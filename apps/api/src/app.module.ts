@@ -2,14 +2,18 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { PersonsModule } from './persons/persons.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 
 @Module({
   imports: [
     // ConfigModule must be first — loads .env before any module reads process.env
     ConfigModule.forRoot({ isGlobal: true }),
+
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
 
     PassportModule.register({ defaultStrategy: 'jwt' }),
 
@@ -22,6 +26,7 @@ import { PersonsModule } from './persons/persons.module';
     PrismaModule,
     AuthModule,
     PersonsModule,
+    WaitlistModule,
   ],
 })
 export class AppModule {}

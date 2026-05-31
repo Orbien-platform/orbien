@@ -1235,3 +1235,49 @@ enum CelebrationRecurrence {
   biweekly
   monthly
 }
+
+// =============================================================================
+// GRUPO 9 — WAITLIST (lead capture pré-lançamento)
+// Exceção ao modelo multi-tenant: lead ainda não é cliente
+// =============================================================================
+
+model WaitlistSubscriber {
+  id            String            @id @default(uuid())
+  email         String            @unique
+  pastor_name   String
+  church_name   String?
+  city          String?
+  state         String?
+  size_range    WaitlistSizeRange
+  lgpd_consent  Boolean           @default(false)
+  source        String?
+  utm_source    String?
+  utm_medium    String?
+  utm_campaign  String?
+  status        WaitlistStatus    @default(pending)
+  notes         String?
+  tenant_id     String?
+  ip            String?
+  user_agent    String?
+  created_at    DateTime          @default(now())
+  contacted_at  DateTime?
+  activated_at  DateTime?
+
+  @@index([status])
+  @@index([created_at(sort: Desc)])
+  @@map("waitlist_subscribers")
+}
+
+enum WaitlistSizeRange {
+  ate_50
+  ate_150
+  ate_300
+  acima_300
+}
+
+enum WaitlistStatus {
+  pending
+  contacted
+  activated
+  declined
+}
