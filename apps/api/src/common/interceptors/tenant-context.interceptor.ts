@@ -34,17 +34,20 @@ export class TenantContextInterceptor implements NestInterceptor {
     // uses the main client, which would open a separate implicit transaction and reset
     // the SET LOCAL vars before next.handle() ever runs.
     return from(
-      this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`
-          SELECT
-            set_config('app.tenant_id',        ${user.tenant_id},              true),
-            set_config('app.congregation_id',   ${user.congregation_id},        true),
-            set_config('app.user_id',           ${user.sub},                    true),
-            set_config('app.role_codes',        ${user.roles.join(',')},        true)
-        `;
+      this.prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`
+            SELECT
+              set_config('app.tenant_id',        ${user.tenant_id},              true),
+              set_config('app.congregation_id',   ${user.congregation_id},        true),
+              set_config('app.user_id',           ${user.sub},                    true),
+              set_config('app.role_codes',        ${user.roles.join(',')},        true)
+          `;
 
-        return firstValueFrom(next.handle());
-      }),
+          return firstValueFrom(next.handle());
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      ),
     );
   }
 }
