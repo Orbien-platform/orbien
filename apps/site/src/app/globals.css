@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ═══════════════════════════════════════════════════════════
+   ORBIEN DESIGN SYSTEM — Tailwind v4 token configuration
+   Tailwind v4 reads @theme to generate utility classes.
+   Every --color-* becomes bg-*, text-*, border-*, etc.
+   Every --radius-* becomes rounded-*, etc.
+═══════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Brand — Navy ──────────────────────────────────────── */
+  --color-navy:          #1E3A7B;   /* Primary · CTAs · links */
+  --color-navy-dark:     #162D62;   /* Hover / pressed */
+  --color-navy-dim:      #D4DCEF;   /* Badge background (light) */
+  --color-navy-dim-dark: #1A2540;   /* Badge background (dark) */
+
+  /* ── Brand — Teal ──────────────────────────────────────── */
+  --color-teal:          #00B8A2;   /* Accent · success · positive delta */
+  --color-teal-dark:     #00CDB5;   /* Teal in dark mode */
+  --color-teal-dim:      #D0F5F1;   /* Badge background (light) */
+  --color-teal-dim-dark: #0A2E2A;   /* Badge background (dark) */
+
+  /* ── Functional — Crimson ─────────────────────────────── */
+  --color-crimson:       #C0392B;   /* Error · critical alert */
+  --color-crimson-dark:  #E05444;   /* Crimson in dark mode */
+  --color-crimson-dim:   #FDECEA;   /* Error background */
+
+  /* ── Functional — Burgundy ────────────────────────────── */
+  --color-burgundy:      #991B1B;   /* Severe status badge only */
+  --color-burgundy-dim:  #F5E6E6;   /* Severe status badge background */
+
+  /* ── Neutrals ──────────────────────────────────────────── */
+  --color-ink:           #0F1117;   /* Primary text (light) · base bg (dark) */
+  --color-parchment:     #F5F4F1;   /* Base background (light) */
+  --color-surface:       #FFFFFF;   /* Cards and elevated surfaces (light) */
+  --color-surface-dark:  #13151E;   /* Cards and elevated surfaces (dark) */
+  --color-subtle:        #EEECEA;   /* Hover · KPI bg · subtle surface (light) */
+  --color-subtle-dark:   #1C1F2B;   /* Hover · KPI bg · subtle surface (dark) */
+  --color-stone:         #5C5A56;   /* Secondary text (light) */
+  --color-ghost:         #9B9893;   /* Tertiary text · labels (light) */
+  --color-border:        #E0DDD9;   /* Default borders (light) */
+  --color-border-dark:   #232634;   /* Default borders (dark) */
+
+  /* ── Shadows ───────────────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+  --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+  --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
+
+  /* ── Border Radius ─────────────────────────────────────── */
+  --radius-btn:     8px;
+  --radius-card:    12px;
+  --radius-modal:   16px;
+  --radius-pill:    9999px;
+  --radius-avatar:  10px;
+  --radius-input:   8px;
+  --radius-tooltip: 6px;
 }
 
+/* Font references resolve at compile time via CSS vars set in layout.tsx */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-dm-sans), 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), 'DM Mono', ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ═══════════════════════════════════════════════════════════
+   shadcn/ui semantic variables — used by shadcn components
+═══════════════════════════════════════════════════════════ */
+:root {
+  --background:          #F5F4F1;
+  --foreground:          #0F1117;
+  --card:                #FFFFFF;
+  --card-foreground:     #0F1117;
+  --popover:             #FFFFFF;
+  --popover-foreground:  #0F1117;
+  --primary:             #1E3A7B;
+  --primary-foreground:  #F5F4F1;
+  --secondary:           #EEECEA;
+  --secondary-foreground:#0F1117;
+  --muted:               #EEECEA;
+  --muted-foreground:    #5C5A56;
+  --accent:              #00B8A2;
+  --accent-foreground:   #0F1117;
+  --destructive:         #C0392B;
+  --border:              #E0DDD9;
+  --input:               #E0DDD9;
+  --ring:                #1E3A7B;
+  --radius:              8px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #F5F4F1;
+  color: #0F1117;
 }
