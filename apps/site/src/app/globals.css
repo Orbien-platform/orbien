@@ -53,6 +53,8 @@
   --border:         #E0DDD9;
   --border-strong:  #C8C5C0;
   /* Component-specific */
+  --navy-soft:      rgba(30,58,123,.03);   /* Premium column tint */
+  --sand-soft:      #F0EDE6;              /* Alternating compare rows */
   --nav-bg:         rgba(245,244,241,.85);
   --hero-glow:      rgba(30,58,123,.06);
   /* Shadows */
@@ -100,6 +102,8 @@
     --muted:          #7A7975;
     --border:         #232634;
     --border-strong:  #2E3142;
+    --navy-soft:      rgba(122,153,217,.06);
+    --sand-soft:      #141727;
     --nav-bg:         rgba(15,17,23,.78);
     --hero-glow:      rgba(122,153,217,.08);
     --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
@@ -145,6 +149,15 @@ body {
 .reveal.in {
   opacity: 1;
   transform: none;
+}
+
+/* ── Card hover with border only (no translate) ────────────────── */
+.card-hover-border {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.card-hover-border:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── Card hover effects (uses CSS vars, can't be done in Tailwind) ── */
