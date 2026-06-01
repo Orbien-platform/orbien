@@ -1,22 +1,29 @@
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Hero } from "@/components/home/Hero";
+import { Credibility } from "@/components/home/Credibility";
+import { Pillars } from "@/components/home/Pillars";
+import { Modules } from "@/components/home/Modules";
+import { SocialProof } from "@/components/home/SocialProof";
+import { Comparison } from "@/components/home/Comparison";
+import { PricingSection } from "@/components/home/PricingSection";
+import { FaqSection } from "@/components/home/FaqSection";
+import { FinalCta } from "@/components/home/FinalCta";
 
 export default function Home() {
   return (
     <>
       <Header />
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 py-32 px-6 text-center">
-        <span className="text-xs font-medium uppercase tracking-[0.1em] text-ghost">
-          Fundação · placeholder
-        </span>
-        <h1 className="text-4xl font-light tracking-tight text-ink max-w-lg">
-          Gestão que serve.{" "}
-          <span className="font-semibold text-navy">Igreja que cresce.</span>
-        </h1>
-        <p className="text-base font-light text-stone max-w-md">
-          Site em construção. A fundação está no ar — design system, Header e
-          Footer prontos para receber conteúdo real.
-        </p>
+      <main className="flex-1">
+        <Hero />
+        <Credibility />
+        <Pillars />
+        <Modules />
+        <SocialProof />
+        <Comparison />
+        <PricingSection />
+        <FaqSection />
+        <FinalCta />
       </main>
       <Footer />
     </>
