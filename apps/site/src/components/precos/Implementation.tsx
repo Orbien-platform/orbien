@@ -21,7 +21,7 @@ const CARDS = [
     name: "Migração assistida",
     price: "499",
     priceNote: "a R$ 999",
-    desc: "Pra igrejas vindas de Eklesia, InPeace ou planilha. A gente faz a importação e validação dos dados junto com você.",
+    desc: "Pra igrejas vindas de Eklesia, InPeace, In Church ou planilha. A gente faz a importação e validação dos dados junto com você.",
   },
 ] as const;
 
