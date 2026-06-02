@@ -4,7 +4,7 @@ import { Footer } from "@/components/layout/Footer";
 import { ContatoContent } from "@/components/contato/ContatoContent";
 
 export const metadata: Metadata = {
-  title: "Contato — Orbien",
+  title: "Contato",
   description:
     "Fale diretamente com a equipe Orbien pelo WhatsApp. Atendimento de segunda a sexta, 9h às 18h. Passo Fundo, RS.",
 };

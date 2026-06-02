@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
-  title: "Entrar — Orbien",
+  title: "Entrar",
   description: "O acesso ao painel Orbien abrirá em breve. Entre na lista de espera para ser avisado.",
 };
 

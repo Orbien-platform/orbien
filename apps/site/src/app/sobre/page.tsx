@@ -8,7 +8,7 @@ import { EstagioAtual } from "@/components/sobre/EstagioAtual";
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Sobre — Orbien",
+  title: "Sobre",
   description:
     "O Orbien existe para dar às igrejas de pequeno e médio porte uma plataforma moderna e acessível — construída com pastores, para pastores. Fase piloto · Passo Fundo, RS.",
 };

@@ -1,4 +1,13 @@
+import type { Metadata } from "next";
 import { Header } from "@/components/layout/Header";
+
+export const metadata: Metadata = {
+  title: {
+    absolute: "Orbien — Gestão que serve. Igreja que cresce.",
+  },
+  description:
+    "Plataforma de gestão para igrejas de pequeno e médio porte. App com identidade da sua igreja sem exigir CNPJ.",
+};
 import { Footer } from "@/components/layout/Footer";
 import { Hero } from "@/components/home/Hero";
 import { Credibility } from "@/components/home/Credibility";

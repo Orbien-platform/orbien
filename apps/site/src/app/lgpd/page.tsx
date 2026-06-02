@@ -4,7 +4,7 @@ import { Footer } from "@/components/layout/Footer";
 import { LgpdContent } from "@/components/lgpd/LgpdContent";
 
 export const metadata: Metadata = {
-  title: "Política de Privacidade e LGPD — Orbien",
+  title: "Política de Privacidade e LGPD",
   description:
     "Como a Orbien coleta, usa e protege dados pessoais conforme a LGPD. Encarregado de Dados, direitos dos titulares e contato para solicitações.",
 };

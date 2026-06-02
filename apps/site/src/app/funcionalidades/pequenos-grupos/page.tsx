@@ -9,7 +9,7 @@ import { PGFaq } from "@/components/funcionalidades/pequenos-grupos/PGFaq";
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Pequenos Grupos — Orbien",
+  title: "Pequenos Grupos",
   description:
     "Materiais agendados, semáforo de saúde e registro de presença pelo celular. O pastor sabe qual célula está esfriando — sem perguntar para cada líder.",
 };

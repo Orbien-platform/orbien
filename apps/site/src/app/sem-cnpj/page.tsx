@@ -10,7 +10,7 @@ import { SemCnpjFaq } from "@/components/sem-cnpj/SemCnpjFaq";
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Sem CNPJ — Orbien",
+  title: "Sem CNPJ",
   description:
     "Sua igreja não tem CNPJ? O Starter foi feito pra você. PIX direto na sua chave, sem intermediário. Migração pro Premium em 15 minutos quando formalizar.",
 };

@@ -10,7 +10,7 @@ import { PrecosFaq } from "@/components/precos/PrecosFaq";
 import { PrecosCta } from "@/components/precos/PrecosCta";
 
 export const metadata: Metadata = {
-  title: "Preços — Orbien",
+  title: "Preços",
   description:
     "Dois planos transparentes com preço por faixa de membros. Sem pegadinha por funcionalidade escondida.",
 };

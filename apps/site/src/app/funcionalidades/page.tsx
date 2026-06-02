@@ -5,7 +5,7 @@ import { FuncionalizadesHub } from "@/components/funcionalidades/Funcionalizades
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Funcionalidades — Orbien",
+  title: "Funcionalidades",
   description:
     "Quatro módulos que cobrem o que sua igreja faz toda semana: membros, financeiro, pequenos grupos e conteúdos. Uma plataforma integrada.",
 };

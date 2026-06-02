@@ -67,18 +67,21 @@ function Cell({ value, variant, mobileLabel }: { value: CellValue; variant: "sta
   const isPremium = variant === "premium";
   return (
     <div
-      className="px-7 py-4 flex items-center gap-2 text-sm border-l"
+      className={[
+        "px-5 md:px-7 py-3 md:py-4 flex items-center gap-2 text-sm",
+        isPremium
+          ? "md:[border-left:2px_solid_#00B8A2] md:bg-[var(--navy-soft)]"
+          : "md:border-l",
+      ].join(" ")}
       style={{
         borderColor: "var(--border)",
-        background: isPremium ? "var(--navy-soft)" : undefined,
-        borderLeft: isPremium ? "2px solid #00B8A2" : undefined,
         color: value.type === "qual" || (value.type === "check" && isPremium) ? "var(--ink)" : "var(--stone)",
         fontWeight: value.type === "qual" || (value.type === "check" && isPremium) ? "400" : "300",
       }}
     >
-      {/* Mobile prefix (hidden on desktop) */}
+      {/* Mobile prefix */}
       <span
-        className="md:hidden font-mono text-[10px] uppercase tracking-[.1em] mr-1"
+        className="md:hidden font-mono text-[10px] uppercase tracking-[.1em] mr-1 shrink-0"
         style={{ color: isPremium ? "var(--navy-accent)" : "var(--muted)" }}
       >
         {mobileLabel} ·{" "}
@@ -125,12 +128,8 @@ export function FeatureCompare() {
               >
                 {/* Group header */}
                 <div
-                  className="px-7 py-4"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.4fr 1fr 1fr",
-                    background: "var(--subtle)",
-                  }}
+                  className="px-5 md:px-7 py-4 grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr]"
+                  style={{ background: "var(--subtle)" }}
                 >
                   <div className="font-mono text-[11px] uppercase tracking-[.14em] font-medium" style={{ color: "var(--stone)" }}>
                     {group.heading}
@@ -147,17 +146,14 @@ export function FeatureCompare() {
                 {group.rows.map((row, ri) => (
                   <div
                     key={row.feature}
-                    className="border-t"
+                    className="border-t grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr]"
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.4fr 1fr 1fr",
                       background: ri % 2 === 0 ? "var(--surface)" : "var(--sand-soft)",
                       borderColor: "var(--border)",
                     }}
                   >
-                    {/* Feature label — on mobile, spans full width then cells stack */}
                     <div
-                      className="px-7 py-4 text-[14.5px] font-medium"
+                      className="px-5 md:px-7 py-3 md:py-4 text-[14.5px] font-medium"
                       style={{ color: "var(--ink)" }}
                     >
                       {row.feature}

@@ -9,7 +9,7 @@ import { MembrosFaq } from "@/components/funcionalidades/membros/MembrosFaq";
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Membros e Visitantes — Orbien",
+  title: "Membros e Visitantes",
   description:
     "Cadastre visitantes em 30 segundos pelo QR code, acompanhe o ciclo de vida completo e nunca perca um visitante de vista. Módulo de membros da Orbien.",
 };

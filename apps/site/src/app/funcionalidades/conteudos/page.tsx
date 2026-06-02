@@ -9,7 +9,7 @@ import { ConteudosFaq } from "@/components/funcionalidades/conteudos/ConteudosFa
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Conteúdos e Notificações — Orbien",
+  title: "Conteúdos e Notificações",
   description:
     "Avisos, devocionais diários e pedidos de oração no app com a identidade da sua igreja. O membro se sente conectado todos os dias — não só no domingo.",
 };

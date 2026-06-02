@@ -9,7 +9,7 @@ import { FinanceiroFaq } from "@/components/funcionalidades/financeiro/Financeir
 import { FinalCta } from "@/components/home/FinalCta";
 
 export const metadata: Metadata = {
-  title: "Financeiro — Orbien",
+  title: "Financeiro",
   description:
     "PIX com recibo automático, dízimo recorrente, relatório semanal e exportação contábil. Gestão financeira completa para igrejas — do Starter ao Premium.",
 };

@@ -17,7 +17,11 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Orbien — Gestão que serve. Igreja que cresce.",
+  metadataBase: new URL("https://useorbien.com"),
+  title: {
+    template: "%s — Orbien",
+    default: "Orbien — Gestão que serve. Igreja que cresce.",
+  },
   description:
     "Plataforma de gestão para igrejas de pequeno e médio porte. App com identidade da sua igreja sem exigir CNPJ.",
 };
