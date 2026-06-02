@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Menu } from "lucide-react";
+import { NavDropdown } from "@/components/layout/NavDropdown";
 
 const NAV_LINKS = [
-  { href: "/funcionalidades", label: "Funcionalidades" },
   { href: "/precos", label: "Preços" },
   { href: "/sem-cnpj", label: "Sem CNPJ" },
   { href: "/sobre", label: "Sobre" },
@@ -47,6 +47,7 @@ export function Header() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-7" aria-label="Principal">
+          <NavDropdown />
           {NAV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
