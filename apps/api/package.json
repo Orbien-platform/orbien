@@ -7,7 +7,9 @@
     "start": "node dist/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "bash scripts/migrate.sh",
+    "db:migrate:resolve": "bash scripts/migrate-resolve.sh",
+    "db:migrate:status": "prisma migrate status",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
     "db:studio": "prisma studio"

@@ -62,6 +62,7 @@ model Tenant {
   celebrationInstances  CelebrationInstance[]
   serviceOrders         ServiceOrder[]
   auditLogs             AuditLog[]
+  qrTokens              QrToken[]
 
   @@index([id])
   @@map("tenants")
@@ -107,6 +108,7 @@ model Congregation {
   celebrationInstances  CelebrationInstance[]
   serviceOrders         ServiceOrder[]
   materialOpenRecords   MaterialOpenRecord[]
+  qrTokens              QrToken[]
 
   @@index([tenant_id, id])
   @@map("congregations")
@@ -1273,6 +1275,32 @@ enum WaitlistSizeRange {
   ate_150
   ate_300
   acima_300
+}
+
+// =============================================================================
+// GRUPO 10 — QR TOKENS (cadastro público de visitante)
+// =============================================================================
+
+model QrToken {
+  id              String      @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  token           String      @unique @default(uuid())
+  origin          VisitOrigin
+  small_group_id  String?
+  label           String?
+  is_active       Boolean     @default(true)
+  scan_count      Int         @default(0)
+  created_by      String
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([tenant_id, congregation_id])
+  @@map("qr_tokens")
 }
 
 enum WaitlistStatus {

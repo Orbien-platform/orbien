@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { PersonsModule } from './persons/persons.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
+import { VisitorModule } from './visitor/visitor.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { WaitlistModule } from './waitlist/waitlist.module';
     AuthModule,
     PersonsModule,
     WaitlistModule,
+    VisitorModule,
   ],
 })
 export class AppModule {}

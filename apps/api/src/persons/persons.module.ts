@@ -9,5 +9,6 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 @Module({
   controllers: [PersonsController, VisitsController],
   providers: [PersonsService, ClassificationService, VisitsService, TenantContextInterceptor],
+  exports: [ClassificationService, VisitsService],
 })
 export class PersonsModule {}
