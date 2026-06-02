@@ -6,7 +6,7 @@ import { FaqItem } from "@/components/ui/FaqItem";
 const FAQS = [
   {
     q: "Por que não preciso de CNPJ pra usar o Starter?",
-    a: "No Starter, as doações via PIX vão direto pra chave da sua iglesia — CPF, telefone ou e-mail. A Orbien é a plataforma de gestão, não a intermediária financeira. Sem conta da Orbien envolvida, não há exigência de CNPJ.",
+    a: "No Starter, as doações via PIX vão direto pra chave da sua igreja — CPF, telefone ou e-mail. A Orbien é a plataforma de gestão, não a intermediária financeira. Sem conta da Orbien envolvida, não há exigência de CNPJ.",
   },
   {
     q: "Como o membro faz a doação sem CNPJ?",
@@ -14,19 +14,19 @@ const FAQS = [
   },
   {
     q: "A Orbien fica com alguma porcentagem das doações?",
-    a: "Não. A assinatura do Starter é a mensalidade fixa da plataforma — o que o membro doa vai 100% pra sua iglesia. A Orbien não cobra nada sobre as transações.",
+    a: "Não. A assinatura do Starter é a mensalidade fixa da plataforma — o que o membro doa vai 100% pra sua igreja. A Orbien não cobra nada sobre as transações.",
   },
   {
     q: "Quando formalizar, preciso recriar tudo?",
     a: "Não. A migração pro Premium mantém todos os membros, histórico financeiro e configurações. Você atualiza a chave PIX pro CNPJ, escolhe o plano Premium e pronto — em 15 minutos.",
   },
   {
-    q: "O app fica no nome da minha iglesia mesmo sem CNPJ?",
-    a: "No Starter, o app usa a identidade visual da sua iglesia (logo e cores), mas é publicado nas lojas pela Orbien. Pra publicar no nome da sua iglesia — com um ícone e nome próprio na App Store — é necessário o plano Premium, que exige CNPJ ou representante legal.",
+    q: "O app fica no nome da minha igreja mesmo sem CNPJ?",
+    a: "No Starter, o app usa a identidade visual da sua igreja (logo e cores), mas é publicado nas lojas pela Orbien. Pra publicar no nome da sua igreja — com um ícone e nome próprio na App Store — é necessário o plano Premium, que exige CNPJ ou representante legal.",
   },
   {
     q: "Os dados dos membros ficam seguros?",
-    a: "Sim. Servidores no Brasil (São Paulo), em conformidade com a LGPD. A sua iglesia é controladora dos dados, a Orbien é operadora. Você pode exportar ou excluir qualquer dado a qualquer momento.",
+    a: "Sim. Servidores no Brasil (São Paulo), em conformidade com a LGPD. A sua igreja é controladora dos dados, a Orbien é operadora. Você pode exportar ou excluir qualquer dado a qualquer momento.",
   },
 ] as const;
 
@@ -40,7 +40,7 @@ export function SemCnpjFaq() {
             className="font-medium tracking-[-0.025em]"
             style={{ fontSize: "clamp(30px, 4.2vw, 44px)", lineHeight: 1.1, color: "var(--ink)" }}
           >
-            As perguntas que toda iglesia sem CNPJ faz.
+            As perguntas que toda igreja sem CNPJ faz.
           </h2>
         </Reveal>
 

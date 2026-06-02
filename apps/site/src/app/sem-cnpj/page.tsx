@@ -12,7 +12,7 @@ import { FinalCta } from "@/components/home/FinalCta";
 export const metadata: Metadata = {
   title: "Sem CNPJ — Orbien",
   description:
-    "Sua iglesia não tem CNPJ? O Starter foi feito pra você. PIX direto na sua chave, sem intermediário. Migração pro Premium em 15 minutos quando formalizar.",
+    "Sua igreja não tem CNPJ? O Starter foi feito pra você. PIX direto na sua chave, sem intermediário. Migração pro Premium em 15 minutos quando formalizar.",
 };
 
 export default function SemCnpjPage() {

@@ -3,14 +3,14 @@ import { Reveal } from "@/components/ui/Reveal";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const STEPS = [
-  "CNPJ registrado no cadastro da iglesia",
+  "CNPJ registrado no cadastro da igreja",
   "Chave PIX migrada para o CNPJ",
   "Acesso ao plano Premium desbloqueado",
-  "App nas lojas com a marca da sua iglesia",
+  "App nas lojas com a marca da sua igreja",
 ] as const;
 
 const PREMIUM_EXTRAS = [
-  "App publicado nas lojas com nome e logo da iglesia",
+  "App publicado nas lojas com nome e logo da igreja",
   "Dízimo recorrente automático via PIX",
   "Contratos e gestão patrimonial",
   "Multiusuário com permissões por cargo",

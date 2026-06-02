@@ -111,7 +111,7 @@ export function PixFlow() {
               className="font-medium tracking-[-0.025em] mb-5"
               style={{ fontSize: "clamp(28px, 3.8vw, 40px)", lineHeight: 1.1, color: "var(--ink)" }}
             >
-              O dinheiro vai direto pra sua iglesia.
+              O dinheiro vai direto pra sua igreja.
             </h2>
             <p className="text-[16px] font-light leading-relaxed mb-8 max-w-[460px]" style={{ color: "var(--stone)" }}>
               A maior preocupação de quem não tem CNPJ é com o dinheiro das doações. A resposta é simples: a Orbien não toca nele.

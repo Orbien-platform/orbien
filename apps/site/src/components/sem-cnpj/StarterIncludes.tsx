@@ -62,7 +62,7 @@ export function StarterIncludes() {
             O que está incluído sem CNPJ.
           </h2>
           <p className="text-[17px] font-light leading-relaxed max-w-[560px]" style={{ color: "var(--stone)" }}>
-            Quatro módulos que cobrem o que sua iglesia faz toda semana — disponíveis desde o primeiro dia, sem exigência de formalização.
+            Quatro módulos que cobrem o que sua igreja faz toda semana — disponíveis desde o primeiro dia, sem exigência de formalização.
           </p>
         </Reveal>
 
