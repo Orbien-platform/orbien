@@ -99,10 +99,12 @@ export function NavDropdown() {
         </svg>
       </button>
 
-      {/* Panel */}
+      {/* Panel — outer wrapper has pt-3 so the padding bridges the gap
+           between trigger and panel, keeping the mouse within the hit area */}
       {open && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 pt-3 w-[420px] z-50">
         <div
-          className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-[420px] rounded-[14px] border overflow-hidden z-50"
+          className="rounded-[14px] border overflow-hidden"
           style={{
             background: "var(--surface)",
             borderColor: "var(--border)",
@@ -150,6 +152,7 @@ export function NavDropdown() {
               Ver todos →
             </Link>
           </div>
+        </div>
         </div>
       )}
     </div>
