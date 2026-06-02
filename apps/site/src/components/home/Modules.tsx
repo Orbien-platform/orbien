@@ -38,7 +38,7 @@ const MODULES = [
     body: "Materiais agendados, semáforo de saúde da célula, notificação automática pro líder.",
   },
   {
-    href: "/funcionalidades/conteudo",
+    href: "/funcionalidades/conteudos",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
