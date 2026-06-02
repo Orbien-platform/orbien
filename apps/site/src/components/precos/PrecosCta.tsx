@@ -1,4 +1,5 @@
 import { Reveal } from "@/components/ui/Reveal";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export function PrecosCta() {
   return (
@@ -17,12 +18,7 @@ export function PrecosCta() {
 
       <div className="relative mx-auto max-w-[1180px] px-6">
         <Reveal className="max-w-[720px]">
-          <p
-            className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-5 text-teal"
-          >
-            <span className="w-6 h-px bg-teal" />
-            Sem pressa
-          </p>
+          <SectionLabel className="mb-5" color="#00B8A2">Sem pressa</SectionLabel>
           <h2
             className="font-semibold tracking-[-0.025em] mb-4 text-white"
             style={{ fontSize: "clamp(28px, 4vw, 44px)", lineHeight: 1.08 }}

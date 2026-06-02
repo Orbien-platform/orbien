@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const STATS = [
   "PIX cai direto na chave da igreja",
@@ -28,13 +29,9 @@ export function NoCnpjBlock() {
         >
           {/* Left */}
           <div>
-            <p
-              className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-[18px]"
-              style={{ color: "rgba(255,255,255,.7)" }}
-            >
-              <span className="w-6 h-px" style={{ background: "rgba(255,255,255,.4)" }} />
+            <SectionLabel className="mb-[18px]" color="rgba(255,255,255,.7)" lineColor="rgba(255,255,255,.4)">
               Antes da formalização
-            </p>
+            </SectionLabel>
             <h2
               className="font-semibold text-white mb-4 tracking-[-0.025em]"
               style={{ fontSize: "clamp(28px, 3.6vw, 38px)", lineHeight: 1.1 }}

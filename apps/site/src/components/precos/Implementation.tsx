@@ -1,4 +1,5 @@
 import { Reveal } from "@/components/ui/Reveal";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const CARDS = [
   {
@@ -29,13 +30,7 @@ export function Implementation() {
     <section className="pb-20 md:pb-24" id="implantacao">
       <div className="mx-auto max-w-[1180px] px-6">
         <Reveal className="mb-12">
-          <p
-            className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-[18px]"
-            style={{ color: "var(--navy-accent)" }}
-          >
-            <span className="w-6 h-px" style={{ background: "var(--navy-accent)" }} />
-            Setup inicial
-          </p>
+          <SectionLabel className="mb-[18px]">Setup inicial</SectionLabel>
           <h2
             className="font-medium tracking-[-0.025em] mb-3.5"
             style={{ fontSize: "clamp(28px, 3.6vw, 40px)", lineHeight: 1.1, color: "var(--ink)" }}

@@ -1,17 +1,6 @@
 import { Reveal } from "@/components/ui/Reveal";
-
-function Check() {
-  return (
-    <span
-      className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
-    >
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    </span>
-  );
-}
+import { CheckIcon } from "@/components/ui/CheckIcon";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 function Cross() {
   return (
@@ -39,13 +28,7 @@ export function Comparison() {
     <section className="py-20 md:py-24" id="comparativo">
       <div className="mx-auto max-w-[1180px] px-6">
         <Reveal className="mb-12">
-          <p
-            className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-[18px]"
-            style={{ color: "var(--navy-accent)" }}
-          >
-            <span className="w-6 h-px" style={{ background: "var(--navy-accent)" }} />
-            Comparativo
-          </p>
+          <SectionLabel className="mb-[18px]">Comparativo</SectionLabel>
           <h2
             className="font-medium tracking-[-0.025em] mb-3.5"
             style={{ fontSize: "clamp(30px, 4.2vw, 44px)", lineHeight: 1.1, color: "var(--ink)" }}
@@ -124,7 +107,7 @@ export function Comparison() {
                       background: "rgba(0,184,162,.04)",
                     }}
                   >
-                    <Check /> {ours}
+                    <CheckIcon /> {ours}
                   </div>
                 </div>
 
@@ -158,7 +141,7 @@ export function Comparison() {
                     >
                       Orbien ·{" "}
                     </span>
-                    <Check /> {ours}
+                    <CheckIcon /> {ours}
                   </div>
                 </div>
               </div>

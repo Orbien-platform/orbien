@@ -1,14 +1,10 @@
+import { SectionLabel } from "@/components/ui/SectionLabel";
+
 export function PrecosHero() {
   return (
     <section className="pt-20 pb-16 md:pt-24 md:pb-16">
       <div className="mx-auto max-w-[1180px] px-6">
-        <p
-          className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-[22px]"
-          style={{ color: "var(--navy-accent)" }}
-        >
-          <span className="w-6 h-px" style={{ background: "var(--navy-accent)" }} />
-          Planos e preços
-        </p>
+        <SectionLabel className="mb-[22px]">Planos e preços</SectionLabel>
         <h1
           className="font-semibold leading-[1.04] tracking-[-0.035em] mb-[22px] max-w-[800px]"
           style={{ fontSize: "clamp(36px, 5.4vw, 60px)", color: "var(--ink)" }}

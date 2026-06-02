@@ -1,17 +1,6 @@
 import Link from "next/link";
-
-function CheckTick() {
-  return (
-    <span
-      className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center flex-shrink-0"
-      style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
-    >
-      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    </span>
-  );
-}
+import { CheckIcon } from "@/components/ui/CheckIcon";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 function DashboardMockup() {
   return (
@@ -238,13 +227,7 @@ export function Hero() {
         <div className="grid grid-cols-1 gap-10 items-center md:grid-cols-[1.05fr_1fr] md:gap-14">
           {/* Content */}
           <div>
-            <p
-              className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-6"
-              style={{ color: "var(--navy-accent)" }}
-            >
-              <span className="w-6 h-px" style={{ background: "var(--navy-accent)" }} />
-              Plataforma de gestão para igrejas
-            </p>
+            <SectionLabel className="mb-6">Plataforma de gestão para igrejas</SectionLabel>
 
             <h1
               className="font-semibold leading-[1.02] tracking-[-0.035em] mb-5"
@@ -296,7 +279,7 @@ export function Hero() {
             <div className="flex gap-5 flex-wrap font-mono text-[12px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
               {["SEM CNPJ", "SEM CARTÃO", "5 MIN PARA COMEÇAR"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
-                  <CheckTick />
+                  <CheckIcon size="sm" />
                   {label}
                 </span>
               ))}

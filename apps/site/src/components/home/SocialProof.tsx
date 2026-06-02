@@ -1,4 +1,5 @@
 import { Reveal } from "@/components/ui/Reveal";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export function SocialProof() {
   return (
@@ -6,13 +7,7 @@ export function SocialProof() {
       <div className="mx-auto max-w-[1180px] px-6">
         <Reveal>
           <div className="text-center py-14 px-8 max-w-[720px] mx-auto">
-            <p
-              className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-[18px]"
-              style={{ color: "var(--stone)" }}
-            >
-              <span className="w-6 h-px" style={{ background: "var(--stone)" }} />
-              Igrejas-piloto
-            </p>
+            <SectionLabel className="mb-[18px]" color="var(--stone)">Igrejas-piloto</SectionLabel>
             <p
               className="font-light leading-[1.4] tracking-[-0.015em]"
               style={{

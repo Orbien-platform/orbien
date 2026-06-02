@@ -1,4 +1,5 @@
 import { Reveal } from "@/components/ui/Reveal";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const PILLARS = [
   {
@@ -41,13 +42,7 @@ export function Pillars() {
     <section className="py-20 md:py-24" id="pilares">
       <div className="mx-auto max-w-[1180px] px-6">
         <Reveal className="mb-12">
-          <p
-            className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] mb-[18px]"
-            style={{ color: "var(--navy-accent)" }}
-          >
-            <span className="w-6 h-px" style={{ background: "var(--navy-accent)" }} />
-            Por que Orbien
-          </p>
+          <SectionLabel className="mb-[18px]">Por que Orbien</SectionLabel>
           <h2
             className="font-medium tracking-[-0.025em] mb-3.5"
             style={{ fontSize: "clamp(30px, 4.2vw, 44px)", lineHeight: 1.1, color: "var(--ink)" }}
