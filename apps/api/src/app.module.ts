@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { PersonsModule } from './persons/persons.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import { VisitorModule } from './visitor/visitor.module';
+import { SmallGroupsModule } from './small-groups/small-groups.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { VisitorModule } from './visitor/visitor.module';
     PersonsModule,
     WaitlistModule,
     VisitorModule,
+    SmallGroupsModule,
   ],
 })
 export class AppModule {}
