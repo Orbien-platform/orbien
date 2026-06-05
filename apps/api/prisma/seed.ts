@@ -1,4 +1,4 @@
-import { PrismaClient, PlanType, PlanStatus } from '@prisma/client';
+import { PrismaClient, PlanType, PlanStatus, PersonClassification } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -111,6 +111,52 @@ async function main(): Promise<void> {
     },
   });
   console.log(`user admin:       ${adminUser.id}`);
+
+  // ── 6b. Persons linked to UserAccounts ────────────────────────────────────
+  // Idempotent: skip creation if account already has a valid person_id
+  async function ensurePersonForAccount(
+    account: { id: string; person_id: string | null },
+    email: string,
+  ): Promise<string> {
+    if (account.person_id) {
+      const existing = await prisma.person.findUnique({
+        where: { id: account.person_id },
+        select: { id: true },
+      });
+      if (existing) return existing.id;
+    }
+
+    let person = await prisma.person.findFirst({
+      where: { tenant_id: tenant.id, email },
+      select: { id: true },
+    });
+
+    if (!person) {
+      person = await prisma.person.create({
+        data: {
+          tenant_id: tenant.id,
+          congregation_id: congregation!.id,
+          full_name: 'Fernando Vargas',
+          email,
+          classification: PersonClassification.member,
+        },
+        select: { id: true },
+      });
+    }
+
+    await prisma.userAccount.update({
+      where: { id: account.id },
+      data: { person_id: person.id },
+    });
+
+    return person.id;
+  }
+
+  const supportPersonId = await ensurePersonForAccount(supportUser, 'fernando.vargas@fill.tech');
+  console.log(`person support:   ${supportPersonId}`);
+
+  const adminPersonId = await ensurePersonForAccount(adminUser, 'fvargaspf@gmail.com');
+  console.log(`person admin:     ${adminPersonId}`);
 
   // ── 7. RoleAssignments ─────────────────────────────────────────────────────
   // No unique constraint — guard with findFirst
