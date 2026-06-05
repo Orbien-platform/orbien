@@ -563,6 +563,7 @@ model StudyMaterial {
   rich_content    String?
   publish_at      DateTime
   expires_at      DateTime?
+  notified_at     DateTime?
   version         Int                 @default(1)
   tags            String[]
   created_at      DateTime            @default(now())

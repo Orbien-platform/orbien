@@ -9,6 +9,8 @@ import { PersonsModule } from './persons/persons.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import { VisitorModule } from './visitor/visitor.module';
 import { SmallGroupsModule } from './small-groups/small-groups.module';
+import { StudyMaterialsModule } from './study-materials/study-materials.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -30,7 +32,9 @@ import { SmallGroupsModule } from './small-groups/small-groups.module';
     PersonsModule,
     WaitlistModule,
     VisitorModule,
+    ScheduleModule.forRoot(),
     SmallGroupsModule,
+    StudyMaterialsModule,
   ],
 })
 export class AppModule {}
