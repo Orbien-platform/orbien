@@ -1,4 +1,4 @@
-import { PrismaClient, PlanType, PlanStatus, PersonClassification } from '@prisma/client';
+import { PrismaClient, PlanType, PlanStatus, PersonClassification, FinancialCategoryType } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -181,6 +181,41 @@ async function main(): Promise<void> {
       });
     }
     console.log(`role_assignment:  ${label}`);
+  }
+
+  // ── 8. Financial Categories (sistema) ─────────────────────────────────────
+  const defaultCategories: { name: string; type: FinancialCategoryType }[] = [
+    { name: 'Dízimo',                type: FinancialCategoryType.income  },
+    { name: 'Oferta',                type: FinancialCategoryType.income  },
+    { name: 'Oferta Missionária',    type: FinancialCategoryType.income  },
+    { name: 'Oferta de Construção',  type: FinancialCategoryType.income  },
+    { name: 'Doação Especial',       type: FinancialCategoryType.income  },
+    { name: 'Outros (Receita)',      type: FinancialCategoryType.income  },
+    { name: 'Aluguel',               type: FinancialCategoryType.expense },
+    { name: 'Água / Luz / Internet', type: FinancialCategoryType.expense },
+    { name: 'Material de Limpeza',   type: FinancialCategoryType.expense },
+    { name: 'Eventos',               type: FinancialCategoryType.expense },
+    { name: 'Missões',               type: FinancialCategoryType.expense },
+    { name: 'Outros (Despesa)',      type: FinancialCategoryType.expense },
+  ];
+
+  for (const cat of defaultCategories) {
+    const exists = await prisma.financialCategory.findFirst({
+      where: { tenant_id: tenant.id, congregation_id: congregation.id, name: cat.name, type: cat.type },
+      select: { id: true },
+    });
+    if (!exists) {
+      await prisma.financialCategory.create({
+        data: {
+          tenant_id: tenant.id,
+          congregation_id: congregation.id,
+          name: cat.name,
+          type: cat.type,
+          is_system: true,
+        },
+      });
+    }
+    console.log(`category:         ${cat.type} · ${cat.name}`);
   }
 }
 

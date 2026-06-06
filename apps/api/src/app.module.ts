@@ -10,6 +10,7 @@ import { WaitlistModule } from './waitlist/waitlist.module';
 import { VisitorModule } from './visitor/visitor.module';
 import { SmallGroupsModule } from './small-groups/small-groups.module';
 import { StudyMaterialsModule } from './study-materials/study-materials.module';
+import { FinancialModule } from './financial/financial.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -35,6 +36,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ScheduleModule.forRoot(),
     SmallGroupsModule,
     StudyMaterialsModule,
+    FinancialModule,
   ],
 })
 export class AppModule {}

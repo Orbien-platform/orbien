@@ -1,0 +1,29 @@
+import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { CategoriesController } from './categories.controller';
+import { CategoriesService } from './categories.service';
+import { TransactionsController } from './transactions.controller';
+import { TransactionsService } from './transactions.service';
+import { PixController } from './pix.controller';
+import { PixService } from './pix.service';
+import { ForecastService } from './forecast.service';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [
+    CategoriesController,
+    TransactionsController,
+    PixController,
+    DashboardController,
+  ],
+  providers: [
+    CategoriesService,
+    TransactionsService,
+    PixService,
+    ForecastService,
+    DashboardService,
+  ],
+})
+export class FinancialModule {}

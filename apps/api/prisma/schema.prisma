@@ -122,6 +122,7 @@ model BrandingConfig {
   logo_url        String?
   app_name        String?
   splash_url      String?
+  pix_key         String?
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
@@ -626,6 +627,7 @@ model FinancialCategory {
   name            String
   type            FinancialCategoryType
   parent_id       String?
+  description     String?
   is_system       Boolean               @default(false)
   created_at      DateTime              @default(now())
   updated_at      DateTime              @updatedAt
