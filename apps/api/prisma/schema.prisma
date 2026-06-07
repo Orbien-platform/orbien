@@ -677,6 +677,7 @@ model FinancialTransaction {
   donor_person_id    String?
   is_anonymous       Boolean           @default(false)
   source             TransactionSource
+  notes              String?
   recurring_rule_id  String?
   created_by_user_id String
   created_at         DateTime          @default(now())
