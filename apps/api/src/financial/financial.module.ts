@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
@@ -11,7 +12,7 @@ import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, HttpModule],
   controllers: [
     CategoriesController,
     TransactionsController,

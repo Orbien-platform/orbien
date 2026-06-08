@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
 } from 'class-validator';
 
 export class CreatePixDto {
@@ -33,3 +34,18 @@ export class CreatePixDto {
   @IsString()
   website?: string;
 }
+
+export class CreateDynamicPixDto {
+  @IsNumber()
+  @IsPositive()
+  amount!: number;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  donor_person_id?: string;
+}
+
