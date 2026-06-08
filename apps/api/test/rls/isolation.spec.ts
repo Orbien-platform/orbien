@@ -7,20 +7,23 @@
  * Do NOT adjust assertions to make tests pass — report failures as-is.
  *
  * Architecture under test:
+ *   - prismaAdmin (postgres, BYPASSRLS) — used only for fixture setup/teardown
+ *   - prisma (orbien_app, NOBYPASSRLS) — used for all isolation assertions
  *   - TenantContextInterceptor sets app.tenant_id + app.congregation_id via SET LOCAL
- *   - RLS policies (if enabled) use app_current_tenant() / app_current_congregation_id()
- *   - Prisma connects as postgres superuser → BYPASSRLS unless FORCE ROW LEVEL SECURITY applied
+ *   - RLS policies use app_current_tenant() which reads app.tenant_id
+ *   - FORCE ROW LEVEL SECURITY is applied on all data tables
  *
- * Two helper variants are used to expose the gap clearly:
- *   - runAsTenant: mimics what the app actually does (no role switch)
- *   - runAsTenantWithRole: sets ROLE app_user so RLS policies are enforced
+ * Two helper variants:
+ *   - runAsTenant: mimics production (orbien_app + SET LOCAL, no role switch)
+ *   - runAsTenantWithRole: also does SET LOCAL ROLE app_user (explicit policy enforcement)
  *
- * If runAsTenant FAILS to isolate data → the app leaks data today.
- * If runAsTenantWithRole FAILS to isolate data → RLS policies are broken.
+ * If runAsTenant FAILS → data leaks in production today.
+ * If runAsTenantWithRole FAILS → RLS policies themselves are broken.
  */
 
 import {
   prisma,
+  prismaAdmin,
   runAsTenant,
   runAsTenantWithRole,
 } from '../helpers/rls';
@@ -49,33 +52,37 @@ let personA2Id: string;
 // ─── Setup / Teardown ─────────────────────────────────────────────────────────
 
 beforeAll(async () => {
+  // All fixture creation uses prismaAdmin (postgres, BYPASSRLS) so inserts
+  // are not blocked by RLS. The isolation assertions use prisma (orbien_app).
+  const ts = Date.now();
+
   // Create Tenant A
-  const tenantA = await prisma.tenant.create({
-    data: { slug: `rls-test-a-${Date.now()}`, name: 'RLS Test Church A' },
+  const tenantA = await prismaAdmin.tenant.create({
+    data: { slug: `rls-test-a-${ts}`, name: 'RLS Test Church A' },
   });
   tenantAId = tenantA.id;
 
-  const congA = await prisma.congregation.create({
+  const congA = await prismaAdmin.congregation.create({
     data: { tenant_id: tenantAId, name: 'Congregation A-Main' },
   });
   congregationAId = congA.id;
 
-  const congA2 = await prisma.congregation.create({
+  const congA2 = await prismaAdmin.congregation.create({
     data: { tenant_id: tenantAId, name: 'Congregation A-Second' },
   });
   congregationA2Id = congA2.id;
 
-  const userA = await prisma.userAccount.create({
+  const userA = await prismaAdmin.userAccount.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
-      email: `admin-a-${Date.now()}@rls-test.local`,
+      email: `admin-a-${ts}@rls-test.local`,
       password_hash: 'x',
     },
   });
   userAccountAId = userA.id;
 
-  const personA = await prisma.person.create({
+  const personA = await prismaAdmin.person.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
@@ -86,7 +93,7 @@ beforeAll(async () => {
   });
   personAId = personA.id;
 
-  const personA2 = await prisma.person.create({
+  const personA2 = await prismaAdmin.person.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationA2Id,
@@ -97,7 +104,7 @@ beforeAll(async () => {
   });
   personA2Id = personA2.id;
 
-  const catA = await prisma.financialCategory.create({
+  const catA = await prismaAdmin.financialCategory.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
@@ -107,7 +114,7 @@ beforeAll(async () => {
   });
   categoryAId = catA.id;
 
-  const sgA = await prisma.smallGroup.create({
+  const sgA = await prismaAdmin.smallGroup.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
@@ -118,7 +125,7 @@ beforeAll(async () => {
   });
   smallGroupAId = sgA.id;
 
-  const txA = await prisma.financialTransaction.create({
+  const txA = await prismaAdmin.financialTransaction.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
@@ -134,7 +141,7 @@ beforeAll(async () => {
   });
   transactionAId = txA.id;
 
-  const pixA = await prisma.pixPayment.create({
+  const pixA = await prismaAdmin.pixPayment.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
@@ -148,27 +155,27 @@ beforeAll(async () => {
   pixPaymentAId = pixA.id;
 
   // Create Tenant B (the "attacker" tenant)
-  const tenantB = await prisma.tenant.create({
-    data: { slug: `rls-test-b-${Date.now()}`, name: 'RLS Test Church B' },
+  const tenantB = await prismaAdmin.tenant.create({
+    data: { slug: `rls-test-b-${ts}`, name: 'RLS Test Church B' },
   });
   tenantBId = tenantB.id;
 
-  const congB = await prisma.congregation.create({
+  const congB = await prismaAdmin.congregation.create({
     data: { tenant_id: tenantBId, name: 'Congregation B' },
   });
   congregationBId = congB.id;
 
-  const userB = await prisma.userAccount.create({
+  const userB = await prismaAdmin.userAccount.create({
     data: {
       tenant_id: tenantBId,
       congregation_id: congregationBId,
-      email: `admin-b-${Date.now()}@rls-test.local`,
+      email: `admin-b-${ts}@rls-test.local`,
       password_hash: 'x',
     },
   });
   userAccountBId = userB.id;
 
-  const personB = await prisma.person.create({
+  const personB = await prismaAdmin.person.create({
     data: {
       tenant_id: tenantBId,
       congregation_id: congregationBId,
@@ -179,7 +186,7 @@ beforeAll(async () => {
   });
   personBId = personB.id;
 
-  const catB = await prisma.financialCategory.create({
+  const catB = await prismaAdmin.financialCategory.create({
     data: {
       tenant_id: tenantBId,
       congregation_id: congregationBId,
@@ -191,10 +198,10 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  // Cascading deletes via tenant removal clean up all child records.
-  await prisma.tenant.deleteMany({
+  await prismaAdmin.tenant.deleteMany({
     where: { id: { in: [tenantAId, tenantBId] } },
   });
+  await prismaAdmin.$disconnect();
   await prisma.$disconnect();
 }, 30_000);
 
@@ -359,7 +366,7 @@ describe('5. Cross-tenant write — INSERT WITH CHECK', () => {
           'WITH CHECK policy on person table is missing or not enforced.',
       );
       // Cleanup the forged record
-      await prisma.person.deleteMany({
+      await prismaAdmin.person.deleteMany({
         where: { full_name: 'Forged Person from B', tenant_id: tenantAId },
       });
     }
@@ -387,7 +394,7 @@ describe('6. Update tampering — tenant_id change', () => {
     }
 
     if (updateSucceeded) {
-      const check = await prisma.person.findUnique({ where: { id: personAId } });
+      const check = await prismaAdmin.person.findUnique({ where: { id: personAId } });
       const actuallyMutated = check?.full_name === 'HIJACKED by B';
       if (actuallyMutated) {
         console.error(
@@ -395,7 +402,7 @@ describe('6. Update tampering — tenant_id change', () => {
             'RLS USING policy is missing or not enforced — cross-tenant writes are possible.',
         );
         // Restore the record
-        await prisma.person.update({
+        await prismaAdmin.person.update({
           where: { id: personAId },
           data: { full_name: 'Person A Main' },
         });

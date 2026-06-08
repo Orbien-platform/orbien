@@ -1,36 +1,39 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 
 /**
- * Shared PrismaClient for RLS tests.
- *
- * Uses DIRECT_URL (bypasses PgBouncer) so that interactive transactions
- * and SET LOCAL settings work reliably. Falls back to DATABASE_URL.
- *
- * This client connects as the postgres superuser — which BYPASSES RLS by
- * default unless the table has FORCE ROW LEVEL SECURITY. The role switch
- * to app_user is intentionally NOT done here, mirroring what
- * TenantContextInterceptor does in production. Any test failure reveals a
- * real security gap: either the app_user role is never activated, or the
- * helper functions reference the wrong config key (app.current_tenant_id
- * vs app.tenant_id).
+ * Admin client — connects as postgres (BYPASSRLS=true, DIRECT_URL).
+ * Used exclusively for test fixture setup/teardown (beforeAll/afterAll).
+ * Never used for isolation assertions — that would bypass the RLS policies
+ * under test.
  */
-export const prisma = new PrismaClient({
+export const prismaAdmin = new PrismaClient({
   datasources: {
-    db: { url: process.env['DIRECT_URL'] ?? process.env['DATABASE_URL']! },
+    db: { url: process.env['DIRECT_URL']! },
   },
   log: [],
 });
 
 /**
- * Runs `fn` inside a Prisma interactive transaction that first applies
- * SET LOCAL for tenant_id and congregation_id — exactly as
- * TenantContextInterceptor does in production.
+ * App client — connects as orbien_app (NOBYPASSRLS, DATABASE_URL).
+ * This mirrors exactly how the production app connects.
+ * Used in runAsTenant / runAsTenantWithRole for all isolation assertions.
  *
- * @param tenantId       - The tenant to impersonate
- * @param congregationId - The congregation to impersonate
- * @param fn             - Receives the transaction client; all queries
- *                         inside MUST use this client to stay within the
- *                         SET LOCAL scope.
+ * With FORCE ROW LEVEL SECURITY on tables and orbien_app having NOBYPASSRLS,
+ * SET LOCAL app.tenant_id is actually enforced by the RLS policies.
+ */
+export const prisma = new PrismaClient({
+  datasources: {
+    db: { url: process.env['DATABASE_URL']! },
+  },
+  log: [],
+});
+
+/**
+ * Mimics TenantContextInterceptor: opens a transaction and applies
+ * SET LOCAL for tenant context vars — no role switch.
+ *
+ * Since orbien_app has NOBYPASSRLS, the RLS policies ARE evaluated.
+ * A test failure here means data leaks in production today.
  */
 export async function runAsTenant<T>(
   tenantId: string,
@@ -41,9 +44,9 @@ export async function runAsTenant<T>(
     async (tx) => {
       await tx.$executeRaw`
         SELECT
-          set_config('app.tenant_id',        ${tenantId},        true),
-          set_config('app.congregation_id',   ${congregationId},  true),
-          set_config('app.current_tenant_id', ${tenantId},        true),
+          set_config('app.tenant_id',              ${tenantId},       true),
+          set_config('app.congregation_id',         ${congregationId}, true),
+          set_config('app.current_tenant_id',       ${tenantId},       true),
           set_config('app.current_congregation_id', ${congregationId}, true)
       `;
       return fn(tx);
@@ -53,12 +56,10 @@ export async function runAsTenant<T>(
 }
 
 /**
- * Same as runAsTenant but also switches the PostgreSQL role to app_user
- * so that RLS policies (which are FOR app_user) are actually evaluated.
+ * Same as runAsTenant but explicitly switches to app_user role before
+ * setting context. Tests RLS enforcement via policies defined FOR app_user.
  *
- * This is the CORRECT way to test RLS enforcement. If runAsTenant (without
- * role switch) passes isolation tests but runAsTenantWithRole does not,
- * the gap is that the app never switches to app_user — RLS is bypassed.
+ * Requires orbien_app to have app_user granted WITH SET TRUE.
  */
 export async function runAsTenantWithRole<T>(
   tenantId: string,
@@ -70,9 +71,9 @@ export async function runAsTenantWithRole<T>(
       await tx.$executeRaw`SET LOCAL ROLE app_user`;
       await tx.$executeRaw`
         SELECT
-          set_config('app.tenant_id',        ${tenantId},        true),
-          set_config('app.congregation_id',   ${congregationId},  true),
-          set_config('app.current_tenant_id', ${tenantId},        true),
+          set_config('app.tenant_id',              ${tenantId},       true),
+          set_config('app.congregation_id',         ${congregationId}, true),
+          set_config('app.current_tenant_id',       ${tenantId},       true),
           set_config('app.current_congregation_id', ${congregationId}, true)
       `;
       return fn(tx);
