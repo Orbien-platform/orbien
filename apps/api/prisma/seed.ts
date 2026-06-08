@@ -44,12 +44,13 @@ async function main(): Promise<void> {
   // ── 3. BrandingConfig ──────────────────────────────────────────────────────
   await prisma.brandingConfig.upsert({
     where: { tenant_id: tenant.id },
-    update: {},
+    update: { pix_key: '12345678900' },
     create: {
       tenant_id: tenant.id,
       primary_color: '#1E3A7B',
       secondary_color: '#00B8A2',
       app_name: 'Doca Church',
+      pix_key: '12345678900',
     },
   });
   console.log('branding_config:  ok');
