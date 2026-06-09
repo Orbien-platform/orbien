@@ -79,7 +79,7 @@ export class DemographicsService {
       : Prisma.empty;
 
     const [classRows, genderRows, ageRows, crossRows] = await Promise.all([
-      this.prisma.$queryRaw<ClassificationRow[]>`
+      this.prisma.client.$queryRaw<ClassificationRow[]>`
         SELECT classification::text, COUNT(*) AS total
         FROM persons
         WHERE tenant_id = ${tenant_id}
@@ -87,7 +87,7 @@ export class DemographicsService {
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY classification
       `,
-      this.prisma.$queryRaw<GenderRow[]>`
+      this.prisma.client.$queryRaw<GenderRow[]>`
         SELECT gender::text, COUNT(*) AS total
         FROM persons
         WHERE tenant_id = ${tenant_id}
@@ -95,7 +95,7 @@ export class DemographicsService {
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY gender
       `,
-      this.prisma.$queryRaw<AgeRangeRow[]>`
+      this.prisma.client.$queryRaw<AgeRangeRow[]>`
         SELECT ${AGE_CASE_SQL} AS range, COUNT(*) AS total
         FROM persons
         WHERE tenant_id = ${tenant_id}
@@ -103,7 +103,7 @@ export class DemographicsService {
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY 1
       `,
-      this.prisma.$queryRaw<CrossRow[]>`
+      this.prisma.client.$queryRaw<CrossRow[]>`
         SELECT ${AGE_CASE_SQL} AS range, gender::text, COUNT(*) AS total
         FROM persons
         WHERE tenant_id = ${tenant_id}

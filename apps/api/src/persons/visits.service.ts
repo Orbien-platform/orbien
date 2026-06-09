@@ -21,7 +21,7 @@ export class VisitsService {
 
     let reclassified = false;
 
-    const visit = await this.prisma.$transaction(
+    const visit = await this.prisma.runInTx(
       async (tx) => {
         const created = await tx.visitRecord.create({
           data: {
@@ -49,7 +49,7 @@ export class VisitsService {
   }
 
   async findByPerson(personId: string): Promise<VisitRecord[]> {
-    return this.prisma.visitRecord.findMany({
+    return this.prisma.client.visitRecord.findMany({
       where: { person_id: personId },
       orderBy: { visited_at: 'desc' },
     });

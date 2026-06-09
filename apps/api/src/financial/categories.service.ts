@@ -19,7 +19,7 @@ export class CategoriesService {
 
   async create(dto: CreateCategoryDto, user: JwtPayload): Promise<FinancialCategory> {
     if (dto.parent_id) {
-      const parent = await this.prisma.financialCategory.findFirst({
+      const parent = await this.prisma.client.financialCategory.findFirst({
         where: {
           id: dto.parent_id,
           tenant_id: user.tenant_id,
@@ -37,7 +37,7 @@ export class CategoriesService {
       }
     }
 
-    return this.prisma.financialCategory.create({
+    return this.prisma.client.financialCategory.create({
       data: {
         name: dto.name,
         type: dto.type,
@@ -51,7 +51,7 @@ export class CategoriesService {
   }
 
   async findAll(user: JwtPayload): Promise<CategoryNode[]> {
-    const all = await this.prisma.financialCategory.findMany({
+    const all = await this.prisma.client.financialCategory.findMany({
       where: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -78,14 +78,14 @@ export class CategoriesService {
   }
 
   async update(id: string, dto: UpdateCategoryDto, user: JwtPayload): Promise<FinancialCategory> {
-    const existing = await this.prisma.financialCategory.findFirst({
+    const existing = await this.prisma.client.financialCategory.findFirst({
       where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
     });
 
     if (!existing) throw new NotFoundException('Categoria não encontrada');
 
     if (dto.type && dto.type !== existing.type) {
-      const linked = await this.prisma.financialTransaction.count({
+      const linked = await this.prisma.client.financialTransaction.count({
         where: { category_id: id },
       });
       if (linked > 0) {
@@ -95,11 +95,11 @@ export class CategoriesService {
       }
     }
 
-    return this.prisma.financialCategory.update({ where: { id }, data: dto });
+    return this.prisma.client.financialCategory.update({ where: { id }, data: dto });
   }
 
   async remove(id: string, user: JwtPayload): Promise<FinancialCategory> {
-    const existing = await this.prisma.financialCategory.findFirst({
+    const existing = await this.prisma.client.financialCategory.findFirst({
       where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
     });
 
@@ -109,7 +109,7 @@ export class CategoriesService {
       throw new ForbiddenException('Categorias do sistema não podem ser removidas');
     }
 
-    const linked = await this.prisma.financialTransaction.count({
+    const linked = await this.prisma.client.financialTransaction.count({
       where: { category_id: id },
     });
     if (linked > 0) {
@@ -118,6 +118,6 @@ export class CategoriesService {
       );
     }
 
-    return this.prisma.financialCategory.delete({ where: { id } });
+    return this.prisma.client.financialCategory.delete({ where: { id } });
   }
 }

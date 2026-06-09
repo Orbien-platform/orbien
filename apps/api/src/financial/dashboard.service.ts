@@ -51,7 +51,7 @@ export class DashboardService {
     const eightWeeksAgo = new Date(currentMonday);
     eightWeeksAgo.setUTCDate(currentMonday.getUTCDate() - 7 * 7); // 8 weeks back (current week is week 8)
 
-    const weekRows = await this.prisma.$queryRaw<WeeklyRow[]>`
+    const weekRows = await this.prisma.client.$queryRaw<WeeklyRow[]>`
       SELECT
         date_trunc('week', occurred_at)                            AS week_start,
         date_trunc('week', occurred_at) + INTERVAL '6 days'       AS week_end,
@@ -94,19 +94,19 @@ export class DashboardService {
     });
 
     const [curInc, curExp, lastInc, lastExp] = await Promise.all([
-      this.prisma.financialTransaction.aggregate({
+      this.prisma.client.financialTransaction.aggregate({
         where: { ...baseWhere(curMonthStart, now), type: TransactionType.income },
         _sum: { amount: true },
       }),
-      this.prisma.financialTransaction.aggregate({
+      this.prisma.client.financialTransaction.aggregate({
         where: { ...baseWhere(curMonthStart, now), type: TransactionType.expense },
         _sum: { amount: true },
       }),
-      this.prisma.financialTransaction.aggregate({
+      this.prisma.client.financialTransaction.aggregate({
         where: { ...baseWhere(lastMonthStart, curMonthStart), type: TransactionType.income },
         _sum: { amount: true },
       }),
-      this.prisma.financialTransaction.aggregate({
+      this.prisma.client.financialTransaction.aggregate({
         where: { ...baseWhere(lastMonthStart, curMonthStart), type: TransactionType.expense },
         _sum: { amount: true },
       }),
@@ -122,7 +122,7 @@ export class DashboardService {
         : Math.round(((curIncome - lastIncome) / lastIncome) * 100 * 100) / 100;
 
     // ── 3. Top 5 income categories (current month) ─────────────────────────
-    const topRaw = await this.prisma.$queryRaw<TopCatRow[]>`
+    const topRaw = await this.prisma.client.$queryRaw<TopCatRow[]>`
       SELECT category_id, SUM(amount) AS total
       FROM financial_transactions
       WHERE tenant_id       = ${tid}
@@ -136,7 +136,7 @@ export class DashboardService {
 
     const catIds = topRaw.map((r) => r.category_id);
     const cats = catIds.length
-      ? await this.prisma.financialCategory.findMany({
+      ? await this.prisma.client.financialCategory.findMany({
           where: { id: { in: catIds } },
           select: { id: true, name: true },
         })
@@ -149,7 +149,7 @@ export class DashboardService {
     }));
 
     // ── 4. Average per contributor ─────────────────────────────────────────
-    const [contribRows] = await this.prisma.$queryRaw<ContribRow[]>`
+    const [contribRows] = await this.prisma.client.$queryRaw<ContribRow[]>`
       SELECT
         COALESCE(SUM(amount), 0)                                             AS total,
         COUNT(DISTINCT donor_person_id) FILTER (WHERE donor_person_id IS NOT NULL) AS donor_count
@@ -165,14 +165,14 @@ export class DashboardService {
 
     // ── 5. Tithe active count (last 30 days) ───────────────────────────────
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const dizimo = await this.prisma.financialCategory.findFirst({
+    const dizimo = await this.prisma.client.financialCategory.findFirst({
       where: { tenant_id: tid, congregation_id: cid, name: 'Dízimo' },
       select: { id: true },
     });
 
     let tithe_active_count = 0;
     if (dizimo) {
-      const [titheRow] = await this.prisma.$queryRaw<TitheRow[]>`
+      const [titheRow] = await this.prisma.client.$queryRaw<TitheRow[]>`
         SELECT COUNT(DISTINCT donor_person_id) AS count
         FROM financial_transactions
         WHERE tenant_id       = ${tid}

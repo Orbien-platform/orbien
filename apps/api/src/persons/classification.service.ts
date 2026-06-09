@@ -99,7 +99,7 @@ export class ClassificationService {
     changedByUserId: string,
   ): Promise<void> {
     if (toClassification === PersonClassification.member) {
-      const person = await this.prisma.person.findUnique({
+      const person = await this.prisma.client.person.findUnique({
         where: { id: personId },
         select: { membership_date: true },
       });
@@ -111,7 +111,7 @@ export class ClassificationService {
       }
     }
 
-    await this.prisma.$transaction(
+    await this.prisma.runInTx(
       async (tx) => {
         await this.reclassify(
           personId,
@@ -126,7 +126,7 @@ export class ClassificationService {
   }
 
   async findHistory(personId: string): Promise<ClassificationHistory[]> {
-    return this.prisma.classificationHistory.findMany({
+    return this.prisma.client.classificationHistory.findMany({
       where: { person_id: personId },
       orderBy: { changed_at: 'desc' },
     });

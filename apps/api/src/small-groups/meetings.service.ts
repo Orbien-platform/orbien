@@ -19,13 +19,13 @@ export class MeetingsService {
     dto: CreateMeetingDto,
     user: JwtPayload,
   ): Promise<CreateMeetingResult> {
-    const group = await this.prisma.smallGroup.findUnique({
+    const group = await this.prisma.client.smallGroup.findUnique({
       where: { id: dto.small_group_id },
       select: { id: true },
     });
     if (!group) throw new NotFoundException('Grupo não encontrado');
 
-    return this.prisma.$transaction(
+    return this.prisma.runInTx(
       async (tx) => {
         const meeting = await tx.groupMeeting.create({
           data: {
@@ -61,7 +61,7 @@ export class MeetingsService {
   }
 
   async findByGroup(groupId: string) {
-    return this.prisma.groupMeeting.findMany({
+    return this.prisma.client.groupMeeting.findMany({
       where: { small_group_id: groupId },
       orderBy: { occurred_at: 'desc' },
       include: {
@@ -71,7 +71,7 @@ export class MeetingsService {
   }
 
   async findOne(meetingId: string) {
-    const meeting = await this.prisma.groupMeeting.findUnique({
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
       include: {
         attendanceRecords: {
@@ -84,13 +84,13 @@ export class MeetingsService {
   }
 
   async update(meetingId: string, dto: UpdateMeetingDto): Promise<GroupMeeting> {
-    const existing = await this.prisma.groupMeeting.findUnique({
+    const existing = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('Reunião não encontrada');
 
-    return this.prisma.groupMeeting.update({
+    return this.prisma.client.groupMeeting.update({
       where: { id: meetingId },
       data: {
         ...dto,
@@ -104,13 +104,13 @@ export class MeetingsService {
     dto: RecordAttendanceDto,
     user: JwtPayload,
   ): Promise<{ added: number }> {
-    const meeting = await this.prisma.groupMeeting.findUnique({
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
       select: { id: true },
     });
     if (!meeting) throw new NotFoundException('Reunião não encontrada');
 
-    const result = await this.prisma.attendanceRecord.createMany({
+    const result = await this.prisma.client.attendanceRecord.createMany({
       data: dto.person_ids.map((person_id) => ({
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -127,7 +127,7 @@ export class MeetingsService {
     meetingId: string,
     personId: string,
   ): Promise<AttendanceRecord> {
-    const record = await this.prisma.attendanceRecord.findUnique({
+    const record = await this.prisma.client.attendanceRecord.findUnique({
       where: {
         group_meeting_id_person_id: {
           group_meeting_id: meetingId,
@@ -136,6 +136,6 @@ export class MeetingsService {
       },
     });
     if (!record) throw new NotFoundException('Registro de presença não encontrado');
-    return this.prisma.attendanceRecord.delete({ where: { id: record.id } });
+    return this.prisma.client.attendanceRecord.delete({ where: { id: record.id } });
   }
 }

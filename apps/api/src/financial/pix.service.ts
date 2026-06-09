@@ -68,18 +68,18 @@ export class PixService {
   }
 
   private async resolveTenant(slug: string): Promise<TenantContext> {
-    const tenant = await this.prisma.tenant.findUnique({
+    const tenant = await this.prisma.client.tenant.findUnique({
       where: { slug },
       select: { id: true, name: true },
     });
     if (!tenant) throw new NotFoundException('Tenant não encontrado');
 
     const [branding, congregation] = await Promise.all([
-      this.prisma.brandingConfig.findUnique({
+      this.prisma.client.brandingConfig.findUnique({
         where: { tenant_id: tenant.id },
         select: { pix_key: true, app_name: true },
       }),
-      this.prisma.congregation.findFirst({
+      this.prisma.client.congregation.findFirst({
         where: { tenant_id: tenant.id },
         orderBy: { created_at: 'asc' },
         select: { id: true },
@@ -101,11 +101,11 @@ export class PixService {
 
   private async resolveTenantFromUser(user: JwtPayload): Promise<TenantContext> {
     const [branding, congregation] = await Promise.all([
-      this.prisma.brandingConfig.findUnique({
+      this.prisma.client.brandingConfig.findUnique({
         where: { tenant_id: user.tenant_id },
         select: { pix_key: true, app_name: true },
       }),
-      this.prisma.congregation.findFirst({
+      this.prisma.client.congregation.findFirst({
         where: { tenant_id: user.tenant_id },
         orderBy: { created_at: 'asc' },
         select: { id: true },
@@ -117,7 +117,7 @@ export class PixService {
     }
     if (!congregation) throw new NotFoundException('Tenant não encontrado');
 
-    const tenant = await this.prisma.tenant.findUnique({
+    const tenant = await this.prisma.client.tenant.findUnique({
       where: { id: user.tenant_id },
       select: { name: true },
     });
@@ -134,7 +134,7 @@ export class PixService {
     const keyword = slug ?? 'oferta';
 
     const category =
-      (await this.prisma.financialCategory.findFirst({
+      (await this.prisma.client.financialCategory.findFirst({
         where: {
           tenant_id: tenantId,
           congregation_id: congregationId,
@@ -143,7 +143,7 @@ export class PixService {
         },
         select: { id: true },
       })) ??
-      (await this.prisma.financialCategory.findFirst({
+      (await this.prisma.client.financialCategory.findFirst({
         where: {
           tenant_id: tenantId,
           congregation_id: congregationId,
@@ -158,7 +158,7 @@ export class PixService {
   }
 
   private async resolveTenantAdmin(tenantId: string): Promise<string> {
-    const assignment = await this.prisma.roleAssignment.findFirst({
+    const assignment = await this.prisma.client.roleAssignment.findFirst({
       where: { tenant_id: tenantId, role_code: 'tenant_admin' },
       select: { user_account_id: true },
     });
@@ -198,7 +198,7 @@ export class PixService {
     const ctx = await this.resolveTenant(dto.tenant_slug);
     const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
 
-    await this.prisma.pixPayment.create({
+    await this.prisma.client.pixPayment.create({
       data: {
         tenant_id: ctx.tenantId,
         congregation_id: ctx.congregationId,
@@ -246,7 +246,7 @@ export class PixService {
       throw new ServiceUnavailableException('Serviço PIX indisponível');
     }
 
-    const pixPayment = await this.prisma.pixPayment.create({
+    const pixPayment = await this.prisma.client.pixPayment.create({
       data: {
         tenant_id: ctx.tenantId,
         congregation_id: ctx.congregationId,
@@ -282,8 +282,8 @@ export class PixService {
     const createdByUserId = await this.resolveTenantAdmin(ctx.tenantId);
     const ref = this.shortRef();
 
-    await this.prisma.$transaction([
-      this.prisma.financialTransaction.create({
+    await this.prisma.runInTx(async (tx) => {
+      await tx.financialTransaction.create({
         data: {
           tenant_id: ctx.tenantId,
           congregation_id: ctx.congregationId,
@@ -296,8 +296,8 @@ export class PixService {
           created_by_user_id: createdByUserId,
           notes: ref,
         },
-      }),
-      this.prisma.pixPayment.create({
+      });
+      await tx.pixPayment.create({
         data: {
           tenant_id: ctx.tenantId,
           congregation_id: ctx.congregationId,
@@ -307,8 +307,8 @@ export class PixService {
           pix_key: ctx.pixKey,
           category_id: category.id,
         },
-      }),
-    ]);
+      });
+    });
 
     return {
       pix_key: ctx.pixKey,
@@ -340,7 +340,7 @@ export class PixService {
       return { received: true };
     }
 
-    const pixPayment = await this.prisma.pixPayment.findFirst({
+    const pixPayment = await this.prisma.client.pixPayment.findFirst({
       where: { asaas_payment_id: asaasPaymentId },
       select: { id: true, tenant_id: true, congregation_id: true, amount: true, category_id: true },
     });
@@ -357,12 +357,12 @@ export class PixService {
         )
       : pixPayment.amount;
 
-    await this.prisma.$transaction([
-      this.prisma.pixPayment.update({
+    await this.prisma.runInTx(async (tx) => {
+      await tx.pixPayment.update({
         where: { id: pixPayment.id },
         data: { status: PixStatus.confirmed, paid_at: new Date() },
-      }),
-      this.prisma.financialTransaction.create({
+      });
+      await tx.financialTransaction.create({
         data: {
           tenant_id: pixPayment.tenant_id,
           congregation_id: pixPayment.congregation_id,
@@ -374,10 +374,10 @@ export class PixService {
           source: TransactionSource.pix_webhook,
           created_by_user_id: adminUserId,
         },
-      }),
-    ]);
+      });
+    });
 
-    this.prisma.auditLog
+    this.prisma.client.auditLog
       .create({
         data: {
           tenant_id: pixPayment.tenant_id,

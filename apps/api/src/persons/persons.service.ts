@@ -41,7 +41,7 @@ export class PersonsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreatePersonDto, user: JwtPayload): Promise<CreatePersonResult> {
-    const person = await this.prisma.person.create({
+    const person = await this.prisma.client.person.create({
       data: {
         ...dto,
         tenant_id: user.tenant_id,
@@ -52,7 +52,7 @@ export class PersonsService {
     let possible_duplicates: DuplicateHit[] = [];
 
     if (dto.phone) {
-      possible_duplicates = await this.prisma.person.findMany({
+      possible_duplicates = await this.prisma.client.person.findMany({
         where: { phone: dto.phone, id: { not: person.id } },
         select: { id: true, full_name: true, phone: true, classification: true },
       });
@@ -73,20 +73,20 @@ export class PersonsService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.person.findMany({
+      this.prisma.client.person.findMany({
         where,
         skip,
         take: limit,
         orderBy: { full_name: 'asc' },
       }),
-      this.prisma.person.count({ where }),
+      this.prisma.client.person.count({ where }),
     ]);
 
     return { data, total, page, limit };
   }
 
   async findOne(id: string): Promise<Person & { householdMemberships: HouseholdMember[] }> {
-    const person = await this.prisma.person.findUnique({
+    const person = await this.prisma.client.person.findUnique({
       where: { id },
       include: { householdMemberships: true },
     });
@@ -96,7 +96,7 @@ export class PersonsService {
   }
 
   async update(id: string, dto: UpdatePersonDto, user: JwtPayload): Promise<Person> {
-    const existing = await this.prisma.person.findUnique({
+    const existing = await this.prisma.client.person.findUnique({
       where: { id },
       select: { id: true, membership_date: true },
     });
@@ -111,22 +111,22 @@ export class PersonsService {
       throw new BadRequestException('Data de membresia é obrigatória para membros');
     }
 
-    return this.prisma.person.update({ where: { id }, data: dto });
+    return this.prisma.client.person.update({ where: { id }, data: dto });
   }
 
   async remove(id: string): Promise<Person> {
-    const existing = await this.prisma.person.findUnique({
+    const existing = await this.prisma.client.person.findUnique({
       where: { id },
       select: { id: true },
     });
 
     if (!existing) throw new NotFoundException('Pessoa não encontrada');
 
-    return this.prisma.person.delete({ where: { id } });
+    return this.prisma.client.person.delete({ where: { id } });
   }
 
   async createHousehold(dto: CreateHouseholdDto, user: JwtPayload): Promise<Household> {
-    return this.prisma.household.create({
+    return this.prisma.client.household.create({
       data: {
         name: dto.name,
         tenant_id: user.tenant_id,
@@ -136,7 +136,7 @@ export class PersonsService {
   }
 
   async findHousehold(id: string): Promise<HouseholdWithMembers> {
-    const household = await this.prisma.household.findUnique({
+    const household = await this.prisma.client.household.findUnique({
       where: { id },
       include: {
         members: { include: { person: true } },
@@ -154,7 +154,7 @@ export class PersonsService {
     await this.findHousehold(householdId);
 
     try {
-      return await this.prisma.householdMember.create({
+      return await this.prisma.client.householdMember.create({
         data: {
           household_id: householdId,
           person_id: dto.person_id,

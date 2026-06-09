@@ -11,7 +11,7 @@ export class WaitlistService {
 
   async subscribe(dto: CreateWaitlistDto, ip: string, userAgent: string) {
     try {
-      await this.prisma.waitlistSubscriber.create({
+      await this.prisma.client.waitlistSubscriber.create({
         data: {
           email: dto.email,
           pastor_name: dto.pastor_name,
@@ -50,20 +50,20 @@ export class WaitlistService {
     };
 
     const [data, total] = await Promise.all([
-      this.prisma.waitlistSubscriber.findMany({
+      this.prisma.client.waitlistSubscriber.findMany({
         where,
         orderBy: { created_at: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.waitlistSubscriber.count({ where }),
+      this.prisma.client.waitlistSubscriber.count({ where }),
     ]);
 
     return { data, total, page, limit };
   }
 
   async findOne(id: string) {
-    const subscriber = await this.prisma.waitlistSubscriber.findUnique({ where: { id } });
+    const subscriber = await this.prisma.client.waitlistSubscriber.findUnique({ where: { id } });
     if (!subscriber) throw new NotFoundException('Waitlist subscriber not found');
     return subscriber;
   }
@@ -75,7 +75,7 @@ export class WaitlistService {
     const data: Prisma.WaitlistSubscriberUpdateInput = { ...dto };
 
     if (dto.status === WaitlistStatus.contacted && !dto.contacted_at) {
-      const current = await this.prisma.waitlistSubscriber.findUnique({
+      const current = await this.prisma.client.waitlistSubscriber.findUnique({
         where: { id },
         select: { contacted_at: true },
       });
@@ -83,13 +83,13 @@ export class WaitlistService {
     }
 
     if (dto.status === WaitlistStatus.activated && !dto.activated_at) {
-      const current = await this.prisma.waitlistSubscriber.findUnique({
+      const current = await this.prisma.client.waitlistSubscriber.findUnique({
         where: { id },
         select: { activated_at: true },
       });
       if (!current?.activated_at) data.activated_at = now;
     }
 
-    return this.prisma.waitlistSubscriber.update({ where: { id }, data });
+    return this.prisma.client.waitlistSubscriber.update({ where: { id }, data });
   }
 }

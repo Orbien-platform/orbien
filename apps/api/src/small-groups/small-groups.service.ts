@@ -69,14 +69,14 @@ export class SmallGroupsService {
 
   async create(dto: CreateSmallGroupDto, user: JwtPayload): Promise<SmallGroup> {
     if (dto.parent_group_id) {
-      const parent = await this.prisma.smallGroup.findUnique({
+      const parent = await this.prisma.client.smallGroup.findUnique({
         where: { id: dto.parent_group_id },
         select: { id: true },
       });
       if (!parent) throw new NotFoundException('Grupo pai não encontrado');
     }
 
-    return this.prisma.$transaction(
+    return this.prisma.runInTx(
       async (tx) => {
         const group = await tx.smallGroup.create({
           data: {
@@ -116,7 +116,7 @@ export class SmallGroupsService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.smallGroup.findMany({
+      this.prisma.client.smallGroup.findMany({
         where,
         skip,
         take: limit,
@@ -126,14 +126,14 @@ export class SmallGroupsService {
           _count: { select: { memberships: true } },
         },
       }),
-      this.prisma.smallGroup.count({ where }),
+      this.prisma.client.smallGroup.count({ where }),
     ]);
 
     return { data: data as SmallGroupSummary[], total, page, limit };
   }
 
   async findOne(id: string): Promise<SmallGroupDetail> {
-    const group = await this.prisma.smallGroup.findUnique({
+    const group = await this.prisma.client.smallGroup.findUnique({
       where: { id },
       include: {
         leader: true,
@@ -152,7 +152,7 @@ export class SmallGroupsService {
     dto: UpdateSmallGroupDto,
     user: JwtPayload,
   ): Promise<SmallGroup> {
-    const existing = await this.prisma.smallGroup.findUnique({
+    const existing = await this.prisma.client.smallGroup.findUnique({
       where: { id },
       select: { id: true, leader_person_id: true },
     });
@@ -162,10 +162,10 @@ export class SmallGroupsService {
       dto.leader_person_id && dto.leader_person_id !== existing.leader_person_id;
 
     if (!leaderChanged) {
-      return this.prisma.smallGroup.update({ where: { id }, data: dto });
+      return this.prisma.client.smallGroup.update({ where: { id }, data: dto });
     }
 
-    return this.prisma.$transaction(
+    return this.prisma.runInTx(
       async (tx) => {
         await tx.groupMembership.updateMany({
           where: { small_group_id: id, person_id: existing.leader_person_id },
@@ -196,12 +196,12 @@ export class SmallGroupsService {
   }
 
   async remove(id: string): Promise<SmallGroup> {
-    const existing = await this.prisma.smallGroup.findUnique({
+    const existing = await this.prisma.client.smallGroup.findUnique({
       where: { id },
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('Grupo não encontrado');
-    return this.prisma.smallGroup.delete({ where: { id } });
+    return this.prisma.client.smallGroup.delete({ where: { id } });
   }
 
   async addMember(
@@ -211,7 +211,7 @@ export class SmallGroupsService {
   ): Promise<GroupMembership> {
     const role = dto.role ?? GroupMemberRole.member;
 
-    const existing = await this.prisma.groupMembership.findUnique({
+    const existing = await this.prisma.client.groupMembership.findUnique({
       where: {
         small_group_id_person_id: {
           small_group_id: groupId,
@@ -224,13 +224,13 @@ export class SmallGroupsService {
       if (existing.role === GroupMemberRole.leader && role !== GroupMemberRole.leader) {
         throw new BadRequestException('Remova o líder atual antes de rebaixar');
       }
-      return this.prisma.groupMembership.update({
+      return this.prisma.client.groupMembership.update({
         where: { id: existing.id },
         data: { role },
       });
     }
 
-    return this.prisma.groupMembership.create({
+    return this.prisma.client.groupMembership.create({
       data: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -242,7 +242,7 @@ export class SmallGroupsService {
   }
 
   async removeMember(groupId: string, personId: string): Promise<GroupMembership> {
-    const group = await this.prisma.smallGroup.findUnique({
+    const group = await this.prisma.client.smallGroup.findUnique({
       where: { id: groupId },
       select: { leader_person_id: true },
     });
@@ -254,18 +254,18 @@ export class SmallGroupsService {
       );
     }
 
-    const membership = await this.prisma.groupMembership.findUnique({
+    const membership = await this.prisma.client.groupMembership.findUnique({
       where: {
         small_group_id_person_id: { small_group_id: groupId, person_id: personId },
       },
     });
     if (!membership) throw new NotFoundException('Membro não encontrado no grupo');
 
-    return this.prisma.groupMembership.delete({ where: { id: membership.id } });
+    return this.prisma.client.groupMembership.delete({ where: { id: membership.id } });
   }
 
   async getHierarchy(groupId: string): Promise<HierarchyNode | null> {
-    const rows = await this.prisma.$queryRaw<HierarchyRow[]>`
+    const rows = await this.prisma.client.$queryRaw<HierarchyRow[]>`
       WITH RECURSIVE hierarchy AS (
         SELECT
           id, name, type::text AS type, parent_group_id, leader_person_id,
@@ -291,11 +291,11 @@ export class SmallGroupsService {
 
   async checkAbsenceAlerts(groupId: string): Promise<Person[]> {
     const [memberships, meetings] = await Promise.all([
-      this.prisma.groupMembership.findMany({
+      this.prisma.client.groupMembership.findMany({
         where: { small_group_id: groupId },
         include: { person: true },
       }),
-      this.prisma.groupMeeting.findMany({
+      this.prisma.client.groupMeeting.findMany({
         where: { small_group_id: groupId },
         orderBy: { occurred_at: 'desc' },
         take: 3,
@@ -307,7 +307,7 @@ export class SmallGroupsService {
 
     const meetingIds = meetings.map((m) => m.id);
 
-    const attendances = await this.prisma.attendanceRecord.findMany({
+    const attendances = await this.prisma.client.attendanceRecord.findMany({
       where: { group_meeting_id: { in: meetingIds } },
       select: { person_id: true },
       distinct: ['person_id'],

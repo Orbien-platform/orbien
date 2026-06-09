@@ -29,7 +29,7 @@ export class VisitorService {
     ip: string | undefined,
     userAgent: string | string[] | undefined,
   ): Promise<RegisterResult> {
-    const qrToken = await this.prisma.qrToken.findUnique({
+    const qrToken = await this.prisma.client.qrToken.findUnique({
       where: { token: dto.token },
       include: { congregation: { select: { name: true } } },
     });
@@ -38,12 +38,12 @@ export class VisitorService {
       throw new NotFoundException('QR code inválido ou expirado');
     }
 
-    await this.prisma.qrToken.update({
+    await this.prisma.client.qrToken.update({
       where: { id: qrToken.id },
       data: { scan_count: { increment: 1 } },
     });
 
-    const { person, isNewPerson } = await this.prisma.$transaction(
+    const { person, isNewPerson } = await this.prisma.runInTx(
       async (tx: PrismaTx) => {
         let isNewPerson = true;
         let person: { id: string; full_name: string } | null = null;
@@ -126,7 +126,7 @@ export class VisitorService {
   }
 
   async createQrToken(dto: CreateQrTokenDto, user: JwtPayload): Promise<QrToken> {
-    return this.prisma.qrToken.create({
+    return this.prisma.client.qrToken.create({
       data: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -140,7 +140,7 @@ export class VisitorService {
   }
 
   async listQrTokens(user: JwtPayload): Promise<QrToken[]> {
-    return this.prisma.qrToken.findMany({
+    return this.prisma.client.qrToken.findMany({
       where: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -150,7 +150,7 @@ export class VisitorService {
   }
 
   async toggleQrToken(id: string, user: JwtPayload): Promise<QrToken> {
-    const qr = await this.prisma.qrToken.findFirst({
+    const qr = await this.prisma.client.qrToken.findFirst({
       where: {
         id,
         tenant_id: user.tenant_id,
@@ -160,7 +160,7 @@ export class VisitorService {
 
     if (!qr) throw new NotFoundException('QR token não encontrado');
 
-    return this.prisma.qrToken.update({
+    return this.prisma.client.qrToken.update({
       where: { id },
       data: { is_active: !qr.is_active },
     });

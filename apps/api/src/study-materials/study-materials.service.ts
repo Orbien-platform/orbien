@@ -64,7 +64,7 @@ export class StudyMaterialsService {
     // Resolve target groups
     let groupIds: string[];
     if (dto.target_group_ids && dto.target_group_ids.length > 0) {
-      const found = await this.prisma.smallGroup.findMany({
+      const found = await this.prisma.client.smallGroup.findMany({
         where: {
           id: { in: dto.target_group_ids },
           congregation_id: user.congregation_id,
@@ -76,14 +76,14 @@ export class StudyMaterialsService {
       }
       groupIds = dto.target_group_ids;
     } else {
-      const allGroups = await this.prisma.smallGroup.findMany({
+      const allGroups = await this.prisma.client.smallGroup.findMany({
         where: { congregation_id: user.congregation_id },
         select: { id: true },
       });
       groupIds = allGroups.map((g) => g.id);
     }
 
-    return this.prisma.$transaction(
+    return this.prisma.runInTx(
       async (tx) => {
         const material = await tx.studyMaterial.create({
           data: {
@@ -142,7 +142,7 @@ export class StudyMaterialsService {
     const skip = (page - 1) * limit;
 
     const [raw, total] = await Promise.all([
-      this.prisma.studyMaterial.findMany({
+      this.prisma.client.studyMaterial.findMany({
         where,
         skip,
         take: limit,
@@ -151,7 +151,7 @@ export class StudyMaterialsService {
           _count: { select: { openRecords: true } },
         },
       }),
-      this.prisma.studyMaterial.count({ where }),
+      this.prisma.client.studyMaterial.count({ where }),
     ]);
 
     const data = raw.map((m) => ({ ...m, status: computeStatus(m) }));
@@ -159,7 +159,7 @@ export class StudyMaterialsService {
   }
 
   async findOne(id: string) {
-    const material = await this.prisma.studyMaterial.findUnique({
+    const material = await this.prisma.client.studyMaterial.findUnique({
       where: { id },
       include: {
         materialTargets: { include: { smallGroup: true } },
@@ -176,7 +176,7 @@ export class StudyMaterialsService {
     file: Express.Multer.File | undefined,
     user: JwtPayload,
   ) {
-    const existing = await this.prisma.studyMaterial.findUnique({
+    const existing = await this.prisma.client.studyMaterial.findUnique({
       where: { id },
       select: { id: true },
     });
@@ -193,7 +193,7 @@ export class StudyMaterialsService {
       );
     }
 
-    return this.prisma.studyMaterial.update({
+    return this.prisma.client.studyMaterial.update({
       where: { id },
       data: {
         ...dto,
@@ -206,17 +206,17 @@ export class StudyMaterialsService {
   }
 
   async remove(id: string) {
-    const existing = await this.prisma.studyMaterial.findUnique({
+    const existing = await this.prisma.client.studyMaterial.findUnique({
       where: { id },
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('Material não encontrado');
-    return this.prisma.studyMaterial.delete({ where: { id } });
+    return this.prisma.client.studyMaterial.delete({ where: { id } });
   }
 
   async recordOpen(materialId: string, user: JwtPayload) {
     // Resolve person_id from the logged-in user account
-    const account = await this.prisma.userAccount.findUnique({
+    const account = await this.prisma.client.userAccount.findUnique({
       where: { id: user.sub },
       select: { person_id: true },
     });
@@ -227,13 +227,13 @@ export class StudyMaterialsService {
       return { recorded: false, reason: 'user_account_not_linked_to_person' };
     }
 
-    const existing = await this.prisma.materialOpenRecord.findFirst({
+    const existing = await this.prisma.client.materialOpenRecord.findFirst({
       where: { study_material_id: materialId, person_id: personId },
     });
 
     if (existing) return { recorded: false, already_opened: true };
 
-    const record = await this.prisma.materialOpenRecord.create({
+    const record = await this.prisma.client.materialOpenRecord.create({
       data: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -246,20 +246,20 @@ export class StudyMaterialsService {
   }
 
   async getOpenStats(materialId: string) {
-    const material = await this.prisma.studyMaterial.findUnique({
+    const material = await this.prisma.client.studyMaterial.findUnique({
       where: { id: materialId },
       select: { id: true },
     });
     if (!material) throw new NotFoundException('Material não encontrado');
 
-    const targets = await this.prisma.materialTarget.findMany({
+    const targets = await this.prisma.client.materialTarget.findMany({
       where: { study_material_id: materialId },
       select: { small_group_id: true },
     });
 
     const groupIds = targets.map((t) => t.small_group_id);
 
-    const memberships = await this.prisma.groupMembership.findMany({
+    const memberships = await this.prisma.client.groupMembership.findMany({
       where: { small_group_id: { in: groupIds } },
       select: { person_id: true },
       distinct: ['person_id'],
@@ -267,7 +267,7 @@ export class StudyMaterialsService {
 
     const total_targets = memberships.length;
 
-    const opened = await this.prisma.materialOpenRecord.count({
+    const opened = await this.prisma.client.materialOpenRecord.count({
       where: { study_material_id: materialId },
     });
 
@@ -284,7 +284,7 @@ export class StudyMaterialsService {
     }
 
     const now = new Date();
-    const pending = await this.prisma.studyMaterial.findMany({
+    const pending = await this.prisma.client.studyMaterial.findMany({
       where: { publish_at: { lte: now }, notified_at: null },
       select: { id: true, title: true, congregation_id: true },
     });
@@ -321,7 +321,7 @@ export class StudyMaterialsService {
           this.logger.warn(`OneSignal retornou ${res.status} para material ${material.id}`);
         }
 
-        await this.prisma.studyMaterial.update({
+        await this.prisma.client.studyMaterial.update({
           where: { id: material.id },
           data: { notified_at: now },
         });

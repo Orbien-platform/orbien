@@ -26,7 +26,7 @@ export class ForecastService {
     const threeMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3, 1));
     const curMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    const histRows = await this.prisma.$queryRaw<HistoricalRow[]>`
+    const histRows = await this.prisma.client.$queryRaw<HistoricalRow[]>`
       SELECT
         to_char(date_trunc('month', occurred_at), 'YYYY-MM') AS month,
         SUM(amount)                                           AS total
@@ -44,7 +44,7 @@ export class ForecastService {
 
     // ── 2. Recurring monthly (source = recurring, last 30 days) ───────────
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const recurringAgg = await this.prisma.financialTransaction.aggregate({
+    const recurringAgg = await this.prisma.client.financialTransaction.aggregate({
       where: {
         tenant_id: tid,
         congregation_id: cid,

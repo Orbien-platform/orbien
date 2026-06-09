@@ -22,7 +22,7 @@ export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateTransactionDto, user: JwtPayload): Promise<FinancialTransaction> {
-    const category = await this.prisma.financialCategory.findFirst({
+    const category = await this.prisma.client.financialCategory.findFirst({
       where: {
         id: dto.category_id,
         tenant_id: user.tenant_id,
@@ -40,7 +40,7 @@ export class TransactionsService {
     }
 
     if (dto.donor_person_id) {
-      const person = await this.prisma.person.findFirst({
+      const person = await this.prisma.client.person.findFirst({
         where: {
           id: dto.donor_person_id,
           tenant_id: user.tenant_id,
@@ -51,7 +51,7 @@ export class TransactionsService {
       if (!person) throw new NotFoundException('Doador não encontrado');
     }
 
-    const transaction = await this.prisma.financialTransaction.create({
+    const transaction = await this.prisma.client.financialTransaction.create({
       data: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
@@ -68,7 +68,7 @@ export class TransactionsService {
       },
     });
 
-    this.prisma.auditLog
+    this.prisma.client.auditLog
       .create({
         data: {
           tenant_id: user.tenant_id,
@@ -104,7 +104,7 @@ export class TransactionsService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.financialTransaction.findMany({
+      this.prisma.client.financialTransaction.findMany({
         where,
         skip,
         take: limit,
@@ -114,14 +114,14 @@ export class TransactionsService {
           donorPerson: { select: { id: true, full_name: true } },
         },
       }),
-      this.prisma.financialTransaction.count({ where }),
+      this.prisma.client.financialTransaction.count({ where }),
     ]);
 
     return { data: data as FinancialTransaction[], total, page, limit };
   }
 
   async findOne(id: string, user: JwtPayload): Promise<FinancialTransaction> {
-    const transaction = await this.prisma.financialTransaction.findFirst({
+    const transaction = await this.prisma.client.financialTransaction.findFirst({
       where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
       include: {
         category: true,
@@ -140,14 +140,14 @@ export class TransactionsService {
     dto: UpdateTransactionDto,
     user: JwtPayload,
   ): Promise<FinancialTransaction> {
-    const existing = await this.prisma.financialTransaction.findFirst({
+    const existing = await this.prisma.client.financialTransaction.findFirst({
       where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
     });
 
     if (!existing) throw new NotFoundException('Transação não encontrada');
 
     if (dto.category_id && dto.category_id !== existing.category_id) {
-      const category = await this.prisma.financialCategory.findFirst({
+      const category = await this.prisma.client.financialCategory.findFirst({
         where: {
           id: dto.category_id,
           tenant_id: user.tenant_id,
@@ -166,7 +166,7 @@ export class TransactionsService {
       }
     }
 
-    const updated = await this.prisma.financialTransaction.update({
+    const updated = await this.prisma.client.financialTransaction.update({
       where: { id },
       data: {
         ...(dto.type && { type: dto.type }),
@@ -181,7 +181,7 @@ export class TransactionsService {
       },
     });
 
-    this.prisma.auditLog
+    this.prisma.client.auditLog
       .create({
         data: {
           tenant_id: user.tenant_id,
@@ -199,15 +199,15 @@ export class TransactionsService {
   }
 
   async remove(id: string, user: JwtPayload): Promise<FinancialTransaction> {
-    const existing = await this.prisma.financialTransaction.findFirst({
+    const existing = await this.prisma.client.financialTransaction.findFirst({
       where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
     });
 
     if (!existing) throw new NotFoundException('Transação não encontrada');
 
-    const deleted = await this.prisma.financialTransaction.delete({ where: { id } });
+    const deleted = await this.prisma.client.financialTransaction.delete({ where: { id } });
 
-    this.prisma.auditLog
+    this.prisma.client.auditLog
       .create({
         data: {
           tenant_id: user.tenant_id,

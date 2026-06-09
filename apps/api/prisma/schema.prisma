@@ -812,6 +812,7 @@ model ContentPost {
   createdBy    UserAccount  @relation(fields: [created_by_user_id], references: [id], onDelete: Restrict)
 
   audienceSegments       AudienceSegment[]
+  postSegments           PostSegment[]
   notificationDispatches NotificationDispatch[]
 
   @@index([tenant_id, id])
@@ -821,21 +822,36 @@ model ContentPost {
 }
 
 model AudienceSegment {
-  id              String              @id @default(uuid())
+  id              String               @id @default(uuid())
   tenant_id       String
   congregation_id String
-  content_post_id String
-  segment_type    AudienceSegmentType
-  segment_value   String
-  created_at      DateTime            @default(now())
-  updated_at      DateTime            @updatedAt
+  name            String
+  criteria        Json
+  // Legacy fields — nullable after migration to standalone
+  content_post_id String?
+  segment_type    AudienceSegmentType?
+  segment_value   String?
+  created_at      DateTime             @default(now())
+  updated_at      DateTime             @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  contentPost  ContentPost  @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
+  contentPost  ContentPost? @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
+  postSegments PostSegment[]
 
-  @@index([tenant_id, content_post_id])
+  @@index([tenant_id, congregation_id])
   @@map("audience_segments")
+}
+
+model PostSegment {
+  post_id    String
+  segment_id String
+
+  post    ContentPost    @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  segment AudienceSegment @relation(fields: [segment_id], references: [id], onDelete: Cascade)
+
+  @@id([post_id, segment_id])
+  @@map("post_segments")
 }
 
 model NotificationDispatch {

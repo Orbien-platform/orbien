@@ -44,7 +44,7 @@ export class TenantContextInterceptor implements NestInterceptor {
               set_config('app.role_codes',        ${user.roles.join(',')},        true)
           `;
 
-          return firstValueFrom(next.handle());
+          return this.prisma.withTx(tx, () => firstValueFrom(next.handle()));
         },
         { timeout: 30_000, maxWait: 10_000 },
       ),
