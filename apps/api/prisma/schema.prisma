@@ -801,7 +801,9 @@ model ContentPost {
   title              String
   body               String?
   media_url          String?
-  publish_at         DateTime
+  is_draft           Boolean         @default(true)
+  publish_at         DateTime?
+  published_at       DateTime?
   expires_at         DateTime?
   created_by_user_id String
   created_at         DateTime        @default(now())
@@ -817,7 +819,7 @@ model ContentPost {
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
-  @@index([tenant_id, publish_at])
+  @@index([tenant_id, published_at])
   @@map("content_posts")
 }
 
