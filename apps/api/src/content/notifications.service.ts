@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { AudienceSegment, ContentPost, NotificationChannel, NotificationStatus } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { AudienceSegment, ContentPost, NotificationChannel, NotificationDispatch, NotificationStatus } from '@prisma/client';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendNotificationDto } from './dto/send-notification.dto';
 
@@ -62,6 +63,76 @@ export class NotificationsService {
       filters,
       data: {},
     });
+  }
+
+  // ── Metrics ───────────────────────────────────────────────────────────────
+
+  @Cron('*/30 * * * *')
+  async syncNotificationMetrics(): Promise<void> {
+    await this.syncMetrics();
+  }
+
+  async syncMetrics(): Promise<void> {
+    const appId = process.env['ONESIGNAL_APP_ID'];
+    const apiKey = process.env['ONESIGNAL_API_KEY'];
+
+    if (!appId) return;
+
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const pending = await this.prisma.system.notificationDispatch.findMany({
+      where: {
+        onesignal_id: { not: null },
+        channel: NotificationChannel.push,
+        sent_at: { gte: since },
+        OR: [{ reached: null }, { opened: null }],
+      },
+      take: 10,
+    });
+
+    for (const dispatch of pending) {
+      try {
+        const res = await fetch(
+          `https://onesignal.com/api/v1/notifications/${dispatch.onesignal_id}?app_id=${appId}`,
+          { headers: { Authorization: `Basic ${apiKey}` } },
+        );
+
+        if (!res.ok) {
+          this.logger.warn(`syncMetrics: OneSignal ${res.status} para dispatch ${dispatch.id}`);
+          continue;
+        }
+
+        const json = (await res.json()) as { successful?: number; converted?: number };
+
+        await this.prisma.system.notificationDispatch.update({
+          where: { id: dispatch.id },
+          data: {
+            reached: json.successful ?? null,
+            opened: json.converted ?? null,
+          },
+        });
+
+        this.logger.log(`syncMetrics: dispatch ${dispatch.id} reached=${json.successful} opened=${json.converted}`);
+      } catch (err) {
+        this.logger.error(`syncMetrics: falha no dispatch ${dispatch.id}: ${String(err)}`);
+      }
+    }
+  }
+
+  async getMetrics(
+    tenantId: string,
+    congregationId: string,
+    id: string,
+  ): Promise<NotificationDispatch & { title: string | null }> {
+    const dispatch = await this.prisma.client.notificationDispatch.findFirst({
+      where: { id, tenant_id: tenantId, congregation_id: congregationId },
+      include: { contentPost: { select: { title: true } } },
+    });
+
+    if (!dispatch) throw new NotFoundException('Dispatch não encontrado');
+
+    const { contentPost, ...rest } = dispatch as typeof dispatch & { contentPost: { title: string } | null };
+    return { ...rest, title: contentPost?.title ?? null };
   }
 
   // ── Private ───────────────────────────────────────────────────────────────

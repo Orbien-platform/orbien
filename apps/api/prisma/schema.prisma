@@ -865,6 +865,8 @@ model NotificationDispatch {
   status          NotificationStatus
   sent_at         DateTime?
   onesignal_id    String?
+  reached         Int?
+  opened          Int?
   created_at      DateTime            @default(now())
   updated_at      DateTime            @updatedAt
 
