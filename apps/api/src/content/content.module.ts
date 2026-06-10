@@ -5,11 +5,12 @@ import { SegmentsService } from './segments.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 import { NotificationsService } from './notifications.service';
+import { NotificationsController } from './notifications.controller';
 import { SchedulerService } from './scheduler.service';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [SegmentsController, PostsController],
+  controllers: [SegmentsController, PostsController, NotificationsController],
   providers: [SegmentsService, PostsService, NotificationsService, SchedulerService],
   exports: [SegmentsService],
 })

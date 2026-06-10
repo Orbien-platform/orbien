@@ -1,13 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ContentPost, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from './notifications.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(
     tenantId: string,
@@ -130,10 +134,17 @@ export class PostsService {
 
   async publish(tenantId: string, congregationId: string, id: string): Promise<ContentPost> {
     await this.findOne(tenantId, congregationId, id);
-    return this.prisma.client.contentPost.update({
+    const post = await this.prisma.client.contentPost.update({
       where: { id },
       data: { is_draft: false, published_at: new Date() },
+      include: { postSegments: { include: { segment: true } } },
     });
+    const segments = post.postSegments.map((ps) => ps.segment);
+    // fire-and-forget: notification failure must not roll back the publish
+    this.notifications.notifyPost(post, segments).catch((err: unknown) => {
+      void err;
+    });
+    return post;
   }
 
   async remove(tenantId: string, congregationId: string, id: string): Promise<ContentPost> {
