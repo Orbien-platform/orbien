@@ -284,7 +284,7 @@ export class StudyMaterialsService {
     }
 
     const now = new Date();
-    const pending = await this.prisma.client.studyMaterial.findMany({
+    const pending = await this.prisma.system.studyMaterial.findMany({
       where: { publish_at: { lte: now }, notified_at: null },
       select: { id: true, title: true, congregation_id: true },
     });
@@ -321,7 +321,7 @@ export class StudyMaterialsService {
           this.logger.warn(`OneSignal retornou ${res.status} para material ${material.id}`);
         }
 
-        await this.prisma.client.studyMaterial.update({
+        await this.prisma.system.studyMaterial.update({
           where: { id: material.id },
           data: { notified_at: now },
         });
