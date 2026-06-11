@@ -12,6 +12,6 @@ import { SchedulerService } from './scheduler.service';
   imports: [PrismaModule],
   controllers: [SegmentsController, PostsController, NotificationsController],
   providers: [SegmentsService, PostsService, NotificationsService, SchedulerService],
-  exports: [SegmentsService],
+  exports: [SegmentsService, NotificationsService],
 })
 export class ContentModule {}

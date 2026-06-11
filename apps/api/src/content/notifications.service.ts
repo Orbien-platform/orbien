@@ -11,9 +11,19 @@ interface SegmentCriteria {
   // age_range and ministry_ids intentionally omitted — no OneSignal tag for these
 }
 
-type OneSignalFilter =
+export type OneSignalFilter =
   | { field: 'tag'; key: string; relation: '='; value: string }
   | { operator: 'OR' };
+
+export interface SendPushOpts {
+  tenantId: string;
+  congregationId: string;
+  contentPostId: string | null;
+  title: string;
+  body: string;
+  filters: OneSignalFilter[];
+  data: Record<string, string>;
+}
 
 @Injectable()
 export class NotificationsService {
@@ -63,6 +73,12 @@ export class NotificationsService {
       filters,
       data: {},
     });
+  }
+
+  // ── Direct push (used by cross-module callers like SchedulesService) ─────
+
+  async sendPush(opts: SendPushOpts): Promise<void> {
+    await this.dispatch(opts);
   }
 
   // ── Metrics ───────────────────────────────────────────────────────────────

@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AssignmentStatus, Prisma, ScheduleAssignment, ScheduleSlot, ScheduleStatus, ServiceSchedule } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../content/notifications.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { CreateSlotDto } from './dto/create-slot.dto';
@@ -21,7 +23,12 @@ type ScheduleWithSlots = ServiceSchedule & {
 
 @Injectable()
 export class SchedulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SchedulesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   // ── Schedules ─────────────────────────────────────────────────────────────
 
@@ -140,15 +147,68 @@ export class SchedulesService {
   async publish(tenantId: string, congregationId: string, id: string): Promise<ServiceSchedule> {
     const schedule = await this.prisma.client.serviceSchedule.findFirst({
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
+      include: {
+        ministry: { select: { name: true } },
+        slots: {
+          include: {
+            assignments: {
+              where: { status: AssignmentStatus.pending },
+              include: {
+                volunteerProfile: {
+                  select: { person_id: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     if (!schedule) throw new NotFoundException('Escala não encontrada');
     if (schedule.status !== ScheduleStatus.draft) {
       throw new BadRequestException('Escala já publicada ou arquivada');
     }
-    return this.prisma.client.serviceSchedule.update({
+
+    const published = await this.prisma.client.serviceSchedule.update({
       where: { id },
       data: { status: ScheduleStatus.published },
     });
+
+    // Fire-and-forget notifications to each pending volunteer
+    const dateFmt = schedule.scheduled_date.toLocaleDateString('pt-BR', {
+      timeZone: 'UTC',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const deadline = schedule.deadline_confirm_at
+      ? schedule.deadline_confirm_at.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })
+      : null;
+
+    const pendingAssignments = schedule.slots.flatMap((s) =>
+      s.assignments.map((a) => ({ assignmentId: a.id, personId: a.volunteerProfile.person_id })),
+    );
+
+    for (const { assignmentId, personId } of pendingAssignments) {
+      const bodyParts = [`${schedule.title} — ${dateFmt}`];
+      if (deadline) bodyParts.push(`Confirme até ${deadline}`);
+
+      this.notifications
+        .sendPush({
+          tenantId,
+          congregationId,
+          contentPostId: null,
+          title: 'Você está na escala!',
+          body: bodyParts.join(' · '),
+          // person_id is an opaque UUID used to route to a specific device; not PII
+          filters: [{ field: 'tag', key: 'person_id', relation: '=', value: personId }],
+          data: { type: 'schedule_assignment', assignment_id: assignmentId, schedule_id: id },
+        })
+        .catch((err: unknown) => {
+          this.logger.error(`Falha ao notificar assignment ${assignmentId}: ${String(err)}`);
+        });
+    }
+
+    return published;
   }
 
   // ── Slots ─────────────────────────────────────────────────────────────────
@@ -355,5 +415,176 @@ export class SchedulesService {
     }
 
     return { suggested, slots_filled: slotsFilled, slots_remaining: slotsRemaining };
+  }
+
+  // ── Confirm / Decline ─────────────────────────────────────────────────────
+
+  async confirm(assignmentId: string, userId: string): Promise<ScheduleAssignment> {
+    return this.respondToAssignment(assignmentId, userId, AssignmentStatus.confirmed);
+  }
+
+  async decline(assignmentId: string, userId: string): Promise<ScheduleAssignment> {
+    return this.respondToAssignment(assignmentId, userId, AssignmentStatus.declined);
+  }
+
+  private async respondToAssignment(
+    assignmentId: string,
+    userId: string,
+    newStatus: 'confirmed' | 'declined',
+  ): Promise<ScheduleAssignment> {
+    // Resolve person_id for the requesting user
+    const userAccount = await this.prisma.client.userAccount.findUnique({
+      where: { id: userId },
+      select: { person_id: true },
+    });
+    if (!userAccount?.person_id) throw new NotFoundException('Usuário sem vínculo de pessoa');
+
+    const assignment = await this.prisma.client.scheduleAssignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        volunteerProfile: { select: { person_id: true } },
+        slot: { include: { schedule: { select: { deadline_confirm_at: true } } } },
+      },
+    });
+    if (!assignment) throw new NotFoundException('Atribuição não encontrada');
+
+    // Ownership guard — volunteer can only respond to their own assignment
+    if (assignment.volunteerProfile.person_id !== userAccount.person_id) {
+      throw new NotFoundException('Atribuição não encontrada');
+    }
+
+    if (assignment.status !== AssignmentStatus.pending) {
+      throw new ConflictException('Esta atribuição já foi respondida');
+    }
+
+    const deadline = assignment.slot.schedule.deadline_confirm_at;
+    if (deadline && deadline < new Date()) {
+      throw new ConflictException('Prazo para confirmação expirado');
+    }
+
+    return this.prisma.client.scheduleAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        status: newStatus,
+        confirmed_at: newStatus === AssignmentStatus.confirmed ? new Date() : null,
+      },
+    });
+  }
+
+  // ── My Assignments ────────────────────────────────────────────────────────
+
+  async getMyAssignments(
+    userId: string,
+    tenantId: string,
+    congregationId: string,
+    query: { status?: AssignmentStatus; upcoming?: boolean },
+  ): Promise<object[]> {
+    const userAccount = await this.prisma.client.userAccount.findUnique({
+      where: { id: userId },
+      select: { person_id: true },
+    });
+    if (!userAccount?.person_id) return [];
+
+    const profile = await this.prisma.client.volunteerProfile.findFirst({
+      where: { person_id: userAccount.person_id, tenant_id: tenantId, congregation_id: congregationId },
+      select: { id: true },
+    });
+    if (!profile) return [];
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const where: Prisma.ScheduleAssignmentWhereInput = {
+      volunteer_profile_id: profile.id,
+      tenant_id: tenantId,
+      ...(query.status && { status: query.status }),
+      ...(query.upcoming
+        ? { slot: { schedule: { scheduled_date: { gte: today } } } }
+        : {}),
+    };
+
+    return this.prisma.client.scheduleAssignment.findMany({
+      where,
+      orderBy: { slot: { schedule: { scheduled_date: 'asc' } } },
+      include: {
+        slot: {
+          select: {
+            role_name: true,
+            schedule: {
+              select: {
+                title: true,
+                scheduled_date: true,
+                ministry: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ── Reminder cron ─────────────────────────────────────────────────────────
+
+  @Cron('0 8 * * *')
+  async sendConfirmationReminders(): Promise<void> {
+    const now = new Date();
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    // Schedules with deadline_confirm_at within the next 48 hours
+    const pending = await this.prisma.system.scheduleAssignment.findMany({
+      where: {
+        status: AssignmentStatus.pending,
+        slot: {
+          schedule: {
+            status: ScheduleStatus.published,
+            deadline_confirm_at: { gte: now, lte: in48h },
+          },
+        },
+      },
+      include: {
+        volunteerProfile: { select: { person_id: true } },
+        slot: {
+          include: {
+            schedule: {
+              select: {
+                id: true,
+                title: true,
+                tenant_id: true,
+                congregation_id: true,
+                scheduled_date: true,
+                deadline_confirm_at: true,
+              },
+            },
+          },
+        },
+      },
+      take: 50,
+    });
+
+    for (const a of pending) {
+      const schedule = a.slot.schedule;
+      const dateFmt = schedule.scheduled_date.toLocaleDateString('pt-BR', {
+        timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric',
+      });
+      const deadline = schedule.deadline_confirm_at!.toLocaleString('pt-BR', {
+        timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short',
+      });
+
+      this.notifications
+        .sendPush({
+          tenantId: schedule.tenant_id,
+          congregationId: schedule.congregation_id,
+          contentPostId: null,
+          title: 'Lembrete: confirme sua presença na escala',
+          body: `${schedule.title} — ${dateFmt} · Confirme até ${deadline}`,
+          filters: [{ field: 'tag', key: 'person_id', relation: '=', value: a.volunteerProfile.person_id }],
+          data: { type: 'schedule_reminder', assignment_id: a.id, schedule_id: schedule.id },
+        })
+        .catch((err: unknown) => {
+          this.logger.error(`Lembrete falhou para assignment ${a.id}: ${String(err)}`);
+        });
+    }
+
+    if (pending.length) this.logger.log(`sendConfirmationReminders: ${pending.length} lembretes enviados`);
   }
 }
