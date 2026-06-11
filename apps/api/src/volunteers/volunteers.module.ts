@@ -8,11 +8,21 @@ import { VolunteerProfilesService } from './volunteer-profiles.service';
 import { SchedulesController } from './schedules.controller';
 import { SchedulesService } from './schedules.service';
 import { AssignmentsController } from './assignments.controller';
+import { SwapRequestsController } from './swap-requests.controller';
+import { SwapRequestsService } from './swap-requests.service';
+import { CheckinController } from './checkin.controller';
 
 @Module({
   imports: [PrismaModule, ContentModule],
-  controllers: [MinistriesController, VolunteerProfilesController, SchedulesController, AssignmentsController],
-  providers: [MinistriesService, VolunteerProfilesService, SchedulesService],
-  exports: [MinistriesService, VolunteerProfilesService, SchedulesService],
+  controllers: [
+    MinistriesController,
+    VolunteerProfilesController,
+    SchedulesController,
+    AssignmentsController,
+    SwapRequestsController,
+    CheckinController,
+  ],
+  providers: [MinistriesService, VolunteerProfilesService, SchedulesService, SwapRequestsService],
+  exports: [MinistriesService, VolunteerProfilesService, SchedulesService, SwapRequestsService],
 })
 export class VolunteersModule {}

@@ -25,6 +25,8 @@ import { ListSchedulesQueryDto } from './dto/list-schedules-query.dto';
 
 const MANAGE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'ministry_leader'];
 const READ_ROLES = [...MANAGE_ROLES, 'secretary'];
+const DETAIL_ROLES = [...READ_ROLES, 'volunteer', 'member'];
+const TOKEN_VISIBLE_ROLES = new Set(['admin_congregation', 'pastor', 'tenant_admin', 'ministry_leader']);
 const PUBLISH_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
 const DELETE_ROLES = ['admin_congregation', 'tenant_admin'];
 
@@ -49,9 +51,20 @@ export class SchedulesController {
   }
 
   @Get(':id')
-  @Roles(...READ_ROLES)
-  findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.schedulesService.findOne(user.tenant_id, user.congregation_id, id);
+  @Roles(...DETAIL_ROLES)
+  async findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    const schedule = await this.schedulesService.findOne(user.tenant_id, user.congregation_id, id);
+    const canSeeToken = user.roles.some((r) => TOKEN_VISIBLE_ROLES.has(r));
+    if (canSeeToken) return schedule;
+
+    // Strip checkin_token for member/volunteer roles
+    return {
+      ...schedule,
+      slots: schedule.slots.map((slot) => ({
+        ...slot,
+        assignments: slot.assignments.map(({ checkin_token: _token, ...a }) => a),
+      })),
+    };
   }
 
   @Patch(':id')

@@ -523,6 +523,57 @@ export class SchedulesService {
     });
   }
 
+  // ── Check-in ──────────────────────────────────────────────────────────────
+
+  async checkIn(token: string): Promise<{
+    ok: boolean;
+    volunteer_name: string;
+    ministry_name: string;
+    role_name: string;
+    schedule_title: string;
+  }> {
+    const assignment = await this.prisma.system.scheduleAssignment.findUnique({
+      where: { checkin_token: token },
+      include: {
+        volunteerProfile: {
+          include: { person: { select: { full_name: true } } },
+        },
+        slot: {
+          include: {
+            schedule: {
+              include: { ministry: { select: { name: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!assignment) throw new NotFoundException('Token de check-in inválido');
+
+    if (assignment.status !== AssignmentStatus.confirmed) {
+      throw new BadRequestException('A atribuição não está confirmada');
+    }
+
+    const scheduledDate = assignment.slot.schedule.scheduled_date;
+    const now = new Date();
+    const diffMs = Math.abs(now.getTime() - scheduledDate.getTime());
+    if (diffMs > 24 * 60 * 60 * 1000) {
+      throw new BadRequestException('Check-in disponível apenas no dia da escala (±24h)');
+    }
+
+    await this.prisma.system.scheduleAssignment.update({
+      where: { id: assignment.id },
+      data: { checked_in_at: now },
+    });
+
+    return {
+      ok: true,
+      volunteer_name: assignment.volunteerProfile.person.full_name,
+      ministry_name: assignment.slot.schedule.ministry.name,
+      role_name: assignment.slot.role_name,
+      schedule_title: assignment.slot.schedule.title,
+    };
+  }
+
   // ── Reminder cron ─────────────────────────────────────────────────────────
 
   @Cron('0 8 * * *')
