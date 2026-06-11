@@ -13,7 +13,7 @@ export class SwapRequestsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async create(userId: string, dto: CreateSwapRequestDto): Promise<VolunteerSwapRequest> {
+  async create(userId: string, dto: CreateSwapRequestDto): Promise<VolunteerSwapRequest & { swap_request_id: string; compatible_substitutes: number }> {
     const userAccount = await this.prisma.client.userAccount.findUnique({
       where: { id: userId },
       select: { person_id: true },
@@ -90,6 +90,8 @@ export class SwapRequestsService {
       return Array.isArray(avail?.[dayOfWeek]) && (avail![dayOfWeek]?.length ?? 0) > 0;
     });
 
+    const compatibleCount = eligible.length;
+
     const swapRequest = await this.prisma.client.volunteerSwapRequest.create({
       data: {
         tenant_id: schedule.tenant_id,
@@ -116,7 +118,7 @@ export class SwapRequestsService {
         });
     }
 
-    return swapRequest;
+    return { ...swapRequest, swap_request_id: swapRequest.id, compatible_substitutes: compatibleCount };
   }
 
   async accept(userId: string, swapRequestId: string): Promise<VolunteerSwapRequest> {

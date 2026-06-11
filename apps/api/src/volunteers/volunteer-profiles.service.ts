@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, VolunteerProfile } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVolunteerProfileDto } from './dto/create-volunteer-profile.dto';
@@ -17,6 +17,11 @@ export class VolunteerProfilesService {
     congregationId: string,
     dto: CreateVolunteerProfileDto,
   ): Promise<ProfileWithMinistries> {
+    const existing = await this.prisma.client.volunteerProfile.findUnique({
+      where: { person_id: dto.person_id },
+    });
+    if (existing) throw new ConflictException('Esta pessoa já possui um perfil de voluntário');
+
     return this.prisma.runInTx(async (tx) => {
       const profile = await tx.volunteerProfile.create({
         data: {

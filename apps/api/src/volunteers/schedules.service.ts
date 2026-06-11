@@ -527,6 +527,7 @@ export class SchedulesService {
 
   async checkIn(token: string): Promise<{
     ok: boolean;
+    already_checked_in?: boolean;
     volunteer_name: string;
     ministry_name: string;
     role_name: string;
@@ -560,18 +561,24 @@ export class SchedulesService {
       throw new BadRequestException('Check-in disponível apenas no dia da escala (±24h)');
     }
 
-    await this.prisma.system.scheduleAssignment.update({
-      where: { id: assignment.id },
-      data: { checked_in_at: now },
-    });
-
-    return {
+    const base = {
       ok: true,
       volunteer_name: assignment.volunteerProfile.person.full_name,
       ministry_name: assignment.slot.schedule.ministry.name,
       role_name: assignment.slot.role_name,
       schedule_title: assignment.slot.schedule.title,
     };
+
+    if (assignment.checked_in_at) {
+      return { ...base, already_checked_in: true };
+    }
+
+    await this.prisma.system.scheduleAssignment.update({
+      where: { id: assignment.id },
+      data: { checked_in_at: now },
+    });
+
+    return base;
   }
 
   // ── Reminder cron ─────────────────────────────────────────────────────────
