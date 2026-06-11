@@ -57,6 +57,7 @@ model Tenant {
   notificationDispatches NotificationDispatch[]
   ministries            Ministry[]
   volunteerProfiles     VolunteerProfile[]
+  volunteerMinistries   VolunteerMinistry[]
   assignments           Assignment[]
   celebrations          Celebration[]
   celebrationInstances  CelebrationInstance[]
@@ -103,6 +104,7 @@ model Congregation {
   notificationDispatches NotificationDispatch[]
   ministries            Ministry[]
   volunteerProfiles     VolunteerProfile[]
+  volunteerMinistries   VolunteerMinistry[]
   assignments           Assignment[]
   celebrations          Celebration[]
   celebrationInstances  CelebrationInstance[]
@@ -890,14 +892,16 @@ model Ministry {
   congregation_id String
   name            String
   description     String?
+  color           String?
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
 
-  assignments       Assignment[]
-  serviceOrderItems ServiceOrderItem[]
+  assignments         Assignment[]
+  serviceOrderItems   ServiceOrderItem[]
+  volunteerMinistries VolunteerMinistry[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -905,25 +909,44 @@ model Ministry {
 }
 
 model VolunteerProfile {
-  id                  String   @id @default(uuid())
-  tenant_id           String
-  congregation_id     String
-  person_id           String   @unique
-  ministries          Json
-  skills              Json
-  weekly_availability Json
-  restrictions        String?
-  accepted_terms_at   DateTime
-  created_at          DateTime @default(now())
-  updated_at          DateTime @updatedAt
+  id              String    @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  person_id       String    @unique
+  availability    Json
+  skills          Json
+  restrictions    String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
 
+  volunteerMinistries VolunteerMinistry[]
+
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@map("volunteer_profiles")
+}
+
+model VolunteerMinistry {
+  id                   String   @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  volunteer_profile_id String
+  ministry_id          String
+  role_in_ministry     String?
+  created_at           DateTime @default(now())
+
+  volunteerProfile VolunteerProfile @relation(fields: [volunteer_profile_id], references: [id], onDelete: Cascade)
+  ministry         Ministry         @relation(fields: [ministry_id], references: [id], onDelete: Cascade)
+  tenant           Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation     Congregation     @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+
+  @@unique([volunteer_profile_id, ministry_id])
+  @@index([tenant_id, volunteer_profile_id])
+  @@map("volunteer_ministries")
 }
 
 model Assignment {
