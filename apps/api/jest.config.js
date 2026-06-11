@@ -18,6 +18,9 @@ module.exports = {
     }],
   },
   setupFiles: ['<rootDir>/test/setup.ts'],
-  testTimeout: 60000,
+  // 90s: RLS tests open $transactions against Supabase pooler; under load
+  // (dev server running concurrently) connection acquisition can take >60s.
+  // If a test still fails at 90s it is a real security gap — investigate.
+  testTimeout: 90000,
   verbose: true,
 };
