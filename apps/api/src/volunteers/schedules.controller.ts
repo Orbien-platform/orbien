@@ -72,6 +72,12 @@ export class SchedulesController {
     return this.schedulesService.publish(user.tenant_id, user.congregation_id, id);
   }
 
+  @Post(':id/suggest')
+  @Roles(...MANAGE_ROLES)
+  suggest(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.schedulesService.suggestAssignments(user.tenant_id, user.congregation_id, id);
+  }
+
   // ── Slots ──────────────────────────────────────────────────────────────────
 
   @Post(':id/slots')

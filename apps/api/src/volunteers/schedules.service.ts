@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ScheduleAssignment, ScheduleSlot, ScheduleStatus, ServiceSchedule } from '@prisma/client';
+import { AssignmentStatus, Prisma, ScheduleAssignment, ScheduleSlot, ScheduleStatus, ServiceSchedule } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
@@ -244,5 +244,116 @@ export class SchedulesService {
     });
     if (!assignment) throw new NotFoundException('Atribuição não encontrada');
     return this.prisma.client.scheduleAssignment.delete({ where: { id: assignmentId } });
+  }
+
+  // ── Suggest ───────────────────────────────────────────────────────────────
+
+  async suggestAssignments(
+    tenantId: string,
+    congregationId: string,
+    scheduleId: string,
+  ): Promise<{ suggested: number; slots_filled: number; slots_remaining: number }> {
+    // Load schedule with full slot+assignment hierarchy
+    const schedule = await this.prisma.client.serviceSchedule.findFirst({
+      where: { id: scheduleId, tenant_id: tenantId, congregation_id: congregationId },
+      include: {
+        slots: {
+          include: { assignments: { select: { volunteer_profile_id: true } } },
+        },
+      },
+    });
+    if (!schedule) throw new NotFoundException('Escala não encontrada');
+    if (schedule.status !== ScheduleStatus.draft) {
+      throw new BadRequestException('Sugestão automática só é possível em escalas com status draft');
+    }
+
+    // Day of week derived from scheduled_date (UTC, locale-agnostic)
+    const date = new Date(schedule.scheduled_date);
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayOfWeek = days[date.getUTCDay()];
+
+    // Set of profile ids already assigned anywhere in this schedule
+    const alreadyAssigned = new Set(
+      schedule.slots.flatMap((s) => s.assignments.map((a) => a.volunteer_profile_id)),
+    );
+
+    // Load all volunteer profiles linked to this schedule's ministry.
+    // Also load recent confirmed assignment count for fair rotation.
+    const since60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+    const candidates = await this.prisma.client.volunteerProfile.findMany({
+      where: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        volunteerMinistries: { some: { ministry_id: schedule.ministry_id } },
+      },
+      select: {
+        id: true,
+        availability: true,
+        created_at: true,
+        // Count of confirmed assignments in last 60 days for fair rotation
+        scheduleAssignments: {
+          where: {
+            status: AssignmentStatus.confirmed,
+            slot: {
+              schedule: { scheduled_date: { gte: since60d } },
+            },
+          },
+          select: { id: true },
+        },
+      },
+    });
+
+    // Filter by day availability (availability is JSON: { sunday: [...], ... })
+    const eligible = candidates.filter((p) => {
+      if (alreadyAssigned.has(p.id)) return false;
+      const avail = p.availability as Record<string, string[]> | null;
+      return Array.isArray(avail?.[dayOfWeek]) && (avail![dayOfWeek]?.length ?? 0) > 0;
+    });
+
+    // Sort: fewest recent confirmed assignments first, then oldest profile (stable rotation)
+    eligible.sort((a, b) => {
+      const diff = a.scheduleAssignments.length - b.scheduleAssignments.length;
+      if (diff !== 0) return diff;
+      return a.created_at.getTime() - b.created_at.getTime();
+    });
+
+    let suggested = 0;
+    let slotsFilled = 0;
+    let slotsRemaining = 0;
+
+    for (const slot of schedule.slots) {
+      const needed = slot.required_count - slot.assignments.length;
+      if (needed <= 0) continue;
+
+      // Pick first `needed` eligible candidates not yet used in this iteration
+      const picked: string[] = [];
+      for (const candidate of eligible) {
+        if (alreadyAssigned.has(candidate.id)) continue;
+        picked.push(candidate.id);
+        alreadyAssigned.add(candidate.id); // prevent double-booking across slots
+        if (picked.length >= needed) break;
+      }
+
+      if (picked.length > 0) {
+        await this.prisma.client.scheduleAssignment.createMany({
+          data: picked.map((profileId) => ({
+            tenant_id: tenantId,
+            congregation_id: congregationId,
+            slot_id: slot.id,
+            volunteer_profile_id: profileId,
+            checkin_token: randomUUID(),
+          })),
+          skipDuplicates: true,
+        });
+        suggested += picked.length;
+      }
+
+      const remaining = needed - picked.length;
+      if (remaining === 0) slotsFilled++;
+      else slotsRemaining++;
+    }
+
+    return { suggested, slots_filled: slotsFilled, slots_remaining: slotsRemaining };
   }
 }
