@@ -49,6 +49,14 @@ let categoryBId: string;
 let congregationA2Id: string;
 let personA2Id: string;
 
+// Sprint 8 — Celebrations module fixtures (Tenant A)
+let celebrationAId: string;
+let celebrationInstanceAId: string;
+let serviceOrderAId: string;
+let serviceOrderItemAId: string;
+let setlistAId: string;
+let setlistSongAId: string;
+
 // ─── Setup / Teardown ─────────────────────────────────────────────────────────
 
 beforeAll(async () => {
@@ -153,6 +161,75 @@ beforeAll(async () => {
     },
   });
   pixPaymentAId = pixA.id;
+
+  // Sprint 8 fixtures: Celebrations → Instance → ServiceOrder → Item → Setlist → Song
+  const celebA = await prismaAdmin.celebration.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      name: 'Culto RLS Test A',
+      type: 'sunday_service',
+      start_time: '19:00',
+      recurrence: 'weekly',
+    },
+  });
+  celebrationAId = celebA.id;
+
+  const instanceA = await prismaAdmin.celebrationInstance.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      celebration_id: celebrationAId,
+      scheduled_date: new Date('2030-01-05'),
+    },
+  });
+  celebrationInstanceAId = instanceA.id;
+
+  const soA = await prismaAdmin.serviceOrder.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      celebration_instance_id: celebrationInstanceAId,
+      title: 'OC RLS Test A',
+    },
+  });
+  serviceOrderAId = soA.id;
+
+  const itemA = await prismaAdmin.serviceOrderItem.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      service_order_id: serviceOrderAId,
+      sequence: 1,
+      name: 'Abertura',
+      start_offset_minutes: 0,
+      duration_minutes: 5,
+      responsible_type: 'free_text',
+      responsible_label: 'Host',
+    },
+  });
+  serviceOrderItemAId = itemA.id;
+
+  const slA = await prismaAdmin.setlist.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      service_order_item_id: serviceOrderItemAId,
+    },
+  });
+  setlistAId = slA.id;
+
+  const songA = await prismaAdmin.setlistSong.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      setlist_id: setlistAId,
+      sequence: 1,
+      title: 'Música RLS Test',
+      key: 'G',
+    },
+  });
+  setlistSongAId = songA.id;
 
   // Create Tenant B (the "attacker" tenant)
   const tenantB = await prismaAdmin.tenant.create({
@@ -477,6 +554,161 @@ describe('8. PIX payment isolation', () => {
       console.error(
         `SECURITY GAP (app_user role): pix_payment id=${pixPaymentAId} from Tenant A ` +
           'is visible to Tenant B. PIX key leakage confirmed.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Celebrations isolation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('9. Cross-tenant read — Celebration', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A celebrations', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.celebration.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} celebration record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A celebration by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.celebration.findUnique({ where: { id: celebrationAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): celebration id=${celebrationAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. CelebrationInstance isolation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('10. Cross-tenant read — CelebrationInstance', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A instances', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.celebrationInstance.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} celebration_instance record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A instance by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.celebrationInstance.findUnique({ where: { id: celebrationInstanceAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): celebration_instance id=${celebrationInstanceAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. ServiceOrder isolation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('11. Cross-tenant read — ServiceOrder', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A service orders', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.serviceOrder.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} service_order record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A service order by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.serviceOrder.findUnique({ where: { id: serviceOrderAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): service_order id=${serviceOrderAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. Setlist isolation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('12. Cross-tenant read — Setlist', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A setlists', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.setlist.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} setlist record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A setlist by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.setlist.findUnique({ where: { id: setlistAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): setlist id=${setlistAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. SetlistSong isolation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('13. Cross-tenant read — SetlistSong', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A setlist songs', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.setlistSong.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} setlist_song record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A setlist song by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.setlistSong.findUnique({ where: { id: setlistSongAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): setlist_song id=${setlistSongAId} from Tenant A ` +
+          'is visible to Tenant B.',
       );
     }
     expect(row).toBeNull();
