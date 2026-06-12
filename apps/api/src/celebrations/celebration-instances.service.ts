@@ -53,6 +53,7 @@ export class CelebrationInstancesService {
       orderBy: { scheduled_date: 'asc' },
       include: {
         celebration: { select: { id: true, name: true, type: true } },
+        serviceOrder: { select: { id: true, title: true, published_at: true } },
       },
     });
   }
@@ -66,6 +67,7 @@ export class CelebrationInstancesService {
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
       include: {
         celebration: { select: { id: true, name: true, type: true } },
+        serviceOrder: { select: { id: true, title: true, published_at: true } },
       },
     });
     if (!instance) throw new NotFoundException('Instância não encontrada');
