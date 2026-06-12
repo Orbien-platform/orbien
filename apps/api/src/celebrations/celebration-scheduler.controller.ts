@@ -14,4 +14,9 @@ export class CelebrationSchedulerController {
   generateInstances() {
     return this.schedulerService.generateInstances();
   }
+
+  @Post('send-host-reminders')
+  sendHostReminders() {
+    return this.schedulerService.sendHostReminders();
+  }
 }

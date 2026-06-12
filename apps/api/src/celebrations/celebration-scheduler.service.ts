@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CelebrationRecurrence } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService, OneSignalFilter } from '../content/notifications.service';
 
 interface TenantStats {
   created: number;
@@ -14,11 +15,22 @@ export interface GenerateInstancesResult {
   tenants: Record<string, TenantStats>;
 }
 
+export interface SendHostRemindersResult {
+  instances_checked: number;
+  sent: number;
+  errors: number;
+}
+
 @Injectable()
 export class CelebrationSchedulerService {
   private readonly logger = new Logger(CelebrationSchedulerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  // ── Cron: generate instances every Sunday at 06:00 ─────────────────────────
 
   @Cron('0 6 * * 0')
   async cronGenerateInstances(): Promise<void> {
@@ -27,6 +39,18 @@ export class CelebrationSchedulerService {
       `Scheduler run complete: ${result.celebrations_processed} celebrations processed — ${JSON.stringify(result.tenants)}`,
     );
   }
+
+  // ── Cron: host reminders every day at 08:00 ────────────────────────────────
+
+  @Cron('0 8 * * *')
+  async cronSendHostReminders(): Promise<void> {
+    const result = await this.sendHostReminders();
+    this.logger.log(
+      `Host reminders: instances_checked=${result.instances_checked} sent=${result.sent} errors=${result.errors}`,
+    );
+  }
+
+  // ── Public methods (also called from the internal controller) ──────────────
 
   async generateInstances(): Promise<GenerateInstancesResult> {
     const today = this.startOfDayUtc(new Date());
@@ -99,6 +123,71 @@ export class CelebrationSchedulerService {
     }
 
     return { celebrations_processed: celebrations.length, tenants };
+  }
+
+  async sendHostReminders(): Promise<SendHostRemindersResult> {
+    const today = this.startOfDayUtc(new Date());
+    const dayEnd = new Date(today.getTime() + 86_400_000 - 1);
+
+    // system client: BYPASSRLS — cross-tenant scheduler
+    const instances = await this.prisma.system.celebrationInstance.findMany({
+      where: {
+        status: 'published',
+        scheduled_date: { gte: today, lte: dayEnd },
+        host_reminder_sent_at: null,
+      },
+      include: {
+        celebration: { select: { name: true, start_time: true } },
+      },
+    });
+
+    let sent = 0;
+    let errors = 0;
+
+    for (const instance of instances) {
+      try {
+        const filters = this.buildHostRoleFilters(instance.congregation_id);
+
+        await this.notifications.sendPush({
+          tenantId: instance.tenant_id,
+          congregationId: instance.congregation_id,
+          contentPostId: null,
+          title: 'Lembrete: Culto Hoje',
+          body: `Hoje tem ${instance.celebration.name} às ${instance.celebration.start_time}. Acesse a OC no app.`,
+          filters,
+          data: { type: 'host_reminder', celebration_instance_id: instance.id },
+        });
+
+        await this.prisma.system.celebrationInstance.update({
+          where: { id: instance.id },
+          data: { host_reminder_sent_at: new Date() },
+        });
+
+        sent++;
+        this.logger.log(`Host reminder sent: instance=${instance.id} congregation=${instance.congregation_id}`);
+      } catch (err) {
+        errors++;
+        this.logger.error(`Host reminder failed for instance ${instance.id}: ${String(err)}`);
+      }
+    }
+
+    return { instances_checked: instances.length, sent, errors };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filter builders
+  // ---------------------------------------------------------------------------
+
+  /** (congregation_id=X AND role=R1) OR (congregation_id=X AND role=R2) … */
+  private buildHostRoleFilters(congregationId: string): OneSignalFilter[] {
+    const roles = ['admin_congregation', 'pastor', 'secretary'];
+    return roles.flatMap((role, i) => {
+      const pair: OneSignalFilter[] = [
+        { field: 'tag', key: 'congregation_id', relation: '=', value: congregationId },
+        { field: 'tag', key: 'role', relation: '=', value: role },
+      ];
+      return i === 0 ? pair : [{ operator: 'OR' }, ...pair];
+    });
   }
 
   // ---------------------------------------------------------------------------

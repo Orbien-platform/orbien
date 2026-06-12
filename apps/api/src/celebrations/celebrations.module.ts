@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ContentModule } from '../content/content.module';
 import { CelebrationsController } from './celebrations.controller';
 import { CelebrationsService } from './celebrations.service';
 import { CelebrationInstancesController } from './celebration-instances.controller';
@@ -16,7 +17,7 @@ import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CelebrationSchedulerController } from './celebration-scheduler.controller';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, ContentModule],
   // More-specific prefixes must come before less-specific ones so NestJS
   // doesn't let CelebrationsController's GET /:id swallow child routes.
   // Ordering: /setlists/songs before /setlists before /celebrations

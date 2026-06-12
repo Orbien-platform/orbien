@@ -1,12 +1,18 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ServiceOrder } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService, OneSignalFilter } from '../content/notifications.service';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 
 @Injectable()
 export class ServiceOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ServiceOrdersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(
     tenantId: string,
@@ -89,7 +95,7 @@ export class ServiceOrdersService {
     if (!order) throw new NotFoundException('Ordem de culto não encontrada');
     if (order.published_at) throw new BadRequestException('Ordem de culto já publicada');
 
-    return this.prisma.runInTx(async (tx) => {
+    const published = await this.prisma.runInTx(async (tx) => {
       await tx.celebrationInstance.update({
         where: { id: order.celebration_instance_id },
         data: { status: 'published' },
@@ -99,6 +105,13 @@ export class ServiceOrdersService {
         data: { published_at: new Date() },
       });
     });
+
+    // Fire-and-forget: notification failure must not roll back the publish
+    this.notifyOrderPublished(tenantId, congregationId, order.celebration_instance_id, id).catch(
+      (err: unknown) => this.logger.error(`Notificação de publicação falhou (order=${id}): ${String(err)}`),
+    );
+
+    return published;
   }
 
   async finalize(tenantId: string, congregationId: string, id: string): Promise<ServiceOrder> {
@@ -113,5 +126,76 @@ export class ServiceOrdersService {
       data: { status: 'finalized' },
     });
     return order;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private async notifyOrderPublished(
+    tenantId: string,
+    congregationId: string,
+    instanceId: string,
+    serviceOrderId: string,
+  ): Promise<void> {
+    const instance = await this.prisma.client.celebrationInstance.findUnique({
+      where: { id: instanceId },
+      include: { celebration: { select: { name: true } } },
+    });
+    if (!instance) return;
+
+    // Find ministry-type items for this order
+    const ministryItems = await this.prisma.client.serviceOrderItem.findMany({
+      where: { service_order_id: serviceOrderId, ministry_id: { not: null } },
+      select: { ministry_id: true },
+    });
+    if (!ministryItems.length) return;
+
+    const ministryIds = [...new Set(ministryItems.map((i) => i.ministry_id!))];
+    const dayStart = new Date(instance.scheduled_date);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(instance.scheduled_date);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+
+    // Find confirmed assignments for those ministries on the celebration date
+    const assignments = await this.prisma.client.scheduleAssignment.findMany({
+      where: {
+        tenant_id: tenantId,
+        status: 'confirmed',
+        slot: {
+          schedule: {
+            ministry_id: { in: ministryIds },
+            scheduled_date: { gte: dayStart, lte: dayEnd },
+          },
+        },
+      },
+      include: { volunteerProfile: { select: { person_id: true } } },
+    });
+    if (!assignments.length) return;
+
+    const personIds = [...new Set(assignments.map((a) => a.volunteerProfile.person_id))];
+
+    // Build OR filter: one tag per person_id
+    const filters: OneSignalFilter[] = personIds.flatMap((pid, i) => {
+      const f: OneSignalFilter = { field: 'tag', key: 'person_id', relation: '=', value: pid };
+      return i === 0 ? [f] : [{ operator: 'OR' }, f];
+    });
+
+    const dateLabel = instance.scheduled_date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+
+    await this.notifications.sendPush({
+      tenantId,
+      congregationId,
+      contentPostId: null,
+      title: 'Ordem de Culto publicada',
+      body: `A Ordem de Celebração de ${instance.celebration.name} do dia ${dateLabel} foi publicada.`,
+      filters,
+      data: { type: 'service_order_published', service_order_id: serviceOrderId },
+    });
   }
 }

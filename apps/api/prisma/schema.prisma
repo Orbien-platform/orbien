@@ -1107,15 +1107,16 @@ model Celebration {
 }
 
 model CelebrationInstance {
-  id              String                    @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  celebration_id  String
-  scheduled_date  DateTime
-  status          CelebrationInstanceStatus @default(draft)
-  notes           String?
-  created_at      DateTime                  @default(now())
-  updated_at      DateTime                  @updatedAt
+  id                    String                    @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  celebration_id        String
+  scheduled_date        DateTime
+  status                CelebrationInstanceStatus @default(draft)
+  notes                 String?
+  host_reminder_sent_at DateTime?
+  created_at            DateTime                  @default(now())
+  updated_at            DateTime                  @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
