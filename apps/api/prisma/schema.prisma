@@ -66,6 +66,7 @@ model Tenant {
   celebrations           Celebration[]
   celebrationInstances   CelebrationInstance[]
   serviceOrders          ServiceOrder[]
+  serviceOrderItems      ServiceOrderItem[]
   auditLogs              AuditLog[]
   qrTokens               QrToken[]
 
@@ -117,6 +118,7 @@ model Congregation {
   celebrations           Celebration[]
   celebrationInstances   CelebrationInstance[]
   serviceOrders          ServiceOrder[]
+  serviceOrderItems      ServiceOrderItem[]
   materialOpenRecords    MaterialOpenRecord[]
   qrTokens               QrToken[]
 
@@ -1093,8 +1095,7 @@ model Celebration {
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
 
-  instances     CelebrationInstance[]
-  serviceOrders ServiceOrder[]
+  instances CelebrationInstance[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1115,6 +1116,7 @@ model CelebrationInstance {
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   celebration  Celebration  @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
+  serviceOrder ServiceOrder?
 
   @@index([tenant_id, celebration_id])
   @@index([tenant_id, scheduled_date])
@@ -1122,17 +1124,18 @@ model CelebrationInstance {
 }
 
 model ServiceOrder {
-  id              String   @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  celebration_id  String
-  is_template     Boolean  @default(false)
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  id                      String    @id @default(uuid())
+  tenant_id               String
+  congregation_id         String
+  celebration_instance_id String    @unique
+  title                   String
+  published_at            DateTime?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  celebration  Celebration  @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
+  tenant              Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation        Congregation        @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  celebrationInstance CelebrationInstance @relation(fields: [celebration_instance_id], references: [id], onDelete: Cascade)
 
   items ServiceOrderItem[]
 
@@ -1142,24 +1145,32 @@ model ServiceOrder {
 }
 
 model ServiceOrderItem {
-  id                    String    @id @default(uuid())
-  service_order_id      String
-  position              Int
-  name                  String
-  starts_at             DateTime?
-  duration_minutes      Int?
-  responsible_person_id String?
-  ministry_id           String?
-  created_at            DateTime  @default(now())
-  updated_at            DateTime  @updatedAt
+  id                   String          @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  service_order_id     String
+  sequence             Int
+  name                 String
+  start_offset_minutes Int
+  duration_minutes     Int
+  responsible_type     ResponsibleType
+  person_id            String?
+  ministry_id          String?
+  responsible_label    String?
+  notes                String?
+  created_at           DateTime        @default(now())
+  updated_at           DateTime        @updatedAt
 
-  serviceOrder      ServiceOrder @relation(fields: [service_order_id], references: [id], onDelete: Cascade)
-  responsiblePerson Person?      @relation(fields: [responsible_person_id], references: [id], onDelete: SetNull)
-  ministry          Ministry?    @relation(fields: [ministry_id], references: [id], onDelete: SetNull)
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  serviceOrder ServiceOrder @relation(fields: [service_order_id], references: [id], onDelete: Cascade)
+  person       Person?      @relation(fields: [person_id], references: [id], onDelete: SetNull)
+  ministry     Ministry?    @relation(fields: [ministry_id], references: [id], onDelete: SetNull)
 
   setlist Setlist?
 
   @@index([service_order_id])
+  @@index([tenant_id, service_order_id])
   @@map("service_order_items")
 }
 
@@ -1409,7 +1420,14 @@ enum CelebrationRecurrence {
 enum CelebrationInstanceStatus {
   draft
   published
+  finalized
   cancelled
+}
+
+enum ResponsibleType {
+  person
+  ministry
+  free_text
 }
 
 // =============================================================================
