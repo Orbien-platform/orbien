@@ -71,6 +71,8 @@ model Tenant {
   setlistSongs           SetlistSong[]
   auditLogs              AuditLog[]
   qrTokens               QrToken[]
+  exportJobs             ExportJob[]
+  importJobs             ImportJob[]
 
   @@index([id])
   @@map("tenants")
@@ -125,6 +127,8 @@ model Congregation {
   setlistSongs           SetlistSong[]
   materialOpenRecords    MaterialOpenRecord[]
   qrTokens               QrToken[]
+  exportJobs             ExportJob[]
+  importJobs             ImportJob[]
 
   @@index([tenant_id, id])
   @@map("congregations")
@@ -1516,4 +1520,66 @@ enum WaitlistStatus {
   contacted
   activated
   declined
+}
+
+// =============================================================================
+// GRUPO 11 — JOBS (export / import)
+// =============================================================================
+
+enum ExportJobType {
+  csv
+  ofx
+  pdf
+  zip
+  sped
+  dre
+}
+
+enum JobStatus {
+  pending
+  processing
+  done
+  error
+}
+
+model ExportJob {
+  id              String        @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  type            ExportJobType
+  status          JobStatus     @default(pending)
+  period_start    DateTime
+  period_end      DateTime
+  file_url        String?
+  error_message   String?
+  created_by      String
+  created_at      DateTime      @default(now())
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, congregation_id])
+  @@index([tenant_id, created_at(sort: Desc)])
+  @@map("export_jobs")
+}
+
+model ImportJob {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  type            String
+  status          JobStatus @default(pending)
+  total_rows      Int       @default(0)
+  imported        Int       @default(0)
+  skipped         Int       @default(0)
+  errors          Json      @default("[]")
+  created_by      String
+  created_at      DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, congregation_id])
+  @@index([tenant_id, created_at(sort: Desc)])
+  @@map("import_jobs")
 }

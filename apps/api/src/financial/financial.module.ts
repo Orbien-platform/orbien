@@ -10,6 +10,8 @@ import { PixService } from './pix.service';
 import { ForecastService } from './forecast.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
+import { DreController } from './dre.controller';
+import { DreService } from './dre.service';
 
 @Module({
   imports: [PrismaModule, HttpModule],
@@ -18,6 +20,7 @@ import { DashboardService } from './dashboard.service';
     TransactionsController,
     PixController,
     DashboardController,
+    DreController,
   ],
   providers: [
     CategoriesService,
@@ -25,6 +28,7 @@ import { DashboardService } from './dashboard.service';
     PixService,
     ForecastService,
     DashboardService,
+    DreService,
   ],
 })
 export class FinancialModule {}
