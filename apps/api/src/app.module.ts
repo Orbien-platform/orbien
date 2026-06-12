@@ -13,6 +13,7 @@ import { StudyMaterialsModule } from './study-materials/study-materials.module';
 import { FinancialModule } from './financial/financial.module';
 import { ContentModule } from './content/content.module';
 import { VolunteersModule } from './volunteers/volunteers.module';
+import { CelebrationsModule } from './celebrations/celebrations.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -41,6 +42,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     FinancialModule,
     ContentModule,
     VolunteersModule,
+    CelebrationsModule,
   ],
 })
 export class AppModule {}

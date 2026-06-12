@@ -1083,9 +1083,10 @@ model Celebration {
   congregation_id String
   name            String
   type            CelebrationType
-  day_of_week     Int
-  time            String
+  day_of_week     Int?
+  start_time      String
   recurrence      CelebrationRecurrence
+  is_active       Boolean               @default(true)
   created_at      DateTime              @default(now())
   updated_at      DateTime              @updatedAt
 
@@ -1101,20 +1102,22 @@ model Celebration {
 }
 
 model CelebrationInstance {
-  id              String   @id @default(uuid())
+  id              String                    @id @default(uuid())
   tenant_id       String
   congregation_id String
   celebration_id  String
-  occurs_at       DateTime
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  scheduled_date  DateTime
+  status          CelebrationInstanceStatus @default(draft)
+  notes           String?
+  created_at      DateTime                  @default(now())
+  updated_at      DateTime                  @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   celebration  Celebration  @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id, celebration_id])
-  @@index([tenant_id, occurs_at])
+  @@index([tenant_id, scheduled_date])
   @@map("celebration_instances")
 }
 
@@ -1391,15 +1394,22 @@ enum SwapStatus {
 }
 
 enum CelebrationType {
-  sunday
+  sunday_service
   midweek
-  special
+  special_event
 }
 
 enum CelebrationRecurrence {
   weekly
   biweekly
   monthly
+  none
+}
+
+enum CelebrationInstanceStatus {
+  draft
+  published
+  cancelled
 }
 
 // =============================================================================
