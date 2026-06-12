@@ -12,6 +12,8 @@ import { SetlistSongsController } from './setlist-songs.controller';
 import { SetlistSongsService } from './setlist-songs.service';
 import { SetlistsController } from './setlists.controller';
 import { SetlistsService } from './setlists.service';
+import { CelebrationSchedulerService } from './celebration-scheduler.service';
+import { CelebrationSchedulerController } from './celebration-scheduler.controller';
 
 @Module({
   imports: [PrismaModule],
@@ -24,6 +26,7 @@ import { SetlistsService } from './setlists.service';
     ServiceOrdersController,
     SetlistSongsController,
     SetlistsController,
+    CelebrationSchedulerController,
     CelebrationsController,
   ],
   providers: [
@@ -33,6 +36,7 @@ import { SetlistsService } from './setlists.service';
     ServiceOrderItemsService,
     SetlistsService,
     SetlistSongsService,
+    CelebrationSchedulerService,
   ],
   exports: [
     CelebrationsService,
@@ -41,6 +45,7 @@ import { SetlistsService } from './setlists.service';
     ServiceOrderItemsService,
     SetlistsService,
     SetlistSongsService,
+    CelebrationSchedulerService,
   ],
 })
 export class CelebrationsModule {}
