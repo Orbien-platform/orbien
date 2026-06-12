@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class StorageService {
@@ -30,5 +31,13 @@ export class StorageService {
     const url = `https://${process.env['R2_PUBLIC_DOMAIN']}/${key}`;
     this.logger.log(`Uploaded: ${url}`);
     return url;
+  }
+
+  async getPresignedGetUrl(key: string, expiresInSeconds = 86_400): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: process.env['R2_BUCKET_NAME'],
+      Key: key,
+    });
+    return getSignedUrl(this.s3, command, { expiresIn: expiresInSeconds });
   }
 }

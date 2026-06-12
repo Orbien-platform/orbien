@@ -6,6 +6,7 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { ServiceOrdersService } from './service-orders.service';
+import { PdfExportService } from './pdf-export.service';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 
@@ -15,7 +16,10 @@ const MANAGER_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'] as const;
 @UseGuards(JwtAuthGuard, RolesGuard)
 @UseInterceptors(TenantContextInterceptor)
 export class ServiceOrdersController {
-  constructor(private readonly serviceOrdersService: ServiceOrdersService) {}
+  constructor(
+    private readonly serviceOrdersService: ServiceOrdersService,
+    private readonly pdfExportService: PdfExportService,
+  ) {}
 
   @Post()
   @Roles(...MANAGER_ROLES)
@@ -49,5 +53,11 @@ export class ServiceOrdersController {
   @Roles(...MANAGER_ROLES)
   finalize(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.serviceOrdersService.finalize(user.tenant_id, user.congregation_id, id);
+  }
+
+  @Get(':id/pdf')
+  @Roles(...MANAGER_ROLES, 'ministry_leader', 'secretary')
+  generatePdf(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.pdfExportService.generateServiceOrderPdf(user.tenant_id, user.congregation_id, id);
   }
 }

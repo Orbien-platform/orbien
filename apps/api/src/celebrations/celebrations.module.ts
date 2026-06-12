@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ContentModule } from '../content/content.module';
+import { StorageModule } from '../storage/storage.module';
+import { PdfExportService } from './pdf-export.service';
 import { CelebrationsController } from './celebrations.controller';
 import { CelebrationsService } from './celebrations.service';
 import { CelebrationInstancesController } from './celebration-instances.controller';
@@ -17,7 +19,7 @@ import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CelebrationSchedulerController } from './celebration-scheduler.controller';
 
 @Module({
-  imports: [PrismaModule, ContentModule],
+  imports: [PrismaModule, ContentModule, StorageModule],
   // More-specific prefixes must come before less-specific ones so NestJS
   // doesn't let CelebrationsController's GET /:id swallow child routes.
   // Ordering: /setlists/songs before /setlists before /celebrations
@@ -38,6 +40,7 @@ import { CelebrationSchedulerController } from './celebration-scheduler.controll
     SetlistsService,
     SetlistSongsService,
     CelebrationSchedulerService,
+    PdfExportService,
   ],
   exports: [
     CelebrationsService,
