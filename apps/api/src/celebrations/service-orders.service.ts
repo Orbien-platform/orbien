@@ -54,6 +54,9 @@ export class ServiceOrdersService {
           include: {
             person: { select: { id: true, full_name: true } },
             ministry: { select: { id: true, name: true } },
+            setlist: {
+              include: { songs: { orderBy: { sequence: 'asc' } } },
+            },
           },
         },
       },

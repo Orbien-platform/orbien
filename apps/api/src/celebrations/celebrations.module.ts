@@ -8,16 +8,22 @@ import { ServiceOrdersController } from './service-orders.controller';
 import { ServiceOrdersService } from './service-orders.service';
 import { ServiceOrderItemsController } from './service-order-items.controller';
 import { ServiceOrderItemsService } from './service-order-items.service';
+import { SetlistSongsController } from './setlist-songs.controller';
+import { SetlistSongsService } from './setlist-songs.service';
+import { SetlistsController } from './setlists.controller';
+import { SetlistsService } from './setlists.service';
 
 @Module({
   imports: [PrismaModule],
   // More-specific prefixes must come before less-specific ones so NestJS
-  // doesn't let CelebrationsController's GET /:id swallow
-  // /celebrations/instances, /celebrations/items or /celebrations/orders
+  // doesn't let CelebrationsController's GET /:id swallow child routes.
+  // Ordering: /setlists/songs before /setlists before /celebrations
   controllers: [
     CelebrationInstancesController,
     ServiceOrderItemsController,
     ServiceOrdersController,
+    SetlistSongsController,
+    SetlistsController,
     CelebrationsController,
   ],
   providers: [
@@ -25,7 +31,16 @@ import { ServiceOrderItemsService } from './service-order-items.service';
     CelebrationInstancesService,
     ServiceOrdersService,
     ServiceOrderItemsService,
+    SetlistsService,
+    SetlistSongsService,
   ],
-  exports: [CelebrationsService, CelebrationInstancesService, ServiceOrdersService, ServiceOrderItemsService],
+  exports: [
+    CelebrationsService,
+    CelebrationInstancesService,
+    ServiceOrdersService,
+    ServiceOrderItemsService,
+    SetlistsService,
+    SetlistSongsService,
+  ],
 })
 export class CelebrationsModule {}

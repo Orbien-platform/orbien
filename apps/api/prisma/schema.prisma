@@ -67,6 +67,8 @@ model Tenant {
   celebrationInstances   CelebrationInstance[]
   serviceOrders          ServiceOrder[]
   serviceOrderItems      ServiceOrderItem[]
+  setlists               Setlist[]
+  setlistSongs           SetlistSong[]
   auditLogs              AuditLog[]
   qrTokens               QrToken[]
 
@@ -119,6 +121,8 @@ model Congregation {
   celebrationInstances   CelebrationInstance[]
   serviceOrders          ServiceOrder[]
   serviceOrderItems      ServiceOrderItem[]
+  setlists               Setlist[]
+  setlistSongs           SetlistSong[]
   materialOpenRecords    MaterialOpenRecord[]
   qrTokens               QrToken[]
 
@@ -1176,31 +1180,42 @@ model ServiceOrderItem {
 
 model Setlist {
   id                    String   @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
   service_order_item_id String   @unique
   created_at            DateTime @default(now())
   updated_at            DateTime @updatedAt
 
+  tenant           Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation     Congregation     @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   serviceOrderItem ServiceOrderItem @relation(fields: [service_order_item_id], references: [id], onDelete: Cascade)
 
   songs SetlistSong[]
 
+  @@index([tenant_id, congregation_id])
   @@map("setlists")
 }
 
 model SetlistSong {
-  id          String   @id @default(uuid())
-  setlist_id  String
-  position    Int
-  title       String
-  musical_key String
-  bpm         Int?
-  link        String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  setlist_id      String
+  sequence        Int
+  title           String
+  key             String?
+  bpm             Int?
+  link            String?
+  notes           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
-  setlist Setlist @relation(fields: [setlist_id], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  setlist      Setlist      @relation(fields: [setlist_id], references: [id], onDelete: Cascade)
 
   @@index([setlist_id])
+  @@index([tenant_id, setlist_id])
   @@map("setlist_songs")
 }
 
