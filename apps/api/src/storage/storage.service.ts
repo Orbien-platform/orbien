@@ -33,6 +33,18 @@ export class StorageService {
     return url;
   }
 
+  async downloadBuffer(key: string): Promise<Buffer> {
+    const { Body } = await this.s3.send(
+      new GetObjectCommand({ Bucket: process.env['R2_BUCKET_NAME'], Key: key }),
+    );
+    if (!Body) return Buffer.alloc(0);
+    const chunks: Buffer[] = [];
+    for await (const chunk of Body as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
   async getPresignedGetUrl(key: string, expiresInSeconds = 86_400): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: process.env['R2_BUCKET_NAME'],

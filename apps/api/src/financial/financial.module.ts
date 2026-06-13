@@ -13,8 +13,12 @@ import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { DreController } from './dre.controller';
 import { DreService } from './dre.service';
+import { DrePdfService } from './dre-pdf.service';
 import { ExportController } from './export/export.controller';
 import { ExportService } from './export/export.service';
+import { PdfExportService } from './export/pdf-export.service';
+import { ZipExportService } from './export/zip-export.service';
+import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
 
 @Module({
@@ -34,7 +38,11 @@ import { JobsService } from './export/jobs.service';
     ForecastService,
     DashboardService,
     DreService,
+    DrePdfService,
     ExportService,
+    PdfExportService,
+    ZipExportService,
+    SpedExportService,
     JobsService,
   ],
 })

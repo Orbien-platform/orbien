@@ -7,10 +7,14 @@ import { ClassificationService } from './classification.service';
 import { VisitsService } from './visits.service';
 import { DemographicsService } from './demographics.service';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
+import { StorageModule } from '../storage/storage.module';
+import { PersonsImportController } from './import/persons-import.controller';
+import { PersonsImportService } from './import/persons-import.service';
 
 @Module({
-  controllers: [DemographicsController, PersonsController, VisitsController],
-  providers: [PersonsService, ClassificationService, VisitsService, DemographicsService, TenantContextInterceptor],
+  imports: [StorageModule],
+  controllers: [DemographicsController, PersonsController, PersonsImportController, VisitsController],
+  providers: [PersonsService, ClassificationService, VisitsService, DemographicsService, TenantContextInterceptor, PersonsImportService],
   exports: [ClassificationService, VisitsService],
 })
 export class PersonsModule {}
