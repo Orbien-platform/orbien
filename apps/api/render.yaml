@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: orbien-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    branch: main
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromGroup: orbien-secrets
+      - key: DIRECT_URL
+        fromGroup: orbien-secrets
+      - key: JWT_SECRET
+        fromGroup: orbien-secrets
+      - key: JWT_REFRESH_SECRET
+        fromGroup: orbien-secrets
+      - key: ONESIGNAL_APP_ID
+        fromGroup: orbien-secrets
+      - key: ONESIGNAL_API_KEY
+        fromGroup: orbien-secrets
+      - key: ASAAS_API_KEY
+        fromGroup: orbien-secrets
+      - key: ASAAS_WEBHOOK_SECRET
+        fromGroup: orbien-secrets
+      - key: R2_ACCOUNT_ID
+        fromGroup: orbien-secrets
+      - key: R2_ACCESS_KEY_ID
+        fromGroup: orbien-secrets
+      - key: R2_SECRET_ACCESS_KEY
+        fromGroup: orbien-secrets
+      - key: R2_BUCKET_NAME
+        fromGroup: orbien-secrets
+      - key: R2_PUBLIC_URL
+        fromGroup: orbien-secrets
+      - key: ALLOWED_ORIGINS
+        value: "https://orbien-web.vercel.app,https://app.useorbien.com,http://localhost:3001"

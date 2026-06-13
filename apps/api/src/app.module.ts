@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -17,6 +18,7 @@ import { CelebrationsModule } from './celebrations/celebrations.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
+  controllers: [AppController],
   imports: [
     // ConfigModule must be first — loads .env before any module reads process.env
     ConfigModule.forRoot({ isGlobal: true }),
