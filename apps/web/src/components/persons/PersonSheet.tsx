@@ -24,6 +24,7 @@ interface PersonDetail {
   phone?: string;
   email?: string;
   birth_date?: string;
+  membership_date?: string;
   gender?: string;
   classification: string;
   created_at: string;
@@ -99,6 +100,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
       phone: person.phone ?? "",
       email: person.email ?? "",
       birth_date: person.birth_date ?? "",
+      membership_date: person.membership_date ?? "",
       gender: person.gender ?? "",
       classification: person.classification,
     });
@@ -111,6 +113,10 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
     if (!person) return;
     setSaveError("");
     if (!editForm.full_name?.trim()) { setSaveError("Nome é obrigatório."); return; }
+    if (editForm.classification === "member" && !editForm.membership_date) {
+      setSaveError("Data de membresía é obrigatória para membros.");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -119,6 +125,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
         phone: editForm.phone?.trim() || undefined,
         email: editForm.email?.trim() || undefined,
         birth_date: editForm.birth_date || undefined,
+        membership_date: editForm.classification === "member" ? (editForm.membership_date || undefined) : undefined,
         gender: editForm.gender || undefined,
         classification: editForm.classification,
       });
@@ -223,7 +230,14 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                     <Label className="text-xs font-medium text-stone uppercase tracking-wide">Classificação</Label>
                     <select
                       value={editForm.classification ?? "visitor"}
-                      onChange={(e) => setEditForm((f) => ({ ...f, classification: e.target.value }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditForm((f) => ({
+                          ...f,
+                          classification: val,
+                          membership_date: val !== "member" ? "" : f.membership_date,
+                        }));
+                      }}
                       disabled={isSaving}
                       className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
                     >
@@ -232,6 +246,21 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                       ))}
                     </select>
                   </div>
+
+                  {editForm.classification === "member" && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-stone uppercase tracking-wide">
+                        Data de membresía <span className="text-crimson">*</span>
+                      </Label>
+                      <Input
+                        type="date"
+                        value={editForm.membership_date ?? ""}
+                        onChange={(e) => setEditForm((f) => ({ ...f, membership_date: e.target.value }))}
+                        className="rounded-[8px]"
+                        disabled={isSaving}
+                      />
+                    </div>
+                  )}
 
                   {saveError && (
                     <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">{saveError}</p>
@@ -286,6 +315,11 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                     <InfoRow icon={<Calendar size={14} strokeWidth={1.5} />} label="Nascimento">
                       {formatDate(person.birth_date)}
                     </InfoRow>
+                    {person.classification === "member" && (
+                      <InfoRow icon={<Calendar size={14} strokeWidth={1.5} />} label="Membresía">
+                        {formatDate(person.membership_date)}
+                      </InfoRow>
+                    )}
                     <InfoRow icon={<User size={14} strokeWidth={1.5} />} label="Gênero">
                       {person.gender ?? "—"}
                     </InfoRow>
