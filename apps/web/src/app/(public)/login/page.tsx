@@ -31,12 +31,19 @@ export default function LoginPage() {
       await login(email.trim(), password, tenantSlug.trim().toLowerCase());
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
-        const status = err.response?.status;
-        // Backend returns 401 for all auth failures (no tenant enumeration)
-        if (status === 401) setError("E-mail, senha ou código da igreja inválidos.");
-        else setError("Erro ao entrar. Tente novamente.");
+        if (!err.response) {
+          setError("Não foi possível conectar. Verifique sua internet.");
+        } else if (err.response.status >= 500) {
+          setError("Serviço temporariamente indisponível. Tente novamente.");
+        } else if (err.response.data?.code === "TENANT_NOT_FOUND") {
+          setError("Código de igreja não encontrado. Verifique e tente novamente.");
+        } else if (err.response.status === 401) {
+          setError("E-mail ou senha incorretos.");
+        } else {
+          setError("Erro ao entrar. Tente novamente.");
+        }
       } else {
-        setError("Erro inesperado. Tente novamente.");
+        setError("Não foi possível conectar. Verifique sua internet.");
       }
     } finally {
       setIsSubmitting(false);
