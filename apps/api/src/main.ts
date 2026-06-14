@@ -16,6 +16,13 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  app.enableCors({
+    origin: process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:3001'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port, '0.0.0.0');
 }
