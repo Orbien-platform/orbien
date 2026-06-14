@@ -341,7 +341,7 @@ export function ScheduleDetailSheet({
                       {schedule.title}
                     </SheetTitle>
                     <SheetDescription className="text-xs text-stone">
-                      {schedule.ministry.name} · {fmtDate(schedule.date)}
+                      {schedule.ministry?.name ?? "—"} · {fmtDate(schedule.date)}
                     </SheetDescription>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <Badge className={statusCls(schedule.status)}>

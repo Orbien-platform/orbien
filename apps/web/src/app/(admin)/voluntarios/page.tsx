@@ -261,13 +261,13 @@ export default function VoluntariosPage() {
       width: "160px",
       render: (row) => (
         <div className="flex items-center gap-2">
-          {row.ministry.color && (
+          {row.ministry?.color && (
             <div
               className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
               style={{ backgroundColor: row.ministry.color }}
             />
           )}
-          <span className="text-stone">{row.ministry.name}</span>
+          <span className="text-stone">{row.ministry?.name ?? "—"}</span>
         </div>
       ),
     },
@@ -480,7 +480,7 @@ export default function VoluntariosPage() {
                         {a.schedule.title}
                       </span>
                       <span className="text-xs text-stone">
-                        {a.schedule.ministry.name}
+                        {a.schedule.ministry?.name ?? "—"}
                         {a.slot?.role_name ? ` · ${a.slot.role_name}` : ""}
                       </span>
                       <span className="text-xs text-stone">{fmtDate(a.schedule.date)}</span>
