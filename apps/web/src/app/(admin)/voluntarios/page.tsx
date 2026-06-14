@@ -32,7 +32,7 @@ interface Schedule {
   title: string;
   date: string;
   status: ScheduleStatus;
-  ministry: { id: string; name: string; color?: string };
+  ministry?: { id: string; name: string; color?: string } | null;
   slots?: { id: string; required_count: number; assignments?: unknown[] }[];
   _count?: { slots?: number; assignments?: number };
 }
@@ -40,12 +40,12 @@ interface Schedule {
 interface MyAssignment {
   id: string;
   status: AssignmentStatus;
-  schedule: {
+  schedule?: {
     id: string;
     title: string;
     date: string;
-    ministry: { id: string; name: string };
-  };
+    ministry?: { id: string; name: string } | null;
+  } | null;
   slot?: { role_name: string };
 }
 
@@ -184,7 +184,7 @@ export default function VoluntariosPage() {
       const { data } = await api.get<{ data: MyAssignment[] } | MyAssignment[]>(
         "/volunteers/my-assignments"
       );
-      setMyAssignments(Array.isArray(data) ? data : data.data ?? []);
+      setMyAssignments(Array.isArray(data) ? data : data?.data ?? []);
     } catch {
       // Endpoint may not exist — show empty state
       setMyAssignments([]);
@@ -264,7 +264,7 @@ export default function VoluntariosPage() {
           {row.ministry?.color && (
             <div
               className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-              style={{ backgroundColor: row.ministry.color }}
+              style={{ backgroundColor: row.ministry?.color ?? "#1E3A7B" }}
             />
           )}
           <span className="text-stone">{row.ministry?.name ?? "—"}</span>
@@ -477,13 +477,15 @@ export default function VoluntariosPage() {
                     {/* Info */}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-sm font-medium text-ink dark:text-white">
-                        {a.schedule.title}
+                        {a.schedule?.title ?? "—"}
                       </span>
                       <span className="text-xs text-stone">
-                        {a.schedule.ministry?.name ?? "—"}
+                        {a.schedule?.ministry?.name ?? "—"}
                         {a.slot?.role_name ? ` · ${a.slot.role_name}` : ""}
                       </span>
-                      <span className="text-xs text-stone">{fmtDate(a.schedule.date)}</span>
+                      <span className="text-xs text-stone">
+                        {a.schedule?.date ? fmtDate(a.schedule.date) : "—"}
+                      </span>
                     </div>
 
                     {/* Status + actions */}
