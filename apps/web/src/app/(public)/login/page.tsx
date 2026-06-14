@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -129,6 +130,13 @@ export default function LoginPage() {
                 "Entrar"
               )}
             </Button>
+
+            <Link
+              href="/esqueci-senha"
+              className="text-center text-sm text-stone hover:text-navy transition-colors"
+            >
+              Esqueceu sua senha?
+            </Link>
           </form>
         </div>
 
