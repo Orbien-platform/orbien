@@ -39,6 +39,13 @@ const CLASSIFICATION_OPTIONS: { value: Classification; label: string }[] = [
   { value: "member", label: "Membro" },
 ];
 
+const GENDER_OPTIONS: { value: string; label: string }[] = [
+  { value: "male", label: "Masculino" },
+  { value: "female", label: "Feminino" },
+  { value: "other", label: "Outro" },
+  { value: "prefer_not_to_say", label: "Prefiro não informar" },
+];
+
 interface PersonSheetProps {
   personId: string | null;
   open: boolean;
@@ -227,6 +234,21 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
 
                   <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">Sexo</Label>
+                    <select
+                      value={editForm.gender ?? ""}
+                      onChange={(e) => setEditForm((f) => ({ ...f, gender: e.target.value }))}
+                      disabled={isSaving}
+                      className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+                    >
+                      <option value="">Não informado</option>
+                      {GENDER_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-stone uppercase tracking-wide">Classificação</Label>
                     <select
                       value={editForm.classification ?? "visitor"}
@@ -320,8 +342,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                         {formatDate(person.membership_date)}
                       </InfoRow>
                     )}
-                    <InfoRow icon={<User size={14} strokeWidth={1.5} />} label="Gênero">
-                      {person.gender ?? "—"}
+                    <InfoRow icon={<User size={14} strokeWidth={1.5} />} label="Sexo">
+                      {GENDER_OPTIONS.find((o) => o.value === person.gender)?.label ?? "—"}
                     </InfoRow>
                   </dl>
 
