@@ -46,7 +46,8 @@ export class AuthService {
       where: { slug: dto.tenant_slug },
       include: { tenantPlan: { select: { plan: true } } },
     });
-    if (!tenant) throw new UnauthorizedException('Credenciais inválidas');
+    if (!tenant)
+      throw new UnauthorizedException({ message: 'Tenant not found', code: 'TENANT_NOT_FOUND' });
 
     const user = await this.prisma.userAccount.findUnique({
       where: { tenant_id_email: { tenant_id: tenant.id, email: dto.email } },
@@ -55,10 +56,12 @@ export class AuthService {
       },
     });
 
-    if (!user || !user.is_active) throw new UnauthorizedException('Credenciais inválidas');
+    if (!user || !user.is_active)
+      throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
 
     const valid = await argon2.verify(user.password_hash, dto.password);
-    if (!valid) throw new UnauthorizedException('Credenciais inválidas');
+    if (!valid)
+      throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
 
     const roles = user.roleAssignments
       .filter((ra) => ra.congregation_id === user.congregation_id)
