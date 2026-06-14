@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { Resend } from 'resend';
 
 @Injectable()
@@ -9,16 +9,21 @@ export class MailService {
   constructor() {
     if (process.env['RESEND_API_KEY']) {
       this.resend = new Resend(process.env['RESEND_API_KEY']);
+    } else if (process.env['NODE_ENV'] === 'production') {
+      this.logger.error('RESEND_API_KEY is not set — email sending will fail in production');
     }
   }
 
   async sendPasswordReset(to: string, resetUrl: string, userName: string): Promise<void> {
     if (!this.resend) {
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new InternalServerErrorException('Email service not configured (missing RESEND_API_KEY)');
+      }
       this.logger.log(`[DEV] Password reset URL for ${to}: ${resetUrl}`);
       return;
     }
 
-    await this.resend.emails.send({
+    const { error } = await this.resend.emails.send({
       from: process.env['MAIL_FROM'] ?? 'Orbien <naoresponda@useorbien.com>',
       to,
       subject: 'Redefinição de senha — Orbien',
@@ -41,5 +46,12 @@ export class MailService {
         </div>
       `,
     });
+
+    if (error) {
+      this.logger.error(`Resend error sending to ${to}: ${JSON.stringify(error)}`);
+      throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
+    }
+
+    this.logger.log(`Password reset email sent to ${to}`);
   }
 }

@@ -235,11 +235,7 @@ export class AuthService {
     const resetUrl = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
     const userName = user.person?.full_name?.split(' ')[0] ?? '';
 
-    try {
-      await this.mail.sendPasswordReset(user.email, resetUrl, userName);
-    } catch (err) {
-      this.logger.error('Failed to send password reset email', err);
-    }
+    await this.mail.sendPasswordReset(user.email, resetUrl, userName);
 
     return genericResponse;
   }
