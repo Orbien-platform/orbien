@@ -188,6 +188,7 @@ model UserAccount {
   person       Person?      @relation(fields: [person_id], references: [id], onDelete: SetNull)
 
   refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
   roleAssignments         RoleAssignment[]
   classificationHistories ClassificationHistory[]
   createdTransactions     FinancialTransaction[]
@@ -250,6 +251,20 @@ model RefreshToken {
   @@index([user_account_id])
   @@index([token_hash])
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  user_id    String
+  token      String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+
+  user UserAccount @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("password_reset_tokens")
 }
 
 // =============================================================================

@@ -3,27 +3,40 @@ import {
   UnauthorizedException,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { ImpersonateDto } from './dto/impersonate.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 7;
 const EXPIRES_IN = 900;
+const RESET_TOKEN_TTL_MINUTES = 30;
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  // key: email — value: { count, resetAt }
+  private readonly resetRateLimit = new Map<string, { count: number; resetAt: number }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly mail: MailService,
   ) {}
 
   async login(
@@ -179,6 +192,100 @@ export class AuthService {
 
     const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
     return { access_token, expires_in: EXPIRES_IN };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const genericResponse = {
+      message: 'Se o email estiver cadastrado, você receberá um link de redefinição.',
+    };
+
+    if (!this.checkResetRateLimit(dto.email)) {
+      // Return generic response to avoid leaking rate limit info
+      return genericResponse;
+    }
+
+    const tenant = await this.prisma.system.tenant.findUnique({
+      where: { slug: dto.tenant_slug },
+    });
+    if (!tenant) return genericResponse;
+
+    const user = await this.prisma.system.userAccount.findUnique({
+      where: { tenant_id_email: { tenant_id: tenant.id, email: dto.email } },
+      include: { person: { select: { full_name: true } } },
+    });
+    if (!user || !user.is_active) return genericResponse;
+
+    // Invalidate any existing unused tokens for this user
+    await this.prisma.system.passwordResetToken.updateMany({
+      where: { user_id: user.id, used_at: null },
+      data: { used_at: new Date() },
+    });
+
+    const rawToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
+
+    await this.prisma.system.passwordResetToken.create({
+      data: { user_id: user.id, token: rawToken, expires_at: expiresAt },
+    });
+
+    const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
+    const resetUrl = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
+    const userName = user.person?.full_name?.split(' ')[0] ?? '';
+
+    try {
+      await this.mail.sendPasswordReset(user.email, resetUrl, userName);
+    } catch (err) {
+      this.logger.error('Failed to send password reset email', err);
+    }
+
+    return genericResponse;
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const resetToken = await this.prisma.system.passwordResetToken.findUnique({
+      where: { token: dto.token },
+    });
+
+    if (!resetToken || resetToken.used_at !== null || resetToken.expires_at < new Date()) {
+      throw new BadRequestException('Link inválido ou expirado.');
+    }
+
+    const newHash = await argon2.hash(dto.password);
+
+    await this.prisma.system.$transaction(async (tx) => {
+      await tx.userAccount.update({
+        where: { id: resetToken.user_id },
+        data: { password_hash: newHash },
+      });
+
+      await tx.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { used_at: new Date() },
+      });
+
+      // Force logout from all sessions
+      await tx.refreshToken.updateMany({
+        where: { user_account_id: resetToken.user_id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      });
+    });
+
+    return { message: 'Senha redefinida com sucesso.' };
+  }
+
+  private checkResetRateLimit(email: string): boolean {
+    const now = Date.now();
+    const entry = this.resetRateLimit.get(email);
+
+    if (!entry || now > entry.resetAt) {
+      this.resetRateLimit.set(email, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+      return true;
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX) return false;
+
+    entry.count++;
+    return true;
   }
 
   private async createRefreshToken(userAccountId: string): Promise<string> {

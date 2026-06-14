@@ -39,3 +39,9 @@ services:
         fromGroup: orbien-secrets
       - key: ALLOWED_ORIGINS
         value: "https://orbien-web.vercel.app,https://app.useorbien.com,http://localhost:3001"
+      - key: RESEND_API_KEY
+        fromGroup: orbien-secrets
+      - key: MAIL_FROM
+        value: "Orbien <naoresponda@useorbien.com>"
+      - key: FRONTEND_URL
+        value: "https://orbien-web.vercel.app"
