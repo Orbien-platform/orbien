@@ -38,9 +38,11 @@ function typeLabel(type: GroupType): string {
 
 export default function GruposPage() {
   const { user } = useAuth();
-  const isPastor = user?.roles?.includes("pastor") ?? false;
-  const isSecretary = user?.roles?.includes("secretary") ?? false;
-  const canEdit = isPastor;
+  const roles = user?.roles ?? [];
+  const canEdit =
+    roles.includes("admin_congregation") ||
+    roles.includes("tenant_admin") ||
+    roles.includes("pastor");
 
   const [groups, setGroups] = useState<SmallGroup[]>([]);
   const [total, setTotal] = useState(0);
