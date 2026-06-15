@@ -106,8 +106,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
       full_name: person.full_name,
       phone: person.phone ?? "",
       email: person.email ?? "",
-      birth_date: person.birth_date ?? "",
-      membership_date: person.membership_date ?? "",
+      birth_date: person.birth_date ? person.birth_date.split("T")[0] : "",
+      membership_date: person.membership_date ? person.membership_date.split("T")[0] : "",
       gender: person.gender ?? "",
       classification: person.classification,
     });
