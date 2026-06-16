@@ -16,17 +16,29 @@ interface Category {
   children: Category[];
 }
 
+interface EditableTransaction {
+  id: string;
+  type: "income" | "expense";
+  amount: string | number;
+  occurred_at: string;
+  description: string;
+  category_id: string | null;
+}
+
 interface NewTransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  editTransaction?: EditableTransaction | null;
 }
 
 export function NewTransactionModal({
   open,
   onOpenChange,
   onCreated,
+  editTransaction = null,
 }: NewTransactionModalProps) {
+  const isEditing = !!editTransaction;
   const [type, setType] = useState<"income" | "expense">("income");
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState(0);
@@ -41,6 +53,7 @@ export function NewTransactionModal({
   const [successMessage, setSuccessMessage] = useState("Lançamento registrado!");
   const [entryMode, setEntryMode] = useState<"single" | "installment" | "fixed">("single");
   const [installments, setInstallments] = useState(2);
+  const [loadedEditId, setLoadedEditId] = useState<string | null>(null);
   const hasFetched = useRef(false);
 
   useEffect(() => {
@@ -51,6 +64,16 @@ export function NewTransactionModal({
       .then((r) => setCategories(r.data ?? []))
       .catch(() => {});
   }, [open]);
+
+  if (open && editTransaction && editTransaction.id !== loadedEditId) {
+    setLoadedEditId(editTransaction.id);
+    setType(editTransaction.type);
+    setCategoryId(editTransaction.category_id ?? "");
+    setAmount(Number(editTransaction.amount));
+    setOccurredAt(editTransaction.occurred_at.slice(0, 10));
+    setDescription(editTransaction.description);
+    setEntryMode("single");
+  }
 
   const filteredCategories = categories.filter((c) => c.type === type);
 
@@ -65,6 +88,7 @@ export function NewTransactionModal({
     setSuccessMessage("Lançamento registrado!");
     setEntryMode("single");
     setInstallments(2);
+    setLoadedEditId(null);
     hasFetched.current = false;
   }
 
@@ -84,7 +108,16 @@ export function NewTransactionModal({
 
     setIsSubmitting(true);
     try {
-      if (entryMode === "single") {
+      if (isEditing) {
+        await api.patch(`/financial/transactions/${editTransaction!.id}`, {
+          type,
+          category_id: categoryId,
+          amount,
+          occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
+          description: description.trim(),
+        });
+        setSuccessMessage("Lançamento atualizado com sucesso");
+      } else if (entryMode === "single") {
         await api.post("/financial/transactions", {
           type,
           category_id: categoryId,
@@ -124,7 +157,11 @@ export function NewTransactionModal({
         reset();
       }, 1200);
     } catch {
-      setError("Erro ao registrar lançamento. Tente novamente.");
+      setError(
+        isEditing
+          ? "Erro ao atualizar lançamento. Tente novamente."
+          : "Erro ao registrar lançamento. Tente novamente."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -134,8 +171,12 @@ export function NewTransactionModal({
     <Modal
       open={open}
       onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
-      title="Novo lançamento"
-      description="Registre uma entrada ou saída financeira."
+      title={isEditing ? "Editar lançamento" : "Novo lançamento"}
+      description={
+        isEditing
+          ? "Atualize os dados desta entrada ou saída financeira."
+          : "Registre uma entrada ou saída financeira."
+      }
     >
       {success ? (
         <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -236,23 +277,25 @@ export function NewTransactionModal({
           </div>
 
           {/* Recurrence */}
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-sm font-medium text-ink dark:text-white">
-              Tipo de lançamento
-            </Label>
-            <select
-              value={entryMode}
-              onChange={(e) => setEntryMode(e.target.value as typeof entryMode)}
-              disabled={isSubmitting}
-              className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-            >
-              <option value="single">Avulso</option>
-              <option value="installment">Parcelado</option>
-              <option value="fixed">Fixo mensal</option>
-            </select>
-          </div>
+          {!isEditing && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium text-ink dark:text-white">
+                Tipo de lançamento
+              </Label>
+              <select
+                value={entryMode}
+                onChange={(e) => setEntryMode(e.target.value as typeof entryMode)}
+                disabled={isSubmitting}
+                className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+              >
+                <option value="single">Avulso</option>
+                <option value="installment">Parcelado</option>
+                <option value="fixed">Fixo mensal</option>
+              </select>
+            </div>
+          )}
 
-          {entryMode === "installment" && (
+          {!isEditing && entryMode === "installment" && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="nt-installments" className="text-sm font-medium text-ink dark:text-white">
                 Número de parcelas <span className="text-crimson">*</span>
@@ -297,6 +340,8 @@ export function NewTransactionModal({
             >
               {isSubmitting ? (
                 <Loader2 size={15} className="animate-spin" />
+              ) : isEditing ? (
+                "Salvar"
               ) : (
                 "Registrar"
               )}

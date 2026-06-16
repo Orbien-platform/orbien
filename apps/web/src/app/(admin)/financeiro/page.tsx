@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -176,6 +176,8 @@ export default function FinanceiroPage() {
 
   const isSecretary = user?.roles?.includes("secretary") ?? false;
   const isPastor = user?.roles?.includes("pastor") ?? false;
+  const canDeleteTx =
+    user?.roles?.includes("admin_congregation") || user?.roles?.includes("tenant_admin") || false;
 
   const [activeTab, setActiveTab] = useState<TabValue>("overview");
 
@@ -200,6 +202,9 @@ export default function FinanceiroPage() {
   const [txTo, setTxTo] = useState("");
   const [txPage, setTxPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
+  const [deletingTxId, setDeletingTxId] = useState<string | null>(null);
 
   // Recurring rules
   const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
@@ -258,6 +263,19 @@ export default function FinanceiroPage() {
   function refreshRecurring() {
     hasFetchedRecurring.current = false;
     loadRecurring();
+  }
+
+  async function handleDeleteTx(id: string) {
+    setDeletingTxId(id);
+    try {
+      await api.delete(`/financial/transactions/${id}`);
+      setConfirmDeleteTxId(null);
+      refreshTx();
+    } catch {
+      // ignore
+    } finally {
+      setDeletingTxId(null);
+    }
   }
 
   async function handleDeactivate(id: string) {
@@ -379,6 +397,35 @@ export default function FinanceiroPage() {
           {r.type === "expense" ? "−" : "+"}
           {fmt(Number(r.amount))}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Ações",
+      width: "90px",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="rounded-[8px]"
+            aria-label="Editar lançamento"
+            onClick={() => setEditingTx(r)}
+          >
+            <Pencil size={13} strokeWidth={1.5} />
+          </Button>
+          {canDeleteTx && (
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="rounded-[8px] text-crimson hover:bg-crimson-dim"
+              aria-label="Remover lançamento"
+              onClick={() => setConfirmDeleteTxId(r.id)}
+            >
+              <Trash2 size={13} strokeWidth={1.5} />
+            </Button>
+          )}
+        </div>
       ),
     },
   ];
@@ -834,6 +881,47 @@ export default function FinanceiroPage() {
         onOpenChange={setCreateOpen}
         onCreated={() => { refreshTx(); refreshRecurring(); }}
       />
+
+      <NewTransactionModal
+        open={!!editingTx}
+        onOpenChange={(v) => { if (!v) setEditingTx(null); }}
+        onCreated={() => { refreshTx(); refreshRecurring(); }}
+        editTransaction={editingTx}
+      />
+
+      {confirmDeleteTxId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
+            <p className="text-sm font-medium text-ink dark:text-white">
+              Remover lançamento?
+            </p>
+            <p className="mt-1.5 text-sm text-stone">
+              Esta ação não pode ser desfeita.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-[8px]"
+                onClick={() => setConfirmDeleteTxId(null)}
+                disabled={deletingTxId === confirmDeleteTxId}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 rounded-[8px] bg-crimson text-white hover:opacity-90"
+                onClick={() => handleDeleteTx(confirmDeleteTxId)}
+                disabled={deletingTxId === confirmDeleteTxId}
+              >
+                {deletingTxId === confirmDeleteTxId ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  "Remover"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
