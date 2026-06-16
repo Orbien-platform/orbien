@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 
@@ -28,7 +29,7 @@ export function NewTransactionModal({
 }: NewTransactionModalProps) {
   const [type, setType] = useState<"income" | "expense">("income");
   const [categoryId, setCategoryId] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(0);
   const [occurredAt, setOccurredAt] = useState(
     () => new Date().toISOString().split("T")[0]
   );
@@ -55,7 +56,7 @@ export function NewTransactionModal({
   function reset() {
     setType("income");
     setCategoryId("");
-    setAmount("");
+    setAmount(0);
     setOccurredAt(new Date().toISOString().split("T")[0]);
     setDescription("");
     setError("");
@@ -69,11 +70,8 @@ export function NewTransactionModal({
     e.preventDefault();
     setError("");
 
-    const numAmount = parseFloat(
-      amount.replace(/[^\d,]/g, "").replace(",", ".")
-    );
     if (!description.trim()) { setError("Descrição é obrigatória."); return; }
-    if (!amount || isNaN(numAmount) || numAmount <= 0) { setError("Informe um valor válido."); return; }
+    if (!amount || amount <= 0) { setError("Informe um valor válido."); return; }
     if (!occurredAt) { setError("Data é obrigatória."); return; }
     if (!categoryId) { setError("Selecione uma categoria."); return; }
 
@@ -83,7 +81,7 @@ export function NewTransactionModal({
         await api.post("/financial/transactions", {
           type,
           category_id: categoryId,
-          amount: numAmount,
+          amount,
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           description: description.trim(),
         });
@@ -92,7 +90,7 @@ export function NewTransactionModal({
           frequency: repeat,
           interval: 1,
           ends_at: endsAt ? new Date(endsAt + "T23:59:59").toISOString() : undefined,
-          amount: numAmount,
+          amount,
           type,
           category_id: categoryId,
           description: description.trim(),
@@ -176,13 +174,10 @@ export function NewTransactionModal({
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone">
                 R$
               </span>
-              <Input
+              <CurrencyInput
                 id="nt-amount"
-                type="text"
-                inputMode="decimal"
-                placeholder="0,00"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onValueChange={setAmount}
                 disabled={isSubmitting}
                 className="rounded-[8px] pl-9"
               />
