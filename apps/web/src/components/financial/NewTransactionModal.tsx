@@ -23,6 +23,12 @@ interface EditableTransaction {
   occurred_at: string;
   description: string;
   category_id: string | null;
+  recurring_rule_id?: string | null;
+}
+
+function editKindLabel(tx: EditableTransaction): string {
+  if (!tx.recurring_rule_id) return "Avulso";
+  return /\(\d+\/\d+\)$/.test(tx.description) ? "Parcelado" : "Fixo mensal";
 }
 
 interface NewTransactionModalProps {
@@ -277,7 +283,22 @@ export function NewTransactionModal({
           </div>
 
           {/* Recurrence */}
-          {!isEditing && (
+          {isEditing ? (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-medium text-ink dark:text-white">
+                Tipo de lançamento
+              </Label>
+              <Input
+                value={editKindLabel(editTransaction!)}
+                disabled
+                readOnly
+                className="rounded-[8px] text-stone"
+              />
+              <p className="text-xs text-stone">
+                O tipo de lançamento é definido na criação e não pode ser alterado aqui.
+              </p>
+            </div>
+          ) : (
             <div className="flex flex-col gap-1.5">
               <Label className="text-sm font-medium text-ink dark:text-white">
                 Tipo de lançamento
