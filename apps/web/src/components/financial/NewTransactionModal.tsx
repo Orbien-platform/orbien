@@ -24,7 +24,7 @@ interface EditableTransaction {
   description: string;
   category_id: string | null;
   recurring_rule_id?: string | null;
-  status?: "pending" | "confirmed";
+  status?: "pending" | "paid" | "confirmed";
 }
 
 function editKindLabel(tx: EditableTransaction): string {

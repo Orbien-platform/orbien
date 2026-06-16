@@ -34,7 +34,7 @@ interface Transaction {
   category_id: string | null;
   category?: { id: string; name: string; type: string } | null;
   recurring_rule_id?: string | null;
-  status: "pending" | "confirmed";
+  status: "pending" | "paid" | "confirmed";
 }
 
 interface Category {
@@ -77,6 +77,16 @@ interface DRE {
 
 function frequencyLabel(freq: "weekly" | "monthly" | "yearly"): string {
   return freq === "weekly" ? "Semanal" : freq === "monthly" ? "Mensal" : "Anual";
+}
+
+function statusLabel(status: Transaction["status"]): string {
+  return status === "pending" ? "Não pago" : status === "paid" ? "Pago" : "Exportado";
+}
+
+function statusBadgeClass(status: Transaction["status"]): string {
+  if (status === "pending") return "bg-[var(--surface-subtle)] text-stone";
+  if (status === "paid") return "bg-teal-dim text-teal";
+  return "bg-blue-100 text-blue-700";
 }
 
 type TabValue = "overview" | "transactions" | "recurring" | "dre";
@@ -202,7 +212,9 @@ export default function FinanceiroPage() {
   const [txCatId, setTxCatId] = useState("");
   const [txFrom, setTxFrom] = useState("");
   const [txTo, setTxTo] = useState("");
+  const [txStatus, setTxStatus] = useState<"" | "pending" | "paid" | "confirmed">("");
   const [txPage, setTxPage] = useState(1);
+  const [statusUpdatingIds, setStatusUpdatingIds] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editScope, setEditScope] = useState<RecurrenceScope | undefined>(undefined);
@@ -300,6 +312,32 @@ export default function FinanceiroPage() {
     }
   }
 
+  async function handleToggleStatus(tx: Transaction) {
+    if (tx.status === "confirmed" || statusUpdatingIds.has(tx.id)) return;
+    const previousStatus = tx.status;
+    const nextStatus: "pending" | "paid" = previousStatus === "pending" ? "paid" : "pending";
+
+    setStatusUpdatingIds((prev) => new Set(prev).add(tx.id));
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === tx.id ? { ...t, status: nextStatus } : t))
+    );
+
+    try {
+      await api.patch(`/financial/transactions/${tx.id}/status`, { status: nextStatus });
+    } catch {
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === tx.id ? { ...t, status: previousStatus } : t))
+      );
+      showToast("Erro ao atualizar status do lançamento.");
+    } finally {
+      setStatusUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(tx.id);
+        return next;
+      });
+    }
+  }
+
   function handleScopeConfirm(scope: RecurrenceScope) {
     if (!scopeDialog) return;
     if (scopeDialog.mode === "edit") {
@@ -358,6 +396,7 @@ export default function FinanceiroPage() {
     if (txCatId && t.category_id !== txCatId) return false;
     if (txFrom && t.occurred_at.slice(0, 10) < txFrom) return false;
     if (txTo && t.occurred_at.slice(0, 10) > txTo) return false;
+    if (txStatus && t.status !== txStatus) return false;
     return true;
   });
   const txTotalPages = Math.max(1, Math.ceil(filteredTx.length / TX_PAGE_SIZE));
@@ -430,6 +469,29 @@ export default function FinanceiroPage() {
           {r.type === "expense" ? "−" : "+"}
           {fmt(Number(r.amount))}
         </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "140px",
+      render: (r) => (
+        <div className="flex items-center gap-1.5">
+          {r.status !== "confirmed" && (
+            <input
+              type="checkbox"
+              checked={r.status === "paid"}
+              onChange={() => handleToggleStatus(r)}
+              disabled={statusUpdatingIds.has(r.id)}
+              aria-label={r.status === "pending" ? "Marcar como pago" : "Desfazer pagamento"}
+              title={r.status === "pending" ? "Marcar como pago" : "Desfazer pagamento"}
+              className="h-3.5 w-3.5 cursor-pointer accent-teal disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          )}
+          <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", statusBadgeClass(r.status))}>
+            {statusLabel(r.status)}
+          </span>
+        </div>
       ),
     },
     {
@@ -636,6 +698,17 @@ export default function FinanceiroPage() {
                     onChange={(e) => { setTxTo(e.target.value); setTxPage(1); }}
                     className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
                   />
+
+                  <select
+                    value={txStatus}
+                    onChange={(e) => { setTxStatus(e.target.value as typeof txStatus); setTxPage(1); }}
+                    className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+                  >
+                    <option value="">Todos os status</option>
+                    <option value="pending">Não pago</option>
+                    <option value="paid">Pago</option>
+                    <option value="confirmed">Exportado</option>
+                  </select>
                 </div>
 
                 <Button
@@ -654,7 +727,7 @@ export default function FinanceiroPage() {
                 getRowKey={(t) => t.id}
                 isLoading={loadingTx}
                 emptyState={
-                  txType || txCatId || txFrom || txTo
+                  txType || txCatId || txFrom || txTo || txStatus
                     ? "Nenhum lançamento com esses filtros."
                     : "Nenhum lançamento registrado."
                 }
