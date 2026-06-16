@@ -20,9 +20,10 @@ import { PdfExportService } from './export/pdf-export.service';
 import { ZipExportService } from './export/zip-export.service';
 import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
+import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
 
 @Module({
-  imports: [PrismaModule, HttpModule, StorageModule],
+  imports: [PrismaModule, HttpModule, StorageModule, RecurringRuleModule],
   controllers: [
     CategoriesController,
     TransactionsController,
