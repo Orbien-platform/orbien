@@ -37,6 +37,8 @@ export function NewTransactionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [repeat, setRepeat] = useState<"none" | "weekly" | "monthly" | "yearly">("none");
+  const [endsAt, setEndsAt] = useState("");
   const hasFetched = useRef(false);
 
   useEffect(() => {
@@ -58,6 +60,8 @@ export function NewTransactionModal({
     setDescription("");
     setError("");
     setSuccess(false);
+    setRepeat("none");
+    setEndsAt("");
     hasFetched.current = false;
   }
 
@@ -75,13 +79,25 @@ export function NewTransactionModal({
 
     setIsSubmitting(true);
     try {
-      await api.post("/financial/transactions", {
-        type,
-        category_id: categoryId,
-        amount: numAmount,
-        occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
-        description: description.trim(),
-      });
+      if (repeat === "none") {
+        await api.post("/financial/transactions", {
+          type,
+          category_id: categoryId,
+          amount: numAmount,
+          occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
+          description: description.trim(),
+        });
+      } else {
+        await api.post("/financial/recurring-rules", {
+          frequency: repeat,
+          interval: 1,
+          ends_at: endsAt ? new Date(endsAt + "T23:59:59").toISOString() : undefined,
+          amount: numAmount,
+          type,
+          category_id: categoryId,
+          description: description.trim(),
+        });
+      }
       setSuccess(true);
       setTimeout(() => {
         onCreated();
@@ -202,6 +218,40 @@ export function NewTransactionModal({
               className="rounded-[8px]"
             />
           </div>
+
+          {/* Recurrence */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-sm font-medium text-ink dark:text-white">
+              Repetir
+            </Label>
+            <select
+              value={repeat}
+              onChange={(e) => setRepeat(e.target.value as typeof repeat)}
+              disabled={isSubmitting}
+              className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+            >
+              <option value="none">Sem repetição</option>
+              <option value="weekly">Fixo semanal</option>
+              <option value="monthly">Fixo mensal</option>
+              <option value="yearly">Fixo anual</option>
+            </select>
+          </div>
+
+          {repeat !== "none" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="nt-ends-at" className="text-sm font-medium text-ink dark:text-white">
+                Encerrar repetição em
+              </Label>
+              <Input
+                id="nt-ends-at"
+                type="date"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                disabled={isSubmitting}
+                className="rounded-[8px]"
+              />
+            </div>
+          )}
 
           {error && (
             <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">

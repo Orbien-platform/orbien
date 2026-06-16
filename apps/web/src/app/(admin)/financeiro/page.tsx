@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,6 +32,7 @@ interface Transaction {
   description: string;
   category_id: string | null;
   category?: { id: string; name: string; type: string } | null;
+  recurring_rule_id?: string | null;
 }
 
 interface Category {
@@ -39,6 +40,19 @@ interface Category {
   name: string;
   type: "income" | "expense";
   children: Category[];
+}
+
+interface RecurringRule {
+  id: string;
+  frequency: "weekly" | "monthly" | "yearly";
+  interval: number;
+  next_occurrence_at: string;
+  ends_at: string | null;
+  is_active: boolean;
+  category_id?: string | null;
+  description?: string;
+  amount?: string | number;
+  type?: "income" | "expense";
 }
 
 interface DreCategory {
@@ -60,7 +74,11 @@ interface DRE {
   };
 }
 
-type TabValue = "overview" | "transactions" | "dre";
+function frequencyLabel(freq: "weekly" | "monthly" | "yearly"): string {
+  return freq === "weekly" ? "Semanal" : freq === "monthly" ? "Mensal" : "Anual";
+}
+
+type TabValue = "overview" | "transactions" | "recurring" | "dre";
 const TX_PAGE_SIZE = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -184,6 +202,13 @@ export default function FinanceiroPage() {
   const [txPage, setTxPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
+  // Recurring rules
+  const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
+  const [loadingRecurring, setLoadingRecurring] = useState(false);
+  const hasFetchedRecurring = useRef(false);
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+
   // ── Secretary redirect ───────────────────────────────────────────────────────
   useEffect(() => {
     if (user && isSecretary) router.replace("/dashboard");
@@ -213,6 +238,40 @@ export default function FinanceiroPage() {
   function refreshTx() {
     hasFetchedTx.current = false;
     loadTx();
+  }
+
+  // ── Fetch recurring rules ────────────────────────────────────────────────────
+  const loadRecurring = useCallback(() => {
+    if (hasFetchedRecurring.current) return;
+    hasFetchedRecurring.current = true;
+    setLoadingRecurring(true);
+    api
+      .get<RecurringRule[]>("/financial/recurring-rules")
+      .then((r) => setRecurringRules(r.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingRecurring(false));
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "recurring") loadRecurring();
+  }, [activeTab, loadRecurring]);
+
+  function refreshRecurring() {
+    hasFetchedRecurring.current = false;
+    loadRecurring();
+  }
+
+  async function handleDeactivate(id: string) {
+    setDeactivatingId(id);
+    try {
+      await api.patch(`/financial/recurring-rules/${id}/deactivate`);
+      setConfirmDeactivateId(null);
+      refreshRecurring();
+    } catch {
+      // ignore
+    } finally {
+      setDeactivatingId(null);
+    }
   }
 
   // ── Fetch DRE ────────────────────────────────────────────────────────────────
@@ -265,7 +324,20 @@ export default function FinanceiroPage() {
     {
       key: "desc",
       header: "Descrição",
-      render: (r) => <span className="font-medium text-ink dark:text-white">{r.description}</span>,
+      render: (r) => (
+        <span className="inline-flex items-center gap-1.5 font-medium text-ink dark:text-white">
+          {r.description}
+          {r.recurring_rule_id && (
+            <span
+              title="Lançamento recorrente"
+              className="inline-flex items-center gap-0.5 rounded-full bg-navy-dim px-1.5 py-0.5 text-[10px] font-medium text-navy"
+            >
+              <Repeat size={10} strokeWidth={2} />
+              Recorrente
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: "cat",
@@ -327,6 +399,11 @@ export default function FinanceiroPage() {
           {!isPastor && (
             <Tabs.Tab value="transactions" className={tabBtn(activeTab === "transactions")}>
               Lançamentos
+            </Tabs.Tab>
+          )}
+          {!isPastor && (
+            <Tabs.Tab value="recurring" className={tabBtn(activeTab === "recurring")}>
+              Recorrentes
             </Tabs.Tab>
           )}
           <Tabs.Tab value="dre" className={tabBtn(activeTab === "dre")}>
@@ -497,6 +574,96 @@ export default function FinanceiroPage() {
           </Tabs.Panel>
         )}
 
+        {/* ── Recorrentes ────────────────────────────────────────────────────── */}
+        {!isPastor && (
+          <Tabs.Panel value="recurring" className="pt-5">
+            {loadingRecurring ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </div>
+            ) : recurringRules.length === 0 ? (
+              <p className="py-10 text-center text-sm text-stone">
+                Nenhuma regra recorrente ativa.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {recurringRules.map((rule) => {
+                  const category = categories.find((c) => c.id === rule.category_id);
+                  return (
+                    <div
+                      key={rule.id}
+                      className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-ink dark:text-white">
+                          {rule.description ?? "—"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-stone">
+                          {frequencyLabel(rule.frequency)} · {category?.name ?? "—"} · próxima ocorrência em{" "}
+                          {fmtDate(rule.next_occurrence_at)}
+                        </p>
+                      </div>
+                      {rule.amount !== undefined && (
+                        <span className={cn(
+                          "shrink-0 text-sm font-medium tabular-nums",
+                          rule.type === "income" ? "text-teal" : "text-crimson"
+                        )}>
+                          {rule.type === "expense" ? "−" : "+"}
+                          {fmt(Number(rule.amount))}
+                        </span>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 rounded-[8px]"
+                        onClick={() => setConfirmDeactivateId(rule.id)}
+                      >
+                        Desativar
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {confirmDeactivateId && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
+                  <p className="text-sm font-medium text-ink dark:text-white">
+                    Desativar regra recorrente?
+                  </p>
+                  <p className="mt-1.5 text-sm text-stone">
+                    Nenhum novo lançamento será gerado a partir desta regra.
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 rounded-[8px]"
+                      onClick={() => setConfirmDeactivateId(null)}
+                      disabled={deactivatingId === confirmDeactivateId}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      className="flex-1 rounded-[8px] bg-crimson text-white hover:opacity-90"
+                      onClick={() => handleDeactivate(confirmDeactivateId)}
+                      disabled={deactivatingId === confirmDeactivateId}
+                    >
+                      {deactivatingId === confirmDeactivateId ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        "Desativar"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Tabs.Panel>
+        )}
+
         {/* ── DRE ────────────────────────────────────────────────────────────── */}
         <Tabs.Panel value="dre" className="pt-5">
           <div className="space-y-5">
@@ -633,7 +800,7 @@ export default function FinanceiroPage() {
       <NewTransactionModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={refreshTx}
+        onCreated={() => { refreshTx(); refreshRecurring(); }}
       />
     </div>
   );
