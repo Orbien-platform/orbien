@@ -77,6 +77,14 @@ export class SpedExportService {
       const key = `exports/${tenantId}/${jobId}.txt`;
       await this.storage.upload(buffer, key, 'text/plain; charset=utf-8');
       const fileUrl = await this.storage.getPresignedGetUrl(key, 7 * 86_400);
+
+      if (rows.length > 0) {
+        await this.prisma.system.financialTransaction.updateMany({
+          where: { id: { in: rows.map((r) => r.id) } },
+          data: { status: 'confirmed' },
+        });
+      }
+
       await this.jobs.markDone(jobId, fileUrl);
       this.logger.log(`SPED export job ${jobId} done (${buffer.length} bytes, ${rows.length} transactions)`);
     } catch (err: unknown) {

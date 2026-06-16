@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -146,6 +147,10 @@ export class TransactionsService {
 
     if (!existing) throw new NotFoundException('Transação não encontrada');
 
+    if (existing.status === 'confirmed') {
+      throw new ForbiddenException('Transação já confirmada em uma exportação contábil não pode ser editada');
+    }
+
     if (dto.category_id && dto.category_id !== existing.category_id) {
       const category = await this.prisma.client.financialCategory.findFirst({
         where: {
@@ -204,6 +209,10 @@ export class TransactionsService {
     });
 
     if (!existing) throw new NotFoundException('Transação não encontrada');
+
+    if (existing.status === 'confirmed') {
+      throw new ForbiddenException('Transação já confirmada em uma exportação contábil não pode ser excluída');
+    }
 
     const deleted = await this.prisma.client.financialTransaction.delete({ where: { id } });
 

@@ -21,6 +21,7 @@ import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
+import { RecurringRuleService, RecurringScope } from './recurring-rules/recurring-rule.service';
 
 const READ_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 const WRITE_ROLES = ['admin_congregation', 'treasurer', 'secretary', 'tenant_admin'];
@@ -29,7 +30,10 @@ const WRITE_ROLES = ['admin_congregation', 'treasurer', 'secretary', 'tenant_adm
 @UseGuards(JwtAuthGuard, RolesGuard)
 @UseInterceptors(TenantContextInterceptor)
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) {}
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly recurringRuleService: RecurringRuleService,
+  ) {}
 
   @Post()
   @Roles(...WRITE_ROLES)
@@ -54,14 +58,21 @@ export class TransactionsController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTransactionDto,
+    @Query('scope') scope: RecurringScope | undefined,
     @CurrentUser() user: JwtPayload,
   ) {
+    if (scope) return this.recurringRuleService.updateTransaction(id, dto, scope, user);
     return this.transactionsService.update(id, dto, user);
   }
 
   @Delete(':id')
   @Roles('admin_congregation', 'tenant_admin')
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('scope') scope: RecurringScope | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (scope) return this.recurringRuleService.deleteTransaction(id, scope, user);
     return this.transactionsService.remove(id, user);
   }
 }

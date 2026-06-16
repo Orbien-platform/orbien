@@ -1,8 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RecurringRule, RecurringRuleMode, TransactionSource } from '@prisma/client';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  FinancialTransaction,
+  Prisma,
+  RecurringRule,
+  RecurringRuleMode,
+  TransactionSource,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { CreateRecurringRuleDto } from './dto/create-recurring-rule.dto';
+import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 
 function addMonths(date: Date, months: number): Date {
   const next = new Date(date);
@@ -11,6 +18,8 @@ function addMonths(date: Date, months: number): Date {
 }
 
 type RecurringRuleWithCount = RecurringRule & { transactions_count: number };
+
+export type RecurringScope = 'this' | 'this_and_future';
 
 @Injectable()
 export class RecurringRuleService {
@@ -179,6 +188,182 @@ export class RecurringRuleService {
         where: { id: rule.id },
         data: { next_occurrence_at: addMonths(rule.next_occurrence_at, 1) },
       });
+    });
+  }
+
+  private assertValidScope(scope: RecurringScope): void {
+    if (scope !== 'this' && scope !== 'this_and_future') {
+      throw new BadRequestException('scope deve ser "this" ou "this_and_future"');
+    }
+  }
+
+  private async loadEditableTransaction(
+    transactionId: string,
+    user: JwtPayload,
+  ): Promise<FinancialTransaction> {
+    const transaction = await this.prisma.client.financialTransaction.findFirst({
+      where: { id: transactionId, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+    });
+
+    if (!transaction) throw new NotFoundException('Transação não encontrada');
+
+    if (transaction.status === 'confirmed') {
+      throw new ForbiddenException('Transação já confirmada em uma exportação contábil não pode ser editada');
+    }
+
+    return transaction;
+  }
+
+  async updateTransaction(
+    transactionId: string,
+    dto: UpdateTransactionDto,
+    scope: RecurringScope,
+    user: JwtPayload,
+  ): Promise<FinancialTransaction | { updated_count: number }> {
+    this.assertValidScope(scope);
+    const transaction = await this.loadEditableTransaction(transactionId, user);
+
+    if (dto.category_id && dto.category_id !== transaction.category_id) {
+      const category = await this.prisma.client.financialCategory.findFirst({
+        where: { id: dto.category_id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+        select: { type: true },
+      });
+      if (!category) throw new NotFoundException('Categoria não encontrada');
+
+      const effectiveType = dto.type ?? transaction.type;
+      if (category.type !== effectiveType) {
+        throw new BadRequestException(
+          `Tipo da transação (${effectiveType}) não corresponde ao tipo da categoria (${category.type})`,
+        );
+      }
+    }
+
+    const fields = {
+      ...(dto.type && { type: dto.type }),
+      ...(dto.amount !== undefined && { amount: new Prisma.Decimal(dto.amount) }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.category_id && { category_id: dto.category_id }),
+      ...(dto.cost_center_id !== undefined && { cost_center_id: dto.cost_center_id }),
+      ...(dto.donor_person_id !== undefined && { donor_person_id: dto.donor_person_id }),
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+    };
+
+    return this.prisma.runInTx(async (tx) => {
+      if (scope === 'this') {
+        const updated = await tx.financialTransaction.update({
+          where: { id: transaction.id },
+          data: { ...fields, ...(dto.occurred_at && { occurred_at: dto.occurred_at }), recurring_rule_id: null },
+        });
+
+        await tx.auditLog
+          .create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              actor_user_id: user.impersonated_by ?? user.sub,
+              entity: 'financial_transaction',
+              action: 'updated',
+              before: transaction as unknown as Prisma.InputJsonValue,
+              after: updated as unknown as Prisma.InputJsonValue,
+            },
+          })
+          .catch(() => void 0);
+
+        return updated;
+      }
+
+      // scope === 'this_and_future'
+      if (!transaction.recurring_rule_id) {
+        throw new BadRequestException('Transação não pertence a uma regra recorrente');
+      }
+
+      const { count } = await tx.financialTransaction.updateMany({
+        where: {
+          recurring_rule_id: transaction.recurring_rule_id,
+          status: 'pending',
+          occurred_at: { gte: transaction.occurred_at },
+        },
+        data: fields,
+      });
+
+      await tx.auditLog
+        .create({
+          data: {
+            tenant_id: user.tenant_id,
+            congregation_id: user.congregation_id,
+            actor_user_id: user.impersonated_by ?? user.sub,
+            entity: 'financial_transaction',
+            action: 'updated_this_and_future',
+            before: transaction as unknown as Prisma.InputJsonValue,
+            after: fields as unknown as Prisma.InputJsonValue,
+          },
+        })
+        .catch(() => void 0);
+
+      return { updated_count: count };
+    });
+  }
+
+  async deleteTransaction(
+    transactionId: string,
+    scope: RecurringScope,
+    user: JwtPayload,
+  ): Promise<FinancialTransaction | { deleted_count: number }> {
+    this.assertValidScope(scope);
+    const transaction = await this.loadEditableTransaction(transactionId, user);
+
+    return this.prisma.runInTx(async (tx) => {
+      if (scope === 'this') {
+        const deleted = await tx.financialTransaction.delete({ where: { id: transaction.id } });
+
+        await tx.auditLog
+          .create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              actor_user_id: user.impersonated_by ?? user.sub,
+              entity: 'financial_transaction',
+              action: 'deleted',
+              before: transaction as unknown as Prisma.InputJsonValue,
+            },
+          })
+          .catch(() => void 0);
+
+        return deleted;
+      }
+
+      // scope === 'this_and_future'
+      if (!transaction.recurring_rule_id) {
+        throw new BadRequestException('Transação não pertence a uma regra recorrente');
+      }
+
+      const { count } = await tx.financialTransaction.deleteMany({
+        where: {
+          recurring_rule_id: transaction.recurring_rule_id,
+          status: 'pending',
+          occurred_at: { gte: transaction.occurred_at },
+        },
+      });
+
+      await tx.recurringRule.update({
+        where: { id: transaction.recurring_rule_id },
+        data: { is_active: false },
+      });
+
+      await tx.auditLog
+        .create({
+          data: {
+            tenant_id: user.tenant_id,
+            congregation_id: user.congregation_id,
+            actor_user_id: user.impersonated_by ?? user.sub,
+            entity: 'financial_transaction',
+            action: 'deleted_this_and_future',
+            before: transaction as unknown as Prisma.InputJsonValue,
+          },
+        })
+        .catch(() => void 0);
+
+      return { deleted_count: count };
     });
   }
 }

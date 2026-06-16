@@ -46,7 +46,23 @@ export class DrePdfService {
       this.dreService.buildDre(tenantId, congregationId, query, false),
       this.prisma.client.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
     ]);
-    return pdfmakeLib.createPdf(this.buildDocDef(dre, tenant?.name ?? 'Igreja'), {}).getBuffer();
+    const buffer = await pdfmakeLib.createPdf(this.buildDocDef(dre, tenant?.name ?? 'Igreja'), {}).getBuffer();
+
+    // The DRE PDF is an accounting export — transactions it covers become 'confirmed'.
+    const start = new Date(query.period_start);
+    const end = new Date(query.period_end);
+    end.setUTCHours(23, 59, 59, 999);
+    await this.prisma.client.financialTransaction.updateMany({
+      where: {
+        tenant_id: tenantId,
+        occurred_at: { gte: start, lte: end },
+        ...(query.congregation_id ? { congregation_id: query.congregation_id } : {}),
+        ...(query.cost_center ? { costCenter: { name: query.cost_center } } : {}),
+      },
+      data: { status: 'confirmed' },
+    });
+
+    return buffer;
   }
 
   private buildDocDef(dre: DreResult, tenantName: string): object {

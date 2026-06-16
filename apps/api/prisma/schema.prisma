@@ -712,6 +712,7 @@ model FinancialTransaction {
   donor_person_id    String?
   is_anonymous       Boolean           @default(false)
   source             TransactionSource
+  status             TransactionStatus @default(pending)
   notes              String?
   recurring_rule_id  String?
   created_by_user_id String
@@ -1367,6 +1368,11 @@ enum TransactionSource {
   manual
   pix_webhook
   recurring
+}
+
+enum TransactionStatus {
+  pending
+  confirmed
 }
 
 enum RecurringFrequency {

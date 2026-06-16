@@ -60,6 +60,7 @@ export class ExportService {
     if (days <= SYNC_MAX_DAYS) {
       const rows = await this.fetchTransactions(tenantId, congregationId, dto, start, end);
       const buffer = this.buildCsvBuffer(rows);
+      await this.markConfirmed(rows.map((r) => r.id), false);
       return {
         type: 'file',
         buffer,
@@ -85,6 +86,7 @@ export class ExportService {
         this.prisma.client.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } }),
       ]);
       const buffer = this.buildOfxBuffer(rows, tenant?.slug ?? 'orbien', start, end);
+      await this.markConfirmed(rows.map((r) => r.id), false);
       return {
         type: 'file',
         buffer,
@@ -154,6 +156,7 @@ export class ExportService {
       await this.storage.upload(buffer, key, mimeType);
       const fileUrl = await this.storage.getPresignedGetUrl(key, 7 * 86_400); // 7 days
 
+      await this.markConfirmed(rows.map((r) => r.id), true);
       await this.jobs.markDone(jobId, fileUrl);
       this.logger.log(`Export job ${jobId} done (${buffer.length} bytes)`);
     } catch (err: unknown) {
@@ -161,6 +164,16 @@ export class ExportService {
       await this.jobs.markError(jobId, msg);
       throw err;
     }
+  }
+
+  /** Marks exported transactions as 'confirmed' — accounting export is what closes the books on them. */
+  private async markConfirmed(ids: string[], useSystemClient: boolean): Promise<void> {
+    if (ids.length === 0) return;
+    const client = useSystemClient ? this.prisma.system : this.prisma.client;
+    await client.financialTransaction.updateMany({
+      where: { id: { in: ids } },
+      data: { status: 'confirmed' },
+    });
   }
 
   // ── Transaction fetchers ──────────────────────────────────────────────────
