@@ -38,8 +38,9 @@ export function NewTransactionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
-  const [repeat, setRepeat] = useState<"none" | "weekly" | "monthly" | "yearly">("none");
-  const [endsAt, setEndsAt] = useState("");
+  const [successMessage, setSuccessMessage] = useState("Lançamento registrado!");
+  const [entryMode, setEntryMode] = useState<"single" | "installment" | "fixed">("single");
+  const [installments, setInstallments] = useState(2);
   const hasFetched = useRef(false);
 
   useEffect(() => {
@@ -61,8 +62,9 @@ export function NewTransactionModal({
     setDescription("");
     setError("");
     setSuccess(false);
-    setRepeat("none");
-    setEndsAt("");
+    setSuccessMessage("Lançamento registrado!");
+    setEntryMode("single");
+    setInstallments(2);
     hasFetched.current = false;
   }
 
@@ -75,9 +77,14 @@ export function NewTransactionModal({
     if (!occurredAt) { setError("Data é obrigatória."); return; }
     if (!categoryId) { setError("Selecione uma categoria."); return; }
 
+    if (entryMode === "installment" && (!installments || installments < 2 || installments > 60)) {
+      setError("Número de parcelas deve ser entre 2 e 60.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      if (repeat === "none") {
+      if (entryMode === "single") {
         await api.post("/financial/transactions", {
           type,
           category_id: categoryId,
@@ -85,16 +92,30 @@ export function NewTransactionModal({
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           description: description.trim(),
         });
-      } else {
+        setSuccessMessage("Lançamento registrado!");
+      } else if (entryMode === "installment") {
         await api.post("/financial/recurring-rules", {
-          frequency: repeat,
-          interval: 1,
-          ends_at: endsAt ? new Date(endsAt + "T23:59:59").toISOString() : undefined,
+          mode: "installment",
+          frequency: "monthly",
+          installments,
+          started_at: new Date(occurredAt + "T12:00:00").toISOString(),
           amount,
           type,
           category_id: categoryId,
           description: description.trim(),
         });
+        setSuccessMessage(`Lançamento parcelado em ${installments}x criado com sucesso`);
+      } else {
+        await api.post("/financial/recurring-rules", {
+          mode: "fixed",
+          frequency: "monthly",
+          started_at: new Date(occurredAt + "T12:00:00").toISOString(),
+          amount,
+          type,
+          category_id: categoryId,
+          description: description.trim(),
+        });
+        setSuccessMessage("Lançamento fixo mensal criado com sucesso");
       }
       setSuccess(true);
       setTimeout(() => {
@@ -120,7 +141,7 @@ export function NewTransactionModal({
         <div className="flex flex-col items-center gap-3 py-6 text-center">
           <CheckCircle2 size={40} className="text-teal" strokeWidth={1.5} />
           <p className="text-sm font-medium text-ink dark:text-white">
-            Lançamento registrado!
+            {successMessage}
           </p>
         </div>
       ) : (
@@ -217,31 +238,32 @@ export function NewTransactionModal({
           {/* Recurrence */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-sm font-medium text-ink dark:text-white">
-              Repetir
+              Tipo de lançamento
             </Label>
             <select
-              value={repeat}
-              onChange={(e) => setRepeat(e.target.value as typeof repeat)}
+              value={entryMode}
+              onChange={(e) => setEntryMode(e.target.value as typeof entryMode)}
               disabled={isSubmitting}
               className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
             >
-              <option value="none">Sem repetição</option>
-              <option value="weekly">Fixo semanal</option>
-              <option value="monthly">Fixo mensal</option>
-              <option value="yearly">Fixo anual</option>
+              <option value="single">Avulso</option>
+              <option value="installment">Parcelado</option>
+              <option value="fixed">Fixo mensal</option>
             </select>
           </div>
 
-          {repeat !== "none" && (
+          {entryMode === "installment" && (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="nt-ends-at" className="text-sm font-medium text-ink dark:text-white">
-                Encerrar repetição em
+              <Label htmlFor="nt-installments" className="text-sm font-medium text-ink dark:text-white">
+                Número de parcelas <span className="text-crimson">*</span>
               </Label>
               <Input
-                id="nt-ends-at"
-                type="date"
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
+                id="nt-installments"
+                type="number"
+                min={2}
+                max={60}
+                value={installments}
+                onChange={(e) => setInstallments(parseInt(e.target.value, 10) || 0)}
                 disabled={isSubmitting}
                 className="rounded-[8px]"
               />

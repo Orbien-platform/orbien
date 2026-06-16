@@ -44,15 +44,14 @@ interface Category {
 
 interface RecurringRule {
   id: string;
+  mode: "installment" | "fixed";
   frequency: "weekly" | "monthly" | "yearly";
   interval: number;
+  installments: number | null;
   next_occurrence_at: string;
   ends_at: string | null;
   is_active: boolean;
-  category_id?: string | null;
-  description?: string;
-  amount?: string | number;
-  type?: "income" | "expense";
+  transactions_count: number;
 }
 
 interface DreCategory {
@@ -324,20 +323,33 @@ export default function FinanceiroPage() {
     {
       key: "desc",
       header: "Descrição",
-      render: (r) => (
-        <span className="inline-flex items-center gap-1.5 font-medium text-ink dark:text-white">
-          {r.description}
-          {r.recurring_rule_id && (
-            <span
-              title="Lançamento recorrente"
-              className="inline-flex items-center gap-0.5 rounded-full bg-navy-dim px-1.5 py-0.5 text-[10px] font-medium text-navy"
-            >
-              <Repeat size={10} strokeWidth={2} />
-              Recorrente
-            </span>
-          )}
-        </span>
-      ),
+      render: (r) => {
+        const isInstallment = r.recurring_rule_id && /\(\d+\/\d+\)$/.test(r.description);
+        const isFixed = r.recurring_rule_id && !isInstallment;
+        return (
+          <span className="inline-flex items-center gap-1.5 font-medium text-ink dark:text-white">
+            {r.description}
+            {isInstallment && (
+              <span
+                title="Lançamento parcelado"
+                className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+              >
+                <Repeat size={10} strokeWidth={2} />
+                Parcelado
+              </span>
+            )}
+            {isFixed && (
+              <span
+                title="Lançamento fixo mensal"
+                className="inline-flex items-center gap-0.5 rounded-full bg-teal-dim px-1.5 py-0.5 text-[10px] font-medium text-teal"
+              >
+                <Repeat size={10} strokeWidth={2} />
+                Fixo
+              </span>
+            )}
+          </span>
+        );
+      },
     },
     {
       key: "cat",
@@ -588,43 +600,63 @@ export default function FinanceiroPage() {
                 Nenhuma regra recorrente ativa.
               </p>
             ) : (
-              <div className="flex flex-col gap-2">
-                {recurringRules.map((rule) => {
-                  const category = categories.find((c) => c.id === rule.category_id);
-                  return (
-                    <div
-                      key={rule.id}
-                      className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-ink dark:text-white">
-                          {rule.description ?? "—"}
-                        </p>
-                        <p className="mt-0.5 text-xs text-stone">
-                          {frequencyLabel(rule.frequency)} · {category?.name ?? "—"} · próxima ocorrência em{" "}
-                          {fmtDate(rule.next_occurrence_at)}
-                        </p>
-                      </div>
-                      {rule.amount !== undefined && (
-                        <span className={cn(
-                          "shrink-0 text-sm font-medium tabular-nums",
-                          rule.type === "income" ? "text-teal" : "text-crimson"
-                        )}>
-                          {rule.type === "expense" ? "−" : "+"}
-                          {fmt(Number(rule.amount))}
-                        </span>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 rounded-[8px]"
-                        onClick={() => setConfirmDeactivateId(rule.id)}
-                      >
-                        Desativar
-                      </Button>
-                    </div>
-                  );
-                })}
+              <div className="overflow-hidden rounded-[12px] border border-[var(--border-default)]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Descrição</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Tipo</th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">Valor</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Frequência</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Próxima ocorrência</th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recurringRules.map((rule) => {
+                      const tx = transactions.find((t) => t.recurring_rule_id === rule.id);
+                      const cleanDescription = tx?.description.replace(/\s*\(\d+\/\d+\)$/, "") ?? "—";
+                      return (
+                        <tr key={rule.id} className="border-t border-[var(--border-default)] hover:bg-[var(--surface-subtle)] transition-colors">
+                          <td className="py-2.5 pl-4 text-sm text-ink dark:text-white">{cleanDescription}</td>
+                          <td className="py-2.5 pr-4">
+                            <span className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                              rule.mode === "installment" ? "bg-amber-100 text-amber-700" : "bg-teal-dim text-teal"
+                            )}>
+                              {rule.mode === "installment"
+                                ? `Parcelado ${rule.transactions_count}/${rule.installments} geradas`
+                                : "Fixo mensal"}
+                            </span>
+                          </td>
+                          <td className={cn(
+                            "py-2.5 pr-4 text-right text-sm font-medium tabular-nums",
+                            tx?.type === "income" ? "text-teal" : "text-crimson"
+                          )}>
+                            {tx ? (
+                              <>
+                                {tx.type === "expense" ? "−" : "+"}
+                                {fmt(Number(tx.amount))}
+                              </>
+                            ) : "—"}
+                          </td>
+                          <td className="py-2.5 pr-4 text-sm text-stone">{frequencyLabel(rule.frequency)}</td>
+                          <td className="py-2.5 pr-4 text-sm text-stone">{fmtDate(rule.next_occurrence_at)}</td>
+                          <td className="py-2.5 pr-4 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-[8px]"
+                              onClick={() => setConfirmDeactivateId(rule.id)}
+                            >
+                              Desativar
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
 
