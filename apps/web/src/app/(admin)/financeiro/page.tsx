@@ -11,12 +11,13 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NewTransactionModal } from "@/components/financial/NewTransactionModal";
+import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financial/RecurrenceScopeDialog";
 import { ExportButton } from "@/components/financial/ExportButton";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
@@ -33,6 +34,7 @@ interface Transaction {
   category_id: string | null;
   category?: { id: string; name: string; type: string } | null;
   recurring_rule_id?: string | null;
+  status: "pending" | "confirmed";
 }
 
 interface Category {
@@ -203,8 +205,13 @@ export default function FinanceiroPage() {
   const [txPage, setTxPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editScope, setEditScope] = useState<RecurrenceScope | undefined>(undefined);
+  const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
   const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
   const [deletingTxId, setDeletingTxId] = useState<string | null>(null);
+  const [scopeDialog, setScopeDialog] = useState<{ mode: "edit" | "delete"; tx: Transaction } | null>(null);
+  const [scopeSubmitting, setScopeSubmitting] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
 
   // Recurring rules
   const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
@@ -265,16 +272,42 @@ export default function FinanceiroPage() {
     loadRecurring();
   }
 
-  async function handleDeleteTx(id: string) {
+  function showToast(msg: string) {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 3000);
+  }
+
+  async function handleDeleteTx(id: string, scope?: RecurrenceScope) {
     setDeletingTxId(id);
+    if (scope) setScopeSubmitting(true);
     try {
-      await api.delete(`/financial/transactions/${id}`);
+      const qs = scope ? `?scope=${scope}` : "";
+      await api.delete(`/financial/transactions/${id}${qs}`);
       setConfirmDeleteTxId(null);
+      setScopeDialog(null);
+      showToast(
+        scope === "this_and_future"
+          ? "Lançamento e próximos removidos com sucesso"
+          : "Lançamento removido com sucesso"
+      );
       refreshTx();
+      if (scope) refreshRecurring();
     } catch {
-      // ignore
+      showToast("Erro ao remover lançamento.");
     } finally {
       setDeletingTxId(null);
+      setScopeSubmitting(false);
+    }
+  }
+
+  function handleScopeConfirm(scope: RecurrenceScope) {
+    if (!scopeDialog) return;
+    if (scopeDialog.mode === "edit") {
+      setEditScope(scope);
+      setEditingTx(scopeDialog.tx);
+      setScopeDialog(null);
+    } else {
+      handleDeleteTx(scopeDialog.tx.id, scope);
     }
   }
 
@@ -403,30 +436,48 @@ export default function FinanceiroPage() {
       key: "actions",
       header: "Ações",
       width: "90px",
-      render: (r) => (
-        <div className="flex items-center justify-end gap-1">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="rounded-[8px]"
-            aria-label="Editar lançamento"
-            onClick={() => setEditingTx(r)}
-          >
-            <Pencil size={13} strokeWidth={1.5} />
-          </Button>
-          {canDeleteTx && (
+      render: (r) => {
+        if (r.status === "confirmed") {
+          return (
+            <div className="flex items-center justify-end">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="rounded-[8px]"
+                aria-label="Visualizar lançamento"
+                onClick={() => setViewingTx(r)}
+              >
+                <Eye size={13} strokeWidth={1.5} />
+              </Button>
+            </div>
+          );
+        }
+        const isRecurring = !!r.recurring_rule_id;
+        return (
+          <div className="flex items-center justify-end gap-1">
             <Button
               variant="outline"
               size="icon-sm"
-              className="rounded-[8px] text-crimson hover:bg-crimson-dim"
-              aria-label="Remover lançamento"
-              onClick={() => setConfirmDeleteTxId(r.id)}
+              className="rounded-[8px]"
+              aria-label="Editar lançamento"
+              onClick={() => (isRecurring ? setScopeDialog({ mode: "edit", tx: r }) : setEditingTx(r))}
             >
-              <Trash2 size={13} strokeWidth={1.5} />
+              <Pencil size={13} strokeWidth={1.5} />
             </Button>
-          )}
-        </div>
-      ),
+            {canDeleteTx && (
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="rounded-[8px] text-crimson hover:bg-crimson-dim"
+                aria-label="Remover lançamento"
+                onClick={() => (isRecurring ? setScopeDialog({ mode: "delete", tx: r }) : setConfirmDeleteTxId(r.id))}
+              >
+                <Trash2 size={13} strokeWidth={1.5} />
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -884,10 +935,33 @@ export default function FinanceiroPage() {
 
       <NewTransactionModal
         open={!!editingTx}
-        onOpenChange={(v) => { if (!v) setEditingTx(null); }}
+        onOpenChange={(v) => { if (!v) { setEditingTx(null); setEditScope(undefined); } }}
         onCreated={() => { refreshTx(); refreshRecurring(); }}
         editTransaction={editingTx}
+        scope={editScope}
       />
+
+      <NewTransactionModal
+        open={!!viewingTx}
+        onOpenChange={(v) => { if (!v) setViewingTx(null); }}
+        onCreated={() => {}}
+        editTransaction={viewingTx}
+        viewOnly
+      />
+
+      <RecurrenceScopeDialog
+        open={!!scopeDialog}
+        mode={scopeDialog?.mode ?? "edit"}
+        isSubmitting={scopeSubmitting}
+        onCancel={() => setScopeDialog(null)}
+        onConfirm={handleScopeConfirm}
+      />
+
+      {toastMsg && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-[8px] bg-ink px-4 py-2.5 text-sm text-white shadow-lg dark:bg-white dark:text-ink">
+          {toastMsg}
+        </div>
+      )}
 
       {confirmDeleteTxId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

@@ -24,6 +24,7 @@ interface EditableTransaction {
   description: string;
   category_id: string | null;
   recurring_rule_id?: string | null;
+  status?: "pending" | "confirmed";
 }
 
 function editKindLabel(tx: EditableTransaction): string {
@@ -36,6 +37,8 @@ interface NewTransactionModalProps {
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
   editTransaction?: EditableTransaction | null;
+  scope?: "this" | "this_and_future";
+  viewOnly?: boolean;
 }
 
 export function NewTransactionModal({
@@ -43,8 +46,11 @@ export function NewTransactionModal({
   onOpenChange,
   onCreated,
   editTransaction = null,
+  scope,
+  viewOnly = false,
 }: NewTransactionModalProps) {
   const isEditing = !!editTransaction;
+  const fieldsDisabled = viewOnly;
   const [type, setType] = useState<"income" | "expense">("income");
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState(0);
@@ -115,14 +121,19 @@ export function NewTransactionModal({
     setIsSubmitting(true);
     try {
       if (isEditing) {
-        await api.patch(`/financial/transactions/${editTransaction!.id}`, {
+        const qs = scope ? `?scope=${scope}` : "";
+        await api.patch(`/financial/transactions/${editTransaction!.id}${qs}`, {
           type,
           category_id: categoryId,
           amount,
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           description: description.trim(),
         });
-        setSuccessMessage("Lançamento atualizado com sucesso");
+        setSuccessMessage(
+          scope === "this_and_future"
+            ? "Lançamento e próximos atualizados com sucesso"
+            : "Lançamento atualizado com sucesso"
+        );
       } else if (entryMode === "single") {
         await api.post("/financial/transactions", {
           type,
@@ -177,11 +188,13 @@ export function NewTransactionModal({
     <Modal
       open={open}
       onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
-      title={isEditing ? "Editar lançamento" : "Novo lançamento"}
+      title={viewOnly ? "Visualizar lançamento" : isEditing ? "Editar lançamento" : "Novo lançamento"}
       description={
-        isEditing
-          ? "Atualize os dados desta entrada ou saída financeira."
-          : "Registre uma entrada ou saída financeira."
+        viewOnly
+          ? "Lançamento confirmado em uma exportação contábil — somente leitura."
+          : isEditing
+            ? "Atualize os dados desta entrada ou saída financeira."
+            : "Registre uma entrada ou saída financeira."
       }
     >
       {success ? (
@@ -199,8 +212,9 @@ export function NewTransactionModal({
               <button
                 key={t}
                 type="button"
+                disabled={fieldsDisabled}
                 onClick={() => { setType(t); setCategoryId(""); }}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   type === t
                     ? t === "income"
                       ? "bg-teal text-white"
@@ -221,7 +235,7 @@ export function NewTransactionModal({
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || fieldsDisabled}
               className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
             >
               <option value="">— Selecione —</option>
@@ -246,7 +260,7 @@ export function NewTransactionModal({
                 id="nt-amount"
                 value={amount}
                 onValueChange={setAmount}
-                disabled={isSubmitting}
+                disabled={isSubmitting || fieldsDisabled}
                 className="rounded-[8px] pl-9"
               />
             </div>
@@ -262,7 +276,7 @@ export function NewTransactionModal({
               type="date"
               value={occurredAt}
               onChange={(e) => setOccurredAt(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || fieldsDisabled}
               className="rounded-[8px]"
             />
           </div>
@@ -277,7 +291,7 @@ export function NewTransactionModal({
               placeholder="ex: Dízimos do culto de domingo"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || fieldsDisabled}
               className="rounded-[8px]"
             />
           </div>
@@ -297,6 +311,11 @@ export function NewTransactionModal({
               <p className="text-xs text-stone">
                 O tipo de lançamento é definido na criação e não pode ser alterado aqui.
               </p>
+              {!viewOnly && editTransaction?.recurring_rule_id && (
+                <p className="rounded-[8px] bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Este lançamento faz parte de uma série recorrente.
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-1.5">
@@ -341,32 +360,45 @@ export function NewTransactionModal({
           )}
 
           <div className="flex gap-2 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1 rounded-[8px]"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className={`flex-1 rounded-[8px] text-white ${
-                type === "income"
-                  ? "bg-teal hover:opacity-90"
-                  : "bg-crimson hover:opacity-90"
-              }`}
-            >
-              {isSubmitting ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : isEditing ? (
-                "Salvar"
-              ) : (
-                "Registrar"
-              )}
-            </Button>
+            {viewOnly ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 rounded-[8px]"
+                onClick={() => onOpenChange(false)}
+              >
+                Fechar
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 rounded-[8px]"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`flex-1 rounded-[8px] text-white ${
+                    type === "income"
+                      ? "bg-teal hover:opacity-90"
+                      : "bg-crimson hover:opacity-90"
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : isEditing ? (
+                    "Salvar"
+                  ) : (
+                    "Registrar"
+                  )}
+                </Button>
+              </>
+            )}
           </div>
         </form>
       )}
