@@ -1,7 +1,7 @@
 import {
+  IsDateString,
   IsEnum,
   IsInt,
-  IsISO8601,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -9,23 +9,21 @@ import {
   IsString,
   IsUUID,
   Min,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { RecurringFrequency, TransactionType } from '@prisma/client';
+import { RecurringFrequency, RecurringRuleMode, TransactionType } from '@prisma/client';
 
 export class CreateRecurringRuleDto {
+  @IsEnum(RecurringRuleMode, { message: 'Modo deve ser installment ou fixed' })
+  mode!: RecurringRuleMode;
+
   @IsEnum(RecurringFrequency, { message: 'Frequência deve ser weekly, monthly ou yearly' })
   frequency!: RecurringFrequency;
 
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt({ message: 'Intervalo deve ser um número inteiro' })
-  @Min(1, { message: 'Intervalo deve ser maior ou igual a 1' })
-  interval?: number = 1;
-
-  @IsOptional()
-  @IsISO8601({}, { message: 'Data de término inválida' })
-  ends_at?: string;
+  @ValidateIf((o: CreateRecurringRuleDto) => o.mode === RecurringRuleMode.installment)
+  @IsInt({ message: 'Número de parcelas deve ser um número inteiro' })
+  @Min(2, { message: 'Número de parcelas deve ser maior ou igual a 2' })
+  installments?: number;
 
   @IsNumber({}, { message: 'Valor deve ser um número' })
   @IsPositive({ message: 'Valor deve ser positivo' })
@@ -44,4 +42,8 @@ export class CreateRecurringRuleDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'Data de início inválida' })
+  started_at?: string;
 }

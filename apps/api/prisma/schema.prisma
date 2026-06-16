@@ -758,8 +758,10 @@ model RecurringRule {
   id                 String             @id @default(uuid())
   tenant_id          String
   congregation_id    String
+  mode               RecurringRuleMode  @default(fixed)
   frequency          RecurringFrequency
   interval           Int                @default(1)
+  installments       Int?
   next_occurrence_at DateTime
   ends_at            DateTime?
   is_active          Boolean            @default(true)
@@ -1371,6 +1373,11 @@ enum RecurringFrequency {
   weekly
   monthly
   yearly
+}
+
+enum RecurringRuleMode {
+  installment
+  fixed
 }
 
 enum PixScenario {
