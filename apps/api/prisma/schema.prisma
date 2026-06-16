@@ -1372,6 +1372,7 @@ enum TransactionSource {
 
 enum TransactionStatus {
   pending
+  paid
   confirmed
 }
 

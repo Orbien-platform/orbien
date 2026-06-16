@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { UpdateTransactionStatusDto } from './dto/update-transaction-status.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 
 type PaginatedTransactions = {
@@ -230,5 +231,42 @@ export class TransactionsService {
       .catch(() => void 0);
 
     return deleted;
+  }
+
+  async updateStatus(
+    id: string,
+    dto: UpdateTransactionStatusDto,
+    user: JwtPayload,
+  ): Promise<FinancialTransaction> {
+    const existing = await this.prisma.client.financialTransaction.findFirst({
+      where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+    });
+
+    if (!existing) throw new NotFoundException('Transação não encontrada');
+
+    if (existing.status === 'confirmed') {
+      throw new ForbiddenException('Transação já confirmada em uma exportação contábil não pode ser alterada');
+    }
+
+    const updated = await this.prisma.client.financialTransaction.update({
+      where: { id },
+      data: { status: dto.status },
+    });
+
+    this.prisma.client.auditLog
+      .create({
+        data: {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          actor_user_id: user.impersonated_by ?? user.sub,
+          entity: 'financial_transaction',
+          action: 'status_updated',
+          before: existing as unknown as Prisma.InputJsonValue,
+          after: updated as unknown as Prisma.InputJsonValue,
+        },
+      })
+      .catch(() => void 0);
+
+    return updated;
   }
 }

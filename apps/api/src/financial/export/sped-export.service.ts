@@ -216,6 +216,7 @@ export class SpedExportService {
       tenant_id: tenantId,
       congregation_id: dto.congregation_id ?? congregationId,
       occurred_at: { gte: start, lte: end },
+      status: 'paid',
       ...(dto.cost_center ? { costCenter: { name: dto.cost_center } } : {}),
     };
   }

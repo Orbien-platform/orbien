@@ -20,11 +20,13 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { UpdateTransactionStatusDto } from './dto/update-transaction-status.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { RecurringRuleService, RecurringScope } from './recurring-rules/recurring-rule.service';
 
 const READ_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 const WRITE_ROLES = ['admin_congregation', 'treasurer', 'secretary', 'tenant_admin'];
+const STATUS_ROLES = ['treasurer', 'admin_congregation', 'tenant_admin'];
 
 @Controller('financial/transactions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,6 +65,16 @@ export class TransactionsController {
   ) {
     if (scope) return this.recurringRuleService.updateTransaction(id, dto, scope, user);
     return this.transactionsService.update(id, dto, user);
+  }
+
+  @Patch(':id/status')
+  @Roles(...STATUS_ROLES)
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTransactionStatusDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.transactionsService.updateStatus(id, dto, user);
   }
 
   @Delete(':id')

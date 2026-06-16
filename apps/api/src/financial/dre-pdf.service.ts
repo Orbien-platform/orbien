@@ -56,6 +56,7 @@ export class DrePdfService {
       where: {
         tenant_id: tenantId,
         occurred_at: { gte: start, lte: end },
+        status: 'paid',
         ...(query.congregation_id ? { congregation_id: query.congregation_id } : {}),
         ...(query.cost_center ? { costCenter: { name: query.cost_center } } : {}),
       },
