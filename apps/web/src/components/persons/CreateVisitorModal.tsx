@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import { applyPhoneMask, stripPhone } from "@/lib/phoneMask";
 
 interface CreateVisitorModalProps {
   open: boolean;
@@ -38,13 +39,13 @@ export function CreateVisitorModal({
     e.preventDefault();
     setError("");
     if (!fullName.trim()) { setError("Nome é obrigatório."); return; }
-    if (!phone.trim()) { setError("Telefone é obrigatório."); return; }
+    if (stripPhone(phone).length < 10) { setError("Informe um telefone válido."); return; }
 
     setIsSubmitting(true);
     try {
       await api.post("/persons", {
         full_name: fullName.trim(),
-        phone: phone.trim(),
+        phone: stripPhone(phone) || undefined,
         email: email.trim() || undefined,
         classification: "visitor",
       });
@@ -98,9 +99,10 @@ export function CreateVisitorModal({
               type="tel"
               placeholder="(11) 99999-9999"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(applyPhoneMask(e.target.value))}
               disabled={isSubmitting}
               className="rounded-[8px]"
+              maxLength={16}
             />
           </div>
 

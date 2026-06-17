@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { UserPlus, Upload, ChevronLeft, ChevronRight } from "lucide-react";
+import { UserPlus, Upload, HelpCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -9,6 +9,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PersonSheet } from "@/components/persons/PersonSheet";
 import { CreateVisitorModal } from "@/components/persons/CreateVisitorModal";
 import { ImportCsvModal } from "@/components/persons/ImportCsvModal";
+import { ImportHelpModal } from "@/components/persons/ImportHelpModal";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
 
@@ -63,6 +64,7 @@ export default function PessoasPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [importHelpOpen, setImportHelpOpen] = useState(false);
 
   const fetchRef = useRef(0);
 
@@ -147,15 +149,26 @@ export default function PessoasPage() {
         </div>
         <div className="flex gap-2">
           {!isPastor && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 rounded-[8px]"
-              onClick={() => setImportOpen(true)}
-            >
-              <Upload size={14} strokeWidth={1.5} />
-              Importar CSV
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-[8px]"
+                onClick={() => setImportHelpOpen(true)}
+              >
+                <HelpCircle size={14} strokeWidth={1.5} />
+                Como importar?
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-[8px]"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload size={14} strokeWidth={1.5} />
+                Importar CSV
+              </Button>
+            </>
           )}
           <Button
             size="sm"
@@ -253,6 +266,10 @@ export default function PessoasPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImported={() => loadPersons(page, search, classification)}
+      />
+      <ImportHelpModal
+        open={importHelpOpen}
+        onOpenChange={setImportHelpOpen}
       />
     </div>
   );

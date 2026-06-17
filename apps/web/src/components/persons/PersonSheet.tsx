@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import api from "@/lib/api";
+import { applyPhoneMask, initPhone, stripPhone } from "@/lib/phoneMask";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
     if (!person) return;
     setEditForm({
       full_name: person.full_name,
-      phone: person.phone ?? "",
+      phone: initPhone(person.phone),
       email: person.email ?? "",
       birth_date: person.birth_date ? person.birth_date.split("T")[0] : "",
       membership_date: person.membership_date ? person.membership_date.split("T")[0] : "",
@@ -129,7 +130,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
     try {
       const { data } = await api.patch<PersonDetail>(`/persons/${person.id}`, {
         full_name: editForm.full_name?.trim(),
-        phone: editForm.phone?.trim() || undefined,
+        phone: stripPhone(editForm.phone ?? "") || undefined,
         email: editForm.email?.trim() || undefined,
         birth_date: editForm.birth_date || undefined,
         membership_date: editForm.classification === "member" ? (editForm.membership_date || undefined) : undefined,
@@ -204,10 +205,12 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                     <Label className="text-xs font-medium text-stone uppercase tracking-wide">Telefone</Label>
                     <Input
                       type="tel"
+                      placeholder="(11) 99999-9999"
                       value={editForm.phone ?? ""}
-                      onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                      onChange={(e) => setEditForm((f) => ({ ...f, phone: applyPhoneMask(e.target.value) }))}
                       className="rounded-[8px]"
                       disabled={isSaving}
+                      maxLength={16}
                     />
                   </div>
 
