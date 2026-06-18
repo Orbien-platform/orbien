@@ -240,9 +240,14 @@ export function NewTransactionModal({
             >
               <option value="">— Selecione —</option>
               {filteredCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <optgroup key={c.id} label={c.name}>
+                  <option value={c.id}>{c.name}</option>
+                  {c.children.map((child) => (
+                    <option key={child.id} value={child.id}>
+                      {"— "}{child.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
