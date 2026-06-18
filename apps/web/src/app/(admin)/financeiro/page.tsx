@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye, Settings2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +19,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NewTransactionModal } from "@/components/financial/NewTransactionModal";
 import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financial/RecurrenceScopeDialog";
 import { ExportButton } from "@/components/financial/ExportButton";
+import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -190,8 +191,14 @@ export default function FinanceiroPage() {
   const isPastor = user?.roles?.includes("pastor") ?? false;
   const canDeleteTx =
     user?.roles?.includes("admin_congregation") || user?.roles?.includes("tenant_admin") || false;
+  const canManageCategories =
+    user?.roles?.includes("treasurer") ||
+    user?.roles?.includes("admin_congregation") ||
+    user?.roles?.includes("tenant_admin") ||
+    false;
 
   const [activeTab, setActiveTab] = useState<TabValue>("overview");
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   // Transactions + categories (shared across tabs)
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -555,9 +562,23 @@ export default function FinanceiroPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">Financeiro</h1>
-        <p className="mt-0.5 text-sm text-stone">Visão geral e tesouraria</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-medium text-ink dark:text-white">Financeiro</h1>
+          <p className="mt-0.5 text-sm text-stone">Visão geral e tesouraria</p>
+        </div>
+        {canManageCategories && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="rounded-[8px]"
+            aria-label="Categorias"
+            title="Categorias"
+            onClick={() => setCategoriesOpen(true)}
+          >
+            <Settings2 size={15} strokeWidth={1.5} />
+          </Button>
+        )}
       </div>
 
       <Tabs.Root
@@ -1021,6 +1042,14 @@ export default function FinanceiroPage() {
         editTransaction={viewingTx}
         viewOnly
       />
+
+      {canManageCategories && (
+        <CategoriesModal
+          open={categoriesOpen}
+          onOpenChange={setCategoriesOpen}
+          onChanged={refreshTx}
+        />
+      )}
 
       <RecurrenceScopeDialog
         open={!!scopeDialog}
