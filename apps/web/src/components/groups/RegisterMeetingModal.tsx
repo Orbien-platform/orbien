@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, Users, FileText, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,21 @@ interface Member {
   id: string;
   role: string;
   person: { id: string; full_name: string };
+}
+
+interface StudyMaterialOption {
+  id: string;
+  title: string;
+  author?: string;
+}
+
+type MaterialVisibility = "all" | "leaders_only";
+
+interface MeetingMaterial {
+  id: string;
+  material_id: string;
+  visibility: MaterialVisibility;
+  material: { id: string; title: string; author?: string; source_type?: string; rich_content?: string };
 }
 
 interface RegisterMeetingModalProps {
@@ -48,6 +63,20 @@ export function RegisterMeetingModal({
   const [attendance, setAttendance] = useState<Record<string, boolean>>({});
   const [savingAttendance, setSavingAttendance] = useState<Record<string, boolean>>({});
 
+  // Materials
+  const [materialMode, setMaterialMode] = useState<"existing" | "link">("existing");
+  const [materialSearch, setMaterialSearch] = useState("");
+  const [materialResults, setMaterialResults] = useState<StudyMaterialOption[]>([]);
+  const [searchingMaterials, setSearchingMaterials] = useState(false);
+  const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterialOption | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkTitle, setLinkTitle] = useState("");
+  const [materialVisibility, setMaterialVisibility] = useState<MaterialVisibility>("all");
+  const [isAddingMaterial, setIsAddingMaterial] = useState(false);
+  const [materialError, setMaterialError] = useState("");
+  const [meetingMaterials, setMeetingMaterials] = useState<MeetingMaterial[]>([]);
+  const [removingMaterialId, setRemovingMaterialId] = useState<string | null>(null);
+
   // Initialize attendance map when members change
   useEffect(() => {
     const init: Record<string, boolean> = {};
@@ -64,6 +93,16 @@ export function RegisterMeetingModal({
     setError("");
     setAttendance({});
     setSavingAttendance({});
+    setMaterialMode("existing");
+    setMaterialSearch("");
+    setMaterialResults([]);
+    setSelectedMaterial(null);
+    setLinkUrl("");
+    setLinkTitle("");
+    setMaterialVisibility("all");
+    setMaterialError("");
+    setMeetingMaterials([]);
+    setRemovingMaterialId(null);
   }
 
   async function handleCreateMeeting(e: FormEvent) {
@@ -113,6 +152,106 @@ export function RegisterMeetingModal({
     }
   }
 
+  async function handleMaterialSearch(term: string) {
+    setMaterialSearch(term);
+    setSelectedMaterial(null);
+    if (!term.trim()) { setMaterialResults([]); return; }
+    setSearchingMaterials(true);
+    try {
+      const { data } = await api.get<{ data: StudyMaterialOption[] }>("/study-materials", {
+        params: { search: term, limit: 8 },
+      });
+      setMaterialResults(data.data ?? []);
+    } catch {
+      setMaterialResults([]);
+    } finally {
+      setSearchingMaterials(false);
+    }
+  }
+
+  function selectMaterial(opt: StudyMaterialOption) {
+    setSelectedMaterial(opt);
+    setMaterialResults([]);
+    setMaterialSearch(opt.title);
+  }
+
+  async function handleAddMaterial() {
+    if (!meetingId) return;
+    setMaterialError("");
+
+    if (materialMode === "link") {
+      if (!linkTitle.trim() || !linkUrl.trim()) {
+        setMaterialError("Informe título e link do material.");
+        return;
+      }
+    } else if (!selectedMaterial) {
+      setMaterialError("Selecione um material.");
+      return;
+    }
+
+    setIsAddingMaterial(true);
+    try {
+      let materialId = selectedMaterial?.id;
+      let materialInfo: MeetingMaterial["material"] = selectedMaterial
+        ? { id: selectedMaterial.id, title: selectedMaterial.title, author: selectedMaterial.author }
+        : { id: "", title: linkTitle.trim() };
+
+      if (materialMode === "link") {
+        // StudyMaterial has no dedicated "link" type — a rich_text material
+        // whose content is the URL is the closest fit the API supports.
+        const { data: created } = await api.post<{ id: string }>("/study-materials", {
+          title: linkTitle.trim(),
+          source_type: "rich_text",
+          rich_content: linkUrl.trim(),
+          publish_at: new Date().toISOString(),
+          target_group_ids: [groupId],
+        });
+        materialId = created.id;
+        materialInfo = { id: created.id, title: linkTitle.trim(), source_type: "rich_text", rich_content: linkUrl.trim() };
+      }
+
+      const { data: linked } = await api.post<{ id: string }>(
+        `/small-groups/meetings/${meetingId}/materials`,
+        { material_id: materialId, visibility: materialVisibility }
+      );
+
+      setMeetingMaterials((prev) => [
+        ...prev,
+        {
+          id: linked.id,
+          material_id: materialId!,
+          visibility: materialVisibility,
+          material: materialInfo,
+        },
+      ]);
+      setSelectedMaterial(null);
+      setMaterialSearch("");
+      setLinkUrl("");
+      setLinkTitle("");
+      setMaterialVisibility("all");
+    } catch (err: unknown) {
+      const status = (err as { response?: { status: number } })?.response?.status;
+      setMaterialError(
+        status === 409 ? "Este material já está vinculado a esta reunião." : "Erro ao adicionar material."
+      );
+    } finally {
+      setIsAddingMaterial(false);
+    }
+  }
+
+  async function handleRemoveMaterial(item: MeetingMaterial) {
+    if (!meetingId) return;
+    setRemovingMaterialId(item.id);
+    try {
+      await api.delete(`/small-groups/meetings/${meetingId}/materials/${item.material_id}`);
+      setMeetingMaterials((prev) => prev.filter((m) => m.id !== item.id));
+    } catch {
+      setMaterialError("Erro ao remover material.");
+    } finally {
+      setRemovingMaterialId(null);
+    }
+  }
+
   const presentCount = Object.values(attendance).filter(Boolean).length;
   const totalCount = members.length;
 
@@ -122,7 +261,7 @@ export function RegisterMeetingModal({
       onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
       title="Registrar reunião"
       description={step === "form" ? groupName : `Presença — ${groupName}`}
-      className="max-w-md"
+      className="max-w-md max-h-[88vh] overflow-y-auto"
     >
       {/* ── Step 1: Meeting form ── */}
       {step === "form" && (
@@ -281,6 +420,185 @@ export function RegisterMeetingModal({
               })}
             </div>
           )}
+
+          {/* Materials */}
+          <div className="flex flex-col gap-3 border-t border-[var(--border-default)] pt-4">
+            <Label className="text-sm font-medium text-ink dark:text-white">
+              Material do encontro <span className="text-xs font-normal text-stone">(opcional)</span>
+            </Label>
+
+            <div className="flex gap-1 rounded-[8px] bg-[var(--surface-subtle)] p-1">
+              <button
+                type="button"
+                onClick={() => setMaterialMode("existing")}
+                className={cn(
+                  "flex-1 rounded-[6px] px-2 py-1.5 text-xs font-medium transition-colors",
+                  materialMode === "existing"
+                    ? "bg-[var(--surface-base)] text-ink shadow-sm dark:text-white"
+                    : "text-stone hover:text-ink dark:hover:text-white"
+                )}
+              >
+                Vincular material existente
+              </button>
+              <button
+                type="button"
+                onClick={() => setMaterialMode("link")}
+                className={cn(
+                  "flex-1 rounded-[6px] px-2 py-1.5 text-xs font-medium transition-colors",
+                  materialMode === "link"
+                    ? "bg-[var(--surface-base)] text-ink shadow-sm dark:text-white"
+                    : "text-stone hover:text-ink dark:hover:text-white"
+                )}
+              >
+                Informar link externo
+              </button>
+            </div>
+
+            {materialMode === "existing" ? (
+              <div className="flex flex-col gap-1.5">
+                <div className="relative">
+                  <Input
+                    placeholder="Buscar material por título…"
+                    value={materialSearch}
+                    onChange={(e) => handleMaterialSearch(e.target.value)}
+                    disabled={isAddingMaterial}
+                    className="rounded-[8px]"
+                  />
+                  {searchingMaterials && (
+                    <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-stone" />
+                  )}
+                </div>
+                {materialResults.length > 0 && !selectedMaterial && (
+                  <div className="max-h-[150px] overflow-y-auto rounded-[8px] border border-[var(--border-default)]">
+                    {materialResults.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => selectMaterial(m)}
+                        className="flex w-full flex-col gap-0 border-b border-[var(--border-default)] px-3 py-2 text-left last:border-0 hover:bg-[var(--surface-subtle)]"
+                      >
+                        <span className="text-sm text-ink dark:text-white">{m.title}</span>
+                        {m.author && <span className="text-xs text-stone">{m.author}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedMaterial && (
+                  <div className="flex items-center justify-between gap-2 rounded-[8px] bg-teal-dim px-3 py-2">
+                    <div className="flex flex-col">
+                      <span className="text-sm text-ink dark:text-white">{selectedMaterial.title}</span>
+                      {selectedMaterial.author && (
+                        <span className="text-xs text-stone">{selectedMaterial.author}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedMaterial(null); setMaterialSearch(""); }}
+                      className="text-stone hover:text-ink"
+                    >
+                      <X size={14} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Input
+                  placeholder="Título do material"
+                  value={linkTitle}
+                  onChange={(e) => setLinkTitle(e.target.value)}
+                  disabled={isAddingMaterial}
+                  className="rounded-[8px]"
+                />
+                <Input
+                  type="url"
+                  placeholder="https://…"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  disabled={isAddingMaterial}
+                  className="rounded-[8px]"
+                />
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
+                <input
+                  type="radio"
+                  name="material-visibility"
+                  checked={materialVisibility === "all"}
+                  onChange={() => setMaterialVisibility("all")}
+                  disabled={isAddingMaterial}
+                />
+                Disponível para todos os membros
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
+                <input
+                  type="radio"
+                  name="material-visibility"
+                  checked={materialVisibility === "leaders_only"}
+                  onChange={() => setMaterialVisibility("leaders_only")}
+                  disabled={isAddingMaterial}
+                />
+                Somente para líderes
+              </label>
+            </div>
+
+            {materialError && (
+              <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson" role="alert">
+                {materialError}
+              </p>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAddMaterial}
+              disabled={isAddingMaterial}
+              className="rounded-[8px]"
+            >
+              {isAddingMaterial ? <Loader2 size={14} className="animate-spin" /> : "Adicionar material"}
+            </Button>
+
+            {meetingMaterials.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {meetingMaterials.map((mm) => (
+                  <div
+                    key={mm.id}
+                    className="flex items-center justify-between gap-2 rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <FileText size={14} strokeWidth={1.5} className="flex-shrink-0 text-stone" />
+                      <span className="truncate text-sm text-ink dark:text-white">{mm.material.title}</span>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          "rounded-[100px] px-2 py-0.5 text-xs font-medium",
+                          mm.visibility === "all" ? "bg-teal-dim text-teal" : "bg-amber-100 text-amber-700"
+                        )}
+                      >
+                        {mm.visibility === "all" ? "Todos" : "Somente líderes"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMaterial(mm)}
+                        disabled={removingMaterialId === mm.id}
+                        className="text-stone hover:text-crimson"
+                        aria-label="Remover material"
+                      >
+                        {removingMaterialId === mm.id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <X size={14} strokeWidth={1.5} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Button
             type="button"

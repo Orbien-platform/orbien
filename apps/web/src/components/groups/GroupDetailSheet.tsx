@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock } from "lucide-react";
+import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import {
   Sheet,
@@ -31,6 +31,25 @@ interface Meeting {
   occurred_at: string;
   topic?: string;
   _count?: { attendanceRecords: number };
+}
+
+type MaterialVisibility = "all" | "leaders_only";
+
+interface MeetingMaterial {
+  id: string;
+  material_id: string;
+  visibility: MaterialVisibility;
+  material: { id: string; title: string; author?: string; source_type?: string; rich_content?: string };
+}
+
+function isUrl(value?: string): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 interface GroupDetail {
@@ -74,6 +93,11 @@ function formatDate(iso: string): string {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function materialIcon(sourceType?: string) {
+  if (sourceType === "link") return <Link2 size={14} strokeWidth={1.5} />;
+  return <FileText size={14} strokeWidth={1.5} />;
 }
 
 function initials(name: string): string {
@@ -248,6 +272,11 @@ export function GroupDetailSheet({
   const [activeTab, setActiveTab] = useState("info");
   const [editing, setEditing] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
+  const [meetingMaterials, setMeetingMaterials] = useState<Record<string, MeetingMaterial[]>>({});
+  const [loadingMaterialsId, setLoadingMaterialsId] = useState<string | null>(null);
+  const [removingMaterial, setRemovingMaterial] = useState<{ meetingId: string; item: MeetingMaterial } | null>(null);
+  const [isRemovingMaterial, setIsRemovingMaterial] = useState(false);
   const hasFetched = useRef(false);
 
   const loadGroup = useCallback(async (id: string) => {
@@ -275,6 +304,8 @@ export function GroupDetailSheet({
       setMeetings([]);
       setEditing(false);
       setActiveTab("info");
+      setExpandedMeetingId(null);
+      setMeetingMaterials({});
       loadGroup(groupId);
     }
   }, [open, groupId, loadGroup]);
@@ -283,6 +314,44 @@ export function GroupDetailSheet({
     setGroup(updated);
     setEditing(false);
     onUpdated();
+  }
+
+  async function toggleMeetingExpand(meetingId: string) {
+    if (expandedMeetingId === meetingId) {
+      setExpandedMeetingId(null);
+      return;
+    }
+    setExpandedMeetingId(meetingId);
+    if (meetingMaterials[meetingId]) return;
+
+    setLoadingMaterialsId(meetingId);
+    try {
+      const { data } = await api.get<{ data: MeetingMaterial[] } | MeetingMaterial[]>(
+        `/small-groups/meetings/${meetingId}/materials`
+      );
+      const list = Array.isArray(data) ? data : data.data ?? [];
+      setMeetingMaterials((prev) => ({ ...prev, [meetingId]: list }));
+    } catch {
+      setMeetingMaterials((prev) => ({ ...prev, [meetingId]: [] }));
+    } finally {
+      setLoadingMaterialsId(null);
+    }
+  }
+
+  async function confirmRemoveMaterial() {
+    if (!removingMaterial) return;
+    const { meetingId, item } = removingMaterial;
+    setIsRemovingMaterial(true);
+    try {
+      await api.delete(`/small-groups/meetings/${meetingId}/materials/${item.material_id}`);
+      setMeetingMaterials((prev) => ({
+        ...prev,
+        [meetingId]: (prev[meetingId] ?? []).filter((m) => m.id !== item.id),
+      }));
+      setRemovingMaterial(null);
+    } finally {
+      setIsRemovingMaterial(false);
+    }
   }
 
   const members: Membership[] = group?.memberships ?? [];
@@ -444,27 +513,104 @@ export function GroupDetailSheet({
                         Nenhuma reunião registrada.
                       </p>
                     ) : (
-                      meetings.map((mtg) => (
-                        <div
-                          key={mtg.id}
-                          className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-default)] last:border-0"
-                        >
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-medium text-ink dark:text-white">
-                              {formatDate(mtg.occurred_at)}
-                            </span>
-                            {mtg.topic && (
-                              <span className="text-xs text-stone">{mtg.topic}</span>
+                      meetings.map((mtg) => {
+                        const isExpanded = expandedMeetingId === mtg.id;
+                        const materials = meetingMaterials[mtg.id] ?? [];
+                        return (
+                          <div key={mtg.id} className="border-b border-[var(--border-default)] last:border-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleMeetingExpand(mtg.id)}
+                              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-subtle)]"
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium text-ink dark:text-white">
+                                  {formatDate(mtg.occurred_at)}
+                                </span>
+                                {mtg.topic && (
+                                  <span className="text-xs text-stone">{mtg.topic}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {mtg._count !== undefined && (
+                                  <span className="flex items-center gap-1 text-xs text-stone">
+                                    <Users size={12} strokeWidth={1.5} />
+                                    {mtg._count.attendanceRecords} presentes
+                                  </span>
+                                )}
+                                <ChevronDown
+                                  size={14}
+                                  strokeWidth={1.5}
+                                  className={cn("text-stone transition-transform", isExpanded && "rotate-180")}
+                                />
+                              </div>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="px-4 pb-3 pl-4">
+                                {loadingMaterialsId === mtg.id ? (
+                                  <div className="flex items-center justify-center py-3">
+                                    <Loader2 size={16} className="animate-spin text-stone" />
+                                  </div>
+                                ) : materials.length === 0 ? (
+                                  <p className="py-2 text-xs text-stone">Nenhum material vinculado.</p>
+                                ) : (
+                                  <div className="flex flex-col gap-1">
+                                    {materials.map((mm) => (
+                                      <div
+                                        key={mm.id}
+                                        className="flex items-center justify-between gap-2 rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2"
+                                      >
+                                        <div className="flex min-w-0 items-center gap-2">
+                                          <span className="flex-shrink-0 text-stone">
+                                            {materialIcon(mm.material.source_type)}
+                                          </span>
+                                          {isUrl(mm.material.rich_content) ? (
+                                            <a
+                                              href={mm.material.rich_content}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="truncate text-sm text-navy underline-offset-2 hover:underline dark:text-white"
+                                            >
+                                              {mm.material.title}
+                                            </a>
+                                          ) : (
+                                            <span className="truncate text-sm text-ink dark:text-white">
+                                              {mm.material.title}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-shrink-0 items-center gap-2">
+                                          <span
+                                            className={cn(
+                                              "rounded-[100px] px-2 py-0.5 text-xs font-medium",
+                                              mm.visibility === "all"
+                                                ? "bg-teal-dim text-teal"
+                                                : "bg-amber-100 text-amber-700"
+                                            )}
+                                          >
+                                            {mm.visibility === "all" ? "Todos" : "Somente líderes"}
+                                          </span>
+                                          {canEdit && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setRemovingMaterial({ meetingId: mtg.id, item: mm })}
+                                              className="text-stone hover:text-crimson"
+                                              aria-label="Remover material"
+                                            >
+                                              <Trash2 size={14} strokeWidth={1.5} />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
-                          {mtg._count !== undefined && (
-                            <span className="flex items-center gap-1 text-xs text-stone">
-                              <Users size={12} strokeWidth={1.5} />
-                              {mtg._count.attendanceRecords} presentes
-                            </span>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 )}
@@ -487,6 +633,34 @@ export function GroupDetailSheet({
             loadGroup(group.id);
           }}
         />
+      )}
+
+      {removingMaterial && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
+            <p className="text-sm font-medium text-ink dark:text-white">Remover material?</p>
+            <p className="mt-1.5 text-sm text-stone">
+              O material continua disponível na biblioteca, apenas o vínculo com este encontro será removido.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-[8px]"
+                onClick={() => setRemovingMaterial(null)}
+                disabled={isRemovingMaterial}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 rounded-[8px] bg-crimson text-white hover:opacity-90"
+                onClick={confirmRemoveMaterial}
+                disabled={isRemovingMaterial}
+              >
+                {isRemovingMaterial ? <Loader2 size={14} className="animate-spin" /> : "Remover"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
