@@ -1,15 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { AttendanceRecord, GroupMeeting } from '@prisma/client';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { RecordAttendanceDto } from './dto/record-attendance.dto';
+import { CreateMeetingMaterialDto } from './dto/create-meeting-material.dto';
 
 type CreateMeetingResult = {
   meeting: GroupMeeting;
   attendance_count: number;
 };
+
+const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
 
 @Injectable()
 export class MeetingsService {
@@ -77,6 +80,9 @@ export class MeetingsService {
         attendanceRecords: {
           include: { person: true },
         },
+        materials: {
+          include: { material: true },
+        },
       },
     });
     if (!meeting) throw new NotFoundException('Reunião não encontrada');
@@ -137,5 +143,78 @@ export class MeetingsService {
     });
     if (!record) throw new NotFoundException('Registro de presença não encontrado');
     return this.prisma.client.attendanceRecord.delete({ where: { id: record.id } });
+  }
+
+  async addMaterial(
+    meetingId: string,
+    dto: CreateMeetingMaterialDto,
+    user: JwtPayload,
+  ): Promise<GroupMeetingMaterial> {
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
+    const material = await this.prisma.client.studyMaterial.findUnique({
+      where: { id: dto.material_id },
+      select: { id: true },
+    });
+    if (!material) throw new NotFoundException('Material de estudo não encontrado');
+
+    const existing = await this.prisma.client.groupMeetingMaterial.findUnique({
+      where: {
+        meeting_id_material_id: {
+          meeting_id: meetingId,
+          material_id: dto.material_id,
+        },
+      },
+    });
+    if (existing) throw new ConflictException('Este material já está vinculado a esta reunião');
+
+    return this.prisma.client.groupMeetingMaterial.create({
+      data: {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        meeting_id: meetingId,
+        material_id: dto.material_id,
+        visibility: dto.visibility ?? MaterialVisibility.all,
+      },
+    });
+  }
+
+  async listMaterials(meetingId: string, user: JwtPayload) {
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
+    const isLeader = user.roles.some((role) => MATERIAL_LEADER_ROLES.includes(role));
+
+    return this.prisma.client.groupMeetingMaterial.findMany({
+      where: {
+        meeting_id: meetingId,
+        ...(isLeader ? {} : { visibility: MaterialVisibility.all }),
+      },
+      include: { material: true },
+      orderBy: { created_at: 'asc' },
+    });
+  }
+
+  async removeMaterial(
+    meetingId: string,
+    materialId: string,
+  ): Promise<GroupMeetingMaterial> {
+    const link = await this.prisma.client.groupMeetingMaterial.findUnique({
+      where: {
+        meeting_id_material_id: {
+          meeting_id: meetingId,
+          material_id: materialId,
+        },
+      },
+    });
+    if (!link) throw new NotFoundException('Material não está vinculado a esta reunião');
+    return this.prisma.client.groupMeetingMaterial.delete({ where: { id: link.id } });
   }
 }

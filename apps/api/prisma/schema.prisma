@@ -27,52 +27,53 @@ model Tenant {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  congregations         Congregation[]
-  brandingConfig        BrandingConfig?
-  tenantPlan            TenantPlan?
-  userAccounts          UserAccount[]
-  roleAssignments       RoleAssignment[]
-  persons               Person[]
-  households            Household[]
+  congregations           Congregation[]
+  brandingConfig          BrandingConfig?
+  tenantPlan              TenantPlan?
+  userAccounts            UserAccount[]
+  roleAssignments         RoleAssignment[]
+  persons                 Person[]
+  households              Household[]
   classificationHistories ClassificationHistory[]
-  visitRecords          VisitRecord[]
-  consentRecords        ConsentRecord[]
-  personTags            PersonTag[]
-  smallGroups           SmallGroup[]
-  groupMemberships      GroupMembership[]
-  groupMeetings         GroupMeeting[]
-  attendanceRecords     AttendanceRecord[]
-  prayerRequests        PrayerRequest[]
-  studyMaterials        StudyMaterial[]
-  materialOpenRecords   MaterialOpenRecord[]
-  financialCategories   FinancialCategory[]
-  costCenters           CostCenter[]
-  financialTransactions FinancialTransaction[]
-  transactionAttachments TransactionAttachment[]
-  recurringRules        RecurringRule[]
-  pixPayments           PixPayment[]
-  donationReceipts      DonationReceipt[]
-  contentPosts          ContentPost[]
-  audienceSegments      AudienceSegment[]
-  notificationDispatches NotificationDispatch[]
-  ministries            Ministry[]
-  volunteerProfiles     VolunteerProfile[]
-  volunteerMinistries   VolunteerMinistry[]
-  serviceSchedules      ServiceSchedule[]
-  scheduleSlots         ScheduleSlot[]
-  scheduleAssignments    ScheduleAssignment[]
-  volunteerSwapRequests  VolunteerSwapRequest[]
-  assignments            Assignment[]
-  celebrations           Celebration[]
-  celebrationInstances   CelebrationInstance[]
-  serviceOrders          ServiceOrder[]
-  serviceOrderItems      ServiceOrderItem[]
-  setlists               Setlist[]
-  setlistSongs           SetlistSong[]
-  auditLogs              AuditLog[]
-  qrTokens               QrToken[]
-  exportJobs             ExportJob[]
-  importJobs             ImportJob[]
+  visitRecords            VisitRecord[]
+  consentRecords          ConsentRecord[]
+  personTags              PersonTag[]
+  smallGroups             SmallGroup[]
+  groupMemberships        GroupMembership[]
+  groupMeetings           GroupMeeting[]
+  attendanceRecords       AttendanceRecord[]
+  prayerRequests          PrayerRequest[]
+  studyMaterials          StudyMaterial[]
+  materialOpenRecords     MaterialOpenRecord[]
+  groupMeetingMaterials   GroupMeetingMaterial[]
+  financialCategories     FinancialCategory[]
+  costCenters             CostCenter[]
+  financialTransactions   FinancialTransaction[]
+  transactionAttachments  TransactionAttachment[]
+  recurringRules          RecurringRule[]
+  pixPayments             PixPayment[]
+  donationReceipts        DonationReceipt[]
+  contentPosts            ContentPost[]
+  audienceSegments        AudienceSegment[]
+  notificationDispatches  NotificationDispatch[]
+  ministries              Ministry[]
+  volunteerProfiles       VolunteerProfile[]
+  volunteerMinistries     VolunteerMinistry[]
+  serviceSchedules        ServiceSchedule[]
+  scheduleSlots           ScheduleSlot[]
+  scheduleAssignments     ScheduleAssignment[]
+  volunteerSwapRequests   VolunteerSwapRequest[]
+  assignments             Assignment[]
+  celebrations            Celebration[]
+  celebrationInstances    CelebrationInstance[]
+  serviceOrders           ServiceOrder[]
+  serviceOrderItems       ServiceOrderItem[]
+  setlists                Setlist[]
+  setlistSongs            SetlistSong[]
+  auditLogs               AuditLog[]
+  qrTokens                QrToken[]
+  exportJobs              ExportJob[]
+  importJobs              ImportJob[]
 
   @@index([id])
   @@map("tenants")
@@ -89,46 +90,47 @@ model Congregation {
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
-  userAccounts          UserAccount[]
-  roleAssignments       RoleAssignment[]
-  persons               Person[]
-  households            Household[]
+  userAccounts            UserAccount[]
+  roleAssignments         RoleAssignment[]
+  persons                 Person[]
+  households              Household[]
   classificationHistories ClassificationHistory[]
-  visitRecords          VisitRecord[]
-  consentRecords        ConsentRecord[]
-  personTags            PersonTag[]
-  smallGroups           SmallGroup[]
-  groupMemberships      GroupMembership[]
-  groupMeetings         GroupMeeting[]
-  attendanceRecords     AttendanceRecord[]
-  prayerRequests        PrayerRequest[]
-  studyMaterials        StudyMaterial[]
-  financialCategories   FinancialCategory[]
-  costCenters           CostCenter[]
-  financialTransactions FinancialTransaction[]
-  recurringRules        RecurringRule[]
-  pixPayments           PixPayment[]
-  contentPosts          ContentPost[]
-  audienceSegments      AudienceSegment[]
-  notificationDispatches NotificationDispatch[]
-  ministries            Ministry[]
-  volunteerProfiles     VolunteerProfile[]
-  volunteerMinistries   VolunteerMinistry[]
-  serviceSchedules      ServiceSchedule[]
-  scheduleSlots         ScheduleSlot[]
-  scheduleAssignments    ScheduleAssignment[]
-  volunteerSwapRequests  VolunteerSwapRequest[]
-  assignments            Assignment[]
-  celebrations           Celebration[]
-  celebrationInstances   CelebrationInstance[]
-  serviceOrders          ServiceOrder[]
-  serviceOrderItems      ServiceOrderItem[]
-  setlists               Setlist[]
-  setlistSongs           SetlistSong[]
-  materialOpenRecords    MaterialOpenRecord[]
-  qrTokens               QrToken[]
-  exportJobs             ExportJob[]
-  importJobs             ImportJob[]
+  visitRecords            VisitRecord[]
+  consentRecords          ConsentRecord[]
+  personTags              PersonTag[]
+  smallGroups             SmallGroup[]
+  groupMemberships        GroupMembership[]
+  groupMeetings           GroupMeeting[]
+  attendanceRecords       AttendanceRecord[]
+  prayerRequests          PrayerRequest[]
+  studyMaterials          StudyMaterial[]
+  financialCategories     FinancialCategory[]
+  costCenters             CostCenter[]
+  financialTransactions   FinancialTransaction[]
+  recurringRules          RecurringRule[]
+  pixPayments             PixPayment[]
+  contentPosts            ContentPost[]
+  audienceSegments        AudienceSegment[]
+  notificationDispatches  NotificationDispatch[]
+  ministries              Ministry[]
+  volunteerProfiles       VolunteerProfile[]
+  volunteerMinistries     VolunteerMinistry[]
+  serviceSchedules        ServiceSchedule[]
+  scheduleSlots           ScheduleSlot[]
+  scheduleAssignments     ScheduleAssignment[]
+  volunteerSwapRequests   VolunteerSwapRequest[]
+  assignments             Assignment[]
+  celebrations            Celebration[]
+  celebrationInstances    CelebrationInstance[]
+  serviceOrders           ServiceOrder[]
+  serviceOrderItems       ServiceOrderItem[]
+  setlists                Setlist[]
+  setlistSongs            SetlistSong[]
+  materialOpenRecords     MaterialOpenRecord[]
+  groupMeetingMaterials   GroupMeetingMaterial[]
+  qrTokens                QrToken[]
+  exportJobs              ExportJob[]
+  importJobs              ImportJob[]
 
   @@index([tenant_id, id])
   @@map("congregations")
@@ -223,7 +225,7 @@ model RoleAssignment {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
-  tenant       Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   userAccount  UserAccount  @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
   role         Role         @relation(fields: [role_code], references: [code], onDelete: Restrict)
@@ -244,7 +246,7 @@ model RefreshToken {
   replaced_by_id  String?
   created_at      DateTime  @default(now())
 
-  userAccount  UserAccount   @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
+  userAccount  UserAccount    @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
   replacedBy   RefreshToken?  @relation("TokenRotation", fields: [replaced_by_id], references: [id])
   replacements RefreshToken[] @relation("TokenRotation")
 
@@ -272,32 +274,32 @@ model PasswordResetToken {
 // =============================================================================
 
 model Person {
-  id                    String               @id @default(uuid())
-  tenant_id             String
-  congregation_id       String
-  full_name             String
-  phone                 String?
-  email                 String?
-  birth_date            DateTime?
-  gender                Gender?
-  marital_status        MaritalStatus?
-  profession            String?
-  address_street        String?
-  address_number        String?
-  address_complement    String?
-  address_neighborhood  String?
-  address_city          String?
-  address_state         String?
-  address_zip           String?
-  photo_url             String?
-  baptism_date          DateTime?
-  membership_date       DateTime?
-  former_denomination   String?
-  origin_congregation   String?
-  classification        PersonClassification @default(visitor)
-  household_id          String?
-  created_at            DateTime             @default(now())
-  updated_at            DateTime             @updatedAt
+  id                   String               @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  full_name            String
+  phone                String?
+  email                String?
+  birth_date           DateTime?
+  gender               Gender?
+  marital_status       MaritalStatus?
+  profession           String?
+  address_street       String?
+  address_number       String?
+  address_complement   String?
+  address_neighborhood String?
+  address_city         String?
+  address_state        String?
+  address_zip          String?
+  photo_url            String?
+  baptism_date         DateTime?
+  membership_date      DateTime?
+  former_denomination  String?
+  origin_congregation  String?
+  classification       PersonClassification @default(visitor)
+  household_id         String?
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -536,6 +538,7 @@ model GroupMeeting {
   smallGroup   SmallGroup   @relation(fields: [small_group_id], references: [id], onDelete: Cascade)
 
   attendanceRecords AttendanceRecord[]
+  materials         GroupMeetingMaterial[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -608,8 +611,9 @@ model StudyMaterial {
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
 
-  materialTargets MaterialTarget[]
-  openRecords     MaterialOpenRecord[]
+  materialTargets  MaterialTarget[]
+  openRecords      MaterialOpenRecord[]
+  meetingMaterials GroupMeetingMaterial[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -651,6 +655,26 @@ model MaterialOpenRecord {
   @@map("material_open_records")
 }
 
+model GroupMeetingMaterial {
+  id              String             @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  meeting_id      String
+  material_id     String
+  visibility      MaterialVisibility @default(all)
+  created_at      DateTime           @default(now())
+
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  meeting      GroupMeeting  @relation(fields: [meeting_id], references: [id], onDelete: Cascade)
+  material     StudyMaterial @relation(fields: [material_id], references: [id], onDelete: Cascade)
+
+  @@unique([meeting_id, material_id])
+  @@index([tenant_id, congregation_id])
+  @@index([material_id])
+  @@map("group_meeting_materials")
+}
+
 // =============================================================================
 // GRUPO 5 — FINANCEIRO
 // =============================================================================
@@ -667,8 +691,8 @@ model FinancialCategory {
   created_at      DateTime              @default(now())
   updated_at      DateTime              @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  tenant       Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation        @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   parent       FinancialCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
   children     FinancialCategory[] @relation("CategoryHierarchy")
 
@@ -796,11 +820,11 @@ model PixPayment {
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
-  tenant       Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation       @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  tenant       Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   transaction  FinancialTransaction? @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
-  donorPerson  Person?            @relation("PixDonor", fields: [donor_person_id], references: [id], onDelete: SetNull)
-  category     FinancialCategory  @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  donorPerson  Person?               @relation("PixDonor", fields: [donor_person_id], references: [id], onDelete: SetNull)
+  category     FinancialCategory     @relation(fields: [category_id], references: [id], onDelete: Restrict)
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -874,9 +898,9 @@ model AudienceSegment {
   created_at      DateTime             @default(now())
   updated_at      DateTime             @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  contentPost  ContentPost? @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  contentPost  ContentPost?  @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
   postSegments PostSegment[]
 
   @@index([tenant_id, congregation_id])
@@ -887,7 +911,7 @@ model PostSegment {
   post_id    String
   segment_id String
 
-  post    ContentPost    @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  post    ContentPost     @relation(fields: [post_id], references: [id], onDelete: Cascade)
   segment AudienceSegment @relation(fields: [segment_id], references: [id], onDelete: Cascade)
 
   @@id([post_id, segment_id])
@@ -946,15 +970,15 @@ model Ministry {
 }
 
 model VolunteerProfile {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   tenant_id       String
   congregation_id String
-  person_id       String    @unique
+  person_id       String   @unique
   availability    Json
   skills          Json
   restrictions    String?
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -1047,10 +1071,10 @@ model ScheduleAssignment {
   created_at           DateTime         @default(now())
   updated_at           DateTime         @updatedAt
 
-  slot             ScheduleSlot     @relation(fields: [slot_id], references: [id], onDelete: Cascade)
-  volunteerProfile VolunteerProfile  @relation(fields: [volunteer_profile_id], references: [id], onDelete: Cascade)
-  tenant           Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation     Congregation     @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  slot             ScheduleSlot           @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+  volunteerProfile VolunteerProfile       @relation(fields: [volunteer_profile_id], references: [id], onDelete: Cascade)
+  tenant           Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation     Congregation           @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   swapRequests     VolunteerSwapRequest[]
 
   @@unique([slot_id, volunteer_profile_id])
@@ -1140,9 +1164,9 @@ model CelebrationInstance {
   created_at            DateTime                  @default(now())
   updated_at            DateTime                  @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  celebration  Celebration  @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  celebration  Celebration   @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
   serviceOrder ServiceOrder?
 
   @@index([tenant_id, celebration_id])
@@ -1352,6 +1376,11 @@ enum StudyMaterialSource {
   rich_text
 }
 
+enum MaterialVisibility {
+  all
+  leaders_only
+}
+
 // --- Financeiro ---
 
 enum FinancialCategoryType {
@@ -1485,26 +1514,26 @@ enum ResponsibleType {
 // =============================================================================
 
 model WaitlistSubscriber {
-  id            String            @id @default(uuid())
-  email         String            @unique
-  pastor_name   String
-  church_name   String?
-  city          String?
-  state         String?
-  size_range    WaitlistSizeRange
-  lgpd_consent  Boolean           @default(false)
-  source        String?
-  utm_source    String?
-  utm_medium    String?
-  utm_campaign  String?
-  status        WaitlistStatus    @default(pending)
-  notes         String?
-  tenant_id     String?
-  ip            String?
-  user_agent    String?
-  created_at    DateTime          @default(now())
-  contacted_at  DateTime?
-  activated_at  DateTime?
+  id           String            @id @default(uuid())
+  email        String            @unique
+  pastor_name  String
+  church_name  String?
+  city         String?
+  state        String?
+  size_range   WaitlistSizeRange
+  lgpd_consent Boolean           @default(false)
+  source       String?
+  utm_source   String?
+  utm_medium   String?
+  utm_campaign String?
+  status       WaitlistStatus    @default(pending)
+  notes        String?
+  tenant_id    String?
+  ip           String?
+  user_agent   String?
+  created_at   DateTime          @default(now())
+  contacted_at DateTime?
+  activated_at DateTime?
 
   @@index([status])
   @@index([created_at(sort: Desc)])

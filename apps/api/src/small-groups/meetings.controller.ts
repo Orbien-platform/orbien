@@ -20,10 +20,13 @@ import { MeetingsService } from './meetings.service';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { RecordAttendanceDto } from './dto/record-attendance.dto';
+import { CreateMeetingMaterialDto } from './dto/create-meeting-material.dto';
 
 const MEETING_WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'cell_leader'];
 const MEETING_READ_ROLES = [...MEETING_WRITE_ROLES, 'treasurer'];
 const MEETING_ADMIN_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
+const MATERIAL_WRITE_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
+const MATERIAL_READ_ROLES = ['member', ...MATERIAL_WRITE_ROLES];
 
 @Controller('small-groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -75,5 +78,33 @@ export class MeetingsController {
     @Param('personId', ParseUUIDPipe) personId: string,
   ) {
     return this.meetingsService.removeAttendance(meetingId, personId);
+  }
+
+  @Post('meetings/:meetingId/materials')
+  @Roles(...MATERIAL_WRITE_ROLES)
+  addMaterial(
+    @Param('meetingId', ParseUUIDPipe) meetingId: string,
+    @Body() dto: CreateMeetingMaterialDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.addMaterial(meetingId, dto, user);
+  }
+
+  @Get('meetings/:meetingId/materials')
+  @Roles(...MATERIAL_READ_ROLES)
+  listMaterials(
+    @Param('meetingId', ParseUUIDPipe) meetingId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.listMaterials(meetingId, user);
+  }
+
+  @Delete('meetings/:meetingId/materials/:materialId')
+  @Roles(...MATERIAL_WRITE_ROLES)
+  removeMaterial(
+    @Param('meetingId', ParseUUIDPipe) meetingId: string,
+    @Param('materialId', ParseUUIDPipe) materialId: string,
+  ) {
+    return this.meetingsService.removeMaterial(meetingId, materialId);
   }
 }
