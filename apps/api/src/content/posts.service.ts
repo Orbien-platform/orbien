@@ -159,7 +159,8 @@ export class PostsService {
   }
 
   async remove(tenantId: string, congregationId: string, id: string): Promise<ContentPost> {
-    await this.findOne(tenantId, congregationId, id);
+    const post = await this.findOne(tenantId, congregationId, id);
+    await this.storageService.deleteByUrl(post.media_url);
     return this.prisma.client.contentPost.delete({ where: { id } });
   }
 
@@ -174,8 +175,8 @@ export class PostsService {
       throw new BadRequestException('Tipo de arquivo não suportado.');
     }
 
-    // StorageService ainda não implementa delete — arquivo antigo (se houver) fica órfão no R2.
-    await this.findOne(tenantId, congregationId, id);
+    const post = await this.findOne(tenantId, congregationId, id);
+    await this.storageService.deleteByUrl(post.media_url);
 
     const key = `content/${tenantId}/${congregationId}/${id}/${Date.now()}-${file.originalname}`;
     const media_url = await this.storageService.upload(file.buffer, key, file.mimetype);

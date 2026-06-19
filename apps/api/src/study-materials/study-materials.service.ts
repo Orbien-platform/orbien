@@ -178,12 +178,13 @@ export class StudyMaterialsService {
   ) {
     const existing = await this.prisma.client.studyMaterial.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, file_url: true },
     });
     if (!existing) throw new NotFoundException('Material não encontrado');
 
     let file_url: string | undefined;
     if (file) {
+      await this.storageService.deleteByUrl(existing.file_url);
       const ext = path.extname(file.originalname).toLowerCase() || '.bin';
       const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
       file_url = await this.storageService.upload(
@@ -208,9 +209,10 @@ export class StudyMaterialsService {
   async remove(id: string) {
     const existing = await this.prisma.client.studyMaterial.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, file_url: true },
     });
     if (!existing) throw new NotFoundException('Material não encontrado');
+    await this.storageService.deleteByUrl(existing.file_url);
     return this.prisma.client.studyMaterial.delete({ where: { id } });
   }
 
