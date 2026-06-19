@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Bell, Send } from "lucide-react";
+import { Plus, Bell, Send, Paperclip } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -24,6 +24,7 @@ interface Post {
   is_draft: boolean;
   publish_at?: string | null;
   created_at: string;
+  media_url?: string | null;
 }
 
 interface Segment {
@@ -199,7 +200,12 @@ export default function ConteudoPage() {
       key: "title",
       header: "Título",
       render: (row) => (
-        <span className="font-medium text-ink dark:text-white line-clamp-1">{row.title}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="font-medium text-ink dark:text-white line-clamp-1">{row.title}</span>
+          {row.media_url && (
+            <Paperclip size={12} strokeWidth={1.5} className="flex-shrink-0 text-stone" aria-label="Possui arquivo anexado" />
+          )}
+        </span>
       ),
     },
     {
