@@ -28,7 +28,9 @@ export class StorageService {
       }),
     );
 
-    const url = `https://${process.env['R2_PUBLIC_DOMAIN']}/${key}`;
+    const domain = process.env['R2_PUBLIC_DOMAIN'] ?? '';
+    const base = /^https?:\/\//.test(domain) ? domain : `https://${domain}`;
+    const url = `${base}/${key}`;
     this.logger.log(`Uploaded: ${url}`);
     return url;
   }
