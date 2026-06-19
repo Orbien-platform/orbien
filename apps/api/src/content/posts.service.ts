@@ -1,15 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ContentPost, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { NotificationsService } from './notifications.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 
+const ALLOWED_MEDIA_MIME_TYPES = [
+  'application/pdf',
+  'audio/mpeg',
+  'video/mp4',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
 @Injectable()
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -150,5 +161,30 @@ export class PostsService {
   async remove(tenantId: string, congregationId: string, id: string): Promise<ContentPost> {
     await this.findOne(tenantId, congregationId, id);
     return this.prisma.client.contentPost.delete({ where: { id } });
+  }
+
+  async uploadMedia(
+    tenantId: string,
+    congregationId: string,
+    id: string,
+    file: Express.Multer.File | undefined,
+  ): Promise<{ media_url: string }> {
+    if (!file) throw new BadRequestException('Arquivo obrigatório.');
+    if (!ALLOWED_MEDIA_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException('Tipo de arquivo não suportado.');
+    }
+
+    // StorageService ainda não implementa delete — arquivo antigo (se houver) fica órfão no R2.
+    await this.findOne(tenantId, congregationId, id);
+
+    const key = `content/${tenantId}/${congregationId}/${id}/${Date.now()}-${file.originalname}`;
+    const media_url = await this.storageService.upload(file.buffer, key, file.mimetype);
+
+    await this.prisma.client.contentPost.update({
+      where: { id },
+      data: { media_url },
+    });
+
+    return { media_url };
   }
 }
