@@ -13,8 +13,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { POST_TYPE_LABELS, type PostType } from "@/components/content/CreatePostModal";
+import { MediaUploadField, iconForFile } from "@/components/content/MediaUploadField";
+import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+
+// A post's uploaded media URL always contains the post's own id as a path
+// segment (see posts.service.ts uploadMedia: `content/{tenant}/{cong}/{id}/...`).
+// External links never coincidentally contain it, so this reliably tells
+// apart "uploaded file" from "external link" without a dedicated DB flag.
+function isUploadedFileUrl(mediaUrl: string, postId: string): boolean {
+  return mediaUrl.includes(postId);
+}
+
+function filenameFromUploadUrl(url: string): string {
+  const last = url.split("/").pop() ?? url;
+  return decodeURIComponent(last.replace(/^\d+-/, ""));
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,12 +104,36 @@ export function PostDetailSheet({
   // Edit form state
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [editMediaMode, setEditMediaMode] = useState<"link" | "upload">("link");
   const [editMediaUrl, setEditMediaUrl] = useState("");
+  const [initialLinkValue, setInitialLinkValue] = useState("");
+  const [initialIsUploadedFile, setInitialIsUploadedFile] = useState(false);
   const [editSegmentIds, setEditSegmentIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
 
   const hasFetched = useRef(false);
+
+  function showToast(msg: string) {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 3000);
+  }
+
+  const fileUpload = useFileUpload(showToast);
+
+  function applyPostToEditState(p: Post) {
+    setEditTitle(p.title);
+    setEditBody(p.body ?? "");
+    setEditSegmentIds(p.segments?.map((s) => s.id) ?? []);
+    const mediaIsFile = !!p.media_url && isUploadedFileUrl(p.media_url, p.id);
+    const linkVal = mediaIsFile ? "" : (p.media_url ?? "");
+    setInitialIsUploadedFile(mediaIsFile);
+    setInitialLinkValue(linkVal);
+    setEditMediaUrl(linkVal);
+    setEditMediaMode(mediaIsFile ? "upload" : "link");
+    fileUpload.reset();
+  }
 
   const loadPost = useCallback(async (id: string) => {
     if (hasFetched.current) return;
@@ -108,10 +147,7 @@ export function PostDetailSheet({
       if (pRes.status === "fulfilled") {
         const p = pRes.value.data;
         setPost(p);
-        setEditTitle(p.title);
-        setEditBody(p.body ?? "");
-        setEditMediaUrl(p.media_url ?? "");
-        setEditSegmentIds(p.segments?.map((s) => s.id) ?? []);
+        applyPostToEditState(p);
       }
       if (sRes.status === "fulfilled") {
         const d = sRes.value.data;
@@ -120,6 +156,7 @@ export function PostDetailSheet({
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -165,13 +202,34 @@ export function PostDetailSheet({
     setSaveError("");
     if (!editTitle.trim()) { setSaveError("Título é obrigatório."); return; }
     setIsSaving(true);
+
+    const linkChanged =
+      editMediaMode === "link" &&
+      editMediaUrl.trim() !== "" &&
+      editMediaUrl.trim() !== initialLinkValue.trim();
+    const fileChanged = editMediaMode === "upload" && fileUpload.selectedFile !== null;
+
     try {
       await api.patch(`/content/posts/${postId}`, {
         title: editTitle.trim(),
         body: editBody.trim() || undefined,
-        media_url: editMediaUrl.trim() || undefined,
         segment_ids: editSegmentIds.length > 0 ? editSegmentIds : undefined,
+        ...(linkChanged ? { media_url: editMediaUrl.trim() } : {}),
       });
+
+      if (fileChanged) {
+        try {
+          await fileUpload.upload(postId);
+        } catch {
+          setSaveError("Erro ao enviar o arquivo. As demais alterações foram salvas.");
+          hasFetched.current = false;
+          await loadPost(postId);
+          onUpdated();
+          return;
+        }
+        showToast("Post atualizado com sucesso");
+      }
+
       hasFetched.current = false;
       await loadPost(postId);
       setEditing(false);
@@ -192,6 +250,7 @@ export function PostDetailSheet({
   const status = post ? deriveStatus(post) : null;
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[500px] overflow-y-auto p-0">
         {isLoading || !post ? (
@@ -311,10 +370,19 @@ export function PostDetailSheet({
                       className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink focus:outline-none dark:text-white resize-none font-mono"
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-sm font-medium text-ink dark:text-white">URL de mídia</Label>
-                    <Input type="url" value={editMediaUrl} onChange={(e) => setEditMediaUrl(e.target.value)} disabled={isSaving} className="rounded-[8px]" />
-                  </div>
+                  <MediaUploadField
+                    mode={editMediaMode}
+                    onModeChange={setEditMediaMode}
+                    linkValue={editMediaUrl}
+                    onLinkChange={setEditMediaUrl}
+                    upload={fileUpload}
+                    disabled={isSaving}
+                    currentFile={
+                      initialIsUploadedFile && post.media_url
+                        ? { name: filenameFromUploadUrl(post.media_url) }
+                        : null
+                    }
+                  />
                   {allSegments.length > 0 && (
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-sm font-medium text-ink dark:text-white">Segmentos</Label>
@@ -330,7 +398,14 @@ export function PostDetailSheet({
                   )}
                   {saveError && <p className="text-sm text-crimson">{saveError}</p>}
                   <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1 rounded-[8px]" onClick={() => setEditing(false)} disabled={isSaving}>Cancelar</Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 rounded-[8px]"
+                      onClick={() => { applyPostToEditState(post); setEditing(false); }}
+                      disabled={isSaving}
+                    >
+                      Cancelar
+                    </Button>
                     <Button onClick={handleSave} disabled={isSaving} className="flex-1 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]">
                       {isSaving ? <Loader2 size={15} className="animate-spin" /> : "Salvar"}
                     </Button>
@@ -356,8 +431,17 @@ export function PostDetailSheet({
                       rel="noopener noreferrer"
                       className="flex items-center gap-1.5 text-sm text-navy hover:underline"
                     >
-                      <ExternalLink size={13} strokeWidth={1.5} />
-                      Mídia / link externo
+                      {isUploadedFileUrl(post.media_url, post.id) ? (
+                        <>
+                          {iconForFile(filenameFromUploadUrl(post.media_url), "text-navy")}
+                          {filenameFromUploadUrl(post.media_url)}
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink size={13} strokeWidth={1.5} />
+                          Mídia / link externo
+                        </>
+                      )}
                     </a>
                   )}
 
@@ -389,5 +473,12 @@ export function PostDetailSheet({
         )}
       </SheetContent>
     </Sheet>
+
+    {toastMsg && (
+      <div className="fixed bottom-4 right-4 z-[80] rounded-[8px] bg-ink px-4 py-2.5 text-sm text-white shadow-lg dark:bg-white dark:text-ink">
+        {toastMsg}
+      </div>
+    )}
+    </>
   );
 }
