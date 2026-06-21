@@ -36,8 +36,4 @@ export class CreateVolunteerProfileDto {
   @IsOptional() @IsArray() @IsString({ each: true }) skills?: string[];
 
   @IsOptional() @IsString() restrictions?: string;
-
-  @IsOptional() @IsArray() @IsUUID('4', { each: true }) ministry_ids?: string[];
-
-  @IsOptional() @IsString() role_in_ministry?: string;
 }

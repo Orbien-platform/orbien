@@ -5,6 +5,8 @@ import { MinistriesController } from './ministries.controller';
 import { MinistriesService } from './ministries.service';
 import { VolunteerProfilesController } from './volunteer-profiles.controller';
 import { VolunteerProfilesService } from './volunteer-profiles.service';
+import { VolunteerMinistriesController } from './volunteer-ministries.controller';
+import { VolunteerMinistriesService } from './volunteer-ministries.service';
 import { SchedulesController } from './schedules.controller';
 import { SchedulesService } from './schedules.service';
 import { AssignmentsController } from './assignments.controller';
@@ -17,12 +19,25 @@ import { CheckinController } from './checkin.controller';
   controllers: [
     MinistriesController,
     VolunteerProfilesController,
+    VolunteerMinistriesController,
     SchedulesController,
     AssignmentsController,
     SwapRequestsController,
     CheckinController,
   ],
-  providers: [MinistriesService, VolunteerProfilesService, SchedulesService, SwapRequestsService],
-  exports: [MinistriesService, VolunteerProfilesService, SchedulesService, SwapRequestsService],
+  providers: [
+    MinistriesService,
+    VolunteerProfilesService,
+    VolunteerMinistriesService,
+    SchedulesService,
+    SwapRequestsService,
+  ],
+  exports: [
+    MinistriesService,
+    VolunteerProfilesService,
+    VolunteerMinistriesService,
+    SchedulesService,
+    SwapRequestsService,
+  ],
 })
 export class VolunteersModule {}

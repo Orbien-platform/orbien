@@ -947,17 +947,20 @@ model NotificationDispatch {
 // =============================================================================
 
 model Ministry {
-  id              String   @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  name            String
-  description     String?
-  color           String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  tenant_id          String
+  congregation_id    String
+  name               String
+  description        String?
+  color              String?
+  parent_ministry_id String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  parent       Ministry?    @relation("MinistryHierarchy", fields: [parent_ministry_id], references: [id])
+  children     Ministry[]   @relation("MinistryHierarchy")
 
   assignments         Assignment[]
   serviceOrderItems   ServiceOrderItem[]
@@ -966,6 +969,7 @@ model Ministry {
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
+  @@index([parent_ministry_id])
   @@map("ministries")
 }
 
@@ -995,13 +999,14 @@ model VolunteerProfile {
 }
 
 model VolunteerMinistry {
-  id                   String   @id @default(uuid())
+  id                   String                @id @default(uuid())
   tenant_id            String
   congregation_id      String
   volunteer_profile_id String
   ministry_id          String
-  role_in_ministry     String?
-  created_at           DateTime @default(now())
+  role                 VolunteerMinistryRole @default(volunteer)
+  is_primary_leader    Boolean               @default(false)
+  created_at           DateTime              @default(now())
 
   volunteerProfile VolunteerProfile @relation(fields: [volunteer_profile_id], references: [id], onDelete: Cascade)
   ministry         Ministry         @relation(fields: [ministry_id], references: [id], onDelete: Cascade)
@@ -1480,6 +1485,11 @@ enum SwapStatus {
   accepted
   rejected
   cancelled
+}
+
+enum VolunteerMinistryRole {
+  leader
+  volunteer
 }
 
 enum CelebrationType {

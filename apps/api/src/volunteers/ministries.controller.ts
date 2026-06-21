@@ -43,7 +43,7 @@ export class MinistriesController {
   @Get(':id')
   @Roles(...READ_ROLES)
   findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.ministriesService.findOne(user.tenant_id, user.congregation_id, id);
+    return this.ministriesService.findOneWithMembers(user.tenant_id, user.congregation_id, id);
   }
 
   @Patch(':id')
