@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import axios from "axios";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import api from "@/lib/api";
 
 // ─── Color presets ─────────────────────────────────────────────────────────────
@@ -29,6 +31,7 @@ const DEFAULT_COLOR = MINISTRY_COLORS[0].value;
 interface CreateMinistryModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  tree: MinistryTreeNode[];
   onCreated: () => void;
 }
 
@@ -37,26 +40,43 @@ interface CreateMinistryModalProps {
 export function CreateMinistryModal({
   open,
   onOpenChange,
+  tree,
   onCreated,
 }: CreateMinistryModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<string>(DEFAULT_COLOR);
+  const [parentId, setParentId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
   const [success, setSuccess] = useState(false);
+
+  const hasRoot = tree.length > 0;
+  const parentOptions = useMemo(() => flattenMinistryTree(tree), [tree]);
+
+  function showToast(msg: string) {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 4000);
+  }
 
   function reset() {
     setName("");
     setDescription("");
     setColor(DEFAULT_COLOR);
+    setParentId("");
     setError("");
+    setToastMsg("");
     setSuccess(false);
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("Nome é obrigatório."); return; }
+    if (hasRoot && !parentId) {
+      setError("Já existe um ministério principal. Selecione um ministério pai.");
+      return;
+    }
     setError("");
     setIsSubmitting(true);
     try {
@@ -64,6 +84,7 @@ export function CreateMinistryModal({
         name: name.trim(),
         description: description.trim() || undefined,
         color,
+        parent_ministry_id: parentId || undefined,
       });
       setSuccess(true);
       setTimeout(() => {
@@ -71,14 +92,21 @@ export function CreateMinistryModal({
         onOpenChange(false);
         reset();
       }, 1200);
-    } catch {
-      setError("Erro ao criar ministério. Tente novamente.");
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        showToast(err.response.data?.message ?? "Já existe um ministério raiz.");
+      } else if (axios.isAxiosError(err) && err.response?.status === 400) {
+        showToast(err.response.data?.message ?? "Dados inválidos.");
+      } else {
+        showToast("Erro ao criar ministério. Tente novamente.");
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
+    <>
     <Modal
       open={open}
       onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
@@ -123,6 +151,40 @@ export function CreateMinistryModal({
               disabled={isSubmitting}
               className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white resize-none"
             />
+          </div>
+
+          {/* Ministério pai */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cm-parent" className="text-sm font-medium text-ink dark:text-white">
+              Ministério pai
+            </Label>
+            <select
+              id="cm-parent"
+              value={parentId}
+              onChange={(e) => setParentId(e.target.value)}
+              disabled={isSubmitting}
+              className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+            >
+              <option
+                value=""
+                disabled={hasRoot}
+                title={hasRoot ? "Já existe um ministério principal" : undefined}
+              >
+                Nenhum (ministério raiz)
+              </option>
+              {parentOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {"  ".repeat(m.depth)}
+                  {m.depth > 0 ? "↳ " : ""}
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {hasRoot && (
+              <p className="text-xs text-stone">
+                Já existe um ministério principal. Selecione um ministério pai para criar um sub-ministério.
+              </p>
+            )}
           </div>
 
           {/* Cor */}
@@ -173,5 +235,12 @@ export function CreateMinistryModal({
         </form>
       )}
     </Modal>
+
+    {toastMsg && (
+      <div className="fixed bottom-4 right-4 z-[80] rounded-[8px] bg-ink px-4 py-2.5 text-sm text-white shadow-lg dark:bg-white dark:text-ink">
+        {toastMsg}
+      </div>
+    )}
+    </>
   );
 }

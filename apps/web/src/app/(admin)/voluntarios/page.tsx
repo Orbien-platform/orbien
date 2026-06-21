@@ -8,9 +8,11 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateMinistryModal } from "@/components/volunteers/CreateMinistryModal";
 import { MinistryDetailSheet } from "@/components/volunteers/MinistryDetailSheet";
+import { MinistryTree } from "@/components/volunteers/MinistryTree";
 import { CreateScheduleModal } from "@/components/volunteers/CreateScheduleModal";
 import { ScheduleDetailSheet } from "@/components/volunteers/ScheduleDetailSheet";
 import { useAuth } from "@/hooks/useAuth";
+import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
@@ -19,12 +21,9 @@ import api from "@/lib/api";
 type ScheduleStatus = "draft" | "published" | "finalized";
 type AssignmentStatus = "pending" | "confirmed" | "declined";
 
-interface Ministry {
-  id: string;
-  name: string;
-  description?: string;
-  color?: string;
-  _count?: { profiles: number; activeSchedules?: number; schedules?: number };
+interface MinistryCounts {
+  leaders: number;
+  volunteers: number;
 }
 
 interface Schedule {
@@ -111,9 +110,12 @@ export default function VoluntariosPage() {
   const [activeTab, setActiveTab] = useState("ministerios");
 
   // ── Ministérios state ──
-  const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [ministryTree, setMinistryTree] = useState<MinistryTreeNode[]>([]);
+  const [ministryCounts, setMinistryCounts] = useState<Record<string, MinistryCounts>>({});
   const [ministriesLoading, setMinistriesLoading] = useState(true);
   const hasFetchedMin = useRef(false);
+
+  const flatMinistries = flattenMinistryTree(ministryTree);
 
   // ── Escalas state ──
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -143,15 +145,32 @@ export default function VoluntariosPage() {
     if (hasFetchedMin.current) return;
     hasFetchedMin.current = true;
     setMinistriesLoading(true);
+    let ids: string[] = [];
     try {
-      const { data } = await api.get<{ data: Ministry[] } | Ministry[]>(
-        "/volunteers/ministries?limit=100"
-      );
-      setMinistries(Array.isArray(data) ? data : data.data ?? []);
+      const { data } = await api.get<MinistryTreeNode[]>("/volunteers/ministries");
+      setMinistryTree(data);
+      ids = flattenMinistryTree(data).map((m) => m.id);
     } catch {
-      setMinistries([]);
+      setMinistryTree([]);
     } finally {
       setMinistriesLoading(false);
+    }
+
+    // The tree endpoint doesn't return aggregate counts, so fetch each
+    // ministry's detail (leaders/volunteers) one at a time — sequential to
+    // avoid piling concurrent requests onto the dev proxy/API.
+    for (const id of ids) {
+      try {
+        const { data } = await api.get<{ leaders: unknown[]; volunteers: unknown[] }>(
+          `/volunteers/ministries/${id}`
+        );
+        setMinistryCounts((prev) => ({
+          ...prev,
+          [id]: { leaders: data.leaders?.length ?? 0, volunteers: data.volunteers?.length ?? 0 },
+        }));
+      } catch {
+        // Skip — that ministry's card just shows 0 counts.
+      }
     }
   }, []);
 
@@ -325,8 +344,8 @@ export default function VoluntariosPage() {
         <Tabs.Panel value="ministerios" className="pt-5">
           <div className="flex items-center justify-between gap-4 mb-4">
             <p className="text-sm text-stone">
-              {ministries.length > 0
-                ? `${ministries.length} ministério${ministries.length !== 1 ? "s" : ""}`
+              {flatMinistries.length > 0
+                ? `${flatMinistries.length} ministério${flatMinistries.length !== 1 ? "s" : ""}`
                 : "Nenhum ministério"}
             </p>
             {canCreate && (
@@ -341,55 +360,25 @@ export default function VoluntariosPage() {
           </div>
 
           {ministriesLoading ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex flex-col gap-2">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-4">
+                <div key={i} className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-3.5">
                   <Skeleton className="mb-2 h-5 w-32" />
                   <Skeleton className="h-3 w-24" />
                 </div>
               ))}
             </div>
-          ) : ministries.length === 0 ? (
+          ) : ministryTree.length === 0 ? (
             <p className="py-10 text-center text-sm text-stone">
               Nenhum ministério cadastrado.{" "}
               {canCreate && "Clique em \"Novo ministério\" para começar."}
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {ministries.map((m) => {
-                const color = m.color ?? "#1E3A5F";
-                const volunteers = m._count?.profiles ?? 0;
-                const activeSchedules = m._count?.activeSchedules ?? m._count?.schedules ?? 0;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => { setSelectedMinId(m.id); setMinSheetOpen(true); }}
-                    className="group flex flex-col rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-4 text-left transition-shadow hover:shadow-md overflow-hidden relative"
-                    style={{ borderLeftColor: color, borderLeftWidth: "4px" }}
-                  >
-                    <span className="text-sm font-medium text-ink dark:text-white group-hover:text-navy transition-colors">
-                      {m.name}
-                    </span>
-                    {m.description && (
-                      <span className="mt-1 text-xs text-stone line-clamp-2">
-                        {m.description}
-                      </span>
-                    )}
-                    <div className="mt-3 flex items-center gap-4">
-                      <div className="flex flex-col">
-                        <span className="text-lg font-semibold text-ink dark:text-white">{volunteers}</span>
-                        <span className="text-xs text-stone">voluntários</span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-lg font-semibold text-ink dark:text-white">{activeSchedules}</span>
-                        <span className="text-xs text-stone">escalas</span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <MinistryTree
+              nodes={ministryTree}
+              counts={ministryCounts}
+              onSelect={(id) => { setSelectedMinId(id); setMinSheetOpen(true); }}
+            />
           )}
         </Tabs.Panel>
 
@@ -404,8 +393,12 @@ export default function VoluntariosPage() {
                 className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
               >
                 <option value="">Todos os ministérios</option>
-                {ministries.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
+                {flatMinistries.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {"  ".repeat(m.depth)}
+                    {m.depth > 0 ? "↳ " : ""}
+                    {m.name}
+                  </option>
                 ))}
               </select>
 
@@ -534,6 +527,7 @@ export default function VoluntariosPage() {
       <CreateMinistryModal
         open={createMinOpen}
         onOpenChange={setCreateMinOpen}
+        tree={ministryTree}
         onCreated={() => {
           hasFetchedMin.current = false;
           loadMinistries();
@@ -545,6 +539,8 @@ export default function VoluntariosPage() {
         onOpenChange={setMinSheetOpen}
         ministryId={selectedMinId}
         canEdit={canCreate}
+        tree={ministryTree}
+        onSelectMinistry={(id) => setSelectedMinId(id)}
         onUpdated={() => {
           hasFetchedMin.current = false;
           loadMinistries();

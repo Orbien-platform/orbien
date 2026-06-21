@@ -208,7 +208,9 @@ export function ScheduleDetailSheet({
     }
   }, [open, scheduleId, loadSchedule]);
 
-  // Load volunteer profiles when assigning
+  // Load volunteers/leaders belonging to this schedule's ministry when assigning.
+  // `/volunteers/profiles` has no ministry filter — members of a ministry are
+  // only discoverable via the ministry detail endpoint's leaders/volunteers lists.
   async function openAssign(slotId: string) {
     setAssigningSlotId(slotId);
     setSelectedProfileId("");
@@ -216,10 +218,11 @@ export function ScheduleDetailSheet({
     if (!profilesFetched.current && schedule) {
       profilesFetched.current = true;
       try {
-        const { data } = await api.get<{ data: VolunteerProfile[] } | VolunteerProfile[]>(
-          `/volunteers/profiles?ministry_id=${schedule.ministry.id}&limit=100`
-        );
-        const list = Array.isArray(data) ? data : data.data ?? [];
+        const { data } = await api.get<{
+          leaders: { volunteerProfile: VolunteerProfile }[];
+          volunteers: { volunteerProfile: VolunteerProfile }[];
+        }>(`/volunteers/ministries/${schedule.ministry.id}`);
+        const list = [...data.leaders, ...data.volunteers].map((m) => m.volunteerProfile);
         setProfiles(list);
       } catch {
         setProfiles([]);

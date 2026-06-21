@@ -6,14 +6,10 @@ import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import api from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Ministry {
-  id: string;
-  name: string;
-}
 
 interface CreateScheduleModalProps {
   open: boolean;
@@ -30,7 +26,7 @@ export function CreateScheduleModal({
   defaultMinistryId,
   onCreated,
 }: CreateScheduleModalProps) {
-  const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [ministryTree, setMinistryTree] = useState<MinistryTreeNode[]>([]);
   const [ministryId, setMinistryId] = useState(defaultMinistryId ?? "");
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -39,15 +35,14 @@ export function CreateScheduleModal({
   const [error, setError] = useState("");
   const hasFetched = useRef(false);
 
+  const ministries = flattenMinistryTree(ministryTree);
+
   const loadMinistries = useCallback(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
     api
-      .get<{ data: Ministry[] } | Ministry[]>("/volunteers/ministries?limit=100")
-      .then((r) => {
-        const list = Array.isArray(r.data) ? r.data : r.data.data ?? [];
-        setMinistries(list);
-      })
+      .get<MinistryTreeNode[]>("/volunteers/ministries")
+      .then((r) => setMinistryTree(r.data))
       .catch(() => {});
   }, []);
 
@@ -115,7 +110,11 @@ export function CreateScheduleModal({
           >
             <option value="">— Selecione o ministério —</option>
             {ministries.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
+              <option key={m.id} value={m.id}>
+                {"  ".repeat(m.depth)}
+                {m.depth > 0 ? "↳ " : ""}
+                {m.name}
+              </option>
             ))}
           </select>
         </div>
