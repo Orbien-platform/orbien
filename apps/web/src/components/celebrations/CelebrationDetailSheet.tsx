@@ -10,7 +10,12 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
-import { RECURRENCE_LABELS } from "@/components/celebrations/CreateCelebrationModal";
+import {
+  RECURRENCE_LABELS,
+  CELEBRATION_TYPE_LABELS,
+  WEEKDAY_LABELS,
+  type CelebrationType,
+} from "@/components/celebrations/CreateCelebrationModal";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
@@ -19,22 +24,17 @@ import api from "@/lib/api";
 interface Celebration {
   id: string;
   name: string;
-  day_of_week?: string;
-  time?: string;
+  type: CelebrationType;
+  day_of_week: number | null;
+  start_time: string;
   recurrence?: string;
-  description?: string;
 }
 
 interface CelebrationInstance {
   id: string;
-  date: string;
+  scheduled_date: string;
   status?: string;
-  service_order?: { id: string } | null;
-}
-
-interface InstancesResponse {
-  data: CelebrationInstance[];
-  total?: number;
+  serviceOrder?: { id: string } | null;
 }
 
 interface CelebrationDetailSheetProps {
@@ -82,14 +82,14 @@ export function CelebrationDetailSheet({
     try {
       const [celRes, instRes] = await Promise.allSettled([
         api.get<Celebration>(`/celebrations/${id}`),
-        api.get<InstancesResponse | CelebrationInstance[]>(
-          `/celebrations/${id}/instances?limit=10&sort=date&order=desc`
-        ),
+        api.get<CelebrationInstance[]>(`/celebrations/instances?celebration_id=${id}`),
       ]);
       if (celRes.status === "fulfilled") setCelebration(celRes.value.data);
       if (instRes.status === "fulfilled") {
-        const d = instRes.value.data;
-        setInstances(Array.isArray(d) ? d : d.data ?? []);
+        const sorted = (instRes.value.data ?? []).sort(
+          (a, b) => new Date(b.scheduled_date).getTime() - new Date(a.scheduled_date).getTime()
+        );
+        setInstances(sorted.slice(0, 10));
       }
     } finally {
       setIsLoading(false);
@@ -129,22 +129,20 @@ export function CelebrationDetailSheet({
                 <SheetTitle className="text-base font-medium text-ink dark:text-white pr-8">
                   {celebration.name}
                 </SheetTitle>
+                <SheetDescription className="mt-1 text-xs text-stone">
+                  {CELEBRATION_TYPE_LABELS[celebration.type] ?? celebration.type}
+                </SheetDescription>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {celebration.day_of_week && (
-                    <span className="text-xs text-stone">{celebration.day_of_week}</span>
+                  {celebration.day_of_week != null && (
+                    <span className="text-xs text-stone">{WEEKDAY_LABELS[celebration.day_of_week]}</span>
                   )}
-                  {celebration.time && (
-                    <span className="text-xs text-stone">{celebration.time}</span>
+                  {celebration.start_time && (
+                    <span className="text-xs text-stone">{celebration.start_time}</span>
                   )}
                   {recLabel && (
                     <span className="text-xs text-stone">{recLabel}</span>
                   )}
                 </div>
-                {celebration.description && (
-                  <SheetDescription className="mt-1 text-xs text-stone">
-                    {celebration.description}
-                  </SheetDescription>
-                )}
               </SheetHeader>
 
               {/* Instances list */}
@@ -162,7 +160,7 @@ export function CelebrationDetailSheet({
                   </p>
                 ) : (
                   instances.map((inst) => {
-                    const hasOC = !!inst.service_order;
+                    const hasOC = !!inst.serviceOrder;
                     return (
                       <button
                         key={inst.id}
@@ -174,7 +172,7 @@ export function CelebrationDetailSheet({
                           <FileText size={14} strokeWidth={1.5} className="flex-shrink-0 text-stone" />
                           <div className="flex flex-col gap-0.5">
                             <span className="text-sm text-ink dark:text-white">
-                              {fmtDate(inst.date)}
+                              {fmtDate(inst.scheduled_date)}
                             </span>
                             {inst.status && (
                               <span className="text-xs text-stone capitalize">{inst.status}</span>

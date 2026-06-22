@@ -10,15 +10,24 @@ import api from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type Recurrence = "weekly" | "biweekly" | "monthly";
+export type Recurrence = "weekly" | "biweekly" | "monthly" | "none";
 
 export const RECURRENCE_LABELS: Record<Recurrence, string> = {
   weekly: "Semanal",
   biweekly: "Quinzenal",
   monthly: "Mensal",
+  none: "Não recorrente",
 };
 
-const DAYS = [
+export type CelebrationType = "sunday_service" | "midweek" | "special_event";
+
+export const CELEBRATION_TYPE_LABELS: Record<CelebrationType, string> = {
+  sunday_service: "Culto Dominical",
+  midweek: "Culto de Semana",
+  special_event: "Evento Especial",
+};
+
+export const WEEKDAY_LABELS = [
   "Domingo",
   "Segunda-feira",
   "Terça-feira",
@@ -27,6 +36,8 @@ const DAYS = [
   "Sexta-feira",
   "Sábado",
 ];
+
+const DAYS = WEEKDAY_LABELS;
 
 interface CreateCelebrationModalProps {
   open: boolean;
@@ -42,20 +53,20 @@ export function CreateCelebrationModal({
   onCreated,
 }: CreateCelebrationModalProps) {
   const [name, setName] = useState("");
+  const [type, setType] = useState<CelebrationType>("sunday_service");
   const [dayOfWeek, setDayOfWeek] = useState("");
-  const [time, setTime] = useState("");
+  const [startTime, setStartTime] = useState("");
   const [recurrence, setRecurrence] = useState<Recurrence>("weekly");
-  const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   function reset() {
     setName("");
+    setType("sunday_service");
     setDayOfWeek("");
-    setTime("");
+    setStartTime("");
     setRecurrence("weekly");
-    setDescription("");
     setError("");
     setSuccess(false);
   }
@@ -63,15 +74,16 @@ export function CreateCelebrationModal({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("Nome é obrigatório."); return; }
+    if (!startTime) { setError("Horário é obrigatório."); return; }
     setError("");
     setIsSubmitting(true);
     try {
       await api.post("/celebrations", {
         name: name.trim(),
-        day_of_week: dayOfWeek || undefined,
-        time: time || undefined,
+        type,
+        day_of_week: dayOfWeek !== "" ? Number(dayOfWeek) : undefined,
+        start_time: startTime,
         recurrence,
-        description: description.trim() || undefined,
       });
       setSuccess(true);
       setTimeout(() => { onCreated(); onOpenChange(false); reset(); }, 1200);
@@ -113,6 +125,24 @@ export function CreateCelebrationModal({
             />
           </div>
 
+          {/* Tipo */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cc-type" className="text-sm font-medium text-ink dark:text-white">
+              Tipo <span className="text-crimson">*</span>
+            </Label>
+            <select
+              id="cc-type"
+              value={type}
+              onChange={(e) => setType(e.target.value as CelebrationType)}
+              disabled={isSubmitting}
+              className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+            >
+              {(Object.entries(CELEBRATION_TYPE_LABELS) as [CelebrationType, string][]).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Dia e Horário */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
@@ -127,20 +157,20 @@ export function CreateCelebrationModal({
                 className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
               >
                 <option value="">— Dia —</option>
-                {DAYS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                {DAYS.map((d, i) => (
+                  <option key={d} value={i}>{d}</option>
                 ))}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cc-time" className="text-sm font-medium text-ink dark:text-white">
-                Horário
+                Horário <span className="text-crimson">*</span>
               </Label>
               <Input
                 id="cc-time"
                 type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
                 disabled={isSubmitting}
                 className="rounded-[8px]"
               />
@@ -163,22 +193,6 @@ export function CreateCelebrationModal({
                 <option key={v} value={v}>{l}</option>
               ))}
             </select>
-          </div>
-
-          {/* Descrição */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cc-desc" className="text-sm font-medium text-ink dark:text-white">
-              Descrição <span className="text-xs font-normal text-stone">(opcional)</span>
-            </Label>
-            <textarea
-              id="cc-desc"
-              rows={2}
-              placeholder="Breve descrição da celebração…"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white resize-none"
-            />
           </div>
 
           {error && (
