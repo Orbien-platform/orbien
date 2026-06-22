@@ -15,6 +15,7 @@ import { FinancialModule } from './financial/financial.module';
 import { ContentModule } from './content/content.module';
 import { VolunteersModule } from './volunteers/volunteers.module';
 import { CelebrationsModule } from './celebrations/celebrations.module';
+import { SettingsModule } from './settings/settings.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -45,6 +46,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ContentModule,
     VolunteersModule,
     CelebrationsModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

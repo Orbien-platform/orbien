@@ -24,6 +24,8 @@ model Tenant {
   id         String   @id @default(uuid())
   slug       String   @unique
   name       String
+  email      String?
+  phone      String?
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -80,13 +82,18 @@ model Tenant {
 }
 
 model Congregation {
-  id         String   @id @default(uuid())
-  tenant_id  String
-  name       String
-  address    String?
-  timezone   String   @default("America/Sao_Paulo")
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id            String   @id @default(uuid())
+  tenant_id     String
+  name          String
+  address       String?
+  timezone      String   @default("America/Sao_Paulo")
+  email         String?
+  phone         String?
+  logo_url      String?
+  primary_color String?
+  app_name      String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
