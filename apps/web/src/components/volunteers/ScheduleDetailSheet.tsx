@@ -24,7 +24,7 @@ type AssignmentStatus = "pending" | "confirmed" | "declined";
 interface Assignment {
   id: string;
   status: AssignmentStatus;
-  volunteer_profile: {
+  volunteerProfile: {
     id: string;
     person: { id: string; full_name: string };
   };
@@ -40,10 +40,10 @@ interface Slot {
 interface ScheduleDetail {
   id: string;
   title: string;
-  date: string;
+  scheduled_date: string;
   status: ScheduleStatus;
-  confirmation_deadline?: string;
-  ministry: { id: string; name: string; color?: string };
+  deadline_confirm_at?: string | null;
+  ministry_id: string;
   slots: Slot[];
 }
 
@@ -52,10 +52,17 @@ interface VolunteerProfile {
   person: { id: string; full_name: string };
 }
 
+interface MinistryRef {
+  id: string;
+  name: string;
+  color?: string | null;
+}
+
 interface ScheduleDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   scheduleId: string | null;
+  ministries: MinistryRef[];
   canManage: boolean;   // can add slots, assign, suggest
   canPublish: boolean;  // can publish
   onUpdated: () => void;
@@ -148,6 +155,7 @@ export function ScheduleDetailSheet({
   open,
   onOpenChange,
   scheduleId,
+  ministries,
   canManage,
   canPublish,
   onUpdated,
@@ -221,7 +229,7 @@ export function ScheduleDetailSheet({
         const { data } = await api.get<{
           leaders: { volunteerProfile: VolunteerProfile }[];
           volunteers: { volunteerProfile: VolunteerProfile }[];
-        }>(`/volunteers/ministries/${schedule.ministry.id}`);
+        }>(`/volunteers/ministries/${schedule.ministry_id}`);
         const list = [...data.leaders, ...data.volunteers].map((m) => m.volunteerProfile);
         setProfiles(list);
       } catch {
@@ -314,11 +322,12 @@ export function ScheduleDetailSheet({
   }
 
   const isDraft = schedule?.status === "draft";
-  const dotColor = schedule?.ministry?.color ?? "#1E3A5F";
+  const ministry = schedule ? ministries.find((m) => m.id === schedule.ministry_id) : undefined;
+  const dotColor = ministry?.color ?? "#1E3A5F";
 
   // Profiles not yet assigned to the slot being edited
   function availableProfiles(slot: Slot): VolunteerProfile[] {
-    const assignedIds = slot.assignments.map((a) => a.volunteer_profile.id);
+    const assignedIds = slot.assignments.map((a) => a.volunteerProfile.id);
     return profiles.filter((p) => !assignedIds.includes(p.id));
   }
 
@@ -344,16 +353,16 @@ export function ScheduleDetailSheet({
                       {schedule.title}
                     </SheetTitle>
                     <SheetDescription className="text-xs text-stone">
-                      {schedule.ministry?.name ?? "—"} · {fmtDate(schedule.date)}
+                      {ministry?.name ?? "—"} · {fmtDate(schedule.scheduled_date)}
                     </SheetDescription>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <Badge className={statusCls(schedule.status)}>
                         {statusLabel(schedule.status)}
                       </Badge>
-                      {schedule.confirmation_deadline && (
+                      {schedule.deadline_confirm_at && (
                         <span className="text-xs text-stone">
                           Prazo:{" "}
-                          {new Date(schedule.confirmation_deadline).toLocaleDateString("pt-BR")}
+                          {new Date(schedule.deadline_confirm_at).toLocaleDateString("pt-BR")}
                         </span>
                       )}
                     </div>
@@ -504,7 +513,7 @@ export function ScheduleDetailSheet({
                                   className="flex items-center justify-between gap-2"
                                 >
                                   <span className="text-xs text-ink dark:text-white">
-                                    {a.volunteer_profile.person.full_name}
+                                    {a.volunteerProfile.person.full_name}
                                   </span>
                                   <Badge className={assignBadgeCls(a.status)}>
                                     {assignBadgeLabel(a.status)}

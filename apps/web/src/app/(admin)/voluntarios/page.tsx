@@ -29,23 +29,22 @@ interface MinistryCounts {
 interface Schedule {
   id: string;
   title: string;
-  date: string;
+  scheduled_date: string;
   status: ScheduleStatus;
-  ministry?: { id: string; name: string; color?: string } | null;
-  slots?: { id: string; required_count: number; assignments?: unknown[] }[];
-  _count?: { slots?: number; assignments?: number };
+  ministry_id: string;
 }
 
 interface MyAssignment {
   id: string;
   status: AssignmentStatus;
-  schedule?: {
-    id: string;
-    title: string;
-    date: string;
-    ministry?: { id: string; name: string } | null;
-  } | null;
-  slot?: { role_name: string };
+  slot?: {
+    role_name: string;
+    schedule?: {
+      title: string;
+      scheduled_date: string;
+      ministry?: { name: string } | null;
+    } | null;
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -278,44 +277,32 @@ export default function VoluntariosPage() {
       key: "ministry",
       header: "Ministério",
       width: "160px",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          {row.ministry?.color && (
-            <div
-              className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-              style={{ backgroundColor: row.ministry?.color ?? "#1E3A7B" }}
-            />
-          )}
-          <span className="text-stone">{row.ministry?.name ?? "—"}</span>
-        </div>
-      ),
+      render: (row) => {
+        const ministry = flatMinistries.find((m) => m.id === row.ministry_id);
+        return (
+          <div className="flex items-center gap-2">
+            {ministry?.color && (
+              <div
+                className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: ministry.color }}
+              />
+            )}
+            <span className="text-stone">{ministry?.name ?? "—"}</span>
+          </div>
+        );
+      },
     },
     {
       key: "date",
       header: "Data",
       width: "110px",
-      render: (row) => <span className="text-stone">{fmtDate(row.date)}</span>,
+      render: (row) => <span className="text-stone">{fmtDate(row.scheduled_date)}</span>,
     },
     {
       key: "status",
       header: "Status",
       width: "120px",
       render: (row) => <ScheduleBadge status={row.status} />,
-    },
-    {
-      key: "slots",
-      header: "Slots",
-      width: "90px",
-      render: (row) => {
-        const total = row._count?.slots ?? row.slots?.length ?? 0;
-        const filled = row.slots?.reduce(
-          (acc, s) => acc + (s.assignments?.filter((a: unknown) => (a as { status: string }).status !== "declined").length ?? 0),
-          0
-        ) ?? 0;
-        return (
-          <span className="text-stone">{total > 0 ? `${filled}/${total}` : "—"}</span>
-        );
-      },
     },
   ];
 
@@ -470,14 +457,14 @@ export default function VoluntariosPage() {
                     {/* Info */}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-sm font-medium text-ink dark:text-white">
-                        {a.schedule?.title ?? "—"}
+                        {a.slot?.schedule?.title ?? "—"}
                       </span>
                       <span className="text-xs text-stone">
-                        {a.schedule?.ministry?.name ?? "—"}
+                        {a.slot?.schedule?.ministry?.name ?? "—"}
                         {a.slot?.role_name ? ` · ${a.slot.role_name}` : ""}
                       </span>
                       <span className="text-xs text-stone">
-                        {a.schedule?.date ? fmtDate(a.schedule.date) : "—"}
+                        {a.slot?.schedule?.scheduled_date ? fmtDate(a.slot.schedule.scheduled_date) : "—"}
                       </span>
                     </div>
 
@@ -563,6 +550,7 @@ export default function VoluntariosPage() {
         open={schSheetOpen}
         onOpenChange={setSchSheetOpen}
         scheduleId={selectedSchId}
+        ministries={flatMinistries}
         canManage={canManage}
         canPublish={canPublish}
         onUpdated={() => {
