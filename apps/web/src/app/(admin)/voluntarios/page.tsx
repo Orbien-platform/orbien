@@ -4,13 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
-import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateMinistryModal } from "@/components/volunteers/CreateMinistryModal";
 import { MinistryDetailSheet } from "@/components/volunteers/MinistryDetailSheet";
 import { MinistryTree } from "@/components/volunteers/MinistryTree";
-import { CreateScheduleModal } from "@/components/volunteers/CreateScheduleModal";
-import { ScheduleDetailSheet } from "@/components/volunteers/ScheduleDetailSheet";
 import { useAuth } from "@/hooks/useAuth";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
@@ -18,20 +15,11 @@ import api from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ScheduleStatus = "draft" | "published" | "finalized";
 type AssignmentStatus = "pending" | "confirmed" | "declined";
 
 interface MinistryCounts {
   leaders: number;
   volunteers: number;
-}
-
-interface Schedule {
-  id: string;
-  title: string;
-  scheduled_date: string;
-  status: ScheduleStatus;
-  ministry_id: string;
 }
 
 interface MyAssignment {
@@ -64,20 +52,6 @@ function tabBtn(active: boolean) {
   );
 }
 
-function ScheduleBadge({ status }: { status: ScheduleStatus }) {
-  const map: Record<ScheduleStatus, [string, string]> = {
-    draft: ["Rascunho", "bg-[var(--surface-subtle)] text-stone"],
-    published: ["Publicada", "bg-teal-dim text-teal"],
-    finalized: ["Finalizada", "bg-navy-dim text-navy"],
-  };
-  const [label, cls] = map[status] ?? [status, ""];
-  return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", cls)}>
-      {label}
-    </span>
-  );
-}
-
 function AssignmentStatusBadge({ status }: { status: AssignmentStatus }) {
   const map: Record<AssignmentStatus, [string, string]> = {
     pending: ["Pendente", "bg-[var(--surface-subtle)] text-stone"],
@@ -99,12 +73,8 @@ export default function VoluntariosPage() {
 
   const roles = user?.roles ?? [];
   const isAdmin = roles.includes("admin_congregation") || roles.includes("tenant_admin");
-  const isPastor = roles.includes("pastor");
-  const isLeader = roles.includes("ministry_leader");
 
   const canCreate = isAdmin;
-  const canPublish = isAdmin || isPastor;
-  const canManage = isAdmin || isPastor || isLeader;
 
   const [activeTab, setActiveTab] = useState("ministerios");
 
@@ -115,13 +85,6 @@ export default function VoluntariosPage() {
   const hasFetchedMin = useRef(false);
 
   const flatMinistries = flattenMinistryTree(ministryTree);
-
-  // ── Escalas state ──
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [schedulesLoading, setSchedulesLoading] = useState(false);
-  const [scheduleMinFilter, setScheduleMinFilter] = useState("");
-  const [scheduleStatusFilter, setScheduleStatusFilter] = useState<ScheduleStatus | "">("");
-  const hasFetchedSch = useRef(false);
 
   // ── Meus Turnos state ──
   const [myAssignments, setMyAssignments] = useState<MyAssignment[]>([]);
@@ -134,10 +97,6 @@ export default function VoluntariosPage() {
   const [createMinOpen, setCreateMinOpen] = useState(false);
   const [selectedMinId, setSelectedMinId] = useState<string | null>(null);
   const [minSheetOpen, setMinSheetOpen] = useState(false);
-
-  const [createSchOpen, setCreateSchOpen] = useState(false);
-  const [selectedSchId, setSelectedSchId] = useState<string | null>(null);
-  const [schSheetOpen, setSchSheetOpen] = useState(false);
 
   // ── Load ministries ──
   const loadMinistries = useCallback(async () => {
@@ -173,26 +132,6 @@ export default function VoluntariosPage() {
     }
   }, []);
 
-  // ── Load schedules ──
-  const loadSchedules = useCallback(async (minId: string, status: string) => {
-    if (hasFetchedSch.current) return;
-    hasFetchedSch.current = true;
-    setSchedulesLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: "50" });
-      if (minId) params.set("ministry_id", minId);
-      if (status) params.set("status", status);
-      const { data } = await api.get<{ data: Schedule[] } | Schedule[]>(
-        `/volunteers/schedules?${params}`
-      );
-      setSchedules(Array.isArray(data) ? data : data.data ?? []);
-    } catch {
-      setSchedules([]);
-    } finally {
-      setSchedulesLoading(false);
-    }
-  }, []);
-
   // ── Load my assignments ──
   const loadMyAssignments = useCallback(async () => {
     if (hasFetchedMy.current) return;
@@ -216,24 +155,12 @@ export default function VoluntariosPage() {
 
   // Load on tab switch
   useEffect(() => {
-    if (activeTab === "escalas") {
-      hasFetchedSch.current = false;
-      loadSchedules(scheduleMinFilter, scheduleStatusFilter);
-    }
     if (activeTab === "meus-turnos") {
       hasFetchedMy.current = false;
       loadMyAssignments();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
-
-  // Reload schedules on filter change
-  useEffect(() => {
-    if (activeTab !== "escalas") return;
-    hasFetchedSch.current = false;
-    loadSchedules(scheduleMinFilter, scheduleStatusFilter);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleMinFilter, scheduleStatusFilter]);
 
   // ── Assignment confirm / decline ──
   async function confirmAssignment(id: string) {
@@ -264,53 +191,11 @@ export default function VoluntariosPage() {
     }
   }
 
-  // ── Schedule table columns ──
-  const scheduleColumns: Column<Schedule>[] = [
-    {
-      key: "title",
-      header: "Título",
-      render: (row) => (
-        <span className="font-medium text-ink dark:text-white">{row.title}</span>
-      ),
-    },
-    {
-      key: "ministry",
-      header: "Ministério",
-      width: "160px",
-      render: (row) => {
-        const ministry = flatMinistries.find((m) => m.id === row.ministry_id);
-        return (
-          <div className="flex items-center gap-2">
-            {ministry?.color && (
-              <div
-                className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: ministry.color }}
-              />
-            )}
-            <span className="text-stone">{ministry?.name ?? "—"}</span>
-          </div>
-        );
-      },
-    },
-    {
-      key: "date",
-      header: "Data",
-      width: "110px",
-      render: (row) => <span className="text-stone">{fmtDate(row.scheduled_date)}</span>,
-    },
-    {
-      key: "status",
-      header: "Status",
-      width: "120px",
-      render: (row) => <ScheduleBadge status={row.status} />,
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-6">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-medium text-ink dark:text-white">Voluntários e Escalas</h1>
+        <h1 className="text-2xl font-medium text-ink dark:text-white">Voluntários</h1>
       </div>
 
       {/* Tabs */}
@@ -318,9 +203,6 @@ export default function VoluntariosPage() {
         <Tabs.List className="flex border-b border-[var(--border-default)]">
           <Tabs.Tab value="ministerios" className={tabBtn(activeTab === "ministerios")}>
             Ministérios
-          </Tabs.Tab>
-          <Tabs.Tab value="escalas" className={tabBtn(activeTab === "escalas")}>
-            Escalas
           </Tabs.Tab>
           <Tabs.Tab value="meus-turnos" className={tabBtn(activeTab === "meus-turnos")}>
             Meus Turnos
@@ -367,64 +249,6 @@ export default function VoluntariosPage() {
               onSelect={(id) => { setSelectedMinId(id); setMinSheetOpen(true); }}
             />
           )}
-        </Tabs.Panel>
-
-        {/* ── Tab: Escalas ── */}
-        <Tabs.Panel value="escalas" className="pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Ministry filter */}
-              <select
-                value={scheduleMinFilter}
-                onChange={(e) => setScheduleMinFilter(e.target.value)}
-                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
-              >
-                <option value="">Todos os ministérios</option>
-                {flatMinistries.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {"  ".repeat(m.depth)}
-                    {m.depth > 0 ? "↳ " : ""}
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-
-              {/* Status filter */}
-              <select
-                value={scheduleStatusFilter}
-                onChange={(e) => setScheduleStatusFilter(e.target.value as ScheduleStatus | "")}
-                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
-              >
-                <option value="">Todos os status</option>
-                <option value="draft">Rascunho</option>
-                <option value="published">Publicada</option>
-                <option value="finalized">Finalizada</option>
-              </select>
-            </div>
-
-            {canCreate && (
-              <Button
-                onClick={() => setCreateSchOpen(true)}
-                className="flex items-center gap-1.5 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-sm"
-              >
-                <Plus size={15} strokeWidth={1.5} />
-                Nova escala
-              </Button>
-            )}
-          </div>
-
-          <DataTable
-            columns={scheduleColumns}
-            rows={schedules}
-            getRowKey={(row) => row.id}
-            isLoading={schedulesLoading}
-            onRowClick={(row) => { setSelectedSchId(row.id); setSchSheetOpen(true); }}
-            emptyState={
-              <p className="py-8 text-center text-sm text-stone">
-                Nenhuma escala encontrada.
-              </p>
-            }
-          />
         </Tabs.Panel>
 
         {/* ── Tab: Meus Turnos ── */}
@@ -531,31 +355,6 @@ export default function VoluntariosPage() {
         onUpdated={() => {
           hasFetchedMin.current = false;
           loadMinistries();
-        }}
-      />
-
-      <CreateScheduleModal
-        open={createSchOpen}
-        onOpenChange={setCreateSchOpen}
-        onCreated={(schId) => {
-          setCreateSchOpen(false);
-          hasFetchedSch.current = false;
-          loadSchedules(scheduleMinFilter, scheduleStatusFilter);
-          setSelectedSchId(schId);
-          setSchSheetOpen(true);
-        }}
-      />
-
-      <ScheduleDetailSheet
-        open={schSheetOpen}
-        onOpenChange={setSchSheetOpen}
-        scheduleId={selectedSchId}
-        ministries={flatMinistries}
-        canManage={canManage}
-        canPublish={canPublish}
-        onUpdated={() => {
-          hasFetchedSch.current = false;
-          loadSchedules(scheduleMinFilter, scheduleStatusFilter);
         }}
       />
     </div>
