@@ -27,7 +27,7 @@ mkdir -p "$FOLDER"
 npx prisma migrate diff \
   --from-schema-datasource prisma/schema.prisma \
   --to-schema-datamodel prisma/schema.prisma \
-  --script > "$FOLDER/migration.sql" 2>&1
+  --script > "$FOLDER/migration.sql"
 
 # Se o arquivo ficou vazio ou só com comentários, não há mudanças
 if ! grep -qE '^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE)' "$FOLDER/migration.sql" 2>/dev/null; then
