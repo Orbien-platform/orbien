@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { GroupDetailSheet } from "@/components/groups/GroupDetailSheet";
-import { CreateGroupModal, GROUP_TYPES, type GroupType } from "@/components/groups/CreateGroupModal";
+import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
+import { GroupTypesModal } from "@/components/groups/GroupTypesModal";
+import { fetchGroupTypes, DEFAULT_GROUP_TYPE_COLOR, type GroupTypeDef } from "@/lib/groupTypes";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
 
@@ -15,7 +17,7 @@ import api from "@/lib/api";
 interface SmallGroup {
   id: string;
   name: string;
-  type: GroupType;
+  groupType: { id: string; name: string; color: string | null };
   meeting_time?: string;
   leader?: { id: string; full_name: string };
   _count?: { memberships: number };
@@ -30,10 +32,6 @@ interface GroupsResponse {
 
 const LIMIT = 20;
 
-function typeLabel(type: GroupType): string {
-  return GROUP_TYPES.find((t) => t.value === type)?.label ?? type;
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GruposPage() {
@@ -43,27 +41,30 @@ export default function GruposPage() {
     roles.includes("admin_congregation") ||
     roles.includes("tenant_admin") ||
     roles.includes("pastor");
+  const canManageTypes = roles.includes("admin_congregation") || roles.includes("tenant_admin");
 
   const [groups, setGroups] = useState<SmallGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<GroupType | "">("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [groupTypes, setGroupTypes] = useState<GroupTypeDef[]>([]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [typesOpen, setTypesOpen] = useState(false);
 
   const fetchRef = useRef(0);
 
-  const loadGroups = useCallback(async (p: number, q: string, type: string) => {
+  const loadGroups = useCallback(async (p: number, q: string, typeId: string) => {
     const req = ++fetchRef.current;
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) });
       if (q) params.set("search", q);
-      if (type) params.set("type", type);
+      if (typeId) params.set("group_type_id", typeId);
       const { data } = await api.get<GroupsResponse>(`/small-groups?${params}`);
       if (req !== fetchRef.current) return;
       setGroups(data.data ?? []);
@@ -77,19 +78,29 @@ export default function GruposPage() {
     }
   }, []);
 
+  const loadGroupTypes = useCallback(() => {
+    fetchGroupTypes()
+      .then(setGroupTypes)
+      .catch(() => setGroupTypes([]));
+  }, []);
+
   useEffect(() => {
     loadGroups(page, search, typeFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, search, typeFilter]);
+
+  useEffect(() => {
+    loadGroupTypes();
+  }, [loadGroupTypes]);
 
   const handleSearch = useCallback((q: string) => {
     setPage(1);
     setSearch(q);
   }, []);
 
-  const handleTypeFilter = useCallback((type: GroupType | "") => {
+  const handleTypeFilter = useCallback((typeId: string) => {
     setPage(1);
-    setTypeFilter(type);
+    setTypeFilter(typeId);
   }, []);
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
@@ -112,7 +123,13 @@ export default function GruposPage() {
       header: "Tipo",
       width: "160px",
       render: (row) => (
-        <span className="text-stone">{typeLabel(row.type)}</span>
+        <span className="flex items-center gap-1.5 text-stone">
+          <span
+            className="h-2 w-2 flex-shrink-0 rounded-full"
+            style={{ backgroundColor: row.groupType?.color || DEFAULT_GROUP_TYPE_COLOR }}
+          />
+          {row.groupType?.name ?? "—"}
+        </span>
       ),
     },
     {
@@ -151,15 +168,29 @@ export default function GruposPage() {
             {total > 0 ? `${total} grupo${total !== 1 ? "s" : ""}` : "Nenhum grupo"}
           </p>
         </div>
-        {canEdit && (
-          <Button
-            onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-1.5 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-sm"
-          >
-            <Plus size={15} strokeWidth={1.5} />
-            Novo grupo
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {canManageTypes && (
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="rounded-[8px]"
+              aria-label="Tipos de grupo"
+              title="Tipos de grupo"
+              onClick={() => setTypesOpen(true)}
+            >
+              <Settings2 size={15} strokeWidth={1.5} />
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-1.5 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-sm"
+            >
+              <Plus size={15} strokeWidth={1.5} />
+              Novo grupo
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -171,12 +202,12 @@ export default function GruposPage() {
         />
         <select
           value={typeFilter}
-          onChange={(e) => handleTypeFilter(e.target.value as GroupType | "")}
+          onChange={(e) => handleTypeFilter(e.target.value)}
           className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
         >
           <option value="">Todos os tipos</option>
-          {GROUP_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
+          {groupTypes.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
       </div>
@@ -236,6 +267,18 @@ export default function GruposPage() {
           setPage(1);
         }}
       />
+
+      {/* Group types management */}
+      {canManageTypes && (
+        <GroupTypesModal
+          open={typesOpen}
+          onOpenChange={setTypesOpen}
+          onChanged={() => {
+            loadGroupTypes();
+            loadGroups(page, search, typeFilter);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
-import { GROUP_TYPES, type GroupType } from "@/components/groups/CreateGroupModal";
+import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
@@ -55,7 +55,7 @@ function isUrl(value?: string): boolean {
 interface GroupDetail {
   id: string;
   name: string;
-  type: GroupType;
+  groupType: { id: string; name: string; color: string | null };
   meeting_time?: string;
   address?: string;
   public_description?: string;
@@ -81,10 +81,6 @@ function tabBtn(active: boolean) {
       ? "border-navy text-navy dark:text-white dark:border-white"
       : "border-transparent text-stone hover:text-ink dark:hover:text-white"
   );
-}
-
-function typeLabel(type: GroupType): string {
-  return GROUP_TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
 function formatDate(iso: string): string {
@@ -373,8 +369,12 @@ export function GroupDetailSheet({
                     <SheetTitle className="text-base font-medium text-ink dark:text-white leading-tight">
                       {group.name}
                     </SheetTitle>
-                    <SheetDescription className="text-xs text-stone">
-                      {typeLabel(group.type as GroupType)}
+                    <SheetDescription className="flex items-center gap-1.5 text-xs text-stone">
+                      <span
+                        className="h-2 w-2 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: group.groupType?.color || DEFAULT_GROUP_TYPE_COLOR }}
+                      />
+                      {group.groupType?.name ?? "—"}
                     </SheetDescription>
                   </div>
                   {canEdit && !editing && (

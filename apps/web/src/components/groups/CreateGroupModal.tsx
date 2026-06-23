@@ -6,6 +6,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { GroupTypeSelect } from "@/components/groups/GroupTypeSelect";
+import { fetchGroupTypes, type GroupTypeDef } from "@/lib/groupTypes";
 import api from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -20,16 +22,6 @@ interface CreateGroupModalProps {
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }
-
-export const GROUP_TYPES = [
-  { value: "cell", label: "Célula" },
-  { value: "bible_study", label: "EBD / Estudo Bíblico" },
-  { value: "youth", label: "Jovens" },
-  { value: "children", label: "Infantil" },
-  { value: "other", label: "Outro" },
-] as const;
-
-export type GroupType = (typeof GROUP_TYPES)[number]["value"];
 
 const DAYS = [
   "Segunda-feira",
@@ -49,30 +41,37 @@ export function CreateGroupModal({
   onCreated,
 }: CreateGroupModalProps) {
   const [name, setName] = useState("");
-  const [type, setType] = useState<GroupType | "">("");
+  const [groupTypeId, setGroupTypeId] = useState("");
   const [leaderId, setLeaderId] = useState("");
   const [address, setAddress] = useState("");
   const [meetingDay, setMeetingDay] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
   const [description, setDescription] = useState("");
   const [persons, setPersons] = useState<Person[]>([]);
+  const [groupTypes, setGroupTypes] = useState<GroupTypeDef[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const hasFetched = useRef(false);
 
-  const loadPersons = useCallback(() => {
+  const loadData = useCallback(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
     api
       .get<{ data: Person[]; total: number }>("/persons?limit=100")
       .then((r) => setPersons(r.data.data ?? []))
       .catch(() => {});
+    setIsLoadingTypes(true);
+    fetchGroupTypes()
+      .then(setGroupTypes)
+      .catch(() => setGroupTypes([]))
+      .finally(() => setIsLoadingTypes(false));
   }, []);
 
   useEffect(() => {
-    if (open) loadPersons();
-  }, [open, loadPersons]);
+    if (open) loadData();
+  }, [open, loadData]);
 
   function buildMeetingTime(): string | undefined {
     if (!meetingDay && !meetingTime) return undefined;
@@ -82,7 +81,7 @@ export function CreateGroupModal({
 
   function reset() {
     setName("");
-    setType("");
+    setGroupTypeId("");
     setLeaderId("");
     setAddress("");
     setMeetingDay("");
@@ -97,14 +96,14 @@ export function CreateGroupModal({
     e.preventDefault();
     setError("");
     if (!name.trim()) { setError("Nome é obrigatório."); return; }
-    if (!type) { setError("Selecione o tipo do grupo."); return; }
+    if (!groupTypeId) { setError("Selecione o tipo do grupo."); return; }
     if (!leaderId) { setError("Selecione um líder."); return; }
 
     setIsSubmitting(true);
     try {
       await api.post("/small-groups", {
         name: name.trim(),
-        type,
+        group_type_id: groupTypeId,
         leader_person_id: leaderId,
         address: address.trim() || undefined,
         meeting_time: buildMeetingTime(),
@@ -160,18 +159,19 @@ export function CreateGroupModal({
             <Label htmlFor="cg-type" className="text-sm font-medium text-ink dark:text-white">
               Tipo <span className="text-crimson">*</span>
             </Label>
-            <select
-              id="cg-type"
-              value={type}
-              onChange={(e) => setType(e.target.value as GroupType | "")}
-              disabled={isSubmitting}
-              className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-            >
-              <option value="">— Selecione o tipo —</option>
-              {GROUP_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
+            {!isLoadingTypes && groupTypes.length === 0 ? (
+              <p className="rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-stone">
+                Nenhum tipo cadastrado. Configure os tipos em Grupos → Tipos.
+              </p>
+            ) : (
+              <GroupTypeSelect
+                id="cg-type"
+                types={groupTypes}
+                value={groupTypeId}
+                onValueChange={setGroupTypeId}
+                disabled={isSubmitting || isLoadingTypes}
+              />
+            )}
           </div>
 
           {/* Líder */}
