@@ -6,6 +6,7 @@ import {
 import {
   GroupMemberRole,
   GroupMembership,
+  GroupType,
   Person,
   Prisma,
   SmallGroup,
@@ -17,13 +18,18 @@ import { UpdateSmallGroupDto } from './dto/update-small-group.dto';
 import { ListSmallGroupsQueryDto } from './dto/list-small-groups-query.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 
+type GroupTypeSummary = Pick<GroupType, 'id' | 'name' | 'color'>;
+const GROUP_TYPE_SUMMARY_SELECT = { id: true, name: true, color: true } as const;
+
 type SmallGroupSummary = SmallGroup & {
   leader: Person;
+  groupType: GroupTypeSummary;
   _count: { memberships: number };
 };
 
 type SmallGroupDetail = SmallGroup & {
   leader: Person;
+  groupType: GroupTypeSummary;
   memberships: Array<GroupMembership & { person: Person }>;
   parentGroup: SmallGroup | null;
   childGroups: SmallGroup[];
@@ -39,7 +45,8 @@ type PaginatedSmallGroups = {
 type HierarchyRow = {
   id: string;
   name: string;
-  type: string;
+  group_type_id: string;
+  group_type_name: string | null;
   parent_group_id: string | null;
   leader_person_id: string;
   is_public: boolean;
@@ -76,6 +83,12 @@ export class SmallGroupsService {
       if (!parent) throw new NotFoundException('Grupo pai não encontrado');
     }
 
+    const groupType = await this.prisma.client.groupType.findUnique({
+      where: { id: dto.group_type_id },
+      select: { id: true },
+    });
+    if (!groupType) throw new NotFoundException('Tipo de grupo não encontrado');
+
     return this.prisma.runInTx(
       async (tx) => {
         const group = await tx.smallGroup.create({
@@ -106,10 +119,10 @@ export class SmallGroupsService {
   async findAll(
     query: ListSmallGroupsQueryDto,
   ): Promise<PaginatedSmallGroups> {
-    const { type, is_public, search, page, limit } = query;
+    const { group_type_id, is_public, search, page, limit } = query;
 
     const where: Prisma.SmallGroupWhereInput = {};
-    if (type) where.type = type;
+    if (group_type_id) where.group_type_id = group_type_id;
     if (is_public !== undefined) where.is_public = is_public;
     if (search) where.name = { contains: search, mode: 'insensitive' };
 
@@ -123,6 +136,7 @@ export class SmallGroupsService {
         orderBy: { name: 'asc' },
         include: {
           leader: true,
+          groupType: { select: GROUP_TYPE_SUMMARY_SELECT },
           _count: { select: { memberships: true } },
         },
       }),
@@ -137,6 +151,7 @@ export class SmallGroupsService {
       where: { id },
       include: {
         leader: true,
+        groupType: { select: GROUP_TYPE_SUMMARY_SELECT },
         memberships: { include: { person: true } },
         parentGroup: true,
         childGroups: true,
@@ -268,17 +283,21 @@ export class SmallGroupsService {
     const rows = await this.prisma.client.$queryRaw<HierarchyRow[]>`
       WITH RECURSIVE hierarchy AS (
         SELECT
-          id, name, type::text AS type, parent_group_id, leader_person_id,
-          is_public, meeting_time, recurrence, 1 AS depth
-        FROM small_groups
-        WHERE id = ${groupId}
+          sg.id, sg.name, sg.group_type_id, gt.name AS group_type_name,
+          sg.parent_group_id, sg.leader_person_id,
+          sg.is_public, sg.meeting_time, sg.recurrence, 1 AS depth
+        FROM small_groups sg
+        LEFT JOIN group_types gt ON gt.id = sg.group_type_id
+        WHERE sg.id = ${groupId}
 
         UNION ALL
 
         SELECT
-          sg.id, sg.name, sg.type::text, sg.parent_group_id, sg.leader_person_id,
+          sg.id, sg.name, sg.group_type_id, gt.name,
+          sg.parent_group_id, sg.leader_person_id,
           sg.is_public, sg.meeting_time, sg.recurrence, h.depth + 1
         FROM small_groups sg
+        LEFT JOIN group_types gt ON gt.id = sg.group_type_id
         INNER JOIN hierarchy h ON sg.parent_group_id = h.id
         WHERE h.depth < 4
       )

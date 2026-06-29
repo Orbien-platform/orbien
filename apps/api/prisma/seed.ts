@@ -1,7 +1,38 @@
 import { PrismaClient, PlanType, PlanStatus, PersonClassification, FinancialCategoryType } from '@prisma/client';
 import * as argon2 from 'argon2';
 
-const prisma = new PrismaClient();
+// Bypassa RLS (postgres/DIRECT_URL) — necessário pois o seed cria o próprio
+// tenant/congregação, sem contexto de sessão (app.tenant_id) para satisfazer
+// as políticas RLS das tabelas com FORCE ROW LEVEL SECURITY.
+const prisma = new PrismaClient({ datasources: { db: { url: process.env['DIRECT_URL'] } } });
+
+const DEFAULT_GROUP_TYPES: { name: string; color: string }[] = [
+  { name: 'Célula',         color: '#1E3A7B' },
+  { name: 'Grupo de Casa',  color: '#0D9488' },
+  { name: 'EBD',            color: '#7C3AED' },
+  { name: 'Discipulado',    color: '#B91C1C' },
+  { name: 'Jovens',         color: '#D97706' },
+];
+
+async function seedGroupTypes(tenantId: string, congregationId: string): Promise<void> {
+  for (const groupType of DEFAULT_GROUP_TYPES) {
+    const exists = await prisma.groupType.findFirst({
+      where: { tenant_id: tenantId, congregation_id: congregationId, name: groupType.name },
+      select: { id: true },
+    });
+    if (!exists) {
+      await prisma.groupType.create({
+        data: {
+          tenant_id: tenantId,
+          congregation_id: congregationId,
+          name: groupType.name,
+          color: groupType.color,
+        },
+      });
+    }
+  }
+  console.log(`group_types:      ${DEFAULT_GROUP_TYPES.map((g) => g.name).join(', ')}`);
+}
 
 const ROLES: { code: string; name: string }[] = [
   { code: 'platform_support',  name: 'Platform Support'      },
@@ -71,6 +102,9 @@ async function main(): Promise<void> {
     });
   }
   console.log(`congregation:     ${congregation.id}`);
+
+  // ── 4b. GroupTypes (padrão) ────────────────────────────────────────────────
+  await seedGroupTypes(tenant.id, congregation.id);
 
   // ── 5. Roles (global reference table) ─────────────────────────────────────
   for (const role of ROLES) {

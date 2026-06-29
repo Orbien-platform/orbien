@@ -10,6 +10,7 @@ import { PersonsModule } from './persons/persons.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import { VisitorModule } from './visitor/visitor.module';
 import { SmallGroupsModule } from './small-groups/small-groups.module';
+import { GroupTypesModule } from './small-groups/group-types/group-types.module';
 import { StudyMaterialsModule } from './study-materials/study-materials.module';
 import { FinancialModule } from './financial/financial.module';
 import { ContentModule } from './content/content.module';
@@ -41,6 +42,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     VisitorModule,
     ScheduleModule.forRoot(),
     SmallGroupsModule,
+    GroupTypesModule,
     StudyMaterialsModule,
     FinancialModule,
     ContentModule,

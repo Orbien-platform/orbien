@@ -122,12 +122,20 @@ beforeAll(async () => {
   });
   categoryAId = catA.id;
 
+  const groupTypeA = await prismaAdmin.groupType.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      name: 'Célula',
+    },
+  });
+
   const sgA = await prismaAdmin.smallGroup.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
       name: 'Célula A',
-      type: 'cell',
+      group_type_id: groupTypeA.id,
       leader_person_id: personAId,
     },
   });

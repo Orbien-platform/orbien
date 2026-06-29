@@ -41,6 +41,7 @@ model Tenant {
   consentRecords          ConsentRecord[]
   personTags              PersonTag[]
   smallGroups             SmallGroup[]
+  groupTypes              GroupType[]
   groupMemberships        GroupMembership[]
   groupMeetings           GroupMeeting[]
   attendanceRecords       AttendanceRecord[]
@@ -106,6 +107,7 @@ model Congregation {
   consentRecords          ConsentRecord[]
   personTags              PersonTag[]
   smallGroups             SmallGroup[]
+  groupTypes              GroupType[]
   groupMemberships        GroupMembership[]
   groupMeetings           GroupMeeting[]
   attendanceRecords       AttendanceRecord[]
@@ -469,26 +471,27 @@ model PersonTag {
 // =============================================================================
 
 model SmallGroup {
-  id                 String         @id @default(uuid())
+  id                 String   @id @default(uuid())
   tenant_id          String
   congregation_id    String
   name               String
-  type               SmallGroupType
+  group_type_id      String
   parent_group_id    String?
   leader_person_id   String
   address            String?
-  lat                Decimal?       @db.Decimal(10, 7)
-  lng                Decimal?       @db.Decimal(10, 7)
+  lat                Decimal? @db.Decimal(10, 7)
+  lng                Decimal? @db.Decimal(10, 7)
   meeting_time       String?
   recurrence         String?
-  is_public          Boolean        @default(false)
+  is_public          Boolean  @default(false)
   public_description String?
   public_photo_url   String?
-  created_at         DateTime       @default(now())
-  updated_at         DateTime       @updatedAt
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  groupType    GroupType    @relation(fields: [group_type_id], references: [id], onDelete: Restrict)
   leader       Person       @relation("GroupLeader", fields: [leader_person_id], references: [id], onDelete: Restrict)
   parentGroup  SmallGroup?  @relation("GroupHierarchy", fields: [parent_group_id], references: [id], onDelete: SetNull)
   childGroups  SmallGroup[] @relation("GroupHierarchy")
@@ -502,7 +505,26 @@ model SmallGroup {
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
+  @@index([group_type_id])
   @@map("small_groups")
+}
+
+model GroupType {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  name            String
+  color           String?
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  smallGroups  SmallGroup[]
+
+  @@index([tenant_id, congregation_id])
+  @@map("group_types")
 }
 
 model GroupMembership {
@@ -1366,15 +1388,6 @@ enum VisitOrigin {
 }
 
 // --- Pequenos grupos ---
-
-enum SmallGroupType {
-  cell
-  home_group
-  bible_study
-  youth
-  children
-  other
-}
 
 enum GroupMemberRole {
   leader

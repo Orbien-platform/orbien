@@ -1,19 +1,17 @@
 import {
   IsBoolean,
-  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
 } from 'class-validator';
-import { SmallGroupType } from '@prisma/client';
 
 export class CreateSmallGroupDto {
   @IsString()
   name!: string;
 
-  @IsEnum(SmallGroupType, { message: 'Tipo de grupo inválido' })
-  type!: SmallGroupType;
+  @IsUUID()
+  group_type_id!: string;
 
   @IsOptional()
   @IsUUID()
