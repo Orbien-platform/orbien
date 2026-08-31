@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbien — Mood Board Final · Precision Modern</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --mode-label: "LIGHT MODE"; }
+
+  [data-theme="light"] {
+    --bg-base:        #F5F4F1;
+    --bg-surface:     #FFFFFF;
+    --bg-subtle:      #EEECEA;
+    --bg-inverse:     #0F1117;
+    --text-primary:   #0F1117;
+    --text-secondary: #5C5A56;
+    --text-muted:     #9B9893;
+    --text-inverse:   #F5F4F1;
+    --accent:         #1E3A7B;
+    --accent-dim:     #D4DCEF;
+    --accent-hover:   #162D62;
+    --teal:           #00B8A2;
+    --teal-dim:       #D0F5F1;
+    --crimson:        #C0392B;
+    --crimson-dim:    #FDECEA;
+    --burgundy:       #991B1B;
+    --burgundy-dim:   #F5E6E6;
+    --border:         #E0DDD9;
+    --border-strong:  #C8C5C0;
+    --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+    --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+    --shadow-lg: 0 12px 40px rgba(15,17,23,.12);
+  }
+
+  [data-theme="dark"] {
+    --bg-base:        #0C0E14;
+    --bg-surface:     #13151E;
+    --bg-subtle:      #1C1F2B;
+    --bg-inverse:     #F0EEE9;
+    --text-primary:   #EAE8E3;
+    --text-secondary: #8D8B87;
+    --text-muted:     #5A5855;
+    --text-inverse:   #0C0E14;
+    --accent:         #3D62CC;
+    --accent-dim:     #1A2540;
+    --accent-hover:   #5278D9;
+    --teal:           #00CDB5;
+    --teal-dim:       #0A2E2A;
+    --crimson:        #E05444;
+    --crimson-dim:    #2A1210;
+    --burgundy:       #E8A0A0;
+    --burgundy-dim:   #220D0D;
+    --border:         #232634;
+    --border-strong:  #353848;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.4);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    min-height: 100vh;
+    transition: background .3s ease, color .3s ease;
+    padding: 40px 24px 80px;
+  }
+
+  /* TOGGLE */
+  .mode-toggle {
+    position: fixed; top: 24px; right: 24px; z-index: 100;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: 100px; padding: 8px 16px; cursor: pointer;
+    box-shadow: var(--shadow-sm); transition: all .2s;
+    font-size: 12px; font-weight: 500; letter-spacing: .06em;
+    color: var(--text-secondary); text-transform: uppercase;
+  }
+  .mode-toggle:hover { box-shadow: var(--shadow-md); color: var(--text-primary); }
+  .toggle-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); transition: background .3s; flex-shrink: 0; }
+
+  .wrapper { max-width: 1100px; margin: 0 auto; }
+
+  /* HEADER */
+  .header { padding: 80px 0 64px; border-bottom: 1px solid var(--border); margin-bottom: 64px; }
+  .direction-label {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--accent);
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+  .direction-label::before { content: ''; display: block; width: 24px; height: 1px; background: var(--accent); }
+  .header h1 {
+    font-size: clamp(48px, 6vw, 80px); font-weight: 300;
+    letter-spacing: -.03em; line-height: 1.05; color: var(--text-primary); margin-bottom: 16px;
+  }
+  .header h1 strong { font-weight: 600; color: var(--accent); }
+  .header p { font-size: 18px; font-weight: 300; color: var(--text-secondary); max-width: 520px; line-height: 1.6; }
+
+  .section-label {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+
+  /* PALETTE */
+  .palette-section { margin-bottom: 72px; }
+  .palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .swatch { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+  .swatch-color { height: 72px; transition: height .2s; }
+  .swatch:hover .swatch-color { height: 90px; }
+  .swatch-info { background: var(--bg-surface); padding: 10px 12px; }
+  .swatch-name { font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+  .swatch-hex { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
+  .swatch-role { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+  /* TYPOGRAPHY */
+  .type-section { margin-bottom: 72px; }
+  .type-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin-bottom: 12px; box-shadow: var(--shadow-sm); }
+  .type-spec { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 14px; }
+  .type-display { font-size: 52px; font-weight: 300; letter-spacing: -.03em; line-height: 1.05; color: var(--text-primary); }
+  .type-display strong { font-weight: 600; }
+  .type-heading { font-size: 26px; font-weight: 500; letter-spacing: -.02em; color: var(--text-primary); }
+  .type-body { font-size: 15px; font-weight: 300; line-height: 1.7; color: var(--text-secondary); max-width: 540px; }
+  .type-mono { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--accent); letter-spacing: .04em; }
+  .type-label { font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+
+  /* COMPONENTS */
+  .component-section { margin-bottom: 72px; }
+  .component-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width: 640px) { .component-grid { grid-template-columns: 1fr; } }
+  .comp-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-sm); }
+  .comp-title { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 18px; }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; letter-spacing: -.01em; transition: all .15s; font-family: 'DM Sans', sans-serif; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-secondary { background: var(--bg-subtle); color: var(--text-primary); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--border-strong); }
+  .btn-danger { background: var(--crimson); color: #fff; }
+  .btn-danger:hover { filter: brightness(.9); }
+  .btn-ghost { background: transparent; color: var(--accent); padding: 10px 12px; }
+  .btn-ghost:hover { background: var(--accent-dim); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+
+  /* Badges */
+  .badge-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 100px; font-size: 11px; font-weight: 500; }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .75; }
+  .badge-teal     { background: var(--teal-dim); color: var(--teal); }
+  .badge-navy     { background: var(--accent-dim); color: var(--accent); }
+  .badge-neutral  { background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border); }
+  .badge-crimson  { background: var(--crimson-dim); color: var(--crimson); }
+  .badge-burgundy { background: var(--burgundy-dim); color: var(--burgundy); }
+
+  /* KPIs */
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .kpi-label { font-size: 10px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; letter-spacing: .05em; text-transform: uppercase; }
+  .kpi-value { font-size: 22px; font-weight: 600; letter-spacing: -.02em; color: var(--text-primary); }
+  .kpi-delta { font-size: 11px; color: var(--teal); margin-top: 3px; font-family: 'DM Mono', monospace; }
+  .kpi-delta-warn { color: var(--crimson); }
+
+  /* Member card */
+  .member-card { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px; transition: box-shadow .2s; margin-bottom: 8px; }
+  .member-card:hover { box-shadow: var(--shadow-md); }
+  .avatar { width: 38px; height: 38px; border-radius: 9px; background: var(--accent-dim); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+  .avatar-teal { background: var(--teal-dim); color: var(--teal); }
+  .member-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+  .member-role { font-size: 11px; color: var(--text-muted); }
+
+  /* Alert */
+  .alert { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 8px; margin-bottom: 8px; }
+  .alert-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .alert-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .alert-body { font-size: 12px; line-height: 1.5; }
+  .alert-error { background: var(--crimson-dim); color: var(--crimson); border-left: 3px solid var(--crimson); }
+  .alert-success { background: var(--teal-dim); color: var(--teal); border-left: 3px solid var(--teal); }
+
+  /* Field */
+  .field-wrap { margin-bottom: 10px; }
+  .field-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; display: block; }
+  .field { background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding: 9px 13px; font-size: 13px; color: var(--text-primary); font-family: 'DM Sans', sans-serif; outline: none; width: 100%; transition: border-color .15s; }
+  .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .field::placeholder { color: var(--text-muted); }
+  .field-error { border-color: var(--crimson); box-shadow: 0 0 0 3px var(--crimson-dim); }
+  .field-hint { font-size: 11px; color: var(--crimson); margin-top: 4px; }
+
+  /* Semáforo */
+  .semaforo-row { display: flex; flex-direction: column; gap: 8px; }
+  .semaforo-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green  { background: #22C55E; box-shadow: 0 0 0 3px rgba(34,197,94,.2); }
+  .dot-yellow { background: #EAB308; box-shadow: 0 0 0 3px rgba(234,179,8,.2); }
+  .dot-red    { background: var(--crimson); box-shadow: 0 0 0 3px var(--crimson-dim); }
+  .semaforo-name { font-size: 13px; font-weight: 500; color: var(--text-primary); flex: 1; }
+  .semaforo-meta { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+
+  /* LOGO */
+  .logo-section { margin-bottom: 72px; }
+  .logo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media(max-width: 640px) { .logo-grid { grid-template-columns: 1fr; } }
+  .logo-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 36px 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: var(--shadow-sm); }
+  .logo-card-dark { background: #0F1117; border-color: #232634; }
+  .logo-note { font-size: 10px; color: var(--text-muted); text-align: center; font-family: 'DM Mono', monospace; letter-spacing: .06em; line-height: 1.5; }
+  .logo-note-dark { color: #3A3D4A; }
+  .logomark { transition: transform .2s; }
+  .logo-card:hover .logomark { transform: scale(1.04); }
+
+  /* MOTION */
+  @keyframes pulse-ring { 0% { transform: scale(1); opacity: .6; } 70% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1); opacity: 0; } }
+  .pulse-dot { position: relative; width: 12px; height: 12px; }
+  .pulse-dot::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--teal); animation: pulse-ring 2s ease infinite; }
+  .pulse-dot::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; background: var(--teal); }
+  @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+  .skeleton { border-radius: 6px; background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border) 50%, var(--bg-subtle) 75%); background-size: 400px 100%; animation: shimmer 1.4s infinite; }
+  .sk-line { height: 11px; margin-bottom: 7px; }
+  .pulse-demo { display: flex; align-items: center; gap: 14px; padding: 20px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; color: var(--text-secondary); }
+
+  /* SPACING */
+  .spacing-row { display: flex; align-items: flex-end; gap: 14px; padding: 24px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; flex-wrap: wrap; }
+  .sp-block { background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 4px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; }
+  .sp-val { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--accent); }
+
+  /* FOOTER */
+  .footer { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .footer-brand { font-size: 13px; font-weight: 500; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .footer-note { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); letter-spacing: .08em; }
+</style>
+</head>
+<body data-theme="light">
+
+<button class="mode-toggle" onclick="toggleTheme()">
+  <div class="toggle-dot"></div>
+  <span id="toggle-label">Dark Mode</span>
+</button>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="direction-label">Identidade Visual Final · v1.0</div>
+    <h1>Precision<br><strong>Modern</strong></h1>
+    <p>Navy como primária. Rigor sem frieza. Uma plataforma que sabe o que faz — e deixa isso óbvio.</p>
+  </header>
+
+  <!-- PALETTE -->
+  <section class="palette-section">
+    <div class="section-label">01 — Paleta de Cores · Tokens Finais</div>
+    <div class="palette-grid">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#1E3A7B"></div>
+        <div class="swatch-info"><div class="swatch-name">Navy</div><div class="swatch-hex">#1E3A7B</div><div class="swatch-role">Primária · CTAs · links</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#00B8A2"></div>
+        <div class="swatch-info"><div class="swatch-name">Teal</div><div class="swatch-hex">#00B8A2</div><div class="swatch-role">Acento · sucesso · semáforo</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#C0392B"></div>
+        <div class="swatch-info"><div class="swatch-name">Crimson</div><div class="swatch-hex">#C0392B</div><div class="swatch-role">Erro · alerta funcional</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#991B1B"></div>
+        <div class="swatch-info"><div class="swatch-name">Burgundy</div><div class="swatch-hex">#991B1B</div><div class="swatch-role">Badge status grave</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#0F1117"></div>
+        <div class="swatch-info"><div class="swatch-name">Ink</div><div class="swatch-hex">#0F1117</div><div class="swatch-role">Texto primário · base dark</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#F5F4F1"></div>
+        <div class="swatch-info"><div class="swatch-name">Parchment</div><div class="swatch-hex">#F5F4F1</div><div class="swatch-role">Fundo light</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#5C5A56"></div>
+        <div class="swatch-info"><div class="swatch-name">Stone</div><div class="swatch-hex">#5C5A56</div><div class="swatch-role">Texto secundário</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#EEECEA"></div>
+        <div class="swatch-info"><div class="swatch-name">Fog</div><div class="swatch-hex">#EEECEA</div><div class="swatch-role">Surface sutil · hover</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TYPOGRAPHY -->
+  <section class="type-section">
+    <div class="section-label">02 — Tipografia · DM Sans + DM Mono</div>
+    <div class="type-card">
+      <div class="type-spec">Display · DM Sans 300 · tracking −3%</div>
+      <div class="type-display">Sua igreja,<br><strong>bem gerida.</strong></div>
+    </div>
+    <div class="type-card">
+      <div class="type-spec">Heading · DM Sans 500 · tracking −2%</div>
+      <div class="type-heading">Membros e Voluntários</div>
+    </div>
+    <div class="type-card">
+      <div class="type-spec">Body · DM Sans 300 · line-height 1.7</div>
+      <div class="type-body">Gerencie membros, visitantes e voluntários em um único lugar. A plataforma identifica duplicações e reclassifica visitantes conforme o engajamento cresce.</div>
+    </div>
+    <div class="type-card" style="display:flex;gap:32px;flex-wrap:wrap;align-items:center">
+      <div><div class="type-spec">Mono · DM Mono 400</div><div class="type-mono">tenant_id · congregation_id</div></div>
+      <div><div class="type-spec">Label · DM Sans 500 · caps</div><div class="type-label">Frequentador ativo</div></div>
+    </div>
+  </section>
+
+  <!-- COMPONENTS -->
+  <section class="component-section">
+    <div class="section-label">03 — Componentes</div>
+    <div class="component-grid">
+
+      <div class="comp-card">
+        <div class="comp-title">Botões</div>
+        <div class="btn-row" style="margin-bottom:10px">
+          <button class="btn btn-primary">Adicionar membro</button>
+          <button class="btn btn-secondary">Exportar</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-danger btn-sm">Remover</button>
+          <button class="btn btn-ghost btn-sm">Ver detalhes →</button>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="comp-title">Badges de Vínculo e Status</div>
+        <div class="badge-row" style="margin-bottom:8px">
+          <span class="badge badge-teal"><span class="badge-dot"></span>Membro</span>
+          <span class="badge badge-navy"><span class="badge-dot"></span>Frequentador</span>
+          <span class="badge badge-neutral"><span class="badge-dot"></span>Visitante</span>
+        </div>
+        <div class="badge-row">
+          <span class="badge badge-crimson"><span class="badge-dot"></span>Inadimplente</span>
+          <span class="badge badge-burgundy"><span class="badge-dot"></span>Suspenso</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="comp-title">KPIs — Dashboard do Pastor</div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Membros ativos</div><div class="kpi-value">247</div><div class="kpi-delta">+8 este mês</div></div>
+          <div class="kpi"><div class="kpi-label">Arrecadação</div><div class="kpi-value">R$12,4k</div><div class="kpi-delta">+14% vs anterior</div></div>
+          <div class="kpi"><div class="kpi-label">Dizimistas</div><div class="kpi-value">68%</div><div class="kpi-delta">meta: 70%</div></div>
+          <div class="kpi"><div class="kpi-label">Células ativas</div><div class="kpi-value">18</div><div class="kpi-delta kpi-delta-warn">2 em atenção</div></div>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="comp-title">Saúde de Célula — Semáforo</div>
+        <div class="semaforo-row">
+          <div class="semaforo-item"><div class="dot dot-green"></div><div class="semaforo-name">Célula Alfa</div><div class="semaforo-meta">12 · 4 reuniões</div></div>
+          <div class="semaforo-item"><div class="dot dot-yellow"></div><div class="semaforo-name">Célula Bética</div><div class="semaforo-meta">7 · 2 reuniões</div></div>
+          <div class="semaforo-item"><div class="dot dot-red"></div><div class="semaforo-name">Célula Delta</div><div class="semaforo-meta">3 · 0 reuniões</div></div>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="comp-title">Perfil de Membro</div>
+        <div class="member-card">
+          <div class="avatar">MR</div>
+          <div style="flex:1"><div class="member-name">Marina Rodrigues</div><div class="member-role">Membro · Líder de célula</div></div>
+          <span class="badge badge-teal" style="font-size:10px">Membro</span>
+        </div>
+        <div class="member-card">
+          <div class="avatar avatar-teal">JP</div>
+          <div style="flex:1"><div class="member-name">João Pedro</div><div class="member-role">Frequentador · 3ª visita</div></div>
+          <span class="badge badge-navy" style="font-size:10px">Frequentador</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="comp-title">Alertas e Formulário</div>
+        <div class="alert alert-error">
+          <div class="alert-icon">⚠</div>
+          <div><div class="alert-title">Erro ao salvar</div><div class="alert-body">Verifique os campos obrigatórios.</div></div>
+        </div>
+        <div class="alert alert-success">
+          <div class="alert-icon">✓</div>
+          <div><div class="alert-title">Membro cadastrado</div><div class="alert-body">Notificação enviada por WhatsApp.</div></div>
+        </div>
+        <div class="field-wrap">
+          <label class="field-label">Telefone</label>
+          <input class="field field-error" value="(54) 9999" readonly>
+          <div class="field-hint">Número inválido — verifique o DDD.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- LOGO -->
+  <section class="logo-section">
+    <div class="section-label">04 — Conceitos de Marca (Brief para Designer)</div>
+    <div class="logo-grid">
+      <div class="logo-card">
+        <svg class="logomark" width="160" height="48" viewBox="0 0 160 48" fill="none">
+          <text x="0" y="36" font-family="DM Sans,sans-serif" font-weight="300" font-size="32" letter-spacing="-1.5" fill="var(--text-primary)">or</text>
+          <text x="42" y="36" font-family="DM Sans,sans-serif" font-weight="600" font-size="32" letter-spacing="-1.5" fill="#1E3A7B">bi</text>
+          <text x="78" y="36" font-family="DM Sans,sans-serif" font-weight="300" font-size="32" letter-spacing="-1.5" fill="var(--text-primary)">en</text>
+          <circle cx="153" cy="10" r="5" fill="#00B8A2"/>
+        </svg>
+        <div class="logo-note">Conceito A — Wordmark<br>peso diferenciado no "bi"</div>
+      </div>
+      <div class="logo-card">
+        <svg class="logomark" width="160" height="48" viewBox="0 0 160 48" fill="none">
+          <circle cx="24" cy="24" r="8" fill="#1E3A7B" opacity=".15"/>
+          <circle cx="24" cy="24" r="4" fill="#1E3A7B"/>
+          <ellipse cx="24" cy="24" rx="18" ry="8" stroke="#1E3A7B" stroke-width="1.5" fill="none"/>
+          <circle cx="42" cy="24" r="3" fill="#00B8A2"/>
+          <text x="54" y="30" font-family="DM Sans,sans-serif" font-weight="500" font-size="22" letter-spacing="-1" fill="var(--text-primary)">orbien</text>
+        </svg>
+        <div class="logo-note">Conceito B — Ícone orbital<br>+ wordmark regular</div>
+      </div>
+      <div class="logo-card logo-card-dark">
+        <svg class="logomark" width="160" height="48" viewBox="0 0 160 48" fill="none">
+          <rect x="2" y="2" width="16" height="16" rx="3" fill="#1E3A7B"/>
+          <rect x="22" y="2" width="8" height="8" rx="2" fill="#00B8A2"/>
+          <rect x="22" y="14" width="8" height="4" rx="1" fill="#1E3A7B" opacity=".5"/>
+          <rect x="2" y="22" width="28" height="3" rx="1" fill="#1E3A7B" opacity=".3"/>
+          <text x="44" y="30" font-family="DM Sans,sans-serif" font-weight="300" font-size="24" letter-spacing="-1" fill="#EAE8E3">orbien</text>
+        </svg>
+        <div class="logo-note logo-note-dark">Conceito C — Dark nativo<br>marca modular em grid</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:14px 18px;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text-muted);line-height:1.6;font-family:'DM Mono',monospace">
+      ⚠ BRIEF — SVGs de referência, não logo final. Para Figma/designer: <strong style="color:var(--text-secondary)">DM Sans · Navy #1E3A7B primária · Teal #00B8A2 acento · traço fino geométrico · sem serifas</strong>
+    </div>
+  </section>
+
+  <!-- MOTION -->
+  <section style="margin-bottom:72px">
+    <div class="section-label">05 — Motion & Feedback</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="comp-card">
+        <div class="comp-title">Estado de atividade</div>
+        <div class="pulse-demo"><div class="pulse-dot"></div><span>Sistema ativo · 3 notificações</span></div>
+      </div>
+      <div class="comp-card">
+        <div class="comp-title">Skeleton loading</div>
+        <div style="padding:4px 0">
+          <div class="skeleton sk-line" style="width:80%"></div>
+          <div class="skeleton sk-line"></div>
+          <div class="skeleton sk-line" style="width:60%;margin-bottom:0"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SPACING -->
+  <section style="margin-bottom:72px">
+    <div class="section-label">06 — Escala de Espaçamento (base 4px)</div>
+    <div class="spacing-row">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:8px;height:8px"></div><span class="sp-val">4</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:16px;height:16px"></div><span class="sp-val">8</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:24px;height:24px"></div><span class="sp-val">12</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:32px;height:32px"></div><span class="sp-val">16</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:48px;height:48px"></div><span class="sp-val">24</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:64px;height:64px"></div><span class="sp-val">32</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:80px;height:80px"></div><span class="sp-val">40</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div class="sp-block" style="width:96px;height:96px"></div><span class="sp-val">48</span></div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-brand">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="3" fill="#1E3A7B"/>
+        <ellipse cx="8" cy="8" rx="7" ry="3" stroke="#1E3A7B" stroke-width="1" fill="none"/>
+        <circle cx="15" cy="8" r="2" fill="#00B8A2"/>
+      </svg>
+      Orbien
+    </div>
+    <div class="footer-note">Mood Board Final · Precision Modern · Navy · v1.0 · 2026</div>
+  </footer>
+
+</div>
+
+<script>
+function toggleTheme() {
+  const body = document.body;
+  const label = document.getElementById('toggle-label');
+  if (body.dataset.theme === 'light') {
+    body.dataset.theme = 'dark';
+    label.textContent = 'Light Mode';
+  } else {
+    body.dataset.theme = 'light';
+    label.textContent = 'Dark Mode';
+  }
+}
+</script>
+</body>
+</html>
+
+
+
+
+

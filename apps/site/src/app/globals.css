@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   ORBIEN DESIGN SYSTEM — globals.css
+   Tailwind v4: @theme generates utility classes (bg-navy, rounded-card…)
+   :root / @media dark: semantic tokens that react to OS dark mode
+════════════════════════════════════════════════════════════════ */
+
+/* ── Static brand tokens → Tailwind utilities ──────────────── */
+@theme {
+  /* Brand colors (invariant — don't change with dark mode) */
+  --color-navy:      #1E3A7B;
+  --color-navy-dark: #162D62;
+  --color-teal:      #00B8A2;
+  --color-teal-dark: #00CDB5;
+  --color-crimson:   #C0392B;
+  --color-burgundy:  #991B1B;
+
+  /* Border radius */
+  --radius-btn:     8px;
+  --radius-card:    12px;
+  --radius-modal:   16px;
+  --radius-pill:    9999px;
+  --radius-avatar:  10px;
+  --radius-input:   8px;
+  --radius-tooltip: 6px;
+}
+
+/* Font references (resolved at compile time from next/font CSS vars) */
+@theme inline {
+  --font-sans: var(--font-dm-sans), 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), 'DM Mono', ui-monospace, monospace;
+}
+
+/* ── Semantic tokens — light mode defaults ──────────────────── */
+:root {
+  /* Navy contextual */
+  --navy-accent:    #1E3A7B;
+  --navy-dim:       #D4DCEF;
+  --navy-tint:      #F0F3FA;
+  /* Teal/Crimson contextual */
+  --teal-dim:       #D0F5F1;
+  --crimson-dim:    #FDECEA;
+  /* Surface palette */
+  --bg:             #F5F4F1;
+  --ink:            #0F1117;
+  --on-ink:         #0F1117;
+  --surface:        #FFFFFF;
+  --subtle:         #EEECEA;
+  --sand:           #EAE6DF;
+  --stone:          #5C5A56;
+  --muted:          #9B9893;
+  --border:         #E0DDD9;
+  --border-strong:  #C8C5C0;
+  /* Component-specific */
+  --navy-soft:      rgba(30,58,123,.03);   /* Premium column tint */
+  --sand-soft:      #F0EDE6;              /* Alternating compare rows */
+  --nav-bg:         rgba(245,244,241,.85);
+  --hero-glow:      rgba(30,58,123,.06);
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+  --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+  --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
+  --shadow-xl: 0 24px 60px rgba(15,17,23,.16), 0 8px 20px rgba(15,17,23,.08);
+  /* shadcn/ui semantic aliases */
+  --background:          #F5F4F1;
+  --foreground:          #0F1117;
+  --card:                #FFFFFF;
+  --card-foreground:     #0F1117;
+  --popover:             #FFFFFF;
+  --popover-foreground:  #0F1117;
+  --primary:             #1E3A7B;
+  --primary-foreground:  #F5F4F1;
+  --secondary:           #EEECEA;
+  --secondary-foreground:#0F1117;
+  --muted-ui:            #EEECEA;
+  --muted-foreground:    #5C5A56;
+  --accent-ui:           #00B8A2;
+  --accent-foreground:   #0F1117;
+  --destructive:         #C0392B;
+  --border-ui:           #E0DDD9;
+  --input:               #E0DDD9;
+  --ring:                #1E3A7B;
+  --radius:              8px;
+}
+
+/* ── Dark mode overrides (OS-level, no toggle) ──────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --navy-accent:    #7A99D9;
+    --navy-dim:       #1A2540;
+    --navy-tint:      #161D33;
+    --teal-dim:       #0A2E2A;
+    --crimson-dim:    #2A1414;
+    --bg:             #0F1117;
+    --ink:            #F5F4F1;
+    --on-ink:         #1A1D27;
+    --surface:        #13151E;
+    --subtle:         #1C1F2B;
+    --sand:           #16192A;
+    --stone:          #B5B2AD;
+    --muted:          #7A7975;
+    --border:         #232634;
+    --border-strong:  #2E3142;
+    --navy-soft:      rgba(122,153,217,.06);
+    --sand-soft:      #141727;
+    --nav-bg:         rgba(15,17,23,.78);
+    --hero-glow:      rgba(122,153,217,.08);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.20);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.24);
+    --shadow-xl: 0 24px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.32);
+    /* shadcn dark */
+    --background:          #0F1117;
+    --foreground:          #F5F4F1;
+    --card:                #13151E;
+    --card-foreground:     #F5F4F1;
+    --popover:             #13151E;
+    --popover-foreground:  #F5F4F1;
+    --primary:             #3D62CC;
+    --secondary:           #1C1F2B;
+    --secondary-foreground:#F5F4F1;
+    --muted-ui:            #1C1F2B;
+    --muted-foreground:    #B5B2AD;
+    --border-ui:           #232634;
+    --input:               #232634;
+  }
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+html {
+  color-scheme: light dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Reveal animation ───────────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .7s ease, transform .7s ease;
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Card hover with border only (no translate) ────────────────── */
+.card-hover-border {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.card-hover-border:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Card hover effects (uses CSS vars, can't be done in Tailwind) ── */
+.card-hover {
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+.card-hover-navy {
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.card-hover-navy:hover {
+  border-color: #1E3A7B;
+  box-shadow: var(--shadow-md);
+}
+
+/* ── FAQ accordion icon ─────────────────────────────────────── */
+.faq-details[open] .faq-icon {
+  transform: rotate(45deg);
+  background: #1E3A7B;
+  color: #fff;
+}
