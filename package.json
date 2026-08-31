@@ -1,0 +1,32 @@
+{
+  "name": "orbien",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "packageManager": "npm@11.14.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=orbien-backend",
+    "dev:site": "turbo run dev --filter=orbien-site",
+    "dev:web": "turbo run dev --filter=orbien-web",
+    "build": "turbo run build",
+    "build:api": "turbo run build --filter=orbien-backend",
+    "build:site": "turbo run build --filter=orbien-site",
+    "build:web": "turbo run build --filter=orbien-web",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "npm run db:generate -w orbien-backend",
+    "db:migrate": "npm run db:migrate -w orbien-backend --",
+    "db:migrate:status": "npm run db:migrate:status -w orbien-backend",
+    "db:seed": "npm run db:seed -w orbien-backend",
+    "db:studio": "npm run db:studio -w orbien-backend"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.12"
+  }
+}

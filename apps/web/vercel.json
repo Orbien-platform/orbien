@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
-  "buildCommand": "next build",
   "devCommand": "next dev --port 3001",
-  "installCommand": "npm install"
+  "ignoreCommand": "npx --yes turbo-ignore orbien-web"
 }

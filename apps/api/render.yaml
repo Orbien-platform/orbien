@@ -3,9 +3,18 @@ services:
     name: orbien-api
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    # Monorepo: contexto de build é a raiz do repositório
+    rootDir: .
+    dockerContext: .
+    dockerfilePath: ./apps/api/Dockerfile
     branch: main
     healthCheckPath: /api/health
+    buildFilter:
+      paths:
+        - apps/api/**
+        - package.json
+        - package-lock.json
+        - turbo.json
     envVars:
       - key: NODE_ENV
         value: production

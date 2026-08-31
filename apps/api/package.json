@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "postinstall": "prisma generate",
     "start": "node dist/main",
+    "dev": "nest start --watch",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "db:migrate": "bash scripts/migrate.sh",
