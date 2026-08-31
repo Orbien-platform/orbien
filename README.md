@@ -69,4 +69,5 @@ Não são centralizadas — cada app mantém as suas:
 | `apps/site` | Vercel | Root Directory = `apps/site` |
 | `apps/web` | Vercel | Root Directory = `apps/web` |
 
-Detalhes em [`docs/MONOREPO.md`](docs/MONOREPO.md).
+Passo a passo completo de configuração das plataformas: [`DEPLOY.md`](DEPLOY.md).
+Estrutura interna do monorepo: [`docs/MONOREPO.md`](docs/MONOREPO.md).

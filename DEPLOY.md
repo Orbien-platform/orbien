@@ -1,0 +1,289 @@
+# Deploy
+
+Passo a passo para configurar o deploy dos três apps do monorepo.
+
+Os deploys são **independentes**: a API roda como container Docker no Render, e
+`site` e `web` rodam em **dois projetos Vercel separados**. Nada disso muda por
+causa do monorepo — o que muda é onde cada plataforma procura os arquivos.
+
+| App | Package | Plataforma | O que muda com o monorepo |
+|---|---|---|---|
+| `apps/api` | `orbien-backend` | Render (Docker) | build context passa a ser a **raiz** do repo |
+| `apps/site` | `orbien-site` | Vercel | Root Directory = `apps/site` |
+| `apps/web` | `orbien-web` | Vercel | Root Directory = `apps/web` |
+
+> Este documento substitui o antigo `apps/api/DEPLOY.md`, que descrevia o setup
+> de quando a API tinha repositório próprio.
+
+---
+
+## Antes de começar
+
+1. Criar o repositório `Orbien-platform/orbien` **vazio** no GitHub
+   (sem README, sem .gitignore — o repo local já tem os dois).
+
+2. Publicar o monorepo:
+
+   ```bash
+   git push -u origin main
+   ```
+
+3. **Não arquive** `orbien-api`, `orbien-site` e `orbien-web` ainda. Eles são o
+   plano de rollback até os três deploys novos ficarem verdes.
+
+A ordem recomendada é **API primeiro**, depois `web`, depois `site`. A API é a
+única que os outros dois dependem; o `site` é o de menor risco (página pública,
+sem backend) e serve de última confirmação.
+
+---
+
+## Parte 1 — API no Render
+
+### 1.1 O que mudou no build
+
+Antes, o Docker rodava com a pasta da API como contexto. Agora o
+`package-lock.json` vive na **raiz do monorepo**, então o contexto precisa ser a
+raiz — senão o `COPY package-lock.json ./` do Dockerfile falha com
+`file not found`.
+
+O `apps/api/render.yaml` já reflete isso:
+
+```yaml
+rootDir: .
+dockerContext: .
+dockerfilePath: ./apps/api/Dockerfile
+```
+
+O build instala apenas o workspace da API
+(`npm ci --workspace orbien-backend --include-workspace-root`), então Next e
+React **não** entram na imagem. A imagem continua com o mesmo tamanho de antes
+(~176MB de conteúdo).
+
+### 1.2 Migrar o serviço existente
+
+No dashboard do Render, serviço `orbien-api`:
+
+1. **Settings → Build & Deploy → Repository** → `Update` → selecionar
+   `Orbien-platform/orbien`.
+2. **Branch**: `main`
+3. **Root Directory**: deixar **vazio** (a raiz do repositório).
+4. **Dockerfile Path**: `apps/api/Dockerfile`
+5. **Docker Build Context Directory**: `.`
+6. **Health Check Path**: `/api/health` (não muda)
+7. Salvar e disparar **Manual Deploy → Deploy latest commit**.
+
+Os passos 3, 4 e 5 são o núcleo da migração. Se o Root Directory ficar como
+`apps/api`, o build quebra ao procurar o lockfile.
+
+### 1.3 Se preferir criar um serviço novo
+
+1. **New → Web Service** → conectar `Orbien-platform/orbien`
+2. Runtime: **Docker**, Branch `main`, Plan `Free`
+3. Aplicar os mesmos campos de 1.2 (Root Directory vazio, Dockerfile Path,
+   Build Context)
+4. Vincular o Environment Group `orbien-secrets` (seção 1.4)
+5. Depois do deploy verde, apontar o domínio e **suspender o serviço antigo**
+
+### 1.4 Variáveis de ambiente
+
+**Não mudam.** Continuam no Environment Group `orbien-secrets`:
+
+| Variável | Descrição | Onde encontrar |
+|---|---|---|
+| `DATABASE_URL` | Supabase pooler (porta 6543, role `orbien_app`) | Supabase → Settings → Database → Connection string (pooler) |
+| `DIRECT_URL` | Supabase direto (porta 5432, role `postgres`) | Supabase → Settings → Database → Connection string (direct) |
+| `JWT_SECRET` | Segredo do access token | `openssl rand -hex 32` |
+| `JWT_REFRESH_SECRET` | Segredo do refresh token | `openssl rand -hex 32` |
+| `ONESIGNAL_APP_ID` | OneSignal App ID | Dashboard OneSignal |
+| `ONESIGNAL_API_KEY` | OneSignal REST API Key | Dashboard OneSignal → Keys |
+| `ASAAS_API_KEY` | API key Asaas | Dashboard Asaas |
+| `ASAAS_WEBHOOK_SECRET` | Secret do webhook Asaas | Dashboard Asaas → Webhooks |
+| `R2_ACCOUNT_ID` | Cloudflare account ID | Dashboard Cloudflare |
+| `R2_ACCESS_KEY_ID` | R2 access key | Cloudflare → R2 → API Tokens |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key | Cloudflare → R2 → API Tokens |
+| `R2_BUCKET_NAME` | Nome do bucket R2 | Cloudflare → R2 |
+| `R2_PUBLIC_URL` | URL pública do bucket R2 | Cloudflare → R2 → Settings |
+| `RESEND_API_KEY` | API key do Resend | Dashboard Resend |
+
+Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
+`ALLOWED_ORIGINS`, `MAIL_FROM`, `FRONTEND_URL`.
+
+`ALLOWED_ORIGINS` é a lista de origens do CORS, separada por vírgula. Se o
+domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
+browser bloqueia as chamadas.
+
+### 1.5 Verificar
+
+```bash
+curl https://orbien-api.onrender.com/api/health
+# esperado: {"status":"ok","timestamp":"..."}
+```
+
+No free tier o serviço dorme após 15min sem tráfego; o primeiro request depois
+disso leva 30–50s. Para manter acordado, pingar `/api/health` a cada 14min
+(UptimeRobot resolve).
+
+### 1.6 Testar o build Docker localmente
+
+**A partir da raiz do repositório**, nunca de dentro de `apps/api`:
+
+```bash
+docker build -f apps/api/Dockerfile -t orbien-api .
+docker run -p 3000:3000 --env-file apps/api/.env orbien-api
+curl http://localhost:3000/api/health
+```
+
+> Se der `P1012 ... the URL must start with the protocol postgresql://`: o
+> `docker run --env-file` **não remove aspas**, e os valores no `.env` estão
+> entre aspas. É limitação do Docker, não erro de configuração — rode sem aspas
+> ou passe as variáveis com `-e`.
+
+### 1.7 Migrations
+
+Continuam manuais, rodadas da máquina local contra o Supabase. A partir da raiz
+do monorepo:
+
+```bash
+npm run db:migrate -- nome_da_migration
+npm run db:migrate:status
+```
+
+---
+
+## Parte 2 — `web` na Vercel
+
+### 2.1 Configuração do projeto
+
+No projeto Vercel `orbien-web` → **Settings**:
+
+1. **Git → Connected Git Repository** → desconectar `orbien-web` e conectar
+   `Orbien-platform/orbien`, branch de produção `main`.
+2. **Build and Deployment → Root Directory** → `apps/web`
+3. Marcar **"Include files outside of the Root Directory in the Build Step"**.
+
+   Esse checkbox é o passo que as pessoas esquecem. Sem ele a Vercel só enxerga
+   `apps/web/`, não acha o `package.json` nem o `package-lock.json` da raiz, e o
+   build morre no install.
+
+4. **Não sobrescreva** Install Command nem Build Command. A Vercel detecta npm
+   workspaces sozinha: roda `npm install` na raiz e `next build` dentro do Root
+   Directory. Se o projeto tiver overrides antigos (`installCommand: npm install`),
+   remova-os.
+
+5. **Node.js Version**: 22.x
+
+### 2.2 Evitar deploy cruzado
+
+`apps/web/vercel.json` já traz:
+
+```json
+{ "ignoreCommand": "npx --yes turbo-ignore orbien-web" }
+```
+
+Sem isso, **todo** commit no monorepo — inclusive um que só mexe na API —
+dispararia build dos dois fronts. O `turbo-ignore` compara o commit com o
+deploy anterior e cancela o build quando `orbien-web` e suas dependências não
+foram tocados.
+
+O primeiro deploy sempre roda (não existe deploy anterior para comparar). Isso é
+esperado.
+
+### 2.3 Variáveis de ambiente
+
+**Não mudam.** Continuam no dashboard do projeto:
+
+| Variável | Valor | Escopo |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
+| `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
+
+O browser nunca chama a API direto: ele bate em `/api-proxy/*`, e o rewrite do
+`next.config.ts` encaminha para `API_BACKEND_URL`. Por isso `API_BACKEND_URL`
+**não** pode ter o prefixo `NEXT_PUBLIC_` — isso a exporia no bundle do cliente
+e ainda quebraria o esquema sem-CORS.
+
+### 2.4 Verificar
+
+1. Abrir a URL de produção e fazer login.
+2. Confirmar no DevTools → Network que as chamadas vão para `/api-proxy/...`
+   (mesma origem) e retornam 200.
+3. Conferir se o domínio do front está em `ALLOWED_ORIGINS` no Render.
+
+---
+
+## Parte 3 — `site` na Vercel
+
+Mesmo procedimento da Parte 2, com duas diferenças:
+
+1. **Root Directory** → `apps/site`
+2. O `site` **não tem variáveis de ambiente** e não fala com a API. É estático.
+
+`apps/site/vercel.json` já tem o `turbo-ignore` correspondente
+(`npx --yes turbo-ignore orbien-site`).
+
+Verificar: abrir a home, `/precos`, `/funcionalidades` e conferir que
+`/sitemap.xml` e `/robots.txt` respondem.
+
+---
+
+## Depois que os três estiverem verdes
+
+1. Confirmar que os domínios customizados (`app.useorbien.com` e o do site)
+   apontam para os projetos novos.
+2. Arquivar no GitHub: `orbien-api`, `orbien-site`, `orbien-web`
+   (Settings → Archive this repository). O histórico deles está inteiro aqui,
+   sob `apps/*` — `git log --follow apps/web/src/...` atravessa tudo.
+3. Suspender/remover o serviço antigo do Render, se você criou um novo.
+
+---
+
+## Deploys do dia a dia
+
+Com o monorepo, um `git push` na `main` pode disparar até três deploys. O que
+dispara o quê:
+
+| Commit toca | API (Render) | site (Vercel) | web (Vercel) |
+|---|---|---|---|
+| `apps/api/**` | deploya | ignora | ignora |
+| `apps/site/**` | ignora | deploya | ignora |
+| `apps/web/**` | ignora | ignora | deploya |
+| `package-lock.json` / raiz | deploya | deploya | deploya |
+
+No Render, o filtro é o `buildFilter` do `render.yaml`. Na Vercel, é o
+`turbo-ignore`. Mudança na raiz reconstrói tudo — o que é o comportamento
+correto, já que o lockfile é compartilhado.
+
+---
+
+## Problemas comuns
+
+**Render: `COPY failed: package-lock.json: no such file or directory`**
+Build Context está apontando para `apps/api`. Tem que ser `.` (raiz).
+
+**Vercel: `npm error Cannot read properties of null` ou lockfile não encontrado**
+Falta marcar *"Include files outside of the Root Directory"*.
+
+**Vercel: build roda mas o app não acha módulos de outro workspace**
+Provavelmente há um Install Command sobrescrito no dashboard. Remova o override
+e deixe a detecção automática de workspaces agir.
+
+**Vercel: builds ficaram mais lentos**
+Esperado. O `npm install` na raiz instala as dependências dos três workspaces,
+incluindo NestJS e Prisma, e o `postinstall` da API roda `prisma generate`. A
+Vercel cacheia `node_modules` entre builds, então o custo real é só no primeiro.
+
+**Erro de CORS depois de trocar domínio**
+Adicionar a nova origem em `ALLOWED_ORIGINS` no Render e redeployar a API.
+
+**Build da API falha com centenas de erros `TS2339` / `Prisma has no exported member`**
+O Prisma Client não foi gerado. Localmente: `npm run db:generate` na raiz. No
+Docker isso já é feito no build.
+
+---
+
+## Rollback
+
+Enquanto os repositórios antigos existirem, o rollback é reconectar cada
+plataforma ao repositório de origem e refazer o deploy do último commit
+conhecido. Por isso vale arquivá-los só depois de tudo verde e testado em
+produção.

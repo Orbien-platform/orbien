@@ -1,3 +1,6 @@
+> **Obsoleto.** Este documento descreve o setup de quando a API tinha
+> repositório próprio. O procedimento atual está em [`/DEPLOY.md`](../../DEPLOY.md).
+
 # Deploy no Render
 
 ## Primeiro deploy

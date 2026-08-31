@@ -44,81 +44,20 @@ build de forma não óbvia.
 Rode `npm run dev:api` + `npm run dev:web` (combinação usual), ou suba o site
 com `npm run dev:site -- --port 3002`.
 
-## Deploy — API (Render)
+## Deploy
 
-O `Dockerfile` mudou de "contexto = pasta da API" para **"contexto = raiz do
-repositório"**, porque o `package-lock.json` agora vive na raiz.
+O passo a passo de configuração do Render e da Vercel está em
+[`/DEPLOY.md`](../DEPLOY.md). Resumo do que o monorepo mudou:
 
-Configuração no Render (`apps/api/render.yaml`):
+- **API (Render):** o build context do Docker passou a ser a **raiz** do repo,
+  porque o `package-lock.json` mora lá. Ver `dockerContext` / `dockerfilePath` /
+  `buildFilter` em `apps/api/render.yaml`.
+- **site e web (Vercel):** dois projetos separados, cada um com Root Directory
+  em `apps/site` / `apps/web` e *"Include files outside of the Root Directory"*
+  habilitado. Cada um tem `ignoreCommand` com `turbo-ignore` no seu
+  `vercel.json`, para não deployar quando o commit não afetou aquele app.
+- **Variáveis de ambiente:** não mudaram, em nenhuma das três plataformas.
 
-```yaml
-rootDir: .
-dockerContext: .
-dockerfilePath: ./apps/api/Dockerfile
-buildFilter:
-  paths:
-    - apps/api/**
-    - package.json
-    - package-lock.json
-    - turbo.json
-```
-
-- `dockerContext: .` — sem isso o `COPY package-lock.json` falha.
-- `buildFilter` evita que commits que só tocam site/web disparem deploy da API.
-
-O build instala apenas o workspace da API
-(`npm ci --workspace orbien-backend --include-workspace-root`), então as
-dependências de Next/React não entram na imagem.
-
-Testar localmente, **a partir da raiz do repositório**:
-
-```bash
-docker build -f apps/api/Dockerfile -t orbien-api .
-docker run -p 3000:3000 --env-file apps/api/.env orbien-api
-curl http://localhost:3000/api/health
-```
-
-### O que reconfigurar no Render
-
-1. No serviço `orbien-api` → Settings → conectar ao repositório novo.
-2. Root Directory: **vazio** (raiz do repo).
-3. Dockerfile Path: `apps/api/Dockerfile`.
-4. Docker Build Context Directory: `.`
-5. As variáveis de ambiente e o Environment Group `orbien-secrets` não mudam.
-
-## Deploy — site e web (Vercel)
-
-Dois projetos Vercel independentes, ambos apontando para o mesmo repositório.
-
-Para cada projeto, em Settings → General:
-
-| Projeto | Root Directory |
-|---|---|
-| `orbien-site` | `apps/site` |
-| `orbien-web` | `apps/web` |
-
-E marque **"Include files outside of the Root Directory in the Build Step"** —
-é isso que dá acesso ao `package.json` e ao `package-lock.json` da raiz.
-
-A Vercel detecta npm workspaces sozinha: roda `npm install` na raiz e
-`next build` dentro do Root Directory. Não sobrescreva Install/Build Command.
-
-Cada app tem um `vercel.json` com:
-
-```json
-{ "ignoreCommand": "npx --yes turbo-ignore orbien-web" }
-```
-
-Isso cancela o build quando o commit não afetou aquele app — sem isso, todo
-commit no monorepo dispararia deploy dos dois fronts.
-
-### Variáveis de ambiente
-
-Não mudam. Continuam definidas no dashboard de cada projeto Vercel
-(`NEXT_PUBLIC_API_URL`, `API_BACKEND_URL`).
-
-## Repositórios antigos
-
-`orbien-api`, `orbien-site` e `orbien-web` no GitHub devem ser arquivados
-(Settings → Archive this repository) depois que os deploys estiverem apontando
-para o monorepo. O histórico deles está inteiro aqui, sob `apps/*`.
+Os repositórios antigos (`orbien-api`, `orbien-site`, `orbien-web`) devem ser
+arquivados só depois que os três deploys novos estiverem verdes — eles são o
+plano de rollback. O histórico deles está inteiro aqui, sob `apps/*`.
