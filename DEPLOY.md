@@ -67,6 +67,16 @@ No dashboard do Render, serviço `orbien-api` → **Settings**:
 | Start Command | `node apps/api/dist/src/main.js` |
 | Health Check Path | `/api/health` |
 
+> **Limpe cada campo por inteiro antes de digitar.** O Render não substitui o
+> conteúdo ao colar: o texto novo é inserido onde estiver o cursor, emendando
+> no antigo. Colar o Build Command novo por cima de `npm install; npm run build`
+> produz `npm run buildnpm ci --include=dev ...` e o build falha com
+> `Missing script: "buildnpm"`. Vale para o Start Command também, que vinha
+> como `yarn start`.
+>
+> O `$` que aparece à esquerda do campo é o prompt desenhado pelo Render, não
+> faz parte do comando.
+
 Depois, **Manual Deploy → Deploy latest commit**.
 
 Três pontos que quebram o deploy se passarem batido:
@@ -80,9 +90,22 @@ Três pontos que quebram o deploy se passarem batido:
   `apps/api/dist/src/main.js` (o `dist/src/` é o layout que o `nest build`
   produz neste projeto, não um erro de digitação).
 
-Opcionalmente, em **Build Filters → Included Paths**, adicione `apps/api/**`,
-`package.json`, `package-lock.json` e `turbo.json` para a API não redeployar
-quando o commit só toca site ou web.
+Opcionalmente, em **Build Filters → Included Paths**, restrinja o que dispara
+deploy da API:
+
+```
+apps/api/**
+package.json
+package-lock.json
+turbo.json
+```
+
+**Uma entrada por caminho**, clicando em *+ Add Included Path* a cada uma. O
+campo valida contra `^[A-Za-z0-9-_./^*?\[\]]+$`, ou seja, não aceita vírgula
+nem espaço — tentar colar os quatro numa linha só é rejeitado.
+
+Com isso preenchido, apenas commits que tocam esses caminhos reconstroem a API;
+mudanças em `apps/site/**` ou `apps/web/**` passam a ser ignoradas.
 
 ### 1.3 Se preferir migrar para Docker
 
@@ -167,6 +190,19 @@ curl https://orbien-api.onrender.com/api/health
 No free tier o serviço dorme após 15min sem tráfego; o primeiro request depois
 disso leva 30–50s. Para manter acordado, pingar `/api/health` a cada 14min
 (UptimeRobot resolve).
+
+E a cadeia inteira, que é o que realmente importa:
+
+```bash
+curl -X POST https://orbien-web.vercel.app/api-proxy/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"...","password":"...","tenant_slug":"doca-church"}'
+```
+
+Isso exercita Vercel → rewrite `/api-proxy` → Render → Supabase de ponta a
+ponta. Valores medidos após a migração, para referência: `/api/health` em
+0,47s (já aquecido, 24s no cold start) e o login em 3,1s — os mesmos números
+de antes da migração.
 
 ### 1.7 Testar o build Docker localmente
 
@@ -329,6 +365,11 @@ correto, já que o lockfile é compartilhado.
 **Render: `npm ci` não acha o lockfile**
 Root Directory está preenchido. Tem que ficar **vazio** — o `package-lock.json`
 está na raiz do monorepo.
+
+**Render: `npm error Missing script: "buildnpm"`**
+O Build Command foi colado por cima do antigo sem limpar o campo, emendando
+`npm run build` com `npm ci`. Apague o conteúdo inteiro e digite só a linha
+correta.
 
 **Render: build falha com `turbo: not found` / `nest: not found`**
 Falta `--include=dev` no Build Command. O serviço tem `NODE_ENV=production`, o
