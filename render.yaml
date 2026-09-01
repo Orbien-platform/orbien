@@ -1,20 +1,35 @@
+# Referência da configuração do serviço `orbien-api` no Render.
+#
+# ATENÇÃO: o serviço em produção foi criado pelo dashboard e é gerenciado por
+# lá — este arquivo NÃO é aplicado automaticamente. Ele documenta a
+# configuração e permite adoção via Blueprint no futuro (Blueprints exigem
+# render.yaml na raiz do repositório, que é onde este arquivo está).
+#
+# O serviço roda com runtime Node, não Docker. O Dockerfile em
+# apps/api/Dockerfile continua válido para build local e para um eventual
+# host de containers, mas não é o que o Render executa.
+
 services:
   - type: web
     name: orbien-api
-    runtime: docker
+    runtime: node
     plan: free
-    # Monorepo: contexto de build é a raiz do repositório
-    rootDir: .
-    dockerContext: .
-    dockerfilePath: ./apps/api/Dockerfile
     branch: main
     healthCheckPath: /api/health
+
+    # --include=dev é obrigatório: NODE_ENV=production (abaixo) faz o npm
+    # omitir devDependencies, e o build precisa de turbo, nest e typescript.
+    buildCommand: npm ci --include=dev && npm run build:api
+    startCommand: node apps/api/dist/src/main.js
+
+    # Evita redeploy da API quando o commit só toca site/web.
     buildFilter:
       paths:
         - apps/api/**
         - package.json
         - package-lock.json
         - turbo.json
+
     envVars:
       - key: NODE_ENV
         value: production

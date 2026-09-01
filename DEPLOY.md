@@ -2,13 +2,13 @@
 
 Passo a passo para configurar o deploy dos três apps do monorepo.
 
-Os deploys são **independentes**: a API roda como container Docker no Render, e
+Os deploys são **independentes**: a API roda no Render (runtime Node) e
 `site` e `web` rodam em **dois projetos Vercel separados**. Nada disso muda por
 causa do monorepo — o que muda é onde cada plataforma procura os arquivos.
 
 | App | Package | Plataforma | O que muda com o monorepo |
 |---|---|---|---|
-| `apps/api` | `orbien-backend` | Render (Docker) | build context passa a ser a **raiz** do repo |
+| `apps/api` | `orbien-backend` | Render (Node) | Root Directory vazio; build e start rodam da **raiz** |
 | `apps/site` | `orbien-site` | Vercel | Root Directory = `apps/site` |
 | `apps/web` | `orbien-web` | Vercel | Root Directory = `apps/web` |
 
@@ -39,50 +39,64 @@ sem backend) e serve de última confirmação.
 
 ## Parte 1 — API no Render
 
-### 1.1 O que mudou no build
+### 1.1 O serviço roda em Node, não em Docker
 
-Antes, o Docker rodava com a pasta da API como contexto. Agora o
-`package-lock.json` vive na **raiz do monorepo**, então o contexto precisa ser a
-raiz — senão o `COPY package-lock.json ./` do Dockerfile falha com
-`file not found`.
+Apesar de existir um `Dockerfile` funcional em `apps/api/`, o serviço
+`orbien-api` no Render foi criado com runtime **Node** e é configurado pelo
+dashboard. Dá para confirmar num olhar: em Settings, um serviço Node mostra
+**Build Command** e **Start Command**; um serviço Docker mostra **Dockerfile
+Path** e **Docker Build Context Directory**. Os dois pares nunca aparecem
+juntos.
 
-O `apps/api/render.yaml` já reflete isso:
+O runtime **não pode ser alterado** depois da criação. Trocar para Docker
+exigiria criar um serviço novo.
 
-```yaml
-rootDir: .
-dockerContext: .
-dockerfilePath: ./apps/api/Dockerfile
-```
-
-O build instala apenas o workspace da API
-(`npm ci --workspace orbien-backend --include-workspace-root`), então Next e
-React **não** entram na imagem. A imagem continua com o mesmo tamanho de antes
-(~176MB de conteúdo).
+O `render.yaml` na raiz documenta essa configuração, mas **não é aplicado
+automaticamente** — o serviço não é gerenciado por Blueprint.
 
 ### 1.2 Migrar o serviço existente
 
-No dashboard do Render, serviço `orbien-api`:
+No dashboard do Render, serviço `orbien-api` → **Settings**:
 
-1. **Settings → Build & Deploy → Repository** → `Update` → selecionar
-   `Orbien-platform/orbien`.
-2. **Branch**: `main`
-3. **Root Directory**: deixar **vazio** (a raiz do repositório).
-4. **Dockerfile Path**: `apps/api/Dockerfile`
-5. **Docker Build Context Directory**: `.`
-6. **Health Check Path**: `/api/health` (não muda)
-7. Salvar e disparar **Manual Deploy → Deploy latest commit**.
+| Campo | Valor |
+|---|---|
+| Source (Repository) | `Orbien-platform/orbien` |
+| Branch | `main` |
+| Root Directory | **vazio** |
+| Build Command | `npm ci --include=dev && npm run build:api` |
+| Start Command | `node apps/api/dist/src/main.js` |
+| Health Check Path | `/api/health` |
 
-Os passos 3, 4 e 5 são o núcleo da migração. Se o Root Directory ficar como
-`apps/api`, o build quebra ao procurar o lockfile.
+Depois, **Manual Deploy → Deploy latest commit**.
 
-### 1.3 Se preferir criar um serviço novo
+Três pontos que quebram o deploy se passarem batido:
+
+- **Root Directory vazio.** O `package-lock.json` está na raiz do monorepo. Se
+  apontar para `apps/api`, o `npm ci` não acha o lockfile.
+- **`--include=dev` no build.** O serviço define `NODE_ENV=production`, e com
+  isso o npm omite as devDependencies — que é onde estão `turbo`, `nest` e
+  `typescript`. Sem a flag, `npm ci` remove 612 pacotes e o build falha.
+- **Start Command a partir da raiz.** O artefato fica em
+  `apps/api/dist/src/main.js` (o `dist/src/` é o layout que o `nest build`
+  produz neste projeto, não um erro de digitação).
+
+Opcionalmente, em **Build Filters → Included Paths**, adicione `apps/api/**`,
+`package.json`, `package-lock.json` e `turbo.json` para a API não redeployar
+quando o commit só toca site ou web.
+
+### 1.3 Se preferir migrar para Docker
+
+Não é necessário — o runtime Node funciona e está validado. Mas se quiser usar
+o `Dockerfile` (imagem enxuta, 176MB, só com as deps da API):
 
 1. **New → Web Service** → conectar `Orbien-platform/orbien`
-2. Runtime: **Docker**, Branch `main`, Plan `Free`
-3. Aplicar os mesmos campos de 1.2 (Root Directory vazio, Dockerfile Path,
-   Build Context)
+2. Runtime **Docker**, Branch `main`
+3. Root Directory **vazio**, Dockerfile Path `apps/api/Dockerfile`,
+   Docker Build Context Directory `.`
 4. Vincular o Environment Group `orbien-secrets` (seção 1.4)
 5. Depois do deploy verde, apontar o domínio e **suspender o serviço antigo**
+
+Serviço novo significa URL nova até o domínio ser reapontado.
 
 ### 1.4 Variáveis de ambiente
 
@@ -312,8 +326,13 @@ correto, já que o lockfile é compartilhado.
 
 ## Problemas comuns
 
-**Render: `COPY failed: package-lock.json: no such file or directory`**
-Build Context está apontando para `apps/api`. Tem que ser `.` (raiz).
+**Render: `npm ci` não acha o lockfile**
+Root Directory está preenchido. Tem que ficar **vazio** — o `package-lock.json`
+está na raiz do monorepo.
+
+**Render: build falha com `turbo: not found` / `nest: not found`**
+Falta `--include=dev` no Build Command. O serviço tem `NODE_ENV=production`, o
+que faz o npm omitir as devDependencies.
 
 **Vercel: `npm error Cannot read properties of null` ou lockfile não encontrado**
 Falta marcar *"Include files outside of the Root Directory"*.
