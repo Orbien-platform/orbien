@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# orbien-web
 
-## Getting Started
+Aplicação logada da Orbien — Next.js 16 (App Router), Tailwind 4,
+TanStack Query.
 
-First, run the development server:
+Faz parte do [monorepo Orbien](../../README.md). As dependências são
+gerenciadas por npm workspaces a partir da **raiz** do repositório.
+
+## Desenvolvimento
+
+A partir da raiz do monorepo:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install       # instala todos os workspaces (uma vez)
+npm run dev:api   # backend em :3000
+npm run dev:web   # esta app em :3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Não rode `npm install` dentro desta pasta — o `package-lock.json` fica na raiz.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Como a app fala com a API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+O browser **nunca** chama o backend direto. Ele bate em `/api-proxy/*`, e o
+rewrite definido em `next.config.ts` encaminha para `API_BACKEND_URL` no
+servidor. É isso que elimina o CORS.
 
-## Learn More
+| Variável | Valor | Escopo |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
+| `API_BACKEND_URL` | URL real do backend | **apenas servidor** |
 
-To learn more about Next.js, take a look at the following resources:
+`API_BACKEND_URL` não pode ganhar o prefixo `NEXT_PUBLIC_`: isso a exporia no
+bundle do cliente e quebraria o esquema sem-CORS. Localmente ela vive em
+`.env.local`; em produção, no dashboard da Vercel.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Autenticação
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`src/proxy.ts` intercepta as rotas privadas e redireciona para
+`/login?from=<rota>` quando não há cookie `auth_session`. Rotas cobertas:
+`/dashboard`, `/pessoas`, `/grupos`, `/financeiro`, `/conteudo`,
+`/voluntarios`, `/celebracoes`, `/configuracoes`.
 
-## Deploy on Vercel
+## Estrutura
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/app/(public)/   rotas abertas (login)
+src/app/(admin)/    rotas protegidas
+src/components/     componentes por domínio + ui/ compartilhado
+src/contexts/       providers de estado
+src/hooks/          hooks de dados (TanStack Query)
+src/lib/            client HTTP e utilitários
+src/proxy.ts        guarda de autenticação
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Build
+
+```bash
+npm run build:web    # a partir da raiz
+```
+
+## Deploy
+
+Projeto próprio na Vercel, com Root Directory `apps/web`. Procedimento
+completo em [`/DEPLOY.md`](../../DEPLOY.md).
