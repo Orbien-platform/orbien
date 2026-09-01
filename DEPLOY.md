@@ -112,7 +112,38 @@ Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
 domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
 browser bloqueia as chamadas.
 
-### 1.5 Verificar
+### 1.5 Provisionar o banco do zero
+
+Necessário quando não existe banco (projeto Supabase novo, ou ambiente novo).
+O `DATABASE_URL` da aplicação usa o role `orbien_app`, que **não existe** num
+Postgres recém-criado — e as migrations sozinhas não bastam.
+
+```bash
+cd apps/api
+DIRECT_URL='postgresql://postgres:<senha>@<host>:5432/postgres' \
+ORBIEN_APP_PASSWORD='<senha-do-app>' \
+bash scripts/bootstrap-db.sh --seed
+```
+
+O script é idempotente e faz, nesta ordem:
+
+1. cria os roles `app_user`, `app_admin` e `orbien_app` (a migration
+   `fix_rls_enforcement` faz `GRANT app_user TO postgres` e falha se eles não
+   existirem antes);
+2. `prisma migrate deploy`;
+3. aplica `001_rls_setup.sql` e `002_rls_celebration_schedules.sql`, que estão
+   fora do histórico do Prisma e por isso não rodam sozinhos;
+4. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
+   (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
+5. verifica tabelas, login do role e herança, falhando alto se algo faltar;
+6. com `--seed`, popula os dados de exemplo.
+
+Depois disso, `DIRECT_URL` aponta para a conexão direta (5432, role `postgres`)
+e `DATABASE_URL` para o pooler (6543, role `orbien_app`).
+
+> `GRANT ... WITH SET TRUE` exige PostgreSQL 16+. Testado em PG 17.
+
+### 1.6 Verificar
 
 ```bash
 curl https://orbien-api.onrender.com/api/health
@@ -123,7 +154,7 @@ No free tier o serviço dorme após 15min sem tráfego; o primeiro request depoi
 disso leva 30–50s. Para manter acordado, pingar `/api/health` a cada 14min
 (UptimeRobot resolve).
 
-### 1.6 Testar o build Docker localmente
+### 1.7 Testar o build Docker localmente
 
 **A partir da raiz do repositório**, nunca de dentro de `apps/api`:
 
@@ -138,7 +169,7 @@ curl http://localhost:3000/api/health
 > entre aspas. É limitação do Docker, não erro de configuração — rode sem aspas
 > ou passe as variáveis com `-e`.
 
-### 1.7 Migrations
+### 1.8 Migrations
 
 Continuam manuais, rodadas da máquina local contra o Supabase. A partir da raiz
 do monorepo:

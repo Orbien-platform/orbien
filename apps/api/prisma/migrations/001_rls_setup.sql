@@ -104,7 +104,7 @@ ALTER TABLE audience_segments         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_dispatches   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ministries                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE volunteer_profiles        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE assignments               ENABLE ROW LEVEL SECURITY;
+-- assignments: tabela removida em 20260703102213_remove_legacy_schedule_system
 ALTER TABLE celebrations              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE celebration_instances     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_orders            ENABLE ROW LEVEL SECURITY;
@@ -122,21 +122,25 @@ ALTER TABLE audit_logs                ENABLE ROW LEVEL SECURITY;
 -- ---- GRUPO 1 — FUNDAÇÃO ----
 
 -- O tenant só vê a si mesmo
+DROP POLICY IF EXISTS tenant_isolation ON tenants;
 CREATE POLICY tenant_isolation ON tenants
   AS PERMISSIVE FOR ALL TO app_user
   USING (id = app_current_tenant())
   WITH CHECK (id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON congregations;
 CREATE POLICY tenant_isolation ON congregations
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON branding_configs;
 CREATE POLICY tenant_isolation ON branding_configs
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON tenant_plans;
 CREATE POLICY tenant_isolation ON tenant_plans
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
@@ -144,17 +148,20 @@ CREATE POLICY tenant_isolation ON tenant_plans
 
 -- ---- GRUPO 2 — AUTH ----
 
+DROP POLICY IF EXISTS tenant_isolation ON user_accounts;
 CREATE POLICY tenant_isolation ON user_accounts
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON role_assignments;
 CREATE POLICY tenant_isolation ON role_assignments
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
 -- Cada usuário acessa apenas seus próprios refresh tokens
+DROP POLICY IF EXISTS own_tokens ON refresh_tokens;
 CREATE POLICY own_tokens ON refresh_tokens
   AS PERMISSIVE FOR ALL TO app_user
   USING (user_account_id = app_current_user())
@@ -162,17 +169,20 @@ CREATE POLICY own_tokens ON refresh_tokens
 
 -- ---- GRUPO 3 — PESSOAS ----
 
+DROP POLICY IF EXISTS tenant_isolation ON persons;
 CREATE POLICY tenant_isolation ON persons
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON households;
 CREATE POLICY tenant_isolation ON households
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
 -- household_members: isolamento via household pai
+DROP POLICY IF EXISTS tenant_isolation ON household_members;
 CREATE POLICY tenant_isolation ON household_members
   AS PERMISSIVE FOR ALL TO app_user
   USING (
@@ -186,21 +196,25 @@ CREATE POLICY tenant_isolation ON household_members
     )
   );
 
+DROP POLICY IF EXISTS tenant_isolation ON classification_histories;
 CREATE POLICY tenant_isolation ON classification_histories
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON visit_records;
 CREATE POLICY tenant_isolation ON visit_records
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON consent_records;
 CREATE POLICY tenant_isolation ON consent_records
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON person_tags;
 CREATE POLICY tenant_isolation ON person_tags
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
@@ -208,37 +222,44 @@ CREATE POLICY tenant_isolation ON person_tags
 
 -- ---- GRUPO 4 — PEQUENOS GRUPOS ----
 
+DROP POLICY IF EXISTS tenant_isolation ON small_groups;
 CREATE POLICY tenant_isolation ON small_groups
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON group_memberships;
 CREATE POLICY tenant_isolation ON group_memberships
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON group_meetings;
 CREATE POLICY tenant_isolation ON group_meetings
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON attendance_records;
 CREATE POLICY tenant_isolation ON attendance_records
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON prayer_requests;
 CREATE POLICY tenant_isolation ON prayer_requests
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON study_materials;
 CREATE POLICY tenant_isolation ON study_materials
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
 -- material_targets: isolamento via study_material pai
+DROP POLICY IF EXISTS tenant_isolation ON material_targets;
 CREATE POLICY tenant_isolation ON material_targets
   AS PERMISSIVE FOR ALL TO app_user
   USING (
@@ -252,6 +273,7 @@ CREATE POLICY tenant_isolation ON material_targets
     )
   );
 
+DROP POLICY IF EXISTS tenant_isolation ON material_open_records;
 CREATE POLICY tenant_isolation ON material_open_records
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
@@ -259,36 +281,43 @@ CREATE POLICY tenant_isolation ON material_open_records
 
 -- ---- GRUPO 5 — FINANCEIRO ----
 
+DROP POLICY IF EXISTS tenant_isolation ON financial_categories;
 CREATE POLICY tenant_isolation ON financial_categories
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON cost_centers;
 CREATE POLICY tenant_isolation ON cost_centers
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON financial_transactions;
 CREATE POLICY tenant_isolation ON financial_transactions
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON transaction_attachments;
 CREATE POLICY tenant_isolation ON transaction_attachments
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON recurring_rules;
 CREATE POLICY tenant_isolation ON recurring_rules
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON pix_payments;
 CREATE POLICY tenant_isolation ON pix_payments
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON donation_receipts;
 CREATE POLICY tenant_isolation ON donation_receipts
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
@@ -296,16 +325,19 @@ CREATE POLICY tenant_isolation ON donation_receipts
 
 -- ---- GRUPO 6 — CONTEÚDO ----
 
+DROP POLICY IF EXISTS tenant_isolation ON content_posts;
 CREATE POLICY tenant_isolation ON content_posts
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON audience_segments;
 CREATE POLICY tenant_isolation ON audience_segments
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON notification_dispatches;
 CREATE POLICY tenant_isolation ON notification_dispatches
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
@@ -313,37 +345,40 @@ CREATE POLICY tenant_isolation ON notification_dispatches
 
 -- ---- GRUPO 7 — VOLUNTARIADO E CELEBRAÇÕES ----
 
+DROP POLICY IF EXISTS tenant_isolation ON ministries;
 CREATE POLICY tenant_isolation ON ministries
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON volunteer_profiles;
 CREATE POLICY tenant_isolation ON volunteer_profiles
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
-CREATE POLICY tenant_isolation ON assignments
-  AS PERMISSIVE FOR ALL TO app_user
-  USING (tenant_id = app_current_tenant())
-  WITH CHECK (tenant_id = app_current_tenant());
+-- assignments: tabela removida em 20260703102213_remove_legacy_schedule_system
 
+DROP POLICY IF EXISTS tenant_isolation ON celebrations;
 CREATE POLICY tenant_isolation ON celebrations
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON celebration_instances;
 CREATE POLICY tenant_isolation ON celebration_instances
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+DROP POLICY IF EXISTS tenant_isolation ON service_orders;
 CREATE POLICY tenant_isolation ON service_orders
   AS PERMISSIVE FOR ALL TO app_user
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
 -- service_order_items: isolamento via service_order pai
+DROP POLICY IF EXISTS tenant_isolation ON service_order_items;
 CREATE POLICY tenant_isolation ON service_order_items
   AS PERMISSIVE FOR ALL TO app_user
   USING (
@@ -358,6 +393,7 @@ CREATE POLICY tenant_isolation ON service_order_items
   );
 
 -- setlists: isolamento via service_order_item → service_order
+DROP POLICY IF EXISTS tenant_isolation ON setlists;
 CREATE POLICY tenant_isolation ON setlists
   AS PERMISSIVE FOR ALL TO app_user
   USING (
@@ -378,6 +414,7 @@ CREATE POLICY tenant_isolation ON setlists
   );
 
 -- setlist_songs: isolamento via setlist → service_order_item → service_order
+DROP POLICY IF EXISTS tenant_isolation ON setlist_songs;
 CREATE POLICY tenant_isolation ON setlist_songs
   AS PERMISSIVE FOR ALL TO app_user
   USING (
@@ -402,6 +439,7 @@ CREATE POLICY tenant_isolation ON setlist_songs
 -- ---- GRUPO 8 — AUDITORIA ----
 
 -- AuditLog: somente leitura pelo app_user; escrita exclusiva via SECURITY DEFINER
+DROP POLICY IF EXISTS tenant_read ON audit_logs;
 CREATE POLICY tenant_read ON audit_logs
   AS PERMISSIVE FOR SELECT TO app_user
   USING (tenant_id = app_current_tenant());
