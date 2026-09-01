@@ -54,12 +54,13 @@ interface Celebration {
   is_active: boolean;
 }
 
-interface VolunteerSchedule {
+interface CelebrationInstance {
   id: string;
-  title: string;
   scheduled_date: string;
-  deadline_confirm_at: string | null;
-  status: string;
+  celebration: { id: string; name: string } | null;
+  // Opcional de propósito: versões da API anteriores ao refactor de escalas
+  // não devolvem este campo. Ver `hasScheduleInfo` abaixo.
+  schedule?: { id: string; status: "draft" | "published" } | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ export default function DashboardPage() {
   const [persons, setPersons] = useState<{ data: Person[]; total: number } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
-  const [schedules, setSchedules] = useState<VolunteerSchedule[]>([]);
+  const [instances, setInstances] = useState<CelebrationInstance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -137,19 +138,35 @@ export default function DashboardPage() {
     hasFetched.current = true;
     setIsLoading(true);
 
-    Promise.all([
+    // Janela usada pelos widgets de escala: hoje até 14 dias à frente.
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+    // allSettled, não all: uma chamada que falha não deve apagar o dashboard
+    // inteiro. Cada bloco renderiza o que conseguiu carregar.
+    Promise.allSettled([
       api.get<{ data: Person[]; total: number }>("/persons?limit=100"),
       api.get<{ data: Transaction[]; total: number }>("/financial/transactions?limit=100"),
       api.get<Celebration[]>("/celebrations"),
-      api.get<{ data: VolunteerSchedule[] }>("/volunteers/schedules"),
+      api.get<CelebrationInstance[]>(
+        `/celebrations/instances?date_from=${iso(from)}&date_to=${iso(to)}`
+      ),
     ])
-      .then(([personsRes, txRes, celRes, schedRes]) => {
-        setPersons(personsRes.data);
-        setTransactions(txRes.data.data ?? []);
-        setCelebrations(Array.isArray(celRes.data) ? celRes.data : []);
-        setSchedules(schedRes.data.data ?? []);
+      .then(([personsRes, txRes, celRes, instRes]) => {
+        if (personsRes.status === "fulfilled") setPersons(personsRes.value.data);
+        if (txRes.status === "fulfilled") setTransactions(txRes.value.data.data ?? []);
+        if (celRes.status === "fulfilled")
+          setCelebrations(Array.isArray(celRes.value.data) ? celRes.value.data : []);
+        if (instRes.status === "fulfilled")
+          setInstances(Array.isArray(instRes.value.data) ? instRes.value.data : []);
+
+        const todasFalharam = [personsRes, txRes, celRes, instRes].every(
+          (r) => r.status === "rejected"
+        );
+        if (todasFalharam) setError("Não foi possível carregar os dados.");
       })
-      .catch(() => setError("Não foi possível carregar os dados."))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -250,17 +267,31 @@ export default function DashboardPage() {
 
   // ── Alerts ──────────────────────────────────────────────────────────────────
 
-  const overdueSchedules = schedules.filter(
-    (s) =>
-      s.deadline_confirm_at &&
-      new Date(s.deadline_confirm_at) < now &&
-      s.status === "published"
+  // A API já limita as instâncias à janela de 14 dias; o filtro abaixo é
+  // defensivo e mantém o cálculo correto se a resposta vier mais ampla.
+  const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const upcomingInstances = instances.filter((i) => {
+    const d = new Date(i.scheduled_date);
+    return d >= weekStart && d <= horizon;
+  });
+
+  // A API passou a devolver `schedule` junto das instâncias só no refactor de
+  // escalas. Se uma versão anterior estiver no ar, o campo vem ausente — e aí
+  // não há como distinguir "sem escala" de "API antiga". Nesse caso os widgets
+  // ficam neutros, em vez de acusar falsamente que nada tem escala.
+  const hasScheduleInfo =
+    upcomingInstances.length > 0 && upcomingInstances.every((i) => "schedule" in i);
+
+  const publishedSchedules = upcomingInstances.filter(
+    (i) => i.schedule?.status === "published"
   );
 
-  const upcomingSchedules = schedules.filter((s) => {
-    const d = new Date(s.scheduled_date);
-    return d >= weekStart && d <= new Date(weekStart.getTime() + 14 * 24 * 60 * 60 * 1000);
-  });
+  // Substitui o antigo alerta de prazo de confirmação vencido: o modelo novo
+  // de escala não tem deadline. O sinal útil equivalente é celebração
+  // chegando sem escala publicada.
+  const unscheduled = hasScheduleInfo
+    ? upcomingInstances.filter((i) => !i.schedule || i.schedule.status === "draft")
+    : [];
 
   if (error) {
     return (
@@ -499,8 +530,8 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="rounded-[100px] bg-navy-dim px-2.5 py-1 text-xs font-medium text-navy">
-                  {upcomingSchedules.length > 0
-                    ? `${upcomingSchedules.length} escala${upcomingSchedules.length > 1 ? "s" : ""} publicada${upcomingSchedules.length > 1 ? "s" : ""}`
+                  {publishedSchedules.length > 0
+                    ? `${publishedSchedules.length} escala${publishedSchedules.length > 1 ? "s" : ""} publicada${publishedSchedules.length > 1 ? "s" : ""}`
                     : "Sem escalas publicadas"}
                 </span>
               </div>
@@ -521,12 +552,14 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="mt-4 space-y-2">
-              {overdueSchedules.length > 0 ? (
+              {unscheduled.length > 0 ? (
                 <div className="flex items-start gap-2.5 rounded-[8px] bg-crimson-dim p-3">
                   <AlertCircle size={15} strokeWidth={1.5} className="mt-0.5 flex-shrink-0 text-crimson" />
                   <p className="text-sm text-crimson">
-                    <span className="font-medium">{overdueSchedules.length} escala</span>
-                    {overdueSchedules.length > 1 ? "s" : ""} com prazo de confirmação vencido
+                    <span className="font-medium">
+                      {unscheduled.length} celebração{unscheduled.length > 1 ? "ões" : ""}
+                    </span>{" "}
+                    nos próximos 14 dias sem escala publicada
                   </p>
                 </div>
               ) : null}
@@ -538,7 +571,7 @@ export default function DashboardPage() {
                 </div>
               ) : null}
 
-              {overdueSchedules.length === 0 &&
+              {unscheduled.length === 0 &&
                 !(totalMembers > 0 && newThisMonth.length === 0) && (
                   <div className="flex items-center gap-2 text-sm text-teal">
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-dim text-teal">

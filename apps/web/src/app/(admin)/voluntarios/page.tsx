@@ -25,14 +25,11 @@ interface MinistryCounts {
 interface MyAssignment {
   id: string;
   status: AssignmentStatus;
-  slot?: {
-    role_name: string;
-    schedule?: {
-      title: string;
-      scheduled_date: string;
-      ministry?: { name: string } | null;
-    } | null;
-  };
+  notified_at: string | null;
+  responded_at: string | null;
+  celebration: { id: string; name: string };
+  ministry: { id: string; name: string };
+  scheduled_date: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -89,6 +86,7 @@ export default function VoluntariosPage() {
   // ── Meus Turnos state ──
   const [myAssignments, setMyAssignments] = useState<MyAssignment[]>([]);
   const [myLoading, setMyLoading] = useState(false);
+  const [myError, setMyError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const hasFetchedMy = useRef(false);
@@ -137,14 +135,15 @@ export default function VoluntariosPage() {
     if (hasFetchedMy.current) return;
     hasFetchedMy.current = true;
     setMyLoading(true);
+    setMyError(null);
     try {
-      const { data } = await api.get<{ data: MyAssignment[] } | MyAssignment[]>(
-        "/volunteers/my-assignments"
-      );
-      setMyAssignments(Array.isArray(data) ? data : data?.data ?? []);
+      const { data } = await api.get<MyAssignment[]>("/volunteers/my-celebration-assignments");
+      setMyAssignments(Array.isArray(data) ? data : []);
     } catch {
-      // Endpoint may not exist — show empty state
+      // Não engolir: mostrar "nenhum turno" quando a chamada falhou faria o
+      // voluntário perder uma escala sem saber.
       setMyAssignments([]);
+      setMyError("Não foi possível carregar seus turnos.");
     } finally {
       setMyLoading(false);
     }
@@ -166,7 +165,7 @@ export default function VoluntariosPage() {
   async function confirmAssignment(id: string) {
     setConfirmingId(id);
     try {
-      await api.post(`/volunteers/assignments/${id}/confirm`);
+      await api.patch(`/assignments/${id}/respond`, { status: "confirmed" });
       setMyAssignments((prev) =>
         prev.map((a) => (a.id === id ? { ...a, status: "confirmed" as AssignmentStatus } : a))
       );
@@ -180,7 +179,7 @@ export default function VoluntariosPage() {
   async function declineAssignment(id: string) {
     setDecliningId(id);
     try {
-      await api.post(`/volunteers/assignments/${id}/decline`);
+      await api.patch(`/assignments/${id}/respond`, { status: "declined" });
       setMyAssignments((prev) =>
         prev.map((a) => (a.id === id ? { ...a, status: "declined" as AssignmentStatus } : a))
       );
@@ -262,6 +261,8 @@ export default function VoluntariosPage() {
                 </div>
               ))}
             </div>
+          ) : myError ? (
+            <p className="py-10 text-center text-sm text-crimson">{myError}</p>
           ) : myAssignments.length === 0 ? (
             <p className="py-10 text-center text-sm text-stone">
               Você não tem turnos agendados.
@@ -281,14 +282,13 @@ export default function VoluntariosPage() {
                     {/* Info */}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-sm font-medium text-ink dark:text-white">
-                        {a.slot?.schedule?.title ?? "—"}
+                        {a.celebration?.name ?? "—"}
                       </span>
                       <span className="text-xs text-stone">
-                        {a.slot?.schedule?.ministry?.name ?? "—"}
-                        {a.slot?.role_name ? ` · ${a.slot.role_name}` : ""}
+                        {a.ministry?.name ?? "—"}
                       </span>
                       <span className="text-xs text-stone">
-                        {a.slot?.schedule?.scheduled_date ? fmtDate(a.slot.schedule.scheduled_date) : "—"}
+                        {a.scheduled_date ? fmtDate(a.scheduled_date) : "—"}
                       </span>
                     </div>
 
