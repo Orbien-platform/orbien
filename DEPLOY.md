@@ -268,6 +268,30 @@ Verificar: abrir a home, `/precos`, `/funcionalidades` e conferir que
 
 ---
 
+## Visibilidade do repositório
+
+O repositório é **público por enquanto**, e assim permanece até o lançamento
+oficial. Isso não impede nenhum passo deste documento — Render e Vercel
+conectam normalmente.
+
+Quando for fechado para privado, atenção à ordem:
+
+- Render e Vercel **perdem acesso** ao repositório no momento em que ele vira
+  privado. Cada plataforma volta a enxergá-lo só depois que você autorizar o
+  GitHub App dela para este repo, em
+  GitHub → Settings → Applications → *(Render / Vercel)* → Repository access.
+- Se você fechar **antes** de reconectar os serviços, o repo simplesmente não
+  aparece no seletor dos dashboards — parece bug, mas é falta de permissão.
+
+O caminho de menor atrito é **reconectar as três plataformas enquanto o repo
+ainda está público**, e fechar depois.
+
+Um ponto que fechar o repositório *não* resolve: o que já esteve exposto
+continua exposto (forks, clones, caches de busca). Vale uma revisão antes do
+lançamento — por exemplo, `apps/api/prisma/seed.ts` tem senha em texto puro e
+e-mails reais, e está público desde os repositórios antigos. Trate essa senha
+como já vazada e não a reaproveite fora do ambiente de desenvolvimento.
+
 ## Deploys do dia a dia
 
 Com o monorepo, um `git push` na `main` pode disparar até três deploys. O que
