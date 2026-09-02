@@ -344,13 +344,9 @@ Surface once, conversationally: "Validação passou — quer que eu redija o PR 
 
 ---
 
-## Pause / End of Session
+## Pausa / fim de sessão
 
-When work is interrupted, paused, or a session ends before the feature is complete:
-
-1. Open `.specs/STATE.md`.
-2. Locate the `## Handoff` section.
-3. **Replace only that section's body** with the current snapshot (feature, phase/task, completed, in-progress `file:line`, next step, blockers, uncommitted files, branch). See [memory.md](memory.md) for the exact format.
-4. Do NOT touch the `## Decisions` section above it — decisions are written only during Design.
-
-**Section-scoped write (critical):** Replace the content between the `## Handoff` header and the next `##` header (or end of file). Never overwrite the full file — doing so silently destroys the Decisions log.
+O harness preserva o contexto entre sessões (compactação automática e
+`--resume`), então não há snapshot a manter à mão. Ao pausar, deixe apenas o
+que sobrevive fora do contexto: commit do que está verde, e uma decisão nova
+registrada em `## Decisions` se alguma foi tomada.

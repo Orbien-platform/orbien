@@ -199,10 +199,11 @@ verificação mínima, porque skill quebrada falha silenciosamente:
 
 - todo `SKILL.md` tem frontmatter com `name` e `description`
 - o `name` do frontmatter casa com o nome da pasta
-- nenhum `SKILL.md` referencia caminho que não existe no repositório
+- nenhum `SKILL.md` referencia caminho ancorado na raiz que não existe
 
-É um script de ~20 linhas e roda em segundos. Vale porque o modo de falha de
-uma skill é não ser acionada — ninguém percebe.
+Já implementado: `node scripts/check-skills.mjs`. Basta acrescentar como step da
+fase 1. Vale porque o modo de falha de uma skill é não ser acionada — não gera
+erro em lugar nenhum, ninguém percebe.
 
 ## O bloqueio: o lint falha hoje
 

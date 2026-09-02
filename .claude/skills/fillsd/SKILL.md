@@ -74,7 +74,7 @@ Planeje e implemente com precisão. Tarefas granulares. Dependências claras. Fe
 
 ```
 .specs/
-├── STATE.md            # Memória do projeto: Decisions (AD-NNN) + Handoff
+├── STATE.md            # Log de decisões do projeto (AD-NNN, append-only)
 ├── LESSONS.md          # Playbook de lições (renderizado pelo script de lições — não editar à mão)
 ├── lessons.json        # Estado canônico das lições (machine-owned)
 └── features/           # Specs por feature
@@ -95,13 +95,13 @@ Planeje e implemente com precisão. Tarefas granulares. Dependências claras. Fe
 
 **Retomar trabalho:**
 
-Leia `.specs/STATE.md` — Handoff para estado em voo, Decisions para reconfirmar constraints ativas — depois proponha o próximo passo.
+Leia `.specs/STATE.md` para reconfirmar as constraints ativas, depois proponha o próximo passo.
 
 ## Context Loading Strategy
 
 **Carga sob demanda (só o que a tarefa atual precisa):**
 
-- `.specs/STATE.md` — Decisions (ler no Design; reler no resume); Handoff (só no resume)
+- `.specs/STATE.md` — Decisions: ler no Design, reler ao retomar
 - lições confirmadas — carregar em Specify e Design via `python3 .claude/skills/fillsd/scripts/lessons.py list --status confirmed` ([lessons.md](references/lessons.md)); só `confirmed`, nunca candidates
 - spec.md / context.md / design.md / tasks.md conforme a fase
 
