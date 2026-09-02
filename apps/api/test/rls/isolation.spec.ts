@@ -57,6 +57,17 @@ let serviceOrderItemAId: string;
 let setlistAId: string;
 let setlistSongAId: string;
 
+// Sprint 11.2 — escalas por celebração (Tenant A)
+let ministryAId: string;
+let volunteerProfileAId: string;
+let celebrationScheduleAId: string;
+let celebrationMinistryAId: string;
+let celebrationAssignmentAId: string;
+let unavailabilityAId: string;
+let unavailabilityDateAId: string;
+let scheduleTemplateAId: string;
+let scheduleTemplateMinistryAId: string;
+
 // ─── Setup / Teardown ─────────────────────────────────────────────────────────
 
 beforeAll(async () => {
@@ -260,6 +271,102 @@ beforeAll(async () => {
   });
   userAccountBId = userB.id;
 
+  // ── Sprint 11.2: escala de celebração + indisponibilidade (Tenant A) ──
+  const ministryA = await prismaAdmin.ministry.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      name: 'Louvor A (RLS)',
+    },
+  });
+  ministryAId = ministryA.id;
+
+  const profileA = await prismaAdmin.volunteerProfile.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      person_id: personAId,
+      availability: {},
+      skills: {},
+    },
+  });
+  volunteerProfileAId = profileA.id;
+
+  const schedA = await prismaAdmin.celebrationSchedule.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      celebration_instance_id: celebrationInstanceAId,
+      status: 'published',
+    },
+  });
+  celebrationScheduleAId = schedA.id;
+
+  const celMinA = await prismaAdmin.celebrationMinistry.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      schedule_id: celebrationScheduleAId,
+      ministry_id: ministryAId,
+      slots: 2,
+    },
+  });
+  celebrationMinistryAId = celMinA.id;
+
+  const asgA = await prismaAdmin.celebrationAssignment.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      celebration_ministry_id: celebrationMinistryAId,
+      volunteer_profile_id: volunteerProfileAId,
+    },
+  });
+  celebrationAssignmentAId = asgA.id;
+
+  const unavA = await prismaAdmin.volunteerUnavailability.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      volunteer_profile_id: volunteerProfileAId,
+      reference_month: 1,
+      reference_year: 2030,
+      notes: 'viagem',
+      dates: {
+        create: [
+          {
+            tenant_id: tenantAId,
+            congregation_id: congregationAId,
+            date: new Date('2030-01-05'),
+          },
+        ],
+      },
+    },
+    include: { dates: true },
+  });
+  unavailabilityAId = unavA.id;
+  unavailabilityDateAId = unavA.dates[0].id;
+
+  const tplA = await prismaAdmin.scheduleTemplate.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      name: 'Culto domingo A (RLS)',
+      ministries: {
+        create: [
+          {
+            tenant_id: tenantAId,
+            congregation_id: congregationAId,
+            ministry_id: ministryAId,
+            slots: 3,
+          },
+        ],
+      },
+    },
+    include: { ministries: true },
+  });
+  scheduleTemplateAId = tplA.id;
+  scheduleTemplateMinistryAId = tplA.ministries[0].id;
+
   const personB = await prismaAdmin.person.create({
     data: {
       tenant_id: tenantBId,
@@ -283,6 +390,16 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  // CelebrationMinistry -> Ministry usa onDelete: Restrict. A cascata a partir
+  // de Tenant pode esbarrar nessa FK dependendo da ordem em que o Postgres
+  // avalia as constraints, então removemos essas linhas explicitamente antes.
+  const tenants = { tenant_id: { in: [tenantAId, tenantBId] } };
+  await prismaAdmin.celebrationAssignment.deleteMany({ where: tenants });
+  await prismaAdmin.celebrationMinistry.deleteMany({ where: tenants });
+  await prismaAdmin.celebrationSchedule.deleteMany({ where: tenants });
+  await prismaAdmin.scheduleTemplateMinistry.deleteMany({ where: tenants });
+  await prismaAdmin.scheduleTemplate.deleteMany({ where: tenants });
+
   await prismaAdmin.tenant.deleteMany({
     where: { id: { in: [tenantAId, tenantBId] } },
   });
@@ -720,5 +837,272 @@ describe('13. Cross-tenant read — SetlistSong', () => {
       );
     }
     expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. CelebrationSchedule isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('14. Cross-tenant read — CelebrationSchedule', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.celebrationSchedule.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} celebration_schedule record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.celebrationSchedule.findUnique({ where: { id: celebrationScheduleAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): celebration_schedule id=${celebrationScheduleAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. CelebrationMinistry isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('15. Cross-tenant read — CelebrationMinistry', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.celebrationMinistry.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} celebration_ministry record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.celebrationMinistry.findUnique({ where: { id: celebrationMinistryAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): celebration_ministry id=${celebrationMinistryAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. CelebrationAssignment isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('16. Cross-tenant read — CelebrationAssignment', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.celebrationAssignment.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} celebration_assignment record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.celebrationAssignment.findUnique({ where: { id: celebrationAssignmentAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): celebration_assignment id=${celebrationAssignmentAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 17. VolunteerUnavailability isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('17. Cross-tenant read — VolunteerUnavailability', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.volunteerUnavailability.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} volunteer_unavailability record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.volunteerUnavailability.findUnique({ where: { id: unavailabilityAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): volunteer_unavailability id=${unavailabilityAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 18. VolunteerUnavailabilityDate isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('18. Cross-tenant read — VolunteerUnavailabilityDate', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.volunteerUnavailabilityDate.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} volunteer_unavailability_date record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.volunteerUnavailabilityDate.findUnique({ where: { id: unavailabilityDateAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): volunteer_unavailability_date id=${unavailabilityDateAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19. ScheduleTemplate isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('19. Cross-tenant read — ScheduleTemplate', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.scheduleTemplate.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} schedule_template record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.scheduleTemplate.findUnique({ where: { id: scheduleTemplateAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): schedule_template id=${scheduleTemplateAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. ScheduleTemplateMinistry isolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('20. Cross-tenant read — ScheduleTemplateMinistry', () => {
+  it('app context (runAsTenant): Tenant B cannot see Tenant A rows', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.scheduleTemplateMinistry.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} schedule_template_ministry record(s) from Tenant A visible to Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B cannot fetch a Tenant A row by ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.scheduleTemplateMinistry.findUnique({ where: { id: scheduleTemplateMinistryAId } }),
+    );
+    if (row !== null) {
+      console.error(
+        `SECURITY GAP (app_user role): schedule_template_ministry id=${scheduleTemplateMinistryAId} from Tenant A ` +
+          'is visible to Tenant B.',
+      );
+    }
+    expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. Controle positivo — as fixtures do refactor de escalas existem mesmo
+//
+// Os testes 14-20 afirmam ausência ("Tenant B não vê"). Eles passariam
+// trivialmente se as fixtures não tivessem sido criadas. Este bloco garante
+// que há o que vazar: do contexto do próprio Tenant A, todas as linhas são
+// visíveis.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('21. Positive control — Tenant A sees its own schedule rows', () => {
+  it('app_user role: cada fixture do refactor é visível para o próprio tenant', async () => {
+    const found = await runAsTenantWithRole(tenantAId, congregationAId, async (tx) => ({
+      schedule: await tx.celebrationSchedule.findUnique({ where: { id: celebrationScheduleAId } }),
+      ministry: await tx.celebrationMinistry.findUnique({ where: { id: celebrationMinistryAId } }),
+      assignment: await tx.celebrationAssignment.findUnique({
+        where: { id: celebrationAssignmentAId },
+      }),
+      unavailability: await tx.volunteerUnavailability.findUnique({
+        where: { id: unavailabilityAId },
+      }),
+      unavailabilityDate: await tx.volunteerUnavailabilityDate.findUnique({
+        where: { id: unavailabilityDateAId },
+      }),
+      template: await tx.scheduleTemplate.findUnique({ where: { id: scheduleTemplateAId } }),
+      templateMinistry: await tx.scheduleTemplateMinistry.findUnique({
+        where: { id: scheduleTemplateMinistryAId },
+      }),
+    }));
+
+    const missing = Object.entries(found)
+      .filter(([, v]) => v === null)
+      .map(([k]) => k);
+
+    if (missing.length > 0) {
+      console.error(
+        `TESTE INVÁLIDO: fixtures ausentes (${missing.join(', ')}). Os testes 14-20 ` +
+          'estariam passando por vacuidade, não por isolamento.',
+      );
+    }
+    expect(missing).toEqual([]);
   });
 });
