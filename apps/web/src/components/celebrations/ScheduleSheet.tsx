@@ -375,7 +375,8 @@ export function ScheduleSheet({
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[520px] overflow-y-auto p-0">
-        <SheetHeader className="border-b border-[var(--border-default)] p-5">
+        {/* pr-12: abre espaço para o botão de fechar do Sheet (absolute top-3 right-3) */}
+        <SheetHeader className="border-b border-[var(--border-default)] p-5 pr-12">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <SheetTitle className="truncate text-base">{celebrationName}</SheetTitle>

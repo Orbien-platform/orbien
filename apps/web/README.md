@@ -52,6 +52,31 @@ src/lib/            client HTTP e utilitários
 src/proxy.ts        guarda de autenticação
 ```
 
+## Testes de tela (e2e)
+
+Scripts em [`e2e/`](e2e) sobem o Chromium contra o app rodando e percorrem os
+fluxos, gerando capturas em `e2e/screenshots/`.
+
+```bash
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=doca-church npm run e2e
+```
+
+A sessão é criada por HTTP contra a API e semeada direto no `localStorage` e no
+cookie `auth_session` (ver `e2e/session.mjs`) — o formulário de login não é
+exercitado, o que mantém o teste focado na tela em análise.
+
+Funciona contra qualquer ambiente:
+
+```bash
+E2E_BASE_URL=https://orbien-web.vercel.app \
+E2E_API_URL=https://orbien-web.vercel.app/api-proxy \
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e
+```
+
+Os dados de apoio são criados e removidos pela própria execução
+(`e2e/fixtures.mjs`): a aba "Próximas" só lista instâncias futuras, e o seed
+pode não ter nenhuma.
+
 ## Build
 
 ```bash

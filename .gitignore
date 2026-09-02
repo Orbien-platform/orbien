@@ -35,3 +35,6 @@ coverage/
 
 # Claude
 .claude/
+
+# Capturas geradas pelos scripts de e2e
+apps/*/e2e/screenshots/
