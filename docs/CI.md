@@ -325,39 +325,55 @@ de CI.
   evidência são as fases 1 a 3. Deixe a fase 4 como comentário, nunca como
   check obrigatório.
 
-## Fluxo de PR e proteção de branch
+## Trunk-based: o CI é alarme, não portão
 
-Hoje tudo vai direto na `main` — 20+ commits, uma branch, zero PRs. Sem PR não
-há onde o CI barrar nada, então adotar o fluxo é o que transforma este
-workflow em rede de proteção em vez de relatório.
+**Decidido: trunk-based.** Commit direto na `main`, sem PR, até se provar que o
+modelo não serve.
 
-**O fluxo:**
+Isso muda o papel do CI, e vale dizer com clareza: o job dispara em `push` para
+a `main`, ou seja **depois** de o commit já estar lá. Ele detecta, não impede.
+Quando ficar vermelho, o problema já está na `main` — e possivelmente já
+deployado, porque Render e Vercel disparam do mesmo push.
+
+Não é inútil: pega o que você não rodou localmente, e pega rápido. Mas é alarme
+de incêndio, não porta trancada.
+
+**Consequência prática: o portão passa a ser local.** Antes de `git push`:
 
 ```bash
-git switch -c feat/nome-curto
-# … trabalho, commits …
-git push -u origin HEAD
-gh pr create --base main        # usa .github/PULL_REQUEST_TEMPLATE.md
+npx turbo run build          # os 3 apps
+npx turbo run lint
+npx tsc --noEmit -p apps/api/tsconfig.json
 ```
 
-O template do PR e a skill `pull-request` compartilham a mesma estrutura de
-quatro seções, então pedir "redige o PR" produz algo que já encaixa no
-template.
+E, quando o diff mexer no que cada um cobre:
 
-**Proteção de branch — depois de uma semana de CI verde**, não antes: ligar
-proteção com workflow instável só ensina a usar bypass. Em Settings → Branches,
-regra para `main`:
+```bash
+npm run test:rls -w orbien-backend    # tocou apps/api/prisma ou src
+npm run e2e -w orbien-web             # tocou tela
+```
 
-- Exigir PR antes do merge
-- Exigir os checks verdes: `Build, tipos e lint` e `Testes de RLS`
-- Exigir branch atualizada com `main` antes do merge
+Mais a revisão local da fase 4.
 
-Deixe o check de **E2E fora dos obrigatórios no começo**: é o mais lento e o
-mais sujeito a intermitência de rede. Promova a obrigatório quando tiver
-histórico dele.
+O gatilho `pull_request` fica no workflow de propósito: não custa nada
+enquanto não houver PR, e passa a funcionar sozinho no dia em que houver.
 
-Não vale exigir aprovação de outra pessoa ainda — com uma pessoa ativa,
-travaria o próprio autor. Revisitar quando houver a segunda.
+### Se a disciplina falhar, existe mecanismo
+
+Rodar tudo à mão antes de todo push depende de lembrar. Se isso começar a
+escapar, o passo seguinte é um hook de `pre-push` rodando o subconjunto rápido
+(lint + tipos + build, ~30s) e barrando o push quando falha, com
+`--no-verify` como escape consciente. É a única forma de ter portão de verdade
+sem PR.
+
+Não está implementado — vale esperar para ver se falta.
+
+### O que fica dormente
+
+- `.github/PULL_REQUEST_TEMPLATE.md` e a skill `pull-request` só entram em cena
+  se um PR for aberto. Não incomodam enquanto isso.
+- Proteção de branch não se aplica: não há PR para exigir check.
+
 
 ## Riscos conhecidos
 
@@ -368,13 +384,20 @@ travaria o próprio autor. Revisitar quando houver a segunda.
 | Seed divergir do que o e2e espera | O e2e cria e remove as próprias fixtures; depende do seed apenas para usuário e ministérios |
 | Tempo total de CI crescer | Fases 1 e 2 em PR; fase 3 pode virar noturna se incomodar |
 
-## Decisões que dependem de você
+## Decisões — todas tomadas
 
-1. **Zerar os 27 erros de lint** antes de ativar o lint no CI? (recomendo sim)
-2. Ativar as fases **1 e 2 juntas**, ou a 1 primeiro e a 2 depois de estável?
-3. E2E **em todo PR** ou só noturno / sob demanda?
-4. Adicionar **eslint em `apps/api`** agora ou tratar como tarefa separada?
-5. Ativar **proteção de branch** já, ou esperar a primeira semana de CI verde?
+Mantidas aqui com o racional, para quem chegar depois entender por quê.
+
+1. ~~Zerar os erros de lint antes de ativar o lint no CI~~ — **sim**, zerados, e
+   o `turbo run lint` entrou como step obrigatório da fase 1.
+2. ~~Quais fases ativar~~ — **1, 2 e 3 juntas**, já implementadas.
+3. ~~E2E em todo PR ou noturno~~ — **em todo push**, que no modelo trunk-based é
+   o equivalente. Fica fora dos checks obrigatórios se algum dia houver PR: é o
+   mais lento e o mais sujeito a intermitência de rede.
+4. ~~eslint em `apps/api`~~ — **adicionado agora**, junto com a limpeza dos
+   fronts, para o `turbo run lint` cobrir os três apps.
+~~5. Proteção de branch~~ — **decidido: trunk-based**, sem PR. Não se aplica
+   enquanto o modelo estiver em teste.
 ~~6. Revisão por IA no CI~~ — **decidido: não.** A revisão é local, antes de
    abrir o PR (fase 4). Reverter quando entrar a segunda pessoa contribuindo.
 ~~7. Gatilho da revisão~~ — sem gatilho, porque não roda no CI. As duas
