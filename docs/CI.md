@@ -168,6 +168,16 @@ O fluxo está nas skills, para não depender de memória: a skill `pull-request`
 manda revisar antes do `gh pr create`, e a skill `pr-review` aceita a branch
 local (`main...HEAD`) como alvo padrão.
 
+Para quem quiser a revisão como **portão** e não como conversa,
+`scripts/pre-push.sh --review` invoca o Claude em modo headless (`claude -p`),
+com ferramentas restritas a leitura, e exige que a última linha da resposta seja
+`VEREDITO: APROVADO` ou `VEREDITO: BLOQUEADO`. Bloqueado sai com código 1.
+
+Ressalva importante: veredito de IA **não é determinístico**. Ele pode reprovar
+o que está bom e aprovar o que não está. É por isso que as regras mecânicas do
+Orbien viraram checagem por script no mesmo arquivo — o que dá para verificar,
+verifica-se; a IA fica para o juízo que não dá.
+
 #### As três fraquezas, ditas de frente
 
 1. **Não é verificável.** Passo local depende de disciplina. Com uma pessoa,
@@ -338,35 +348,52 @@ deployado, porque Render e Vercel disparam do mesmo push.
 Não é inútil: pega o que você não rodou localmente, e pega rápido. Mas é alarme
 de incêndio, não porta trancada.
 
-**Consequência prática: o portão passa a ser local.** Antes de `git push`:
+**Consequência prática: o portão passa a ser local**, e está implementado:
 
 ```bash
-npx turbo run build          # os 3 apps
-npx turbo run lint
-npx tsc --noEmit -p apps/api/tsconfig.json
+bash scripts/pre-push.sh              # determinístico
+bash scripts/pre-push.sh --e2e        # inclui a suíte de tela
+bash scripts/pre-push.sh --review     # inclui revisão por IA, com veredito
 ```
 
-E, quando o diff mexer no que cada um cobre:
+Ele roda o que o CI rodaria — build dos 3 apps, tipos da API incluindo `test/`,
+lint, sanidade das skills — e dispara os testes de RLS sozinho quando o diff
+toca `apps/api`. Sai com código 1 quando bloqueia, então serve de hook.
 
-```bash
-npm run test:rls -w orbien-backend    # tocou apps/api/prisma ou src
-npm run e2e -w orbien-web             # tocou tela
-```
+Antes dos portões genéricos ele checa o que é **específico do Orbien e dá para
+verificar por script**, em vez de depender de juízo:
 
-Mais a revisão local da fase 4.
+| Checagem | Efeito |
+|---|---|
+| Import cruzando app | bloqueia — quebra a independência dos deploys |
+| `package-lock.json` em `apps/*` | bloqueia — a raiz é a única fonte |
+| `schema.prisma` sem migration, ou o inverso | alerta |
+| Tabela nova sem `ENABLE ROW LEVEL SECURITY` | alerta |
+| Tabela nova sem caso em `isolation.spec.ts` | alerta |
+| `CREATE POLICY` sem `DROP POLICY IF EXISTS` | alerta — quebra reexecução |
+
+A distinção entre bloquear e alertar é deliberada: bloqueio é só para o que é
+inequívoco. Alerta que vira bloqueio falso ensina a usar `--no-verify`, e aí o
+portão deixa de existir.
 
 O gatilho `pull_request` fica no workflow de propósito: não custa nada
 enquanto não houver PR, e passa a funcionar sozinho no dia em que houver.
 
-### Se a disciplina falhar, existe mecanismo
+### Se a disciplina falhar, o hook é uma linha
 
-Rodar tudo à mão antes de todo push depende de lembrar. Se isso começar a
-escapar, o passo seguinte é um hook de `pre-push` rodando o subconjunto rápido
-(lint + tipos + build, ~30s) e barrando o push quando falha, com
-`--no-verify` como escape consciente. É a única forma de ter portão de verdade
-sem PR.
+O script existe, mas rodar depende de lembrar. Para virar portão de verdade:
 
-Não está implementado — vale esperar para ver se falta.
+```bash
+printf '#!/bin/sh\nexec bash scripts/pre-push.sh\n' > .git/hooks/pre-push
+chmod +x .git/hooks/pre-push
+```
+
+`git push --no-verify` continua passando por cima — de propósito, como escape
+consciente. Hook não é versionado pelo git, então cada pessoa ativa o seu.
+
+Deliberadamente **não ativei**: hook que roda 3 min a cada push vira atrito, e
+atrito vira `--no-verify` por reflexo. Vale esperar para ver se a disciplina
+falta antes de impor.
 
 ### O que fica dormente
 
