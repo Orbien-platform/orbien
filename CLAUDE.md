@@ -30,5 +30,12 @@ leia o do app antes de mexer nele.
 - Busca de dados no web é `useEffect` + axios (`src/lib/api.ts`), em todas as
   telas. `@tanstack/react-query` está no package.json mas **não tem provider
   nem uso** — não é o padrão da base; siga o que está em volta.
+- As skills em `.claude/skills/` fazem parte do harness e são versionadas — é o
+  que faz o time compartilhar as mesmas regras. Só `settings.local.json` fica
+  fora. `node scripts/check-skills.mjs` valida frontmatter e caminhos citados.
+- Antes de escrever uma skill nova, verifique se o Claude Code já resolve
+  nativamente: `/code-review`, `/simplify`, `/security-review`, memória em
+  arquivos, subagentes, TodoWrite. Skill que reimplementa o embutido custa
+  contexto em toda ativação e envelhece pior.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.

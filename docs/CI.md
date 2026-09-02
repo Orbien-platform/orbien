@@ -22,7 +22,7 @@ valer. CI serve para pegar antes do merge o que o deploy só descobre depois.
 As três últimas linhas são o valor real. As duas primeiras o CI apenas antecipa
 — útil, porque falhar num PR é mais barato que falhar num deploy de `main`.
 
-## A boa notícia: dá para rodar tudo sem um único segredo
+## As checagens objetivas rodam sem um único segredo
 
 Não é o caso comum, e vale explicar por quê aqui:
 
@@ -35,10 +35,13 @@ Não é o caso comum, e vale explicar por quê aqui:
   produção (ver `DEPLOY.md`), mas em CI é conveniência: as credenciais do e2e
   saem do seed, não de um secret.
 
-Consequência: o pipeline inteiro roda em um runner efêmero, contra um Postgres
+Consequência: as fases 1 a 3 rodam em um runner efêmero, contra um Postgres
 descartável, sem tocar no Supabase de desenvolvimento e sem nenhum segredo
 configurado. Isso remove o obstáculo mais comum para CI em projeto pequeno —
 e significa que um fork ou um PR de fora roda igual.
+
+A fase 4 (revisão por IA) é a exceção: precisa de autenticação. Está separada
+justamente por isso.
 
 ## Fases
 
@@ -150,6 +153,57 @@ Requisitos:
 Tempo estimado: 6–10 min. Vale rodar em PR, mas é o primeiro candidato a virar
 `workflow_dispatch` ou noturno se o tempo incomodar.
 
+### Fase 4 — Revisão de PR pelo Claude (opcional, e a única que custa)
+
+Substitui o template que veio nas skills, que usava o **Cursor SDK** com
+`CURSOR_API_KEY` — incompatível com a decisão de usar Claude para tudo. Foi
+removido do repositório.
+
+A action oficial é `anthropics/claude-code-action@v1`, e ela consegue rodar a
+skill `/code-review` embutida:
+
+```yaml
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: "/code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          claude_args: >-
+            --max-turns 8
+            --allowedTools "mcp__github_inline_comment__create_inline_comment"
+```
+
+`permissions` do job: `contents: read`, `pull-requests: write` (para comentar),
+`id-token: write`.
+
+O que decidir aqui:
+
+| Assunto | Opções | Nota |
+|---|---|---|
+| Autenticação | `ANTHROPIC_API_KEY` (secret de org), `CLAUDE_CODE_OAUTH_TOKEN` (pessoal), ou **WIF** (sem secret, via OIDC) | O OAuth é atrelado a uma assinatura pessoal — não serve para organização. WIF é o único caminho que funciona em PR de fork |
+| Gatilho | automático em `pull_request`, ou sob demanda via `@claude` em comentário | `prompt` presente = automático; ausente = espera menção |
+| Custo | pago por token consumido. `--max-turns` e `--model` limitam | O serviço gerenciado de Code Review da Anthropic é cobrado por review (na ordem de dezenas de dólares em PR grande); a action com API key é bem mais barata para PR pequeno |
+
+**PR de fork:** o GitHub não entrega secrets a workflow disparado por fork.
+Com API key, a revisão simplesmente não roda. WIF resolve, ou exigir `@claude`
+de alguém com write access.
+
+**Ordem recomendada:** só depois das fases 1 e 2 estáveis. Revisão por IA
+opinando sobre um PR cujo build ninguém verificou é ruído caro — e há um
+risco de hábito: barra verde da IA não é evidência de que o código funciona.
+
+### Fase 5 — Sanidade das skills (barata, e nova)
+
+As skills em `.claude/skills/` passaram a ser versionadas — é o que faz o time
+compartilhar as mesmas regras em vez de cada um ter as suas. Isso pede uma
+verificação mínima, porque skill quebrada falha silenciosamente:
+
+- todo `SKILL.md` tem frontmatter com `name` e `description`
+- o `name` do frontmatter casa com o nome da pasta
+- nenhum `SKILL.md` referencia caminho que não existe no repositório
+
+É um script de ~20 linhas e roda em segundos. Vale porque o modo de falha de
+uma skill é não ser acionada — ninguém percebe.
+
 ## O bloqueio: o lint falha hoje
 
 Não é ideia de fase futura, é impedimento imediato. Estado atual:
@@ -195,6 +249,10 @@ de CI.
   um serviço em free tier que dorme.
 - **Remote cache do Turborepo.** Reduziria o tempo, mas exige token e conta.
   Vale reconsiderar se o tempo de CI passar a incomodar; hoje não é o gargalo.
+- **Revisão por IA como gate bloqueante.** Ela opina, não decide. Barra verde
+  de revisão por IA não é evidência de que o código funciona — quem dá essa
+  evidência são as fases 1 a 3. Deixe a fase 4 como comentário, nunca como
+  check obrigatório.
 
 ## Proteção de branch
 
@@ -223,3 +281,8 @@ próprio autor. Revisitar quando houver duas pessoas ativas.
 3. E2E **em todo PR** ou só noturno / sob demanda?
 4. Adicionar **eslint em `apps/api`** agora ou tratar como tarefa separada?
 5. Ativar **proteção de branch** já, ou esperar a primeira semana de CI verde?
+6. Revisão por IA (fase 4): **ativar agora ou depois**? E qual autenticação —
+   API key em secret de organização, ou WIF sem secret? (recomendo depois das
+   fases 1 e 2, e WIF se houver intenção de aceitar PR de fork)
+7. Gatilho da revisão: **automático em todo PR** ou sob demanda com `@claude`?
+   (sob demanda custa menos e evita ruído em PR de uma linha)

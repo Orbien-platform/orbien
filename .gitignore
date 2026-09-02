@@ -33,8 +33,14 @@ coverage/
 .vscode/
 .idea/
 
-# Claude
-.claude/
+# Claude Code
+# As skills fazem parte do harness e são versionadas — é o que faz o time
+# compartilhar as mesmas regras. Só preferência local fica de fora.
+.claude/settings.local.json
+apps/*/.claude/settings.local.json
+.claude/**/node_modules/
+.claude/**/.skill-meta.json
+.claude/**/.temp-execution-*.js
 
 # Capturas geradas pelos scripts de e2e
 apps/*/e2e/screenshots/
