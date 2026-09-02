@@ -62,11 +62,6 @@ model Tenant {
   ministries              Ministry[]
   volunteerProfiles       VolunteerProfile[]
   volunteerMinistries     VolunteerMinistry[]
-  serviceSchedules        ServiceSchedule[]
-  scheduleSlots           ScheduleSlot[]
-  scheduleAssignments     ScheduleAssignment[]
-  volunteerSwapRequests   VolunteerSwapRequest[]
-  assignments             Assignment[]
   celebrations            Celebration[]
   celebrationInstances    CelebrationInstance[]
   serviceOrders           ServiceOrder[]
@@ -124,11 +119,6 @@ model Congregation {
   ministries              Ministry[]
   volunteerProfiles       VolunteerProfile[]
   volunteerMinistries     VolunteerMinistry[]
-  serviceSchedules        ServiceSchedule[]
-  scheduleSlots           ScheduleSlot[]
-  scheduleAssignments     ScheduleAssignment[]
-  volunteerSwapRequests   VolunteerSwapRequest[]
-  assignments             Assignment[]
   celebrations            Celebration[]
   celebrationInstances    CelebrationInstance[]
   serviceOrders           ServiceOrder[]
@@ -329,7 +319,6 @@ model Person {
   donationReceipts        DonationReceipt[]
   pixDonations            PixPayment[]            @relation("PixDonor")
   volunteerProfile        VolunteerProfile?
-  assignments             Assignment[]
   serviceOrderItems       ServiceOrderItem[]
 
   @@index([tenant_id, id])
@@ -991,10 +980,10 @@ model Ministry {
   parent       Ministry?    @relation("MinistryHierarchy", fields: [parent_ministry_id], references: [id])
   children     Ministry[]   @relation("MinistryHierarchy")
 
-  assignments         Assignment[]
-  serviceOrderItems   ServiceOrderItem[]
-  volunteerMinistries VolunteerMinistry[]
-  serviceSchedules    ServiceSchedule[]
+  serviceOrderItems          ServiceOrderItem[]
+  volunteerMinistries        VolunteerMinistry[]
+  celebrationMinistries      CelebrationMinistry[]
+  scheduleTemplateMinistries ScheduleTemplateMinistry[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1017,10 +1006,9 @@ model VolunteerProfile {
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
 
-  volunteerMinistries      VolunteerMinistry[]
-  scheduleAssignments      ScheduleAssignment[]
-  swapRequestsAsRequester  VolunteerSwapRequest[] @relation("SwapRequester")
-  swapRequestsAsSubstitute VolunteerSwapRequest[] @relation("SwapSubstitute")
+  volunteerMinistries    VolunteerMinistry[]
+  celebrationAssignments CelebrationAssignment[]
+  unavailabilities       VolunteerUnavailability[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1047,122 +1035,6 @@ model VolunteerMinistry {
   @@map("volunteer_ministries")
 }
 
-model ServiceSchedule {
-  id                  String         @id @default(uuid())
-  tenant_id           String
-  congregation_id     String
-  ministry_id         String
-  title               String
-  scheduled_date      DateTime
-  deadline_confirm_at DateTime?
-  status              ScheduleStatus @default(draft)
-  created_by_user_id  String
-  created_at          DateTime       @default(now())
-  updated_at          DateTime       @updatedAt
-
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  ministry     Ministry     @relation(fields: [ministry_id], references: [id], onDelete: Cascade)
-
-  slots ScheduleSlot[]
-
-  @@index([tenant_id, ministry_id])
-  @@index([tenant_id, scheduled_date])
-  @@map("service_schedules")
-}
-
-model ScheduleSlot {
-  id              String   @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  schedule_id     String
-  role_name       String
-  required_count  Int      @default(1)
-  notes           String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-
-  schedule     ServiceSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
-  tenant       Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation    @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-
-  assignments ScheduleAssignment[]
-
-  @@index([tenant_id, schedule_id])
-  @@map("schedule_slots")
-}
-
-model ScheduleAssignment {
-  id                   String           @id @default(uuid())
-  tenant_id            String
-  congregation_id      String
-  slot_id              String
-  volunteer_profile_id String
-  status               AssignmentStatus @default(pending)
-  checkin_token        String           @unique @default(uuid())
-  confirmed_at         DateTime?
-  checked_in_at        DateTime?
-  created_at           DateTime         @default(now())
-  updated_at           DateTime         @updatedAt
-
-  slot             ScheduleSlot           @relation(fields: [slot_id], references: [id], onDelete: Cascade)
-  volunteerProfile VolunteerProfile       @relation(fields: [volunteer_profile_id], references: [id], onDelete: Cascade)
-  tenant           Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation     Congregation           @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  swapRequests     VolunteerSwapRequest[]
-
-  @@unique([slot_id, volunteer_profile_id])
-  @@index([tenant_id, slot_id])
-  @@index([checkin_token])
-  @@map("schedule_assignments")
-}
-
-model VolunteerSwapRequest {
-  id              String     @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  assignment_id   String
-  requester_id    String
-  substitute_id   String?
-  status          SwapStatus @default(pending)
-  message         String?
-  created_at      DateTime   @default(now())
-  updated_at      DateTime   @updatedAt
-
-  assignment   ScheduleAssignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
-  requester    VolunteerProfile   @relation("SwapRequester", fields: [requester_id], references: [id])
-  substitute   VolunteerProfile?  @relation("SwapSubstitute", fields: [substitute_id], references: [id])
-  tenant       Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation       @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-
-  @@index([tenant_id, assignment_id])
-  @@map("volunteer_swap_requests")
-}
-
-model Assignment {
-  id               String           @id @default(uuid())
-  tenant_id        String
-  congregation_id  String
-  person_id        String
-  ministry_id      String
-  scheduled_date   DateTime
-  role_in_ministry String
-  status           AssignmentStatus
-  confirmed_at     DateTime?
-  created_at       DateTime         @default(now())
-  updated_at       DateTime         @updatedAt
-
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
-  ministry     Ministry     @relation(fields: [ministry_id], references: [id], onDelete: Cascade)
-
-  @@index([tenant_id, id])
-  @@index([tenant_id, congregation_id])
-  @@index([tenant_id, scheduled_date])
-  @@map("assignments")
-}
-
 model Celebration {
   id              String                @id @default(uuid())
   tenant_id       String
@@ -1172,6 +1044,7 @@ model Celebration {
   day_of_week     Int?
   start_time      String
   recurrence      CelebrationRecurrence
+  anchor_date     DateTime?             @db.Date
   is_active       Boolean               @default(true)
   created_at      DateTime              @default(now())
   updated_at      DateTime              @updatedAt
@@ -1198,10 +1071,11 @@ model CelebrationInstance {
   created_at            DateTime                  @default(now())
   updated_at            DateTime                  @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  celebration  Celebration   @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
+  tenant       Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation         @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  celebration  Celebration          @relation(fields: [celebration_id], references: [id], onDelete: Cascade)
   serviceOrder ServiceOrder?
+  schedule     CelebrationSchedule?
 
   @@index([tenant_id, celebration_id])
   @@index([tenant_id, scheduled_date])
@@ -1298,6 +1172,126 @@ model SetlistSong {
   @@index([setlist_id])
   @@index([tenant_id, setlist_id])
   @@map("setlist_songs")
+}
+
+model CelebrationSchedule {
+  id                      String         @id @default(uuid())
+  tenant_id               String
+  congregation_id         String
+  celebration_instance_id String         @unique
+  status                  ScheduleStatus @default(draft)
+  created_at              DateTime       @default(now())
+  updated_at              DateTime       @updatedAt
+
+  celebrationInstance CelebrationInstance   @relation(fields: [celebration_instance_id], references: [id], onDelete: Cascade)
+  ministries          CelebrationMinistry[]
+
+  @@index([congregation_id])
+  @@map("celebration_schedules")
+}
+
+model CelebrationMinistry {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  schedule_id     String
+  ministry_id     String
+  slots           Int      @default(1)
+  created_at      DateTime @default(now())
+
+  schedule    CelebrationSchedule     @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  ministry    Ministry                @relation(fields: [ministry_id], references: [id], onDelete: Restrict)
+  assignments CelebrationAssignment[]
+
+  @@unique([schedule_id, ministry_id])
+  @@index([congregation_id])
+  @@map("celebration_ministries")
+}
+
+model CelebrationAssignment {
+  id                      String           @id @default(uuid())
+  tenant_id               String
+  congregation_id         String
+  celebration_ministry_id String
+  volunteer_profile_id    String
+  status                  AssignmentStatus @default(pending)
+  notified_at             DateTime?
+  responded_at            DateTime?
+  created_at              DateTime         @default(now())
+  updated_at              DateTime         @updatedAt
+
+  celebrationMinistry CelebrationMinistry @relation(fields: [celebration_ministry_id], references: [id], onDelete: Cascade)
+  volunteerProfile    VolunteerProfile    @relation(fields: [volunteer_profile_id], references: [id], onDelete: Restrict)
+
+  @@unique([celebration_ministry_id, volunteer_profile_id])
+  @@index([congregation_id])
+  @@index([volunteer_profile_id])
+  @@map("celebration_assignments")
+}
+
+model VolunteerUnavailability {
+  id                   String   @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  volunteer_profile_id String
+  reference_month      Int
+  reference_year       Int
+  notes                String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  volunteerProfile VolunteerProfile              @relation(fields: [volunteer_profile_id], references: [id], onDelete: Cascade)
+  dates            VolunteerUnavailabilityDate[]
+
+  @@unique([volunteer_profile_id, reference_month, reference_year])
+  @@index([congregation_id])
+  @@map("volunteer_unavailabilities")
+}
+
+model VolunteerUnavailabilityDate {
+  id                String   @id @default(uuid())
+  tenant_id         String
+  congregation_id   String
+  unavailability_id String
+  date              DateTime @db.Date
+
+  unavailability VolunteerUnavailability @relation(fields: [unavailability_id], references: [id], onDelete: Cascade)
+
+  @@unique([unavailability_id, date])
+  @@index([congregation_id, date])
+  @@map("volunteer_unavailability_dates")
+}
+
+model ScheduleTemplate {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  name            String
+  description     String?
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  ministries ScheduleTemplateMinistry[]
+
+  @@index([congregation_id])
+  @@map("schedule_templates")
+}
+
+model ScheduleTemplateMinistry {
+  id              String @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  template_id     String
+  ministry_id     String
+  slots           Int    @default(1)
+
+  template ScheduleTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  ministry Ministry         @relation(fields: [ministry_id], references: [id], onDelete: Restrict)
+
+  @@unique([template_id, ministry_id])
+  @@index([congregation_id])
+  @@map("schedule_template_ministries")
 }
 
 // =============================================================================
@@ -1498,13 +1492,6 @@ enum AssignmentStatus {
   confirmed
   declined
   swapped
-}
-
-enum SwapStatus {
-  pending
-  accepted
-  rejected
-  cancelled
 }
 
 enum VolunteerMinistryRole {

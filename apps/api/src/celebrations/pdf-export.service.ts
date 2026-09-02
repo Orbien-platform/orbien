@@ -84,31 +84,26 @@ export class PdfExportService {
     ];
     const volunteersByMinistry: Record<string, string[]> = {};
     if (ministryIds.length) {
-      const schedDate = order.celebrationInstance.scheduled_date;
-      const dayStart = new Date(schedDate);
-      dayStart.setUTCHours(0, 0, 0, 0);
-      const dayEnd = new Date(schedDate);
-      dayEnd.setUTCHours(23, 59, 59, 999);
-
-      const assignments = await this.prisma.client.scheduleAssignment.findMany({
+      // CelebrationSchedule is 1:1 per CelebrationInstance since Bloco 1 — a
+      // snapshot of who was scheduled for this specific date, not the
+      // celebration's standing roster.
+      const assignments = await this.prisma.client.celebrationAssignment.findMany({
         where: {
           tenant_id: tenantId,
           status: 'confirmed',
-          slot: {
-            schedule: {
-              ministry_id: { in: ministryIds },
-              scheduled_date: { gte: dayStart, lte: dayEnd },
-            },
+          celebrationMinistry: {
+            ministry_id: { in: ministryIds },
+            schedule: { celebration_instance_id: order.celebrationInstance.id },
           },
         },
         include: {
           volunteerProfile: { include: { person: { select: { full_name: true } } } },
-          slot: { include: { schedule: { select: { ministry_id: true } } } },
+          celebrationMinistry: { select: { ministry_id: true } },
         },
       });
 
       for (const a of assignments) {
-        const mid = a.slot.schedule.ministry_id;
+        const mid = a.celebrationMinistry.ministry_id;
         if (!volunteersByMinistry[mid]) volunteersByMinistry[mid] = [];
         volunteersByMinistry[mid].push(a.volunteerProfile.person.full_name);
       }

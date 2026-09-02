@@ -54,6 +54,11 @@ DECLARE
   v_adoracao_id      TEXT := gen_random_uuid()::text;
   v_comunhao_id      TEXT := gen_random_uuid()::text;
 BEGIN
+  -- Só executa se o tenant existir (skip em shadow DB / ambientes frescos)
+  IF NOT EXISTS (SELECT 1 FROM "tenants" WHERE id = v_tenant_id) THEN
+    RETURN;
+  END IF;
+
   INSERT INTO "ministries" (id, tenant_id, congregation_id, name, parent_ministry_id, created_at, updated_at)
   VALUES (v_root_id, v_tenant_id, v_congregation_id, 'Pastor Presidente', NULL, now(), now());
 

@@ -75,7 +75,7 @@ export class NotificationsService {
     });
   }
 
-  // ── Direct push (used by cross-module callers like SchedulesService) ─────
+  // ── Direct push (used by cross-module callers like CelebrationAssignmentService) ─────
 
   async sendPush(opts: SendPushOpts): Promise<void> {
     await this.dispatch(opts);

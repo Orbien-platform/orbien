@@ -17,6 +17,14 @@ import { SetlistsController } from './setlists.controller';
 import { SetlistsService } from './setlists.service';
 import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CelebrationSchedulerController } from './celebration-scheduler.controller';
+import { CelebrationScheduleController } from './celebration-schedule.controller';
+import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationAssignmentController } from './celebration-assignment.controller';
+import { CelebrationAssignmentService } from './celebration-assignment.service';
+import {
+  CelebrationRespondController,
+  CelebrationMyAssignmentsController,
+} from './celebration-volunteer.controller';
 
 @Module({
   imports: [PrismaModule, ContentModule, StorageModule],
@@ -30,6 +38,10 @@ import { CelebrationSchedulerController } from './celebration-scheduler.controll
     SetlistSongsController,
     SetlistsController,
     CelebrationSchedulerController,
+    CelebrationScheduleController,
+    CelebrationAssignmentController,
+    CelebrationRespondController,
+    CelebrationMyAssignmentsController,
     CelebrationsController,
   ],
   providers: [
@@ -40,6 +52,8 @@ import { CelebrationSchedulerController } from './celebration-scheduler.controll
     SetlistsService,
     SetlistSongsService,
     CelebrationSchedulerService,
+    CelebrationScheduleService,
+    CelebrationAssignmentService,
     PdfExportService,
   ],
   exports: [
@@ -50,6 +64,8 @@ import { CelebrationSchedulerController } from './celebration-scheduler.controll
     SetlistsService,
     SetlistSongsService,
     CelebrationSchedulerService,
+    CelebrationScheduleService,
+    CelebrationAssignmentService,
   ],
 })
 export class CelebrationsModule {}

@@ -13,7 +13,7 @@ export class ServiceOrderItemsService {
     const order = await this.prisma.client.serviceOrder.findFirst({
       where: { id: serviceOrderId, tenant_id: tenantId, congregation_id: congregationId },
       include: {
-        celebrationInstance: { select: { scheduled_date: true } },
+        celebrationInstance: { select: { id: true } },
       },
     });
     if (!order) throw new NotFoundException('Ordem de culto não encontrada');
@@ -71,12 +71,7 @@ export class ServiceOrderItemsService {
 
   async findAll(tenantId: string, congregationId: string, serviceOrderId: string) {
     const order = await this.resolveOrder(tenantId, congregationId, serviceOrderId);
-    const scheduleDate = order.celebrationInstance.scheduled_date;
-
-    const dayStart = new Date(scheduleDate);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(scheduleDate);
-    dayEnd.setUTCHours(23, 59, 59, 999);
+    const instanceId = order.celebrationInstance.id;
 
     const items = await this.prisma.client.serviceOrderItem.findMany({
       where: { service_order_id: serviceOrderId, tenant_id: tenantId },
@@ -99,31 +94,28 @@ export class ServiceOrderItemsService {
     let volunteersByMinistry: Record<string, { id: string; full_name: string }[]> = {};
 
     if (ministryIds.length > 0) {
-      const scheduleAssignments = await this.prisma.client.scheduleAssignment.findMany({
+      // CelebrationSchedule is 1:1 per CelebrationInstance since Bloco 1 — a
+      // snapshot of who was scheduled for this specific instance's date, not
+      // the celebration's standing roster.
+      const assignments = await this.prisma.client.celebrationAssignment.findMany({
         where: {
           tenant_id: tenantId,
           status: 'confirmed',
-          slot: {
-            schedule: {
-              ministry_id: { in: ministryIds },
-              scheduled_date: { gte: dayStart, lte: dayEnd },
-            },
+          celebrationMinistry: {
+            ministry_id: { in: ministryIds },
+            schedule: { celebration_instance_id: instanceId },
           },
         },
         include: {
           volunteerProfile: {
             include: { person: { select: { id: true, full_name: true } } },
           },
-          slot: {
-            include: {
-              schedule: { select: { ministry_id: true } },
-            },
-          },
+          celebrationMinistry: { select: { ministry_id: true } },
         },
       });
 
-      for (const a of scheduleAssignments) {
-        const minId = a.slot.schedule.ministry_id;
+      for (const a of assignments) {
+        const minId = a.celebrationMinistry.ministry_id;
         if (!volunteersByMinistry[minId]) volunteersByMinistry[minId] = [];
         volunteersByMinistry[minId].push(a.volunteerProfile.person);
       }

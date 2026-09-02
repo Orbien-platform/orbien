@@ -152,21 +152,17 @@ export class ServiceOrdersService {
     if (!ministryItems.length) return;
 
     const ministryIds = [...new Set(ministryItems.map((i) => i.ministry_id!))];
-    const dayStart = new Date(instance.scheduled_date);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(instance.scheduled_date);
-    dayEnd.setUTCHours(23, 59, 59, 999);
 
-    // Find confirmed assignments for those ministries on the celebration date
-    const assignments = await this.prisma.client.scheduleAssignment.findMany({
+    // Find confirmed assignments for those ministries in THIS instance's schedule
+    // (CelebrationSchedule is 1:1 per CelebrationInstance since Bloco 1 — a snapshot
+    // of who was scheduled for this specific date, not the celebration's standing roster).
+    const assignments = await this.prisma.client.celebrationAssignment.findMany({
       where: {
         tenant_id: tenantId,
         status: 'confirmed',
-        slot: {
-          schedule: {
-            ministry_id: { in: ministryIds },
-            scheduled_date: { gte: dayStart, lte: dayEnd },
-          },
+        celebrationMinistry: {
+          ministry_id: { in: ministryIds },
+          schedule: { celebration_instance_id: instanceId },
         },
       },
       include: { volunteerProfile: { select: { person_id: true } } },

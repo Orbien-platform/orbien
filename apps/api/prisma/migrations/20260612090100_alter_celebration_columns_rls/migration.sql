@@ -10,7 +10,15 @@ ALTER TABLE "celebration_instances"
   ADD COLUMN IF NOT EXISTS "scheduled_date" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "status" "CelebrationInstanceStatus" NOT NULL DEFAULT 'draft';
 
-UPDATE "celebration_instances" SET "scheduled_date" = "occurs_at" WHERE "scheduled_date" IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'celebration_instances' AND column_name = 'occurs_at'
+  ) THEN
+    UPDATE "celebration_instances" SET "scheduled_date" = "occurs_at" WHERE "scheduled_date" IS NULL;
+  END IF;
+END $$;
 ALTER TABLE "celebration_instances" ALTER COLUMN "scheduled_date" SET NOT NULL;
 
 -- Only drop occurs_at if it still exists
@@ -30,7 +38,15 @@ ALTER TABLE "celebrations"
   ADD COLUMN IF NOT EXISTS "is_active" BOOLEAN NOT NULL DEFAULT true,
   ALTER COLUMN "day_of_week" DROP NOT NULL;
 
-UPDATE "celebrations" SET "start_time" = "time" WHERE "start_time" IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'celebrations' AND column_name = 'time'
+  ) THEN
+    UPDATE "celebrations" SET "start_time" = "time" WHERE "start_time" IS NULL;
+  END IF;
+END $$;
 ALTER TABLE "celebrations" ALTER COLUMN "start_time" SET NOT NULL;
 
 DO $$
