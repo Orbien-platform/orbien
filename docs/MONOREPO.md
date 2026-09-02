@@ -37,12 +37,12 @@ build de forma não óbvia.
 | App | Porta |
 |---|---|
 | `apps/api` | 3000 |
-| `apps/site` | 3000 (`next dev` padrão) |
 | `apps/web` | 3001 |
+| `apps/site` | 3002 |
 
-`npm run dev` sobe os três em paralelo e **a API colide com o site na 3000**.
-Rode `npm run dev:api` + `npm run dev:web` (combinação usual), ou suba o site
-com `npm run dev:site -- --port 3002`.
+`npm run dev` sobe os três em paralelo sem colisão. As portas dos fronts estão
+fixadas nos próprios scripts `dev` de cada app, e não no `next dev` padrão,
+justamente para não brigarem com a API na 3000.
 
 ## Deploy
 

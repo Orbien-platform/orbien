@@ -32,8 +32,8 @@ Um único `package-lock.json` na raiz. Não rode `npm install` dentro de `apps/*
 ```bash
 npm run dev          # sobe os três em paralelo
 npm run dev:api      # NestJS  — :3000
-npm run dev:site     # Next.js — :3000 (ajuste a porta se rodar junto da API)
 npm run dev:web      # Next.js — :3001
+npm run dev:site     # Next.js — :3002
 ```
 
 ## Build
