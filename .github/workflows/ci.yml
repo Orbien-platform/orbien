@@ -47,6 +47,39 @@ jobs:
       - name: Lint
         run: npx turbo run lint
 
+  # ── Testes de unidade e cobertura — sem banco, roda em paralelo ──────────
+  # Nenhum passo aqui precisa de Postgres: a suíte `unit` da API usa Prisma
+  # mockado, e web/site rodam em jsdom. O que precisa de banco está nos jobs
+  # `rls` e `e2e`. Ver docs/TESTES.md.
+  unit:
+    name: Unidade e cobertura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+
+      # `turbo run test` depende de ^build por causa do Prisma Client: sem
+      # `prisma generate`, os imports de @prisma/client não resolvem.
+      - name: Suítes de unidade dos 3 apps
+        run: npx turbo run test
+
+      # O portão da meta de 100%. Os thresholds sobem por caminho a cada fase
+      # concluída; enquanto estiverem em 0, este passo mede sem bloquear.
+      - name: Cobertura da API
+        run: npm run test:cov -w orbien-backend
+
+      - name: Cobertura do web
+        run: npm run test:cov -w orbien-web
+
+      - name: Cobertura do site
+        run: npm run test:cov -w orbien-site
+
   # ── Fase 2 — isolamento multi-tenant contra Postgres efêmero ─────────────
   rls:
     name: Testes de RLS
