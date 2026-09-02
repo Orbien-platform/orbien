@@ -10,6 +10,9 @@ import { AddScheduleMinistryDto } from './dto/add-schedule-ministry.dto';
 import { ApplyTemplateDto } from './dto/apply-template.dto';
 
 const MANAGE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'ministry_leader'];
+// Apagar a escala inteira é destrutivo (leva ministérios e atribuições por
+// cascata), então exige o mesmo nível de quem publica — sem ministry_leader.
+const DELETE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
 
 @Controller('celebrations/instances')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,6 +30,12 @@ export class CelebrationScheduleController {
   @Roles(...MANAGE_ROLES)
   getSchedule(@Param('instanceId') instanceId: string, @CurrentUser() user: JwtPayload) {
     return this.scheduleService.getSchedule(user.tenant_id, user.congregation_id, instanceId);
+  }
+
+  @Delete(':instanceId/schedule')
+  @Roles(...DELETE_ROLES)
+  remove(@Param('instanceId') instanceId: string, @CurrentUser() user: JwtPayload) {
+    return this.scheduleService.remove(user.tenant_id, user.congregation_id, instanceId);
   }
 
   @Post(':instanceId/schedule/ministries')

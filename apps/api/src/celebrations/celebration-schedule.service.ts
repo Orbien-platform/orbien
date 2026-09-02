@@ -137,6 +137,26 @@ export class CelebrationScheduleService {
     });
   }
 
+  /**
+   * Remove a escala da instância. Ministérios e atribuições saem por cascata.
+   * Não bloqueamos escala publicada: cancelar uma escala já divulgada é uma
+   * ação legítima de administração — e é justamente aí que ela é necessária.
+   */
+  async remove(
+    tenantId: string,
+    congregationId: string,
+    instanceId: string,
+  ): Promise<CelebrationSchedule> {
+    await this.assertInstance(tenantId, congregationId, instanceId);
+
+    const schedule = await this.prisma.client.celebrationSchedule.findUnique({
+      where: { celebration_instance_id: instanceId },
+    });
+    if (!schedule) throw new NotFoundException('Escala não encontrada para esta instância');
+
+    return this.prisma.client.celebrationSchedule.delete({ where: { id: schedule.id } });
+  }
+
   async removeMinistry(
     tenantId: string,
     congregationId: string,

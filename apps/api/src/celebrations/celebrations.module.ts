@@ -20,6 +20,8 @@ import { CelebrationSchedulerController } from './celebration-scheduler.controll
 import { CelebrationScheduleController } from './celebration-schedule.controller';
 import { CelebrationScheduleService } from './celebration-schedule.service';
 import { CelebrationAssignmentController } from './celebration-assignment.controller';
+import { ScheduleTemplateController } from './schedule-template.controller';
+import { ScheduleTemplateService } from './schedule-template.service';
 import { CelebrationAssignmentService } from './celebration-assignment.service';
 import {
   CelebrationRespondController,
@@ -42,9 +44,11 @@ import {
     CelebrationAssignmentController,
     CelebrationRespondController,
     CelebrationMyAssignmentsController,
+    ScheduleTemplateController,
     CelebrationsController,
   ],
   providers: [
+    ScheduleTemplateService,
     CelebrationsService,
     CelebrationInstancesService,
     ServiceOrdersService,
