@@ -558,6 +558,18 @@ npm run test:rls -w orbien-backend   # 39 testes verdes
 
 ---
 
+## Pendências abertas
+
+O primeiro run de CI (PR #1) revelou três pendências que **não** vêm deste
+plano e não foram corrigidas por decisão unilateral: RLS sem isolamento por
+congregação, lint do `site` quebrado no estado commitado, e e2e dependendo de
+dados que o seed não cria. Estão mapeadas com evidência em
+[PENDENCIAS.md](PENDENCIAS.md).
+
+A primeira toca este plano: enquanto o job `Testes de RLS` estiver vermelho, o
+CI não fica verde de ponta a ponta — o que não impede as Fases 1 a 12, mas
+impede a Fase 13 de declarar fechamento.
+
 ## Registro de decisões
 
 **A meta de 100% foi definida pelo dono do projeto.** A objeção usual — que
