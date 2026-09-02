@@ -1,7 +1,7 @@
 # Plano de CI
 
-Documento de decisão, não de implementação: descreve o que vale automatizar,
-em que ordem, e o que precisa ser resolvido antes. Nada disso está ativo ainda.
+Racional das decisões de CI. **As fases 1, 2 e 3 estão implementadas** em
+`.github/workflows/ci.yml`; as fases 4 e 5 seguem como plano.
 
 O contexto que motiva: com mais de uma pessoa no projeto, os deploys deixam de
 ser suficientes como rede de proteção. Render e Vercel só constroem o app que
@@ -191,6 +191,86 @@ de alguém com write access.
 opinando sobre um PR cujo build ninguém verificou é ruído caro — e há um
 risco de hábito: barra verde da IA não é evidência de que o código funciona.
 
+#### WIF — autenticar sem secret
+
+WIF (Workload Identity Federation) troca o token OIDC que o GitHub já emite
+para todo workflow por um token da Anthropic. Não há chave guardada em lugar
+nenhum, e é o **único** caminho que funciona em PR de fork, porque o GitHub
+retém secrets nesse cenário mas continua emitindo o OIDC.
+
+Configuração em duas pontas:
+
+1. **No Console da Anthropic** — criar um issuer apontando para o GitHub OIDC
+   e uma federation rule restringindo qual repositório e qual branch podem
+   trocar token. É aqui que fica o controle de acesso: a regra é o que impede
+   outro repositório de usar sua conta.
+2. **No workflow** — em vez de `anthropic_api_key`, passar os três
+   identificadores que a regra gerou:
+
+```yaml
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write        # sem isto o GitHub não emite o OIDC
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+```
+
+Os três não são segredo — são identificadores. Podem ir em `vars` (variáveis de
+repositório, visíveis) em vez de `secrets`, ou até literais no arquivo. O que
+autoriza é a federation rule do lado da Anthropic, não o valor deles.
+
+Trade-off honesto: exige uma configuração inicial no Console que a API key
+dispensa. Em troca, não há chave para rotacionar, revogar ou vazar em log — e
+funciona em fork.
+
+#### Acionamento sob demanda
+
+O modo é determinado por um detalhe: **`prompt` presente = automático;
+`prompt` ausente = espera menção.**
+
+```yaml
+name: Claude
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude:
+    if: contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: '--max-turns 8'
+```
+
+Na prática: alguém comenta no PR `@claude revisa o isolamento multi-tenant
+deste diff` e o workflow dispara com aquele texto como instrução. Dois eventos
+são necessários — `issue_comment` cobre comentário no corpo do PR,
+`pull_request_review_comment` cobre comentário em linha de código.
+
+Quem comenta precisa ter write access no repositório; menção de terceiro não
+dispara. E o `if:` no nível do job é o que evita gastar runner em todo
+comentário do repositório.
+
+Vantagem além do custo: você pede a revisão que quer, em vez de receber sempre
+a mesma. "Revisa só a parte de RLS" é um pedido melhor que uma varredura
+genérica — e é onde a skill `pr-review` deste repo entra, porque ela sabe quais
+dimensões existem aqui.
+
 ### Fase 5 — Sanidade das skills (barata, e nova)
 
 As skills em `.claude/skills/` passaram a ser versionadas — é o que faz o time
@@ -255,16 +335,39 @@ de CI.
   evidência são as fases 1 a 3. Deixe a fase 4 como comentário, nunca como
   check obrigatório.
 
-## Proteção de branch
+## Fluxo de PR e proteção de branch
 
-Só faz sentido depois da fase 1 estável. Em Settings → Branches, para `main`:
+Hoje tudo vai direto na `main` — 20+ commits, uma branch, zero PRs. Sem PR não
+há onde o CI barrar nada, então adotar o fluxo é o que transforma este
+workflow em rede de proteção em vez de relatório.
+
+**O fluxo:**
+
+```bash
+git switch -c feat/nome-curto
+# … trabalho, commits …
+git push -u origin HEAD
+gh pr create --base main        # usa .github/PULL_REQUEST_TEMPLATE.md
+```
+
+O template do PR e a skill `pull-request` compartilham a mesma estrutura de
+quatro seções, então pedir "redige o PR" produz algo que já encaixa no
+template.
+
+**Proteção de branch — depois de uma semana de CI verde**, não antes: ligar
+proteção com workflow instável só ensina a usar bypass. Em Settings → Branches,
+regra para `main`:
 
 - Exigir PR antes do merge
-- Exigir os checks de CI verdes (marcar apenas os que já são confiáveis)
+- Exigir os checks verdes: `Build, tipos e lint` e `Testes de RLS`
 - Exigir branch atualizada com `main` antes do merge
 
-Ainda não vale exigir aprovação de outra pessoa: com o time atual, travaria o
-próprio autor. Revisitar quando houver duas pessoas ativas.
+Deixe o check de **E2E fora dos obrigatórios no começo**: é o mais lento e o
+mais sujeito a intermitência de rede. Promova a obrigatório quando tiver
+histórico dele.
+
+Não vale exigir aprovação de outra pessoa ainda — com uma pessoa ativa,
+travaria o próprio autor. Revisitar quando houver a segunda.
 
 ## Riscos conhecidos
 

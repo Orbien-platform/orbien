@@ -1,0 +1,183 @@
+name: CI
+
+# Racional, alternativas consideradas e o que deliberadamente ficou de fora:
+# docs/CI.md
+#
+# Nenhum job precisa de secret. O banco é um Postgres descartável provisionado
+# por apps/api/scripts/bootstrap-db.sh, e as credenciais do e2e saem do seed do
+# próprio repositório. Um PR de fork roda igual.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Fase 1 — build, tipos e lint ─────────────────────────────────────────
+  build:
+    name: Build, tipos e lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # --include=dev é explícito de propósito: se algum dia este job definir
+      # NODE_ENV=production, o npm omite devDependencies e o build morre por
+      # falta de turbo, nest e typescript. Foi o que quebrou o primeiro deploy.
+      - run: npm ci --include=dev
+
+      - name: Sanidade das skills
+        run: node scripts/check-skills.mjs
+
+      - name: Build dos 3 apps
+        run: npx turbo run build
+
+      # nest build não checa a pasta test/, e é lá que estão os testes de RLS.
+      - name: Tipos da API, incluindo os testes
+        run: npx tsc --noEmit -p apps/api/tsconfig.json
+
+      - name: Lint
+        run: npx turbo run lint
+
+  # ── Fase 2 — isolamento multi-tenant contra Postgres efêmero ─────────────
+  rls:
+    name: Testes de RLS
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # 16+ é requisito: bootstrap-db.sh usa GRANT ... WITH SET TRUE.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: orbien
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DIRECT_URL: postgresql://postgres:ci@localhost:5432/orbien
+      # orbien_app, não postgres: rodar como superusuário passaria por cima do
+      # RLS e os testes passariam sem testar nada.
+      DATABASE_URL: postgresql://orbien_app:ci_app@localhost:5432/orbien
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+
+      - name: Provisionar o banco
+        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh
+        working-directory: apps/api
+
+      # test/setup.ts carrega .env via dotenv, que aqui não existe. Não é
+      # problema: arquivo ausente não lança, e variável de ambiente tem
+      # precedência sobre o arquivo.
+      - name: Suíte de isolamento
+        run: npm run test:rls -w orbien-backend
+
+  # ── Fase 3 — e2e autocontido: API e web sobem no próprio runner ──────────
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: orbien
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DIRECT_URL: postgresql://postgres:ci@localhost:5432/orbien
+      DATABASE_URL: postgresql://orbien_app:ci_app@localhost:5432/orbien
+      # O browser chama /api-proxy no próprio web; o rewrite do next.config
+      # encaminha para cá. Precisa estar definido no build E no start.
+      API_BACKEND_URL: http://localhost:3000/api
+      NEXT_PUBLIC_API_URL: /api-proxy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+
+      - name: Provisionar o banco com dados de seed
+        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh --seed
+        working-directory: apps/api
+
+      - name: Build da API e do web
+        run: npx turbo run build --filter=orbien-backend --filter=orbien-web
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Conjunto mínimo verificado para a API subir: sem estes ela morre no
+      # boot; as integrações externas (R2, Resend, OneSignal) não são exigidas.
+      - name: Subir a API
+        env:
+          PORT: '3000'
+          JWT_SECRET: ci-jwt-secret
+          JWT_REFRESH_SECRET: ci-jwt-refresh-secret
+          ALLOWED_ORIGINS: http://localhost:3001
+          FRONTEND_URL: http://localhost:3001
+        run: |
+          node apps/api/dist/src/main.js &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health >/dev/null && exit 0
+            sleep 2
+          done
+          echo "API não respondeu em 120s"; exit 1
+
+      - name: Subir o web
+        run: |
+          npm run start -w orbien-web -- --port 3001 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3001/login >/dev/null && exit 0
+            sleep 2
+          done
+          echo "web não respondeu em 120s"; exit 1
+
+      # As credenciais saem do seed do repositório — não são segredo. O usuário
+      # precisa ser o tenant_admin: platform_support leva 403 na maioria das
+      # rotas.
+      - name: Suíte de e2e
+        env:
+          E2E_BASE_URL: http://localhost:3001
+          E2E_API_URL: http://localhost:3001/api-proxy
+          E2E_EMAIL: fvargaspf@gmail.com
+          E2E_PASSWORD: A3dodfemf
+          E2E_TENANT: doca-church
+        run: npm run e2e -w orbien-web
+
+      # É o que transforma "quebrou no CI" em diagnóstico de dois minutos.
+      - name: Relatório e traces quando falhar
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            apps/web/e2e/screenshots/
+          retention-days: 7
