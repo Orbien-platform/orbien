@@ -117,15 +117,33 @@ if toca "^apps/api/(src|prisma)/"; then
   echo
   echo "▶ Isolamento multi-tenant (o diff toca a API)"
   echo "  … a suíte leva ~2,5 min contra o Supabase"
-  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && passa "39 testes de RLS" \
-    || { bloqueia "testes de RLS falharam — veja /tmp/prepush-rls.log"; grep -E "✕|SECURITY GAP|Tests:" /tmp/prepush-rls.log | tail -6 | sed 's/^/      /'; }
+  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && passa "39 testes de RLS" || {
+    # Distinguir banco inacessível de teste vermelho: bloquear por
+    # infraestrutura ensina a ignorar o portão.
+    if grep -qE "Exceeded timeout|Can't reach database|P1001|ECONNREFUSED" /tmp/prepush-rls.log; then
+      alerta "testes de RLS não rodaram: o banco não respondeu a tempo (veja /tmp/prepush-rls.log)"
+    else
+      bloqueia "testes de RLS falharam — veja /tmp/prepush-rls.log"
+      grep -E "✕|SECURITY GAP|Tests:" /tmp/prepush-rls.log | tail -6 | sed 's/^/      /'
+    fi
+  }
 fi
 
 if [ "$WITH_E2E" = true ] && toca "^apps/web/src/"; then
   echo
   echo "▶ E2E (--e2e, e o diff toca tela)"
-  npm run e2e -w orbien-web >/tmp/prepush-e2e.log 2>&1 && passa "suíte de tela" \
-    || { bloqueia "e2e falhou — veja /tmp/prepush-e2e.log"; grep -E "✘|passed|failed" /tmp/prepush-e2e.log | tail -6 | sed 's/^/      /'; }
+  E2E_URL="${E2E_BASE_URL:-http://localhost:3001}"
+
+  # Sem estas checagens o e2e falha por falta de setup e o portão bloqueia o
+  # push por motivo errado — que é pior do que não rodar.
+  if [ -z "${E2E_EMAIL:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${E2E_TENANT:-}" ]; then
+    alerta "e2e pulado: defina E2E_EMAIL, E2E_PASSWORD e E2E_TENANT (credenciais estão no seed)"
+  elif ! curl -sf --max-time 10 "$E2E_URL/login" >/dev/null 2>&1; then
+    alerta "e2e pulado: nada respondendo em $E2E_URL — suba o web ou aponte E2E_BASE_URL"
+  else
+    npm run e2e -w orbien-web >/tmp/prepush-e2e.log 2>&1 && passa "suíte de tela" \
+      || { bloqueia "e2e falhou — veja /tmp/prepush-e2e.log"; grep -E "✘|passed|failed" /tmp/prepush-e2e.log | tail -6 | sed 's/^/      /'; }
+  fi
 elif toca "^apps/web/src/"; then
   alerta "o diff toca tela e o e2e não rodou — use --e2e"
 fi
