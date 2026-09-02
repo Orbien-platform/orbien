@@ -160,7 +160,7 @@ fi
 # ── Resultado ─────────────────────────────────────────────────────────────
 echo
 if [ ${#WARNS[@]} -gt 0 ]; then
-  echo "${#WARNS[@]} alerta(s) — não bloqueiam, mas leia antes de subir:"
+  echo "${#WARNS[@]} alerta(s) — não bloqueiam. Decida: seguir assim, ou ajustar antes?"
   for w in "${WARNS[@]}"; do echo "  ! $w"; done
   echo
 fi

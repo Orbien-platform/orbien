@@ -37,5 +37,12 @@ leia o do app antes de mexer nele.
   nativamente: `/code-review`, `/simplify`, `/security-review`, memória em
   arquivos, subagentes, TodoWrite. Skill que reimplementa o embutido custa
   contexto em toda ativação e envelhece pior.
+- **Achado de revisão ou alerta de portão vira pergunta, não decisão
+  unilateral.** Ao encontrar problema em revisão (`pr-review`, `/code-review`)
+  ou alerta em `scripts/pre-push.sh`, apresente o achado com a evidência e
+  pergunte: seguir assim, ou ajustar antes? Seguir com pendência conhecida é
+  uma escolha legítima do dev — mas tem que ser escolha declarada, não
+  silêncio. Não corrija por conta própria o que não foi pedido, e não bloqueie
+  o trabalho esperando por certeza.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.

@@ -132,8 +132,12 @@ desta base — erro genérico de React fica com o `/code-review`.
 Você mesmo consolida; não gaste um subagente nisso.
 
 Revisando **branch local**: entregue no chat, e nada mais — não crie arquivo de
-relatório. Se houver 🚨, diga explicitamente que abrir o PR antes de resolver é
-uma escolha, não um esquecimento.
+relatório.
+
+Feche pedindo a decisão, item a item quando houver mais de um: **seguir assim ou
+ajustar antes?** Não corrija por conta própria e não trave o trabalho esperando
+resposta perfeita. Seguir com um 🚨 conhecido é escolha legítima do dev; o que
+não pode é a pendência passar em silêncio.
 
 Revisando **PR aberto**: poste **um** comentário com `gh pr comment <N> --body`:
 
