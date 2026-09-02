@@ -11,9 +11,14 @@ import { CelebrationInstancesService } from './celebration-instances.service';
 import { AddScheduleMinistryDto } from './dto/add-schedule-ministry.dto';
 import { ApplyTemplateDto } from './dto/apply-template.dto';
 
+// A tela de escala precisa mostrar QUEM está escalado, não só quantos.
+type AssignmentRow = CelebrationAssignment & {
+  volunteerProfile: { id: string; person: { id: string; full_name: string } };
+};
+
 type MinistryRow = CelebrationMinistry & {
   ministry: { id: string; name: string };
-  assignments: CelebrationAssignment[];
+  assignments: AssignmentRow[];
   assigned_count: number;
 };
 
@@ -38,7 +43,7 @@ export class CelebrationScheduleService {
     schedule: CelebrationSchedule & {
       ministries: (CelebrationMinistry & {
         ministry: { id: string; name: string };
-        assignments: CelebrationAssignment[];
+        assignments: AssignmentRow[];
       })[];
     },
   ): ScheduleDetail {
@@ -74,7 +79,14 @@ export class CelebrationScheduleService {
           orderBy: { created_at: 'asc' },
           include: {
             ministry: { select: { id: true, name: true } },
-            assignments: true,
+            assignments: {
+              orderBy: { created_at: 'asc' },
+              include: {
+                volunteerProfile: {
+                  select: { id: true, person: { select: { id: true, full_name: true } } },
+                },
+              },
+            },
           },
         },
       },
@@ -195,7 +207,14 @@ export class CelebrationScheduleService {
             orderBy: { created_at: 'asc' },
             include: {
               ministry: { select: { id: true, name: true } },
-              assignments: true,
+              assignments: {
+                orderBy: { created_at: 'asc' },
+                include: {
+                  volunteerProfile: {
+                    select: { id: true, person: { select: { id: true, full_name: true } } },
+                  },
+                },
+              },
             },
           },
         },
