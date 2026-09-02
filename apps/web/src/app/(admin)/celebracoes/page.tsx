@@ -8,6 +8,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/components/celebrations/CreateCelebrationModal";
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
+import { ScheduleSheet } from "@/components/celebrations/ScheduleSheet";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,8 @@ interface CelebrationInstance {
   status?: string;
   celebration: { id: string; name: string };
   serviceOrder?: { id: string } | null;
+  // Opcional: versões da API anteriores ao refactor de escalas não devolvem.
+  schedule?: { id: string; status: "draft" | "published" | "archived" } | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -64,6 +67,8 @@ export default function CelebracoesPage() {
   );
 
   const [activeTab, setActiveTab] = useState("celebrations");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleInst, setScheduleInst] = useState<CelebrationInstance | null>(null);
 
   // ── Celebrations tab state ──
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
@@ -137,6 +142,11 @@ export default function CelebracoesPage() {
   function openInstance(instId: string) {
     setSelectedInstId(instId);
     setSoViewOpen(true);
+  }
+
+  function openSchedule(inst: CelebrationInstance) {
+    setScheduleInst(inst);
+    setScheduleOpen(true);
   }
 
   // ── Celebrations table columns ──
@@ -261,14 +271,27 @@ export default function CelebracoesPage() {
               {upcomingInstances.map((inst) => {
                 const hasOC = !!inst.serviceOrder;
                 const startTime = celebrations.find((c) => c.id === inst.celebration.id)?.start_time;
+                const sched = inst.schedule;
+                const schedLabel =
+                  sched === undefined
+                    ? "Escala"
+                    : sched === null
+                      ? "Sem escala"
+                      : sched.status === "published"
+                        ? "Escala publicada"
+                        : sched.status === "archived"
+                          ? "Escala arquivada"
+                          : "Escala rascunho";
                 return (
-                  <button
+                  <div
                     key={inst.id}
-                    type="button"
-                    onClick={() => openInstance(inst.id)}
                     className="flex items-center justify-between gap-4 rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-4 text-left transition-shadow hover:shadow-sm group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => openInstance(inst.id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
                       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[8px] bg-[var(--surface-subtle)] text-stone group-hover:bg-navy group-hover:text-white transition-colors">
                         <FileText size={16} strokeWidth={1.5} />
                       </div>
@@ -281,7 +304,7 @@ export default function CelebracoesPage() {
                           {startTime ? ` · ${startTime}` : ""}
                         </span>
                       </div>
-                    </div>
+                    </button>
 
                     <div className="flex flex-shrink-0 items-center gap-2">
                       <span
@@ -294,8 +317,20 @@ export default function CelebracoesPage() {
                       >
                         {hasOC ? "Com OC" : "Sem OC"}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => openSchedule(inst)}
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-xs font-medium transition-colors",
+                          sched?.status === "published"
+                            ? "bg-teal-dim text-teal hover:bg-teal hover:text-white"
+                            : "bg-[var(--surface-subtle)] text-stone hover:bg-navy hover:text-white"
+                        )}
+                      >
+                        {schedLabel}
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -327,6 +362,19 @@ export default function CelebracoesPage() {
         instanceId={selectedInstId}
         canEdit={canEdit}
         canAddSongs={canAddSongs}
+      />
+
+      <ScheduleSheet
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        instanceId={scheduleInst?.id ?? null}
+        celebrationName={scheduleInst?.celebration.name ?? ""}
+        scheduledDate={scheduleInst?.scheduled_date ?? ""}
+        onChanged={() => {
+          // Recarrega a lista para o badge de escala refletir o novo estado.
+          hasFetchedUpcoming.current = false;
+          loadUpcoming();
+        }}
       />
     </div>
   );

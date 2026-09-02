@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CreateMinistryModal } from "@/components/volunteers/CreateMinistryModal";
 import { MinistryDetailSheet } from "@/components/volunteers/MinistryDetailSheet";
 import { MinistryTree } from "@/components/volunteers/MinistryTree";
+import { UnavailabilityPanel } from "@/components/volunteers/UnavailabilityPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
@@ -206,6 +207,12 @@ export default function VoluntariosPage() {
           <Tabs.Tab value="meus-turnos" className={tabBtn(activeTab === "meus-turnos")}>
             Meus Turnos
           </Tabs.Tab>
+          <Tabs.Tab
+            value="indisponibilidade"
+            className={tabBtn(activeTab === "indisponibilidade")}
+          >
+            Indisponibilidade
+          </Tabs.Tab>
         </Tabs.List>
 
         {/* ── Tab: Ministérios ── */}
@@ -331,6 +338,11 @@ export default function VoluntariosPage() {
               })}
             </div>
           )}
+        </Tabs.Panel>
+
+        {/* ── Tab: Indisponibilidade ── */}
+        <Tabs.Panel value="indisponibilidade" className="pt-5">
+          <UnavailabilityPanel />
         </Tabs.Panel>
       </Tabs.Root>
 
