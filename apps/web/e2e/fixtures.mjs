@@ -67,3 +67,46 @@ export async function ensureUpcomingInstance(token) {
     },
   };
 }
+
+/** Achata a árvore de ministérios que a API devolve. */
+function flatMinistries(nodes) {
+  const out = [];
+  for (const n of nodes) {
+    out.push(n);
+    out.push(...flatMinistries(n.children ?? []));
+  }
+  return out;
+}
+
+/**
+ * Garante um template de escala. Como acontece com a instância, só remove o
+ * que ele próprio criou.
+ */
+export async function ensureTemplate(token) {
+  const existing = await call(token, "GET", "/celebrations/schedule-templates");
+  if (existing.length > 0) {
+    return { template: existing[0], created: false, cleanup: async () => {} };
+  }
+
+  const ministries = flatMinistries(await call(token, "GET", "/volunteers/ministries"));
+  if (ministries.length === 0) {
+    throw new Error("Nenhum ministério cadastrado — impossível criar template de teste.");
+  }
+
+  const template = await call(token, "POST", "/celebrations/schedule-templates", {
+    name: "Template temporário de e2e",
+    description: "criado e removido pelo teste",
+    ministries: [{ ministry_id: ministries[0].id, slots: 2 }],
+  });
+
+  return {
+    template,
+    created: true,
+    cleanup: async () => {
+      await fetch(`${API_URL}/celebrations/schedule-templates/${template.id}`, {
+        method: "DELETE",
+        headers: headers(token),
+      });
+    },
+  };
+}

@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Crown,
+  LayoutTemplate,
   Loader2,
   Plus,
   Send,
@@ -28,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
+import type { ScheduleTemplate } from "@/components/celebrations/TemplatesPanel";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
@@ -139,6 +141,11 @@ export function ScheduleSheet({
   const [pickedSlots, setPickedSlots] = useState("1");
   const [addingMinistry, setAddingMinistry] = useState(false);
 
+  // Aplicar template
+  const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
+  const [pickedTemplate, setPickedTemplate] = useState("");
+  const [applying, setApplying] = useState(false);
+
   // Seleção de voluntários — por CelebrationMinistry.id
   const [openPicker, setOpenPicker] = useState<string | null>(null);
   const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
@@ -185,6 +192,10 @@ export function ScheduleSheet({
       .get<MinistryTreeNode[]>("/volunteers/ministries")
       .then(({ data }) => setMinistryTree(Array.isArray(data) ? data : []))
       .catch(() => setMinistryTree([]));
+    api
+      .get<ScheduleTemplate[]>("/celebrations/schedule-templates")
+      .then(({ data }) => setTemplates(Array.isArray(data) ? data : []))
+      .catch(() => setTemplates([]));
     return () => {
       signal.cancelled = true;
     };
@@ -244,6 +255,27 @@ export function ScheduleSheet({
       setError(errMsg(err, "Não foi possível adicionar o ministério."));
     } finally {
       setAddingMinistry(false);
+    }
+  }
+
+  async function applyTemplate() {
+    if (!instanceId || !pickedTemplate) return;
+    setApplying(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.post(`/celebrations/instances/${instanceId}/schedule/apply-template`, {
+        template_id: pickedTemplate,
+      });
+      // O endpoint só adiciona os ministérios que ainda não estão na escala,
+      // então aplicar duas vezes não duplica nada.
+      setPickedTemplate("");
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errMsg(err, "Não foi possível aplicar o template."));
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -482,7 +514,7 @@ export function ScheduleSheet({
                               {cm.assigned_count}/{cm.slots}
                             </span>
                           </div>
-                          <Button
+                          <button
                             type="button"
                             onClick={() => removeMinistry(cm.ministry_id)}
                             disabled={busyId === cm.ministry_id}
@@ -494,7 +526,7 @@ export function ScheduleSheet({
                             ) : (
                               <Trash2 size={14} strokeWidth={1.5} />
                             )}
-                          </Button>
+                          </button>
                         </div>
 
                         {/* Voluntários atribuídos */}
@@ -517,19 +549,19 @@ export function ScheduleSheet({
                                   >
                                     {ASSIGNMENT_LABELS[a.status]}
                                   </span>
-                                  <Button
+                                  <button
                                     type="button"
                                     onClick={() => unassign(cm, a.id)}
                                     disabled={busyId === a.id}
                                     aria-label={`Remover ${a.volunteerProfile.person.full_name} da escala`}
-                                    className="rounded-[6px] p-1 text-stone hover:bg-crimson-dim hover:text-crimson"
+                                    className="rounded-[6px] p-1 text-stone transition-colors hover:bg-crimson-dim hover:text-crimson disabled:opacity-50"
                                   >
                                     {busyId === a.id ? (
                                       <Loader2 size={11} className="animate-spin" />
                                     ) : (
                                       <X size={11} strokeWidth={1.5} />
                                     )}
-                                  </Button>
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -537,7 +569,7 @@ export function ScheduleSheet({
                         ) : null}
 
                         {/* Seletor de voluntários */}
-                        <Button
+                        <button
                           type="button"
                           onClick={() => togglePicker(cm)}
                           className="mt-3 flex items-center gap-1 text-xs text-navy hover:underline"
@@ -549,7 +581,7 @@ export function ScheduleSheet({
                             strokeWidth={1.5}
                             className={cn("transition-transform", pickerOpen && "rotate-180")}
                           />
-                        </Button>
+                        </button>
 
                         {pickerOpen ? (
                           <div className="mt-2 rounded-[8px] border border-[var(--border-default)] p-2">
@@ -618,6 +650,44 @@ export function ScheduleSheet({
                 </div>
               )}
 
+              {/* ── Aplicar template ── */}
+              {templates.length > 0 ? (
+                <div className="flex items-end gap-2 rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <Label htmlFor="sched-tpl" className="text-xs">
+                      Aplicar template
+                    </Label>
+                    <select
+                      id="sched-tpl"
+                      value={pickedTemplate}
+                      onChange={(e) => setPickedTemplate(e.target.value)}
+                      disabled={applying}
+                      className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+                    >
+                      <option value="">Selecione…</option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.ministries.length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={applyTemplate}
+                    disabled={applying || !pickedTemplate}
+                    className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-[8px] bg-navy px-3 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
+                  >
+                    {applying ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <LayoutTemplate size={14} strokeWidth={1.5} />
+                    )}
+                    Aplicar
+                  </Button>
+                </div>
+              ) : null}
+
               {/* ── Adicionar ministério ── */}
               {addMinOpen ? (
                 <div className="flex flex-col gap-3 rounded-[12px] border border-dashed border-[var(--border-default)] p-4">
@@ -675,25 +745,25 @@ export function ScheduleSheet({
                       )}
                       Adicionar
                     </Button>
-                    <Button
+                    <button
                       type="button"
                       onClick={() => setAddMinOpen(false)}
                       disabled={addingMinistry}
                       className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
                     >
                       Cancelar
-                    </Button>
+                    </button>
                   </div>
                 </div>
               ) : (
-                <Button
+                <button
                   type="button"
                   onClick={() => setAddMinOpen(true)}
                   className="flex items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-[var(--border-default)] py-3 text-sm text-stone hover:bg-[var(--surface-subtle)]"
                 >
                   <Plus size={14} strokeWidth={1.5} />
                   Adicionar ministério
-                </Button>
+                </button>
               )}
 
               {/* ── Publicar ── */}

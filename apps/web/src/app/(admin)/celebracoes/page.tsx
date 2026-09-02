@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/components/celebrations/CreateCelebrationModal";
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
 import { ScheduleSheet } from "@/components/celebrations/ScheduleSheet";
+import { TemplatesPanel } from "@/components/celebrations/TemplatesPanel";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -195,6 +196,9 @@ export default function CelebracoesPage() {
           <Tabs.Tab value="celebrations" className={tabBtn(activeTab === "celebrations")}>
             Celebrações
           </Tabs.Tab>
+          <Tabs.Tab value="templates" className={tabBtn(activeTab === "templates")}>
+            Templates
+          </Tabs.Tab>
           <Tabs.Tab value="proximas" className={tabBtn(activeTab === "proximas")}>
             Próximas
           </Tabs.Tab>
@@ -335,6 +339,11 @@ export default function CelebracoesPage() {
               })}
             </div>
           )}
+        </Tabs.Panel>
+
+        {/* ── Tab: Templates de escala ── */}
+        <Tabs.Panel value="templates" className="pt-5">
+          <TemplatesPanel canEdit={canEdit} />
         </Tabs.Panel>
       </Tabs.Root>
 

@@ -12,7 +12,7 @@
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { authenticatedPage, BASE_URL, login } from "./session.mjs";
-import { ensureUpcomingInstance } from "./fixtures.mjs";
+import { ensureTemplate, ensureUpcomingInstance } from "./fixtures.mjs";
 
 const SHOTS = new URL("./screenshots/", import.meta.url).pathname;
 
@@ -57,6 +57,14 @@ async function main() {
     fixture.created
       ? `  · instância temporária criada para o teste (${fixture.instance.id.slice(0, 8)})`
       : `  · reaproveitando instância futura existente (${fixture.instance.id.slice(0, 8)})`
+  );
+
+  // O seletor de "aplicar template" só existe se houver template cadastrado.
+  const tpl = await ensureTemplate(tokens.access_token);
+  console.log(
+    tpl.created
+      ? "  · template temporário criado para o teste"
+      : `  · reaproveitando template existente ("${tpl.template.name}")`
   );
 
   const browser = await chromium.launch();
@@ -120,6 +128,22 @@ async function main() {
         c && b && c.x < b.x + b.width && b.x < c.x + c.width && c.y < b.y + b.height && b.y < c.y + c.height;
       if (overlap) fail("botão de fechar sobrepõe o badge de status do painel");
       else ok("botão de fechar não colide com o badge de status");
+    }
+
+    // ── Aplicar template ──
+    const tplSelect = page.locator("#sched-tpl");
+    if (await waitForAny({ tpl: tplSelect }, 8000)) {
+      await tplSelect.selectOption({ index: 1 });
+      await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+      const applied = page.getByRole("button", { name: /Adicionar voluntário/ }).first();
+      if (await waitForAny({ applied })) {
+        ok("aplicar template preenche os ministérios da escala");
+        await shot(page, "07-template-aplicado");
+      } else {
+        fail("template aplicado não trouxe ministérios para a escala");
+      }
+    } else {
+      fail("seletor de template não apareceu no painel");
     }
 
     // ── Adiciona um ministério ──
@@ -222,6 +246,8 @@ async function main() {
     await browser.close();
     await fixture.cleanup();
     if (fixture.created) console.log("  · instância temporária removida");
+    await tpl.cleanup();
+    if (tpl.created) console.log("  · template temporário removido");
   }
 
   const failed = steps.filter((s) => !s.ok);

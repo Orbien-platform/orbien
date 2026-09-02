@@ -55,7 +55,13 @@ src/proxy.ts        guarda de autenticação
 ## Testes de tela (e2e)
 
 Scripts em [`e2e/`](e2e) sobem o Chromium contra o app rodando e percorrem os
-fluxos, gerando capturas em `e2e/screenshots/`.
+fluxos, gerando capturas em `e2e/screenshots/`:
+
+- `schedule.mjs` — montagem de escala (criar, aplicar template, ministérios,
+  voluntários) e indisponibilidade do voluntário
+- `templates.mjs` — CRUD de templates de escala
+
+`npm run e2e` roda os dois em sequência.
 
 ```bash
 E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=doca-church npm run e2e

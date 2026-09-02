@@ -24,6 +24,9 @@ leia o do app antes de mexer nele.
   `npm ci --include=dev && npm run build:api`, start
   `node apps/api/dist/src/main.js`, ambos a partir da raiz. O `Dockerfile`
   existe e funciona, mas não é o que o Render executa. Ver `/DEPLOY.md`.
+- No web, `<Button>` é para botões primários (com `bg-navy` na className). Para
+  ícone ou link, use `<button>` puro: o `variant` padrão do componente pinta um
+  fundo escuro que a className não remove.
 - Busca de dados no web é `useEffect` + axios (`src/lib/api.ts`), em todas as
   telas. `@tanstack/react-query` está no package.json mas **não tem provider
   nem uso** — não é o padrão da base; siga o que está em volta.
