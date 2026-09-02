@@ -132,7 +132,9 @@ async function main() {
 
     // ── Aplicar template ──
     const tplSelect = page.locator("#sched-tpl");
-    if (await waitForAny({ tpl: tplSelect }, 8000)) {
+    // Sem timeout curto aqui: contra produção a API pode estar em cold start
+    // do free tier, e 8s davam falso negativo. Usa o mesmo orçamento do resto.
+    if (await waitForAny({ tpl: tplSelect })) {
       await tplSelect.selectOption({ index: 1 });
       await page.getByRole("button", { name: "Aplicar", exact: true }).click();
       const applied = page.getByRole("button", { name: /Adicionar voluntário/ }).first();
