@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Revisa um PR do monorepo Orbien nas dimensões que o code-review embutido não cobre — isolamento multi-tenant, sincronia entre migration e código, fronteiras do monorepo e convenções do front. Use SOMENTE quando pedirem revisão de PR explicitamente ("revisa o PR #N", "code review desse PR"). NÃO acione durante implementação nem em perguntas gerais.
+description: Revisa mudanças do monorepo Orbien nas dimensões que o code-review embutido não cobre — isolamento multi-tenant, sincronia entre migration e código, fronteiras do monorepo e convenções do front. Serve para a branch local antes de abrir PR (o padrão aqui) ou para um PR já aberto. Use SOMENTE quando pedirem revisão explicitamente ("revisa antes do PR", "revisa o PR #N", "code review"). NÃO acione durante implementação nem em perguntas gerais.
 ---
 
 # pr-review
@@ -11,7 +11,8 @@ Correção genérica — bug de lógica, simplificação, eficiência — é o
 `/code-review` embutido do Claude Code. **Rode ele primeiro:**
 
 ```
-/code-review <número do PR>
+/code-review                 # branch local, antes do PR
+/code-review <número do PR>  # PR já aberto
 ```
 
 Esta skill cobre só o que é específico do Orbien e o embutido não conhece.
@@ -19,14 +20,24 @@ Não reimplemente o que ele faz.
 
 ## Passo 1 — Contexto
 
+**Alvo padrão: a branch local, antes de abrir o PR.** É onde a revisão é mais
+útil, porque ainda dá para corrigir sem outro commit.
+
+```bash
+git log --oneline main..HEAD
+git diff main...HEAD
+```
+
+**Alvo alternativo: um PR já aberto** (código de outra pessoa, ou revisão
+depois do fato):
+
 ```bash
 gh pr view <N> --json title,body,headRefName,files
 gh pr diff <N> > /tmp/pr-<N>.diff
 gh api repos/Orbien-platform/orbien/pulls/<N>/comments --jq '.[] | "\(.path):\(.line)"'
 ```
 
-O último comando evita repostar comentário onde já existe um (tolerância de ±3
-linhas).
+O último comando evita repostar comentário onde já existe um (±3 linhas).
 
 ## Passo 2 — Escolher as dimensões
 
@@ -50,7 +61,9 @@ ferramenta Agent para cada.
 1. Comentar só em linha do diff que começa com `+` (não `+++`).
 2. Confiança ≥ 80%. Na dúvida, não reporte.
 3. Citar o trecho do diff que é a evidência. Sem evidência, sem achado.
-4. Nunca aprovar, rejeitar nem alterar arquivo. Só `gh pr review <N> --comment`.
+4. Nunca aprovar, rejeitar nem alterar arquivo por conta própria. Em PR aberto,
+   só `gh pr review <N> --comment`; em branch local, relate no chat e deixe a
+   correção para uma decisão explícita.
 5. Prefixo do comentário: `<!-- orbien-review:<dimensão> -->`.
 6. Severidade: `🚨 crítico` (quebra ou vaza dado), `⚠️ atenção`, `💡 sugestão`.
 
@@ -116,8 +129,13 @@ desta base — erro genérico de React fica com o `/code-review`.
 
 ## Passo 3 — Consolidar
 
-Você mesmo consolida; não gaste um subagente nisso. Poste **um** comentário no
-PR com `gh pr comment <N> --body`:
+Você mesmo consolida; não gaste um subagente nisso.
+
+Revisando **branch local**: entregue no chat, e nada mais — não crie arquivo de
+relatório. Se houver 🚨, diga explicitamente que abrir o PR antes de resolver é
+uma escolha, não um esquecimento.
+
+Revisando **PR aberto**: poste **um** comentário com `gh pr comment <N> --body`:
 
 ```markdown
 ## Revisão Orbien
@@ -135,6 +153,21 @@ Cada item: arquivo:linha — o que é — o que fazer.
 
 Se nenhuma dimensão achou nada, diga isso em uma linha. Achado inventado para
 parecer útil é pior que revisão vazia.
+
+## Autor ≠ revisor
+
+Se esta revisão roda na mesma sessão que escreveu o código, é o autor
+conferindo o próprio trabalho — aplicando o mesmo modelo mental que produziu
+qualquer lacuna. É a fraqueza estrutural da revisão local.
+
+Duas formas de mitigar, em ordem de eficácia:
+
+1. Revisar em **sessão nova**, sem o contexto de como o código foi escrito.
+2. Despachar as dimensões como **subagentes**, que é o que o Passo 2 manda
+   fazer — cada um re-deriva a análise a partir do diff, não da memória.
+
+Nenhuma das duas equivale a outra pessoa revisando. Quando houver a segunda
+pessoa no projeto, revisão em PR volta a ser necessária — ver `docs/CI.md`.
 
 ## Custo
 

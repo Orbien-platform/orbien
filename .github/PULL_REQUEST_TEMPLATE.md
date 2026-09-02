@@ -13,6 +13,14 @@
 <!-- Passos numerados que outra pessoa consegue seguir, terminando no
      resultado esperado. Comandos exatos quando houver. -->
 
+## Revisão
+
+<!-- O padrão aqui é revisar localmente antes de abrir o PR: /code-review para
+     correção genérica, e a skill pr-review para as dimensões do Orbien
+     (isolamento multi-tenant, sincronia migration↔código, fronteiras do
+     monorepo, convenções do front). Diga o que rodou e o que achou.
+     Se não rodou, diga isso — é informação, não vergonha. -->
+
 ## Riscos e pendências
 
 <!-- O que pode quebrar, o que ficou de fora, o que depende de ação manual.

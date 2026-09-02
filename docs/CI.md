@@ -153,14 +153,39 @@ Requisitos:
 Tempo estimado: 6–10 min. Vale rodar em PR, mas é o primeiro candidato a virar
 `workflow_dispatch` ou noturno se o tempo incomodar.
 
-### Fase 4 — Revisão de PR pelo Claude (opcional, e a única que custa)
+### Fase 4 — Revisão: local, não no CI
 
-Substitui o template que veio nas skills, que usava o **Cursor SDK** com
-`CURSOR_API_KEY` — incompatível com a decisão de usar Claude para tudo. Foi
-removido do repositório.
+**Decidido: a revisão por IA acontece localmente, antes de abrir o PR.** Não há
+job de revisão no CI, e por bons motivos:
 
-A action oficial é `anthropics/claude-code-action@v1`, e ela consegue rodar a
-skill `/code-review` embutida:
+- Custa zero em minutos de Actions e zero em API — o Claude Code já está pago.
+- Dispensa autenticação: nada de secret, nada de WIF a configurar.
+- O feedback chega **antes** do push, quando corrigir não exige outro commit.
+- O revisor local tem o repositório inteiro à mão: roda os testes, abre o banco,
+  confirma a hipótese. Um job de CI só lê o diff.
+
+O fluxo está nas skills, para não depender de memória: a skill `pull-request`
+manda revisar antes do `gh pr create`, e a skill `pr-review` aceita a branch
+local (`main...HEAD`) como alvo padrão.
+
+#### As três fraquezas, ditas de frente
+
+1. **Não é verificável.** Passo local depende de disciplina. Com uma pessoa,
+   funciona; com duas, "você rodou a revisão?" não tem resposta objetiva.
+2. **Autor revisando o próprio trabalho.** Se a revisão roda na mesma sessão
+   que escreveu o código, aplica-se o mesmo modelo mental que produziu qualquer
+   lacuna. Mitiga-se revisando em sessão nova ou despachando as dimensões como
+   subagentes, mas não equivale a outra pessoa.
+3. **Não deixa registro.** Revisão em PR fica no histórico para quem vier
+   depois. A local se perde no terminal.
+
+#### Quando reverter esta decisão
+
+Quando entrar a segunda pessoa contribuindo. Aí a revisão local dela é
+invisível para você, e o item 1 deixa de ser aceitável. Nesse momento, as duas
+receitas abaixo passam a valer.
+
+#### Receita A — automático em todo PR
 
 ```yaml
       - uses: anthropics/claude-code-action@v1
@@ -172,69 +197,14 @@ skill `/code-review` embutida:
             --allowedTools "mcp__github_inline_comment__create_inline_comment"
 ```
 
-`permissions` do job: `contents: read`, `pull-requests: write` (para comentar),
-`id-token: write`.
+`permissions`: `contents: read`, `pull-requests: write`, `id-token: write`.
 
-O que decidir aqui:
+#### Receita B — sob demanda por menção
 
-| Assunto | Opções | Nota |
-|---|---|---|
-| Autenticação | `ANTHROPIC_API_KEY` (secret de org), `CLAUDE_CODE_OAUTH_TOKEN` (pessoal), ou **WIF** (sem secret, via OIDC) | O OAuth é atrelado a uma assinatura pessoal — não serve para organização. WIF é o único caminho que funciona em PR de fork |
-| Gatilho | automático em `pull_request`, ou sob demanda via `@claude` em comentário | `prompt` presente = automático; ausente = espera menção |
-| Custo | pago por token consumido. `--max-turns` e `--model` limitam | O serviço gerenciado de Code Review da Anthropic é cobrado por review (na ordem de dezenas de dólares em PR grande); a action com API key é bem mais barata para PR pequeno |
-
-**PR de fork:** o GitHub não entrega secrets a workflow disparado por fork.
-Com API key, a revisão simplesmente não roda. WIF resolve, ou exigir `@claude`
-de alguém com write access.
-
-**Ordem recomendada:** só depois das fases 1 e 2 estáveis. Revisão por IA
-opinando sobre um PR cujo build ninguém verificou é ruído caro — e há um
-risco de hábito: barra verde da IA não é evidência de que o código funciona.
-
-#### WIF — autenticar sem secret
-
-WIF (Workload Identity Federation) troca o token OIDC que o GitHub já emite
-para todo workflow por um token da Anthropic. Não há chave guardada em lugar
-nenhum, e é o **único** caminho que funciona em PR de fork, porque o GitHub
-retém secrets nesse cenário mas continua emitindo o OIDC.
-
-Configuração em duas pontas:
-
-1. **No Console da Anthropic** — criar um issuer apontando para o GitHub OIDC
-   e uma federation rule restringindo qual repositório e qual branch podem
-   trocar token. É aqui que fica o controle de acesso: a regra é o que impede
-   outro repositório de usar sua conta.
-2. **No workflow** — em vez de `anthropic_api_key`, passar os três
-   identificadores que a regra gerou:
+O modo é decidido por um detalhe: **`prompt` presente = automático; `prompt`
+ausente = espera menção.**
 
 ```yaml
-    permissions:
-      contents: read
-      pull-requests: write
-      id-token: write        # sem isto o GitHub não emite o OIDC
-    steps:
-      - uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
-          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
-          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
-```
-
-Os três não são segredo — são identificadores. Podem ir em `vars` (variáveis de
-repositório, visíveis) em vez de `secrets`, ou até literais no arquivo. O que
-autoriza é a federation rule do lado da Anthropic, não o valor deles.
-
-Trade-off honesto: exige uma configuração inicial no Console que a API key
-dispensa. Em troca, não há chave para rotacionar, revogar ou vazar em log — e
-funciona em fork.
-
-#### Acionamento sob demanda
-
-O modo é determinado por um detalhe: **`prompt` presente = automático;
-`prompt` ausente = espera menção.**
-
-```yaml
-name: Claude
 on:
   issue_comment:
     types: [created]
@@ -257,19 +227,39 @@ jobs:
           claude_args: '--max-turns 8'
 ```
 
-Na prática: alguém comenta no PR `@claude revisa o isolamento multi-tenant
-deste diff` e o workflow dispara com aquele texto como instrução. Dois eventos
-são necessários — `issue_comment` cobre comentário no corpo do PR,
-`pull_request_review_comment` cobre comentário em linha de código.
+Alguém comenta `@claude revisa o isolamento multi-tenant deste diff` e o
+workflow dispara com aquele texto. Dois eventos são necessários:
+`issue_comment` para comentário no corpo, `pull_request_review_comment` para
+comentário em linha. Só quem tem write access dispara, e o `if:` no nível do
+job evita gastar runner em todo comentário.
 
-Quem comenta precisa ter write access no repositório; menção de terceiro não
-dispara. E o `if:` no nível do job é o que evita gastar runner em todo
-comentário do repositório.
+#### Autenticação, quando chegar a hora
 
-Vantagem além do custo: você pede a revisão que quer, em vez de receber sempre
-a mesma. "Revisa só a parte de RLS" é um pedido melhor que uma varredura
-genérica — e é onde a skill `pr-review` deste repo entra, porque ela sabe quais
-dimensões existem aqui.
+| Opção | Secret | Nota |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | sim, de organização | Mais simples. **Não funciona em PR de fork** — o GitHub retém secrets |
+| `CLAUDE_CODE_OAUTH_TOKEN` | sim, pessoal | Atrelado a uma assinatura individual; não serve para organização |
+| **WIF** | **nenhum** | Troca o OIDC que o GitHub já emite por token da Anthropic. Único caminho que funciona em fork |
+
+WIF em duas pontas: no Console da Anthropic, criar issuer apontando para o
+GitHub OIDC e uma federation rule restringindo repositório e branch — é a regra
+que autoriza, e é onde fica o controle de acesso. No workflow, trocar
+`anthropic_api_key` por três identificadores:
+
+```yaml
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+```
+
+Os três não são segredo, são identificadores — podem ir em `vars`, visíveis.
+`id-token: write` é obrigatório, senão o GitHub não emite o OIDC.
+
+Custo, para quando for decidir: a action com API key é paga por token
+consumido, controlável com `--max-turns` e `--model`. O serviço gerenciado de
+Code Review da Anthropic é cobrado por review, na ordem de dezenas de dólares
+em PR grande.
+
 
 ### Fase 5 — Sanidade das skills (barata, e nova)
 
@@ -385,8 +375,7 @@ travaria o próprio autor. Revisitar quando houver a segunda.
 3. E2E **em todo PR** ou só noturno / sob demanda?
 4. Adicionar **eslint em `apps/api`** agora ou tratar como tarefa separada?
 5. Ativar **proteção de branch** já, ou esperar a primeira semana de CI verde?
-6. Revisão por IA (fase 4): **ativar agora ou depois**? E qual autenticação —
-   API key em secret de organização, ou WIF sem secret? (recomendo depois das
-   fases 1 e 2, e WIF se houver intenção de aceitar PR de fork)
-7. Gatilho da revisão: **automático em todo PR** ou sob demanda com `@claude`?
-   (sob demanda custa menos e evita ruído em PR de uma linha)
+~~6. Revisão por IA no CI~~ — **decidido: não.** A revisão é local, antes de
+   abrir o PR (fase 4). Reverter quando entrar a segunda pessoa contribuindo.
+~~7. Gatilho da revisão~~ — sem gatilho, porque não roda no CI. As duas
+   receitas ficam documentadas na fase 4 para quando a decisão 6 for revista.

@@ -26,7 +26,8 @@ o número no título; ele vai no corpo.
 
 ## Corpo
 
-Quatro seções. Omita a que não se aplica em vez de escrever "N/A".
+Cinco seções, iguais às de `.github/PULL_REQUEST_TEMPLATE.md`. Omita a que não
+se aplica em vez de escrever "N/A".
 
 ```markdown
 ## O que muda
@@ -43,6 +44,11 @@ que estava quebrado e como se manifestava.
 
 Passos numerados que outra pessoa consegue seguir, terminando no resultado
 esperado. Comandos exatos quando houver.
+
+## Revisão
+
+O que foi rodado antes de abrir e o que achou. Se não rodou, diga — é
+informação. Não afirme que rodou sem ter rodado.
 
 ## Riscos e pendências
 
@@ -67,6 +73,20 @@ Verifique no diff e mencione em **Riscos e pendências** quando aparecer:
 | Variável de ambiente nova | configurar em Render ou Vercel antes do merge |
 | `apps/web/e2e/` | como rodar a suíte |
 | Rota de API removida ou renomeada | quem consome no front precisa mudar junto |
+
+## Antes de abrir: revisar
+
+O padrão deste repositório é **revisar localmente antes de abrir o PR**, em vez
+de depender de revisão automática no CI. Antes do `gh pr create`:
+
+1. `/code-review` — correção genérica: bug, simplificação, eficiência.
+2. Skill `pr-review` — as dimensões próprias do Orbien: isolamento
+   multi-tenant, sincronia entre migration e código, fronteiras do monorepo,
+   convenções do front.
+
+Achado 🚨 se resolve antes de abrir. Se você abrir com um pendente, diga isso em
+**Riscos e pendências** — pendência declarada é decisão; pendência silenciosa é
+descuido.
 
 ## Abrir o PR
 
