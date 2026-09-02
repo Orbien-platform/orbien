@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, FileText, Calendar } from "lucide-react";
 import {
   Sheet,
@@ -70,40 +70,56 @@ export function CelebrationDetailSheet({
 }: CelebrationDetailSheetProps) {
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const [instances, setInstances] = useState<CelebrationInstance[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Carregamento é derivado: qual celebração já terminou de carregar. Evita
+  // setState síncrono dentro do effect, que dispara renders em cascata.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [soViewOpen, setSoViewOpen] = useState(false);
-  const hasFetched = useRef(false);
 
-  const loadData = useCallback(async (id: string) => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    setIsLoading(true);
-    try {
-      const [celRes, instRes] = await Promise.allSettled([
-        api.get<Celebration>(`/celebrations/${id}`),
-        api.get<CelebrationInstance[]>(`/celebrations/instances?celebration_id=${id}`),
-      ]);
-      if (celRes.status === "fulfilled") setCelebration(celRes.value.data);
-      if (instRes.status === "fulfilled") {
-        const sorted = (instRes.value.data ?? []).sort(
-          (a, b) => new Date(b.scheduled_date).getTime() - new Date(a.scheduled_date).getTime()
-        );
-        setInstances(sorted.slice(0, 10));
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const isLoading = open && celebrationId !== null && loadedFor !== celebrationId;
 
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona no corpo do effect.
   useEffect(() => {
-    if (open && celebrationId) {
-      hasFetched.current = false;
+    if (!open || !celebrationId) return;
+    // Cancelamento evita que uma resposta antiga sobrescreva o estado quando
+    // o usuário troca de celebração antes da anterior terminar.
+    const signal = { cancelled: false };
+    Promise.allSettled([
+      api.get<Celebration>(`/celebrations/${celebrationId}`),
+      api.get<CelebrationInstance[]>(`/celebrations/instances?celebration_id=${celebrationId}`),
+    ])
+      .then(([celRes, instRes]) => {
+        if (signal.cancelled) return;
+        // Falha na celebração deixa o estado nulo — o spinner permanece, como
+        // antes, em vez de mostrar dados da celebração anterior.
+        setCelebration(celRes.status === "fulfilled" ? celRes.value.data : null);
+        if (instRes.status === "fulfilled") {
+          const sorted = (instRes.value.data ?? []).sort(
+            (a, b) => new Date(b.scheduled_date).getTime() - new Date(a.scheduled_date).getTime()
+          );
+          setInstances(sorted.slice(0, 10));
+        } else {
+          setInstances([]);
+        }
+      })
+      .finally(() => {
+        if (!signal.cancelled) setLoadedFor(celebrationId);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, celebrationId]);
+
+  // Reset ao fechar acontece no handler, não em effect.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
       setCelebration(null);
       setInstances([]);
-      loadData(celebrationId);
+      setLoadedFor(null);
     }
-  }, [open, celebrationId, loadData]);
+    onOpenChange(next);
+  }
 
   function openInstance(instanceId: string) {
     setSelectedInstanceId(instanceId);
@@ -116,7 +132,7 @@ export function CelebrationDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
           {isLoading || !celebration ? (
             <div className="flex h-full items-center justify-center">

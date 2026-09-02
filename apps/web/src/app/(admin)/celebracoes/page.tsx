@@ -89,41 +89,37 @@ export default function CelebracoesPage() {
   const [soViewOpen, setSoViewOpen] = useState(false);
 
   // ── Load celebrations ──
-  const loadCelebrations = useCallback(async () => {
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona quando o effect chama.
+  // O flag de carregamento sobe onde a requisição é disparada — no mount ele
+  // já começa `true`, e na recarga manual quem sobe é o handler.
+  const loadCelebrations = useCallback(() => {
     if (hasFetchedCel.current) return;
     hasFetchedCel.current = true;
-    setCelebrationsLoading(true);
-    try {
-      // The API doesn't support pagination here — it always returns the full list.
-      const { data } = await api.get<Celebration[]>("/celebrations");
-      setCelebrations(Array.isArray(data) ? data : []);
-    } catch {
-      setCelebrations([]);
-    } finally {
-      setCelebrationsLoading(false);
-    }
+    // The API doesn't support pagination here — it always returns the full list.
+    return api
+      .get<Celebration[]>("/celebrations")
+      .then(({ data }) => setCelebrations(Array.isArray(data) ? data : []))
+      .catch(() => setCelebrations([]))
+      .finally(() => setCelebrationsLoading(false));
   }, []);
 
   // ── Load upcoming instances ──
-  const loadUpcoming = useCallback(async () => {
+  const loadUpcoming = useCallback(() => {
     if (hasFetchedUpcoming.current) return;
     hasFetchedUpcoming.current = true;
-    setUpcomingLoading(true);
-    try {
-      // No `limit`/`upcoming` support — filter with date_from and cap client-side.
-      const todayIso = new Date().toISOString().slice(0, 10);
-      const { data } = await api.get<CelebrationInstance[]>(
-        `/celebrations/instances?date_from=${todayIso}`
-      );
-      const sorted = (Array.isArray(data) ? data : []).sort(
-        (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
-      );
-      setUpcomingInstances(sorted.slice(0, 30));
-    } catch {
-      setUpcomingInstances([]);
-    } finally {
-      setUpcomingLoading(false);
-    }
+    // No `limit`/`upcoming` support — filter with date_from and cap client-side.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return api
+      .get<CelebrationInstance[]>(`/celebrations/instances?date_from=${todayIso}`)
+      .then(({ data }) => {
+        const sorted = (Array.isArray(data) ? data : []).sort(
+          (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+        );
+        setUpcomingInstances(sorted.slice(0, 30));
+      })
+      .catch(() => setUpcomingInstances([]))
+      .finally(() => setUpcomingLoading(false));
   }, []);
 
   useEffect(() => { loadCelebrations(); }, [loadCelebrations]);
@@ -134,6 +130,13 @@ export default function CelebracoesPage() {
       loadUpcoming();
     }
   }, [activeTab, loadUpcoming]);
+
+  // Entrar na aba "Próximas" refaz a busca; o skeleton sobe aqui, no evento,
+  // em vez de dentro do effect.
+  function handleTabChange(next: string) {
+    if (next === "proximas") setUpcomingLoading(true);
+    setActiveTab(next);
+  }
 
   function openDetail(celId: string) {
     setSelectedCelId(celId);
@@ -191,7 +194,7 @@ export default function CelebracoesPage() {
         <h1 className="text-2xl font-medium text-ink dark:text-white">Celebrações</h1>
       </div>
 
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+      <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
         <Tabs.List className="flex border-b border-[var(--border-default)]">
           <Tabs.Tab value="celebrations" className={tabBtn(activeTab === "celebrations")}>
             Celebrações
@@ -353,6 +356,7 @@ export default function CelebracoesPage() {
         onOpenChange={setCreateOpen}
         onCreated={() => {
           hasFetchedCel.current = false;
+          setCelebrationsLoading(true);
           loadCelebrations();
         }}
       />
@@ -382,6 +386,7 @@ export default function CelebracoesPage() {
         onChanged={() => {
           // Recarrega a lista para o badge de escala refletir o novo estado.
           hasFetchedUpcoming.current = false;
+          setUpcomingLoading(true);
           loadUpcoming();
         }}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Loader2, Users, FileText, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
@@ -60,6 +60,10 @@ export function RegisterMeetingModal({
   const [meetingId, setMeetingId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Mapa esparso: só quem foi marcado entra nele — ausência é a falta da
+  // chave. Antes um effect pré-preenchia todos os membros com `false`, o que
+  // era equivalente (as leituras já usam `?? false` e a contagem só olha
+  // `true`) e disparava setState de dentro do effect.
   const [attendance, setAttendance] = useState<Record<string, boolean>>({});
   const [savingAttendance, setSavingAttendance] = useState<Record<string, boolean>>({});
 
@@ -76,13 +80,6 @@ export function RegisterMeetingModal({
   const [materialError, setMaterialError] = useState("");
   const [meetingMaterials, setMeetingMaterials] = useState<MeetingMaterial[]>([]);
   const [removingMaterialId, setRemovingMaterialId] = useState<string | null>(null);
-
-  // Initialize attendance map when members change
-  useEffect(() => {
-    const init: Record<string, boolean> = {};
-    for (const m of members) init[m.person.id] = false;
-    setAttendance(init);
-  }, [members]);
 
   function reset() {
     setStep("form");

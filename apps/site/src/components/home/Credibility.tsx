@@ -6,9 +6,9 @@ export function Credibility() {
     >
       <div className="mx-auto max-w-[1180px] px-6 flex items-center justify-between gap-7 flex-wrap">
         <p className="text-[15px] italic" style={{ color: "var(--ink)", maxWidth: "360px" }}>
-          <span style={{ color: "var(--navy-accent)", fontWeight: 600 }}>"</span>
+          <span style={{ color: "var(--navy-accent)", fontWeight: 600 }}>&quot;</span>
           Feito com pastores, para pastores.
-          <span style={{ color: "var(--navy-accent)", fontWeight: 600 }}>"</span>
+          <span style={{ color: "var(--navy-accent)", fontWeight: 600 }}>&quot;</span>
         </p>
         <span
           className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em]"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -46,7 +46,6 @@ export default function GruposPage() {
   const [groups, setGroups] = useState<SmallGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [groupTypes, setGroupTypes] = useState<GroupTypeDef[]>([]);
@@ -56,27 +55,16 @@ export default function GruposPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [typesOpen, setTypesOpen] = useState(false);
 
-  const fetchRef = useRef(0);
+  // Uma requisição por combinação de página/busca/filtro; `reloadTick` força
+  // uma nova quando algo muda fora da tabela (criar grupo, editar tipos).
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = `${page}|${search}|${typeFilter}|${reloadTick}`;
+  // Carregamento derivado: qual requisição já terminou. Evita setState
+  // síncrono dentro do effect, que dispara renders em cascata.
+  const isLoading = loadedKey !== requestKey;
 
-  const loadGroups = useCallback(async (p: number, q: string, typeId: string) => {
-    const req = ++fetchRef.current;
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) });
-      if (q) params.set("search", q);
-      if (typeId) params.set("group_type_id", typeId);
-      const { data } = await api.get<GroupsResponse>(`/small-groups?${params}`);
-      if (req !== fetchRef.current) return;
-      setGroups(data.data ?? []);
-      setTotal(data.total ?? 0);
-    } catch {
-      if (req !== fetchRef.current) return;
-      setGroups([]);
-      setTotal(0);
-    } finally {
-      if (req === fetchRef.current) setIsLoading(false);
-    }
-  }, []);
+  const reloadGroups = useCallback(() => setReloadTick((t) => t + 1), []);
 
   const loadGroupTypes = useCallback(() => {
     fetchGroupTypes()
@@ -84,10 +72,34 @@ export default function GruposPage() {
       .catch(() => setGroupTypes([]));
   }, []);
 
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona no corpo do effect. O
+  // cancelamento substitui o antigo contador de requisição — evita que uma
+  // resposta antiga sobrescreva a lista quando página/filtro mudam antes.
   useEffect(() => {
-    loadGroups(page, search, typeFilter);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, typeFilter]);
+    const signal = { cancelled: false };
+    const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
+    if (search) params.set("search", search);
+    if (typeFilter) params.set("group_type_id", typeFilter);
+    api
+      .get<GroupsResponse>(`/small-groups?${params}`)
+      .then(({ data }) => {
+        if (signal.cancelled) return;
+        setGroups(data.data ?? []);
+        setTotal(data.total ?? 0);
+      })
+      .catch(() => {
+        if (signal.cancelled) return;
+        setGroups([]);
+        setTotal(0);
+      })
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(requestKey);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [requestKey, page, search, typeFilter]);
 
   useEffect(() => {
     loadGroupTypes();
@@ -255,7 +267,7 @@ export default function GruposPage() {
         onOpenChange={setSheetOpen}
         groupId={selectedId}
         canEdit={canEdit}
-        onUpdated={() => loadGroups(page, search, typeFilter)}
+        onUpdated={reloadGroups}
       />
 
       {/* Create modal */}
@@ -263,7 +275,7 @@ export default function GruposPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={() => {
-          loadGroups(1, search, typeFilter);
+          reloadGroups();
           setPage(1);
         }}
       />
@@ -275,7 +287,7 @@ export default function GruposPage() {
           onOpenChange={setTypesOpen}
           onChanged={() => {
             loadGroupTypes();
-            loadGroups(page, search, typeFilter);
+            reloadGroups();
           }}
         />
       )}

@@ -141,37 +141,33 @@ export default function ConteudoPage() {
   const [sendNotifOpen, setSendNotifOpen] = useState(false);
 
   // ── Load posts ──
-  const loadPosts = useCallback(async (type: string, status: string) => {
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona quando o effect chama.
+  // O skeleton sobe onde a requisição é disparada — no mount ele já começa
+  // `true`, e nas trocas de filtro / recargas quem sobe é o handler.
+  const loadPosts = useCallback((type: string, status: string) => {
     if (hasFetchedPosts.current) return;
     hasFetchedPosts.current = true;
-    setPostsLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: "50" });
-      if (type) params.set("type", type);
-      if (status === "draft") params.set("is_draft", "true");
-      else if (status === "published") params.set("is_draft", "false");
-      const { data } = await api.get<{ data: Post[] } | Post[]>(`/content/posts?${params}`);
-      setPosts(Array.isArray(data) ? data : data.data ?? []);
-    } catch {
-      setPosts([]);
-    } finally {
-      setPostsLoading(false);
-    }
+    const params = new URLSearchParams({ limit: "50" });
+    if (type) params.set("type", type);
+    if (status === "draft") params.set("is_draft", "true");
+    else if (status === "published") params.set("is_draft", "false");
+    return api
+      .get<{ data: Post[] } | Post[]>(`/content/posts?${params}`)
+      .then(({ data }) => setPosts(Array.isArray(data) ? data : data.data ?? []))
+      .catch(() => setPosts([]))
+      .finally(() => setPostsLoading(false));
   }, []);
 
   // ── Load segments ──
-  const loadSegments = useCallback(async () => {
+  const loadSegments = useCallback(() => {
     if (hasFetchedSegs.current) return;
     hasFetchedSegs.current = true;
-    setSegmentsLoading(true);
-    try {
-      const { data } = await api.get<{ data: Segment[] } | Segment[]>("/content/segments?limit=100");
-      setSegments(Array.isArray(data) ? data : data.data ?? []);
-    } catch {
-      setSegments([]);
-    } finally {
-      setSegmentsLoading(false);
-    }
+    return api
+      .get<{ data: Segment[] } | Segment[]>("/content/segments?limit=100")
+      .then(({ data }) => setSegments(Array.isArray(data) ? data : data.data ?? []))
+      .catch(() => setSegments([]))
+      .finally(() => setSegmentsLoading(false));
   }, []);
 
   useEffect(() => { loadPosts(typeFilter, statusFilter); }, [loadPosts]);
@@ -188,6 +184,24 @@ export default function ConteudoPage() {
     loadPosts(typeFilter, statusFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeFilter, statusFilter]);
+
+  // Entrar na aba "Segmentos" refaz a busca; o skeleton sobe aqui, no evento,
+  // em vez de dentro do effect.
+  function handleTabChange(next: string) {
+    if (next === "segmentos") setSegmentsLoading(true);
+    setActiveTab(next);
+  }
+
+  // Trocar de filtro dispara o effect abaixo; o skeleton sobe no evento.
+  function handleTypeFilterChange(next: string) {
+    setPostsLoading(true);
+    setTypeFilter(next);
+  }
+
+  function handleStatusFilterChange(next: string) {
+    setPostsLoading(true);
+    setStatusFilter(next);
+  }
 
   // Filter scheduled client-side (API may not support it)
   const filteredPosts = statusFilter === "scheduled"
@@ -265,7 +279,7 @@ export default function ConteudoPage() {
         <h1 className="text-2xl font-medium text-ink dark:text-white">Conteúdo</h1>
       </div>
 
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+      <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
         <Tabs.List className="flex border-b border-[var(--border-default)]">
           <Tabs.Tab value="posts" className={tabBtn(activeTab === "posts")}>Posts</Tabs.Tab>
           <Tabs.Tab value="segmentos" className={tabBtn(activeTab === "segmentos")}>Segmentos</Tabs.Tab>
@@ -279,7 +293,7 @@ export default function ConteudoPage() {
               {/* Type filter */}
               <select
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
+                onChange={(e) => handleTypeFilterChange(e.target.value)}
                 className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
               >
                 <option value="">Todos os tipos</option>
@@ -291,7 +305,7 @@ export default function ConteudoPage() {
               {/* Status filter */}
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
                 className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
               >
                 <option value="">Todos os status</option>
@@ -425,6 +439,7 @@ export default function ConteudoPage() {
         onOpenChange={setCreatePostOpen}
         onCreated={() => {
           hasFetchedPosts.current = false;
+          setPostsLoading(true);
           loadPosts(typeFilter, statusFilter);
         }}
       />
@@ -437,6 +452,7 @@ export default function ConteudoPage() {
         canDelete={canDelete}
         onUpdated={() => {
           hasFetchedPosts.current = false;
+          setPostsLoading(true);
           loadPosts(typeFilter, statusFilter);
         }}
       />
@@ -446,6 +462,7 @@ export default function ConteudoPage() {
         onOpenChange={setCreateSegOpen}
         onCreated={() => {
           hasFetchedSegs.current = false;
+          setSegmentsLoading(true);
           loadSegments();
         }}
       />

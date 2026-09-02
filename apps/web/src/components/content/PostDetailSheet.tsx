@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Trash2, Clock, ExternalLink } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,7 +94,6 @@ export function PostDetailSheet({
 }: PostDetailSheetProps) {
   const [post, setPost] = useState<Post | null>(null);
   const [allSegments, setAllSegments] = useState<Segment[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -113,7 +111,13 @@ export function PostDetailSheet({
   const [saveError, setSaveError] = useState("");
   const [toastMsg, setToastMsg] = useState("");
 
-  const hasFetched = useRef(false);
+  // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
+  // cada recarga disparada por um evento (publicar, salvar). Evita setState
+  // síncrono dentro do effect, que dispara renders em cascata.
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = postId ? `${postId}|${reloadTick}` : null;
+  const isLoading = open && requestKey !== null && loadedKey !== requestKey;
 
   function showToast(msg: string) {
     setToastMsg(msg);
@@ -135,47 +139,68 @@ export function PostDetailSheet({
     fileUpload.reset();
   }
 
-  const loadPost = useCallback(async (id: string) => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    setIsLoading(true);
-    try {
-      const [pRes, sRes] = await Promise.allSettled([
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona quando o effect chama.
+  const loadPost = useCallback(
+    (id: string, key: string, signal: { cancelled: boolean }) =>
+      Promise.allSettled([
         api.get<Post>(`/content/posts/${id}`),
         api.get<{ data: Segment[] } | Segment[]>("/content/segments?limit=100"),
-      ]);
-      if (pRes.status === "fulfilled") {
-        const p = pRes.value.data;
-        setPost(p);
-        applyPostToEditState(p);
-      }
-      if (sRes.status === "fulfilled") {
-        const d = sRes.value.data;
-        setAllSegments(Array.isArray(d) ? d : d.data ?? []);
-      }
-    } finally {
-      setIsLoading(false);
-    }
+      ])
+        .then(([pRes, sRes]) => {
+          if (signal.cancelled) return;
+          if (pRes.status === "fulfilled") {
+            const p = pRes.value.data;
+            setPost(p);
+            applyPostToEditState(p);
+          } else {
+            // Falha mantém o post nulo — o spinner permanece, como antes.
+            setPost(null);
+          }
+          if (sRes.status === "fulfilled") {
+            const d = sRes.value.data;
+            setAllSegments(Array.isArray(d) ? d : d.data ?? []);
+          }
+        })
+        .finally(() => {
+          if (!signal.cancelled) setLoadedKey(key);
+        }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    []
+  );
 
   useEffect(() => {
-    if (open && postId) {
-      hasFetched.current = false;
+    if (!open || !postId) return;
+    // Cancelamento evita que uma resposta antiga sobrescreva o estado.
+    const signal = { cancelled: false };
+    loadPost(postId, `${postId}|${reloadTick}`, signal);
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, postId, reloadTick, loadPost]);
+
+  // Reset ao fechar acontece no handler, não em effect.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
       setPost(null);
       setEditing(false);
       setConfirmDelete(false);
-      loadPost(postId);
+      setLoadedKey(null);
     }
-  }, [open, postId, loadPost]);
+    onOpenChange(next);
+  }
+
+  // Recarga disparada por evento.
+  function reloadPost() {
+    setReloadTick((t) => t + 1);
+  }
 
   async function handlePublish() {
     if (!postId) return;
     setIsPublishing(true);
     try {
       await api.post(`/content/posts/${postId}/publish`);
-      hasFetched.current = false;
-      await loadPost(postId);
+      reloadPost();
       onUpdated();
     } catch {
       // ignore
@@ -190,7 +215,7 @@ export function PostDetailSheet({
     try {
       await api.delete(`/content/posts/${postId}`);
       onUpdated();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch {
       setIsDeleting(false);
       setConfirmDelete(false);
@@ -222,16 +247,14 @@ export function PostDetailSheet({
           await fileUpload.upload(postId);
         } catch {
           setSaveError("Erro ao enviar o arquivo. As demais alterações foram salvas.");
-          hasFetched.current = false;
-          await loadPost(postId);
+          reloadPost();
           onUpdated();
           return;
         }
         showToast("Post atualizado com sucesso");
       }
 
-      hasFetched.current = false;
-      await loadPost(postId);
+      reloadPost();
       setEditing(false);
       onUpdated();
     } catch {
@@ -251,7 +274,7 @@ export function PostDetailSheet({
 
   return (
     <>
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[500px] overflow-y-auto p-0">
         {isLoading || !post ? (
           <div className="flex h-full items-center justify-center">

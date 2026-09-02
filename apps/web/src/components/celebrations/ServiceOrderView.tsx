@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
   Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown,
@@ -8,7 +8,6 @@ import {
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AddItemModal, ITEM_TYPE_LABELS, type ItemType } from "@/components/celebrations/AddItemModal";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -180,7 +179,6 @@ export function ServiceOrderView({
   const [instance, setInstance] = useState<CelebrationInstance | null>(null);
   const [serviceOrder, setServiceOrder] = useState<ServiceOrder | null>(null);
   const [items, setItems] = useState<ServiceOrderItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [noOC, setNoOC] = useState(false);
   const [isCreatingOC, setIsCreatingOC] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
@@ -189,55 +187,80 @@ export function ServiceOrderView({
   const [reordering, setReordering] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
-  const hasFetched = useRef(false);
+
+  // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
+  // cada recarga disparada por um evento (adicionar etapa, música, reverter
+  // reordenação). Evita setState síncrono dentro do effect.
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = instanceId ? `${instanceId}|${reloadTick}` : null;
+  const isLoading = open && requestKey !== null && loadedKey !== requestKey;
 
   function showToast(msg: string) {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 3000);
   }
 
-  const loadData = useCallback(async (id: string) => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    setIsLoading(true);
-    setNoOC(false);
-    try {
-      // Load instance details
-      const instRes = await api.get<CelebrationInstance>(`/celebrations/instances/${id}`);
-      setInstance(instRes.data);
-
-      // Load service order (may be 404 if none exists yet)
-      try {
-        const soRes = await api.get<ServiceOrder>(`/celebrations/instances/${id}/service-order`);
-        setServiceOrder(soRes.data);
-        setItems(
-          [...(soRes.data.items ?? [])].sort((a, b) => a.position - b.position)
-        );
-      } catch (soErr: unknown) {
-        const status = (soErr as { response?: { status: number } })?.response?.status;
-        if (status === 404) {
-          setNoOC(true);
-        }
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona no corpo do effect.
   useEffect(() => {
-    if (open && instanceId) {
-      hasFetched.current = false;
+    if (!open || !instanceId) return;
+    const id = instanceId;
+    // Cancelamento evita que uma resposta antiga sobrescreva o estado.
+    const signal = { cancelled: false };
+    // Load instance details
+    api
+      .get<CelebrationInstance>(`/celebrations/instances/${id}`)
+      .then((instRes) => {
+        if (signal.cancelled) return;
+        setInstance(instRes.data);
+        // Load service order (may be 404 if none exists yet)
+        return api
+          .get<ServiceOrder>(`/celebrations/instances/${id}/service-order`)
+          .then((soRes) => {
+            if (signal.cancelled) return;
+            setServiceOrder(soRes.data);
+            setItems([...(soRes.data.items ?? [])].sort((a, b) => a.position - b.position));
+            setNoOC(false);
+          })
+          .catch((soErr: unknown) => {
+            if (signal.cancelled) return;
+            const status = (soErr as { response?: { status: number } })?.response?.status;
+            setNoOC(status === 404);
+          });
+      })
+      .catch(() => {
+        // Falha ao carregar a instância: mesmo estado final de antes, quando
+        // `noOC` era zerado no início da carga.
+        if (signal.cancelled) return;
+        setNoOC(false);
+      })
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(`${id}|${reloadTick}`);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, instanceId, reloadTick]);
+
+  // Reset ao fechar acontece no handler, não em effect.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
       setInstance(null);
       setServiceOrder(null);
       setItems([]);
       setNoOC(false);
       setAddItemOpen(false);
       setAddSongForItemId(null);
-      loadData(instanceId);
+      setLoadedKey(null);
     }
-  }, [open, instanceId, loadData]);
+    onOpenChange(next);
+  }
+
+  // Recarga disparada por evento.
+  function reloadData() {
+    setReloadTick((t) => t + 1);
+  }
 
   async function handleCreateOC() {
     if (!instanceId) return;
@@ -290,8 +313,7 @@ export function ServiceOrderView({
       ]);
     } catch {
       // Revert on error
-      hasFetched.current = false;
-      if (instanceId) loadData(instanceId);
+      if (instanceId) reloadData();
     } finally {
       setReordering(false);
     }
@@ -318,18 +340,16 @@ export function ServiceOrderView({
   }
 
   // After adding item: reload OC
-  async function afterAddItem() {
+  function afterAddItem() {
     if (!instanceId) return;
-    hasFetched.current = false;
-    await loadData(instanceId);
+    reloadData();
   }
 
   // After adding song: reload
-  async function afterAddSong() {
+  function afterAddSong() {
     setAddSongForItemId(null);
     if (!instanceId) return;
-    hasFetched.current = false;
-    await loadData(instanceId);
+    reloadData();
   }
 
   // Create setlist for a worship item then open add-song form
@@ -380,7 +400,7 @@ export function ServiceOrderView({
 
   return (
     <>
-      <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Root open={open} onOpenChange={handleOpenChange}>
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
           <Dialog.Popup className="fixed inset-0 z-50 flex flex-col bg-[var(--surface-base)] transition duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 overflow-hidden">

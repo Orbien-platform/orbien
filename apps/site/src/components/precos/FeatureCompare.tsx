@@ -111,7 +111,7 @@ export function FeatureCompare() {
             O que cabe em cada plano
           </h2>
           <p className="text-base font-light leading-relaxed max-w-[620px]" style={{ color: "var(--stone)" }}>
-            Cinco frentes da gestão da igreja, lado a lado. Sem categoria "Enterprise" escondendo o que importa.
+            Cinco frentes da gestão da igreja, lado a lado. Sem categoria &quot;Enterprise&quot; escondendo o que importa.
           </p>
         </Reveal>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import {
@@ -264,7 +264,6 @@ export function GroupDetailSheet({
 }: GroupDetailSheetProps) {
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
   const [editing, setEditing] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
@@ -273,38 +272,56 @@ export function GroupDetailSheet({
   const [loadingMaterialsId, setLoadingMaterialsId] = useState<string | null>(null);
   const [removingMaterial, setRemovingMaterial] = useState<{ meetingId: string; item: MeetingMaterial } | null>(null);
   const [isRemovingMaterial, setIsRemovingMaterial] = useState(false);
-  const hasFetched = useRef(false);
+  // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
+  // cada recarga disparada por um evento (registrar encontro). Evita setState
+  // síncrono dentro do effect, que dispara renders em cascata.
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = groupId ? `${groupId}|${reloadTick}` : null;
+  const isLoading = open && requestKey !== null && loadedKey !== requestKey;
 
-  const loadGroup = useCallback(async (id: string) => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    setIsLoading(true);
-    try {
-      const [groupRes, meetingsRes] = await Promise.allSettled([
-        api.get<GroupDetail>(`/small-groups/${id}`),
-        api.get<{ data: Meeting[] }>(`/small-groups/${id}/meetings?limit=10`),
-      ]);
-      if (groupRes.status === "fulfilled") setGroup(groupRes.value.data);
-      if (meetingsRes.status === "fulfilled") {
-        setMeetings(meetingsRes.value.data.data ?? meetingsRes.value.data as unknown as Meeting[]);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona no corpo do effect.
   useEffect(() => {
-    if (open && groupId) {
-      hasFetched.current = false;
+    if (!open || !groupId) return;
+    const id = groupId;
+    // Cancelamento evita que uma resposta antiga sobrescreva o estado.
+    const signal = { cancelled: false };
+    Promise.allSettled([
+      api.get<GroupDetail>(`/small-groups/${id}`),
+      api.get<{ data: Meeting[] }>(`/small-groups/${id}/meetings?limit=10`),
+    ])
+      .then(([groupRes, meetingsRes]) => {
+        if (signal.cancelled) return;
+        // Falha mantém o grupo nulo — o spinner permanece, como antes.
+        setGroup(groupRes.status === "fulfilled" ? groupRes.value.data : null);
+        if (meetingsRes.status === "fulfilled") {
+          setMeetings(meetingsRes.value.data.data ?? meetingsRes.value.data as unknown as Meeting[]);
+        } else {
+          setMeetings([]);
+        }
+      })
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(`${id}|${reloadTick}`);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, groupId, reloadTick]);
+
+  // Reset ao fechar acontece no handler, não em effect.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
       setGroup(null);
       setMeetings([]);
       setEditing(false);
       setActiveTab("info");
       setExpandedMeetingId(null);
       setMeetingMaterials({});
-      loadGroup(groupId);
+      setLoadedKey(null);
     }
-  }, [open, groupId, loadGroup]);
+    onOpenChange(next);
+  }
 
   function handleSaved(updated: GroupDetail) {
     setGroup(updated);
@@ -354,7 +371,7 @@ export function GroupDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent side="right" className="w-full sm:max-w-[480px] overflow-y-auto p-0">
           {isLoading || !group ? (
             <div className="flex h-full items-center justify-center">
@@ -629,8 +646,7 @@ export function GroupDetailSheet({
           members={members}
           onRegistered={() => {
             // Refresh meetings list
-            hasFetched.current = false;
-            loadGroup(group.id);
+            setReloadTick((t) => t + 1);
           }}
         />
       )}

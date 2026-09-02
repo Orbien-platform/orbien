@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Loader2, Phone, Mail, Calendar, User, Edit2, Check, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,29 +76,43 @@ function formatPhone(phone?: string): string {
 
 export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonSheetProps) {
   const [person, setPerson] = useState<PersonDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editForm, setEditForm] = useState<Partial<PersonDetail>>({});
   const [saveError, setSaveError] = useState("");
-  const hasFetched = useRef(false);
+  // Carregamento é derivado: qual pessoa já terminou de carregar. Evita
+  // setState síncrono dentro do effect, que dispara renders em cascata.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+
+  const isLoading = open && personId !== null && loadedFor !== personId;
 
   useEffect(() => {
-    if (!personId || !open) {
+    if (!personId || !open) return;
+    // Cancelamento evita que uma resposta antiga sobrescreva o estado quando
+    // o usuário troca de pessoa antes da anterior terminar.
+    const signal = { cancelled: false };
+    api.get<PersonDetail>(`/persons/${personId}`)
+      .then((r) => {
+        if (!signal.cancelled) setPerson(r.data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!signal.cancelled) setLoadedFor(personId);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [personId, open]);
+
+  // Reset ao fechar acontece no handler, não em effect.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
       setPerson(null);
       setIsEditing(false);
-      hasFetched.current = false;
-      return;
+      setLoadedFor(null);
     }
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-
-    setIsLoading(true);
-    api.get<PersonDetail>(`/persons/${personId}`)
-      .then((r) => setPerson(r.data))
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
-  }, [personId, open]);
+    onOpenChange(next);
+  }
 
   function startEdit() {
     if (!person) return;
@@ -148,7 +161,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
         {isLoading ? (
           <div className="p-6 space-y-4">

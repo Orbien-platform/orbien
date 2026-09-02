@@ -73,7 +73,7 @@ function AppFeedMockup() {
             <div className="px-3 py-2.5">
               <p className="text-[11px] font-semibold mb-1" style={{ color: "var(--ink)" }}>Salmos 23 — O Senhor é meu pastor</p>
               <p className="text-[9px] font-light leading-relaxed" style={{ color: "var(--stone)" }}>
-                "O Senhor é o meu pastor, nada me faltará." Uma meditação sobre confiar no cuidado de Deus...
+                &quot;O Senhor é o meu pastor, nada me faltará.&quot; Uma meditação sobre confiar no cuidado de Deus...
               </p>
               <p className="font-mono text-[8px] mt-1.5" style={{ color: "var(--navy-accent)" }}>Ler mais →</p>
             </div>

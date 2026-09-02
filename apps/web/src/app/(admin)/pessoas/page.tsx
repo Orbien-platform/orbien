@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { UserPlus, Upload, HelpCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -56,7 +56,6 @@ export default function PessoasPage() {
   const [persons, setPersons] = useState<Person[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [classification, setClassification] = useState("");
 
@@ -66,35 +65,45 @@ export default function PessoasPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importHelpOpen, setImportHelpOpen] = useState(false);
 
-  const fetchRef = useRef(0);
+  // Uma requisição por combinação de página/busca/classificação; `reloadTick`
+  // força uma nova quando algo muda fora da tabela (criar, importar, editar).
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = `${page}|${search}|${classification}|${reloadTick}`;
+  // Carregamento derivado: qual requisição já terminou. Evita setState
+  // síncrono dentro do effect, que dispara renders em cascata.
+  const isLoading = loadedKey !== requestKey;
 
-  const loadPersons = useCallback(
-    async (p: number, q: string, cls: string) => {
-      const req = ++fetchRef.current;
-      setIsLoading(true);
-      try {
-        const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) });
-        if (q) params.set("search", q);
-        if (cls) params.set("classification", cls);
-        const { data } = await api.get<PersonsResponse>(`/persons?${params}`);
-        if (req !== fetchRef.current) return;
+  const reloadPersons = useCallback(() => setReloadTick((t) => t + 1), []);
+
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona no corpo do effect. O
+  // cancelamento substitui o antigo contador de requisição — evita que uma
+  // resposta antiga sobrescreva a lista quando página/filtro mudam antes.
+  useEffect(() => {
+    const signal = { cancelled: false };
+    const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
+    if (search) params.set("search", search);
+    if (classification) params.set("classification", classification);
+    api
+      .get<PersonsResponse>(`/persons?${params}`)
+      .then(({ data }) => {
+        if (signal.cancelled) return;
         setPersons(data.data);
         setTotal(data.total);
-      } catch {
-        if (req !== fetchRef.current) return;
+      })
+      .catch(() => {
+        if (signal.cancelled) return;
         setPersons([]);
         setTotal(0);
-      } finally {
-        if (req === fetchRef.current) setIsLoading(false);
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    loadPersons(page, search, classification);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, classification]);
+      })
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(requestKey);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [requestKey, page, search, classification]);
 
   const handleSearch = useCallback((q: string) => {
     setPage(1);
@@ -253,19 +262,19 @@ export default function PessoasPage() {
         personId={selectedId}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        onUpdated={() => loadPersons(page, search, classification)}
+        onUpdated={reloadPersons}
       />
 
       {/* ── Modals ── */}
       <CreateVisitorModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={() => { setPage(1); loadPersons(1, search, classification); }}
+        onCreated={() => { setPage(1); reloadPersons(); }}
       />
       <ImportCsvModal
         open={importOpen}
         onOpenChange={setImportOpen}
-        onImported={() => loadPersons(page, search, classification)}
+        onImported={reloadPersons}
       />
       <ImportHelpModal
         open={importHelpOpen}

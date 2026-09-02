@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import {
   Loader2,
@@ -144,8 +144,11 @@ function AddMinistryMemberModal({
 
   // Debounced search-by-name, filtered by classification rules for the
   // selected role (client-side mirror of the API's own validation).
+  // A limpeza dos resultados saiu do effect para os eventos que zeram a busca
+  // (digitar vazio, limpar seleção, fechar o modal) — antes era um setState
+  // síncrono no corpo do effect.
   useEffect(() => {
-    if (!open || !query.trim()) { setResults([]); return; }
+    if (!open || !query.trim()) return;
     const handle = setTimeout(() => {
       setIsSearching(true);
       const params = new URLSearchParams({ search: query.trim(), limit: "10" });
@@ -163,6 +166,13 @@ function AddMinistryMemberModal({
     }, 300);
     return () => clearTimeout(handle);
   }, [query, role, open, existingPersonIds]);
+
+  function handleQueryChange(next: string) {
+    setQuery(next);
+    setSelectedPerson(null);
+    // Busca vazia zera os resultados, como o effect fazia antes.
+    if (!next.trim()) setResults([]);
+  }
 
   function handleRoleChange(next: MinistryRole) {
     setRole(next);
@@ -237,14 +247,14 @@ function AddMinistryMemberModal({
               <Input
                 placeholder="Buscar pelo nome…"
                 value={selectedPerson ? selectedPerson.full_name : query}
-                onChange={(e) => { setQuery(e.target.value); setSelectedPerson(null); }}
+                onChange={(e) => handleQueryChange(e.target.value)}
                 disabled={isSubmitting}
                 className="rounded-[8px] pr-8"
               />
               {selectedPerson && (
                 <button
                   type="button"
-                  onClick={() => { setSelectedPerson(null); setQuery(""); }}
+                  onClick={() => { setSelectedPerson(null); setQuery(""); setResults([]); }}
                   aria-label="Limpar seleção"
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-stone hover:text-ink"
                 >
@@ -296,7 +306,7 @@ function AddMinistryMemberModal({
           )}
 
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 rounded-[8px]" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            <Button variant="outline" className="flex-1 rounded-[8px]" onClick={() => { setResults([]); onOpenChange(false); }} disabled={isSubmitting}>
               Cancelar
             </Button>
             <Button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]">
@@ -388,7 +398,6 @@ export function MinistryDetailSheet({
   onSelectMinistry,
 }: MinistryDetailSheetProps) {
   const [ministry, setMinistry] = useState<MinistryDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
@@ -405,38 +414,60 @@ export function MinistryDetailSheet({
   const [isRemoving, setIsRemoving] = useState(false);
   const [primaryBusyId, setPrimaryBusyId] = useState<string | null>(null);
 
-  const hasFetched = useRef(false);
+  // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
+  // cada recarga disparada por um evento (adicionar/remover pessoa, trocar o
+  // líder principal). Evita setState síncrono dentro do effect.
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = ministryId ? `${ministryId}|${reloadTick}` : null;
+  const isLoading = open && requestKey !== null && loadedKey !== requestKey;
 
   function showToast(msg: string) {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 4000);
   }
 
-  const loadData = useCallback(async (id: string) => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    setIsLoading(true);
-    try {
-      const { data } = await api.get<MinistryDetail>(`/volunteers/ministries/${id}`);
-      setMinistry(data);
-      setEditName(data.name);
-      setEditDesc(data.description ?? "");
-      setEditColor(data.color ?? MINISTRY_COLORS[0].value);
-    } catch {
-      setMinistry(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona no corpo do effect.
   useEffect(() => {
-    if (open && ministryId) {
-      hasFetched.current = false;
+    if (!open || !ministryId) return;
+    const id = ministryId;
+    // Cancelamento evita que uma resposta antiga sobrescreva o estado.
+    const signal = { cancelled: false };
+    api
+      .get<MinistryDetail>(`/volunteers/ministries/${id}`)
+      .then(({ data }) => {
+        if (signal.cancelled) return;
+        setMinistry(data);
+        setEditName(data.name);
+        setEditDesc(data.description ?? "");
+        setEditColor(data.color ?? MINISTRY_COLORS[0].value);
+      })
+      .catch(() => {
+        if (!signal.cancelled) setMinistry(null);
+      })
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(`${id}|${reloadTick}`);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, ministryId, reloadTick]);
+
+  // Reset ao fechar acontece no handler, não em effect.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
       setMinistry(null);
       setEditing(false);
-      loadData(ministryId);
+      setLoadedKey(null);
     }
-  }, [open, ministryId, loadData]);
+    onOpenChange(next);
+  }
+
+  // Recarga disparada por evento.
+  function reloadData() {
+    setReloadTick((t) => t + 1);
+  }
 
   async function handleSave() {
     if (!editName.trim() || !ministryId) return;
@@ -463,8 +494,7 @@ export function MinistryDetailSheet({
     setPrimaryBusyId(assignmentId);
     try {
       await api.patch(`/volunteers/ministry-assignments/${assignmentId}`, { is_primary_leader: true });
-      hasFetched.current = false;
-      await loadData(ministryId);
+      reloadData();
       onUpdated();
       showToast("Líder principal atualizado.");
     } catch (err) {
@@ -480,8 +510,7 @@ export function MinistryDetailSheet({
     try {
       await api.delete(`/volunteers/ministry-assignments/${removeTarget.id}`);
       setRemoveTarget(null);
-      hasFetched.current = false;
-      await loadData(ministryId);
+      reloadData();
       onUpdated();
       showToast("Pessoa removida do ministério.");
     } catch (err) {
@@ -500,7 +529,7 @@ export function MinistryDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
           {isLoading || !ministry ? (
             <div className="flex h-full items-center justify-center">
@@ -685,8 +714,7 @@ export function MinistryDetailSheet({
           ministryId={ministryId}
           existingPersonIds={existingPersonIds}
           onAdded={() => {
-            hasFetched.current = false;
-            loadData(ministryId);
+            reloadData();
             onUpdated();
           }}
         />

@@ -98,56 +98,67 @@ export default function VoluntariosPage() {
   const [minSheetOpen, setMinSheetOpen] = useState(false);
 
   // ── Load ministries ──
-  const loadMinistries = useCallback(async () => {
+  // Cadeia de promises em vez de async/await: assim todo setState acontece
+  // dentro de um callback, nunca de forma síncrona quando o effect chama.
+  // Os flags de carregamento sobem onde a requisição é disparada — no mount
+  // eles já vêm do useState, e nas recargas quem sobe é o handler.
+  const loadMinistries = useCallback(() => {
     if (hasFetchedMin.current) return;
     hasFetchedMin.current = true;
-    setMinistriesLoading(true);
-    let ids: string[] = [];
-    try {
-      const { data } = await api.get<MinistryTreeNode[]>("/volunteers/ministries");
-      setMinistryTree(data);
-      ids = flattenMinistryTree(data).map((m) => m.id);
-    } catch {
-      setMinistryTree([]);
-    } finally {
-      setMinistriesLoading(false);
-    }
-
-    // The tree endpoint doesn't return aggregate counts, so fetch each
-    // ministry's detail (leaders/volunteers) one at a time — sequential to
-    // avoid piling concurrent requests onto the dev proxy/API.
-    for (const id of ids) {
-      try {
-        const { data } = await api.get<{ leaders: unknown[]; volunteers: unknown[] }>(
-          `/volunteers/ministries/${id}`
+    return api
+      .get<MinistryTreeNode[]>("/volunteers/ministries")
+      .then(({ data }) => {
+        setMinistryTree(data);
+        return flattenMinistryTree(data).map((m) => m.id);
+      })
+      .catch(() => {
+        setMinistryTree([]);
+        return [] as string[];
+      })
+      .then((ids) => {
+        setMinistriesLoading(false);
+        // The tree endpoint doesn't return aggregate counts, so fetch each
+        // ministry's detail (leaders/volunteers) one at a time — sequential to
+        // avoid piling concurrent requests onto the dev proxy/API.
+        return ids.reduce<Promise<void>>(
+          (chain, id) =>
+            chain.then(() =>
+              api
+                .get<{ leaders: unknown[]; volunteers: unknown[] }>(
+                  `/volunteers/ministries/${id}`
+                )
+                .then(({ data }) => {
+                  setMinistryCounts((prev) => ({
+                    ...prev,
+                    [id]: {
+                      leaders: data.leaders?.length ?? 0,
+                      volunteers: data.volunteers?.length ?? 0,
+                    },
+                  }));
+                })
+                .catch(() => {
+                  // Skip — that ministry's card just shows 0 counts.
+                })
+            ),
+          Promise.resolve()
         );
-        setMinistryCounts((prev) => ({
-          ...prev,
-          [id]: { leaders: data.leaders?.length ?? 0, volunteers: data.volunteers?.length ?? 0 },
-        }));
-      } catch {
-        // Skip — that ministry's card just shows 0 counts.
-      }
-    }
+      });
   }, []);
 
   // ── Load my assignments ──
-  const loadMyAssignments = useCallback(async () => {
+  const loadMyAssignments = useCallback(() => {
     if (hasFetchedMy.current) return;
     hasFetchedMy.current = true;
-    setMyLoading(true);
-    setMyError(null);
-    try {
-      const { data } = await api.get<MyAssignment[]>("/volunteers/my-celebration-assignments");
-      setMyAssignments(Array.isArray(data) ? data : []);
-    } catch {
-      // Não engolir: mostrar "nenhum turno" quando a chamada falhou faria o
-      // voluntário perder uma escala sem saber.
-      setMyAssignments([]);
-      setMyError("Não foi possível carregar seus turnos.");
-    } finally {
-      setMyLoading(false);
-    }
+    return api
+      .get<MyAssignment[]>("/volunteers/my-celebration-assignments")
+      .then(({ data }) => setMyAssignments(Array.isArray(data) ? data : []))
+      .catch(() => {
+        // Não engolir: mostrar "nenhum turno" quando a chamada falhou faria o
+        // voluntário perder uma escala sem saber.
+        setMyAssignments([]);
+        setMyError("Não foi possível carregar seus turnos.");
+      })
+      .finally(() => setMyLoading(false));
   }, []);
 
   // Initial loads
@@ -161,6 +172,16 @@ export default function VoluntariosPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Entrar na aba "Meus turnos" refaz a busca; o skeleton e a limpeza do erro
+  // sobem aqui, no evento, em vez de dentro do effect.
+  function handleTabChange(next: string) {
+    if (next === "meus-turnos") {
+      setMyLoading(true);
+      setMyError(null);
+    }
+    setActiveTab(next);
+  }
 
   // ── Assignment confirm / decline ──
   async function confirmAssignment(id: string) {
@@ -199,7 +220,7 @@ export default function VoluntariosPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+      <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
         <Tabs.List className="flex border-b border-[var(--border-default)]">
           <Tabs.Tab value="ministerios" className={tabBtn(activeTab === "ministerios")}>
             Ministérios
@@ -353,6 +374,7 @@ export default function VoluntariosPage() {
         tree={ministryTree}
         onCreated={() => {
           hasFetchedMin.current = false;
+          setMinistriesLoading(true);
           loadMinistries();
         }}
       />
@@ -366,6 +388,7 @@ export default function VoluntariosPage() {
         onSelectMinistry={(id) => setSelectedMinId(id)}
         onUpdated={() => {
           hasFetchedMin.current = false;
+          setMinistriesLoading(true);
           loadMinistries();
         }}
       />

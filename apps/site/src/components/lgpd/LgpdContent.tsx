@@ -60,7 +60,7 @@ export function LgpdContent() {
             Orbien — Church Platform Ltda · Versão 1.0 · Última atualização: junho de 2026
           </p>
           <p className="font-light leading-[1.65]" style={{ fontSize: "15px", color: "var(--muted)" }}>
-            Esta política descreve como a Church Platform Ltda ("Orbien") coleta, usa, armazena e protege os dados pessoais de acordo com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD).
+            Esta política descreve como a Church Platform Ltda (&quot;Orbien&quot;) coleta, usa, armazena e protege os dados pessoais de acordo com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD).
           </p>
 
           {/* Sections */}

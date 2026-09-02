@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
@@ -62,7 +61,7 @@ export function EstagioAtual() {
                 style={{ borderColor: "rgba(0,205,181,.6)" }}
               >
                 <p className="text-[15px] font-light italic leading-[1.6]" style={{ color: "rgba(255,255,255,.82)" }}>
-                  "Cada feature é validada com um pastor antes de ir pra produção. Quem usa decide o que fica."
+                  &quot;Cada feature é validada com um pastor antes de ir pra produção. Quem usa decide o que fica.&quot;
                 </p>
               </blockquote>
 
