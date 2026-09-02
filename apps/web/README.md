@@ -54,34 +54,67 @@ src/proxy.ts        guarda de autenticação
 
 ## Testes de tela (e2e)
 
-Scripts em [`e2e/`](e2e) sobem o Chromium contra o app rodando e percorrem os
-fluxos, gerando capturas em `e2e/screenshots/`:
+Rodam no [`@playwright/test`](https://playwright.dev), configurado em
+[`playwright.config.ts`](playwright.config.ts). Sobem o Chromium contra o app
+**já em pé** (a suíte não levanta servidor) e percorrem os fluxos, gerando
+capturas em `e2e/screenshots/`:
 
-- `schedule.mjs` — montagem de escala (criar, aplicar template, ministérios,
-  voluntários) e indisponibilidade do voluntário
-- `templates.mjs` — CRUD de templates de escala
+- [`e2e/schedule.spec.ts`](e2e/schedule.spec.ts) — montagem de escala (criar,
+  aplicar template, ministérios, voluntários) e indisponibilidade do voluntário
+- [`e2e/templates.spec.ts`](e2e/templates.spec.ts) — CRUD de templates de escala
+- [`e2e/fixtures.ts`](e2e/fixtures.ts) — sessão autenticada, coleta de erros de
+  console/rede e os dados de apoio
 
-`npm run e2e` roda os dois em sequência.
+A partir da raiz do monorepo:
 
 ```bash
-E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=doca-church npm run e2e
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=doca-church \
+  npm run e2e -w orbien-web
+```
+
+Comandos úteis (todos com `-w orbien-web` a partir da raiz, ou direto nesta
+pasta):
+
+```bash
+npm run e2e -w orbien-web                                   # a suíte inteira
+npm run e2e:report -w orbien-web                            # abre o relatório HTML
+npx playwright test e2e/templates.spec.ts                    # um spec só
+npx playwright test --headed                                 # vendo o navegador
+npx playwright test --ui                                     # modo interativo
+npx playwright show-trace test-results/<pasta>/trace.zip     # trace de uma falha
+```
+
+O relatório HTML sai em `playwright-report/` e os artefatos de falha
+(screenshot, trace) em `test-results/` — ambos ignorados pelo git, como
+`e2e/screenshots/`.
+
+O `trace` é gravado com `on-first-retry`: em CI (`retries: 1`) a primeira
+falha dispara uma retentativa já instrumentada. Localmente, para forçar:
+
+```bash
+npx playwright test --retries=1 --trace=on-first-retry
 ```
 
 A sessão é criada por HTTP contra a API e semeada direto no `localStorage` e no
-cookie `auth_session` (ver `e2e/session.mjs`) — o formulário de login não é
-exercitado, o que mantém o teste focado na tela em análise.
+cookie `auth_session` (fixture `page` em `e2e/fixtures.ts`) — o formulário de
+login não é exercitado, o que mantém o teste focado na tela em análise.
 
 Funciona contra qualquer ambiente:
 
 ```bash
 E2E_BASE_URL=https://orbien-web.vercel.app \
 E2E_API_URL=https://orbien-web.vercel.app/api-proxy \
-E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
 ```
 
-Os dados de apoio são criados e removidos pela própria execução
-(`e2e/fixtures.mjs`): a aba "Próximas" só lista instâncias futuras, e o seed
-pode não ter nenhuma.
+Os dados de apoio são criados e removidos pelas fixtures, com teardown
+garantido mesmo se o teste estourar — e **só o que elas criaram**: a aba
+"Próximas" só lista instâncias futuras e o seed pode não ter nenhuma, mas uma
+instância pré-existente é reaproveitada e não é removida no fim.
+
+A suíte roda com `workers: 1` e `fullyParallel: false` de propósito: os dois
+specs montam e desmontam dados reais no mesmo tenant, e em paralelo um apagaria
+o template que o outro reaproveita.
 
 ## Build
 
