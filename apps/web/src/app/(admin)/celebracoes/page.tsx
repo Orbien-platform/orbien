@@ -60,9 +60,6 @@ export default function CelebracoesPage() {
   const canEdit = roles.some((r) =>
     ["admin_congregation", "pastor", "tenant_admin"].includes(r)
   );
-  const canView = canEdit || roles.some((r) =>
-    ["ministry_leader", "secretary"].includes(r)
-  );
   const canAddSongs = roles.some((r) =>
     ["admin_congregation", "pastor", "ministry_leader"].includes(r)
   );
