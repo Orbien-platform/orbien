@@ -22,30 +22,36 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- 2. Funções helper de contexto
 --    Valores injetados pelo backend via SET LOCAL antes de cada query:
---      SET LOCAL app.current_tenant_id     = '<uuid>';
---      SET LOCAL app.current_congregation_id = '<uuid>';
---      SET LOCAL app.current_user_id       = '<uuid>';
+--      SET LOCAL app.tenant_id       = '<uuid>';
+--      SET LOCAL app.congregation_id = '<uuid>';
+--      SET LOCAL app.user_id         = '<uuid>';
+--
+--    As chaves têm que casar exatamente com o que
+--    src/common/interceptors/tenant-context.interceptor.ts escreve. Divergir
+--    faz as funções devolverem NULL e TODA policy negar — a API responde
+--    listas vazias sem erro nenhum, o que é o modo de falha mais difícil de
+--    diagnosticar que este arquivo tem.
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION app_current_tenant()
 RETURNS TEXT
 LANGUAGE SQL STABLE
 AS $$
-  SELECT NULLIF(current_setting('app.current_tenant_id', TRUE), '')::TEXT;
+  SELECT NULLIF(current_setting('app.tenant_id', TRUE), '')::TEXT;
 $$;
 
 CREATE OR REPLACE FUNCTION app_current_congregation()
 RETURNS TEXT
 LANGUAGE SQL STABLE
 AS $$
-  SELECT NULLIF(current_setting('app.current_congregation_id', TRUE), '')::TEXT;
+  SELECT NULLIF(current_setting('app.congregation_id', TRUE), '')::TEXT;
 $$;
 
 CREATE OR REPLACE FUNCTION app_current_user()
 RETURNS TEXT
 LANGUAGE SQL STABLE
 AS $$
-  SELECT NULLIF(current_setting('app.current_user_id', TRUE), '')::TEXT;
+  SELECT NULLIF(current_setting('app.user_id', TRUE), '')::TEXT;
 $$;
 
 -- Verifica se o usuário atual possui determinado role no tenant/congregação corrente

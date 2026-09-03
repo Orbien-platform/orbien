@@ -30,10 +30,18 @@ Não é o caso comum, e vale explicar por quê aqui:
   idempotente. Foi testado contra PostgreSQL 17 — que é exatamente o que um
   service container do GitHub Actions oferece. Roles, migrations, scripts de
   RLS e o role de aplicação, tudo num comando.
-- **O seed (`prisma/seed.ts`) carrega usuário, tenant, ministérios e
-  voluntários**, com senha em texto no próprio repositório. É problema em
-  produção (ver `DEPLOY.md`), mas em CI é conveniência: as credenciais do e2e
-  saem do seed, não de um secret.
+- **O seed (`prisma/seed.ts`) carrega o conjunto mínimo que o e2e precisa**:
+  tenant, congregação, dois usuários, uma celebração, um ministério e
+  voluntários vinculados a ele — incluindo a conta admin, porque a aba de
+  indisponibilidade responde 404 para usuário sem perfil de voluntário. As
+  credenciais estão em texto no repositório, o que é problema em produção (ver
+  `DEPLOY.md`) e conveniência em CI: saem do seed, não de um secret.
+
+  Esta lista não é decorativa. Quando o seed não criava celebração nem
+  ministério, os dois specs falhavam por falta de dado antes de tocar a tela —
+  e o job de e2e foi desenhado como "autocontido" justamente por uma afirmação
+  errada aqui. Quem mexer no seed deve rodar `npm run e2e -w orbien-web` contra
+  um banco recém-provisionado antes de confiar.
 
 Consequência: as fases 1 a 3 rodam em um runner efêmero, contra um Postgres
 descartável, sem tocar no Supabase de desenvolvimento e sem nenhum segredo

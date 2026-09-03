@@ -10,77 +10,81 @@ Origem: primeiro run de CI da história do repositório, no
 em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 `main`, então nada disso tinha como aparecer antes.
 
-| # | Pendência | Gravidade | Job |
+| # | Pendência | Gravidade | Situação |
 |---|---|---|---|
-| 1 | RLS não isola por congregação dentro do mesmo tenant | segurança | Testes de RLS |
+| 1 | RLS não isola por congregação dentro do mesmo tenant | segurança | ✔ **resolvido** — causa era ordem no bootstrap |
 | 2 | Lint do `site` quebrado no estado commitado | portão | ✔ resolvido em `chore/harness-ci-e-lint` |
-| 3 | E2E depende de dados que o seed não cria | portão | E2E |
+| 3 | E2E depende de dados que o seed não cria | portão | ✔ **resolvido** — seed estendido |
+
+> As três estão fechadas. O diagnóstico original da nº 1 estava incompleto (a
+> causa não era policy ausente) e a nº 3 escondia um segundo defeito, mais
+> grave. As duas seções abaixo foram reescritas com a causa real.
 
 O job `Unidade e cobertura` passou (53s). Nenhuma destas três é causada pela
 Fase 0 do [plano de testes](TESTES.md).
 
 ---
 
-## 1. RLS não isola por congregação dentro do mesmo tenant
+## 1. RLS não isolava por congregação — resolvido
 
-**Gravidade: segurança.** É a única das três que não é problema de
-encanamento de CI.
+**Diagnóstico original estava incompleto.** Ele concluiu que "as políticas de
+RLS consideram `tenant_id` e não `congregation_id`". A conclusão é verdadeira
+sobre o `001_rls_setup.sql`, e falsa sobre o banco: a migration
+`20260608144811_fix_congregation_isolation_policies` faz
+`DROP POLICY tenant_isolation` e cria `tenant_congregation_isolation` em 17
+tabelas. A policy existe.
+
+### Causa real: ordem no bootstrap
+
+`scripts/bootstrap-db.sh` roda as migrations **antes** do `001_rls_setup.sql`,
+porque o `001` precisa das tabelas existindo. Consequência: a migration remove
+a policy fraca e cria a forte, e então o `001` recria a fraca por cima.
+Policies `PERMISSIVE` se combinam com **OR** — a mais fraca ganha, e o
+isolamento por congregação deixa de valer.
+
+Medido em banco recém-provisionado: **15 tabelas** ficavam com as duas
+policies, entre elas `persons`. No banco de desenvolvimento, só a forte existe
+(o `001` foi aplicado antes da migration, na ordem histórica).
+
+### Segundo defeito, encontrado no caminho
+
+O `001` definia as funções de contexto lendo `app.current_tenant_id`,
+`app.current_congregation_id` e `app.current_user_id`. O interceptor da
+aplicação escreve `app.tenant_id`, `app.congregation_id` e `app.user_id` — e a
+migration `20260608130316_fix_rls_enforcement` já corrigia isso, sendo também
+sobrescrita pelo `001`.
+
+Efeito num banco novo: as funções devolviam NULL, **toda** policy negava, e a
+API respondia listas vazias sem erro nenhum. Foi o que fez a pendência nº 3
+parecer só falta de dado de seed.
+
+Os testes de RLS não pegavam porque `test/helpers/rls.ts` escreve as duas
+grafias de chave.
+
+### Correções
+
+1. Passo novo no bootstrap: onde existe `tenant_congregation_isolation`, a
+   `tenant_isolation` redundante é removida.
+2. Asserção na verificação do bootstrap: se qualquer tabela ficar com as duas,
+   falha alto. Testada nos dois sentidos.
+3. `001_rls_setup.sql` alinhado às chaves que o interceptor escreve, com
+   comentário explicando que divergir faz toda policy negar em silêncio.
 
 ### Evidência
 
-`npm run test:rls -w orbien-backend` — **37 de 39 testes passam**. Os dois que
-falham são a seção 4 de
-[`test/rls/isolation.spec.ts`](../apps/api/test/rls/isolation.spec.ts):
+Banco provisionado do zero com o bootstrap corrigido:
 
 ```
-● 4. Cross-congregation read (same tenant)
-  › Congregation A-Main context cannot see Congregation A-Second persons
-● 4. Cross-congregation read (same tenant)
-  › app_user role: Congregation A-Main cannot see Congregation A-Second persons
-
-    Expected: 0
-    Received: 1
+tabelas com as duas policies: 0
+persons: tenant_congregation_isolation
+Tests: 39 passed, 39 total
 ```
 
-Uma pessoa da congregação A-Second é visível a partir do contexto da A-Main,
-dentro do mesmo tenant.
+### Continua em aberto
 
-### Leitura do resultado
-
-Isolamento **entre tenants** está íntegro: os outros 37 testes cobrem leitura,
-INSERT com `WITH CHECK`, tampering de `tenant_id` e privacidade de doador em
-20 tabelas, e todos passam. O que falha é só a fronteira **entre congregações**.
-
-As **duas** variantes falharam — `runAsTenant` e `runAsTenantWithRole`. Pelo
-critério escrito no cabeçalho do próprio spec, falhar nas duas significa que
-não é contexto mal aplicado: as políticas de RLS consideram `tenant_id` e não
-`congregation_id`.
-
-### O que este teste não prova
-
-Ele prova que o **banco** não isola por congregação. Se isso chega ao usuário
-final depende de todas as queries da aplicação filtrarem `congregation_id` no
-código — o que não foi auditado nos 48 services. O alcance real é a pergunta
-em aberto, não o achado em si.
-
-### Em aberto
-
-Três saídas, e a escolha é de produto tanto quanto de engenharia:
-
-1. **Isolamento por congregação é requisito** → as policies precisam de
-   `app_current_congregation()`, e o `SET LOCAL` já existe para alimentá-las
-   (`tenant-context.interceptor.ts` define `app.congregation_id`).
-2. **Congregações do mesmo tenant devem mesmo se enxergar** → o teste está
-   errado, e a seção 4 deve ser reescrita para afirmar o contrário. Note que
-   existe um teste de controle positivo (seção 21) justamente para impedir que
-   a suíte passe por vacuidade; reescrever a 4 não afeta os outros 37.
-3. **Aceitar como limitação conhecida** → registrar aqui e no `DEPLOY.md`,
-   com a ressalva de que o gate de CI fica vermelho até alguém decidir.
-
-Enquanto não houver decisão, **não ajuste a asserção para o teste passar** —
-é o que o cabeçalho do spec pede explicitamente.
-
----
+O teste prova o isolamento no **banco**. Se alguma query da aplicação depende
+de filtrar `congregation_id` no código, isso não foi auditado nos services — o
+alcance real segue sendo pergunta aberta, ainda que agora o banco isole.
 
 ## 2. Lint do `site` quebrado no estado commitado
 
@@ -130,54 +134,46 @@ ficar verde.
 
 ---
 
-## 3. E2E depende de dados que o seed não cria
+## 3. E2E dependia de dados que o seed não criava — resolvido
 
-**Gravidade: portão.** Os 2 testes e2e falharam, os dois por falta de dado —
-não por regressão de UI.
+Os dois specs falhavam por falta de dado, antes de tocar a tela: o seed não
+criava celebração nem ministério.
+
+**Mas isso era metade da causa.** Mesmo depois de estender o seed, a API
+continuava devolvendo listas vazias — porque o defeito de chaves de contexto
+descrito na pendência nº 1 fazia toda policy negar. O dado existia e o RLS o
+escondia.
+
+### Correções
+
+- Seed estendido com uma celebração, um ministério e dois voluntários
+  vinculados a ele (um líder, um comum).
+- Perfil de voluntário para a **conta admin** também: a aba de
+  indisponibilidade é visível para qualquer usuário logado, e
+  `UnavailabilityService.resolveProfile` responde 404 para quem não tem perfil
+  — a tela abria com erro para a própria conta que o e2e usa.
+- `docs/CI.md` corrigido: ele afirmava que o seed carregava "ministérios e
+  voluntários", o que era falso e foi a premissa que fez o job ser desenhado
+  como autocontido.
 
 ### Evidência
 
-[`e2e/schedule.spec.ts`](../apps/web/e2e/schedule.spec.ts), falha em 296 ms
-(antes de tocar a tela):
+API e web locais contra banco provisionado do zero, como o job faz:
 
 ```
-Error: Nenhuma celebração cadastrada — impossível criar instância de teste.
-  at e2e/fixtures.ts:288
+/celebrations           1 item
+/volunteers/ministries  1 item
+/persons                4 itens
+2 passed (5.3s)
 ```
 
-[`e2e/templates.spec.ts`](../apps/web/e2e/templates.spec.ts), falha após 30 s
-de espera:
+### Nota histórica
 
-```
-Error: select de ministérios não foi preenchido
-  Locator: getByLabel('Ministério 1').locator('option').nth(1)
-  at e2e/templates.spec.ts:50
-```
+O diagnóstico original propunha duas saídas — estender o seed ou fazer as
+fixtures criarem tudo. A primeira foi escolhida: dado de base pertence ao seed,
+dado efêmero às fixtures.
 
-### Causa
-
-[`prisma/seed.ts`](../apps/api/prisma/seed.ts) cria: `groupType`, `tenant`,
-`tenantPlan`, `brandingConfig`, `congregation`, `role`, dois `userAccount`,
-uma `person`, `roleAssignment` e categorias financeiras.
-
-**Não cria celebração nem ministério** — que é precisamente o que os dois
-specs precisam.
-
-Os testes presumivelmente passam contra o Supabase de desenvolvimento, que tem
-dados reais acumulados. Contra um banco provisionado do zero, não têm de onde
-partir.
-
-### Nota sobre a documentação
-
-[`docs/CI.md`](CI.md) afirma que o seed "carrega usuário, tenant, **ministérios
-e voluntários**" e descreve a fase de e2e como "autocontida". As duas
-afirmações não conferem com o `seed.ts` atual. Quem for mexer nesta pendência
-deve corrigir o `CI.md` junto — a premissa errada é o que fez o job ser
-desenhado assim.
-
-### Em aberto
-
-Duas saídas:
+<!-- resto do diagnóstico original preservado abaixo -->
 
 1. **Estender o seed** com uma celebração e ao menos um ministério com
    voluntário. Torna o e2e de fato autocontido, que era a intenção declarada.

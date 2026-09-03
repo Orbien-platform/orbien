@@ -1,4 +1,13 @@
-import { PrismaClient, PlanType, PlanStatus, PersonClassification, FinancialCategoryType } from '@prisma/client';
+import {
+  PrismaClient,
+  PlanType,
+  PlanStatus,
+  PersonClassification,
+  FinancialCategoryType,
+  CelebrationType,
+  CelebrationRecurrence,
+  VolunteerMinistryRole,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 
 // Bypassa RLS (postgres/DIRECT_URL) — necessário pois o seed cria o próprio
@@ -252,6 +261,158 @@ async function main(): Promise<void> {
     }
     console.log(`category:         ${cat.type} · ${cat.name}`);
   }
+
+  // ── 9. Celebração, ministério e voluntários ───────────────────────────────
+  // Mínimo que a suíte de e2e precisa para existir num banco provisionado do
+  // zero: uma celebração (de onde a fixture cria a instância), um ministério
+  // (para o seletor de template) e voluntários vinculados a ele (para o
+  // seletor de disponibilidade). Sem isso os dois specs falham por falta de
+  // dado, antes de tocar a tela — foi o que aconteceu no primeiro run de CI.
+
+  let celebration = await prisma.celebration.findFirst({
+    where: { tenant_id: tenant.id, congregation_id: congregation.id, name: 'Culto de Domingo' },
+    select: { id: true },
+  });
+  if (!celebration) {
+    celebration = await prisma.celebration.create({
+      data: {
+        tenant_id: tenant.id,
+        congregation_id: congregation.id,
+        name: 'Culto de Domingo',
+        type: CelebrationType.sunday_service,
+        day_of_week: 0,
+        start_time: '10:00',
+        recurrence: CelebrationRecurrence.weekly,
+      },
+      select: { id: true },
+    });
+  }
+  console.log(`celebration:      ${celebration.id}`);
+
+  let ministry = await prisma.ministry.findFirst({
+    where: { tenant_id: tenant.id, congregation_id: congregation.id, name: 'Louvor' },
+    select: { id: true },
+  });
+  if (!ministry) {
+    ministry = await prisma.ministry.create({
+      data: {
+        tenant_id: tenant.id,
+        congregation_id: congregation.id,
+        name: 'Louvor',
+        description: 'Equipe de música e adoração',
+      },
+      select: { id: true },
+    });
+  }
+  console.log(`ministry:         ${ministry.id}`);
+
+  // Dois voluntários: um líder e um comum. O seletor de disponibilidade
+  // distingue os dois, então ter os dois papéis cobre o caso real.
+  const volunteers: { name: string; role: VolunteerMinistryRole }[] = [
+    { name: 'Carlos Pereira',  role: VolunteerMinistryRole.leader },
+    { name: 'Maria Rodrigues', role: VolunteerMinistryRole.volunteer },
+  ];
+
+  for (const v of volunteers) {
+    let person = await prisma.person.findFirst({
+      where: { tenant_id: tenant.id, congregation_id: congregation.id, full_name: v.name },
+      select: { id: true },
+    });
+    if (!person) {
+      person = await prisma.person.create({
+        data: {
+          tenant_id: tenant.id,
+          congregation_id: congregation.id,
+          full_name: v.name,
+          classification: PersonClassification.member,
+        },
+        select: { id: true },
+      });
+    }
+
+    let profile = await prisma.volunteerProfile.findFirst({
+      where: { person_id: person.id },
+      select: { id: true },
+    });
+    if (!profile) {
+      profile = await prisma.volunteerProfile.create({
+        data: {
+          tenant_id: tenant.id,
+          congregation_id: congregation.id,
+          person_id: person.id,
+          availability: {},
+          skills: {},
+        },
+        select: { id: true },
+      });
+    }
+
+    const link = await prisma.volunteerMinistry.findUnique({
+      where: {
+        volunteer_profile_id_ministry_id: {
+          volunteer_profile_id: profile.id,
+          ministry_id: ministry.id,
+        },
+      },
+      select: { id: true },
+    });
+    if (!link) {
+      await prisma.volunteerMinistry.create({
+        data: {
+          tenant_id: tenant.id,
+          congregation_id: congregation.id,
+          volunteer_profile_id: profile.id,
+          ministry_id: ministry.id,
+          role: v.role,
+          is_primary_leader: v.role === VolunteerMinistryRole.leader,
+        },
+      });
+    }
+    console.log(`volunteer:        ${v.name} (${v.role})`);
+  }
+
+  // O usuário admin também precisa de perfil de voluntário: a aba
+  // "Indisponibilidade" é visível para qualquer usuário logado, e
+  // UnavailabilityService.resolveProfile lança 404 para quem não tem perfil.
+  // Sem isto, a tela abre com erro para a própria conta que o e2e usa.
+  let adminProfile = await prisma.volunteerProfile.findFirst({
+    where: { person_id: adminPersonId },
+    select: { id: true },
+  });
+  if (!adminProfile) {
+    adminProfile = await prisma.volunteerProfile.create({
+      data: {
+        tenant_id: tenant.id,
+        congregation_id: congregation.id,
+        person_id: adminPersonId,
+        availability: {},
+        skills: {},
+      },
+      select: { id: true },
+    });
+  }
+
+  const adminLink = await prisma.volunteerMinistry.findUnique({
+    where: {
+      volunteer_profile_id_ministry_id: {
+        volunteer_profile_id: adminProfile.id,
+        ministry_id: ministry.id,
+      },
+    },
+    select: { id: true },
+  });
+  if (!adminLink) {
+    await prisma.volunteerMinistry.create({
+      data: {
+        tenant_id: tenant.id,
+        congregation_id: congregation.id,
+        volunteer_profile_id: adminProfile.id,
+        ministry_id: ministry.id,
+        role: VolunteerMinistryRole.volunteer,
+      },
+    });
+  }
+  console.log(`volunteer:        conta admin (perfil para a aba de indisponibilidade)`);
 }
 
 main()

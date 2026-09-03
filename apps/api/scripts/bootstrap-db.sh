@@ -33,7 +33,7 @@ run_sql() {
 }
 
 echo ""
-echo "▶ 1/6 Criando roles base..."
+echo "▶ 1/7 Criando roles base..."
 # Precisa vir ANTES do migrate deploy: a migration fix_rls_enforcement faz
 # GRANT app_user TO postgres e falha se o role ainda nao existe. Num banco
 # novo, 001_rls_setup.sql (que tambem cria os roles) so roda depois das
@@ -54,18 +54,50 @@ END $$;
 SQL
 
 echo ""
-echo "▶ 2/6 Aplicando migrations do Prisma..."
+echo "▶ 2/7 Aplicando migrations do Prisma..."
 DATABASE_URL="$DIRECT_URL" npx --yes prisma migrate deploy
 
 echo ""
-echo "▶ 3/6 Aplicando scripts de RLS (fora do histórico do Prisma)..."
+echo "▶ 3/7 Aplicando scripts de RLS (fora do histórico do Prisma)..."
 run_sql_file prisma/migrations/001_rls_setup.sql
 if [ -f prisma/migrations/002_rls_celebration_schedules.sql ]; then
   run_sql_file prisma/migrations/002_rls_celebration_schedules.sql
 fi
 
+# Ordem invertida em relação à história do projeto: aqui as migrations rodam
+# ANTES do 001 (que precisa das tabelas existindo), mas a migration
+# fix_congregation_isolation_policies faz DROP da tenant_isolation e cria a
+# tenant_congregation_isolation no lugar. Rodando o 001 depois, a policy fraca
+# volta por cima da forte — e policies PERMISSIVE se combinam com OR, então a
+# fraca ganha e o isolamento por congregação se perde. Restauramos o estado
+# final correto: onde existe a de congregação, a de tenant sai.
 echo ""
-echo "▶ 4/6 Configurando o role de aplicação orbien_app..."
+echo "▶ 4/7 Removendo policies redundantes de tenant onde há isolamento por congregação..."
+run_sql <<'SQL'
+DO $$
+DECLARE r record; n int := 0;
+BEGIN
+  FOR r IN
+    SELECT DISTINCT c.relname
+      FROM pg_class c
+      JOIN pg_policy p ON p.polrelid = c.oid
+      JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+     WHERE p.polname = 'tenant_congregation_isolation'
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_policy p2 JOIN pg_class c2 ON c2.oid = p2.polrelid
+       WHERE c2.relname = r.relname AND p2.polname = 'tenant_isolation'
+    ) THEN
+      EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', r.relname);
+      n := n + 1;
+    END IF;
+  END LOOP;
+  RAISE NOTICE 'policies de tenant removidas: %', n;
+END $$;
+SQL
+
+echo ""
+echo "▶ 5/7 Configurando o role de aplicação orbien_app..."
 # orbien_app é criado NOLOGIN pelas migrations; aqui ele ganha senha e os
 # privilégios de app_user. WITH SET TRUE permite o `SET LOCAL ROLE app_user`
 # que o backend usa para forçar a avaliação das políticas de RLS.
@@ -89,13 +121,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 SQL
 
 echo ""
-echo "▶ 5/6 Verificando..."
+echo "▶ 6/7 Verificando..."
 run_sql <<'SQL'
 DO $$
 DECLARE
   n_tables  int;
   can_login bool;
   has_role  bool;
+  n         int;
 BEGIN
   SELECT count(*) INTO n_tables
     FROM information_schema.tables WHERE table_schema = 'public';
@@ -114,15 +147,33 @@ BEGIN
   IF n_tables = 0 THEN RAISE EXCEPTION 'nenhuma tabela criada'; END IF;
   IF NOT can_login THEN RAISE EXCEPTION 'orbien_app sem LOGIN'; END IF;
   IF NOT has_role THEN RAISE EXCEPTION 'orbien_app nao herda app_user'; END IF;
+
+  -- Se uma tabela ficar com tenant_isolation E tenant_congregation_isolation,
+  -- as duas combinam com OR e a fraca vence: o isolamento por congregação
+  -- deixa de valer sem nada falhar. Falhar alto aqui é o que impede isso de
+  -- passar em silêncio.
+  SELECT count(*) INTO n FROM (
+    SELECT c.relname
+      FROM pg_class c
+      JOIN pg_policy p ON p.polrelid = c.oid
+      JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+     WHERE p.polname IN ('tenant_isolation', 'tenant_congregation_isolation')
+     GROUP BY c.relname
+    HAVING count(DISTINCT p.polname) = 2
+  ) dup;
+  RAISE NOTICE 'tabelas com policy de tenant sombreando a de congregacao: %', n;
+  IF n > 0 THEN
+    RAISE EXCEPTION 'ha % tabela(s) onde tenant_isolation anula o isolamento por congregacao', n;
+  END IF;
 END $$;
 SQL
 
 echo ""
 if [ "$SEED" = true ]; then
-  echo "▶ 6/6 Populando com dados de seed..."
+  echo "▶ 7/7 Populando com dados de seed..."
   DATABASE_URL="$DIRECT_URL" npx --yes ts-node prisma/seed.ts
 else
-  echo "▶ 6/6 Seed pulado (rode com --seed para popular)."
+  echo "▶ 7/7 Seed pulado (rode com --seed para popular)."
 fi
 
 echo ""
