@@ -12,10 +12,16 @@
  *      plausível e vazia, e nada é gravado. Se o teste do honeypot cair, o
  *      formulário público volta a virar canal de flood.
  *
- * Fica registrado o que a suíte NÃO consegue afirmar: `handleWebhook` não tem
- * idempotência. Dois `PAYMENT_CONFIRMED` do mesmo pagamento criam dois
- * lançamentos. Há um teste nomeando isso — ele prende o comportamento atual,
- * não o desejado.
+ * O webhook é idempotente em dois níveis, e os testes cobrem os dois:
+ *
+ *   - um `if` de atalho, para o reenvio que chega depois de tudo pronto;
+ *   - um `updateMany` condicional `pending → confirmed`, que é o que fecha a
+ *     corrida entre duas entregas simultâneas. É o banco que decide o empate.
+ *
+ * O fake de `pixPayment` abaixo é ESTADO, não constante: o `updateMany` só
+ * "pega" quando o registro está `pending`, e altera o que o `findFirst`
+ * devolve depois. Um fake que sempre aceitasse a escrita deixaria os dois
+ * testes de idempotência passando sem medir nada.
  */
 
 import {
@@ -51,6 +57,12 @@ type Opts = {
   httpPost?: (url: string, body: unknown) => unknown;
   httpFails?: boolean;
   auditThrows?: boolean;
+  /**
+   * Simula a corrida: o `findFirst` devolve `pending`, mas a linha vira
+   * `confirmed` logo depois — como se outra entrega tivesse confirmado entre a
+   * leitura e a escrita. O `updateMany` condicional então não pega.
+   */
+  perdeCorrida?: boolean;
 };
 
 function harness(opts: Opts = {}) {
@@ -67,6 +79,21 @@ function harness(opts: Opts = {}) {
   let catCall = 0;
   const categories = opts.categories ?? [{ id: 'cat-oferta' }];
 
+  // O registro que o webhook lê e escreve. Precisa ser estado compartilhado
+  // entre `findFirst` e `update`, senão o reenvio do webhook veria sempre
+  // `pending` e a idempotência ficaria sem teste.
+  const registro: Record<string, unknown> | null =
+    opts.pixPayment === undefined
+      ? {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+        }
+      : opts.pixPayment;
+
   const tx = {
     financialTransaction: {
       create: (args: { data: Record<string, unknown> }) => {
@@ -79,9 +106,19 @@ function harness(opts: Opts = {}) {
         cap.pixPayments.push(args.data);
         return Promise.resolve({ id: 'pix-1' });
       },
-      update: (args: Record<string, unknown>) => {
+      // Reproduz o `WHERE status = 'pending'` do serviço: a escrita só pega
+      // quando a condição bate, e devolve `count` como o Prisma devolveria.
+      updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         cap.updates.push(args);
-        return Promise.resolve({});
+
+        const casa =
+          registro !== null &&
+          Object.entries(args.where).every(([k, v]) => registro[k] === v);
+
+        if (!casa) return Promise.resolve({ count: 0 });
+
+        Object.assign(registro, args.data);
+        return Promise.resolve({ count: 1 });
       },
     },
   };
@@ -123,18 +160,11 @@ function harness(opts: Opts = {}) {
           cap.pixPayments.push(args.data);
           return Promise.resolve({ id: 'pix-1' });
         },
-        findFirst: () =>
-          Promise.resolve(
-            opts.pixPayment === undefined
-              ? {
-                  id: 'pix-1',
-                  tenant_id: 't1',
-                  congregation_id: 'c1',
-                  amount: new Prisma.Decimal('50.00'),
-                  category_id: 'cat-oferta',
-                }
-              : opts.pixPayment,
-          ),
+        findFirst: () => {
+          const lido = registro ? { ...registro } : null;
+          if (opts.perdeCorrida && registro) registro['status'] = 'confirmed';
+          return Promise.resolve(lido);
+        },
       },
       auditLog: {
         create: (args: { data: Record<string, unknown> }) => {
@@ -801,20 +831,84 @@ describe('PixService', () => {
       expect(cap.audits).toEqual([]);
     });
 
-    it('NÃO é idempotente: o mesmo evento duas vezes cria dois lançamentos', async () => {
-      // Comportamento atual, e é um risco de receita dobrada — a Asaas
-      // reenvia webhook quando não recebe 200 a tempo. Nada no serviço checa
-      // se o pagamento já está `confirmed`.
-      //
-      // O teste existe para que a decisão seja consciente: se a idempotência
-      // entrar, ele falha e deve ser reescrito para exigir o contrário.
+    it('é idempotente: o mesmo evento duas vezes cria UM lançamento', async () => {
+      // O caso que motivou a correção. A Asaas reenvia o webhook quando não
+      // recebe 200 a tempo; antes, cada reenvio criava outro lançamento e a
+      // receita aparecia dobrada no DRE sem nenhum erro à vista.
       const { service, cap } = harness();
       const evento = { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123', value: 50 } };
 
-      await service.handleWebhook(evento, 'segredo');
-      await service.handleWebhook(evento, 'segredo');
+      const primeira = await service.handleWebhook(evento, 'segredo');
+      const segunda = await service.handleWebhook(evento, 'segredo');
 
-      expect(cap.transactions).toHaveLength(2);
+      // As duas respostas são 200: recusar a segunda faria a Asaas tentar de
+      // novo para sempre.
+      expect(primeira).toEqual({ received: true });
+      expect(segunda).toEqual({ received: true });
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.updates).toHaveLength(1);
+    });
+
+    it('`PAYMENT_RECEIVED` depois de `PAYMENT_CONFIRMED` não duplica', async () => {
+      // A Asaas manda os dois eventos para o mesmo pagamento, e ambos caem no
+      // ramo de confirmação. Este é o caminho de duplicação que acontece
+      // sozinho, sem falha de rede nenhuma.
+      const { service, cap } = harness();
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123', value: 50 } },
+        'segredo',
+      );
+      await service.handleWebhook(
+        { event: 'PAYMENT_RECEIVED', payment: { id: 'pay_123', value: 50 } },
+        'segredo',
+      );
+
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('entrega simultânea: quem perde a corrida no banco não cria lançamento', async () => {
+      // O `if` de atalho NÃO cobre este caso: quando ele roda, a linha ainda
+      // está `pending`. Entre ele e a escrita há dois `await`, e é aí que a
+      // outra entrega confirma. Só o `updateMany` condicional segura.
+      const { service, cap } = harness({ perdeCorrida: true });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+
+      // Continua 200: recusar faria a Asaas reenviar para sempre.
+      expect(result).toEqual({ received: true });
+      // A tentativa de escrita aconteceu e não pegou; nenhum lançamento saiu.
+      expect(cap.updates).toHaveLength(1);
+      expect(cap.transactions).toEqual([]);
+      // E não audita uma confirmação que não foi desta entrega.
+      expect(cap.audits).toEqual([]);
+    });
+
+    it('pagamento que já chegou `confirmed` do banco é ignorado de saída', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'confirmed',
+        },
+      });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.transactions).toEqual([]);
+      expect(cap.updates).toEqual([]);
+      // Nem consulta o admin do tenant — a guarda vem antes.
+      expect(cap.audits).toEqual([]);
     });
   });
 });

@@ -213,24 +213,16 @@ describe('SpedExportService', () => {
       return linha.split('|')[i];
     }
 
-    // ATENÇÃO — este é o único contador cuja regra está em dúvida.
-    //
-    // O serviço conta o bloco 0 a partir do `|0001|`, deixando o `|0000|` de
-    // fora: dá `|0990|4|`. No layout da ECD o `0000` é registro do bloco 0, e
-    // `QTD_LIN_0` é a quantidade total de linhas do bloco — o que daria 5.
-    // Reforça a dúvida o fato de o próprio `|9900|0000|1|` tratar o `0000`
-    // como registro contável.
-    //
-    // O teste prende o comportamento ATUAL de propósito, para não travar uma
-    // regra que ninguém confirmou contra o validador da Receita. Se a resposta
-    // for 5, este teste falha — e é isso que se quer dele.
-    it('|0990| conta o bloco 0 a partir do |0001|, sem o |0000| (a confirmar)', async () => {
+    it('|0990| conta o bloco 0 INTEIRO, com o |0000| e com ele mesmo', async () => {
+      // Saía 4 em vez de 5: o contador começava depois do push do `|0000|`.
+      // `QTD_LIN_0` é a quantidade total de linhas do bloco 0, e o `0000` é
+      // registro do bloco 0 — o próprio `|9900|0000|1|` já o contava.
       const ls = await linhas(rowsDoGolden);
-      const semAbertura = ls.filter((l) => /^\|0/.test(l) && !/^\|0000\|/.test(l));
+      const bloco0 = ls.filter((l) => /^\|0/.test(l));
 
       const declarado = Number(campo(ls.find((l) => l.startsWith('|0990|'))!, 2));
-      expect(declarado).toBe(semAbertura.length);
-      expect(declarado).toBe(4);
+      expect(declarado).toBe(bloco0.length);
+      expect(declarado).toBe(5);
     });
 
     it('|I990| conta os registros do bloco I, incluindo ele mesmo', async () => {
