@@ -710,6 +710,14 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   proxy. Enquanto a sessão vale, o `web` mostra a faixa do
   `SupportSessionBanner` — o par visível do `AuditInterceptor`.
 - **A sessão pode escrever**, não só ler. Decisão adiada.
+- **Sem limite de tentativa no login da plataforma.** `POST
+  /auth/platform/login` (Fase 3) não tem rate limit, e nem `POST /auth/login`
+  tem — só `forgot-password` tem, e é em memória, o que não sobrevive a mais de
+  uma instância no Render. A porta do console é a que mais interessa fechar:
+  ela dá acesso a `POST /auth/impersonate`, e daí a qualquer tenant. Fica
+  registrado, não corrigido nesta fase: limitador que preste é
+  compartilhado (Redis ou tabela), não um `Map` por processo — unidade de
+  trabalho própria, e vale para as duas rotas de login de uma vez.
 - **TTL** do token de impersonação é o padrão de access token — 15 minutos.
   Continua sendo o padrão, mas agora tem consequência visível: `impersonate`
   não emite refresh token, então a sessão de suporte **não se renova**. Aos 15

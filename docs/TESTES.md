@@ -157,6 +157,16 @@ Scripts em `apps/api/package.json`:
 "test:cov": "jest --selectProjects unit integration --coverage --passWithNoTests"
 ```
 
+> **`test:cov` roda a suíte de integração em paralelo** — só `test:integration`
+> e `test:rls` usam `--runInBand`. Consequência prática: fixture compartilhada
+> entre suítes de integração precisa ser criada de forma atômica. Semear papéis
+> com `role.upsert()` **não** serve: é find-then-create, e duas workers que não
+> acham a linha criam as duas — a segunda morre com P2002. Use
+> `createMany({ ..., skipDuplicates: true })`, que vira um
+> `INSERT ... ON CONFLICT DO NOTHING`. Encontrado em 2026-09-03, ao acrescentar
+> a terceira suíte de integração; as anteriores conviviam com a corrida sem
+> nunca perdê-la.
+
 `npm run test:rls` continua fazendo exatamente o que fazia. Isso é requisito:
 o job `rls` do CI depende dele. **É o único sem `--passWithNoTests`**: ele tem
 39 testes e deve falhar alto se eles sumirem. Os outros precisam da flag

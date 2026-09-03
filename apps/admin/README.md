@@ -10,6 +10,16 @@ libera no banco é o ramo `app_platform_access()` das policies — que só é
 verdadeiro sem tenant no contexto **e** com `platform_support` em
 `role_assignments`.
 
+## Login
+
+`POST /auth/platform/login`, com e-mail e senha — **sem slug de tenant**. Quem
+entra aqui administra o ecossistema e não está dentro de nenhum tenant. O
+desempate é o papel `platform_support` em `role_assignments`, e o tenant de
+origem da conta é resolvido no servidor (o token o carrega porque
+`audit_logs.tenant_id` é NOT NULL).
+
+Conta sem o papel recebe o mesmo 401 de senha errada. É intencional.
+
 ## Desenvolvimento
 
 ```bash

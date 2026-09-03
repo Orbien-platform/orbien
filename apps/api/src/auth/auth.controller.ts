@@ -1,6 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { PlatformLoginDto } from './dto/platform-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { ImpersonateDto } from './dto/impersonate.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -20,6 +21,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  // Public — no guard. Sem tenant_slug: só contas com platform_support entram,
+  // e o tenant de origem é resolvido no serviço. Ver AuthService.platformLogin.
+  @Post('platform/login')
+  @HttpCode(HttpStatus.OK)
+  platformLogin(@Body() dto: PlatformLoginDto) {
+    return this.authService.platformLogin(dto);
   }
 
   // Public — no guard

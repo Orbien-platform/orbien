@@ -27,18 +27,11 @@ export interface PlatformUser {
   roles: string[];
 }
 
-export class NotPlatformSupportError extends Error {
-  constructor() {
-    super("Esta conta não tem acesso ao console da plataforma.");
-    this.name = "NotPlatformSupportError";
-  }
-}
-
 export interface AuthContextType {
   user: PlatformUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string, tenantSlug: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -126,35 +119,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [token, email] = snapshot.split(" ");
     // Token expirado não derruba a sessão: o interceptor do Axios troca pelo
     // refresh na primeira chamada. O que derruba é a ausência de
-    // `platform_support`, e isso não muda por renovação de token.
+    // `platform_support` — que a rota de login já garante, mas que pode sumir
+    // se o papel for revogado enquanto a sessão está viva.
     if (!token || !email || !hasPlatformRole(token)) return null;
     return buildUser(token, email);
   }, [snapshot]);
 
   /**
-   * O login é o mesmo `POST /auth/login` do `apps/web`, e por isso ainda pede
-   * o slug do tenant: a conta de suporte é uma `user_accounts` como qualquer
-   * outra, e `user_accounts` é única por (tenant_id, email). O que este app
-   * acrescenta é a checagem do papel — sem `platform_support` no token não faz
-   * sentido entrar, porque todas as telas responderiam 403.
+   * `POST /auth/platform/login` — sem slug de tenant.
+   *
+   * Quem entra aqui administra o ecossistema de tenants e não está dentro de
+   * nenhum; pedir o slug seria pedir que informasse onde a própria conta está
+   * guardada. Quem desempata no servidor é o papel `platform_support`, e o
+   * tenant de origem da conta é resolvido lá — o console nunca o informa nem
+   * precisa saber qual é.
+   *
+   * Consequência: conta sem o papel recebe o mesmo 401 de senha errada. É
+   * intencional — credencial válida de `tenant_admin` não deve descobrir pela
+   * mensagem que serve em outro lugar.
    */
   const login = useCallback(
-    async (email: string, password: string, tenantSlug: string) => {
+    async (email: string, password: string) => {
       const { data } = await api.post<{
         access_token: string;
         refresh_token: string;
         expires_in: number;
-      }>("/auth/login", { email, password, tenant_slug: tenantSlug });
-
-      if (!hasPlatformRole(data.access_token)) {
-        // A credencial é válida — só não é de plataforma. Encerrar o refresh
-        // token recém-criado evita deixar sessão pendurada no banco por uma
-        // tentativa que não vai a lugar nenhum.
-        await api
-          .post("/auth/logout", { refresh_token: data.refresh_token })
-          .catch(() => undefined);
-        throw new NotPlatformSupportError();
-      }
+      }>("/auth/platform/login", { email, password });
 
       saveTokens(data.access_token, data.refresh_token, email);
       emitSessionChange();

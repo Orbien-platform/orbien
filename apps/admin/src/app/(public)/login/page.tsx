@@ -4,7 +4,6 @@ import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
-import { NotPlatformSupportError } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -21,26 +19,29 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password.trim() || !tenantSlug.trim()) {
-      setError("Todos os campos são obrigatórios.");
+    if (!email.trim() || !password.trim()) {
+      setError("Informe e-mail e senha.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await login(email.trim(), password, tenantSlug.trim().toLowerCase());
+      await login(email.trim(), password);
     } catch (err: unknown) {
-      if (err instanceof NotPlatformSupportError) {
-        setError("Esta conta não tem acesso ao console da plataforma.");
-      } else if (axios.isAxiosError(err)) {
+      if (axios.isAxiosError(err)) {
         if (!err.response) {
           setError("Não foi possível conectar. Verifique sua internet.");
+        } else if (err.response.data?.code === "PLATFORM_ACCOUNT_AMBIGUOUS") {
+          // Erro de configuração, não do usuário: o mesmo e-mail tem
+          // platform_support em mais de um tenant. A mensagem vem da API
+          // porque só ela sabe o que fazer a respeito.
+          setError(err.response.data.message);
+        } else if (err.response.status === 401) {
+          // A API não distingue senha errada de conta sem acesso de
+          // plataforma, de propósito — ver AuthContext.login.
+          setError("E-mail ou senha incorretos, ou conta sem acesso à plataforma.");
         } else if (err.response.status >= 500) {
           setError("Serviço temporariamente indisponível. Tente novamente.");
-        } else if (err.response.data?.code === "TENANT_NOT_FOUND") {
-          setError("Organização não encontrada.");
-        } else if (err.response.status === 401) {
-          setError("E-mail ou senha incorretos.");
         } else {
           setError("Erro ao entrar. Tente novamente.");
         }
@@ -64,28 +65,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-            {/* O slug continua aqui porque `user_accounts` é única por
-                (tenant_id, email): a conta de suporte mora dentro de um tenant,
-                e o login precisa saber qual. Ver a nota no AuthContext. */}
-            <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor="tenant_slug"
-                className="text-sm font-medium text-ink dark:text-white"
-              >
-                Organização
-              </Label>
-              <Input
-                id="tenant_slug"
-                type="text"
-                placeholder="ex: doca-church"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                autoComplete="organization"
-                disabled={isSubmitting}
-                className="rounded-[8px]"
-              />
-            </div>
-
             <div className="flex flex-col gap-1.5">
               <Label
                 htmlFor="email"

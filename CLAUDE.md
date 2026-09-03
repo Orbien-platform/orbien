@@ -90,6 +90,24 @@ leia o do app antes de mexer nele.
   Dado de igreja não passa por lá; para ver dado de igreja o suporte abre uma
   sessão de suporte no `apps/web`. Se você se pegar precisando de uma rota de
   tenant no admin, o desenho está errado em algum lugar.
+- O console tem login próprio: `POST /auth/platform/login`, **sem
+  `tenant_slug`**. Quem administra a plataforma não está dentro de tenant
+  nenhum, e o desempate vem do papel — só contas com `platform_support` em
+  `role_assignments` são candidatas. Mas o token continua carregando o tenant
+  de origem da conta, resolvido no servidor: as rotas de plataforma o ignoram
+  (o `@PlatformRoute()` não o fixa), e o `AuditInterceptor` o usa como
+  `audit_logs.tenant_id`, que é NOT NULL com FK. Token sem tenant faria toda
+  linha `platform_access` falhar em silêncio, porque a auditoria é
+  best-effort. Não "simplifique" tirando o tenant do token.
+- Conta sem `platform_support` recebe o mesmo 401 de senha errada, de
+  propósito: credencial válida de `tenant_admin` não deve descobrir pela
+  mensagem que serve em outro lugar. Se você mexer nas mensagens dessa rota,
+  mantenha as três indistinguíveis (senha errada, sem papel, inativa).
+- `platform_support` entra no token mesmo quando a atribuição está em outra
+  congregação do tenant — é o que `rolesForToken()` em `auth.service.ts` faz.
+  O papel é global por definição (`app_is_platform_support()` não filtra por
+  tenant nem congregação); sem a união, um refresh o perderia e o console
+  cairia a cada 15 minutos sem motivo aparente.
 - A sessão de suporte cruza duas origens (`admin.` → app do tenant), e
   `localStorage` é por origem: o token vai no **fragmento** da URL, nunca na
   query. Fragmento não chega ao servidor — fica fora do log de acesso da

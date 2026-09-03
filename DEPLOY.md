@@ -383,8 +383,9 @@ no servidor da Vercel — não há requisição cross-origin para o browser barr
 ### 4.3 Verificar
 
 1. Abrir `admin.<domínio>` e logar com uma conta que tenha
-   `platform_support` em `role_assignments`. Conta sem o papel tem que ser
-   recusada na própria tela de login, não nas telas internas.
+   `platform_support` em `role_assignments` — **só e-mail e senha**, sem slug
+   de tenant. Conta sem o papel tem que receber o mesmo 401 de senha errada
+   (indistinguível de propósito), e não passar para as telas internas.
 2. `/tenants` lista **mais de um** tenant. Um só é o sintoma clássico de
    contexto de tenant fixado — ver a nota do `ListTenantsService`.
 3. "Entrar no web como suporte" abre o `web` em outra aba, com a faixa

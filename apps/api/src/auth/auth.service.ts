@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -13,6 +14,7 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
+import { PlatformLoginDto } from './dto/platform-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { ImpersonateDto } from './dto/impersonate.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -25,6 +27,40 @@ const EXPIRES_IN = 900;
 const RESET_TOKEN_TTL_MINUTES = 30;
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+/** Papel que dá acesso ao console da plataforma. Global, não por tenant. */
+const PLATFORM_ROLE = 'platform_support';
+
+interface RoleAssignmentRow {
+  role_code: string;
+  congregation_id: string | null;
+}
+
+/**
+ * Papéis que vão para o token.
+ *
+ * A regra base é a de sempre: só os papéis atribuídos na congregação em que a
+ * conta está. `platform_support` é a exceção, e por natureza — ele é global
+ * (ver `app_is_platform_support()` em 004, que não filtra por tenant nem por
+ * congregação). Sem a exceção, uma atribuição feita em outra congregação do
+ * mesmo tenant sumiria do token na primeira renovação, e o console derrubaria
+ * a sessão a cada 15 minutos sem motivo aparente.
+ *
+ * Isso não afrouxa nada no plano do tenant: `platform_support` não está em
+ * nenhuma lista de `@Roles` de dado de igreja, de propósito. E o predicado que
+ * abre os N tenants no banco resolve o papel por `role_assignments`, não por
+ * `app.role_codes` — o token não é a autoridade aqui.
+ */
+function rolesForToken(
+  assignments: RoleAssignmentRow[],
+  congregationId: string,
+): string[] {
+  const roles = new Set(
+    assignments.filter((ra) => ra.congregation_id === congregationId).map((ra) => ra.role_code),
+  );
+  if (assignments.some((ra) => ra.role_code === PLATFORM_ROLE)) roles.add(PLATFORM_ROLE);
+  return [...roles];
+}
 
 @Injectable()
 export class AuthService {
@@ -63,9 +99,7 @@ export class AuthService {
     if (!valid)
       throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
 
-    const roles = user.roleAssignments
-      .filter((ra) => ra.congregation_id === user.congregation_id)
-      .map((ra) => ra.role_code);
+    const roles = rolesForToken(user.roleAssignments, user.congregation_id);
 
     const plan = (tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
 
@@ -74,6 +108,93 @@ export class AuthService {
       tenant_id: tenant.id,
       congregation_id: user.congregation_id,
       roles,
+      plan,
+    };
+
+    const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
+    const refresh_token = await this.createRefreshToken(user.id);
+
+    return { access_token, refresh_token, expires_in: EXPIRES_IN };
+  }
+
+  /**
+   * Login do console da plataforma — sem `tenant_slug`.
+   *
+   * `POST /auth/login` pede o slug porque `user_accounts` é única por
+   * `(tenant_id, email)`: sem o tenant não há chave para procurar a conta. Aqui
+   * o desempate vem de outro lugar — o papel. Só contas que têm
+   * `platform_support` em `role_assignments` são candidatas, e são poucas,
+   * porque o papel é da equipe que administra o ecossistema.
+   *
+   * O token continua carregando o tenant e a congregação de origem da conta,
+   * resolvidos aqui e não informados pelo cliente. Não é detalhe: as rotas de
+   * plataforma ignoram esse tenant (o `@PlatformRoute()` não o fixa no
+   * contexto, e é a ausência dele que abre o ramo `app_platform_access()`), mas
+   * o `AuditInterceptor` o usa como `audit_logs.tenant_id` — coluna NOT NULL
+   * com FK para `tenants`. Emitir token sem tenant faria toda linha
+   * `platform_access` falhar no INSERT, e a auditoria é best-effort: ela cairia
+   * em silêncio, deixando o plano de plataforma sem rastro. Foi exatamente o
+   * defeito da pendência nº 6.
+   *
+   * Roda antes de haver contexto, como `orbien_app` — o mesmo caminho do
+   * `login`, e o que o sustenta são as policies `orbien_app_auth`.
+   */
+  async platformLogin(
+    dto: PlatformLoginDto,
+  ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+    const invalid = new UnauthorizedException({
+      message: 'Invalid credentials',
+      code: 'INVALID_CREDENTIALS',
+    });
+
+    // Busca por e-mail sem tenant não usa a unique `(tenant_id, email)` — é
+    // varredura. Aceitável e deliberado: o `where` do papel corta para as
+    // poucas contas de plataforma, e este login é de um punhado de pessoas.
+    const candidates = await this.prisma.userAccount.findMany({
+      where: {
+        email: dto.email,
+        is_active: true,
+        roleAssignments: { some: { role_code: PLATFORM_ROLE } },
+      },
+      include: {
+        roleAssignments: { select: { role_code: true, congregation_id: true } },
+        tenant: { include: { tenantPlan: { select: { plan: true } } } },
+      },
+    });
+
+    // Uma conta sem o papel é indistinguível de e-mail inexistente, e tem que
+    // ser: quem tenta entrar aqui com credencial válida de `tenant_admin` não
+    // deve descobrir pela mensagem que a credencial serve em outro lugar.
+    const matches = [];
+    for (const candidate of candidates) {
+      if (await argon2.verify(candidate.password_hash, dto.password)) {
+        matches.push(candidate);
+      }
+    }
+
+    if (matches.length === 0) throw invalid;
+
+    // O mesmo e-mail pode existir em dois tenants — a unique é por par. Se os
+    // dois tiverem `platform_support` e a mesma senha, não há como saber qual
+    // conta o token deveria representar, e escolher uma em silêncio poria o
+    // tenant errado em `audit_logs`. Falha alto: é erro de configuração.
+    if (matches.length > 1) {
+      throw new ConflictException({
+        message:
+          'Este e-mail tem acesso de plataforma em mais de um tenant. ' +
+          'Deixe o papel platform_support em apenas uma das contas.',
+        code: 'PLATFORM_ACCOUNT_AMBIGUOUS',
+      });
+    }
+
+    const user = matches[0]!;
+    const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      tenant_id: user.tenant_id,
+      congregation_id: user.congregation_id,
+      roles: rolesForToken(user.roleAssignments, user.congregation_id),
       plan,
     };
 
@@ -134,9 +255,7 @@ export class AuthService {
     });
 
     const { userAccount } = stored;
-    const roles = userAccount.roleAssignments
-      .filter((ra) => ra.congregation_id === userAccount.congregation_id)
-      .map((ra) => ra.role_code);
+    const roles = rolesForToken(userAccount.roleAssignments, userAccount.congregation_id);
 
     const plan = (userAccount.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
 
