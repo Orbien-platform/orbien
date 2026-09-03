@@ -45,6 +45,26 @@ export class VisitorService {
 
     const { person, isNewPerson } = await this.prisma.runInTx(
       async (tx: PrismaTx) => {
+        // O contexto de RLS vem do próprio QR token.
+        //
+        // Esta rota é pública: não há JWT, logo o TenantContextInterceptor não
+        // roda e `app.tenant_id` fica nulo. `persons`, `consent_records` e
+        // `visit_records` têm FORCE ROW LEVEL SECURITY com policy por tenant,
+        // então toda escrita aqui era negada com 42501 — o cadastro de
+        // visitante por QR nunca funcionou sob RLS. Ficou escondido atrás de um
+        // TypeError anterior (ver PrismaService.client) até 2026-09-03.
+        //
+        // O que autoriza a escrita é o token: ele é emitido por alguém do
+        // tenant, guarda `tenant_id` e `congregation_id`, e já foi validado
+        // acima (existe e está ativo). O contexto é escrito a partir dele, e
+        // não do que o visitante mandou — o corpo da requisição não influencia
+        // qual tenant é gravado. `set_config(..., true)` é local à transação.
+        await tx.$executeRaw`
+          SELECT
+            set_config('app.tenant_id',       ${qrToken.tenant_id},       true),
+            set_config('app.congregation_id', ${qrToken.congregation_id}, true)
+        `;
+
         let isNewPerson = true;
         let person: { id: string; full_name: string } | null = null;
 
