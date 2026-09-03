@@ -66,11 +66,19 @@ async function criarTenant(slug: string, nome: string) {
 
 beforeAll(async () => {
   // `role_code` é FK para `roles.code` com ON DELETE RESTRICT: o papel precisa
-  // existir. O bootstrap --seed já o cria; o upsert deixa a suíte independente.
-  await admin.role.upsert({
-    where: { code: 'platform_support' },
-    update: {},
-    create: { code: 'platform_support', name: 'Platform Support' },
+  // existir. O bootstrap --seed já o cria; semear aqui deixa a suíte
+  // independente.
+  //
+  // `createMany` com `skipDuplicates`, e não `upsert`: `test:cov` roda a
+  // integração em paralelo (só `test:integration` usa --runInBand) e as quatro
+  // suítes semeiam os mesmos papéis. `upsert` é find-then-create, então duas
+  // workers que não acham a linha criam as duas e a segunda morre com P2002 —
+  // foi o que passou a acontecer quando a terceira e a quarta suítes entraram.
+  // `createMany` vira um INSERT ... ON CONFLICT DO NOTHING, sem janela.
+  // Ver docs/TESTES.md.
+  await admin.role.createMany({
+    data: [{ code: 'platform_support', name: 'Platform Support' }],
+    skipDuplicates: true,
   });
 
   const suporte = await criarTenant(slugSuporte, 'Tenant da Plataforma');
