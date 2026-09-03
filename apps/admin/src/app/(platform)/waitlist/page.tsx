@@ -59,10 +59,14 @@ function fmtDate(iso: string): string {
 }
 
 /**
- * Somente leitura, de propósito. `PATCH /admin/waitlist/:id` existe e move o
- * status (e preenche `contacted_at` / `activated_at`), mas mudar o estado de um
- * lead é decisão comercial, não de plataforma — entra quando alguém for de
- * fato trabalhar a lista por aqui.
+ * Somente leitura, de propósito.
+ *
+ * `PATCH /admin/waitlist/:id` existe e move o status, mas ligar um seletor aqui
+ * seria meia-medida: `ProvisionTenantService` não toca em
+ * `waitlist_subscribers`, então `tenant_id` e `activated_at` do lead ficariam
+ * nulos de todo jeito — e a tela passaria a impressão contrária. A forma certa
+ * é provisionar a partir do lead, na mesma transação. Adiado para a Fase 4;
+ * o registro da decisão está em `docs/PENDENCIAS.md`.
  */
 export default function WaitlistPage() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);

@@ -943,6 +943,45 @@ com o mesmo 42501.
 
 ---
 
+## Adiado por decisão — provisionar a partir do lead da waitlist (Fase 4)
+
+Não é achado: é escopo declarado fora da Fase 3, em 2026-09-03. Fica escrito
+porque hoje só existe como comentário no `apps/admin/src/app/(platform)/waitlist/page.tsx`,
+e comentário não é lugar de guardar decisão de escopo.
+
+### O que está de fora
+
+A waitlist no console é **somente leitura**. `PATCH /admin/waitlist/:id` existe,
+move o `status` e preenche `contacted_at` / `activated_at` — e não foi ligado na
+tela.
+
+### Por que não é só um botão
+
+`ProvisionTenantService` não toca em `waitlist_subscribers`. As colunas
+`tenant_id` e `activated_at` da tabela existem e ficam nulas para sempre: nada
+no produto liga o lead à igreja que ele virou. Um seletor de status na tela
+deixaria alguém marcar "ativado" à mão e o vínculo continuaria faltando — ou
+seja, a informação que de fato importa depois ("de onde veio este cliente")
+seguiria fora do banco, com a tela dando a impressão contrária. Meia-medida que
+parece pronta é pior que ausência declarada.
+
+### A forma certa, quando for feita
+
+Provisionar **a partir do lead**: o formulário de novo tenant abre preenchido
+com os dados dele, e o `ProvisionTenantService` grava `status=activated`,
+`activated_at` e `tenant_id` **dentro da mesma transação** que cria o tenant. A
+transação já roda sob RLS pelo ramo `app_platform_access()`, e
+`waitlist_subscribers` já está nesse ramo desde o `004` — a policy não precisa
+mudar. O que muda é o serviço, e ele é atômico de propósito: um tenant criado
+com o lead não marcado é o mesmo tipo de estado meio-feito que a atomicidade
+atual existe para evitar.
+
+Mexer em `ProvisionTenantService` é mexer no caminho que abre igreja nova. É
+unidade de trabalho própria, com teste próprio, não apêndice de uma tela de
+listagem.
+
+---
+
 ## Registro
 
 Ao resolver uma pendência, remova a seção e registre no commit o que foi
