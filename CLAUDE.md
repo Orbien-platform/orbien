@@ -73,6 +73,16 @@ leia o do app antes de mexer nele.
   fixa `app.tenant_id`) e o interceptor em si. Quem responde por elas no banco
   é `app_platform_access()`, que exige contexto sem tenant **e** o papel em
   `role_assignments` — o papel vem do banco, não de `app.role_codes`.
+- `POST /auth/impersonate` resolve `platform_support` em `role_assignments`, não
+  no `roles` do JWT. É de propósito, e é o mesmo princípio que o cabeçalho de
+  `004_rls_platform_plane.sql` declara para `app_is_platform_support()`: o
+  predicado que abre tenant é o último lugar onde vale depender de valor que
+  veio de fora do banco. O que depende disso é uma coisa: papel revogado vale na
+  hora — o token vive até 15 minutos e a cadeia de refresh segue renovando. O
+  `is_active` na mesma consulta é redundância; quem barra conta desativada é o
+  `JwtStrategy.validate`, em toda requisição. O `@Roles` do controller continua
+  lá como rejeição barata — não é a autoridade. Trocar essa consulta por
+  `user.roles.includes(...)` reabre a janela dos 15 minutos.
 - `platform_support` não está em nenhuma lista de `@Roles` de dados de igreja, e
   isso é deliberado: o acesso dela é pontual, por `POST /auth/impersonate`, que
   emite token com `support_session: true` — e essa marca satisfaz qualquer
@@ -107,7 +117,9 @@ leia o do app antes de mexer nele.
   congregação do tenant — é o que `rolesForToken()` em `auth.service.ts` faz.
   O papel é global por definição (`app_is_platform_support()` não filtra por
   tenant nem congregação); sem a união, um refresh o perderia e o console
-  cairia a cada 15 minutos sem motivo aparente.
+  cairia a cada 15 minutos sem motivo aparente. **Não é verdade que
+  `platform_support` esteja fora de toda lista de `@Roles`** — estão nela
+  `POST /internal/celebrations/*` e `POST /auth/impersonate`.
 - A sessão de suporte cruza duas origens (`admin.` → app do tenant), e
   `localStorage` é por origem: o token vai no **fragmento** da URL, nunca na
   query. Fragmento não chega ao servidor — fica fora do log de acesso da

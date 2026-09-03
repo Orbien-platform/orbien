@@ -241,6 +241,11 @@ jobs:
           E2E_EMAIL: fvargaspf@gmail.com
           E2E_PASSWORD: A3dodfemf
           E2E_TENANT: doca-church
+          # A conta de plataforma do seed. `suporte.spec.ts` precisa dela para
+          # montar o handoff de verdade (login de plataforma → listar tenants →
+          # impersonate); sem estas duas o spec se pula em vez de falhar.
+          E2E_SUPPORT_EMAIL: fernando.vargas@fill.tech
+          E2E_SUPPORT_PASSWORD: A3dodfemf
         run: npm run e2e -w orbien-web
 
       # É o que transforma "quebrou no CI" em diagnóstico de dois minutos.

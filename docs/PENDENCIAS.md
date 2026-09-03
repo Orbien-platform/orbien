@@ -943,6 +943,53 @@ com o mesmo 42501.
 
 ---
 
+## `refresh()` não reconfere `is_active` — aberta
+
+Apareceu na revisão da Fase 3, em 2026-09-03, na dimensão de isolamento, junto
+de um achado sobre o `impersonate` que foi fechado na própria fase (ver abaixo).
+Não é introduzida pela fase; o que a fase faz é passar a depender dela.
+
+### O achado vizinho, que fechou
+
+`AuthService.impersonate` autorizava com
+`requestingUser.roles.includes('platform_support')` e nada mais — sem predicado
+de banco, diferente das rotas de plataforma, que respondem a
+`app_is_platform_support()`. E o token que ela emite carrega
+`support_session: true`, marca que satisfaz **qualquer** `@Roles` no
+`RolesGuard`. É a rota mais poderosa do sistema, e era a única do plano de
+plataforma decidindo por valor vindo de fora do banco.
+
+Fechado na Fase 3: `impersonate` passou a resolver o papel em
+`role_assignments`. O ganho é um só e é o que importa — papel revogado vale na
+hora, onde antes o `roles` do JWT continuava afirmando `platform_support` por
+até 15 minutos, com a cadeia de refresh renovando. De passagem, a união de
+`rolesForToken()` deixou de ampliar quem chega ali.
+
+O `is_active: true` entrou na mesma consulta, mas é redundância deliberada, não
+ganho: **`JwtStrategy.validate` já confere `is_active` em toda requisição
+autenticada**, então conta desativada leva 401 antes de alcançar o serviço.
+Descoberto ao ver o teste novo esperar 403 e receber 401 — a expectativa estava
+errada, não o código.
+
+### O que continua aberto
+
+`AuthService.refresh` valida existência do hash, `revoked_at` e `expires_at` —
+não relê `is_active`. Desativar uma conta não impede a **rotação**: o refresh
+continua trocando o token e emitindo access tokens com `platform_support`.
+
+O impacto é menor do que a primeira leitura sugeria, e é por causa do
+`JwtStrategy`: os tokens emitidos assim não servem para nada, porque toda
+requisição autenticada relê `is_active` e devolve 401. Ou seja, desativar a
+conta **corta o acesso**; o que não corta é a cadeia girando. Fica registrado
+como higiene — refresh token de conta desativada devia ser revogado, não
+renovado — e porque o console de plataforma agora vive de refresh a cada 15
+minutos, o que torna esse caminho quente onde antes era eventual.
+
+Verificado por leitura de `refresh()` e de `jwt.strategy.ts`, e pelo 401 do
+teste `conta desativada não abre sessão de suporte`.
+
+---
+
 ## Adiado por decisão — provisionar a partir do lead da waitlist (Fase 4)
 
 Não é achado: é escopo declarado fora da Fase 3, em 2026-09-03. Fica escrito

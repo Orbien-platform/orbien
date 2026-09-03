@@ -53,18 +53,32 @@ export default function SessaoSuportePage() {
   );
 
   useEffect(() => {
-    if (!result || "error" in result) return;
+    if (!result) return;
+
+    // Limpa o fragmento ANTES de decidir o que fazer com ele. Antes isto
+    // rodava só no caminho de sucesso, e nos três ramos de erro o
+    // `#access_token=…` ficava na barra de endereço e na entrada de histórico
+    // da aba — o token desses ramos é ausente, ilegível ou expirado, mas o
+    // cuidado é o mesmo que justifica usar fragmento em vez de query.
+    window.history.replaceState(null, "", window.location.pathname);
+
+    if ("error" in result) return;
     const { token, tenantName } = result.handoff;
 
     // O e-mail exibido é o do operador de suporte, não o de quem ele está
     // atendendo — quem está usando o app precisa saber quem está logado.
     saveTokens(token, "", "suporte@orbien");
+    // Escrito sempre, inclusive removendo quando não vem nome. Só gravar
+    // quando `tenantName` existe deixava o marcador de uma sessão de suporte
+    // ANTERIOR sobreviver, e a faixa anunciava a igreja errada — justamente a
+    // informação que ela existe para garantir.
     if (tenantName) {
       localStorage.setItem("support_session_tenant", tenantName);
+    } else {
+      localStorage.removeItem("support_session_tenant");
     }
     localStorage.setItem("support_session", "1");
 
-    window.history.replaceState(null, "", window.location.pathname);
     window.location.replace("/dashboard");
   }, [result]);
 

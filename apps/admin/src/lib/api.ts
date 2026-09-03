@@ -32,11 +32,17 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config as typeof error.config & { _retry?: boolean };
 
-    if (
-      error.response?.status !== 401 ||
-      original._retry ||
-      original.url === "/auth/login"
-    ) {
+    // A rota de login deste app é `/auth/platform/login`, não `/auth/login` —
+    // o arquivo veio do `apps/web` e a exceção tinha ficado apontando para a
+    // rota de lá. Sem isto, 401 de senha errada entra no ramo de refresh, não
+    // acha refresh token, e faz `clearTokens()` + `location.href = "/login"`:
+    // a página recarrega e apaga a mensagem de erro que a tela acabou de
+    // montar. As duas ficam na lista porque `/auth/logout` também é chamado
+    // com credencial que pode já ter expirado.
+    const isAuthEntrypoint =
+      original.url === "/auth/platform/login" || original.url === "/auth/login";
+
+    if (error.response?.status !== 401 || original._retry || isAuthEntrypoint) {
       return Promise.reject(error);
     }
 

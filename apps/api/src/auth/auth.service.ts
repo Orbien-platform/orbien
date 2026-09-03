@@ -33,7 +33,9 @@ const PLATFORM_ROLE = 'platform_support';
 
 interface RoleAssignmentRow {
   role_code: string;
-  congregation_id: string | null;
+  // Não-nulável no schema (`RoleAssignment.congregation_id: String`); tipar
+  // mais largo só criaria um caso para raciocinar que o banco não produz.
+  congregation_id: string;
 }
 
 /**
@@ -46,10 +48,18 @@ interface RoleAssignmentRow {
  * mesmo tenant sumiria do token na primeira renovação, e o console derrubaria
  * a sessão a cada 15 minutos sem motivo aparente.
  *
- * Isso não afrouxa nada no plano do tenant: `platform_support` não está em
- * nenhuma lista de `@Roles` de dado de igreja, de propósito. E o predicado que
- * abre os N tenants no banco resolve o papel por `role_assignments`, não por
- * `app.role_codes` — o token não é a autoridade aqui.
+ * Nas duas rotas de plataforma isto não amplia nada: elas têm `@PlatformRoute()`
+ * e quem decide no banco é `app_is_platform_support()`, que lê
+ * `role_assignments` e já não filtra por congregação — o token só passou a
+ * concordar com o banco.
+ *
+ * `POST /auth/impersonate` levava `@Roles('platform_support')` e decidia pelo
+ * token, então esta união ampliaria quem chega à rota mais poderosa do sistema.
+ * Não amplia mais: ela passou a resolver o papel em `role_assignments` (ver
+ * `impersonate`), e o `roles` do JWT deixou de ser autoridade ali.
+ *
+ * `POST /internal/celebrations/*` também leva `@Roles('platform_support')` e
+ * segue decidindo pelo token; é job interno e não devolve dado de igreja.
  */
 function rolesForToken(
   assignments: RoleAssignmentRow[],
@@ -284,9 +294,38 @@ export class AuthService {
     requestingUser: JwtPayload,
     dto: ImpersonateDto,
   ): Promise<{ access_token: string; expires_in: number }> {
-    if (!requestingUser.roles.includes('platform_support')) {
-      throw new ForbiddenException();
-    }
+    // O papel vem do BANCO, não do token — mesmo princípio que o cabeçalho de
+    // `004_rls_platform_plane.sql` declara para `app_is_platform_support()`:
+    // "o predicado que abre TODOS os tenants é o último lugar do sistema onde
+    // vale a pena depender de um valor que veio de fora do banco". Esta rota
+    // abre UM tenant por inteiro e emite `support_session: true`, marca que
+    // satisfaz qualquer `@Roles` no `RolesGuard`. É a mesma classe de decisão,
+    // e estava decidindo pelo token.
+    //
+    // O que isto de fato acrescenta é uma coisa só, e é a que importa: papel
+    // revogado passa a valer na hora. Antes, o `roles` do JWT continuava
+    // dizendo `platform_support` por até 15 minutos, e a cadeia de refresh
+    // seguia renovando. De passagem, a união de `rolesForToken()` deixa de
+    // ampliar quem chega aqui, porque o token não é mais autoridade.
+    //
+    // O `is_active` é redundância deliberada: `JwtStrategy.validate` já
+    // confere isso em toda requisição autenticada, então conta desativada leva
+    // 401 antes de chegar aqui. Fica porque o serviço não deve depender de o
+    // guard estar montado — mas não conte como ganho desta consulta.
+    //
+    // O `@Roles('platform_support')` do controller fica: é rejeição barata
+    // antes da consulta. Autoridade é esta linha. Roda como `orbien_app`, sem
+    // contexto — o mesmo caminho do `login`, sustentado pelas policies
+    // `orbien_app_auth`.
+    const actor = await this.prisma.userAccount.findFirst({
+      where: {
+        id: requestingUser.sub,
+        is_active: true,
+        roleAssignments: { some: { role_code: PLATFORM_ROLE } },
+      },
+      select: { id: true },
+    });
+    if (!actor) throw new ForbiddenException();
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: dto.target_tenant_id },

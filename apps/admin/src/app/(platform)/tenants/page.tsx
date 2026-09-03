@@ -52,44 +52,58 @@ function fmtDate(iso: string): string {
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState("");
+
+  // Mesmo desenho de `apps/web/src/app/(admin)/pessoas/page.tsx`, e pelo mesmo
+  // motivo. `isLoading` como estado imperativo travava a tela: o `SearchInput`
+  // dispara `onSearch` no próprio mount depois do debounce, e com o termo igual
+  // ao atual o `setSearch` não muda nada — o effect não rodava de novo e nada
+  // voltava a desligar o loading. Derivado de "qual requisição já terminou",
+  // isso não tem como acontecer.
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = `${search}|${reloadTick}`;
+  const isLoading = loadedKey !== requestKey;
 
   // Qual linha está abrindo sessão de suporte — o spinner é por tenant, não da
   // tela: a lista continua utilizável enquanto o `impersonate` responde.
   const [openingFor, setOpeningFor] = useState<string | null>(null);
 
-  const load = useCallback((term: string) => {
+  // O cancelamento evita que uma resposta antiga sobreescreva a lista: digitar
+  // "doca" e apagar rápido deixa duas requisições em voo, e sem isto a
+  // primeira a chegar por último ganha.
+  useEffect(() => {
+    const signal = { cancelled: false };
     const params = new URLSearchParams({ limit: "100" });
-    if (term) params.set("search", term);
-    return api
+    if (search) params.set("search", search);
+    api
       .get<{ data: Tenant[] }>(`/platform/tenants?${params}`)
       .then(({ data }) => {
+        if (signal.cancelled) return;
         setTenants(data.data);
         setError("");
       })
       .catch(() => {
+        if (signal.cancelled) return;
         setTenants([]);
         setError("Não foi possível carregar os tenants.");
       })
-      .finally(() => setIsLoading(false));
-  }, []);
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(requestKey);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [requestKey, search]);
 
-  useEffect(() => {
-    load(search);
-  }, [load, search]);
+  // Estável de propósito: o effect do `SearchInput` tem `onSearch` nas
+  // dependências, e uma identidade nova a cada render reagenda o debounce sem
+  // parar.
+  const handleSearch = useCallback((term: string) => setSearch(term), []);
 
-  function handleSearch(term: string) {
-    setIsLoading(true);
-    setSearch(term);
-  }
-
-  function reload() {
-    setIsLoading(true);
-    load(search);
-  }
+  const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
   async function handleSupportSession(tenant: Tenant) {
     setError("");
@@ -103,6 +117,12 @@ export default function TenantsPage() {
         setError(
           `${tenant.name} não tem congregação — não é possível abrir sessão de suporte.`
         );
+      } else if (!axios.isAxiosError(err) && err instanceof Error) {
+        // Não veio da API: é o erro de configuração que `openSupportSession`
+        // lança quando `NEXT_PUBLIC_WEB_URL` não está definida. A mensagem
+        // nomeia a variável, e engoli-la transformava uma correção de um
+        // minuto no painel em tentativa e erro.
+        setError(err.message);
       } else {
         setError("Não foi possível abrir a sessão de suporte.");
       }

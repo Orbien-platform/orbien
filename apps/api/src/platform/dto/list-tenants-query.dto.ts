@@ -7,10 +7,14 @@ export class ListTenantsQueryDto {
   @IsString()
   search?: string;
 
+  // Teto também aqui, não só no `limit`: `page` alto vira OFFSET profundo na
+  // mesma tabela, o que anula o motivo do teto do `limit`. 100 páginas de 100
+  // cobrem qualquer volume que o console vá listar antes de precisar de cursor.
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   page?: number = 1;
 
   // O teto existe porque esta rota é a única do sistema que lê os N tenants:
