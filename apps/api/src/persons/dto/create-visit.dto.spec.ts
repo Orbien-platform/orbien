@@ -7,7 +7,7 @@ const GROUP_ID = '4fa85f64-5717-4562-b3fc-2c963f66afa6';
 
 describe('CreateVisitDto', () => {
   it('aceita origin que não é small_group sem small_group_id', async () => {
-    const dto = plainToInstance(CreateVisitDto, { person_id: PERSON_ID, origin: 'in_person' });
+    const dto = plainToInstance(CreateVisitDto, { person_id: PERSON_ID, origin: 'service' });
     expect(await validate(dto)).toHaveLength(0);
   });
 
@@ -21,7 +21,7 @@ describe('CreateVisitDto', () => {
   });
 
   it('rejeita person_id que não é UUID', async () => {
-    const dto = plainToInstance(CreateVisitDto, { person_id: 'nope', origin: 'in_person' });
+    const dto = plainToInstance(CreateVisitDto, { person_id: 'nope', origin: 'service' });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'person_id')).toBe(true);
   });
@@ -41,7 +41,7 @@ describe('CreateVisitDto', () => {
   it('rejeita visited_at inválido', async () => {
     const dto = plainToInstance(CreateVisitDto, {
       person_id: PERSON_ID,
-      origin: 'in_person',
+      origin: 'service',
       visited_at: 'não é uma data',
     });
     const errors = await validate(dto);

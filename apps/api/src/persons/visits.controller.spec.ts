@@ -28,7 +28,7 @@ describe('VisitsController', () => {
     } as unknown as jest.Mocked<VisitsService>;
     const controller = new VisitsController(visitsService);
 
-    const dto = { person_id: 'p1', origin: 'in_person' } as never;
+    const dto = { person_id: 'p1', origin: 'service' } as never;
     const result = await controller.create(dto, user);
 
     expect(visitsService.create).toHaveBeenCalledWith(dto, user);

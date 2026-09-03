@@ -38,6 +38,9 @@ describe('DemographicsService', () => {
         { classification: 'visitor', total: 40n },
         { classification: 'attendee', total: 25n },
         { classification: 'member', total: 60n },
+        // Categoria desconhecida: entra no total geral, mas em nenhum balde
+        // específico — cobre o `else` final do encadeamento de ifs.
+        { classification: 'unknown_bucket', total: 2n },
       ],
       genderRows: [
         { gender: 'male', total: 55n },
@@ -45,6 +48,8 @@ describe('DemographicsService', () => {
         { gender: 'other', total: 3n },
         { gender: 'prefer_not_to_say', total: 4n },
         { gender: null, total: 5n },
+        // Idem: valor de gênero fora dos cinco baldes conhecidos.
+        { gender: 'unknown_gender', total: 1n },
       ],
       ageRows: [
         { range: '0-2', total: 4n },
@@ -57,12 +62,15 @@ describe('DemographicsService', () => {
         { range: '18-24', gender: 'female', total: 15n },
         { range: '18-24', gender: 'other', total: 1n },
         { range: '60+', gender: null, total: 12n },
+        // Faixa que o SQL nunca deveria produzir (fora de AGE_RANGES_IN_ORDER)
+        // — cobre a guarda `if (!bucket) continue`.
+        { range: 'faixa_inexistente', gender: 'male', total: 1n },
       ],
     });
 
     const result = await service.getStats(user, {} as never);
 
-    expect(result.totals).toEqual({ visitor: 40, attendee: 25, member: 60, total: 125 });
+    expect(result.totals).toEqual({ visitor: 40, attendee: 25, member: 60, total: 127 });
     expect(result.by_gender).toEqual({
       male: 55,
       female: 58,
@@ -99,12 +107,10 @@ describe('DemographicsService', () => {
   });
 
   it('registra apenas os filtros efetivamente aplicados', async () => {
-    const { service } = serviceWithRows({});
-
-    const noFilters = await service.getStats(user, {} as never);
+    const noFilters = await serviceWithRows({}).service.getStats(user, {} as never);
     expect(noFilters.filters_applied).toEqual({});
 
-    const withFilters = await service.getStats(user, {
+    const withFilters = await serviceWithRows({}).service.getStats(user, {
       classification: 'member',
       since: '2026-01-01',
       until: '2026-06-01',
@@ -122,5 +128,21 @@ describe('DemographicsService', () => {
     const result = await service.getStats(user, {} as never);
 
     expect(() => new Date(result.generated_at).toISOString()).not.toThrow();
+  });
+
+  it('usa 0 como fallback se o Map de faixa etária não tiver a chave (guarda defensiva)', async () => {
+    // `ageMap` é pré-semeado com todas as faixas de AGE_RANGES_IN_ORDER, então
+    // `.get(r)` nunca deveria devolver `undefined` em uso normal — o `?? 0` é
+    // puramente defensivo. Simula essa falha forçando o primeiro `Map#get` a
+    // devolver `undefined`, exatamente a chamada de `by_age_range`.
+    const { service } = serviceWithRows({ ageRows: [{ range: '0-2', total: 9n }] });
+    const getSpy = jest.spyOn(Map.prototype, 'get').mockReturnValueOnce(undefined);
+
+    try {
+      const result = await service.getStats(user, {} as never);
+      expect(result.by_age_range[0]!.total).toBe(0);
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 });

@@ -46,7 +46,7 @@ describe('VisitsService', () => {
       });
 
       const result = await service.create(
-        { person_id: 'p1', origin: VisitOrigin.in_person } as never,
+        { person_id: 'p1', origin: VisitOrigin.service } as never,
         user,
       );
 
@@ -55,7 +55,7 @@ describe('VisitsService', () => {
           tenant_id: 'tenant-1',
           congregation_id: 'cong-1',
           person_id: 'p1',
-          origin: VisitOrigin.in_person,
+          origin: VisitOrigin.service,
           small_group_id: null,
         }),
       });
