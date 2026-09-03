@@ -97,6 +97,13 @@ module.exports = {
   // global em 100. O piso nunca desce.
   coverageThreshold: {
     global: { statements: 0, branches: 0, functions: 0, lines: 0 },
+    // Fase 1 (financeiro) segue parcial — ver docs/TESTES.md — então não
+    // trava threshold por caminho lá ainda; travar agora colidiria com o WIP
+    // em andamento nos achados #1 e #3 (ver docs/PENDENCIAS.md).
+    './src/prisma/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/auth/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/app.controller.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/app.module.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/persons/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/visitor/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/waitlist/': { statements: 100, branches: 100, functions: 100, lines: 100 },

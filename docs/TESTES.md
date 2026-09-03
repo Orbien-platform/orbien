@@ -18,7 +18,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 |---|---|---|---|---|
 | 0 | Infra e instrumentação | jest projects, vitest, gate no CI | — | ☑ |
 | 1 | API — financeiro | `financial/`, `common/` | 37 | ☐ |
-| 2 | API — auth e raiz | `auth/`, `prisma/`, `app.*` | 18 | ☐ |
+| 2 | API — auth e raiz | `auth/`, `prisma/`, `app.*` | 18 | ☑ |
 | 3 | API — pessoas | `persons/`, `visitor/`, `waitlist/` | 34 | ☑ |
 | 4 | API — celebrações | `celebrations/` | 46 | ☐ |
 | 5 | API — voluntários e grupos | `volunteers/`, `small-groups/` | 36 | ☐ |
@@ -260,6 +260,15 @@ npm run test:cov -w orbien-backend   # imprime relatório de cobertura
 `DATABASE_URL`/`DIRECT_URL`; no CI ele continua verde com os 39 testes. Para
 conferir localmente sem banco, `npx jest --selectProjects rls --listTests`
 deve listar `test/rls/isolation.spec.ts`.
+
+Em sessão remota (Claude Code on the web/CLI), `.claude/hooks/session-start.sh`
+resolve isso sozinho: sobe um Postgres 16 local e efêmero (já vem instalado na
+imagem, sem precisar de Docker), roda `bootstrap-db.sh` nele e sobrescreve
+`DATABASE_URL`/`DIRECT_URL`/`ORBIEN_APP_PASSWORD` da sessão para apontar pra
+esse banco — nunca para o Supabase de produção, mesmo que a sessão já tenha
+vindo com as URLs de produção configuradas. Depois disso, `test:integration` e
+`test:rls -w orbien-backend` rodam de ponta a ponta sem nenhuma ação manual.
+Ver o cabeçalho do hook para o racional completo.
 
 ### Verificado na execução
 

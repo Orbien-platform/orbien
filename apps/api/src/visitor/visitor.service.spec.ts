@@ -24,6 +24,7 @@ function serviceWith() {
   };
 
   const tx = {
+    $executeRaw: jest.fn().mockResolvedValue(undefined),
     person: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
     consentRecord: { create: jest.fn().mockResolvedValue({}) },
     visitRecord: { create: jest.fn().mockResolvedValue({}) },

@@ -11,9 +11,33 @@ import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { CreateRecurringRuleDto } from './dto/create-recurring-rule.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 
+/**
+ * Soma meses **saturando no último dia** do mês de destino.
+ *
+ * O `setMonth` do JS transborda em vez de saturar: 31/01 + 1 mês pedia "31 de
+ * fevereiro" e o runtime devolvia 03/03. Numa série de parcelas isso fazia
+ * fevereiro ficar sem parcela nenhuma e março receber duas. Aqui o dia é
+ * limitado ao último dia do mês de destino, então 31/01 + 1 mês = 28/02, e
+ * 29/02 em ano bissexto.
+ *
+ * A conta é toda em UTC de propósito. `getMonth`/`setMonth` são locais, então
+ * o resultado dependia do fuso da máquina — a mesma regra dava datas
+ * diferentes no CI (UTC) e no laptop (-03).
+ *
+ * Chamar sempre a partir da data ÂNCORA, nunca do resultado anterior: somar
+ * de mês em mês a partir do último valor perde o dia original (31/01 → 28/02 →
+ * 28/03). Em `create` a âncora é `started_at`; ver a limitação registrada em
+ * `generateNext`.
+ */
 function addMonths(date: Date, months: number): Date {
+  const year = date.getUTCFullYear();
+  const targetMonth = date.getUTCMonth() + months;
+
+  // Dia 0 do mês seguinte é o último dia do mês de destino.
+  const lastDayOfTarget = new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate();
+
   const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
+  next.setUTCFullYear(year, targetMonth, Math.min(date.getUTCDate(), lastDayOfTarget));
   return next;
 }
 
