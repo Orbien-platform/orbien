@@ -26,9 +26,9 @@ jobs:
     name: Build, tipos e lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -86,9 +86,9 @@ jobs:
       JWT_SECRET: ci-jwt-secret
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -143,9 +143,9 @@ jobs:
       # RLS e os testes passariam sem testar nada.
       DATABASE_URL: postgresql://orbien_app:ci_app@localhost:5432/orbien
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -186,9 +186,9 @@ jobs:
       API_BACKEND_URL: http://localhost:3000/api
       NEXT_PUBLIC_API_URL: /api-proxy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -251,7 +251,7 @@ jobs:
       # É o que transforma "quebrou no CI" em diagnóstico de dois minutos.
       - name: Relatório e traces quando falhar
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: |

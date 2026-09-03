@@ -22,7 +22,6 @@ test.describe("grupos", () => {
     const stamp = Date.now();
     const nomeA = `Célula E2E A ${stamp}`;
     const nomeB = `Célula E2E B ${stamp}`;
-    const rows = page.locator("tbody tr");
     const busca = page.getByPlaceholder("Buscar grupos…");
     const criados: string[] = [];
 

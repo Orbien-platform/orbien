@@ -127,11 +127,17 @@ export class SpedExportService {
     // ── Line arrays ────────────────────────────────────────────────────────
     const lines: string[] = [];
 
+    // Bloco 0 — o `0000` faz parte dele.
+    //
+    // O `b0Start` ficava DEPOIS do push do `|0000|`, e o `|0990|` saía com uma
+    // linha a menos. `QTD_LIN_0` é a quantidade total de linhas do bloco 0, e o
+    // `0000` é registro do bloco 0 — o próprio `|9900|0000|1|` já o conta como
+    // registro. Começar em 0 inclui a abertura.
+    const b0Start = lines.length;
+
     // 0000 — Abertura
     lines.push(`|0000|9|N|${dtIni}|${dtFin}|${nome}|${cnpj}||0|||0||`);
 
-    // Block 0
-    const b0Start = lines.length;
     lines.push('|0001|1|');
     lines.push('|0007|0|0|0|105|3550308|SP|||||0,00|0,00|||');
     lines.push('|0035|||');
@@ -154,7 +160,13 @@ export class SpedExportService {
     for (const tx of rows) {
       seqLcto++;
       const isIncome = tx.category.type === 'income';
-      const catCode = accountByCategory.get(tx.category.name) ?? CAIXA_CODE;
+      // O `!` é seguro e o fallback anterior era código morto: o laço acima
+      // percorre ESTAS MESMAS `rows` e registra uma conta para cada
+      // `category.name` distinto, então a busca nunca falha. O `?? CAIXA_CODE`
+      // que estava aqui era, além de inalcançável, o pior default possível —
+      // mandaria o lançamento para a conta Caixa nos dois lados da partida,
+      // zerando o efeito contábil sem nenhum erro à vista.
+      const catCode = accountByCategory.get(tx.category.name)!;
       const value = this.fmtValue(Number(tx.amount));
       const date = this.fmtSpedDate(tx.occurred_at);
       const doc = this.safe(tx.pixPayment?.asaas_payment_id ?? tx.id, 60);

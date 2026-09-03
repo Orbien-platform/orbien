@@ -15,6 +15,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     log: [],
   });
 
+  // O Prisma 6 devolve um Proxy do construtor, e é o proxy — não o objeto que
+  // ele embrulha — que resolve os delegates de modelo (`person`,
+  // `waitlistSubscriber`, ...). Dentro de um getter do protótipo o `this` é o
+  // alvo cru: tem `$connect` e `$transaction`, e nenhum modelo.
+  //
+  // Por isso `get client()` não pode devolver `this`. Enquanto devolvia, todo
+  // caminho SEM transação ativa quebrava com
+  // `Cannot read properties of undefined (reading 'create')` — e só esses,
+  // porque quem passa pelo TenantContextInterceptor recebe o `tx`, que tem os
+  // delegates. Os dois caminhos públicos do produto (cadastro da waitlist e
+  // registro de visitante por QR) estavam mortos em produção por isso.
+  //
+  // No construtor o `this` ainda é o proxy — é o único lugar onde dá para
+  // guardar a referência boa. Descoberto em 2026-09-03; ver a pendência nº 8.
+  private readonly proxied: PrismaClient;
+
+  constructor() {
+    super();
+    this.proxied = this as unknown as PrismaClient;
+  }
+
   async onModuleInit(): Promise<void> {
     await this.$connect();
     await this.system.$connect();
@@ -27,7 +48,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   // Returns the active transaction client (set by TenantContextInterceptor) or the main client.
   get client(): PrismaClient | TxClient {
-    return txStorage.getStore() ?? this;
+    return txStorage.getStore() ?? this.proxied;
   }
 
   // Runs fn inside the given transaction context so all this.prisma.client calls use tx.

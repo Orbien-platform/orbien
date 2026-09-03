@@ -40,4 +40,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+# `next-env.d.ts` NÃO entra aqui, diferente do apps/web: ele é versionado neste
+# app de propósito (`chore: versiona apps/admin/next-env.d.ts`), para sessão
+# remota conseguir rodar `tsc` sem antes rodar o `next build` que o gera.
+# Manter a regra faria a linha ignorada contradizer o arquivo rastreado.

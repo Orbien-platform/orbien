@@ -21,6 +21,7 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; **falta rodar o bootstrap** |
 | 8 | As duas rotas públicas do produto estavam mortas: `PrismaService.client` devolvia o cliente sem delegates de modelo | defeito | ✔ fechada |
 | 9 | Cadastro de visitante por QR nunca conseguiu gravar sob RLS — rota pública sem contexto de tenant | defeito | ✔ fechada — contexto vem do QR token |
+| 10 | Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — vale para as 8 telas de `(admin)` | UX | aberta — decisão registrada |
 
 > Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
 > nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
@@ -940,6 +941,38 @@ grava no tenant que o token diz, em vez de não gravar em lugar nenhum.
 
 Verificado nos dois sentidos: removendo o `set_config`, o teste volta a falhar
 com o mesmo 42501.
+
+---
+
+## 10. Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — aberta
+
+### O que apareceu
+
+O aviso `'canView' is assigned a value but never used` em
+`apps/web/src/app/(admin)/celebracoes/page.tsx:63`, no run de CI de 2026-09-03
+que passou verde com 7 annotations.
+
+### O que era — e o que não era
+
+`canView` era `canEdit || ministry_leader/secretary`: exatamente os cinco papéis
+de `READ_ROLES` em `apps/api/src/celebrations/celebrations.controller.ts:17`.
+Não havia exposição de dado. O servidor é a autoridade e ela está de pé —
+`volunteer` e `member` levam 403 em `GET /celebrations` com ou sem a variável.
+
+O que a variável morta revelava é outra coisa. `components/layout/sidebar.tsx`
+não filtra nenhum link por papel, e `loadCelebrations` engole o 403 com
+`.catch(() => setCelebrations([]))`. Quem não tem acesso vê **"Nenhuma
+celebração cadastrada."** e conclui que a igreja não tem culto — não que lhe
+falta permissão. Vale para as 8 telas de `(admin)`: nenhuma tem estado de "sem
+permissão", e `canView` não aparecia em nenhum outro lugar do `web`.
+
+### Decisão
+
+Remover `canView` — é código morto, e o que ela espelhava o servidor já garante.
+Não criar um estado de "sem permissão" em uma única tela: seria um padrão de uma
+página só, divergindo das outras sete. O tratamento certo é igual para as oito —
+filtrar o sidebar por papel, e distinguir 403 de lista vazia no `catch` — e é
+unidade de trabalho própria, não parte de uma limpeza de lint.
 
 ---
 
