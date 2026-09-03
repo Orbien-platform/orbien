@@ -261,6 +261,15 @@ npm run test:cov -w orbien-backend   # imprime relatório de cobertura
 conferir localmente sem banco, `npx jest --selectProjects rls --listTests`
 deve listar `test/rls/isolation.spec.ts`.
 
+Em sessão remota (Claude Code on the web/CLI), `.claude/hooks/session-start.sh`
+resolve isso sozinho: sobe um Postgres 16 local e efêmero (já vem instalado na
+imagem, sem precisar de Docker), roda `bootstrap-db.sh` nele e sobrescreve
+`DATABASE_URL`/`DIRECT_URL`/`ORBIEN_APP_PASSWORD` da sessão para apontar pra
+esse banco — nunca para o Supabase de produção, mesmo que a sessão já tenha
+vindo com as URLs de produção configuradas. Depois disso, `test:integration` e
+`test:rls -w orbien-backend` rodam de ponta a ponta sem nenhuma ação manual.
+Ver o cabeçalho do hook para o racional completo.
+
 ### Verificado na execução
 
 O harness foi validado com specs descartáveis, depois removidos:
