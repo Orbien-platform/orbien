@@ -3,19 +3,14 @@
  * cria 12 lançamentos de uma vez, e um mês errado no meio da série só aparece
  * quando o tesoureiro fecha o DRE.
  *
- * O centro de gravidade é o `addMonths` no topo do arquivo, que é
- * `setMonth(getMonth() + n)`. Duas consequências que esta suíte prende:
+ * O centro de gravidade é o `addMonths` no topo do arquivo. Ele saturava? Não:
+ * era `setMonth`, que transbordava — 31/01 + 1 mês virava 03/03, e fevereiro
+ * ficava sem parcela. Passou a saturar no último dia do mês de destino, e é
+ * isso que os testes de calendário abaixo exigem.
  *
- *   - **Overflow de dia**: 31/01 + 1 mês não é 28/02, é 03/03 — o JS estoura
- *     para o mês seguinte em vez de saturar no último dia. Uma parcela de dia
- *     31 pula fevereiro.
- *   - **`setMonth` é local, não UTC.** O resultado depende do fuso da máquina.
- *     Os testes usam horário 12:00Z de propósito, para que a data local seja a
- *     mesma em qualquer fuso plausível e a suíte não fique verde no CI (UTC) e
- *     vermelha no laptop (-03).
- *
- * Os testes de overflow abaixo prendem o comportamento ATUAL, não o desejado.
- * Se a decisão for saturar no fim do mês, eles falham — é o ponto deles.
+ * A conta é em UTC. Os testes usam horário 12:00Z de propósito: assim a data
+ * é a mesma em qualquer fuso plausível e a suíte não fica verde no CI (UTC) e
+ * vermelha no laptop (-03).
  */
 
 import {
@@ -258,10 +253,11 @@ describe('RecurringRuleService', () => {
       expect(String(cap.transactions[0]?.['amount'])).toBe('1234.56');
     });
 
-    it('parcela do dia 31 PULA fevereiro — 31/01 vira 03/03', async () => {
-      // Comportamento atual do `addMonths`: `setMonth` estoura em vez de
-      // saturar no último dia do mês. Numa série de 3 parcelas começando em
-      // 31/01/2026, o mês de fevereiro fica sem parcela e março recebe duas.
+    it('parcela do dia 31 satura em 28/02 e volta ao dia 31 em março', async () => {
+      // O caso que motivou a correção. Com `setMonth`, a segunda parcela caía
+      // em 03/03: fevereiro ficava sem parcela e março recebia duas. Como cada
+      // parcela é calculada a partir da ÂNCORA (`started_at`), saturar em
+      // fevereiro não desloca as parcelas seguintes — março volta ao dia 31.
       const { service, cap } = harness({});
 
       await service.create(
@@ -271,12 +267,12 @@ describe('RecurringRuleService', () => {
 
       expect(cap.transactions.map((t) => (t['occurred_at'] as Date).toISOString())).toEqual([
         '2026-01-31T12:00:00.000Z',
-        '2026-03-03T12:00:00.000Z',
+        '2026-02-28T12:00:00.000Z',
         '2026-03-31T12:00:00.000Z',
       ]);
     });
 
-    it('parcela do dia 30 também estoura em fevereiro', async () => {
+    it('parcela do dia 30 também satura em 28/02', async () => {
       const { service, cap } = harness({});
 
       await service.create(
@@ -286,13 +282,13 @@ describe('RecurringRuleService', () => {
 
       expect(cap.transactions.map((t) => (t['occurred_at'] as Date).toISOString())).toEqual([
         '2026-01-30T12:00:00.000Z',
-        '2026-03-02T12:00:00.000Z',
+        '2026-02-28T12:00:00.000Z',
       ]);
     });
 
-    it('em ano bissexto, 30/01 vira 01/03', async () => {
-      // 2028 é bissexto: fevereiro tem 29 dias, então o estouro é de um dia
-      // em vez de dois. Prende que a conta segue o calendário real.
+    it('em ano bissexto, satura em 29/02', async () => {
+      // 2028 é bissexto. Prende que o limite vem do calendário real e não de
+      // um 28 fixo no código.
       const { service, cap } = harness({});
 
       await service.create(
@@ -302,8 +298,51 @@ describe('RecurringRuleService', () => {
 
       expect(cap.transactions.map((t) => (t['occurred_at'] as Date).toISOString())).toEqual([
         '2028-01-30T12:00:00.000Z',
-        '2028-03-01T12:00:00.000Z',
+        '2028-02-29T12:00:00.000Z',
       ]);
+    });
+
+    it('série de 13 parcelas do dia 31 satura em cada mês curto', async () => {
+      // Varre um ano inteiro a partir de 31/01: fevereiro, abril, junho,
+      // setembro e novembro são curtos, e cada um recebe o próprio último dia.
+      // Nenhum mês fica sem parcela e nenhum recebe duas.
+      const { service, cap } = harness({});
+
+      await service.create(
+        { ...parcelado, installments: 13, started_at: '2026-01-31T12:00:00.000Z' },
+        user,
+      );
+
+      expect(
+        cap.transactions.map((t) => (t['occurred_at'] as Date).toISOString().slice(0, 10)),
+      ).toEqual([
+        '2026-01-31',
+        '2026-02-28',
+        '2026-03-31',
+        '2026-04-30',
+        '2026-05-31',
+        '2026-06-30',
+        '2026-07-31',
+        '2026-08-31',
+        '2026-09-30',
+        '2026-10-31',
+        '2026-11-30',
+        '2026-12-31',
+        '2027-01-31',
+      ]);
+    });
+
+    it('a hora do dia é preservada na saturação', async () => {
+      const { service, cap } = harness({});
+
+      await service.create(
+        { ...parcelado, installments: 2, started_at: '2026-01-31T08:45:30.123Z' },
+        user,
+      );
+
+      expect((cap.transactions[1]?.['occurred_at'] as Date).toISOString()).toBe(
+        '2026-02-28T08:45:30.123Z',
+      );
     });
 
     it('série que atravessa a virada de ano continua correta', async () => {
@@ -471,7 +510,7 @@ describe('RecurringRuleService', () => {
       expect(data.next_occurrence_at.toISOString()).toBe('2026-03-15T12:00:00.000Z');
     });
 
-    it('regra do dia 31 avança para 03/03 — o mesmo estouro da criação', async () => {
+    it('regra do dia 31 avança saturando em 28/02', async () => {
       const { service, cap } = harness({
         rule: { ...regraFixa, next_occurrence_at: new Date('2026-01-31T12:00:00.000Z') },
         lastTransaction: ultima,
@@ -481,7 +520,28 @@ describe('RecurringRuleService', () => {
 
       const update = cap.updates.find((u) => u.model === 'recurringRule')!;
       const data = (update.args as { data: { next_occurrence_at: Date } }).data;
-      expect(data.next_occurrence_at.toISOString()).toBe('2026-03-03T12:00:00.000Z');
+      expect(data.next_occurrence_at.toISOString()).toBe('2026-02-28T12:00:00.000Z');
+    });
+
+    it('LIMITAÇÃO CONHECIDA: no modo fixed o dia original não volta depois de saturar', async () => {
+      // Diferente de `create`, o `generateNext` soma a partir do
+      // `next_occurrence_at` gravado, não de uma âncora. Depois de saturar em
+      // 28/02, o mês seguinte parte de 28 e a regra fica no dia 28 para
+      // sempre — em vez de voltar ao 31.
+      //
+      // Corrigir exige guardar o dia âncora na regra (coluna nova), o que é
+      // mudança de schema e não entrou nesta correção. O teste existe para que
+      // a limitação seja conhecida em vez de descoberta.
+      const { service, cap } = harness({
+        rule: { ...regraFixa, next_occurrence_at: new Date('2026-02-28T12:00:00.000Z') },
+        lastTransaction: ultima,
+      });
+
+      await service.generateNext('rule-1');
+
+      const update = cap.updates.find((u) => u.model === 'recurringRule')!;
+      const data = (update.args as { data: { next_occurrence_at: Date } }).data;
+      expect(data.next_occurrence_at.toISOString()).toBe('2026-03-28T12:00:00.000Z');
     });
 
     it('regra inexistente é no-op', async () => {

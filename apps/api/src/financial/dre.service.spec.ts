@@ -4,10 +4,10 @@
  *
  * Duas coisas concentram o risco, e são o foco desta suíte:
  *
- *   1. `previousPeriod` é aritmética de milissegundos, não de calendário. O
- *      período anterior tem o MESMO comprimento do atual — não é "o mês
- *      passado". Para janeiro cheio isso coincide com dezembro; para fevereiro
- *      não coincide com janeiro, e é fácil ler o relatório supondo que sim.
+ *   1. `previousPeriod` é híbrido de propósito: quando o período pedido são
+ *      meses inteiros, o anterior são os meses de calendário equivalentes
+ *      (fevereiro compara com janeiro inteiro); para recorte arbitrário, volta
+ *      a ser por comprimento, porque "mês anterior" não significa nada ali.
  *   2. `groupByCategory` arredonda só no fim, depois de somar. Somar centavos
  *      arredondados por transação daria outro total.
  *
@@ -147,11 +147,11 @@ describe('DreService.buildDre', () => {
       expect(dre.previous_period.revenue_total).toBe(70);
     });
 
-    it('fevereiro de 28 dias NÃO devolve janeiro inteiro', async () => {
-      // Comportamento por comprimento, não por calendário: 28 dias antes de
-      // 01/02 começa em 04/01, então os três primeiros dias de janeiro ficam
-      // fora da comparação. Não é bug — é o que o serviço faz de propósito —
-      // mas é contraintuitivo o suficiente para merecer um teste com nome.
+    it('fevereiro de 28 dias compara com janeiro INTEIRO', async () => {
+      // O caso que motivou a correção. Pela conta antiga, de comprimento, o
+      // período anterior era 04/01–31/01: os três primeiros dias de janeiro
+      // ficavam fora, e a comparação aparecia menor sem que nada tivesse
+      // caído.
       const { service } = serviceWith([]);
 
       const dre = await service.buildDre(
@@ -162,7 +162,107 @@ describe('DreService.buildDre', () => {
       );
 
       expect(dre.previous_period.period).toEqual({
-        start: '2026-01-04',
+        start: '2026-01-01',
+        end: '2026-01-31',
+      });
+    });
+
+    it('março compara com fevereiro, que é mais curto — sem esticar o período', async () => {
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2026-03-01', period_end: '2026-03-31' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2026-02-01',
+        end: '2026-02-28',
+      });
+    });
+
+    it('fevereiro de ano bissexto compara com janeiro inteiro', async () => {
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2028-02-01', period_end: '2028-02-29' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2028-01-01',
+        end: '2028-01-31',
+      });
+    });
+
+    it('trimestre compara com o trimestre anterior', async () => {
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2026-01-01', period_end: '2026-03-31' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2025-10-01',
+        end: '2025-12-31',
+      });
+    });
+
+    it('ano inteiro compara com o ano anterior', async () => {
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2026-01-01', period_end: '2026-12-31' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2025-01-01',
+        end: '2025-12-31',
+      });
+    });
+
+    it('recorte arbitrário continua por comprimento', async () => {
+      // 15/01 a 14/02 não são meses inteiros: não existe "mês anterior" que
+      // faça sentido, e a conta por comprimento é a resposta certa. Prende que
+      // a correção não vazou para este caminho.
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2026-01-15', period_end: '2026-02-14' },
+        false,
+      );
+
+      // 31 dias, os mesmos do período pedido: 15/12 a 14/01.
+      expect(dre.previous_period.period).toEqual({
+        start: '2025-12-15',
+        end: '2026-01-14',
+      });
+    });
+
+    it('período que começa no dia 1 mas não fecha o mês é por comprimento', async () => {
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2026-02-01', period_end: '2026-02-20' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2026-01-12',
         end: '2026-01-31',
       });
     });
@@ -214,16 +314,28 @@ describe('DreService.buildDre', () => {
       expect(occurred.lte.toISOString()).toBe('2026-01-31T23:59:59.999Z');
     });
 
-    it('sem `congregation_id` na query, o período atual não filtra congregação', async () => {
+    it('sem `congregation_id` na query, NENHUM dos dois períodos filtra congregação', async () => {
+      // O caso que motivou a correção. O período atual sempre foi do tenant
+      // inteiro; o anterior caía para a congregação do token, e os dois lados
+      // do relatório mediam recortes diferentes. Agora o escopo é o mesmo.
       const { service, wheres } = serviceWith([]);
 
       await service.buildDre('t1', 'cong-do-token', janeiro, false);
 
       expect(wheres[0]).not.toHaveProperty('congregation_id');
-      // Mas o período anterior filtra, caindo na congregação do token. Os dois
-      // lados do relatório passam a medir escopos diferentes. Prende o
-      // comportamento atual; ver a nota em docs/PENDENCIAS.md.
-      expect(wheres[1]?.['congregation_id']).toBe('cong-do-token');
+      expect(wheres[1]).not.toHaveProperty('congregation_id');
+    });
+
+    it('a congregação do token não influencia o relatório', async () => {
+      // Prende que o segundo argumento ficou fora da conta: dois tokens de
+      // congregações diferentes, no mesmo tenant, veem o mesmo DRE.
+      const a = serviceWith([]);
+      const b = serviceWith([]);
+
+      await a.service.buildDre('t1', 'cong-sede', janeiro, false);
+      await b.service.buildDre('t1', 'cong-filial', janeiro, false);
+
+      expect(a.wheres).toEqual(b.wheres);
     });
 
     it('com `congregation_id` na query, os dois períodos usam ela', async () => {
