@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nest build",
     "postinstall": "prisma generate",
+    "lint": "eslint",
     "start": "node dist/main",
     "dev": "nest start --watch",
     "start:dev": "nest start --watch",
@@ -55,6 +56,7 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@nestjs/cli": "^10.4.0",
     "@nestjs/schematics": "^10.2.0",
     "@nestjs/testing": "^10.4.22",
@@ -66,11 +68,14 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.1",
     "dotenv": "^17.4.2",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
     "jest": "^30.4.2",
     "prisma": "^6.19.3",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.48.1"
   }
 }

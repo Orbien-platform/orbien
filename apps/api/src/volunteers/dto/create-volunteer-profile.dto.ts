@@ -7,13 +7,18 @@ import {
   IsUUID,
   ValidateNested,
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 
 const SLOTS = ['morning', 'afternoon', 'evening'] as const;
-const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
-
 type Slot = (typeof SLOTS)[number];
-type DayKey = (typeof DAYS)[number];
+type DayKey =
+  | 'sunday'
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday';
 
 class DayAvailabilityDto {
   @IsOptional() @IsArray() @IsIn(SLOTS, { each: true }) sunday?: Slot[];

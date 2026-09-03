@@ -91,7 +91,7 @@ export class ServiceOrderItemsService {
       ),
     ];
 
-    let volunteersByMinistry: Record<string, { id: string; full_name: string }[]> = {};
+    const volunteersByMinistry: Record<string, { id: string; full_name: string }[]> = {};
 
     if (ministryIds.length > 0) {
       // CelebrationSchedule is 1:1 per CelebrationInstance since Bloco 1 — a

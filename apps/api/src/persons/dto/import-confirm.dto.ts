@@ -1,4 +1,4 @@
-import { IsObject, IsString, IsUUID } from 'class-validator';
+import { IsObject, IsString } from 'class-validator';
 
 export class ImportMappingDto {
   nome?: string;

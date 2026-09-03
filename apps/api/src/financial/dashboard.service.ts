@@ -93,7 +93,11 @@ export class DashboardService {
       occurred_at: { gte, lt },
     });
 
-    const [curInc, curExp, lastInc, lastExp] = await Promise.all([
+    // Só três agregações: havia uma quarta, de despesa do mês anterior, cujo
+    // resultado era descartado — `vs_last_month_pct` compara receita apenas.
+    // Se a intenção era mostrar variação de despesa também, o cálculo nunca
+    // chegou a existir; a query, sim, e ia ao banco a cada carga do dashboard.
+    const [curInc, curExp, lastInc] = await Promise.all([
       this.prisma.client.financialTransaction.aggregate({
         where: { ...baseWhere(curMonthStart, now), type: TransactionType.income },
         _sum: { amount: true },
@@ -104,10 +108,6 @@ export class DashboardService {
       }),
       this.prisma.client.financialTransaction.aggregate({
         where: { ...baseWhere(lastMonthStart, curMonthStart), type: TransactionType.income },
-        _sum: { amount: true },
-      }),
-      this.prisma.client.financialTransaction.aggregate({
-        where: { ...baseWhere(lastMonthStart, curMonthStart), type: TransactionType.expense },
         _sum: { amount: true },
       }),
     ]);
