@@ -248,17 +248,20 @@ estão fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
 bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
 passo 7 falha alto se algum invariante quebrar.
 
-> **Pendente no banco de produção:** o `audit_insert()` corrigido. O
-> `003_rls_admin_write.sql` já foi aplicado em 2026-09-03; o que falta é a
-> correção da função de auditoria, que vive no `001_rls_setup.sql` — ela
-> inseria em `audit_logs` sem `id`, coluna NOT NULL sem DEFAULT, e falhava com
-> 23502 desde sempre. Até rodar o bootstrap, sessão de suporte funciona mas não
-> deixa rastro. Ver a pendência nº 6 em `docs/PENDENCIAS.md`.
+> **Aplicado em produção em 2026-09-03:** o `003_rls_admin_write.sql` e o
+> `audit_insert()` corrigido da pendência nº 6 — ele inseria em `audit_logs`
+> sem `id`, coluna NOT NULL sem DEFAULT, e falhava com 23502 desde sempre.
+> Sessão de suporte agora deixa rastro.
 >
-> **Também pendente:** o `004_rls_platform_plane.sql`. Enquanto ele não rodar,
-> as rotas de plataforma (`POST /platform/tenants`, `GET /admin/waitlist`)
-> respondem vazio ou falham com 42501 — o interceptor já deixa de fixar tenant
-> nelas, mas não há policy que responda por isso.
+> **Pendente no banco de produção:** o `004_rls_platform_plane.sql`. Enquanto
+> ele não rodar, as rotas de plataforma (`POST /platform/tenants`,
+> `GET /admin/waitlist`) respondem vazio ou falham com 42501 — o interceptor já
+> deixa de fixar tenant nelas, mas não há policy que responda por isso.
+>
+> Aplique rodando o `bootstrap-db.sh` inteiro, **não** colando o `004` no SQL
+> Editor: ele faz `ALTER POLICY tenant_isolation`, e é o passo 4 do script que
+> decide em quais tabelas essa policy sobrevive. Aplicar script de RLS fora de
+> ordem é o defeito que a pendência nº 1 documentou.
 
 ---
 

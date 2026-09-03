@@ -17,7 +17,7 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 3 | E2E depende de dados que o seed não cria | portão | ✔ fechada — seed estendido |
 | 4 | 6 mudanças de comportamento do `c84fc02` sem cobertura permanente | risco de regressão | ✔ **fechada** — e2e nas três telas |
 | 5 | Lint em `apps/api` | portão | ✔ fechada — lint nos 3 apps, portão verde |
-| 6 | Sessão de suporte não levava a nada, e a auditoria dela era tripla­mente morta | segurança | ✔ fechada — **falta rodar o bootstrap em produção** |
+| 6 | Sessão de suporte não levava a nada, e a auditoria dela era tripla­mente morta | segurança | ✔ fechada — `audit_insert()` aplicado em produção em 2026-09-03 |
 | 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; **falta rodar o bootstrap** |
 
 > Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
@@ -25,10 +25,13 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 > registro escrito; a nº 5 apareceu na revisão; a nº 6 apareceu ao testar o
 > resultado da nº 1 pelo navegador; a nº 7 apareceu ao abrir a Fase 2.
 >
-> Resta **um passo operacional**, não uma pendência de código: rodar
-> `bash scripts/bootstrap-db.sh` contra o Supabase, que aplica o
-> `003_rls_admin_write.sql` (feito) e o `audit_insert()` corrigido da nº 6
-> (pendente).
+> O passo operacional que restava foi feito em 2026-09-03: o
+> `003_rls_admin_write.sql` e o `audit_insert()` corrigido da nº 6 estão
+> aplicados no Supabase de produção e conferidos por leitura. O que segue
+> pendente lá é o `004_rls_platform_plane.sql` da nº 7, e ele **não** deve ser
+> colado no SQL Editor: precisa rodar depois do passo que remove as policies
+> redundantes de tenant, e aplicar script de RLS fora de ordem é exatamente o
+> defeito que a nº 1 documentou. O caminho é o `bootstrap-db.sh` inteiro.
 
 O job `Unidade e cobertura` passou (53s). Nenhuma das três originais é causada
 pela Fase 0 do [plano de testes](TESTES.md).
@@ -668,22 +671,26 @@ sem sessão continua barrado seguem passando.
 > não consegue `require`. Resolvido com `moduleNameMapper` para
 > `test/stubs/archiver.ts`, que estoura se alguém realmente tentar gerar um ZIP.
 
-### Falta aplicar em produção
+### Aplicado em produção — 2026-09-03
 
 O `audit_insert()` corrigido vive no `001_rls_setup.sql`, que só o
-`bootstrap-db.sh` aplica. Até rodar, a sessão de suporte **funciona mas não
-deixa rastro** — o guard libera, o interceptor tenta gravar e o banco recusa
-com 23502, agora visível no log da API.
+`bootstrap-db.sh` aplica. Enquanto não rodava, a sessão de suporte funcionava
+mas não deixava rastro — o guard liberava, o interceptor tentava gravar e o
+banco recusava com 23502.
 
-```bash
-cd apps/api
-DIRECT_URL='postgresql://postgres:<senha>@<host>:5432/postgres' \
-ORBIEN_APP_PASSWORD='<senha-do-app>' \
-bash scripts/bootstrap-db.sh
+Fernando aplicou pelo SQL Editor do Supabase o `CREATE OR REPLACE FUNCTION
+audit_insert()` na versão da `main` (a que gera `gen_random_uuid()::text`), com
+um smoke test que chamou a função de verdade e foi removido depois. Conferido
+por leitura contra o banco:
+
+```
+audit_insert: gera id = true | SECURITY DEFINER = true
+policies de congregação: 22 | desalinhadas 0 | com papel fantasma 0
+linhas de smoke_test ainda no banco: 0
 ```
 
-Idempotente, sem `--seed`. Roda 001 → 002 → 003 na ordem certa e verifica os
-invariantes no fim.
+Registro feito a partir do relato da sessão que conduziu a aplicação; esta
+sessão não tem acesso ao banco de produção e não repetiu as leituras.
 
 ### Continua em aberto, por desenho
 
@@ -754,6 +761,16 @@ token de impersonação) vê um só, e `tenant_admin` sem contexto não vê nenh
 
 `src/common/interceptors/tenant-context.interceptor.spec.ts` prende as duas
 decisões do interceptor sem precisar de banco.
+
+`test/integration/platform-provisioning.spec.ts` mede o caminho inteiro por
+HTTP: as três marcas (`@Roles`, `@PlatformRoute()`, interceptor) só funcionam
+juntas, e nenhum teste de unidade prova que elas se encontram numa requisição
+de verdade. Provisiona, confere as seis peças no banco, loga com o admin
+recém-criado e confere a linha de `platform_access`.
+
+Tudo isso rodou contra `postgres:17-alpine` local, provisionado pelo
+`bootstrap-db.sh` completo — o mesmo caminho do CI: 54 testes de RLS e 13 de
+integração, verdes.
 
 O `AuditInterceptor` passou a gravar `platform_access` nas rotas marcadas com
 `@PlatformRoute()`. Ele só olhava `support_session`, e um `platform_support`
