@@ -755,6 +755,18 @@ token de impersonação) vê um só, e `tenant_admin` sem contexto não vê nenh
 `src/common/interceptors/tenant-context.interceptor.spec.ts` prende as duas
 decisões do interceptor sem precisar de banco.
 
+O `AuditInterceptor` passou a gravar `platform_access` nas rotas marcadas com
+`@PlatformRoute()`. Ele só olhava `support_session`, e um `platform_support`
+logado normalmente não tem essa marca: `POST /platform/tenants` criava uma
+igreja inteira sem deixar rastro. São exceções diferentes — `support_access` é
+o contrapeso do `RolesGuard` dentro de um tenant, `platform_access` é o
+contrapeso do ramo de RLS que abre os N tenants — e por isso viraram duas
+`action` distintas em vez de uma só. O `tenant_id` da coluna é o do ator (o
+token do suporte não carrega o tenant da ação); qual tenant foi criado vai em
+`after.subject_tenant_id`. Coberto por
+`src/common/interceptors/audit.interceptor.spec.ts`, que o interceptor não
+tinha.
+
 Duas asserções novas no passo de verificação do `bootstrap-db.sh`: o
 `orbien_app` tem que poder `SET ROLE app_user` (sem isso a API inteira para com
 42501), e as seis policies do plano de plataforma têm que existir e ser
@@ -770,12 +782,6 @@ simétricas.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) segue passando por cima. É o mesmo
   desenho do `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
-- **Rota de plataforma não é auditada.** O `AuditInterceptor` retorna na
-  primeira linha para quem não tem `support_session`, e um `platform_support`
-  logado normalmente não tem. Ou seja: `POST /platform/tenants` cria uma igreja
-  inteira sem deixar rastro em `audit_logs`. Não foi corrigido aqui de
-  propósito — mexer nisso é mexer no acordo `RolesGuard` + `impersonate` +
-  `AuditInterceptor`, que o `CLAUDE.md` trata como peça única.
 - **Falta rodar o bootstrap em produção**, como na nº 6. Até lá as rotas de
   plataforma respondem vazio.
 

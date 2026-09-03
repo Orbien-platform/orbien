@@ -69,6 +69,9 @@ leia o do app antes de mexer nele.
   emite token com `support_session: true` — e essa marca satisfaz qualquer
   `@Roles` no `RolesGuard`. O contrapeso é o `AuditInterceptor`, global, que
   grava `support_access` em `audit_logs` por `audit_insert()`. Se você mexer em
-  um dos três, mexeu no acordo inteiro.
+  um dos três, mexeu no acordo inteiro. O mesmo interceptor grava
+  `platform_access` nas rotas marcadas com `@PlatformRoute()` — ali não há
+  impersonação, mas há o ramo de RLS que abre os N tenants, e ele também
+  precisa de rastro.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.

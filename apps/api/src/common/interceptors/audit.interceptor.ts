@@ -5,17 +5,30 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable, tap } from 'rxjs';
 import { Request, Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
+import { PLATFORM_ROUTE_KEY } from '../decorators/platform-route.decorator';
 
 /**
- * Registra em `audit_logs` toda requisição feita em sessão de suporte.
+ * Registra em `audit_logs` duas coisas: toda requisição feita em sessão de
+ * suporte, e toda requisição a uma rota de plataforma.
  *
- * É o contrapeso da exceção do `RolesGuard`: uma sessão de suporte satisfaz
- * qualquer `@Roles`, e o que torna isso aceitável é o rastro. Se este
- * interceptor não rodar, a exceção fica sem contrapartida.
+ * É o contrapeso das duas exceções que o produto abre para o suporte da
+ * plataforma, e elas são diferentes:
+ *
+ *   `support_access`  — a exceção do `RolesGuard`: uma sessão de suporte
+ *                       satisfaz qualquer `@Roles`, dentro de um tenant.
+ *   `platform_access` — a exceção do RLS: `@PlatformRoute()` tira o tenant do
+ *                       contexto e o ramo `app_platform_access()` abre os N
+ *                       tenants. Nenhuma sessão de suporte está envolvida —
+ *                       é o login normal de um `platform_support`.
+ *
+ * A segunda foi adicionada na Fase 2 porque sem ela `POST /platform/tenants`
+ * criava uma igreja inteira sem deixar rastro. Se este interceptor não rodar,
+ * as duas exceções ficam sem contrapartida.
  *
  * Duas coisas que estavam erradas aqui e ficaram valendo até 2026-09-03:
  *
@@ -38,7 +51,10 @@ import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 export class AuditInterceptor implements NestInterceptor {
   private readonly logger = new Logger(AuditInterceptor.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reflector: Reflector,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
@@ -46,7 +62,20 @@ export class AuditInterceptor implements NestInterceptor {
     const res = http.getResponse<Response>();
     const user = req.user as JwtPayload | undefined;
 
-    if (!user?.support_session) return next.handle();
+    if (!user) return next.handle();
+
+    // A sessão de suporte vence: se as duas marcas estiverem presentes, o que
+    // interessa registrar é que havia impersonação no meio.
+    const action = user.support_session
+      ? 'support_access'
+      : this.reflector.getAllAndOverride<boolean | undefined>(PLATFORM_ROUTE_KEY, [
+            context.getHandler(),
+            context.getClass(),
+          ]) === true
+        ? 'platform_access'
+        : null;
+
+    if (!action) return next.handle();
 
     const route = req.path;
     const method = req.method;
@@ -54,8 +83,17 @@ export class AuditInterceptor implements NestInterceptor {
     const userAgent = req.get('user-agent') ?? null;
 
     return next.handle().pipe(
-      tap(() => {
-        const after = JSON.stringify({ route, method, status: res.statusCode });
+      tap((body: unknown) => {
+        const after = JSON.stringify({
+          route,
+          method,
+          status: res.statusCode,
+          // Numa rota de plataforma o tenant da coluna é o do ator, não o da
+          // ação — o token do suporte não carrega tenant algum. Sem isto,
+          // "criou uma igreja" e "listou a waitlist" ficam indistinguíveis no
+          // log. Lê um campo só, e só quando a resposta é um objeto.
+          ...(action === 'platform_access' ? { subject_tenant_id: tenantOf(body) } : {}),
+        });
 
         this.prisma
           .$executeRaw`
@@ -66,7 +104,7 @@ export class AuditInterceptor implements NestInterceptor {
               ${user.impersonated_by ?? user.sub}::text,
               NULL::text,
               ${route}::text,
-              'support_access'::text,
+              ${action}::text,
               NULL::jsonb,
               ${after}::jsonb,
               ${ip}::text,
@@ -74,10 +112,21 @@ export class AuditInterceptor implements NestInterceptor {
             )
           `.catch((err: unknown) => {
           this.logger.error(
-            `falha ao registrar support_access em ${method} ${route}: ${String(err)}`,
+            `falha ao registrar ${action} em ${method} ${route}: ${String(err)}`,
           );
         });
       }),
     );
   }
+}
+
+/**
+ * Extrai o `tenant_id` da resposta, quando ela é um objeto que tem um. É o
+ * caso de `POST /platform/tenants`; nas demais rotas de plataforma dá `null`,
+ * e tudo bem — o rastro continua sendo rota, método e status.
+ */
+function tenantOf(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const value = (body as Record<string, unknown>)['tenant_id'];
+  return typeof value === 'string' ? value : null;
 }
