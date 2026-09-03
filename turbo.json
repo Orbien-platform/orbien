@@ -20,7 +20,8 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "cache": false
+      "cache": false,
+      "env": ["DATABASE_URL", "DIRECT_URL", "JWT_SECRET", "JWT_REFRESH_SECRET"]
     }
   }
 }
