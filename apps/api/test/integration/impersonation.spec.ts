@@ -29,6 +29,7 @@ import { PlanStatus, PlanType, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { ensureRole } from '../helpers/rls';
 
 const SENHA = 'senha-de-teste-integration';
 
@@ -66,12 +67,8 @@ async function criarTenant(slug: string, nome: string) {
 
 beforeAll(async () => {
   // `role_code` é FK para `roles.code` com ON DELETE RESTRICT: o papel precisa
-  // existir. O bootstrap --seed já o cria; o upsert deixa a suíte independente.
-  await admin.role.upsert({
-    where: { code: 'platform_support' },
-    update: {},
-    create: { code: 'platform_support', name: 'Platform Support' },
-  });
+  // existir. O bootstrap --seed já o cria; isto deixa a suíte independente.
+  await ensureRole(admin, 'platform_support', 'Platform Support');
 
   const suporte = await criarTenant(slugSuporte, 'Tenant da Plataforma');
   tenantSuporteId = suporte.tenantId;

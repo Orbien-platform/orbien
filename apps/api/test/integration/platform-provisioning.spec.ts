@@ -26,6 +26,7 @@ import { PlanStatus, PlanType, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { ensureRole } from '../helpers/rls';
 
 const SENHA = 'senha-de-teste-provisioning';
 const SENHA_NOVO_ADMIN = 'senha-do-admin-novo';
@@ -62,7 +63,7 @@ beforeAll(async () => {
     ['platform_support', 'Platform Support'],
     ['tenant_admin', 'Admin Tenant'],
   ] as const) {
-    await admin.role.upsert({ where: { code }, update: {}, create: { code, name } });
+    await ensureRole(admin, code, name);
   }
 
   const tenant = await admin.tenant.create({
