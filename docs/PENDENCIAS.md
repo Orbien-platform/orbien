@@ -772,6 +772,13 @@ Tudo isso rodou contra `postgres:17-alpine` local, provisionado pelo
 `bootstrap-db.sh` completo — o mesmo caminho do CI: 54 testes de RLS e 13 de
 integração, verdes.
 
+E a suíte de e2e junto, que é o que importa aqui: o `SET LOCAL ROLE app_user`
+alcança **toda** rota autenticada do produto, não só as de plataforma, e é a
+primeira vez que essas rotas são avaliadas sob RLS de verdade. API e web em pé
+localmente contra o banco semeado, os 5 specs passam (pessoas, grupos,
+conteúdo, escala, templates). Sem isso o risco da mudança ficaria medido só
+pelo lado da API.
+
 O `AuditInterceptor` passou a gravar `platform_access` nas rotas marcadas com
 `@PlatformRoute()`. Ele só olhava `support_session`, e um `platform_support`
 logado normalmente não tem essa marca: `POST /platform/tenants` criava uma
