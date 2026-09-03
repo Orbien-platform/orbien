@@ -19,11 +19,17 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 5 | Lint em `apps/api` | portão | ✔ fechada — lint nos 3 apps, portão verde |
 | 6 | Sessão de suporte não levava a nada, e a auditoria dela era tripla­mente morta | segurança | ✔ fechada — `audit_insert()` aplicado em produção em 2026-09-03 |
 | 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; **falta rodar o bootstrap** |
+| 8 | As duas rotas públicas do produto estavam mortas: `PrismaService.client` devolvia o cliente sem delegates de modelo | defeito | ✔ fechada |
+| 9 | Cadastro de visitante por QR nunca conseguiu gravar sob RLS — rota pública sem contexto de tenant | defeito | ✔ fechada — contexto vem do QR token |
 
 > Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
 > nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
 > registro escrito; a nº 5 apareceu na revisão; a nº 6 apareceu ao testar o
 > resultado da nº 1 pelo navegador; a nº 7 apareceu ao abrir a Fase 2.
+>
+> As nº 8 e 9 não vieram do primeiro run de CI: apareceram em 2026-09-03, ao
+> verificar a Fase 2 em produção. As duas são anteriores à fase e nenhuma tinha
+> teste que as alcançasse.
 >
 > O passo operacional que restava foi feito em 2026-09-03: o
 > `003_rls_admin_write.sql` e o `audit_insert()` corrigido da nº 6 estão
@@ -808,6 +814,112 @@ simétricas.
   desenho do `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
 - **Falta rodar o bootstrap em produção**, como na nº 6. Até lá as rotas de
   plataforma respondem vazio.
+
+---
+
+## 8. As rotas públicas estavam mortas — resolvido
+
+Achado em 2026-09-03, ao verificar em produção o cadastro público da waitlist
+depois do `004`. O sintoma parecia RLS; não era.
+
+### O que estava errado
+
+```
+[ExceptionsHandler] Cannot read properties of undefined (reading 'create')
+    at WaitlistService.subscribe (dist/src/waitlist/waitlist.service.js:22:57)
+```
+
+O Prisma 6 devolve um **Proxy** do construtor, e é o proxy — não o objeto que
+ele embrulha — que resolve os delegates de modelo (`person`,
+`waitlistSubscriber`, ...). Dentro de um getter do protótipo o `this` é o alvo
+cru: tem `$connect` e `$transaction`, e nenhum modelo.
+
+```
+client !== service        : true
+client.$connect           : function
+keys em client            : _originalClient,_runtimeDataModel,...
+client.person             : undefined
+client.waitlistSubscriber : undefined
+```
+
+`get client()` devolvia `this`. Então **todo caminho sem transação ativa**
+recebia um cliente sem modelos. Só não quebrou o produto inteiro porque quem
+passa pelo `TenantContextInterceptor` recebe o `tx` pela AsyncLocalStorage, e
+o `tx` tem os delegates — ou seja, o defeito atingia exatamente as rotas que
+ninguém testava.
+
+Duas rotas, as duas voltadas para o cliente final:
+
+- `POST /api/public/waitlist` — o formulário de captação do site;
+- `POST /api/public/visitor/register` — o cadastro de visitante por QR.
+
+Reproduzido localmente byte a byte contra o mesmo build: não era ambiente, não
+era pooler, não era RLS.
+
+### Decisão
+
+No construtor o `this` ainda é o proxy — é o único lugar onde dá para guardar a
+referência boa:
+
+```
+private readonly proxied: PrismaClient;
+constructor() { super(); this.proxied = this as unknown as PrismaClient; }
+get client() { return txStorage.getStore() ?? this.proxied; }
+```
+
+Verificado nos dois sentidos: desfazendo a correção, o teste novo falha.
+
+### Verificação
+
+`src/prisma/prisma.service.spec.ts` — sem banco, afirma que os delegates
+existem quando não há transação. É o teste que teria pego isso no dia.
+
+`test/integration/public-routes.spec.ts` — as duas rotas por HTTP. A suíte de
+RLS chamava o Prisma direto, sem passar pelo Nest: media a policy e não o
+caminho, e por isso não via nada.
+
+> Nota: `GET /admin/waitlist` sofria do mesmo mal e foi consertado por acidente
+> na Fase 2, que passou a colocar o `TenantContextInterceptor` nesse
+> controller.
+
+---
+
+## 9. Visitante por QR nunca gravou sob RLS — resolvido
+
+Apareceu atrás da nº 8: com o `client` corrigido o fluxo finalmente chegou ao
+banco, e parou em
+
+```
+42501: new row violates row-level security policy for table "persons"
+```
+
+`registerViaQr` abre `runInTx` sem contexto nenhum — rota pública não tem JWT,
+logo o interceptor não roda e `app.tenant_id` fica nulo. `persons`,
+`consent_records` e `visit_records` têm `FORCE ROW LEVEL SECURITY` com policy
+por tenant desde junho. Ou seja: o cadastro por QR nunca funcionou sob RLS, e o
+`TypeError` da nº 8 escondia isso.
+
+### Decisão
+
+O contexto passa a vir do **próprio QR token**, dentro da transação:
+
+```sql
+set_config('app.tenant_id', <do token>, true),
+set_config('app.congregation_id', <do token>, true)
+```
+
+O que autoriza a escrita é o token: ele é emitido por alguém do tenant, guarda
+`tenant_id` e `congregation_id`, e já foi validado antes (existe e está ativo).
+O contexto vem dele e **não** do corpo da requisição — o visitante não
+influencia em qual tenant grava. `set_config(..., true)` é local à transação,
+então nada vaza para a próxima requisição do pool.
+
+É um caminho sem autenticação que escreve em `persons`, e isso é deliberado:
+já era a função do produto antes do RLS existir. O que mudou é que agora ele
+grava no tenant que o token diz, em vez de não gravar em lugar nenhum.
+
+Verificado nos dois sentidos: removendo o `set_config`, o teste volta a falhar
+com o mesmo 42501.
 
 ---
 
