@@ -81,3 +81,40 @@ export async function runAsTenantWithRole<T>(
     { timeout: 30_000, maxWait: 10_000 },
   );
 }
+
+/**
+ * Same as runAsTenantWithRole, plus `app.user_id`.
+ *
+ * Isto importa: `app_has_role()` — a função que a policy
+ * `tenant_congregation_isolation` chama para liberar `tenant_admin` — resolve
+ * o usuário por `app_current_user()`, ou seja por `app.user_id`. Os dois
+ * helpers acima nunca setam essa chave, então nas suítes que os usam
+ * `app_has_role()` devolve sempre `false` e só o ramo estrito da policy é
+ * exercitado. Para testar o ramo do admin, o usuário precisa existir no
+ * contexto — é para isso que este helper existe.
+ *
+ * O interceptor de produção (`TenantContextInterceptor`) seta as três chaves.
+ */
+export async function runAsUser<T>(
+  tenantId: string,
+  congregationId: string,
+  userId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE app_user`;
+      await tx.$executeRaw`
+        SELECT
+          set_config('app.tenant_id',              ${tenantId},       true),
+          set_config('app.congregation_id',         ${congregationId}, true),
+          set_config('app.user_id',                 ${userId},         true),
+          set_config('app.current_tenant_id',       ${tenantId},       true),
+          set_config('app.current_congregation_id', ${congregationId}, true),
+          set_config('app.current_user_id',         ${userId},         true)
+      `;
+      return fn(tx);
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
+}

@@ -102,12 +102,8 @@ export class PersonsController {
 
   @Patch(':id')
   @Roles(...WRITE_ROLES)
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdatePersonDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.personsService.update(id, dto, user);
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdatePersonDto) {
+    return this.personsService.update(id, dto);
   }
 
   @Delete(':id')

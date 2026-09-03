@@ -95,7 +95,11 @@ export class PersonsService {
     return person;
   }
 
-  async update(id: string, dto: UpdatePersonDto, user: JwtPayload): Promise<Person> {
+  // Sem `user`: o escopo de tenant e congregação é do RLS, não deste método —
+  // `tenant_congregation_isolation` avalia USING na linha antiga e WITH CHECK
+  // na nova (ver prisma/migrations/003_rls_admin_write.sql). `remove`, logo
+  // abaixo, já seguia essa convenção.
+  async update(id: string, dto: UpdatePersonDto): Promise<Person> {
     const existing = await this.prisma.client.person.findUnique({
       where: { id },
       select: { id: true, membership_date: true },

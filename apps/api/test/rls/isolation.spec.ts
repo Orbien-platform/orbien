@@ -26,6 +26,7 @@ import {
   prismaAdmin,
   runAsTenant,
   runAsTenantWithRole,
+  runAsUser,
 } from '../helpers/rls';
 
 // ─── Test fixture identifiers ─────────────────────────────────────────────────
@@ -35,19 +36,21 @@ let congregationAId: string;
 let userAccountAId: string;
 let personAId: string;
 let categoryAId: string;
-let smallGroupAId: string;
 let transactionAId: string;
 let pixPaymentAId: string;
 
 let tenantBId: string;
 let congregationBId: string;
-let userAccountBId: string;
-let personBId: string;
-let categoryBId: string;
 
 // Second congregation within Tenant A (for cross-congregation test)
 let congregationA2Id: string;
 let personA2Id: string;
+
+// Contas com papel, na congregação A-Main — para exercitar o ramo
+// `OR app_has_role('tenant_admin')` da policy, que os helpers sem
+// `app.user_id` nunca alcançam.
+let tenantAdminUserId: string;
+let congAdminUserId: string;
 
 // Sprint 8 — Celebrations module fixtures (Tenant A)
 let celebrationAId: string;
@@ -141,7 +144,7 @@ beforeAll(async () => {
     },
   });
 
-  const sgA = await prismaAdmin.smallGroup.create({
+  await prismaAdmin.smallGroup.create({
     data: {
       tenant_id: tenantAId,
       congregation_id: congregationAId,
@@ -150,7 +153,6 @@ beforeAll(async () => {
       leader_person_id: personAId,
     },
   });
-  smallGroupAId = sgA.id;
 
   const txA = await prismaAdmin.financialTransaction.create({
     data: {
@@ -261,7 +263,7 @@ beforeAll(async () => {
   });
   congregationBId = congB.id;
 
-  const userB = await prismaAdmin.userAccount.create({
+  await prismaAdmin.userAccount.create({
     data: {
       tenant_id: tenantBId,
       congregation_id: congregationBId,
@@ -269,7 +271,6 @@ beforeAll(async () => {
       password_hash: 'x',
     },
   });
-  userAccountBId = userB.id;
 
   // ── Sprint 11.2: escala de celebração + indisponibilidade (Tenant A) ──
   const ministryA = await prismaAdmin.ministry.create({
@@ -367,7 +368,7 @@ beforeAll(async () => {
   scheduleTemplateAId = tplA.id;
   scheduleTemplateMinistryAId = tplA.ministries[0].id;
 
-  const personB = await prismaAdmin.person.create({
+  await prismaAdmin.person.create({
     data: {
       tenant_id: tenantBId,
       congregation_id: congregationBId,
@@ -376,9 +377,8 @@ beforeAll(async () => {
       gender: 'male',
     },
   });
-  personBId = personB.id;
 
-  const catB = await prismaAdmin.financialCategory.create({
+  await prismaAdmin.financialCategory.create({
     data: {
       tenant_id: tenantBId,
       congregation_id: congregationBId,
@@ -386,7 +386,58 @@ beforeAll(async () => {
       type: 'income',
     },
   });
-  categoryBId = catB.id;
+
+  // ── Contas com papel (congregação A-Main) ──────────────────────────────────
+  // `role_assignments.role_code` é FK para `roles.code` com onDelete: Restrict,
+  // então os papéis precisam existir. O bootstrap --seed já os cria; o upsert
+  // aqui torna a suíte independente disso.
+  for (const [code, name] of [
+    ['tenant_admin', 'Admin Tenant'],
+    ['admin_congregation', 'Admin Congregação'],
+  ] as const) {
+    await prismaAdmin.role.upsert({
+      where: { code },
+      update: {},
+      create: { code, name },
+    });
+  }
+
+  const tenantAdminUser = await prismaAdmin.userAccount.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      email: `tenant-admin-${ts}@rls-test.local`,
+      password_hash: 'x',
+    },
+  });
+  tenantAdminUserId = tenantAdminUser.id;
+
+  const congAdminUser = await prismaAdmin.userAccount.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      email: `cong-admin-${ts}@rls-test.local`,
+      password_hash: 'x',
+    },
+  });
+  congAdminUserId = congAdminUser.id;
+
+  await prismaAdmin.roleAssignment.createMany({
+    data: [
+      {
+        tenant_id: tenantAId,
+        congregation_id: congregationAId,
+        user_account_id: tenantAdminUserId,
+        role_code: 'tenant_admin',
+      },
+      {
+        tenant_id: tenantAId,
+        congregation_id: congregationAId,
+        user_account_id: congAdminUserId,
+        role_code: 'admin_congregation',
+      },
+    ],
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -394,6 +445,7 @@ afterAll(async () => {
   // de Tenant pode esbarrar nessa FK dependendo da ordem em que o Postgres
   // avalia as constraints, então removemos essas linhas explicitamente antes.
   const tenants = { tenant_id: { in: [tenantAId, tenantBId] } };
+  await prismaAdmin.roleAssignment.deleteMany({ where: tenants });
   await prismaAdmin.celebrationAssignment.deleteMany({ where: tenants });
   await prismaAdmin.celebrationMinistry.deleteMany({ where: tenants });
   await prismaAdmin.celebrationSchedule.deleteMany({ where: tenants });
@@ -535,6 +587,62 @@ describe('4. Cross-congregation read (same tenant)', () => {
       );
     }
     expect(leaked).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4b. O ramo administrativo da policy
+//
+// `tenant_congregation_isolation` libera leitura cross-congregação para quem
+// tem `tenant_admin`:
+//
+//   USING (tenant_id = app_current_tenant()
+//          AND (congregation_id = app_current_congregation()
+//               OR app_has_role('tenant_admin')
+//               OR app_has_role('denomination_admin')))
+//
+// `app_has_role()` resolve o usuário por `app.user_id`. Como `runAsTenant` e
+// `runAsTenantWithRole` não setam essa chave, os blocos 1–4 exercitam apenas o
+// ramo estrito. Estes três testes cobrem o outro ramo — nos dois sentidos.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('4b. Ramo administrativo — app_has_role', () => {
+  it('tenant_admin na A-Main LÊ pessoa da A-Second (exceção da policy)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.person.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(personA2Id);
+  });
+
+  it('admin_congregation na A-Main NÃO lê pessoa da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.person.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} pessoa(s) de congregação irmã. ` +
+          'A exceção da policy deveria valer só para tenant_admin.',
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main ATUALIZA pessoa da A-Second', async () => {
+    // O `WITH CHECK` da policy não repete a exceção de papel que o `USING`
+    // tem. Num UPDATE o Postgres avalia os dois — `USING` na linha antiga,
+    // `WITH CHECK` na nova — então, sem a exceção nos dois lados, o
+    // tenant_admin lê a linha e falha ao gravar com 42501. Este teste é o que
+    // prova que leitura e escrita andam juntas.
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.person.update({
+        where: { id: personA2Id },
+        data: { full_name: 'Person A Second Cong (editada pelo tenant_admin)' },
+      }),
+    );
+
+    const after = await prismaAdmin.person.findUniqueOrThrow({ where: { id: personA2Id } });
+    expect(after.full_name).toBe('Person A Second Cong (editada pelo tenant_admin)');
+    expect(after.congregation_id).toBe(congregationA2Id);
   });
 });
 

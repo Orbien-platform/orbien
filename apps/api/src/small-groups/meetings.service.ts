@@ -206,6 +206,18 @@ export class MeetingsService {
     meetingId: string,
     materialId: string,
   ): Promise<GroupMeetingMaterial> {
+    // A reunião vem primeiro de propósito. `group_meetings` tem a policy
+    // `tenant_congregation_isolation`; `group_meeting_materials` tem só a de
+    // tenant. Sem esta leitura, o DELETE encontrava o vínculo pela chave
+    // (meeting_id, material_id) e apagava material de reunião de outra
+    // congregação do mesmo tenant. `addMaterial` e `listMaterials` já validavam
+    // a reunião assim — só a remoção escapava.
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
     const link = await this.prisma.client.groupMeetingMaterial.findUnique({
       where: {
         meeting_id_material_id: {

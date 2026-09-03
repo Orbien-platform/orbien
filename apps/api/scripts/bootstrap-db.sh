@@ -63,6 +63,12 @@ run_sql_file prisma/migrations/001_rls_setup.sql
 if [ -f prisma/migrations/002_rls_celebration_schedules.sql ]; then
   run_sql_file prisma/migrations/002_rls_celebration_schedules.sql
 fi
+# Precisa vir depois de 001 e 002: alinha o WITH CHECK ao USING em todas as
+# policies tenant_congregation_isolation que os dois criaram, e tira a
+# cláusula do papel inexistente denomination_admin. Ver o cabeçalho do arquivo.
+if [ -f prisma/migrations/003_rls_admin_write.sql ]; then
+  run_sql_file prisma/migrations/003_rls_admin_write.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -164,6 +170,25 @@ BEGIN
   RAISE NOTICE 'tabelas com policy de tenant sombreando a de congregacao: %', n;
   IF n > 0 THEN
     RAISE EXCEPTION 'ha % tabela(s) onde tenant_isolation anula o isolamento por congregacao', n;
+  END IF;
+
+  -- Leitura e escrita tem que dizer a mesma coisa. Enquanto o USING abria
+  -- excecao para tenant_admin e o WITH CHECK nao, o admin lia a linha de outra
+  -- congregacao e falhava ao gravar com 42501 — sintoma confuso, causa
+  -- invisivel. Ver prisma/migrations/003_rls_admin_write.sql.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND (with_check IS DISTINCT FROM qual);
+  RAISE NOTICE 'policies de congregacao com USING != WITH CHECK: %', n;
+  IF n > 0 THEN
+    RAISE EXCEPTION 'ha % policy(s) tenant_congregation_isolation onde a escrita nao acompanha a leitura', n;
+  END IF;
+
+  SELECT count(*) INTO n FROM pg_policies
+   WHERE qual LIKE '%denomination_admin%' OR with_check LIKE '%denomination_admin%';
+  IF n > 0 THEN
+    RAISE EXCEPTION 'ha % policy(s) citando denomination_admin, papel que nao existe na tabela roles', n;
   END IF;
 END $$;
 SQL
