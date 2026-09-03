@@ -9,6 +9,7 @@ npm workspaces + Turborepo. Node 22.
 | `apps/api` | `orbien-backend` | NestJS 10, Prisma 6, Postgres (Supabase) | Render (runtime Node) |
 | `apps/site` | `orbien-site` | Next.js 16 (App Router), Tailwind 4 | Vercel |
 | `apps/web` | `orbien-web` | Next.js 16 (App Router), Tailwind 4 | Vercel |
+| `apps/admin` | `orbien-admin` | Next.js 16 (App Router), Tailwind 4 | Vercel (subdomínio `admin.`) |
 
 Cada app tem seu próprio `CLAUDE.md`/`AGENTS.md` com as regras específicas —
 leia o do app antes de mexer nele.
@@ -83,3 +84,20 @@ leia o do app antes de mexer nele.
   precisa de rastro.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.
+- `apps/admin` é o console da plataforma e **não** é uma tela do produto. Só
+  entra ali o que opera acima dos tenants — e, na prática, só o que a API expõe
+  como rota de plataforma (`@PlatformRoute()` + `@Roles('platform_support')`).
+  Dado de igreja não passa por lá; para ver dado de igreja o suporte abre uma
+  sessão de suporte no `apps/web`. Se você se pegar precisando de uma rota de
+  tenant no admin, o desenho está errado em algum lugar.
+- A sessão de suporte cruza duas origens (`admin.` → app do tenant), e
+  `localStorage` é por origem: o token vai no **fragmento** da URL, nunca na
+  query. Fragmento não chega ao servidor — fica fora do log de acesso da
+  Vercel, do `Referer` e de qualquer proxy no caminho. Ver
+  `apps/admin/src/lib/support-session.ts` e
+  `apps/web/src/app/(public)/suporte/sessao/page.tsx`. O token de
+  `POST /auth/impersonate` não traz refresh token: a sessão vale 15 minutos e
+  não se renova, de propósito.
+- Enquanto a sessão for de suporte, o `apps/web` mostra a faixa do
+  `SupportSessionBanner`. Ela é o par visível do `AuditInterceptor`: um grava o
+  rastro, o outro avisa quem está operando. Não some nenhum dos dois sozinho.

@@ -48,7 +48,7 @@ diff justifica:
 |---|---|
 | A — Isolamento e banco | `apps/api/prisma/**`, `apps/api/src/**` |
 | B — Monorepo e deploy | `render.yaml`, `vercel.json`, `turbo.json`, `Dockerfile`, `package.json`, `apps/*/package.json`, ou remove/renomeia rota |
-| C — Front | `apps/web/src/**`, `apps/site/src/**` |
+| C — Front | `apps/web/src/**`, `apps/site/src/**`, `apps/admin/src/**` |
 
 Diff só de documentação ou só de teste: nenhuma dimensão, e diga isso em vez de
 inventar achado.

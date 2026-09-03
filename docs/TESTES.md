@@ -1,6 +1,6 @@
 # Testes — plano para 100% de cobertura
 
-Meta declarada: **100% de cobertura nos três apps** (`statements`, `branches`,
+Meta declarada: **100% de cobertura nos quatro apps** (`statements`, `branches`,
 `functions`, `lines`), travada no CI.
 
 O plano é dividido em fases que podem ser executadas **uma por sessão de
@@ -534,7 +534,7 @@ da Fase 13, ou sai.
 
 **Pré-requisito:** fases 1–12.
 
-1. **Trocar todos os thresholds por caminho por `global: 100`** nos três apps,
+1. **Trocar todos os thresholds por caminho por `global: 100`** nos quatro apps,
    e apagar as entradas parciais. A partir daqui, código novo sem teste
    quebra o CI — que é o ponto da meta.
 2. **e2e dos fluxos não cobertos.** Os 2 testes atuais estão ambos em escalas.
@@ -553,6 +553,7 @@ npx turbo run test
 npm run test:cov -w orbien-backend   # 100% nas 4 métricas
 npm run test:cov -w orbien-web       # 100%
 npm run test:cov -w orbien-site      # 100%
+npm run test:cov -w orbien-admin     # 100%
 npm run test:rls -w orbien-backend   # 39 testes verdes
 ```
 

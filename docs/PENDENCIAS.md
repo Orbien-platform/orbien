@@ -700,11 +700,23 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
 
 ### Continua em aberto, por desenho
 
-- **Não existe UI.** `impersonate` e `support_session` não aparecem em nenhum
-  lugar do `apps/web`. A sessão de suporte só é utilizável por HTTP direto.
-  É a Fase 3/4 do plano de plataforma.
+- ~~**Não existe UI.**~~ Fechado na Fase 3, em 2026-09-03. A sessão é aberta
+  pela lista de tenants do `apps/admin` ("Entrar no web como suporte"), que
+  chama `POST /auth/impersonate` e entrega o token ao `apps/web` em
+  `/suporte/sessao`, pelo **fragmento** da URL — as duas origens são
+  diferentes (`admin.` e o app do tenant) e `localStorage` é por origem, então
+  não havia caminho por baixo. Fragmento e não query porque fragmento não
+  chega ao servidor: fica fora do log da Vercel, do `Referer` e de qualquer
+  proxy. Enquanto a sessão vale, o `web` mostra a faixa do
+  `SupportSessionBanner` — o par visível do `AuditInterceptor`.
 - **A sessão pode escrever**, não só ler. Decisão adiada.
-- **TTL** do token de impersonação é o padrão de access token.
+- **TTL** do token de impersonação é o padrão de access token — 15 minutos.
+  Continua sendo o padrão, mas agora tem consequência visível: `impersonate`
+  não emite refresh token, então a sessão de suporte **não se renova**. Aos 15
+  minutos o interceptor do Axios não acha refresh e devolve o suporte para
+  `/login`. É o comportamento desejado; renovar sozinha uma sessão que enxerga
+  dado de igreja alheia é o que não se quer. O que falta é aviso antes de
+  expirar, hoje inexistente.
 - **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
   token fixa um tenant, e o `IS NULL` de `app_platform_access()` fecha o ramo
   de plataforma justamente quando há tenant fixado. Suporte a vários clientes

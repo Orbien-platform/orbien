@@ -50,9 +50,9 @@ echo
 echo "▶ Regras do monorepo"
 
 # Import cruzando app quebra a independência dos deploys — inequívoco.
-if grep -rnE "from ['\"].*apps/(api|web|site)/" apps/*/src 2>/dev/null | grep -v "^apps/\([a-z]*\)/src.*apps/\1/" | head -3 | grep -q .; then
+if grep -rnE "from ['\"].*apps/(api|web|site|admin)/" apps/*/src 2>/dev/null | grep -v "^apps/\([a-z]*\)/src.*apps/\1/" | head -3 | grep -q .; then
   bloqueia "import cruzando app — os deploys precisam ser independentes"
-  grep -rnE "from ['\"].*apps/(api|web|site)/" apps/*/src 2>/dev/null | head -3 | sed 's/^/      /'
+  grep -rnE "from ['\"].*apps/(api|web|site|admin)/" apps/*/src 2>/dev/null | head -3 | sed 's/^/      /'
 else
   passa "nenhum import cruzando app"
 fi
@@ -104,7 +104,7 @@ fi
 # ── Portões determinísticos ───────────────────────────────────────────────
 echo
 echo "▶ Build, tipos e lint"
-npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 3 apps" \
+npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 4 apps" \
   || { bloqueia "build falhou — veja /tmp/prepush-build.log"; tail -15 /tmp/prepush-build.log | sed 's/^/      /'; }
 npx tsc --noEmit -p apps/api/tsconfig.json >/tmp/prepush-tsc.log 2>&1 && passa "tipos da API, incluindo test/" \
   || { bloqueia "tsc falhou — veja /tmp/prepush-tsc.log"; head -10 /tmp/prepush-tsc.log | sed 's/^/      /'; }

@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { SupportSessionBanner } from "@/components/layout/SupportSessionBanner";
 
 export default function AdminLayout({
   children,
@@ -15,6 +16,7 @@ export default function AdminLayout({
 
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        <SupportSessionBanner />
         <Header />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
