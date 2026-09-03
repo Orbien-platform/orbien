@@ -15,6 +15,14 @@ leia o do app antes de mexer nele.
 
 ## Regras do monorepo
 
+- **Branch antes da primeira edição.** Todo prompt que vai alterar arquivo
+  começa criando uma branch a partir de `main` — antes de qualquer Edit,
+  Write ou comando que escreva no disco. Nada é editado com `main` em
+  checkout, nem "só um ajuste rápido". Nome no padrão
+  `<tipo>/<assunto-em-kebab>` (`feat/`, `fix/`, `chore/`, `docs/`, `ci/`),
+  em português, como o histórico já faz. Se o prompt seguinte continua o
+  mesmo trabalho, fique na branch que já existe; branch nova é por unidade
+  de trabalho, não por mensagem. Commit e push continuam só quando pedidos.
 - **Sempre** instale a partir da raiz (`npm install`). Existe um único
   `package-lock.json`, na raiz. Não crie lockfiles em `apps/*`.
 - Para adicionar dependência a um app:
