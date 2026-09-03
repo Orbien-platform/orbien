@@ -7,10 +7,17 @@
  *   - `archiver` é ESM-only e o Jest no Node 22 não dá `require` nele; o
  *     mock abaixo espelha `test/stubs/archiver.ts`, usado pela suíte de
  *     integração pelo mesmo motivo.
- *   - `apps/api/.env` (JWT_SECRET, DATABASE_URL, DIRECT_URL) precisa existir
- *     no worktree — é o `ConfigModule.forRoot` do próprio AppModule que o
- *     carrega, então valores de teste aqui seriam side effect, não fonte.
+ *   - `PrismaService` e `JwtStrategy` exigem DATABASE_URL/DIRECT_URL e
+ *     JWT_SECRET só para construir (não para conectar). No worktree local
+ *     `apps/api/.env` já fornece isso via `ConfigModule.forRoot`, mas o CI
+ *     não tem esse arquivo — por isso os `??=` abaixo, no mesmo padrão de
+ *     `prisma.service.spec.ts`. Só entram em jogo quando o `.env` não define
+ *     a variável; não sobrescrevem nada em ambiente que já tem valor real.
  */
+
+process.env['DATABASE_URL'] ??= 'postgresql://user:pass@localhost:5432/db';
+process.env['DIRECT_URL'] ??= process.env['DATABASE_URL'];
+process.env['JWT_SECRET'] ??= 'segredo-de-teste';
 
 jest.mock('archiver', () => ({
   ZipArchive: class {
