@@ -342,11 +342,33 @@ export class PixService {
 
     const pixPayment = await this.prisma.client.pixPayment.findFirst({
       where: { asaas_payment_id: asaasPaymentId },
-      select: { id: true, tenant_id: true, congregation_id: true, amount: true, category_id: true },
+      select: {
+        id: true,
+        tenant_id: true,
+        congregation_id: true,
+        amount: true,
+        category_id: true,
+        status: true,
+      },
     });
 
     if (!pixPayment) {
       this.logger.warn(`PixPayment não encontrado para asaas_id=${asaasPaymentId}`);
+      return { received: true };
+    }
+
+    // Idempotência. A Asaas reenvia o webhook quando não recebe 200 a tempo, e
+    // manda `PAYMENT_CONFIRMED` e `PAYMENT_RECEIVED` para o mesmo pagamento —
+    // os dois caem aqui. Sem esta guarda, cada reenvio criava OUTRO lançamento
+    // de receita, e o dinheiro aparecia dobrado no DRE sem nenhum erro à vista.
+    //
+    // O estado é a própria linha do pagamento: `confirmed` só é gravado no
+    // mesmo `runInTx` que cria o lançamento, então "já está confirmado"
+    // equivale a "o lançamento já existe".
+    if (pixPayment.status === PixStatus.confirmed) {
+      this.logger.log(
+        `Webhook repetido para asaas_id=${asaasPaymentId} (${event}); pagamento já confirmado`,
+      );
       return { received: true };
     }
 
@@ -357,11 +379,23 @@ export class PixService {
         )
       : pixPayment.amount;
 
-    await this.prisma.runInTx(async (tx) => {
-      await tx.pixPayment.update({
-        where: { id: pixPayment.id },
+    // A guarda que realmente fecha a porta é ESTE `updateMany` condicional, e
+    // não o `if` acima: `pending → confirmed` só acontece para quem chega
+    // primeiro, e o banco resolve o empate. O `if` anterior é atalho — evita
+    // trabalho e deixa a linha de log —, mas entre ele e este ponto há dois
+    // `await`, e duas entregas simultâneas (a Asaas manda `PAYMENT_CONFIRMED`
+    // e `PAYMENT_RECEIVED` para o mesmo pagamento) passariam as duas.
+    //
+    // `count === 0` significa que outra entrega ganhou a corrida e já criou o
+    // lançamento. Nada a fazer, e a resposta continua 200.
+    const confirmado = await this.prisma.runInTx(async (tx) => {
+      const { count } = await tx.pixPayment.updateMany({
+        where: { id: pixPayment.id, status: PixStatus.pending },
         data: { status: PixStatus.confirmed, paid_at: new Date() },
       });
+
+      if (count === 0) return false;
+
       await tx.financialTransaction.create({
         data: {
           tenant_id: pixPayment.tenant_id,
@@ -375,7 +409,16 @@ export class PixService {
           created_by_user_id: adminUserId,
         },
       });
+
+      return true;
     });
+
+    if (!confirmado) {
+      this.logger.log(
+        `Entrega simultânea para asaas_id=${asaasPaymentId} (${event}); outra já confirmou`,
+      );
+      return { received: true };
+    }
 
     this.prisma.client.auditLog
       .create({
