@@ -29,7 +29,15 @@ const transform = { '^.+\\.ts$': ['ts-jest', tsJestOptions] };
 // que esta lista não chegou lá.
 // As exclusões são curtas de propósito: *.module.ts e dto/** ficam DENTRO da
 // conta. Ver docs/TESTES.md.
-const collectCoverageFrom = ['src/**/*.ts', '!src/main.ts', '!src/**/*.d.ts'];
+// `!src/**/*.spec.ts`: sem essa exclusão, rodar os projects `unit` e
+// `integration` juntos (como `test:cov` faz) faz cada `*.spec.ts` de `src/`
+// entrar no denominador do project `integration` — que não o reconhece como
+// arquivo de teste (seu `testMatch` é só `test/integration/**`) e o injeta
+// zerado. O arquivo de teste é o instrumento de medida, não o medido (ver "O
+// que conta como cobertura" em docs/TESTES.md); sem a exclusão, um caminho
+// 100% coberto no `unit` sozinho aparece diluído para ~30% quando os dois
+// projects rodam juntos, mesmo com todo arquivo-fonte em 100%.
+const collectCoverageFrom = ['src/**/*.ts', '!src/main.ts', '!src/**/*.d.ts', '!src/**/*.spec.ts'];
 
 // 90s: as suítes com banco abrem $transaction contra o pooler do Supabase;
 // sob carga (dev server rodando junto) adquirir conexão pode passar de 60s.
@@ -48,6 +56,11 @@ module.exports = {
       rootDir: '.',
       testMatch: ['<rootDir>/src/**/*.spec.ts'],
       transform,
+      // class-transformer's `@Type()` (usado nos DTOs de paginação/data) lê
+      // metadata de design-time via `Reflect.getMetadata`. Em produção isso
+      // vem de `import 'reflect-metadata'` no topo de main.ts; aqui não há
+      // main.ts, então o polyfill precisa ser carregado antes de qualquer DTO.
+      setupFiles: ['reflect-metadata'],
     },
     {
       displayName: 'integration',
@@ -91,6 +104,9 @@ module.exports = {
     './src/auth/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/app.controller.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/app.module.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/persons/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/visitor/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/waitlist/': { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
 
   verbose: true,
