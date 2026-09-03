@@ -20,7 +20,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 1 | API — financeiro | `financial/`, `common/` | 37 | ☐ |
 | 2 | API — auth e raiz | `auth/`, `prisma/`, `app.*` | 18 | ☑ |
 | 3 | API — pessoas | `persons/`, `visitor/`, `waitlist/` | 34 | ☑ |
-| 4 | API — celebrações | `celebrations/` | 46 | ☐ |
+| 4 | API — celebrações | `celebrations/` | 46 | ☑ |
 | 5 | API — voluntários e grupos | `volunteers/`, `small-groups/` | 36 | ☐ |
 | 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☐ |
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☐ |
