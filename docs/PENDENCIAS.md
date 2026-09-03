@@ -15,17 +15,15 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 1 | RLS não isola por congregação dentro do mesmo tenant | segurança | ✔ fechada no código — **falta rodar o bootstrap em produção** |
 | 2 | Lint do `site` quebrado no estado commitado | portão | ✔ fechada |
 | 3 | E2E depende de dados que o seed não cria | portão | ✔ fechada — seed estendido |
-| 4 | 6 mudanças de comportamento do `c84fc02` sem cobertura permanente | risco de regressão | ○ **aberta por decisão** |
+| 4 | 6 mudanças de comportamento do `c84fc02` sem cobertura permanente | risco de regressão | ✔ **fechada** — e2e nas três telas |
 | 5 | Lint em `apps/api` | portão | ✔ fechada — lint nos 3 apps, portão verde |
 
-> Em 2026-09-03 as cinco foram revistas. A nº 4 e a nº 5 nasceram nessa
-> revisão — a nº 4 já estava decidida como aberta e só não tinha registro
-> escrito; a nº 5 apareceu ali. Quatro fecharam.
+> Em 2026-09-03 as cinco foram revistas e as cinco fecharam. A nº 4 e a nº 5
+> nasceram nessa revisão — a nº 4 já estava decidida como aberta e só não tinha
+> registro escrito; a nº 5 apareceu ali.
 >
-> **A única aberta é a nº 4**, cobertura de teste, deixada aberta por decisão
-> do dev — não será executada agora. A nº 1 está fechada no código e tem um
-> passo operacional pendente: rodar o `bootstrap-db.sh` contra o Supabase de
-> produção.
+> Resta **um passo operacional**, não uma pendência de código: aplicar o
+> `003_rls_admin_write.sql` no Supabase.
 
 O job `Unidade e cobertura` passou (53s). Nenhuma das três originais é causada
 pela Fase 0 do [plano de testes](TESTES.md).
@@ -445,11 +443,57 @@ Conclusão da revisão: **o risco não é o código estar errado hoje, é não h
 nada que avise quando parar de estar.** Dez arquivos usam
 `loadedFor`/`loadedKey` e nenhum deles tem teste.
 
-### Pergunta em aberto
+### Fechada em 2026-09-03 — as três telas têm e2e
 
-Cobrir as três telas (conteúdo, grupos, pessoas) no e2e, o que fecha 4 e 5 e dá
-rede para 1, 2 e 3 — ou aceitar declaradamente o risco e fechar esta pendência
-como "revisada, sem cobertura por escolha"?
+Entraram `e2e/pessoas.spec.ts`, `e2e/grupos.spec.ts` e `e2e/conteudo.spec.ts`.
+A suíte foi de 2 para 5 specs, roda em ~22s contra build local e banco efêmero,
+e duas execuções seguidas deixam o banco no estado do seed — a limpeza é feita
+pela API na saída de cada spec.
+
+O que cada comportamento ganhou:
+
+| # | Como está coberto |
+|---|---|
+| 1 | pessoas: abre o sheet, entra em edição, fecha e reabre — tem que voltar em modo de leitura |
+| 2 | conteúdo: filtro de status recarrega a lista; grupos: sheet reabre após mutação |
+| 3, 4 | pessoas e grupos: dois termos de busca em sequência, sem esperar o primeiro — vence o último |
+| 5 | as três: registro criado pela UI aparece na lista sem recarregar a página |
+
+Mais as três telas afirmando ausência de erro de console e de resposta HTTP
+inesperada, que é o que a verificação manual do `c84fc02` fazia a olho.
+
+#### O que a verificação em dois sentidos revelou
+
+Não bastou escrever o teste: cada asserção foi checada quebrando o
+comportamento de propósito e conferindo que ela falha. Duas descobertas.
+
+**A primeira versão da asserção de sheet não mordia.** Ela afirmava só o estado
+final — "depois de clicar no segundo registro, o nome do primeiro não está na
+tela". O auto-retry do Playwright espera a janela de estado sujo passar e dá o
+teste por bom. Removido o reset no fechamento, o teste continuava verde.
+
+**E o reset no fechamento não é o que protege a troca de registro.** Quem
+protege é o carregamento derivado: `loadedFor !== personId` mostra o skeleton
+enquanto o novo registro carrega, então o nome antigo não chega a aparecer nem
+sem reset nenhum. Os dois mecanismos cobrem o mesmo caso, e por isso a troca de
+registro não distingue um do outro.
+
+O que **só** o reset protege é o estado de UI que não depende do id —
+`isEditing`. Sem ele, fechar o sheet no meio de uma edição e reabrir devolve o
+formulário aberto. É essa a asserção que ficou, e é a que falha quando o reset
+sai:
+
+```
+✘ pessoas › lista, busca, sheet e cadastro
+  Error: o sheet reabriu em modo de edição — o fechamento não resetou
+```
+
+Restaurado o reset, verde. Uma versão intermediária do teste segurava a
+resposta da API com `page.route` para tornar a janela observável; foi removida
+— só pegava o caso de os **dois** mecanismos estarem quebrados, ao custo de um
+teste bem mais frágil.
+
+### Nada em aberto nesta pendência
 
 ---
 

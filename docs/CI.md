@@ -158,8 +158,15 @@ Requisitos:
 - Publicar `playwright-report/` e os traces como artifact quando falhar: é o
   que transforma "quebrou no CI" em diagnóstico de dois minutos
 
-Tempo estimado: 6–10 min. Vale rodar em PR, mas é o primeiro candidato a virar
-`workflow_dispatch` ou noturno se o tempo incomodar.
+A suíte tem 5 specs desde 2026-09-03: escala, templates, pessoas, grupos e
+conteúdo. As três últimas entraram para cobrir as telas que o `c84fc02`
+reescreveu — ver a pendência nº 4 de [PENDENCIAS.md](PENDENCIAS.md). Elas
+limpam pela API o que criam, e duas execuções seguidas devolvem o banco ao
+estado do seed.
+
+Tempo estimado: 6–10 min no runner (~22s contra build local). Vale rodar em PR,
+mas é o primeiro candidato a virar `workflow_dispatch` ou noturno se o tempo
+incomodar.
 
 ### Fase 4 — Revisão: local, não no CI
 
@@ -309,10 +316,10 @@ não ter CI — por isso o caminho escolhido foi **zerar os erros antes de ativa
 o lint como step obrigatório**, e não `continue-on-error` nem lint só no diff.
 
 Os fronts foram zerados em `c84fc02` — e essa limpeza teve custo: seis mudanças
-de comportamento que hoje são a pendência nº 4 de
-[PENDENCIAS.md](PENDENCIAS.md). A API foi configurada em 2026-09-03; ali o medo
-de repetir o `c84fc02` não se confirmou — dos 12 erros, nove eram import e
-variável mortos.
+de comportamento, hoje cobertas pelas specs de pessoas, grupos e conteúdo (ver
+a pendência nº 4 de [PENDENCIAS.md](PENDENCIAS.md)). A API foi configurada em
+2026-09-03; ali o medo de repetir o `c84fc02` não se confirmou — dos 12 erros,
+nove eram import e variável mortos.
 
 ```
 $ npx turbo run lint
@@ -408,7 +415,7 @@ falta antes de impor.
 | Risco | Mitigação |
 |---|---|
 | Testes de RLS lentos (transações contra o pooler) | Em CI o Postgres é local, sem pooler: devem ficar bem mais rápidos que os ~2,5 min contra Supabase |
-| E2E intermitente | O harness já usa espera por estado, não por tempo. Com `retries: 1` e trace no primeiro retry, falha transitória não vira ruído |
+| E2E intermitente | O harness já usa espera por estado, não por tempo. Com `retries: 1` e trace no primeiro retry, falha transitória não vira ruído. **Contrapartida:** o auto-retry também espera janelas de estado sujo passarem — asserção sobre estado transitório precisa ser verificada quebrando o comportamento de propósito, senão passa sem medir nada (aconteceu; ver pendência nº 4) |
 | Seed divergir do que o e2e espera | **Risco real, já materializado uma vez.** O e2e cria e remove as próprias fixtures, mas depende do seed para bem mais que o usuário: tenant, congregação, celebração, ministério, voluntários vinculados e perfil de voluntário da conta admin (lista completa na seção do seed, acima). Mitigação é procedimento, não automação: quem mexer no seed roda `npm run e2e -w orbien-web` contra um banco recém-provisionado |
 | Tempo total de CI crescer | Fases 1 e 2 em PR; fase 3 pode virar noturna se incomodar |
 
