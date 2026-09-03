@@ -630,6 +630,10 @@ describe('PersonsImportService', () => {
       for (let i = 0; i < 501; i++) rows.push(`Pessoa ${i},1199999${String(i).padStart(4, '0')}`);
       storage.downloadBuffer.mockResolvedValue(Buffer.from(rows.join('\n'), 'utf-8'));
       (system.person.findFirst as jest.Mock).mockRejectedValue('motivo em string, não Error');
+      const loggerErrorSpy = jest.spyOn(
+        (service as unknown as { logger: { error: (msg: string) => void } }).logger,
+        'error',
+      );
 
       await service.confirm({ file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone' } }, user);
 
@@ -643,6 +647,9 @@ describe('PersonsImportService', () => {
           errors: [{ row: 0, reason: 'motivo em string, não Error' }],
         }),
       });
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Import job job-1 failed: motivo em string, não Error'),
+      );
     });
   });
 

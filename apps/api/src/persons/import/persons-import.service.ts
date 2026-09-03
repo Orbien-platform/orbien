@@ -112,7 +112,8 @@ export class PersonsImportService {
 
     setImmediate(() => {
       this.runJobBackground(job.id, rows, dto.mapping, user.tenant_id, user.congregation_id, user.sub).catch(
-        (err: Error) => this.logger.error(`Import job ${job.id} failed: ${err.message}`),
+        (err: unknown) =>
+          this.logger.error(`Import job ${job.id} failed: ${err instanceof Error ? err.message : String(err)}`),
       );
     });
 
