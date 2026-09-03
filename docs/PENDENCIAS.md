@@ -12,18 +12,22 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 
 | # | Pendência | Gravidade | Situação |
 |---|---|---|---|
-| 1 | RLS não isola por congregação dentro do mesmo tenant | segurança | ✔ fechada no código — **falta rodar o bootstrap em produção** |
+| 1 | RLS não isola por congregação dentro do mesmo tenant | segurança | ✔ fechada — `003` aplicado em produção em 2026-09-03 |
 | 2 | Lint do `site` quebrado no estado commitado | portão | ✔ fechada |
 | 3 | E2E depende de dados que o seed não cria | portão | ✔ fechada — seed estendido |
 | 4 | 6 mudanças de comportamento do `c84fc02` sem cobertura permanente | risco de regressão | ✔ **fechada** — e2e nas três telas |
 | 5 | Lint em `apps/api` | portão | ✔ fechada — lint nos 3 apps, portão verde |
+| 6 | Sessão de suporte não levava a nada, e a auditoria dela era tripla­mente morta | segurança | ✔ fechada — **falta rodar o bootstrap em produção** |
 
-> Em 2026-09-03 as cinco foram revistas e as cinco fecharam. A nº 4 e a nº 5
-> nasceram nessa revisão — a nº 4 já estava decidida como aberta e só não tinha
-> registro escrito; a nº 5 apareceu ali.
+> Em 2026-09-03 as seis foram revistas e as seis fecharam. As nº 4, 5 e 6
+> nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
+> registro escrito; a nº 5 apareceu na revisão; a nº 6 apareceu ao testar o
+> resultado da nº 1 pelo navegador.
 >
-> Resta **um passo operacional**, não uma pendência de código: aplicar o
-> `003_rls_admin_write.sql` no Supabase.
+> Resta **um passo operacional**, não uma pendência de código: rodar
+> `bash scripts/bootstrap-db.sh` contra o Supabase, que aplica o
+> `003_rls_admin_write.sql` (feito) e o `audit_insert()` corrigido da nº 6
+> (pendente).
 
 O job `Unidade e cobertura` passou (53s). Nenhuma das três originais é causada
 pela Fase 0 do [plano de testes](TESTES.md).
@@ -268,11 +272,13 @@ Tests: 42 passed, 42 total
 
 Eram 39. Os 3 novos são o bloco `4b`.
 
-### Falta aplicar em produção
+### Aplicado em produção em 2026-09-03
 
-O código está fechado; o **banco de produção não**. Os scripts de RLS ficam
-fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica — o Supabase de
-produção segue com as policies antigas até alguém rodar, da máquina local:
+O `003` foi rodado contra o Supabase e conferido: as 22 policies com
+`USING != WITH CHECK` foram a zero, as 22 citações de `denomination_admin`
+também, e `app_congregation_allowed` passou a existir. Fica registrado como
+rodar de novo, porque os scripts de RLS ficam fora do histórico do Prisma e só
+o `bootstrap-db.sh` os aplica:
 
 ```bash
 cd apps/api
@@ -568,6 +574,125 @@ propósito em `c84fc02` — `canView` não usado em celebrações e o
 `exhaustive-deps` pré-existente em conteúdo.
 
 ### Nada em aberto nesta pendência
+
+---
+
+## 6. A sessão de suporte não levava a nada — e a auditoria dela estava morta em três lugares
+
+Aberta e fechada em 2026-09-03. Chegou por um caminho torto: a conta
+`fernando.vargas@fill.tech` mostrava *"Não foi possível carregar os dados"* no
+dashboard, e a suspeita inicial recaiu sobre o `003_rls_admin_write.sql`,
+aplicado minutos antes.
+
+### Não era o `003`
+
+`fernando.vargas@fill.tech` é `platform_support`, não `tenant_admin`. A tela
+inicial faz quatro GETs — `/persons`, `/financial/transactions`,
+`/celebrations`, `/celebrations/instances` — e só mostra aquela mensagem quando
+**todos** falham (`dashboard/page.tsx:168`). `platform_support` não está em
+nenhuma das listas de leitura dessas quatro rotas, então são quatro 403.
+
+Provado com banco provisionado do zero, rodando as quatro rotas nas duas
+contas, **com** e **sem** o `003`:
+
+```
+com 003     platform_support: 403 403 403 403   tenant_admin: 200 200 200 200
+sem 003     platform_support: 403 403 403 403
+            {"message":"Forbidden resource","error":"Forbidden","statusCode":403}
+```
+
+Idêntico. O 403 vem do `RolesGuard`, que roda antes de qualquer query — o RLS
+nem é avaliado. E o `.github/workflows/ci.yml` já dizia, no job de e2e, que
+*"platform_support leva 403 na maioria das rotas"*.
+
+### O que era: um caminho projetado, e inacabado
+
+`platform_support` não é papel esquecido — ele tem um acesso projetado e bom:
+não vê dados de igreja de forma permanente, e sim abre uma **sessão de
+suporte** por `POST /auth/impersonate`, que é explícita e auditada. A intenção
+estava inteira. A implementação, não. Três defeitos empilhados:
+
+**1. O token impersonado não abria nada.** `impersonate()` troca `tenant_id` e
+`congregation_id` mas faz `roles: requestingUser.roles` — copia os papéis do
+próprio suporte. O `RolesGuard` não tinha exceção para `support_session`, então
+o token novo batia nos mesmos 403 do token velho. O caminho existia e não
+levava a lugar nenhum.
+
+**2. O `AuditInterceptor` nunca rodou.** Não estava registrado em lugar nenhum
+— nem global, nem em controller. Código morto desde que foi escrito.
+
+**3. A função `audit_insert()` nunca poderia ter funcionado.** Ela insere em
+`audit_logs` sem `id`. No schema o campo é `@default(uuid())`, que no Prisma é
+gerado **no cliente**: a coluna é NOT NULL e não tem `DEFAULT` no banco. Todo
+INSERT falhava com 23502. E o único chamador — o interceptor do item 2 — tinha
+`.catch(() => void 0)`, então o erro nunca apareceu nem em log.
+
+Os três se escondiam um atrás do outro. O item 3 só ficou visível depois de
+consertar 1 e 2, quando o teste de integração passou a exigir a linha de
+auditoria e o log mostrou o 23502.
+
+### Correções
+
+1. `RolesGuard`: `support_session === true` satisfaz qualquer `@Roles`. É
+   exceção larga de propósito. Preferida a forjar papéis do tenant alvo, que
+   inventaria atribuição inexistente e ficaria invisível no token.
+2. `AuditInterceptor` registrado como `APP_INTERCEPTOR` global. Por controller
+   deixaria rota nova sem auditoria por esquecimento.
+3. O interceptor passa a escrever por `audit_insert()`. A escrita anterior era
+   `prisma.auditLog.create()`, ou seja um INSERT como `orbien_app` — e
+   `audit_logs` só tem policy de SELECT para esse role. Era negado pelo RLS
+   **além** de faltar o `id`. A falha agora vai para o log em vez de ser
+   engolida; segue best-effort, porque auditoria que derruba requisição troca
+   observabilidade por indisponibilidade.
+4. `audit_insert()` gera o `id` com `gen_random_uuid()::text`.
+
+### Evidência
+
+Primeiro teste do projeto `integration` do repositório —
+`test/integration/impersonation.spec.ts`, que sobe o `AppModule` e fala HTTP —
+mais `roles.guard.spec.ts` no projeto `unit`:
+
+```
+unit         8 passed
+integration  7 passed
+rls         42 passed
+```
+
+Verificado nos dois sentidos: comentando a linha da exceção no guard, **2 testes
+de unidade e 3 de integração falham** — e os que provam que `platform_support`
+sem sessão continua barrado seguem passando.
+
+> Nota de infraestrutura: subir o `AppModule` sob Jest alcança
+> `financial/export`, que importa `archiver` — ESM-only, que o Jest no Node 22
+> não consegue `require`. Resolvido com `moduleNameMapper` para
+> `test/stubs/archiver.ts`, que estoura se alguém realmente tentar gerar um ZIP.
+
+### Falta aplicar em produção
+
+O `audit_insert()` corrigido vive no `001_rls_setup.sql`, que só o
+`bootstrap-db.sh` aplica. Até rodar, a sessão de suporte **funciona mas não
+deixa rastro** — o guard libera, o interceptor tenta gravar e o banco recusa
+com 23502, agora visível no log da API.
+
+```bash
+cd apps/api
+DIRECT_URL='postgresql://postgres:<senha>@<host>:5432/postgres' \
+ORBIEN_APP_PASSWORD='<senha-do-app>' \
+bash scripts/bootstrap-db.sh
+```
+
+Idempotente, sem `--seed`. Roda 001 → 002 → 003 na ordem certa e verifica os
+invariantes no fim.
+
+### Continua em aberto, por desenho
+
+- **Não existe UI.** `impersonate` e `support_session` não aparecem em nenhum
+  lugar do `apps/web`. A sessão de suporte só é utilizável por HTTP direto.
+  É a Fase 3/4 do plano de plataforma.
+- **A sessão pode escrever**, não só ler. Decisão adiada.
+- **TTL** do token de impersonação é o padrão de access token.
+- **Não cruza tenant**, e isso é estrutural: nenhuma policy permite. Suporte a
+  vários clientes exige impersonar um por vez.
 
 ---
 

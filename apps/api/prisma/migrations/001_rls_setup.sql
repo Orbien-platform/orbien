@@ -466,10 +466,17 @@ CREATE OR REPLACE FUNCTION audit_insert(
 RETURNS VOID
 LANGUAGE SQL SECURITY DEFINER
 AS $$
+  -- `id` tem que ser gerado aqui. No schema ele e' `@default(uuid())`, o que
+  -- no Prisma e' gerado no cliente, nao no banco: a coluna e' NOT NULL e nao
+  -- tem DEFAULT. Sem esta linha todo INSERT falhava com 23502
+  -- ("null value in column id"), e a funcao nunca funcionou desde que foi
+  -- escrita — o unico chamador engolia o erro. Descoberto em 2026-09-03, ao
+  -- registrar o AuditInterceptor. Ver docs/PENDENCIAS.md.
   INSERT INTO audit_logs (
-    tenant_id, congregation_id, actor_user_id, subject_person_id,
+    id, tenant_id, congregation_id, actor_user_id, subject_person_id,
     entity, action, before, after, ip, user_agent, at
   ) VALUES (
+    gen_random_uuid()::text,
     p_tenant_id, p_congregation_id, p_actor_user_id, p_subject_person_id,
     p_entity, p_action, p_before, p_after, p_ip, p_user_agent, now()
   );

@@ -241,11 +241,12 @@ fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
 bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
 passo 5 falha alto se algum invariante quebrar.
 
-> **Pendente no banco de produção.** O `003_rls_admin_write.sql` foi criado em
-> 2026-09-03 e validado contra Postgres 17 provisionado do zero, mas o Supabase
-> de produção segue com as policies antigas até alguém rodar o bootstrap contra
-> ele. Enquanto isso, um `tenant_admin` que edite registro de congregação irmã
-> recebe 42501. Ver a pendência nº 1 em `docs/PENDENCIAS.md`.
+> **Pendente no banco de produção:** o `audit_insert()` corrigido. O
+> `003_rls_admin_write.sql` já foi aplicado em 2026-09-03; o que falta é a
+> correção da função de auditoria, que vive no `001_rls_setup.sql` — ela
+> inseria em `audit_logs` sem `id`, coluna NOT NULL sem DEFAULT, e falhava com
+> 23502 desde sempre. Até rodar o bootstrap, sessão de suporte funciona mas não
+> deixa rastro. Ver a pendência nº 6 em `docs/PENDENCIAS.md`.
 
 ---
 

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -49,6 +51,14 @@ import { ScheduleModule } from '@nestjs/schedule';
     VolunteersModule,
     CelebrationsModule,
     SettingsModule,
+  ],
+  providers: [
+    // Global de propósito: é o rastro das sessões de suporte, que satisfazem
+    // qualquer @Roles (ver RolesGuard). Registrar por controller deixaria
+    // rota nova sem auditoria por esquecimento — e "esqueci de auditar" é
+    // pior aqui do que em qualquer outro interceptor. Para requisição sem
+    // `support_session` ele retorna na primeira linha, sem custo.
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

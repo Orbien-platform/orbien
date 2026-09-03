@@ -54,5 +54,11 @@ leia o do app antes de mexer nele.
   `USING` e o `WITH CHECK` têm que dizer a mesma coisa — divergir faz o admin
   ler a linha e falhar ao gravar com 42501. O passo 6 do bootstrap falha alto
   se isso acontecer.
+- `platform_support` não está em nenhuma lista de `@Roles` de dados de igreja, e
+  isso é deliberado: o acesso dela é pontual, por `POST /auth/impersonate`, que
+  emite token com `support_session: true` — e essa marca satisfaz qualquer
+  `@Roles` no `RolesGuard`. O contrapeso é o `AuditInterceptor`, global, que
+  grava `support_access` em `audit_logs` por `audit_insert()`. Se você mexer em
+  um dos três, mexeu no acordo inteiro.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.

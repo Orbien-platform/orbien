@@ -58,6 +58,11 @@ module.exports = {
       transform,
       setupFiles: ['<rootDir>/test/setup.ts'],
       testTimeout: DB_TIMEOUT,
+      // Esta suíte sobe o AppModule inteiro, e o grafo alcança
+      // financial/export, que importa `archiver` — ESM-only, que o Jest no
+      // Node 22 não consegue `require`. Sem o stub a suíte não chega a rodar.
+      // Ver o cabeçalho de test/stubs/archiver.ts.
+      moduleNameMapper: { '^archiver$': '<rootDir>/test/stubs/archiver.ts' },
     },
     {
       displayName: 'rls',
