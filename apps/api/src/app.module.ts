@@ -19,6 +19,7 @@ import { ContentModule } from './content/content.module';
 import { VolunteersModule } from './volunteers/volunteers.module';
 import { CelebrationsModule } from './celebrations/celebrations.module';
 import { SettingsModule } from './settings/settings.module';
+import { PlatformModule } from './platform/platform.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -51,6 +52,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     VolunteersModule,
     CelebrationsModule,
     SettingsModule,
+    PlatformModule,
   ],
   providers: [
     // Global de propósito: é o rastro das sessões de suporte, que satisfazem

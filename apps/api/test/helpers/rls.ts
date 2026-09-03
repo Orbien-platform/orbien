@@ -118,3 +118,31 @@ export async function runAsUser<T>(
     { timeout: 30_000, maxWait: 10_000 },
   );
 }
+
+/**
+ * Espelha o TenantContextInterceptor numa rota marcada com `@PlatformRoute()`:
+ * troca para `app_user`, seta `app.user_id` e **não** seta tenant nem
+ * congregação.
+ *
+ * É a única forma de alcançar o ramo `app_platform_access()` das policies —
+ * que exige as duas coisas ao mesmo tempo: `app_current_tenant()` nulo e o
+ * usuário com `platform_support` em `role_assignments`.
+ */
+export async function runAsPlatform<T>(
+  userId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE app_user`;
+      await tx.$executeRaw`
+        SELECT
+          set_config('app.tenant_id',       '',        true),
+          set_config('app.congregation_id', '',        true),
+          set_config('app.user_id',         ${userId}, true)
+      `;
+      return fn(tx);
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
+}

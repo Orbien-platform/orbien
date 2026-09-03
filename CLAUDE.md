@@ -48,12 +48,22 @@ leia o do app antes de mexer nele.
   `typescript-eslint` recommended **sem** checagem de tipos, e a única regra
   ajustada é `no-unused-vars` com `argsIgnorePattern: "^_"` — o código marca
   "não usado de propósito" com underscore (`_tx`, `_depth`).
-- Os scripts de RLS (`apps/api/prisma/migrations/00{1,2,3}_*.sql`) ficam **fora**
-  do histórico do Prisma: `prisma migrate deploy` não os aplica, só o
+- Os scripts de RLS (`apps/api/prisma/migrations/00{1,2,3,4}_*.sql`) ficam
+  **fora** do histórico do Prisma: `prisma migrate deploy` não os aplica, só o
   `bootstrap-db.sh`, e a ordem entre eles importa. Ao mexer em policy, o
   `USING` e o `WITH CHECK` têm que dizer a mesma coisa — divergir faz o admin
-  ler a linha e falhar ao gravar com 42501. O passo 6 do bootstrap falha alto
+  ler a linha e falhar ao gravar com 42501. O passo 7 do bootstrap falha alto
   se isso acontecer.
+- Toda requisição autenticada roda como `app_user`: o `TenantContextInterceptor`
+  faz `SET LOCAL ROLE app_user` antes do `set_config`. É isso que faz o RLS ser
+  avaliado — a conexão é `orbien_app`, que tem `orbien_app_auth USING (true)`
+  nas tabelas de auth para o login funcionar sem contexto. Rodar autenticado
+  como `orbien_app` reabre todas elas com um `OR true`. Ver a pendência nº 7.
+- Rota que opera **acima** dos tenants leva três marcas juntas, e nenhuma basta
+  sozinha: `@Roles('platform_support')`, `@PlatformRoute()` (o interceptor não
+  fixa `app.tenant_id`) e o interceptor em si. Quem responde por elas no banco
+  é `app_platform_access()`, que exige contexto sem tenant **e** o papel em
+  `role_assignments` — o papel vem do banco, não de `app.role_codes`.
 - `platform_support` não está em nenhuma lista de `@Roles` de dados de igreja, e
   isso é deliberado: o acesso dela é pontual, por `POST /auth/impersonate`, que
   emite token com `support_session: true` — e essa marca satisfaz qualquer

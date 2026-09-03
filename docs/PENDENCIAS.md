@@ -18,11 +18,12 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 4 | 6 mudanças de comportamento do `c84fc02` sem cobertura permanente | risco de regressão | ✔ **fechada** — e2e nas três telas |
 | 5 | Lint em `apps/api` | portão | ✔ fechada — lint nos 3 apps, portão verde |
 | 6 | Sessão de suporte não levava a nada, e a auditoria dela era tripla­mente morta | segurança | ✔ fechada — **falta rodar o bootstrap em produção** |
+| 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; **falta rodar o bootstrap** |
 
-> Em 2026-09-03 as seis foram revistas e as seis fecharam. As nº 4, 5 e 6
+> Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
 > nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
 > registro escrito; a nº 5 apareceu na revisão; a nº 6 apareceu ao testar o
-> resultado da nº 1 pelo navegador.
+> resultado da nº 1 pelo navegador; a nº 7 apareceu ao abrir a Fase 2.
 >
 > Resta **um passo operacional**, não uma pendência de código: rodar
 > `bash scripts/bootstrap-db.sh` contra o Supabase, que aplica o
@@ -691,8 +692,92 @@ invariantes no fim.
   É a Fase 3/4 do plano de plataforma.
 - **A sessão pode escrever**, não só ler. Decisão adiada.
 - **TTL** do token de impersonação é o padrão de access token.
-- **Não cruza tenant**, e isso é estrutural: nenhuma policy permite. Suporte a
-  vários clientes exige impersonar um por vez.
+- **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
+  token fixa um tenant, e o `IS NULL` de `app_platform_access()` fecha o ramo
+  de plataforma justamente quando há tenant fixado. Suporte a vários clientes
+  exige impersonar um por vez. O que mudou na Fase 2 é o outro caminho: sem
+  impersonar ninguém, `platform_support` enxerga os N tenants nas tabelas de
+  plataforma. Ver a pendência nº 7.
+
+---
+
+## 7. RLS de plataforma não valia em produção — resolvido
+
+Achado ao abrir a Fase 2 (plano de plataforma), em 2026-09-03.
+
+### O que estava errado
+
+`20260608175621_fix_orbien_app_auth_policies` criou, em `tenants`,
+`congregations`, `branding_configs`, `tenant_plans`, `user_accounts`,
+`role_assignments` e `audit_logs`:
+
+```sql
+CREATE POLICY orbien_app_auth ON tenants
+  AS PERMISSIVE FOR ALL TO orbien_app
+  USING (true) WITH CHECK (true);
+```
+
+Existe por um motivo real: login e bootstrap público rodam antes de haver
+contexto. O problema é que a requisição **autenticada** também rodava como
+`orbien_app` — o `TenantContextInterceptor` fazia `set_config` e nunca
+`SET LOCAL ROLE`. Policies `PERMISSIVE` combinam com **OR**, então o
+`OR true` ganhava do `tenant_id = app_current_tenant()` em toda requisição.
+
+O comentário do passo 5 do `bootstrap-db.sh` dizia "o `SET LOCAL ROLE app_user`
+que o backend usa". O backend não usava. Quem usava era só
+`test/helpers/rls.ts` — por isso a suíte de RLS passava: `runAsTenantWithRole`
+e `runAsUser` trocam de role, e `runAsTenant`, o helper que espelha produção,
+não é usado nessas sete tabelas.
+
+### Decisão
+
+Fechar dentro da Fase 2, não depois: a política de plataforma não teria
+significado nenhum enquanto o `OR true` estivesse por cima dela.
+
+O interceptor passa a fazer `SET LOCAL ROLE app_user` antes do `set_config`.
+Policy só se aplica ao role corrente e aos que ele herda; `app_user` **não** é
+membro de `orbien_app`, então as policies de auth deixam de ser alcançáveis a
+partir de uma requisição autenticada. O caminho pré-autenticação continua como
+`orbien_app` e não muda — ele nem passa pelo interceptor, porque não tem
+`req.user`.
+
+`waitlist_subscribers` entrou junto: ficou fora do `001` inteiro, sem `ENABLE`
+e sem policy. O `004` habilita RLS e escreve os dois caminhos legítimos — o
+cadastro público (INSERT como `orbien_app`, sem contexto) e o admin
+(`platform_support` sem tenant, como `app_user`).
+
+### Verificação
+
+`test/rls/platform-plane.spec.ts`, nos dois sentidos: `platform_support` sem
+contexto lista N tenants e provisiona; o mesmo usuário com tenant fixado (o
+token de impersonação) vê um só, e `tenant_admin` sem contexto não vê nenhum.
+
+`src/common/interceptors/tenant-context.interceptor.spec.ts` prende as duas
+decisões do interceptor sem precisar de banco.
+
+Duas asserções novas no passo de verificação do `bootstrap-db.sh`: o
+`orbien_app` tem que poder `SET ROLE app_user` (sem isso a API inteira para com
+42501), e as seis policies do plano de plataforma têm que existir e ser
+simétricas.
+
+### Continua em aberto, por desenho
+
+- **`user_accounts`, `role_assignments` e `audit_logs` seguem com
+  `orbien_app_auth USING (true)`.** Não incomoda mais nas rotas autenticadas
+  (que agora são `app_user`), mas qualquer rota pública futura que toque essas
+  tabelas as lê inteiras. Fechar isso exige mapear o que o login precisa ler
+  antes de existir contexto — trabalho próprio, não da Fase 2.
+- **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
+  (`postgres`, que é o `prisma.system`) segue passando por cima. É o mesmo
+  desenho do `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
+- **Rota de plataforma não é auditada.** O `AuditInterceptor` retorna na
+  primeira linha para quem não tem `support_session`, e um `platform_support`
+  logado normalmente não tem. Ou seja: `POST /platform/tenants` cria uma igreja
+  inteira sem deixar rastro em `audit_logs`. Não foi corrigido aqui de
+  propósito — mexer nisso é mexer no acordo `RolesGuard` + `impersonate` +
+  `AuditInterceptor`, que o `CLAUDE.md` trata como peça única.
+- **Falta rodar o bootstrap em produção**, como na nº 6. Até lá as rotas de
+  plataforma respondem vazio.
 
 ---
 

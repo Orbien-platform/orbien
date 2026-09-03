@@ -33,7 +33,7 @@ run_sql() {
 }
 
 echo ""
-echo "▶ 1/7 Criando roles base..."
+echo "▶ 1/8 Criando roles base..."
 # Precisa vir ANTES do migrate deploy: a migration fix_rls_enforcement faz
 # GRANT app_user TO postgres e falha se o role ainda nao existe. Num banco
 # novo, 001_rls_setup.sql (que tambem cria os roles) so roda depois das
@@ -54,11 +54,11 @@ END $$;
 SQL
 
 echo ""
-echo "▶ 2/7 Aplicando migrations do Prisma..."
+echo "▶ 2/8 Aplicando migrations do Prisma..."
 DATABASE_URL="$DIRECT_URL" npx --yes prisma migrate deploy
 
 echo ""
-echo "▶ 3/7 Aplicando scripts de RLS (fora do histórico do Prisma)..."
+echo "▶ 3/8 Aplicando scripts de RLS (fora do histórico do Prisma)..."
 run_sql_file prisma/migrations/001_rls_setup.sql
 if [ -f prisma/migrations/002_rls_celebration_schedules.sql ]; then
   run_sql_file prisma/migrations/002_rls_celebration_schedules.sql
@@ -78,7 +78,7 @@ fi
 # fraca ganha e o isolamento por congregação se perde. Restauramos o estado
 # final correto: onde existe a de congregação, a de tenant sai.
 echo ""
-echo "▶ 4/7 Removendo policies redundantes de tenant onde há isolamento por congregação..."
+echo "▶ 4/8 Removendo policies redundantes de tenant onde há isolamento por congregação..."
 run_sql <<'SQL'
 DO $$
 DECLARE r record; n int := 0;
@@ -103,7 +103,17 @@ END $$;
 SQL
 
 echo ""
-echo "▶ 5/7 Configurando o role de aplicação orbien_app..."
+echo "▶ 5/8 Abrindo o plano de plataforma (004)..."
+# Precisa vir depois do passo 4: ele faz ALTER POLICY em `tenant_isolation`, e
+# o passo 4 é quem decide se essa policy sobrevive em cada tabela. Nas seis
+# tabelas que 004 toca não há isolamento por congregação, então ela sobrevive
+# — mas rodar antes tornaria isso uma coincidência em vez de uma ordem.
+if [ -f prisma/migrations/004_rls_platform_plane.sql ]; then
+  run_sql_file prisma/migrations/004_rls_platform_plane.sql
+fi
+
+echo ""
+echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
 # orbien_app é criado NOLOGIN pelas migrations; aqui ele ganha senha e os
 # privilégios de app_user. WITH SET TRUE permite o `SET LOCAL ROLE app_user`
 # que o backend usa para forçar a avaliação das políticas de RLS.
@@ -127,7 +137,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 SQL
 
 echo ""
-echo "▶ 6/7 Verificando..."
+echo "▶ 7/8 Verificando..."
 run_sql <<'SQL'
 DO $$
 DECLARE
@@ -190,15 +200,51 @@ BEGIN
   IF n > 0 THEN
     RAISE EXCEPTION 'ha % policy(s) citando denomination_admin, papel que nao existe na tabela roles', n;
   END IF;
+
+  -- O TenantContextInterceptor faz `SET LOCAL ROLE app_user` em toda
+  -- requisicao autenticada. Sem ADMIN/SET option no GRANT acima, essa linha
+  -- falha com 42501 e a API inteira para. Falhar aqui e' barato; descobrir em
+  -- producao, nao.
+  SELECT count(*) INTO n
+    FROM pg_auth_members m
+    JOIN pg_roles r ON r.oid = m.roleid
+    JOIN pg_roles g ON g.oid = m.member
+   WHERE r.rolname = 'app_user' AND g.rolname = 'orbien_app' AND m.set_option;
+  RAISE NOTICE 'orbien_app pode SET ROLE app_user: %', n > 0;
+  IF n = 0 THEN
+    RAISE EXCEPTION 'orbien_app nao pode SET ROLE app_user (falta WITH SET TRUE no GRANT)';
+  END IF;
+
+  -- O ramo de plataforma tem que existir nas seis tabelas, e nos dois lados.
+  -- Se 004 nao rodou, o suporte le lista vazia sem erro nenhum.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_isolation'
+     AND tablename IN ('tenants', 'tenant_plans', 'branding_configs',
+                       'congregations', 'user_accounts', 'role_assignments')
+     AND qual LIKE '%app_platform_access%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'policies com o ramo de plataforma: %', n;
+  IF n <> 6 THEN
+    RAISE EXCEPTION 'esperava 6 policies com app_platform_access simetrico, encontrei % — 004_rls_platform_plane.sql rodou?', n;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class c
+      JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+     WHERE c.relname = 'waitlist_subscribers' AND c.relrowsecurity
+  ) THEN
+    RAISE EXCEPTION 'waitlist_subscribers sem RLS habilitado';
+  END IF;
 END $$;
 SQL
 
 echo ""
 if [ "$SEED" = true ]; then
-  echo "▶ 7/7 Populando com dados de seed..."
+  echo "▶ 8/8 Populando com dados de seed..."
   DATABASE_URL="$DIRECT_URL" npx --yes ts-node prisma/seed.ts
 else
-  echo "▶ 7/7 Seed pulado (rode com --seed para popular)."
+  echo "▶ 8/8 Seed pulado (rode com --seed para popular)."
 fi
 
 echo ""

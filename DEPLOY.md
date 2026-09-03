@@ -173,14 +173,21 @@ O script é idempotente e faz, nesta ordem:
    por isso não rodam sozinhos. O `003` alinha o `WITH CHECK` ao `USING` nas
    policies que os dois primeiros criam; sem ele um `tenant_admin` lê linha de
    congregação irmã e falha ao gravar, com 42501;
-4. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
+4. remove a `tenant_isolation` das tabelas que têm isolamento por congregação;
+5. aplica `004_rls_platform_plane.sql`, que abre o plano de plataforma:
+   `platform_support` **sem tenant no contexto** passa a enxergar todos os
+   tenants, e `waitlist_subscribers` ganha RLS (nunca teve). Precisa vir depois
+   do passo 4, que é quem decide quais `tenant_isolation` sobrevivem;
+6. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
    (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
-5. verifica tabelas, login do role, herança e três invariantes de RLS,
+7. verifica tabelas, login do role, herança e cinco invariantes de RLS,
    falhando alto se algo faltar: nenhuma tabela pode ter `tenant_isolation`
    sombreando `tenant_congregation_isolation`, nenhuma policy de congregação
-   pode ter `USING` diferente de `WITH CHECK`, e nenhuma pode citar
-   `denomination_admin` (papel que não existe na tabela `roles`);
-6. com `--seed`, popula os dados de exemplo.
+   pode ter `USING` diferente de `WITH CHECK`, nenhuma pode citar
+   `denomination_admin` (papel que não existe na tabela `roles`), o
+   `orbien_app` precisa poder `SET ROLE app_user`, e as seis policies do plano
+   de plataforma precisam existir;
+8. com `--seed`, popula os dados de exemplo.
 
 Depois disso, `DIRECT_URL` aponta para a conexão direta (5432, role `postgres`)
 e `DATABASE_URL` para o pooler (6543, role `orbien_app`).
@@ -236,10 +243,10 @@ npm run db:migrate -- nome_da_migration
 npm run db:migrate:status
 ```
 
-Os scripts de RLS (`001`, `002`, `003`) **não** entram nesse comando: estão
-fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
+Os scripts de RLS (`001`, `002`, `003`, `004`) **não** entram nesse comando:
+estão fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
 bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
-passo 5 falha alto se algum invariante quebrar.
+passo 7 falha alto se algum invariante quebrar.
 
 > **Pendente no banco de produção:** o `audit_insert()` corrigido. O
 > `003_rls_admin_write.sql` já foi aplicado em 2026-09-03; o que falta é a
@@ -247,6 +254,11 @@ passo 5 falha alto se algum invariante quebrar.
 > inseria em `audit_logs` sem `id`, coluna NOT NULL sem DEFAULT, e falhava com
 > 23502 desde sempre. Até rodar o bootstrap, sessão de suporte funciona mas não
 > deixa rastro. Ver a pendência nº 6 em `docs/PENDENCIAS.md`.
+>
+> **Também pendente:** o `004_rls_platform_plane.sql`. Enquanto ele não rodar,
+> as rotas de plataforma (`POST /platform/tenants`, `GET /admin/waitlist`)
+> respondem vazio ou falham com 42501 — o interceptor já deixa de fixar tenant
+> nelas, mas não há policy que responda por isso.
 
 ---
 
