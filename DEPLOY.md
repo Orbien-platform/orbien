@@ -168,11 +168,18 @@ O script é idempotente e faz, nesta ordem:
    `fix_rls_enforcement` faz `GRANT app_user TO postgres` e falha se eles não
    existirem antes);
 2. `prisma migrate deploy`;
-3. aplica `001_rls_setup.sql` e `002_rls_celebration_schedules.sql`, que estão
-   fora do histórico do Prisma e por isso não rodam sozinhos;
+3. aplica `001_rls_setup.sql`, `002_rls_celebration_schedules.sql` e
+   `003_rls_admin_write.sql`, nesta ordem — estão fora do histórico do Prisma e
+   por isso não rodam sozinhos. O `003` alinha o `WITH CHECK` ao `USING` nas
+   policies que os dois primeiros criam; sem ele um `tenant_admin` lê linha de
+   congregação irmã e falha ao gravar, com 42501;
 4. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
    (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
-5. verifica tabelas, login do role e herança, falhando alto se algo faltar;
+5. verifica tabelas, login do role, herança e três invariantes de RLS,
+   falhando alto se algo faltar: nenhuma tabela pode ter `tenant_isolation`
+   sombreando `tenant_congregation_isolation`, nenhuma policy de congregação
+   pode ter `USING` diferente de `WITH CHECK`, e nenhuma pode citar
+   `denomination_admin` (papel que não existe na tabela `roles`);
 6. com `--seed`, popula os dados de exemplo.
 
 Depois disso, `DIRECT_URL` aponta para a conexão direta (5432, role `postgres`)
@@ -228,6 +235,17 @@ do monorepo:
 npm run db:migrate -- nome_da_migration
 npm run db:migrate:status
 ```
+
+Os scripts de RLS (`001`, `002`, `003`) **não** entram nesse comando: estão
+fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
+bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
+passo 5 falha alto se algum invariante quebrar.
+
+> **Pendente no banco de produção.** O `003_rls_admin_write.sql` foi criado em
+> 2026-09-03 e validado contra Postgres 17 provisionado do zero, mas o Supabase
+> de produção segue com as policies antigas até alguém rodar o bootstrap contra
+> ele. Enquanto isso, um `tenant_admin` que edite registro de congregação irmã
+> recebe 42501. Ver a pendência nº 1 em `docs/PENDENCIAS.md`.
 
 ---
 

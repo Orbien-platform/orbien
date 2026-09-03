@@ -44,5 +44,15 @@ leia o do app antes de mexer nele.
   uma escolha legítima do dev — mas tem que ser escolha declarada, não
   silêncio. Não corrija por conta própria o que não foi pedido, e não bloqueie
   o trabalho esperando por certeza.
+- Os três apps têm `lint` e `turbo run lint` cobre os três. A base da API é
+  `typescript-eslint` recommended **sem** checagem de tipos, e a única regra
+  ajustada é `no-unused-vars` com `argsIgnorePattern: "^_"` — o código marca
+  "não usado de propósito" com underscore (`_tx`, `_depth`).
+- Os scripts de RLS (`apps/api/prisma/migrations/00{1,2,3}_*.sql`) ficam **fora**
+  do histórico do Prisma: `prisma migrate deploy` não os aplica, só o
+  `bootstrap-db.sh`, e a ordem entre eles importa. Ao mexer em policy, o
+  `USING` e o `WITH CHECK` têm que dizer a mesma coisa — divergir faz o admin
+  ler a linha e falhar ao gravar com 42501. O passo 6 do bootstrap falha alto
+  se isso acontecer.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.

@@ -293,38 +293,31 @@ Já implementado: `node scripts/check-skills.mjs`. Basta acrescentar como step d
 fase 1. Vale porque o modo de falha de uma skill é não ser acionada — não gera
 erro em lugar nenhum, ninguém percebe.
 
-## O bloqueio: o lint falha hoje
+## O bloqueio do lint — resolvido
 
-Não é ideia de fase futura, é impedimento imediato. Estado atual:
+Isto foi impedimento real e é mantido aqui como registro. O estado que travava
+a fase 1:
 
-| App | `lint` | Situação |
-|---|---|---|
-| `apps/api` | **não existe** | nunca teve eslint configurado |
-| `apps/site` | falha | 10 erros, 2 avisos |
-| `apps/web` | falha | 17 erros, 7 avisos |
+| App | `lint` | Situação em 2026-09-02 | Hoje |
+|---|---|---|---|
+| `apps/api` | não existia | nunca teve eslint configurado | ✔ configurado, verde |
+| `apps/site` | falhava | 10 erros, 2 avisos | ✔ verde |
+| `apps/web` | falhava | 17 erros, 7 avisos | ✔ verde, 2 avisos deixados de propósito |
 
-Colocar `turbo run lint` no CI hoje deixa a barra vermelha desde o primeiro PR
-— e barra vermelha permanente ensina o time a ignorar a barra, o que é pior do
-que não ter CI.
+Barra vermelha permanente ensina o time a ignorar a barra, o que é pior do que
+não ter CI — por isso o caminho escolhido foi **zerar os erros antes de ativar
+o lint como step obrigatório**, e não `continue-on-error` nem lint só no diff.
 
-Três caminhos, em ordem de preferência:
+Os fronts foram zerados em `c84fc02` — e essa limpeza teve custo: seis mudanças
+de comportamento que hoje são a pendência nº 4 de
+[PENDENCIAS.md](PENDENCIAS.md). A API foi configurada em 2026-09-03; ali o medo
+de repetir o `c84fc02` não se confirmou — dos 12 erros, nove eram import e
+variável mortos.
 
-1. **Zerar os 27 erros antes de ativar o lint no CI.** A maioria é de duas
-   famílias: `react-hooks/set-state-in-effect` e imports não usados. Trabalho
-   delimitado e mecânico, e deixa a regra valendo de verdade daí em diante.
-2. **Ativar como não-bloqueante** (`continue-on-error: true`), com o
-   compromisso explícito de virar bloqueante em uma data. Funciona se o
-   compromisso for real; caso contrário é só ruído.
-3. **Lint apenas nos arquivos alterados no PR.** Impede regressão nova sem
-   exigir a limpeza do passado. Mais complexo de configurar, e a barra fica
-   dependente do diff.
-
-Recomendo o caminho 1. Enquanto ele não acontecer, a fase 1 entra **sem** lint.
-
-Sobre `apps/api` não ter eslint: adicionar é desejável, mas é decisão à parte
-— configurar eslint num projeto NestJS existente costuma revelar dezenas de
-avisos, e isso merece ser tratado como tarefa própria, não como pré-requisito
-de CI.
+```
+$ npx turbo run lint
+ Tasks:    3 successful, 3 total
+```
 
 ## O que deliberadamente NÃO entra em CI
 
@@ -416,7 +409,7 @@ falta antes de impor.
 |---|---|
 | Testes de RLS lentos (transações contra o pooler) | Em CI o Postgres é local, sem pooler: devem ficar bem mais rápidos que os ~2,5 min contra Supabase |
 | E2E intermitente | O harness já usa espera por estado, não por tempo. Com `retries: 1` e trace no primeiro retry, falha transitória não vira ruído |
-| Seed divergir do que o e2e espera | O e2e cria e remove as próprias fixtures; depende do seed apenas para usuário e ministérios |
+| Seed divergir do que o e2e espera | **Risco real, já materializado uma vez.** O e2e cria e remove as próprias fixtures, mas depende do seed para bem mais que o usuário: tenant, congregação, celebração, ministério, voluntários vinculados e perfil de voluntário da conta admin (lista completa na seção do seed, acima). Mitigação é procedimento, não automação: quem mexer no seed roda `npm run e2e -w orbien-web` contra um banco recém-provisionado |
 | Tempo total de CI crescer | Fases 1 e 2 em PR; fase 3 pode virar noturna se incomodar |
 
 ## Decisões — todas tomadas
@@ -429,8 +422,13 @@ Mantidas aqui com o racional, para quem chegar depois entender por quê.
 3. ~~E2E em todo PR ou noturno~~ — **em todo push**, que no modelo trunk-based é
    o equivalente. Fica fora dos checks obrigatórios se algum dia houver PR: é o
    mais lento e o mais sujeito a intermitência de rede.
-4. ~~eslint em `apps/api`~~ — **adicionado agora**, junto com a limpeza dos
-   fronts, para o `turbo run lint` cobrir os três apps.
+4. eslint em `apps/api` — **implementado em 2026-09-03**, e não antes. A versão
+   anterior desta linha dizia "adicionado agora" desde o primeiro rascunho do
+   plano, sem que existisse config, devDependency ou script — afirmação falsa
+   do mesmo tipo da que havia sobre o seed, corrigida acima. `turbo run lint`
+   agora roda **3 tarefas** e o portão está **verde**. Os 12 erros que o lint
+   novo encontrou estão detalhados na pendência nº 5 de
+   [PENDENCIAS.md](PENDENCIAS.md) — nove eram ruído, três eram achados.
 ~~5. Proteção de branch~~ — **decidido: trunk-based**, sem PR. Não se aplica
    enquanto o modelo estiver em teste.
 ~~6. Revisão por IA no CI~~ — **decidido: não.** A revisão é local, antes de
