@@ -170,8 +170,6 @@ export default function ConteudoPage() {
       .finally(() => setSegmentsLoading(false));
   }, []);
 
-  useEffect(() => { loadPosts(typeFilter, statusFilter); }, [loadPosts]);
-
   useEffect(() => {
     if (activeTab === "segmentos") {
       hasFetchedSegs.current = false;
@@ -179,11 +177,15 @@ export default function ConteudoPage() {
     }
   }, [activeTab, loadSegments]);
 
+  // Ponto único de carga dos posts: roda no mount e em cada troca de filtro.
+  // Havia um segundo effect só para o mount, e os dois juntos disparavam duas
+  // requisições idênticas — o primeiro marcava o guard `hasFetchedPosts`, este
+  // o zerava e buscava de novo. `loadPosts` é um useCallback com deps [], de
+  // identidade estável, então declará-lo aqui não reintroduz recarga.
   useEffect(() => {
     hasFetchedPosts.current = false;
     loadPosts(typeFilter, statusFilter);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeFilter, statusFilter]);
+  }, [typeFilter, statusFilter, loadPosts]);
 
   // Entrar na aba "Segmentos" refaz a busca; o skeleton sobe aqui, no evento,
   // em vez de dentro do effect.

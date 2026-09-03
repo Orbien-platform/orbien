@@ -72,8 +72,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -115,8 +115,8 @@ que garante que os testes de isolamento não passam por vacuidade.
       DIRECT_URL: postgresql://postgres:ci@localhost:5432/orbien
       DATABASE_URL: postgresql://orbien_app:ci_app@localhost:5432/orbien
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc, cache: npm }
       - run: npm ci --include=dev
       - run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh
@@ -245,7 +245,7 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
