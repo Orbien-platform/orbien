@@ -54,6 +54,33 @@ jobs:
   unit:
     name: Unidade e cobertura
     runs-on: ubuntu-latest
+    # Postgres aqui porque `test:cov` da API roda os projetos `unit` E
+    # `integration`, e o `integration` existe justamente para exercitar o app
+    # contra um banco de verdade. Ficou sem serviço até 2026-09-03 só porque
+    # não havia nenhum teste de integração — o primeiro a entrar
+    # (impersonation.spec.ts) derrubou este job.
+    #
+    # A alternativa era tirar o `integration` do `test:cov`, e ela é pior: o
+    # que esses testes cobrem em `src/` sairia da conta da meta de 100%,
+    # baixando o número medido sem baixar o risco.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: orbien
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DIRECT_URL: postgresql://postgres:ci@localhost:5432/orbien
+      DATABASE_URL: postgresql://orbien_app:ci_app@localhost:5432/orbien
+      # A suíte de integração sobe o AppModule, que exige estes no boot.
+      JWT_SECRET: ci-jwt-secret
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +95,12 @@ jobs:
       # `prisma generate`, os imports de @prisma/client não resolvem.
       - name: Suítes de unidade dos 3 apps
         run: npx turbo run test
+
+      # Sem --seed: a suíte de integração monta as próprias fixtures e as
+      # remove. Dado de seed aqui só criaria acoplamento.
+      - name: Provisionar o banco para a suíte de integração
+        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh
+        working-directory: apps/api
 
       # O portão da meta de 100%. Os thresholds sobem por caminho a cada fase
       # concluída; enquanto estiverem em 0, este passo mede sem bloquear.
