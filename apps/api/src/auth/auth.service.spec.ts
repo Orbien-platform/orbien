@@ -535,6 +535,58 @@ describe('AuthService.forgotPassword', () => {
     expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.stringContaining('/redefinir-senha?token='), 'Ana');
   });
 
+  describe('FRONTEND_URL no link de redefinição', () => {
+    const ORIGINAL_FRONTEND_URL = process.env['FRONTEND_URL'];
+
+    afterEach(() => {
+      if (ORIGINAL_FRONTEND_URL === undefined) {
+        delete process.env['FRONTEND_URL'];
+      } else {
+        process.env['FRONTEND_URL'] = ORIGINAL_FRONTEND_URL;
+      }
+    });
+
+    it('usa FRONTEND_URL do ambiente quando definida', async () => {
+      process.env['FRONTEND_URL'] = 'https://orbien-web.vercel.app';
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        is_active: true,
+        person: { full_name: 'Ana Silva' },
+      });
+
+      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringContaining('https://orbien-web.vercel.app/redefinir-senha?token='),
+        'Ana',
+      );
+    });
+
+    it('cai para localhost:3001 quando FRONTEND_URL não está definida', async () => {
+      delete process.env['FRONTEND_URL'];
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        is_active: true,
+        person: { full_name: 'Ana Silva' },
+      });
+
+      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringContaining('http://localhost:3001/redefinir-senha?token='),
+        'Ana',
+      );
+    });
+  });
+
   it('usa string vazia como primeiro nome quando a pessoa não tem full_name', async () => {
     const { service, prisma, mail } = serviceWith({});
     (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
