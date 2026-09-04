@@ -129,8 +129,8 @@ beforeEach(() => {
   getMock.mockReset();
   respondeCom([grupo()], 1);
   fetchGroupTypesMock.mockReset().mockResolvedValue([
-    { id: "t-1", name: "Célula", color: "#123456" },
-    { id: "t-2", name: "Discipulado", color: null },
+    { id: "t-1", name: "Célula", color: "#123456", is_active: true },
+    { id: "t-2", name: "Discipulado", color: null, is_active: true },
   ]);
   comPapeis(["tenant_admin"]);
 });
