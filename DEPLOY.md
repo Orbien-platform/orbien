@@ -180,9 +180,14 @@ O script é idempotente e faz, nesta ordem:
    `platform_support` **sem tenant no contexto** passa a enxergar todos os
    tenants, e `waitlist_subscribers` ganha RLS (nunca teve). Precisa vir depois
    do passo 4, que é quem decide quais `tenant_isolation` sobrevivem;
-6. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
+6. aplica `005_rls_audit_platform.sql`, que dá ao plano de plataforma acesso
+   ao próprio rastro em `audit_logs` — e só a ele: o ramo se limita a
+   `support_access` e `platform_access`, porque cada linha de `audit_logs`
+   carrega `before`/`after` com o dado da igreja. Depende de
+   `app_platform_access()`, criada em `004`;
+7. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
    (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
-7. verifica tabelas, login do role, herança e cinco invariantes de RLS,
+8. verifica tabelas, login do role, herança e cinco invariantes de RLS,
    falhando alto se algo faltar: nenhuma tabela pode ter `tenant_isolation`
    sombreando `tenant_congregation_isolation`, nenhuma policy de congregação
    pode ter `USING` diferente de `WITH CHECK`, nenhuma pode citar
@@ -245,7 +250,7 @@ npm run db:migrate -- nome_da_migration
 npm run db:migrate:status
 ```
 
-Os scripts de RLS (`001`, `002`, `003`, `004`) **não** entram nesse comando:
+Os scripts de RLS (`001` a `005`) **não** entram nesse comando:
 estão fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
 bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
 passo 7 falha alto se algum invariante quebrar.
@@ -255,14 +260,18 @@ passo 7 falha alto se algum invariante quebrar.
 > sem `id`, coluna NOT NULL sem DEFAULT, e falhava com 23502 desde sempre.
 > Sessão de suporte agora deixa rastro.
 >
-> **Pendente no banco de produção:** o `004_rls_platform_plane.sql`. Enquanto
-> ele não rodar, as rotas de plataforma (`POST /platform/tenants`,
-> `GET /admin/waitlist`) respondem vazio ou falham com 42501 — o interceptor já
-> deixa de fixar tenant nelas, mas não há policy que responda por isso.
+> **Pendente no banco de produção:** o `004_rls_platform_plane.sql` e o
+> `005_rls_audit_platform.sql`. Enquanto o `004` não rodar, as rotas de
+> plataforma (`POST /platform/tenants`, `GET /admin/waitlist`) respondem vazio
+> ou falham com 42501 — o interceptor já deixa de fixar tenant nelas, mas não
+> há policy que responda por isso. Enquanto o `005` não rodar, a tela de
+> Auditoria do console lista zero linhas **sem erro nenhum**; o estado vazio
+> dela diz isso, e o passo 8 do bootstrap falha alto se o ramo não existir.
 >
-> Aplique rodando o `bootstrap-db.sh` inteiro, **não** colando o `004` no SQL
-> Editor: ele faz `ALTER POLICY tenant_isolation`, e é o passo 4 do script que
-> decide em quais tabelas essa policy sobrevive. Aplicar script de RLS fora de
+> Aplique rodando o `bootstrap-db.sh` inteiro, **não** colando os scripts no
+> SQL Editor: o `004` faz `ALTER POLICY tenant_isolation`, e é o passo 4 do
+> script que decide em quais tabelas essa policy sobrevive; o `005` depende de
+> `app_platform_access()`, que o `004` cria. Aplicar script de RLS fora de
 > ordem é o defeito que a pendência nº 1 documentou.
 
 ---

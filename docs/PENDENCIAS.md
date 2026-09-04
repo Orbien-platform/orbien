@@ -701,6 +701,20 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
 
 ### Continua em aberto, por desenho
 
+- ~~**Ninguém olha o rastro.**~~ Fechado na Fase 5. `audit_logs` recebia
+  `support_access` e `platform_access` desde a Fase 2 e não havia como ler:
+  a policy `tenant_read` de 001 dizia `tenant_id = app_current_tenant()`, e
+  rota de plataforma roda sem tenant no contexto. `005_rls_audit_platform.sql`
+  abriu o ramo, `GET /platform/audit` expõe, e o console tem a tela
+  **Auditoria**, somente leitura — auditoria que a própria plataforma edita não
+  é auditoria.
+
+  O ramo de 005 é mais estreito que os seis de 004, e de propósito: só
+  `support_access` e `platform_access`. Cada linha de `audit_logs` carrega
+  `before`/`after` com o dado da igreja no momento da mudança; abrir a tabela
+  inteira daria ao suporte, sem impersonar ninguém e sem deixar rastro de
+  sessão, o histórico de alterações de todas as igrejas. A listagem também não
+  devolve `before`/`after`, pelo mesmo motivo.
 - ~~**Não existe UI.**~~ Fechado na Fase 3, em 2026-09-03. A sessão é aberta
   pela lista de tenants do `apps/admin` ("Entrar no web como suporte"), que
   chama `POST /auth/impersonate` e entrega o token ao `apps/web` em

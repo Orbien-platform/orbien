@@ -16,8 +16,10 @@ import { PlatformRoute } from '../common/decorators/platform-route.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { ProvisionTenantService, ProvisionedTenant } from './provision-tenant.service';
 import { ListTenantsService, TenantListPage } from './list-tenants.service';
+import { ListAuditService, AuditListPage } from './list-audit.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
+import { ListAuditQueryDto } from './dto/list-audit-query.dto';
 
 /**
  * Plano de plataforma: opera acima dos tenants, não dentro de um.
@@ -38,11 +40,25 @@ export class PlatformController {
   constructor(
     private readonly provisionTenant: ProvisionTenantService,
     private readonly listTenants: ListTenantsService,
+    private readonly listAudit: ListAuditService,
   ) {}
 
   @Get('tenants')
   list(@Query() query: ListTenantsQueryDto): Promise<TenantListPage> {
     return this.listTenants.list(query);
+  }
+
+  /**
+   * O rastro que a própria plataforma deixa: `support_access` (sessão de
+   * suporte dentro de um tenant) e `platform_access` (rota acima deles).
+   *
+   * Só enxerga essas duas ações, e quem decide isso é a policy de
+   * `005_rls_audit_platform.sql`, não o filtro do serviço. O resto do
+   * `audit_logs` de uma igreja continua fora do alcance da plataforma.
+   */
+  @Get('audit')
+  audit(@Query() query: ListAuditQueryDto): Promise<AuditListPage> {
+    return this.listAudit.list(query);
   }
 
   @Post('tenants')

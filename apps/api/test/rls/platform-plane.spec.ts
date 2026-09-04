@@ -11,7 +11,8 @@
  *   fecha — o mesmo usuário com tenant fixado (o token de impersonate) vê um
  *           só; e tenant_admin sem contexto não vê nada, papel não é lugar.
  *
- * Ver prisma/migrations/004_rls_platform_plane.sql.
+ * Ver prisma/migrations/004_rls_platform_plane.sql e
+ * prisma/migrations/005_rls_audit_platform.sql.
  */
 
 import { prisma, prismaAdmin, runAsPlatform, runAsUser } from '../helpers/rls';
@@ -101,6 +102,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const tenants = { tenant_id: { in: [tenantAId, tenantBId] } };
+  // Antes do tenant, e explicitamente: `audit_logs.actor_user_id` é
+  // `onDelete: Restrict`, então deixar o cascade do tenant resolver depende da
+  // ordem interna dele para não bater na restrição.
+  await prismaAdmin.auditLog.deleteMany({ where: tenants });
   await prismaAdmin.roleAssignment.deleteMany({ where: tenants });
   await prismaAdmin.waitlistSubscriber.deleteMany({
     where: { email: { startsWith: `plat-lead-${ts}` } },
@@ -252,5 +257,109 @@ describe('4. waitlist_subscribers — tabela de plataforma, sem tenant', () => {
     });
 
     expect(created.id).toBeTruthy();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+describe('5. audit_logs — o ramo de plataforma é estreito', () => {
+  // As seis policies de 004 abrem a tabela inteira para o plano de plataforma.
+  // `audit_logs` não: cada linha carrega `before`/`after` com o dado da igreja
+  // no momento da mudança. O ramo de 005 se limita ao que a própria plataforma
+  // gerou — o suporte vê o que o suporte fez, e nada além.
+  let idSuporteA: string;
+  let idPlataformaB: string;
+  let idComumA: string;
+
+  beforeAll(async () => {
+    const [suporteA, plataformaB, comumA] = await Promise.all([
+      prismaAdmin.auditLog.create({
+        data: {
+          tenant_id: tenantAId,
+          congregation_id: congregationAId,
+          actor_user_id: supportUserId,
+          entity: 'persons',
+          action: 'support_access',
+        },
+      }),
+      prismaAdmin.auditLog.create({
+        data: {
+          tenant_id: tenantBId,
+          actor_user_id: supportUserId,
+          entity: 'platform',
+          action: 'platform_access',
+        },
+      }),
+      prismaAdmin.auditLog.create({
+        data: {
+          tenant_id: tenantAId,
+          congregation_id: congregationAId,
+          actor_user_id: adminUserId,
+          entity: 'persons',
+          action: 'person.update',
+        },
+      }),
+    ]);
+    idSuporteA = suporteA.id;
+    idPlataformaB = plataformaB.id;
+    idComumA = comumA.id;
+  }, 30_000);
+
+  it('abre: platform_support sem contexto lê as duas ações da plataforma, nos dois tenants', async () => {
+    const ids = await runAsPlatform(supportUserId, async (tx) =>
+      (
+        await tx.auditLog.findMany({
+          where: { id: { in: [idSuporteA, idPlataformaB, idComumA] } },
+          select: { id: true },
+        })
+      ).map((r) => r.id),
+    );
+
+    expect(ids).toContain(idSuporteA);
+    expect(ids).toContain(idPlataformaB);
+  });
+
+  it('fecha: a mesma consulta não devolve ação comum de igreja', async () => {
+    // É o ponto inteiro de 005 ser mais estreito que 004. Se este teste
+    // passar a falhar, o histórico de alterações de todas as igrejas ficou
+    // legível para o suporte sem sessão e sem rastro.
+    const ids = await runAsPlatform(supportUserId, async (tx) =>
+      (
+        await tx.auditLog.findMany({
+          where: { id: { in: [idSuporteA, idComumA] } },
+          select: { id: true },
+        })
+      ).map((r) => r.id),
+    );
+
+    expect(ids).not.toContain(idComumA);
+  });
+
+  it('fecha: com tenant fixado, o ramo de plataforma some — o token de impersonate não lê tenant alheio', async () => {
+    const ids = await runAsUser(tenantAId, congregationAId, supportUserId, async (tx) =>
+      (
+        await tx.auditLog.findMany({
+          where: { id: { in: [idSuporteA, idPlataformaB] } },
+          select: { id: true },
+        })
+      ).map((r) => r.id),
+    );
+
+    expect(ids).toContain(idSuporteA);
+    expect(ids).not.toContain(idPlataformaB);
+  });
+
+  it('a igreja continua lendo o próprio log inteiro, ação comum incluída', async () => {
+    const ids = await runAsUser(tenantAId, congregationAId, adminUserId, async (tx) =>
+      (
+        await tx.auditLog.findMany({
+          where: { id: { in: [idSuporteA, idComumA, idPlataformaB] } },
+          select: { id: true },
+        })
+      ).map((r) => r.id),
+    );
+
+    expect(ids).toContain(idComumA);
+    expect(ids).toContain(idSuporteA);
+    expect(ids).not.toContain(idPlataformaB);
   });
 });

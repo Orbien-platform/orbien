@@ -112,6 +112,11 @@ if [ -f prisma/migrations/004_rls_platform_plane.sql ]; then
   run_sql_file prisma/migrations/004_rls_platform_plane.sql
 fi
 
+# 005 depende de app_platform_access(), criada em 004 — a ordem importa.
+if [ -f prisma/migrations/005_rls_audit_platform.sql ]; then
+  run_sql_file prisma/migrations/005_rls_audit_platform.sql
+fi
+
 echo ""
 echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
 # orbien_app é criado NOLOGIN pelas migrations; aqui ele ganha senha e os
@@ -227,6 +232,20 @@ BEGIN
   RAISE NOTICE 'policies com o ramo de plataforma: %', n;
   IF n <> 6 THEN
     RAISE EXCEPTION 'esperava 6 policies com app_platform_access simetrico, encontrei % — 004_rls_platform_plane.sql rodou?', n;
+  END IF;
+
+  -- 005: sem o ramo, a tela de auditoria do console lista zero linhas e nao
+  -- diz por que. Mesmo modo de falha silenciosa que a checagem acima cobre
+  -- para 004. O ramo aqui e estreito de proposito (so support_access e
+  -- platform_access), entao a checagem confere as duas coisas.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+     WHERE tablename = 'audit_logs'
+       AND policyname = 'tenant_read'
+       AND qual LIKE '%app_platform_access%'
+       AND qual LIKE '%support_access%'
+  ) THEN
+    RAISE EXCEPTION 'audit_logs sem o ramo de plataforma — 005_rls_audit_platform.sql rodou?';
   END IF;
 
   IF NOT EXISTS (
