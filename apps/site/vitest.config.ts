@@ -34,6 +34,11 @@ export default defineConfig({
         // próprio React.
         "src/components/**": { statements: 99, branches: 98, functions: 100, lines: 100 },
         "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        // Fase 12 — rotas. As 18 são Server Components sem `async`, então
+        // entram como função. `icon.tsx` e `apple-icon.tsx` devolvem
+        // `ImageResponse`: a asserção é sobre tipo e tamanho, não sobre
+        // pixel.
+        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

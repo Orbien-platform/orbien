@@ -26,10 +26,20 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☑ |
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
-| 10 | web — rotas | `app/` | 14 | ☐ |
-| 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
-| 12 | site — rotas | `app/` | 18 | ☐ |
+| 10 | web — rotas | `app/` | 19 | ☑ |
+| 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
+| 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
+| 14 | admin — console da plataforma | `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `proxy.ts` | 25 | ☐ |
+
+A Fase 14 não estava no plano original: o `apps/admin` nasceu depois dele, e
+a Fase 13 já cobrava `npm run test:cov -w orbien-admin` em 100% sem que
+existisse fase para chegar lá. Ela fecha esse buraco e é independente das
+demais — pode rodar em paralelo com 10 a 12.
+
+O escopo da Fase 10 subiu de 14 para 19 arquivos: a sessão em cookie
+`HttpOnly` acrescentou os três Route Handlers de `/api/session` e o proxy
+`/api-proxy/[...path]`, que não existiam quando o plano foi escrito.
 
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
 `test/rls/isolation.spec.ts`), **2 testes e2e no web** (escalas e templates),
@@ -615,6 +625,13 @@ comparar pixel.
 
 Decida aqui o destino do `playwright` órfão em `devDependencies`: vira o smoke
 da Fase 13, ou sai.
+
+**Decidido na execução da Fase 12: fica, e vira o smoke da Fase 13.** As 18
+rotas agora renderizam sob Vitest, o que pega conteúdo e composição — mas não
+pega o que só quebra no build do Next (fonte que não carrega, `ImageResponse`
+que falha no runtime real, âncora `#waitlist` que some do HTML gerado). Um
+smoke de Playwright contra `next start` é o portão que falta, e removê-lo
+agora só faria a Fase 13 reinstalar a mesma dependência.
 
 ---
 
