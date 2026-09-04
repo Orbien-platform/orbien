@@ -28,6 +28,16 @@ export default defineConfig({
         branches: 0,
         functions: 0,
         lines: 0,
+        // Fase 7
+        "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/hooks/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/contexts/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/proxy.ts": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        // Fase 8
+        "src/components/ui/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/components/layout/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/components/dashboard/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/components/providers/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         // Fase 9 — componentes de domínio do web. As frações abaixo de
         // 100% em `branches`/`statements` são guards defensivos do tipo
         // `if (!x) return` só alcançáveis chamando a função interna

@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JwtModule } from '@nestjs/jwt';
 import { ContentModule } from './content.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
@@ -10,7 +11,12 @@ import { SchedulerService } from './scheduler.service';
 describe('ContentModule', () => {
   it('compila e registra todos os providers', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule, StorageModule, ContentModule],
+      imports: [
+        JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
+        PrismaModule,
+        StorageModule,
+        ContentModule,
+      ],
     }).compile();
 
     expect(moduleRef.get(SegmentsService)).toBeInstanceOf(SegmentsService);

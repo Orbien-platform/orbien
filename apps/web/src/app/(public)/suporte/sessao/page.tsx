@@ -1,27 +1,33 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { saveTokens, decodeJwtPayload } from "@/lib/auth";
+import axios from "axios";
+import { decodeJwtPayload } from "@/lib/auth";
 import { useHydrated } from "@/hooks/useHydrated";
 
 /**
  * Ponto de entrada da sessão de suporte, aberto pelo `apps/admin`.
  *
- * O console e este app vivem em subdomínios diferentes — `admin.` e o do
- * tenant — e `localStorage` é por origem. Não existe caminho por baixo: o
- * token vem no fragmento da URL.
+ * O console e este app vivem em subdomínios diferentes, e cookie de um não é
+ * cookie do outro. Não existe caminho por baixo: o token vem no fragmento da
+ * URL.
  *
  * Fragmento, e não query string, porque fragmento não é enviado ao servidor:
  * fica fora do log de acesso da Vercel, do `Referer` e de qualquer proxy no
  * caminho. Depois de lido ele é apagado da barra de endereço com
  * `replaceState`, para não sobrar num screenshot nem no histórico.
  *
- * O token não traz refresh token (`POST /auth/impersonate` não emite um): a
- * sessão vale os 15 minutos do access token e não se renova. Quando expira, o
- * interceptor do Axios não acha refresh e manda para `/login` — que é o
- * comportamento certo, porque renovar sozinha uma sessão que enxerga dado de
- * igreja alheia é exatamente o que não se quer.
+ * O token só passa por esta página: daqui vai para `POST /api/session/suporte`,
+ * que o guarda em cookie `HttpOnly` e o tira do alcance do JavaScript. A
+ * janela em que ele é legível por script é o intervalo entre ler o
+ * `location.hash` e essa chamada voltar.
+ *
+ * Não há refresh token (`POST /auth/impersonate` não emite): a sessão vale os
+ * 15 minutos do access token e não se renova. Quando expira, `/api/session`
+ * responde 401, o middleware manda para `/login`, e é o comportamento certo —
+ * renovar sozinha uma sessão que enxerga dado de igreja alheia é exatamente o
+ * que não se quer.
  */
 
 interface Handoff {
@@ -46,6 +52,7 @@ function readHandoff(): { handoff: Handoff } | { error: string } {
 
 export default function SessaoSuportePage() {
   const isHydrated = useHydrated();
+  const [erroDeTroca, setErroDeTroca] = useState<string | null>(null);
 
   const result = useMemo(
     () => (isHydrated ? readHandoff() : null),
@@ -65,24 +72,22 @@ export default function SessaoSuportePage() {
     if ("error" in result) return;
     const { token, tenantName } = result.handoff;
 
-    // O e-mail exibido é o do operador de suporte, não o de quem ele está
-    // atendendo — quem está usando o app precisa saber quem está logado.
-    saveTokens(token, "", "suporte@orbien");
-    // Escrito sempre, inclusive removendo quando não vem nome. Só gravar
-    // quando `tenantName` existe deixava o marcador de uma sessão de suporte
-    // ANTERIOR sobreviver, e a faixa anunciava a igreja errada — justamente a
-    // informação que ela existe para garantir.
-    if (tenantName) {
-      localStorage.setItem("support_session_tenant", tenantName);
-    } else {
-      localStorage.removeItem("support_session_tenant");
-    }
-    localStorage.setItem("support_session", "1");
-
-    window.location.replace("/dashboard");
+    axios
+      .post("/api/session/suporte", {
+        access_token: token,
+        ...(tenantName ? { tenant_name: tenantName } : {}),
+      })
+      .then(() => {
+        window.location.replace("/dashboard");
+      })
+      .catch(() => {
+        setErroDeTroca("Não foi possível abrir a sessão de suporte. Tente pelo console.");
+      });
   }, [result]);
 
-  if (result && "error" in result) {
+  const erro = erroDeTroca ?? (result && "error" in result ? result.error : null);
+
+  if (erro) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--surface-parchment)] px-4">
         <div className="w-full max-w-[420px] rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-8 text-center shadow-[var(--shadow-md)]">
@@ -90,7 +95,7 @@ export default function SessaoSuportePage() {
             Sessão de suporte não iniciada
           </h1>
           <p className="mt-2 text-sm text-stone" role="alert">
-            {result.error}
+            {erro}
           </p>
         </div>
       </div>

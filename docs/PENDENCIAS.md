@@ -709,7 +709,11 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   não havia caminho por baixo. Fragmento e não query porque fragmento não
   chega ao servidor: fica fora do log da Vercel, do `Referer` e de qualquer
   proxy. Enquanto a sessão vale, o `web` mostra a faixa do
-  `SupportSessionBanner` — o par visível do `AuditInterceptor`.
+  `SupportSessionBanner` — o par visível do `AuditInterceptor` —, agora com
+  botão de encerrar. Fechado de vez na Fase 4, junto da troca de `localStorage`
+  por cookie `HttpOnly` (ver abaixo): o token do fragmento é postado em `POST
+  /api/session/suporte` e vira cookie ali mesmo, então a janela em que ele é
+  legível por script é o intervalo entre o `location.hash` e essa chamada.
 - **A sessão pode escrever**, não só ler. Decisão adiada.
 - **Sem limite de tentativa no login da plataforma.** `POST
   /auth/platform/login` (Fase 3) não tem rate limit, e nem `POST /auth/login`
@@ -722,8 +726,8 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
 - **TTL** do token de impersonação é o padrão de access token — 15 minutos.
   Continua sendo o padrão, mas agora tem consequência visível: `impersonate`
   não emite refresh token, então a sessão de suporte **não se renova**. Aos 15
-  minutos o interceptor do Axios não acha refresh e devolve o suporte para
-  `/login`. É o comportamento desejado; renovar sozinha uma sessão que enxerga
+  minutos `GET /api/session` responde 401, o middleware barra a navegação e o
+  suporte volta para `/login`. É o comportamento desejado; renovar sozinha uma sessão que enxerga
   dado de igreja alheia é o que não se quer. O que falta é aviso antes de
   expirar, hoje inexistente.
 - **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
@@ -732,6 +736,90 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   exige impersonar um por vez. O que mudou na Fase 2 é o outro caminho: sem
   impersonar ninguém, `platform_support` enxerga os N tenants nas tabelas de
   plataforma. Ver a pendência nº 7.
+
+---
+
+## Token do web em `localStorage` — resolvido na Fase 4
+
+Levantado ao fechar a ponte admin → web, em 2026-09-03. Não era achado da
+Fase 3: é anterior a ela e valia para o app inteiro, não só para a sessão de
+suporte.
+
+### O que estava errado
+
+`src/lib/auth.ts` guardava access e refresh token em `localStorage`. Qualquer
+script rodando na origem — um XSS, uma dependência comprometida — lia a
+credencial inteira e podia usá-la de qualquer lugar, pelos 7 dias do refresh
+token. O cookie `auth_session=1` que existia ao lado não era credencial: era
+só um flag para o middleware, que não enxerga `localStorage`.
+
+Discutiu-se trocar o **fragmento** da URL do handoff por um código de troca de
+uso único. Não foi feito, e a razão está registrada aqui para não voltar como
+pergunta: fragmento já mantém o token fora do `Referer`, do log da Vercel e do
+histórico (`replaceState` apaga a entrada). O que o código de troca fecharia a
+mais — a janela de milissegundos em `location.hash` e o link que continua
+válido se vazar — não se sustenta contra quem lê o `hash`, porque esse mesmo
+alguém lê o storage em seguida; e o link só existe na mão do operador de
+suporte, que pode emitir outro quando quiser. O buraco real era o storage.
+
+### O que passou a valer
+
+A sessão do web vive em três cookies `HttpOnly`, `SameSite=Lax`:
+`orbien_at` (access, TTL do token), `orbien_rt` (refresh, 7 dias) e
+`orbien_id` (e-mail e, em sessão de suporte, o nome da igreja — dado de
+exibição, não credencial).
+
+- `/api-proxy` deixou de ser `rewrite` do `next.config` e virou Route Handler:
+  é ele que lê o cookie e monta o `Authorization`. É o único ponto do web que
+  vê o access token.
+- `/api/session` cria (POST), lê (GET) e encerra (DELETE) a sessão. O corpo de
+  erro do login sobe intacto, porque a tela distingue `TENANT_NOT_FOUND` de
+  401 de 5xx pelo que a API respondeu.
+- `/api/session/refresh` rotaciona. Fica **fora** do proxy de propósito: a API
+  revoga a família inteira de refresh tokens ao detectar reuso, então duas
+  rotações concorrentes derrubam a sessão. Quem serializa continua sendo a
+  fila do interceptor do Axios — que agora não manipula token nenhum, só sabe
+  *quando* renovar.
+- O middleware lê os cookies da sessão direto, e o flag `auth_session` sumiu
+  junto com o risco de ele discordar da verdade.
+
+### O que quebrou junto, e como foi fechado
+
+Trocar o `rewrite` por Route Handler pôs toda chamada de dado dentro de uma
+função da Vercel — e função da Vercel tem teto de **4,5 MB de corpo de
+requisição**. O upload de mídia aceita 50 MB dos dois lados
+(`useFileUpload.ts` e `posts.controller.ts`). O `rewrite` resolvia na camada
+de roteamento e o corpo ia direto para o Render, sem passar por função; o
+handler não. Achado pela revisão, não pelos testes: `next dev` não impõe
+limite nenhum, então o defeito só apareceria depois do deploy.
+
+O upload saiu do proxy. Vai direto do browser para a API, em dois passos:
+
+1. `POST /content/posts/:id/upload-ticket`, pelo proxy — corpo minúsculo, o
+   cookie faz o trabalho. Exige `WRITE_ROLES` e confirma que o post existe,
+   para o 404 não chegar depois de 50 MB de rede.
+2. O arquivo sobe direto para a API com o **ticket** no `Authorization`.
+
+O ticket é o único token que o JavaScript da página chega a ver, então foi
+desenhado para não servir para mais nada: 5 minutos, `roles: []`, preso ao
+post em `upload_target`, e recusado em qualquer rota que não tenha
+`@UploadTicketRoute()`. A recusa mora no `JwtAuthGuard`, e não no
+`RolesGuard`, porque `RolesGuard` libera cedo toda rota sem `@Roles` — um
+ticket vazado alcançaria justamente essas. O ramo do ticket no `RolesGuard`
+vem **antes** do de `support_session`: ticket emitido dentro de uma sessão de
+suporte continua preso ao seu alvo, senão deixaria de ser um ticket.
+
+O preço é o upload virar a única chamada cross-origin do `web`: o domínio dele
+precisa estar em `ALLOWED_ORIGINS` no Render, e `NEXT_PUBLIC_API_UPLOAD_URL`
+expõe a URL da API no bundle — que nunca foi segredo, só não era usada de lá.
+
+Cookie `HttpOnly` não fecha o XSS. Troca "roubar a credencial e usar de
+qualquer lugar por 7 dias" por "agir de dentro da aba enquanto ela existe",
+que é bem menos. O que continua aberto é `SameSite=Lax` como única defesa de
+CSRF no `/api-proxy`: Lax não envia cookie em requisição cross-site que não
+seja navegação de topo, e navegação de topo só faz GET, cuja resposta o
+atacante não lê por falta de CORS. É suficiente hoje; deixa de ser se alguma
+rota de escrita passar a aceitar GET.
 
 ---
 

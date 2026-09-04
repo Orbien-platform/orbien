@@ -12,11 +12,14 @@ import { Reflector } from '@nestjs/core';
 import { RolesGuard } from './roles.guard';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
-function contextWith(user: Partial<JwtPayload> | undefined): ExecutionContext {
+function contextWith(
+  user: Partial<JwtPayload> | undefined,
+  params: Record<string, string> = {},
+): ExecutionContext {
   return {
     getHandler: () => function handler() {},
     getClass: () => class Controller {},
-    switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    switchToHttp: () => ({ getRequest: () => ({ user, params }) }),
   } as unknown as ExecutionContext;
 }
 
@@ -83,6 +86,44 @@ describe('RolesGuard', () => {
       const guard = guardRequiring(['tenant_admin']);
       const adulterado = { roles: [], support_session: '1' } as unknown as Partial<JwtPayload>;
       expect(guard.canActivate(contextWith(adulterado))).toBe(false);
+    });
+  });
+
+  describe('ticket de upload', () => {
+    // O ticket é o único token que o JavaScript da página chega a ver, e por
+    // isso ele não carrega papel: quem autorizou foi a rota que o emitiu. O
+    // que prende o ticket é o alvo.
+    const ticket: Partial<JwtPayload> = {
+      sub: 'user-1',
+      roles: [],
+      scope: 'upload',
+      upload_target: 'post-1',
+    };
+
+    it('libera quando o alvo do ticket é o recurso da rota', () => {
+      const guard = guardRequiring(['tenant_admin']);
+      expect(guard.canActivate(contextWith(ticket, { id: 'post-1' }))).toBe(true);
+    });
+
+    it('barra o ticket do post A usado no post B', () => {
+      const guard = guardRequiring(['tenant_admin']);
+      expect(guard.canActivate(contextWith(ticket, { id: 'post-2' }))).toBe(false);
+    });
+
+    it('barra ticket sem alvo', () => {
+      const guard = guardRequiring(['tenant_admin']);
+      const semAlvo = { roles: [], scope: 'upload' } as Partial<JwtPayload>;
+      expect(guard.canActivate(contextWith(semAlvo, { id: 'post-1' }))).toBe(false);
+    });
+
+    it('o alvo vale mesmo em sessão de suporte — o ramo do ticket vem antes', () => {
+      // Ticket emitido dentro de uma sessão de suporte continua preso ao seu
+      // post. Se o ramo de `support_session` viesse primeiro, ele liberaria
+      // qualquer alvo, e o ticket deixaria de ser um ticket.
+      const guard = guardRequiring(['tenant_admin']);
+      const ticketDeSuporte = { ...ticket, support_session: true };
+      expect(guard.canActivate(contextWith(ticketDeSuporte, { id: 'post-2' }))).toBe(false);
+      expect(guard.canActivate(contextWith(ticketDeSuporte, { id: 'post-1' }))).toBe(true);
     });
   });
 });

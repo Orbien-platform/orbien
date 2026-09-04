@@ -234,10 +234,19 @@ jobs:
       # As credenciais saem do seed do repositório — não são segredo. O usuário
       # precisa ser o tenant_admin: platform_support leva 403 na maioria das
       # rotas.
+      #
+      # E2E_API_URL vai direto na API, não em /api-proxy: as fixtures (e
+      # suporte.spec.ts) montam e desmontam dados com fetch() cru, fora do
+      # browser, e anexam o Bearer na mão. Desde que o proxy virou Route
+      # Handler (sessão em cookie HttpOnly), ele ignora Authorization de
+      # entrada e só repassa o token que lê do cookie — que essas chamadas não
+      # têm. Passar por ali agora rende 401 em qualquer GET/POST de apoio; só
+      # a `page` (fixture do Playwright) precisa do proxy, porque é ela quem
+      # de fato navega pelo browser com o cookie semeado.
       - name: Suíte de e2e
         env:
           E2E_BASE_URL: http://localhost:3001
-          E2E_API_URL: http://localhost:3001/api-proxy
+          E2E_API_URL: http://localhost:3000/api
           E2E_EMAIL: fvargaspf@gmail.com
           E2E_PASSWORD: A3dodfemf
           E2E_TENANT: doca-church

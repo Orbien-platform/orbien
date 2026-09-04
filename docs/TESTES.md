@@ -17,14 +17,14 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | # | Fase | Escopo | Arquivos | Feito |
 |---|---|---|---|---|
 | 0 | Infra e instrumentação | jest projects, vitest, gate no CI | — | ☑ |
-| 1 | API — financeiro | `financial/`, `common/` | 37 | ☐ |
+| 1 | API — financeiro | `financial/`, `common/` | 37 | ☑ |
 | 2 | API — auth e raiz | `auth/`, `prisma/`, `app.*` | 18 | ☑ |
 | 3 | API — pessoas | `persons/`, `visitor/`, `waitlist/` | 34 | ☑ |
 | 4 | API — celebrações | `celebrations/` | 46 | ☑ |
 | 5 | API — voluntários e grupos | `volunteers/`, `small-groups/` | 36 | ☑ |
 | 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☑ |
-| 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☐ |
-| 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☐ |
+| 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☑ |
+| 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
@@ -495,7 +495,25 @@ parse e expiração de token. **`api.ts` é a mais importante** — o intercepto
 usuário quando falha. `useFileUpload.ts` e `AuthContext.tsx` pedem
 `renderHook`.
 
-### Fase 8 — web: componentes base
+> **Executado em 2026-09-04:** os 10 arquivos do escopo (`lib/api.ts`,
+> `lib/auth.ts`, `lib/groupTypes.ts`, `lib/ministryTree.ts`, `lib/phoneMask.ts`,
+> `lib/utils.ts`, `hooks/useAuth.ts`, `hooks/useFileUpload.ts`,
+> `hooks/useHydrated.ts`, `contexts/AuthContext.tsx`, `proxy.ts` — 11 no total,
+> contando os 3 arquivos de `hooks/` que já existiam além dos 2 previstos)
+> fecharam em 100% nas quatro métricas — thresholds por caminho em
+> `vitest.config.ts`. `useHydrated.ts` precisou de `renderToString` (não só
+> `renderHook`) para cobrir o branch de `getServerSnapshot`.
+>
+> **Achado durante a escrita dos testes, corrigido em seguida:** em
+> `lib/api.ts`, o branch "401 sem refresh token" retornava antes do
+> `try/finally` que zera `isRefreshing`, então o módulo ficava com
+> `isRefreshing=true` permanentemente depois desse caminho — qualquer 401
+> seguinte cairia para sempre na fila de retry em vez de tentar de novo, o
+> que travaria a sessão do usuário até um reload da página. Fix: o check de
+> `refreshToken` entrou para dentro do `try`, então qualquer retorno desse
+> branch passa pelo `finally`. `lib/api.test.ts` ganhou um teste de
+> regressão que prova que um 401 seguinte volta a acionar o refresh
+> normalmente.
 
 **Escopo:** `src/components/ui/` (16), `layout/` (2), `dashboard/` (2),
 `providers/theme-provider.tsx`.
@@ -505,6 +523,24 @@ primário (com `bg-navy` na className); para ícone ou link usa-se `<button>`
 puro, porque o `variant` padrão pinta fundo escuro que a className não remove.
 **Escreva o teste que fixa esse comportamento** — é exatamente o tipo de coisa
 que uma atualização do shadcn quebra em silêncio.
+
+> **Executado em 2026-09-04:** os 21 arquivos do escopo fecharam em 100% nas
+> quatro métricas — ver as entradas por caminho em `vitest.config.ts`.
+> `layout/` tinha 3 arquivos, não 2 como a tabela contava (`SupportSessionBanner.tsx`
+> não estava na contagem original); os três foram cobertos. Em
+> `StatusBadge.tsx` o teste do fallback expôs `LABELS[key] ?? classification`
+> como ramo morto — `key` só chega vazio para `"visitor"`, nunca para um valor
+> fora de `LABELS`, então `?? classification` nunca executava; removido para
+> fechar 100% de branch sem teste artificial. Componentes do `@base-ui/react`
+> (Modal, Sheet, DropdownMenu, Tooltip, Avatar) renderizam e respondem a
+> interação em jsdom via Testing Library; a única armadilha foi
+> `DropdownMenuLabel`, que exige estar dentro de `DropdownMenuGroup` — sem
+> isso o Base UI lança em runtime, mesmo sem uso desse padrão em código de
+> produção ainda. `npx turbo run build --filter=orbien-web` falha em
+> `/_not-found` (`TypeError: Cannot read properties of null (reading
+> 'useContext')`) — confirmado pré-existente em `main` antes desta fase
+> (mesmo erro com o working tree limpo), não investigado por não ser escopo
+> desta fase.
 
 ### Fase 9 — web: componentes de domínio
 
