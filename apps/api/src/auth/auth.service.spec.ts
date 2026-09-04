@@ -459,7 +459,7 @@ describe('AuthService.impersonate', () => {
 
     const result = await service.impersonate(requester, { target_tenant_id: 'target' });
 
-    expect(result).toEqual({ access_token: 'signed-token', expires_in: 900 });
+    expect(result).toEqual({ access_token: 'signed-token', expires_in: 300 });
     const [payload] = (jwtService.sign as jest.Mock).mock.calls[0];
     expect(payload).toMatchObject({
       sub: requester.sub,
@@ -468,6 +468,25 @@ describe('AuthService.impersonate', () => {
       support_session: true,
       impersonated_by: requester.sub,
     });
+  });
+
+  it('a sessão de suporte vale menos que um access token comum', async () => {
+    // 5 minutos contra 15. A sessão de suporte não se renova — `impersonate`
+    // não emite refresh token —, então o prazo é o único limite automático
+    // que existe: nada além dele fecha a aba esquecida.
+    const { service, prisma } = serviceWith({});
+    comAtor(prisma, true);
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
+      id: 'target',
+      tenantPlan: { plan: 'starter' },
+      congregations: [{ id: 'target-cong' }],
+    });
+    (jwtService.sign as jest.Mock).mockClear();
+
+    await service.impersonate(requester, { target_tenant_id: 'target' });
+
+    const [, options] = (jwtService.sign as jest.Mock).mock.calls[0];
+    expect(options).toEqual({ expiresIn: '5m' });
   });
 
   it('usa "starter" quando o tenant alvo não tem plano', async () => {

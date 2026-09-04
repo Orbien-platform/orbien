@@ -723,7 +723,15 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   registrado, não corrigido nesta fase: limitador que preste é
   compartilhado (Redis ou tabela), não um `Map` por processo — unidade de
   trabalho própria, e vale para as duas rotas de login de uma vez.
-- **TTL** do token de impersonação é o padrão de access token — 15 minutos.
+- ~~**TTL** do token de impersonação é o padrão de access token — 15 minutos.~~
+  Fechado na Fase 5: caiu para **5 minutos** (`SUPPORT_SESSION_TTL`), separado
+  do `ACCESS_TOKEN_TTL` das sessões comuns. Como a sessão não se renova, o
+  prazo é o único limite automático que existe — nada além dele fecha a aba
+  esquecida. Curto para trabalho é a intenção: reabrir é um clique no console,
+  e cada reabertura é uma linha nova em `audit_logs`. A faixa passou a contar
+  o tempo restante e a mudar de cor abaixo de um minuto, porque prazo curto
+  sem aviso troca uma armadilha por outra. Texto antigo abaixo, para
+  contexto:
   Continua sendo o padrão, mas agora tem consequência visível: `impersonate`
   não emite refresh token, então a sessão de suporte **não se renova**. Aos 15
   minutos `GET /api/session` responde 401, o middleware barra a navegação e o

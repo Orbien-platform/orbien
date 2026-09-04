@@ -107,6 +107,12 @@ export interface SessionUser {
   congregation_id: string;
   support_session: boolean;
   support_tenant_name: string | null;
+  /**
+   * `exp` do token, em segundos. A faixa de suporte conta o tempo que resta
+   * com isto: a sessão de suporte dura 5 minutos e não se renova, então
+   * chegar ao fim sem aviso é perder o que estava sendo feito.
+   */
+  expires_at: number;
 }
 
 /**
@@ -128,6 +134,7 @@ export function buildSessionUser(
     congregation_id: payload.congregation_id,
     support_session: payload.support_session === true,
     support_tenant_name: identity.tenantName ?? null,
+    expires_at: payload.exp,
   };
 }
 

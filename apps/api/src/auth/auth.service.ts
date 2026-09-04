@@ -22,6 +22,21 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 const ACCESS_TOKEN_TTL = '15m';
+
+/**
+ * A sessão de suporte vale menos que um access token comum, e de propósito.
+ *
+ * Ela enxerga o dado de uma igreja alheia satisfazendo qualquer `@Roles`, e
+ * não se renova — `impersonate` não emite refresh token. O prazo é, então, o
+ * único limite automático que existe: nada além dele fecha a sessão se o
+ * operador esquecer a aba aberta.
+ *
+ * Cinco minutos é curto para trabalho e é essa a intenção: reabrir é um
+ * clique no console, e cada reabertura é uma linha nova em `audit_logs`.
+ * Sessão longa é o que vira aba esquecida.
+ */
+const SUPPORT_SESSION_TTL = '5m';
+const SUPPORT_EXPIRES_IN = 300;
 const REFRESH_TOKEN_TTL_DAYS = 7;
 const EXPIRES_IN = 900;
 const RESET_TOKEN_TTL_MINUTES = 30;
@@ -351,8 +366,10 @@ export class AuthService {
       impersonated_by: requestingUser.sub,
     };
 
-    const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    return { access_token, expires_in: EXPIRES_IN };
+    const access_token = this.jwtService.sign(payload, {
+      expiresIn: SUPPORT_SESSION_TTL,
+    });
+    return { access_token, expires_in: SUPPORT_EXPIRES_IN };
   }
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
