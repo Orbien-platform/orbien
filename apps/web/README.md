@@ -21,8 +21,14 @@ Não rode `npm install` dentro desta pasta — o `package-lock.json` fica na rai
 ## Como a app fala com a API
 
 O browser **nunca** chama o backend direto. Ele bate em `/api-proxy/*`, e o
-rewrite definido em `next.config.ts` encaminha para `API_BACKEND_URL` no
-servidor. É isso que elimina o CORS.
+Route Handler em `src/app/api-proxy/[...path]/route.ts` encaminha para
+`API_BACKEND_URL` no servidor. É isso que elimina o CORS.
+
+Era um `rewrite` do `next.config.ts` até a sessão virar cookie `HttpOnly`.
+Rewrite repassa a requisição como ela chegou, e a requisição chega sem
+`Authorization`: o token está num cookie que o JavaScript da página não lê.
+Quem lê o cookie e monta o cabeçalho é o handler — o único ponto do web que
+enxerga o access token.
 
 | Variável | Valor | Escopo |
 |---|---|---|
@@ -110,9 +116,11 @@ falha dispara uma retentativa já instrumentada. Localmente, para forçar:
 npx playwright test --retries=1 --trace=on-first-retry
 ```
 
-A sessão é criada por HTTP contra a API e semeada direto no `localStorage` e no
-cookie `auth_session` (fixture `page` em `e2e/fixtures.ts`) — o formulário de
-login não é exercitado, o que mantém o teste focado na tela em análise.
+A sessão é criada por HTTP contra a API e semeada direto nos cookies
+`orbien_at`/`orbien_rt`/`orbien_id` (fixture `page` em `e2e/fixtures.ts`) — o
+formulário de login não é exercitado, o que mantém o teste focado na tela em
+análise. Como os cookies são `HttpOnly`, a semeadura é `addCookies` no contexto
+do Playwright, e não `page.evaluate` no storage.
 
 Funciona contra qualquer ambiente:
 

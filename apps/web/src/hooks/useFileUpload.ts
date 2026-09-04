@@ -2,7 +2,6 @@
 
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import api from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
 
 export const ACCEPTED_MIME_TYPES = [
   "application/pdf",
@@ -38,8 +37,9 @@ export function uploadPostMedia(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${api.defaults.baseURL}/content/posts/${postId}/upload`);
-    const token = getAccessToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    // Sem `Authorization`: a requisição vai para `/api-proxy`, na mesma
+    // origem, e o cookie `HttpOnly` da sessão viaja sozinho — o token é
+    // anexado no servidor. XHR de mesma origem já manda cookie por padrão.
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };

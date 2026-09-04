@@ -1,8 +1,9 @@
 /**
  * Entrada da sessão de suporte — `/suporte/sessao`.
  *
- * É a única rota do `web` que recebe credencial pela URL e a escreve no
- * storage, e ela existe porque o console (`apps/admin`) vive em outra origem.
+ * É a única rota do `web` que recebe credencial pela URL, e ela existe porque
+ * o console (`apps/admin`) vive em outra origem. O token que chega no
+ * fragmento é trocado por cookie `HttpOnly` em `POST /api/session/suporte`.
  * A revisão da Fase 3 achou dois defeitos exatamente aqui, e os dois eram
  * invisíveis para teste de unidade:
  *
@@ -127,10 +128,11 @@ test.describe("sessão de suporte no web", () => {
     // O ramo de erro também limpa o fragmento — era o segundo defeito.
     expect(page.url()).not.toContain("access_token");
 
-    // E não deixa sessão pela metade: sem token no storage, o proxy manda para
-    // o login em vez de abrir o dashboard.
-    const token = await page.evaluate(() => localStorage.getItem("access_token"));
-    expect(token).toBeNull();
+    // E não deixa sessão pela metade. O token vive em cookie `HttpOnly`, fora
+    // do alcance de `page.evaluate` — a verificação é no cookie jar do
+    // contexto, que é onde ele estaria.
+    const cookies = await page.context().cookies();
+    expect(cookies.map((c) => c.name)).not.toContain("orbien_at");
 
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login/);

@@ -215,7 +215,7 @@ curl -X POST https://orbien-web.vercel.app/api-proxy/auth/login \
   -d '{"email":"...","password":"...","tenant_slug":"doca-church"}'
 ```
 
-Isso exercita Vercel → rewrite `/api-proxy` → Render → Supabase de ponta a
+Isso exercita Vercel → handler `/api-proxy` → Render → Supabase de ponta a
 ponta. Valores medidos após a migração, para referência: `/api/health` em
 0,47s (já aquecido, 24s no cold start) e o login em 3,1s — os mesmos números
 de antes da migração.
@@ -314,10 +314,20 @@ esperado.
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
 
-O browser nunca chama a API direto: ele bate em `/api-proxy/*`, e o rewrite do
-`next.config.ts` encaminha para `API_BACKEND_URL`. Por isso `API_BACKEND_URL`
-**não** pode ter o prefixo `NEXT_PUBLIC_` — isso a exporia no bundle do cliente
-e ainda quebraria o esquema sem-CORS.
+O browser nunca chama a API direto: ele bate em `/api-proxy/*`, e o Route
+Handler em `src/app/api-proxy/[...path]/route.ts` encaminha para
+`API_BACKEND_URL`. Por isso `API_BACKEND_URL` **não** pode ter o prefixo
+`NEXT_PUBLIC_` — isso a exporia no bundle do cliente e ainda quebraria o
+esquema sem-CORS. Ela é lida em runtime, dentro da função; a Vercel injeta as
+variáveis do projeto no build e no runtime, então não há nada a marcar no
+painel.
+
+Era um `rewrite` do `next.config.ts` até a sessão do web virar cookie
+`HttpOnly`: rewrite repassa a requisição como ela chega, e ela chega sem
+`Authorization` — o token está num cookie que o JavaScript da página não lê.
+Consequência operacional: cada chamada de dado agora invoca uma função, onde
+o rewrite era resolvido na camada de roteamento. O `admin` continua com
+rewrite, porque a sessão dele não mudou.
 
 ### 2.4 Verificar
 
