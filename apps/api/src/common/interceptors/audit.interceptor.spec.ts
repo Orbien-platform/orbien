@@ -36,13 +36,17 @@ function run(opts: {
   user?: JwtPayload;
   isPlatformRoute?: boolean;
   body?: unknown;
+  auditInsertFails?: boolean;
+  withoutIpAndUserAgent?: boolean;
 }) {
   const writes: unknown[][] = [];
 
   const prisma = {
     $executeRaw: (_s: TemplateStringsArray, ...values: unknown[]) => {
       writes.push(values);
-      return Promise.resolve(1);
+      return opts.auditInsertFails
+        ? Promise.reject(new Error('audit_insert indisponível'))
+        : Promise.resolve(1);
     },
   } as unknown as PrismaService;
 
@@ -58,8 +62,8 @@ function run(opts: {
         user: opts.user,
         path: '/platform/tenants',
         method: 'POST',
-        ip: '10.0.0.1',
-        get: () => 'jest',
+        ip: opts.withoutIpAndUserAgent ? undefined : '10.0.0.1',
+        get: () => (opts.withoutIpAndUserAgent ? undefined : 'jest'),
       }),
       getResponse: () => ({ statusCode: 201 }),
     }),
@@ -79,6 +83,8 @@ function run(opts: {
 //   0 tenant · 1 congregation · 2 actor · 3 entity · 4 action · 5 after
 const ACTION = 4;
 const AFTER = 5;
+const IP = 6;
+const USER_AGENT = 7;
 
 describe('AuditInterceptor', () => {
   it('não registra requisição comum', async () => {
@@ -140,5 +146,27 @@ describe('AuditInterceptor', () => {
     await result;
 
     expect(writes[0]?.[ACTION]).toBe('support_access');
+  });
+
+  it('grava null quando a requisição não tem IP nem User-Agent', async () => {
+    const { writes, result } = run({ user: suporte, withoutIpAndUserAgent: true });
+    await result;
+
+    expect(writes[0]?.[IP]).toBeNull();
+    expect(writes[0]?.[USER_AGENT]).toBeNull();
+  });
+
+  it('falha ao gravar a auditoria não derruba a requisição — best-effort', async () => {
+    // auditoria que derruba requisição trocaria observabilidade por
+    // indisponibilidade (ver comentário do interceptor). O `.catch()` loga o
+    // erro e nada mais — a resposta ao cliente segue normalmente.
+    const { result } = run({ user: suporte, auditInsertFails: true });
+
+    await expect(result).resolves.toBe('resultado');
+
+    // O reject de `$executeRaw` é tratado dentro do `tap`, de forma
+    // assíncrona — dá um tick para o `.catch()` rodar antes de terminar o
+    // teste, senão a rejeição não tratada vaza para o processo do Jest.
+    await new Promise((resolve) => setImmediate(resolve));
   });
 });

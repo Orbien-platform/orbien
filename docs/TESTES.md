@@ -17,7 +17,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | # | Fase | Escopo | Arquivos | Feito |
 |---|---|---|---|---|
 | 0 | Infra e instrumentação | jest projects, vitest, gate no CI | — | ☑ |
-| 1 | API — financeiro | `financial/`, `common/` | 37 | ☐ |
+| 1 | API — financeiro | `financial/`, `common/` | 37 | ☑ |
 | 2 | API — auth e raiz | `auth/`, `prisma/`, `app.*` | 18 | ☑ |
 | 3 | API — pessoas | `persons/`, `visitor/`, `waitlist/` | 34 | ☑ |
 | 4 | API — celebrações | `celebrations/` | 46 | ☑ |
