@@ -1,5 +1,12 @@
 {
-  "framework": "nextjs",
-  "devCommand": "next dev --port 3001",
-  "ignoreCommand": "npx --yes turbo-ignore orbien-web"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "develop": false,
+      "feature/*": false,
+      "fix/*": false,
+      "release/*": false
+    }
+  }
 }
