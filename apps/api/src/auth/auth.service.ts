@@ -24,6 +24,13 @@ import { JwtPayload } from './interfaces/jwt-payload.interface';
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 7;
 const EXPIRES_IN = 900;
+// Sessão de suporte: bem mais curto que o token normal, de propósito. Não tem
+// refresh — a única forma de renovar é chamar /auth/impersonate de novo, o que
+// exige o papel válido no banco naquele instante. Um TTL igual ao do token
+// comum deixaria uma janela de 15 minutos em que o papel já pode ter sido
+// revogado e a sessão de suporte continuaria valendo.
+const IMPERSONATE_TOKEN_TTL = '5m';
+const IMPERSONATE_EXPIRES_IN = 300;
 const RESET_TOKEN_TTL_MINUTES = 30;
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -351,8 +358,8 @@ export class AuthService {
       impersonated_by: requestingUser.sub,
     };
 
-    const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    return { access_token, expires_in: EXPIRES_IN };
+    const access_token = this.jwtService.sign(payload, { expiresIn: IMPERSONATE_TOKEN_TTL });
+    return { access_token, expires_in: IMPERSONATE_EXPIRES_IN };
   }
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {

@@ -180,15 +180,20 @@ O script é idempotente e faz, nesta ordem:
    `platform_support` **sem tenant no contexto** passa a enxergar todos os
    tenants, e `waitlist_subscribers` ganha RLS (nunca teve). Precisa vir depois
    do passo 4, que é quem decide quais `tenant_isolation` sobrevivem;
+5b. aplica `005_rls_audit_platform_read.sql`, que abre `audit_logs` para o
+    mesmo `app_platform_access()` — só leitura, sem `WITH CHECK`, porque a
+    escrita continua reservada a `audit_insert()`. Depende das funções
+    criadas no passo anterior;
 6. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
    (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
-7. verifica tabelas, login do role, herança e cinco invariantes de RLS,
+7. verifica tabelas, login do role, herança e seis invariantes de RLS,
    falhando alto se algo faltar: nenhuma tabela pode ter `tenant_isolation`
    sombreando `tenant_congregation_isolation`, nenhuma policy de congregação
    pode ter `USING` diferente de `WITH CHECK`, nenhuma pode citar
    `denomination_admin` (papel que não existe na tabela `roles`), o
-   `orbien_app` precisa poder `SET ROLE app_user`, e as seis policies do plano
-   de plataforma precisam existir;
+   `orbien_app` precisa poder `SET ROLE app_user`, as seis policies do plano
+   de plataforma precisam existir, e `audit_logs` precisa ter o ramo de
+   plataforma na policy `tenant_read`;
 8. com `--seed`, popula os dados de exemplo.
 
 Depois disso, `DIRECT_URL` aponta para a conexão direta (5432, role `postgres`)
@@ -245,7 +250,7 @@ npm run db:migrate -- nome_da_migration
 npm run db:migrate:status
 ```
 
-Os scripts de RLS (`001`, `002`, `003`, `004`) **não** entram nesse comando:
+Os scripts de RLS (`001`, `002`, `003`, `004`, `005`) **não** entram nesse comando:
 estão fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
 bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
 passo 7 falha alto se algum invariante quebrar.
@@ -264,6 +269,13 @@ passo 7 falha alto se algum invariante quebrar.
 > Editor: ele faz `ALTER POLICY tenant_isolation`, e é o passo 4 do script que
 > decide em quais tabelas essa policy sobrevive. Aplicar script de RLS fora de
 > ordem é o defeito que a pendência nº 1 documentou.
+>
+> **`005_rls_audit_platform_read.sql` é novo, da Fase 5** (2026-09-04): abre
+> `GET /platform/audit-logs/support-access` para leitura cross-tenant, do
+> mesmo jeito que o `004` abriu para `tenants`. Roda pelo mesmo
+> `bootstrap-db.sh`, depois do `004` — não precisa de cuidado extra de ordem
+> além desse, e enquanto ele não rodar em produção a tela de auditoria do
+> `apps/admin` responde lista vazia, sem erro.
 
 ---
 

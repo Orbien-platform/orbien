@@ -64,7 +64,7 @@ leia o do app antes de mexer nele.
   `typescript-eslint` recommended **sem** checagem de tipos, e a única regra
   ajustada é `no-unused-vars` com `argsIgnorePattern: "^_"` — o código marca
   "não usado de propósito" com underscore (`_tx`, `_depth`).
-- Os scripts de RLS (`apps/api/prisma/migrations/00{1,2,3,4}_*.sql`) ficam
+- Os scripts de RLS (`apps/api/prisma/migrations/00{1,2,3,4,5}_*.sql`) ficam
   **fora** do histórico do Prisma: `prisma migrate deploy` não os aplica, só o
   `bootstrap-db.sh`, e a ordem entre eles importa. Ao mexer em policy, o
   `USING` e o `WITH CHECK` têm que dizer a mesma coisa — divergir faz o admin

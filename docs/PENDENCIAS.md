@@ -714,7 +714,22 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   por cookie `HttpOnly` (ver abaixo): o token do fragmento é postado em `POST
   /api/session/suporte` e vira cookie ali mesmo, então a janela em que ele é
   legível por script é o intervalo entre o `location.hash` e essa chamada.
-- **A sessão pode escrever**, não só ler. Decisão adiada.
+- ~~**A sessão pode escrever**, não só ler.~~ Decisão fechada na Fase 5,
+  em 2026-09-04: só lê. O `RolesGuard` passou a checar o método HTTP antes de
+  liberar `support_session` — GET e HEAD continuam satisfazendo qualquer
+  `@Roles`, qualquer outro verbo cai na checagem normal de papel, que nega,
+  porque `platform_support` não está em nenhuma lista de `@Roles` de dado de
+  igreja. Não precisou de mudança no RLS: a exceção sempre foi só do guard,
+  nunca de uma policy.
+- ~~**`audit_logs` de `support_access` nunca teve tela.**~~ Fechado na Fase
+  5, em 2026-09-04. O dado é gravado desde a Fase 1 e ninguém tinha olhado.
+  `GET /platform/audit-logs/support-access` (mesma marcação de plataforma das
+  outras rotas — `@Roles('platform_support')` + `@PlatformRoute()`) e a tela
+  `apps/admin/(platform)/auditoria`. O filtro por `action` é fixo no backend,
+  não vem da query: a rota responde uma pergunta só. Precisou de RLS novo —
+  `005_rls_audit_platform_read.sql` abre `audit_logs` para
+  `app_platform_access()` no `USING`, sem tocar o `WITH CHECK`, que não existe
+  numa policy `FOR SELECT`: a escrita segue reservada a `audit_insert()`.
 - **Sem limite de tentativa no login da plataforma.** `POST
   /auth/platform/login` (Fase 3) não tem rate limit, e nem `POST /auth/login`
   tem — só `forgot-password` tem, e é em memória, o que não sobrevive a mais de
@@ -723,13 +738,14 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   registrado, não corrigido nesta fase: limitador que preste é
   compartilhado (Redis ou tabela), não um `Map` por processo — unidade de
   trabalho própria, e vale para as duas rotas de login de uma vez.
-- **TTL** do token de impersonação é o padrão de access token — 15 minutos.
-  Continua sendo o padrão, mas agora tem consequência visível: `impersonate`
-  não emite refresh token, então a sessão de suporte **não se renova**. Aos 15
-  minutos `GET /api/session` responde 401, o middleware barra a navegação e o
-  suporte volta para `/login`. É o comportamento desejado; renovar sozinha uma sessão que enxerga
-  dado de igreja alheia é o que não se quer. O que falta é aviso antes de
-  expirar, hoje inexistente.
+- ~~**TTL** do token de impersonação é o padrão de access token — 15 minutos.~~
+  Fechado na Fase 5, em 2026-09-04: caiu para 5 minutos, dedicado
+  (`IMPERSONATE_TOKEN_TTL`, separado de `ACCESS_TOKEN_TTL`). Continua sem
+  refresh token, então a sessão de suporte **não se renova** — 5 minutos
+  depois `GET /api/session` responde 401, o middleware barra a navegação e o
+  suporte volta para `/login`. É o comportamento desejado; renovar sozinha uma
+  sessão que enxerga dado de igreja alheia é o que não se quer. O que falta é
+  aviso antes de expirar, hoje inexistente.
 - **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
   token fixa um tenant, e o `IS NULL` de `app_platform_access()` fecha o ramo
   de plataforma justamente quando há tenant fixado. Suporte a vários clientes

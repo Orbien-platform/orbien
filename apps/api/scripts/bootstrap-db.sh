@@ -111,6 +111,11 @@ echo "▶ 5/8 Abrindo o plano de plataforma (004)..."
 if [ -f prisma/migrations/004_rls_platform_plane.sql ]; then
   run_sql_file prisma/migrations/004_rls_platform_plane.sql
 fi
+# Depende de app_platform_access(), criada em 004 — por isso vem depois, não
+# junto do passo 5.
+if [ -f prisma/migrations/005_rls_audit_platform_read.sql ]; then
+  run_sql_file prisma/migrations/005_rls_audit_platform_read.sql
+fi
 
 echo ""
 echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
@@ -235,6 +240,18 @@ BEGIN
      WHERE c.relname = 'waitlist_subscribers' AND c.relrowsecurity
   ) THEN
     RAISE EXCEPTION 'waitlist_subscribers sem RLS habilitado';
+  END IF;
+
+  -- 005: sem isto a tela de auditoria da Fase 5 lê lista vazia em silêncio,
+  -- o mesmo sintoma que a checagem acima cobre para as seis tabelas de 004.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_read'
+     AND tablename  = 'audit_logs'
+     AND qual LIKE '%app_platform_access%';
+  RAISE NOTICE 'audit_logs com o ramo de plataforma: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'audit_logs sem o ramo de plataforma na policy tenant_read — 005_rls_audit_platform_read.sql rodou?';
   END IF;
 END $$;
 SQL
