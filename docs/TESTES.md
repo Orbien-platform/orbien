@@ -17,14 +17,14 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | # | Fase | Escopo | Arquivos | Feito |
 |---|---|---|---|---|
 | 0 | Infra e instrumentação | jest projects, vitest, gate no CI | — | ☑ |
-| 1 | API — financeiro | `financial/`, `common/` | 37 | ☐ |
+| 1 | API — financeiro | `financial/`, `common/` | 37 | ☑ |
 | 2 | API — auth e raiz | `auth/`, `prisma/`, `app.*` | 18 | ☑ |
 | 3 | API — pessoas | `persons/`, `visitor/`, `waitlist/` | 34 | ☑ |
 | 4 | API — celebrações | `celebrations/` | 46 | ☑ |
 | 5 | API — voluntários e grupos | `volunteers/`, `small-groups/` | 36 | ☑ |
 | 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☑ |
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☑ |
-| 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☐ |
+| 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☐ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
@@ -523,6 +523,24 @@ primário (com `bg-navy` na className); para ícone ou link usa-se `<button>`
 puro, porque o `variant` padrão pinta fundo escuro que a className não remove.
 **Escreva o teste que fixa esse comportamento** — é exatamente o tipo de coisa
 que uma atualização do shadcn quebra em silêncio.
+
+> **Executado em 2026-09-04:** os 21 arquivos do escopo fecharam em 100% nas
+> quatro métricas — ver as entradas por caminho em `vitest.config.ts`.
+> `layout/` tinha 3 arquivos, não 2 como a tabela contava (`SupportSessionBanner.tsx`
+> não estava na contagem original); os três foram cobertos. Em
+> `StatusBadge.tsx` o teste do fallback expôs `LABELS[key] ?? classification`
+> como ramo morto — `key` só chega vazio para `"visitor"`, nunca para um valor
+> fora de `LABELS`, então `?? classification` nunca executava; removido para
+> fechar 100% de branch sem teste artificial. Componentes do `@base-ui/react`
+> (Modal, Sheet, DropdownMenu, Tooltip, Avatar) renderizam e respondem a
+> interação em jsdom via Testing Library; a única armadilha foi
+> `DropdownMenuLabel`, que exige estar dentro de `DropdownMenuGroup` — sem
+> isso o Base UI lança em runtime, mesmo sem uso desse padrão em código de
+> produção ainda. `npx turbo run build --filter=orbien-web` falha em
+> `/_not-found` (`TypeError: Cannot read properties of null (reading
+> 'useContext')`) — confirmado pré-existente em `main` antes desta fase
+> (mesmo erro com o working tree limpo), não investigado por não ser escopo
+> desta fase.
 
 ### Fase 9 — web: componentes de domínio
 
