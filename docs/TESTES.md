@@ -29,11 +29,37 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 10 | web — rotas | `app/` | 14 | ☐ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
 | 12 | site — rotas | `app/` | 18 | ☐ |
-| 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
+| 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ◐ |
 
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
 `test/rls/isolation.spec.ts`), **2 testes e2e no web** (escalas e templates),
 **nada no site**. Nenhuma instrumentação de cobertura em lugar nenhum.
+
+`◐` = parcial. A Fase 13 rodou o que não depende das fases 10-12 (e2e dos
+fluxos faltantes, smoke do site, `global: 100` travado na API); o que depende
+delas segue aberto. Ver "Estado da Fase 13" abaixo.
+
+**Medido em 2026-09-04**, com os thresholds em vigor:
+
+| App | Statements | Branches | Functions | Lines | Suítes |
+|---|---|---|---|---|---|
+| api | 100% | 100% | 100% | 100% | 213 (1883 testes) |
+| web | 68,5% | 63,3% | 66,8% | 68,3% | 63 (608 testes) |
+| site | 0% | 0% | 0% | 0% | nenhuma |
+| admin | 1,5% | 1,0% | 0,8% | 1,6% | 1 (4 testes) |
+
+Dois números aí não estão no quadro de fases, e é isso que eles dizem:
+
+- **`apps/admin` nunca teve fase.** O console nasceu depois que o plano foi
+  escrito. O quadro vai de 0 a 13 sem mencioná-lo, mas o "Pronto quando" da
+  Fase 13 cobrava `test:cov -w orbien-admin` em 100% — cobrança sem fase que a
+  produzisse. A checklist foi corrigida; a fase não foi criada (decisão do dev
+  nesta sessão). Enquanto não existir, `apps/admin` fica fora da meta.
+- **`src/platform/` na API** é o mesmo caso, e mostra o custo do threshold por
+  caminho: nasceu depois das fases 1-6, não entrou em nenhuma entrada da lista
+  de caminhos, e ficou com dois DTOs abaixo de 100% **sem reprovar nada**. Os
+  dois specs que faltavam foram escritos nesta sessão, e o `global` que
+  substituiu a lista não tem esse ponto cego.
 
 ---
 
@@ -620,30 +646,153 @@ da Fase 13, ou sai.
 
 ## Fase 13 — Fechamento
 
-**Pré-requisito:** fases 1–12.
+**Pré-requisito declarado:** fases 1–12. **Cumprido:** 1–9. As fases 10 (rotas
+do web), 11 e 12 (site) seguem abertas, e é isso que divide esta fase em duas
+metades — a que não depende delas rodou, a que depende não.
 
-1. **Trocar todos os thresholds por caminho por `global: 100`** nos quatro apps,
-   e apagar as entradas parciais. A partir daqui, código novo sem teste
-   quebra o CI — que é o ponto da meta.
-2. **e2e dos fluxos não cobertos.** Os 2 testes atuais estão ambos em escalas.
-   Acrescentar, por ordem de dano: financeiro (lançar transação → conferir no
-   DRE), pessoas (cadastro e importação), login/redefinir senha. Manter
-   `workers: 1` e `fullyParallel: false` — os specs montam e desmontam dados
-   no mesmo tenant, e paralelizar faria um apagar o template do outro.
-3. **Smoke do site**, se decidido na Fase 12: as 18 rotas respondem 200,
-   header e footer renderizam, âncora `#waitlist` existe.
+### Estado da Fase 13
+
+| Item | Estado |
+|---|---|
+| 1. `global: 100` na API | ☑ travado, e verde |
+| 1. `global: 100` no web, site e admin | ☐ bloqueado pelas fases 10-12 |
+| 2. e2e de financeiro (transação → DRE) | ☑ `apps/web/e2e/financeiro.spec.ts` |
+| 2. e2e de pessoas (cadastro e importação) | ☑ cadastro já existia; importação em `pessoas.spec.ts` |
+| 2. e2e de login / redefinir senha | ☑ `apps/web/e2e/login.spec.ts` |
+| 3. Smoke do site | ☑ `apps/site/e2e/smoke.spec.ts`, 18 testes |
+
+### 1. Thresholds
+
+A API trocou os 18 thresholds por caminho por
+`global: { statements: 100, branches: 100, functions: 100, lines: 100 }`, e
+`test:cov` fecha em 100% nas quatro métricas. A partir daqui, código novo na
+API sem teste quebra o CI — que é o ponto da meta.
+
+**Nos outros três apps o `global` continua em 0, de propósito.** Travá-lo hoje
+não seria "a meta cumprida", seria `test:cov` vermelho em três apps por causa
+de trabalho que ainda não foi feito: web em 68,5% (falta a Fase 10), site em 0%
+(faltam 11 e 12), admin em 1,5% (nunca teve fase). Os thresholds por caminho
+que já existem no web seguem valendo e seguem sendo o piso — o piso nunca
+desce.
+
+Quem fechar as fases 10-12 fecha também esta metade: trocar as listas de
+caminho de `apps/{web,site}/vitest.config.ts` por `thresholds: { statements:
+100, branches: 100, functions: 100, lines: 100 }`. Os comentários nos dois
+arquivos já apontam para cá.
+
+### 2. e2e dos fluxos faltantes
+
+Eram 2 testes quando este plano foi escrito, ambos em escalas. Hoje são **13,
+em 8 arquivos** — os três desta fase e mais os que as sessões intermediárias
+acrescentaram (conteúdo, grupos, pessoas, suporte).
+
+- **`financeiro.spec.ts`** — lança uma receita pelo modal e confere que ela
+  chegou ao DRE, na categoria certa. A asserção é sobre a coluna **Qtd** da
+  categoria (inteiro), não sobre o valor formatado: comparar "quantos
+  lançamentos esta conta tem" antes e depois não depende de nenhum outro dado
+  do tenant, enquanto prender o total em reais faria o teste depender de tudo
+  o mais lançado no mês.
+- **`pessoas.spec.ts`** — o cadastro já estava coberto; entrou a **importação
+  de CSV**, com cabeçalhos deliberadamente diferentes dos campos do Orbien
+  ("Nome do membro", não `full_name`) para que o passo de mapeamento seja de
+  fato exercido, e não resolvido pela sugestão automática.
+- **`login.spec.ts`** — o único fluxo sem sessão, e por isso o único que a
+  fixture `page` não serve pronta: cada teste começa limpando os cookies que
+  ela semeou. Cobre as três mensagens de erro distintas do login (tenant
+  inexistente, senha errada, campo vazio), o login bem-sucedido até o
+  dashboard, o pedido de link de redefinição, e a tela de redefinição sem
+  token e com token inválido.
+
+**O que não está coberto, e é limite do ambiente:** a troca de senha
+concluída. O token só existe no e-mail que a API envia (ou no log do
+`MailService` em dev), não há rota que o devolva, e concluir a troca mudaria a
+senha da conta de e2e e derrubaria os outros specs. Ficam cobertos os dois
+ramos que não dependem do token.
+
+`workers: 1` e `fullyParallel: false` seguem como estavam no web, pelo motivo
+original: os specs montam e desmontam dados no mesmo tenant.
+
+### 3. Smoke do site
+
+Decisão que a Fase 12 deixou em aberto — o `playwright` órfão em
+`devDependencies` vira o smoke, ou sai: **virou o smoke**, e a dependência foi
+trocada por `@playwright/test`, na mesma versão que o web usa. O pacote
+`playwright` puro traz só a biblioteca de automação, não o runner, então o
+órfão não daria para usar como estava.
+
+`apps/site/playwright.config.ts` tem o mesmo desenho do web (alvo por
+`E2E_BASE_URL`, sem subir servidor) menos o `workers: 1`: o site é estático,
+nenhum spec cria ou altera dado, então não há estado compartilhado para dois
+workers corromperem.
+
+Sobre a contagem: este plano falava em "18 rotas respondem 200". 18 é o número
+de **arquivos** em `src/app/`, não de endpoints HTTP — a conta inclui
+`layout.tsx`, `globals.css` e o `favicon.ico`, e trata o `not-found` como rota
+de 200. Os endpoints reais são **12 páginas navegáveis + 4 gerados** (`icon`,
+`apple-icon`, `robots.txt`, `sitemap.xml`), mais o 404. O smoke tem 18 testes
+por coincidência de número, não por corresponder à lista antiga.
+
+Cada página é verificada em quatro coisas: responde 200, tem header e footer
+(são importados **por página**, não pelo `layout.tsx` — esquecer um deles em
+página nova não quebra build nenhum), tem a navegação principal, e traz um
+texto próprio dela (sem isso, duas rotas apontando para o mesmo componente
+passariam iguais). O 404 é verificado como 404 de verdade: página de erro
+servida com 200 é indexada como conteúdo.
+
+### Achados desta sessão
+
+Registrados, não corrigidos — não foi o que se pediu, e a regra da casa é que
+achado vira pergunta:
+
+1. **`/entrar` no header do site não existe.** `layout/Header.tsx` linha 66
+   aponta para `/entrar`; a rota é `/login`. É link morto no header de **todas
+   as 13 páginas**. O smoke não o cobre de propósito: um teste que passasse
+   com esse link no ar seria teste afrouxado.
+2. **A âncora `#waitlist` só tem destino na home.** O `id="waitlist"` vive em
+   `components/home/FinalCta.tsx`; o `href="#waitlist"` aparece em 6 outros
+   arquivos, em páginas que não têm o alvo. Nelas o CTA não faz nada. O smoke
+   afirma a âncora **na home**, e diz no comentário que é só na home.
+3. **`tsc --noEmit` do web tem 1 erro pré-existente**, em
+   `src/components/layout/header.test.tsx:29`: o mock de `SessionUser` não tem
+   `support_session` nem `support_tenant_name`. Confirmado na baseline sem as
+   mudanças desta sessão. Não quebra `turbo run lint`, `test` nem `build` —
+   nenhum deles roda `tsc` no web.
 
 ### Pronto quando
 
+O que esta fase entrega, e é o que roda verde hoje:
+
 ```bash
-npx turbo run build
-npx turbo run test
-npm run test:cov -w orbien-backend   # 100% nas 4 métricas
-npm run test:cov -w orbien-web       # 100%
-npm run test:cov -w orbien-site      # 100%
-npm run test:cov -w orbien-admin     # 100%
-npm run test:rls -w orbien-backend   # 39 testes verdes
+npx turbo run build                  # 4 successful, 4 total
+npx turbo run test                   # 4 successful, 4 total
+npx turbo run lint                   # 0 errors
+npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
+npm run test:rls -w orbien-backend   # 54 testes verdes
+node scripts/check-skills.mjs
+npx playwright test --list -c apps/web    # 13 testes em 8 arquivos
+E2E_BASE_URL=http://localhost:3002 npx playwright test -c apps/site   # 18 verdes
 ```
+
+O smoke do site foi verificado contra `next start` de verdade: 18/18. Os e2e do
+web só compilam aqui (`--list`) — rodá-los exige API, web em pé e
+`E2E_EMAIL`/`E2E_PASSWORD`/`E2E_TENANT`, que é o que o CI faz.
+
+O smoke virou portão: job `smoke-site` no `ci.yml`, separado do job de e2e
+porque o site não precisa de banco nem de API para ser verificado. Ver
+"Fase 3b" em [CI.md](CI.md).
+
+O que **falta** para a meta de 100% nos quatro apps, que era a redação
+original desta checklist:
+
+```bash
+npm run test:cov -w orbien-web       # hoje 68,5% — falta a Fase 10
+npm run test:cov -w orbien-site      # hoje 0%    — faltam as Fases 11 e 12
+npm run test:cov -w orbien-admin     # hoje 1,5%  — não há fase que o cubra
+```
+
+A linha do admin foi mantida aqui como registro, não como cobrança: sem uma
+fase que produza esses testes, exigir 100% dele nesta checklist era pedir o
+resultado sem o trabalho.
 
 ---
 
@@ -655,9 +804,11 @@ congregação, lint do `site` quebrado no estado commitado, e e2e dependendo de
 dados que o seed não cria. Estão mapeadas com evidência em
 [PENDENCIAS.md](PENDENCIAS.md).
 
-A primeira toca este plano: enquanto o job `Testes de RLS` estiver vermelho, o
-CI não fica verde de ponta a ponta — o que não impede as Fases 1 a 12, mas
-impede a Fase 13 de declarar fechamento.
+A primeira tocava este plano enquanto o job `Testes de RLS` estava vermelho.
+**Não está mais**: `npm run test:rls -w orbien-backend` fecha em 54 testes
+verdes (o plano falava em 39 — a suíte cresceu desde então). O que impede a
+Fase 13 de declarar fechamento hoje não é o RLS, são as fases 10-12; ver
+"Estado da Fase 13".
 
 ## Registro de decisões
 
@@ -678,6 +829,21 @@ segurança sem nenhum teste hoje; site por último porque é estático e não te
 como falhar em runtime. Se o form de waitlist for ligado ao
 `waitlist.public.controller` antes da Fase 11, o site sobe de prioridade — é o
 primeiro ponto dele que pode compilar e não funcionar.
+
+**Threshold global em vez de lista de caminhos (Fase 13).** A lista por
+caminho serviu para subir o piso fase por fase sem travar o CI no meio, e para
+isso foi a escolha certa. Mas ela tem um ponto cego que só apareceu no
+fechamento: arquivo que nasce **fora** de todos os caminhos listados não é
+cobrado por ninguém. Foi o que houve com `src/platform/` — dois DTOs abaixo de
+100% sem reprovar nada, em módulo que trata do plano de plataforma. Na API a
+lista saiu e o `global` entrou. Nos outros três apps a troca fica para quem
+fechar as fases 10-12, porque lá o `global` hoje só produziria CI vermelho.
+
+**O `playwright` órfão do site virou o smoke da Fase 13**, e não saiu. O que
+decidiu foi haver uma afirmação que só browser faz e que importa em site
+estático: header e footer são importados por página, não pelo `layout.tsx`, e
+página nova sem um deles compila, builda e sobe — só não navega. A dependência
+trocou de `playwright` para `@playwright/test`, que é o pacote com o runner.
 
 **`E2E_PASSWORD` em texto no `ci.yml`** vem do seed do repositório e o
 [`docs/CI.md`](CI.md) argumenta que não é segredo. Segue válido enquanto o

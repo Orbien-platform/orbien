@@ -11,6 +11,11 @@
  *   #4 o contador `fetchRef` de pessoas foi substituído por esse cancelamento
  *   #5 criar registro passou de 2 fetches para 1
  *
+ * O segundo `test` cobre a **importação de CSV**, pedida pela Fase 13 de
+ * docs/TESTES.md. Fica neste arquivo, e não em um spec próprio, porque é a
+ * mesma tela: o `workers: 1` do runner garante que os dois rodem em série, e
+ * separar faria a lista de pessoas ser carregada duas vezes sem ganho.
+ *
  * Uso: E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
  */
 
@@ -123,4 +128,109 @@ test.describe("pessoas", () => {
     criadoId = lista.data.find((p) => p.full_name === nome)?.id ?? null;
     if (criadoId) await api.tryCall("DELETE", `/persons/${criadoId}`);
   });
+
+  test("importação de CSV mapeia colunas e grava as pessoas do arquivo", async ({
+    page,
+    errorLog,
+    api,
+  }) => {
+    // Nomes únicos por execução: o tenant é compartilhado com o seed e com os
+    // outros specs, e a importação não é idempotente — rodar duas vezes com o
+    // mesmo nome criaria duplicata em vez de falhar.
+    const marca = Date.now();
+    const nomes = [`Importado E2E A ${marca}`, `Importado E2E B ${marca}`];
+
+    // Cabeçalhos deliberadamente **fora** dos nomes de campo do Orbien
+    // ("Nome do membro", não "full_name"): o que este teste prende é o passo de
+    // mapeamento. Com cabeçalhos já iguais aos campos, a sugestão automática
+    // acertaria tudo e o mapeamento manual nunca seria exercido.
+    const csv = [
+      "Nome do membro,Celular,Contato de email",
+      `${nomes[0]},11988880001,importado.a.${marca}@exemplo.test`,
+      `${nomes[1]},11988880002,importado.b.${marca}@exemplo.test`,
+    ].join("\n");
+
+    await test.step("modal de importação aceita o arquivo e vai para o mapeamento", async () => {
+      await page.goto("/pessoas", { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Importar CSV" }).click();
+
+      const modal = page.getByRole("dialog");
+      await expect(modal.getByText("Importar CSV")).toBeVisible();
+      await expect(modal.getByText("Arraste um arquivo .csv aqui")).toBeVisible();
+
+      // `setInputFiles` no input escondido é o caminho suportado pelo runner:
+      // o `<input type="file">` do modal tem `className="hidden"` e é acionado
+      // pelo clique na área de arraste, que não dá para automatizar com um
+      // arquivo real.
+      await modal.locator('input[type="file"]').setInputFiles({
+        name: `import-e2e-${marca}.csv`,
+        mimeType: "text/csv",
+        buffer: Buffer.from(csv, "utf-8"),
+      });
+
+      await expect(
+        modal.getByText("2 linha(s) de prévia · 3 colunas detectadas"),
+        "o preview não reconheceu as 2 linhas e 3 colunas do arquivo",
+      ).toBeVisible();
+      await shot(page, "22-pessoas-import-mapeamento");
+    });
+
+    await test.step("mapeamento manual grava as duas pessoas", async () => {
+      const modal = page.getByRole("dialog");
+      const selects = modal.locator("select");
+      await expect(selects, "um select por coluna do CSV").toHaveCount(3);
+
+      // A ordem dos selects segue `preview.columns`, que segue a ordem do
+      // cabeçalho do arquivo.
+      await selects.nth(0).selectOption("full_name");
+      await selects.nth(1).selectOption("phone");
+      await selects.nth(2).selectOption("email");
+
+      await modal.getByRole("button", { name: "Importar" }).click();
+
+      await expect(
+        modal.getByText("Importação concluída sem erros!"),
+        "a importação relatou erro",
+      ).toBeVisible();
+      // O cartão do resultado é `<p>{imported}</p><p>importados</p>` — irmãos
+      // dentro do mesmo bloco. Ancorar no rótulo e voltar um irmão é o que
+      // dispensa depender de classe de estilo.
+      await expect(
+        modal.locator('p:text-is("importados")').locator("xpath=preceding-sibling::p[1]"),
+        "o resultado não contou as 2 pessoas importadas",
+      ).toHaveText("2");
+
+      await modal.getByRole("button", { name: "Concluir" }).click();
+      await expect(modal).toHaveCount(0);
+    });
+
+    await test.step("as pessoas importadas aparecem na lista sem recarregar a página", async () => {
+      // `Concluir` chama `onImported()`, que recarrega a lista no mesmo
+      // documento — é isso que a asserção sem `goto` prende.
+      for (const nome of nomes) {
+        await page.getByPlaceholder(BUSCA).fill(nome);
+        await expect(
+          page.getByRole("cell", { name: nome }),
+          `a pessoa importada "${nome}" não está na lista`,
+        ).toBeVisible();
+      }
+      await page.getByPlaceholder(BUSCA).fill("");
+    });
+
+    await test.step("sem erro de console ou HTTP inesperado", async () => {
+      expect(realConsoleErrors(errorLog), "erros de console na importação").toEqual([]);
+      expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+    });
+
+    // ── Limpeza ──
+    for (const nome of nomes) {
+      const lista = await api.call<{ data: { id: string; full_name: string }[] }>(
+        "GET",
+        `/persons?limit=100&search=${encodeURIComponent(nome)}`,
+      );
+      const id = lista.data.find((p) => p.full_name === nome)?.id;
+      if (id) await api.tryCall("DELETE", `/persons/${id}`);
+    }
+  });
+
 });
