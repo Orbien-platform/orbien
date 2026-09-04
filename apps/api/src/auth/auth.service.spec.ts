@@ -459,7 +459,9 @@ describe('AuthService.impersonate', () => {
 
     const result = await service.impersonate(requester, { target_tenant_id: 'target' });
 
-    expect(result).toEqual({ access_token: 'signed-token', expires_in: 900 });
+    // TTL curto e diferente do token comum (900s): sessão de suporte não tem
+    // refresh, e a única forma de renovar é reautorizar pelo banco.
+    expect(result).toEqual({ access_token: 'signed-token', expires_in: 300 });
     const [payload] = (jwtService.sign as jest.Mock).mock.calls[0];
     expect(payload).toMatchObject({
       sub: requester.sub,
