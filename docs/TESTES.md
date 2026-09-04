@@ -22,7 +22,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 3 | API — pessoas | `persons/`, `visitor/`, `waitlist/` | 34 | ☑ |
 | 4 | API — celebrações | `celebrations/` | 46 | ☑ |
 | 5 | API — voluntários e grupos | `volunteers/`, `small-groups/` | 36 | ☑ |
-| 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☐ |
+| 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☑ |
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☐ |
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☐ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☐ |
@@ -455,6 +455,16 @@ externas — mocke o SDK, não faça chamada de rede em teste de unidade.
 
 **Ao terminar, a API está em 100%.** Troque as entradas por caminho de
 `coverageThreshold` por um único `global` em 100 e apague as parciais.
+
+> **Executado em 2026-09-04:** os 30 arquivos do escopo (`content/`,
+> `settings/`, `study-materials/`, `mail/`, `storage/`) fecharam em 100% nas
+> quatro métricas — ver as entradas por caminho correspondentes em
+> `jest.config.js`. A troca para `global: 100` **não** foi feita: a Fase 1
+> (`financial/`) segue com apenas 4 de 35 arquivos testados (linha continua
+> `☐` no quadro de Estado), e travar o `global` agora quebraria `test:cov`
+> por um motivo alheio a esta fase — `./src/financial/` e `./src/common/`
+> nunca tiveram entrada de threshold própria. Decisão fica para quando a
+> Fase 1 fechar; a troca é a mesma descrita acima.
 
 ---
 

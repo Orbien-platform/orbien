@@ -110,6 +110,16 @@ module.exports = {
     './src/celebrations/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/volunteers/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/small-groups/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    // Fase 6 (conteúdo e apoio). NÃO virou `global: 100` ainda porque
+    // `./src/financial/` (Fase 1) e `./src/common/` seguem parciais — só 4
+    // dos 35 arquivos de financial têm spec. Ver docs/TESTES.md, Fase 6, e o
+    // relatório desta sessão: travar `global` agora quebraria `test:cov` por
+    // um motivo alheio a esta fase.
+    './src/content/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/settings/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/study-materials/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/mail/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/storage/': { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
 
   verbose: true,
