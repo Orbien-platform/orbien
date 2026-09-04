@@ -208,9 +208,15 @@ export default function ConfiguracoesPage() {
 
     setIsSaving(true);
     try {
-      const payload: UpdateSettingsPayload = {};
-      if (canEditCongregation) {
-        payload.congregation = {
+      // `canEditCongregation` é sempre true neste ponto: o botão que chama
+      // `handleSave` só existe quando `canEditAny` é true, e
+      // `canEditAny = canEditCongregation || canEditTenant` com
+      // `canEditCongregation = canEditTenant || admin_congregation` — logo
+      // `canEditTenant` true implica `canEditCongregation` true também. Um
+      // `if` aqui era branch morto; removido ao fechar a Fase 10
+      // (docs/TESTES.md tem o registro).
+      const payload: UpdateSettingsPayload = {
+        congregation: {
           name: congName.trim(),
           address: congAddress.trim() || undefined,
           timezone: congTimezone,
@@ -218,8 +224,8 @@ export default function ConfiguracoesPage() {
           phone: stripPhone(congPhone) || undefined,
           app_name: appName.trim() || undefined,
           primary_color: primaryColor.trim() || undefined,
-        };
-      }
+        },
+      };
       if (canEditTenant) {
         payload.tenant = {
           name: tenantName.trim(),
@@ -239,10 +245,15 @@ export default function ConfiguracoesPage() {
           formData
         );
         setLogoUrl(logoRes.logo_url);
-        if (logoPreview) URL.revokeObjectURL(logoPreview);
+        // `logoPreview` e a ref do `<input type="file">` são sempre setados
+        // juntos com `logoFile` em `onLogoSelected`, e o input só desmonta se
+        // `canEditCongregation` virar false — o que não acontece enquanto
+        // este handler roda (mesmo raciocínio do payload acima). As duas
+        // guardas eram branch morto; removidas ao fechar a Fase 10.
+        URL.revokeObjectURL(logoPreview as string);
         setLogoFile(null);
         setLogoPreview(null);
-        if (logoInputRef.current) logoInputRef.current.value = "";
+        logoInputRef.current!.value = "";
       }
 
       showToast("Configurações salvas com sucesso.");
@@ -348,9 +359,13 @@ export default function ConfiguracoesPage() {
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-subtle)]">
                   {logoPreview || logoUrl ? (
+                    // O `<img>` só renderiza quando um dos dois é truthy (condição
+                    // acima), então "os dois nulos" nunca acontece aqui — um
+                    // terceiro fallback (`?? ""`) era branch morto, removido ao
+                    // fechar a Fase 10 (docs/TESTES.md tem o registro).
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={logoPreview ?? logoUrl ?? ""}
+                      src={logoPreview ?? (logoUrl as string)}
                       alt="Logotipo"
                       className="h-full w-full object-contain"
                     />

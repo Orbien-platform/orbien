@@ -557,7 +557,7 @@ export default function DashboardPage() {
                   <AlertCircle size={15} strokeWidth={1.5} className="mt-0.5 flex-shrink-0 text-crimson" />
                   <p className="text-sm text-crimson">
                     <span className="font-medium">
-                      {unscheduled.length} celebração{unscheduled.length > 1 ? "ões" : ""}
+                      {unscheduled.length} {unscheduled.length > 1 ? "celebrações" : "celebração"}
                     </span>{" "}
                     nos próximos 14 dias sem escala publicada
                   </p>

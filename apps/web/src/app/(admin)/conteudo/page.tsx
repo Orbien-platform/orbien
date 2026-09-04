@@ -39,7 +39,6 @@ interface NotificationDispatch {
   title: string;
   sentAt: string;
   delivered?: number;
-  opened?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,8 +144,11 @@ export default function ConteudoPage() {
   // dentro de um callback, nunca de forma síncrona quando o effect chama.
   // O skeleton sobe onde a requisição é disparada — no mount ele já começa
   // `true`, e nas trocas de filtro / recargas quem sobe é o handler.
+  // Sem guarda de "já buscou": o único chamador (o effect de mount/troca de
+  // filtro, abaixo) sempre zera `hasFetchedPosts.current` no mesmo tick antes
+  // de chamar esta função — branch morto, removido ao fechar a Fase 10
+  // (docs/TESTES.md tem o registro).
   const loadPosts = useCallback((type: string, status: string) => {
-    if (hasFetchedPosts.current) return;
     hasFetchedPosts.current = true;
     const params = new URLSearchParams({ limit: "50" });
     if (type) params.set("type", type);
@@ -160,8 +162,9 @@ export default function ConteudoPage() {
   }, []);
 
   // ── Load segments ──
+  // Mesmo raciocínio de `loadPosts`: o único chamador (o effect de troca de
+  // aba) sempre zera a ref antes de chamar — branch morto, removido.
   const loadSegments = useCallback(() => {
-    if (hasFetchedSegs.current) return;
     hasFetchedSegs.current = true;
     return api
       .get<{ data: Segment[] } | Segment[]>("/content/segments?limit=100")
@@ -404,9 +407,6 @@ export default function ConteudoPage() {
           ) : (
             <div className="flex flex-col gap-3">
               {dispatches.map((d) => {
-                const openRate = d.delivered && d.opened
-                  ? Math.round((d.opened / d.delivered) * 100)
-                  : null;
                 return (
                   <div
                     key={d.id}
@@ -419,12 +419,6 @@ export default function ConteudoPage() {
                     <div className="flex items-center gap-4 text-xs text-stone">
                       {d.delivered != null && (
                         <span>{d.delivered} entregue(s)</span>
-                      )}
-                      {d.opened != null && (
-                        <span>{d.opened} aberto(s)</span>
-                      )}
-                      {openRate != null && (
-                        <span className="font-medium text-teal">{openRate}% abertura</span>
                       )}
                     </div>
                   </div>

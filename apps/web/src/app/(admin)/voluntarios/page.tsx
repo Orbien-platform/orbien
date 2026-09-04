@@ -146,8 +146,12 @@ export default function VoluntariosPage() {
   }, []);
 
   // ── Load my assignments ──
+  // Sem guarda de "já buscou": o único chamador (o effect de troca de aba,
+  // abaixo) sempre zera `hasFetchedMy.current` no mesmo tick antes de chamar
+  // esta função, então a guarda nunca via um `true` — branch morto, removido
+  // ao fechar a Fase 10 (docs/TESTES.md tem o registro). O ref continua
+  // existindo só para o reset explícito ler/escrever nele.
   const loadMyAssignments = useCallback(() => {
-    if (hasFetchedMy.current) return;
     hasFetchedMy.current = true;
     return api
       .get<MyAssignment[]>("/volunteers/my-celebration-assignments")

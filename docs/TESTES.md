@@ -26,7 +26,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☑ |
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☐ |
-| 10 | web — rotas | `app/` | 14 | ☐ |
+| 10 | web — rotas | `app/` | 14 | ☑ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
 | 12 | site — rotas | `app/` | 18 | ☐ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
@@ -564,6 +564,66 @@ cobrir por integração.
 
 **Ao terminar, o web está em 100%.**
 
+> **Executado em 2026-09-04:** os 19 arquivos de `src/app/` (14 páginas/rotas +
+> 2 layouts + 1 `page.tsx` raiz + 4 Route Handlers de `api-proxy/` e
+> `api/session/*` — mais do que os 14 estimados, pela mesma razão da Fase 8:
+> a contagem original não separava layouts e route handlers) fecharam em 100%
+> nas quatro métricas — thresholds por caminho em `vitest.config.ts`
+> (`"src/app/**"`). Os três Server Components sem `async` (`layout.tsx`,
+> `(admin)/layout.tsx`, `page.tsx`) seguem invocáveis como função, confirmando
+> a premissa registrada na Fase 0. `npx turbo run build --filter=orbien-web`
+> continua falhando em `/_global-error` com o mesmo `TypeError: Cannot read
+> properties of null (reading 'useContext')` já registrado como pré-existente
+> na Fase 7 (confirmado de novo com `git stash` antes desta fase) — não é
+> regressão desta fase e não foi investigado, por não ser escopo dela.
+>
+> **Achados durante a escrita dos testes, corrigidos em seguida — todos no
+> mesmo padrão do achado do `StatusBadge.tsx` na Fase 8 (branch morto por
+> invariante do próprio componente, não por falta de teste):**
+> - `financeiro/page.tsx`: `handleToggleStatus` tinha um guard
+>   `if (tx.status === "confirmed" || statusUpdatingIds.has(tx.id)) return`
+>   inalcançável pelos dois lados — a checkbox que chama a função **não
+>   renderiza** para `status === "confirmed"`, e fica `disabled` enquanto
+>   `statusUpdatingIds` tem o id, e um input `disabled` não dispara `change`
+>   nem via `fireEvent` direto (confirmado experimentalmente). Guard removido.
+>   `KpiCard` tinha uma terceira variante `"default"` que nenhuma das três
+>   chamadas em Visão Geral usa (só `"positive"`/`"negative"`); removida junto
+>   com o parâmetro opcional.
+> - `celebracoes/page.tsx`, `conteudo/page.tsx`, `voluntarios/page.tsx`: as
+>   refs `hasFetched*.current` de `loadUpcoming`/`loadPosts`/`loadSegments`/
+>   `loadMyAssignments` tinham um guard de "já buscou" cujo único efeito seria
+>   pular uma segunda chamada — mas todo chamador zera a ref no mesmo tick,
+>   síncrono, imediatamente antes de invocar a função (confirmado lendo os
+>   dois ou três call sites de cada uma). O guard nunca via `true`. Removidos.
+> - `conteudo/page.tsx`: o campo `opened`/a métrica `openRate` em
+>   `NotificationDispatch` nunca era populado em runtime — `dispatches` só
+>   recebe itens do `onSent` de `SendNotificationModal`, que devolve apenas
+>   `delivered`. Era UI para um dado que a API nunca alimenta (funcionalidade
+>   não implementada do lado do backend, não uma regressão). Removido junto
+>   com o campo do tipo.
+> - `configuracoes/page.tsx`: `handleSave` só é alcançável pelo botão
+>   "Salvar alterações", que só renderiza sob `canEditAny`; e
+>   `canEditAny = canEditCongregation || canEditTenant` com
+>   `canEditCongregation = canEditTenant || admin_congregation` — ou seja
+>   `canEditCongregation` é sempre `true` dentro de `handleSave`. Os `if
+>   (canEditCongregation)` ao montar `payload.congregation` e as duas guardas
+>   de `logoPreview`/`logoInputRef` (sempre setados juntos com `logoFile` em
+>   `onLogoSelected`, dentro do mesmo `if (canEditCongregation)` no JSX) eram
+>   branch morto pela mesma razão. Removidos.
+> - `dashboard/page.tsx`: `` `${n} celebração${n > 1 ? "ões" : ""}` `` produzia
+>   "2 celebraçãoões" no plural — bug de digitação anterior a esta fase,
+>   pego ao escrever o teste do banner de não-escaladas. Corrigido para
+>   `${n} ${n > 1 ? "celebrações" : "celebração"}`.
+>
+> **Pendência aberta, não desta fase:** `src/lib/session.ts` (adicionado no
+> PR #16, depois da Fase 7 fechar) está em 87,5% de branch — falta cobrir
+> `secure: process.env.NODE_ENV === "production"` em `base` — e isso já
+> quebra `npm run test:cov -w orbien-web` no `main` de hoje, antes de
+> qualquer mudança desta fase (confirmado com `git stash`). Ver seção
+> "Pendências abertas" abaixo — não corrigido aqui por não ser escopo da
+> Fase 10 e por ser exatamente o tipo de achado de portão que este projeto
+> trata como pergunta, não decisão unilateral.
+
 ---
 
 ## Fases 11–12 — site
@@ -636,6 +696,18 @@ dados que o seed não cria. Estão mapeadas com evidência em
 A primeira toca este plano: enquanto o job `Testes de RLS` estiver vermelho, o
 CI não fica verde de ponta a ponta — o que não impede as Fases 1 a 12, mas
 impede a Fase 13 de declarar fechamento.
+
+**`npm run test:cov -w orbien-web` já está vermelho no `main`, independente
+desta fase.** `src/lib/session.ts` chegou no PR #16 (a sessão em cookie
+HttpOnly), depois da Fase 7 ter fechado `src/lib/**` em 100%, e ficou em
+87,5% de branch: falta cobrir `secure: process.env.NODE_ENV === "production"`
+em `base` (o objeto de opções dos cookies). Confirmado com `git stash` antes
+da Fase 10: o mesmo erro de threshold aparece com a árvore de trabalho limpa,
+no `main` de hoje. Não é regressão de nenhuma fase deste plano — é um gap que
+ficou para trás quando o threshold de `src/lib/**` já estava travado em 100 e
+o PR #16 não tocou `docs/TESTES.md`. Registrado aqui em vez de corrigido por
+decisão unilateral, porque é exatamente o tipo de achado de portão que a regra
+do `CLAUDE.md` pede para virar pergunta.
 
 ## Registro de decisões
 

@@ -36,6 +36,7 @@ export default defineConfig({
         "src/components/layout/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/components/dashboard/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/components/providers/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },
