@@ -1,4 +1,5 @@
 import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
@@ -35,7 +36,9 @@ describe('PostsController', () => {
       uploadMedia: jest.fn(),
     } as unknown as jest.Mocked<PostsService>;
 
-    controller = new PostsController(service);
+    const jwtService = { sign: jest.fn().mockReturnValue('token') } as unknown as jest.Mocked<JwtService>;
+
+    controller = new PostsController(service, jwtService);
   });
 
   it('create exige papel de escrita', () => {
