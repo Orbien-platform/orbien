@@ -31,7 +31,7 @@ export function StatusBadge({ classification, className }: StatusBadgeProps) {
         className
       )}
     >
-      {LABELS[key] ?? classification}
+      {LABELS[key]}
     </span>
   );
 }

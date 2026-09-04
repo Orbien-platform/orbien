@@ -23,6 +23,7 @@ function rolesFor(methodName: keyof PostsController): string[] | undefined {
 
 describe('PostsController', () => {
   let service: jest.Mocked<PostsService>;
+  let jwtService: jest.Mocked<JwtService>;
   let controller: PostsController;
 
   beforeEach(() => {
@@ -36,7 +37,7 @@ describe('PostsController', () => {
       uploadMedia: jest.fn(),
     } as unknown as jest.Mocked<PostsService>;
 
-    const jwtService = { sign: jest.fn().mockReturnValue('token') } as unknown as jest.Mocked<JwtService>;
+    jwtService = { sign: jest.fn().mockReturnValue('token') } as unknown as jest.Mocked<JwtService>;
 
     controller = new PostsController(service, jwtService);
   });
@@ -61,6 +62,10 @@ describe('PostsController', () => {
 
   it('uploadMedia exige papel de escrita', () => {
     expect(rolesFor('uploadMedia')).toEqual(WRITE_ROLES);
+  });
+
+  it('uploadTicket exige papel de escrita', () => {
+    expect(rolesFor('uploadTicket')).toEqual(WRITE_ROLES);
   });
 
   it('create delega ao service com tenant/congregação/usuário', async () => {
@@ -128,5 +133,49 @@ describe('PostsController', () => {
 
     expect(service.uploadMedia).toHaveBeenCalledWith('t1', 'g1', 'p1', file);
     expect(result).toEqual({ media_url: 'https://cdn/a.png' });
+  });
+
+  it('uploadTicket confere o post antes de assinar e devolve o ticket', async () => {
+    service.findOne.mockResolvedValue({ id: 'p1' } as never);
+
+    const result = await controller.uploadTicket('p1', USER);
+
+    expect(service.findOne).toHaveBeenCalledWith('t1', 'g1', 'p1');
+    expect(jwtService.sign).toHaveBeenCalledWith(
+      {
+        sub: 'u1',
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        roles: [],
+        plan: 'premium',
+        scope: 'upload',
+        upload_target: 'p1',
+      },
+      { expiresIn: 300 }
+    );
+    expect(result).toEqual({ upload_token: 'token', expires_in: 300 });
+  });
+
+  it('uploadTicket propaga impersonated_by e support_session pro ticket, quando presentes', async () => {
+    service.findOne.mockResolvedValue({ id: 'p1' } as never);
+    const supportUser: JwtPayload = {
+      ...USER,
+      impersonated_by: 'support1',
+      support_session: true,
+    };
+
+    await controller.uploadTicket('p1', supportUser);
+
+    expect(jwtService.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ impersonated_by: 'support1', support_session: true }),
+      { expiresIn: 300 }
+    );
+  });
+
+  it('uploadTicket propaga o 404 do service sem chegar a assinar', async () => {
+    service.findOne.mockRejectedValue(new Error('não encontrado'));
+
+    await expect(controller.uploadTicket('p1', USER)).rejects.toThrow('não encontrado');
+    expect(jwtService.sign).not.toHaveBeenCalled();
   });
 });
