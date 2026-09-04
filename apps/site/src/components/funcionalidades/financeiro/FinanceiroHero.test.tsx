@@ -37,10 +37,6 @@ describe("FinanceiroHero", () => {
 
   it("pinta os três deltas do mockup em verde", () => {
     render(<FinanceiroHero />);
-    // Os três KPIs do mockup têm `deltaOk: true`, então o ramo negativo do
-    // ternário (`#C0392B`) não é alcançável — é o único ramo descoberto
-    // deste arquivo. Ver o threshold de `src/components/funcionalidades/**`
-    // em `vitest.config.ts`.
     for (const delta of ["+14%", "meta 70%", "+3 vs mês ant."]) {
       expect(screen.getByText(delta)).toHaveStyle({ color: "#00B8A2" });
     }

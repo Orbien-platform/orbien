@@ -55,10 +55,6 @@ describe("Reveal", () => {
     expect(obs.unobserved).toEqual([]);
   });
 
-  // O guard `if (!el) return` do efeito é o único ramo não coberto deste
-  // arquivo: o React sempre preenche `ref.current` antes do efeito rodar,
-  // então `el` nunca é null pela UI real. Ver o threshold de
-  // `src/components/ui/**` em `vitest.config.ts`.
   it("desconecta o observer ao desmontar", () => {
     const { unmount } = render(<Reveal>x</Reveal>);
     const obs = lastObserver();

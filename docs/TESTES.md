@@ -605,19 +605,18 @@ apontam para o href certo. `layout/NavDropdown.tsx` e `layout/Header.tsx` são
 os únicos com interação real.
 
 > **Executado em 2026-09-04:** os 57 arquivos do escopo (56 componentes +
-> `lib/utils.ts`) fecharam em `functions` e `lines` 100%, `statements` 100%
-> (94% em `ui/`) e `branches` 100% (95% em `ui/`, 97% em `funcionalidades/`)
-> — thresholds por caminho em `vitest.config.ts`. Dois ramos ficaram de
-> fora, ambos inalcançáveis pela UI real e documentados no teste
-> correspondente:
-> - `ui/Reveal.tsx`: o guard `if (!el) return` do efeito protege um ref que
->   o React sempre preenche antes de o efeito rodar.
-> - `funcionalidades/financeiro/FinanceiroHero.tsx`: o ternário de `deltaOk`
->   só tem o ramo positivo nos dados do mockup — o `#C0392B` é código morto.
+> `lib/utils.ts`) fecharam em **100% nas quatro métricas** — thresholds por
+> caminho em `vitest.config.ts`.
 >
-> Nenhum dos dois foi mexido: são achados de revisão, e a decisão de limpar
-> (como a Fase 8 fez em `StatusBadge.tsx`) ou manter é do dev. Se limpar, as
-> duas entradas de threshold acima sobem para 100.
+> **Dois ramos mortos removidos** (mesmo tratamento que a Fase 8 deu ao
+> `StatusBadge.tsx`), decisão tomada com o dev depois que os testes os
+> expuseram:
+> - `ui/Reveal.tsx`: o guard `if (!el) return` protegia um ref que o React
+>   sempre preenche antes de o efeito rodar. Virou `ref.current!` com o
+>   porquê no comentário.
+> - `funcionalidades/financeiro/FinanceiroHero.tsx`: o ternário de `deltaOk`
+>   só tinha o ramo positivo nos dados do mockup — o `#C0392B` nunca
+>   executava. O campo saiu dos três KPIs e a cor virou literal.
 >
 > Duas armadilhas encontradas na execução:
 > - **`vitest.setup.ts` ganhou um stub de `IntersectionObserver`.** O jsdom
