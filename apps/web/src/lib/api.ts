@@ -55,6 +55,7 @@ api.interceptors.response.use(
     try {
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
+        processQueue(error, null);
         clearTokens();
         if (typeof window !== "undefined") window.location.href = "/login";
         return Promise.reject(error);
