@@ -150,4 +150,114 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
       expect(result.top_income_categories).toEqual([]);
     });
   }, 30000);
+
+  it('RLS isola: um segundo tenant não muda o dashboard do tenant principal nem é visível nele', async () => {
+    const otherTs = Date.now();
+    const otherTenant = await prismaAdmin.tenant.create({
+      data: { slug: `dash-int-other-${otherTs}`, name: 'Integração Dashboard — Outro Tenant' },
+    });
+    const otherCongregation = await prismaAdmin.congregation.create({
+      data: { tenant_id: otherTenant.id, name: 'Sede — Outro Tenant' },
+    });
+    await prismaAdmin.tenantPlan.create({
+      data: { tenant_id: otherTenant.id, plan: PlanType.starter, status: PlanStatus.trial },
+    });
+    const otherAccount = await prismaAdmin.userAccount.create({
+      data: {
+        tenant_id: otherTenant.id,
+        congregation_id: otherCongregation.id,
+        email: `tesoureiro-outro-${otherTs}@orbien.test`,
+        password_hash: 'x',
+      },
+    });
+    const otherCategory = await prismaAdmin.financialCategory.create({
+      data: {
+        tenant_id: otherTenant.id,
+        congregation_id: otherCongregation.id,
+        name: 'Ofertas — Outro Tenant',
+        type: 'income',
+      },
+    });
+
+    try {
+      const now = new Date();
+
+      // Valores bem distintos (múltiplos de 1000) para nunca colidir por acaso
+      // com o que o tenant principal já tem.
+      await prismaAdmin.financialTransaction.create({
+        data: {
+          tenant_id: otherTenant.id,
+          congregation_id: otherCongregation.id,
+          type: TransactionType.income,
+          amount: '9000.00',
+          occurred_at: now,
+          category_id: otherCategory.id,
+          source: TransactionSource.manual,
+          created_by_user_id: otherAccount.id,
+        },
+      });
+      await prismaAdmin.financialTransaction.create({
+        data: {
+          tenant_id: otherTenant.id,
+          congregation_id: otherCongregation.id,
+          type: TransactionType.expense,
+          amount: '3000.00',
+          occurred_at: now,
+          category_id: otherCategory.id,
+          source: TransactionSource.manual,
+          created_by_user_id: otherAccount.id,
+        },
+      });
+
+      // Sob o tenant principal: o resultado não muda com o segundo tenant no ar —
+      // continua batendo com o que já era esperado antes dele existir.
+      await runAsTenant(tenantId, congregationId, async (dbTx) => {
+        const prisma = { client: dbTx } as unknown as PrismaService;
+        const service = new DashboardService(prisma);
+
+        const result = await service.getWeeklyDashboard(user());
+
+        const currentWeek = result.weekly[result.weekly.length - 1]!;
+        expect(currentWeek.income).toBe(300);
+        expect(currentWeek.expense).toBe(30);
+        expect(currentWeek.net).toBe(270);
+
+        expect(result.current_month.income).toBe(300);
+        expect(result.current_month.expense).toBe(30);
+
+        expect(result.top_income_categories).toEqual([
+          { category_name: 'Ofertas', total: 200 },
+          { category_name: 'Dízimo', total: 100 },
+        ]);
+      });
+
+      // Sob o segundo tenant: só os próprios valores (múltiplos de 1000) aparecem.
+      await runAsTenant(otherTenant.id, otherCongregation.id, async (dbTx) => {
+        const prisma = { client: dbTx } as unknown as PrismaService;
+        const service = new DashboardService(prisma);
+
+        const result = await service.getWeeklyDashboard({
+          sub: otherAccount.id,
+          tenant_id: otherTenant.id,
+          congregation_id: otherCongregation.id,
+          roles: ['treasurer'],
+          plan: 'starter',
+        });
+
+        const currentWeek = result.weekly[result.weekly.length - 1]!;
+        expect(currentWeek.income).toBe(9000);
+        expect(currentWeek.expense).toBe(3000);
+        expect(currentWeek.net).toBe(6000);
+
+        expect(result.current_month.income).toBe(9000);
+        expect(result.current_month.expense).toBe(3000);
+
+        expect(result.top_income_categories).toEqual([
+          { category_name: 'Ofertas — Outro Tenant', total: 9000 },
+        ]);
+      });
+    } finally {
+      await prismaAdmin.tenant.delete({ where: { id: otherTenant.id } });
+    }
+  }, 30000);
 });

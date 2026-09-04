@@ -166,4 +166,117 @@ describe('ForecastService.getForecast — SQL real (integração)', () => {
       expect(result.recurring_monthly).toBe(0);
     });
   }, 30000);
+
+  it('RLS isola: um segundo tenant não muda o forecast do tenant principal nem é visível nele', async () => {
+    const otherTs = Date.now();
+    const otherTenant = await prismaAdmin.tenant.create({
+      data: { slug: `fcst-int-other-${otherTs}`, name: 'Integração Forecast — Outro Tenant' },
+    });
+    const otherCongregation = await prismaAdmin.congregation.create({
+      data: { tenant_id: otherTenant.id, name: 'Sede — Outro Tenant' },
+    });
+    await prismaAdmin.tenantPlan.create({
+      data: { tenant_id: otherTenant.id, plan: PlanType.starter, status: PlanStatus.trial },
+    });
+    const otherAccount = await prismaAdmin.userAccount.create({
+      data: {
+        tenant_id: otherTenant.id,
+        congregation_id: otherCongregation.id,
+        email: `tesoureiro-outro-${otherTs}@orbien.test`,
+        password_hash: 'x',
+      },
+    });
+    const otherCategory = await prismaAdmin.financialCategory.create({
+      data: {
+        tenant_id: otherTenant.id,
+        congregation_id: otherCongregation.id,
+        name: 'Dízimos — Outro Tenant',
+        type: 'income',
+      },
+    });
+
+    try {
+      // Valores bem distintos (múltiplos de 1000) para nunca colidir por acaso
+      // com o histórico do tenant principal.
+      await prismaAdmin.financialTransaction.createMany({
+        data: [
+          {
+            tenant_id: otherTenant.id,
+            congregation_id: otherCongregation.id,
+            type: TransactionType.income,
+            amount: '5000.00',
+            occurred_at: monthsAgo(1),
+            category_id: otherCategory.id,
+            source: TransactionSource.manual,
+            created_by_user_id: otherAccount.id,
+          },
+          {
+            tenant_id: otherTenant.id,
+            congregation_id: otherCongregation.id,
+            type: TransactionType.income,
+            amount: '7000.00',
+            occurred_at: monthsAgo(2),
+            category_id: otherCategory.id,
+            source: TransactionSource.manual,
+            created_by_user_id: otherAccount.id,
+          },
+          {
+            tenant_id: otherTenant.id,
+            congregation_id: otherCongregation.id,
+            type: TransactionType.income,
+            amount: '4000.00',
+            occurred_at: new Date(),
+            category_id: otherCategory.id,
+            source: TransactionSource.recurring,
+            created_by_user_id: otherAccount.id,
+          },
+        ],
+      });
+
+      // Sob o tenant principal: o resultado não muda com o segundo tenant no ar —
+      // continua batendo com o que já era esperado antes dele existir.
+      await runAsTenant(tenantId, congregationId, async (dbTx) => {
+        const prisma = { client: dbTx } as unknown as PrismaService;
+        const service = new ForecastService(prisma);
+
+        const result = await service.getForecast(3, {
+          sub: userId,
+          tenant_id: tenantId,
+          congregation_id: congregationId,
+          roles: ['treasurer'],
+          plan: 'starter',
+        });
+
+        expect(result.months_of_history).toBe(2);
+        const totals = result.historical.map((h) => h.total).sort((a, b) => a - b);
+        expect(totals).toEqual([150, 200]);
+        expect(result.monthly_average).toBe(175);
+        expect(result.recurring_monthly).toBe(40);
+        expect(result.projected.every((p) => p.projected === 215)).toBe(true);
+      });
+
+      // Sob o segundo tenant: só os próprios valores (múltiplos de 1000) aparecem.
+      await runAsTenant(otherTenant.id, otherCongregation.id, async (dbTx) => {
+        const prisma = { client: dbTx } as unknown as PrismaService;
+        const service = new ForecastService(prisma);
+
+        const result = await service.getForecast(3, {
+          sub: otherAccount.id,
+          tenant_id: otherTenant.id,
+          congregation_id: otherCongregation.id,
+          roles: ['treasurer'],
+          plan: 'starter',
+        });
+
+        expect(result.months_of_history).toBe(2);
+        const totals = result.historical.map((h) => h.total).sort((a, b) => a - b);
+        expect(totals).toEqual([5000, 7000]);
+        expect(result.monthly_average).toBe(6000);
+        expect(result.recurring_monthly).toBe(4000);
+        expect(result.projected.every((p) => p.projected === 10000)).toBe(true);
+      });
+    } finally {
+      await prismaAdmin.tenant.delete({ where: { id: otherTenant.id } });
+    }
+  }, 30000);
 });
