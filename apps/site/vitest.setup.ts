@@ -1,35 +1,53 @@
 import "@testing-library/jest-dom/vitest";
 
 /**
- * jsdom não implementa IntersectionObserver, e `components/ui/Reveal.tsx`
- * embrulha praticamente toda seção do site — sem este stub qualquer render
- * de página quebra com `ReferenceError` no efeito do Reveal.
+ * jsdom não implementa IntersectionObserver, e `ui/Reveal.tsx` — usado por
+ * quase toda seção do site — instancia um no mount. Sem este stub qualquer
+ * render quebraria com ReferenceError.
  *
- * O stub entrega o elemento como visível assim que é observado, que é o que
- * o navegador faz para conteúdo já dentro da viewport. Assim o caminho
- * "revelou" é o testado por padrão; o caminho "fora da viewport" é exercido
- * pelos testes do próprio Reveal, que substituem o global.
+ * As instâncias ficam em `intersectionObservers` para que o teste do próprio
+ * `Reveal` possa disparar o callback à mão; os demais testes só precisam que
+ * o construtor exista.
  */
-class ImmediateIntersectionObserver implements IntersectionObserver {
-  readonly root = null;
-  readonly rootMargin = "";
-  readonly thresholds: ReadonlyArray<number> = [];
+export interface FakeIntersectionObserver {
+  callback: IntersectionObserverCallback;
+  observed: Element[];
+  unobserved: Element[];
+  disconnected: boolean;
+}
 
-  constructor(private readonly callback: IntersectionObserverCallback) {}
+export const intersectionObservers: FakeIntersectionObserver[] = [];
 
-  observe(target: Element): void {
-    this.callback(
-      [{ target, isIntersecting: true } as IntersectionObserverEntry],
-      this,
-    );
+class IntersectionObserverStub implements FakeIntersectionObserver {
+  callback: IntersectionObserverCallback;
+  observed: Element[] = [];
+  unobserved: Element[] = [];
+  disconnected = false;
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+    intersectionObservers.push(this);
   }
 
-  unobserve(): void {}
-  disconnect(): void {}
+  observe(el: Element) {
+    this.observed.push(el);
+  }
+
+  unobserve(el: Element) {
+    this.unobserved.push(el);
+  }
+
+  disconnect() {
+    this.disconnected = true;
+  }
+
   takeRecords(): IntersectionObserverEntry[] {
     return [];
   }
 }
 
-globalThis.IntersectionObserver =
-  ImmediateIntersectionObserver as unknown as typeof IntersectionObserver;
+Object.defineProperty(globalThis, "IntersectionObserver", {
+  writable: true,
+  configurable: true,
+  value: IntersectionObserverStub,
+});

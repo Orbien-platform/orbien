@@ -27,7 +27,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
-| 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
+| 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
 | 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
 
@@ -604,6 +604,37 @@ Todos apresentacionais. Teste: renderiza, mostra o texto esperado, links
 apontam para o href certo. `layout/NavDropdown.tsx` e `layout/Header.tsx` são
 os únicos com interação real.
 
+> **Executado em 2026-09-04:** os 57 arquivos do escopo (56 componentes +
+> `lib/utils.ts`) fecharam em **100% nas quatro métricas** — thresholds por
+> caminho em `vitest.config.ts`.
+>
+> **Dois ramos mortos removidos** (mesmo tratamento que a Fase 8 deu ao
+> `StatusBadge.tsx`), decisão tomada com o dev depois que os testes os
+> expuseram:
+> - `ui/Reveal.tsx`: o guard `if (!el) return` protegia um ref que o React
+>   sempre preenche antes de o efeito rodar. Virou `ref.current!` com o
+>   porquê no comentário.
+> - `funcionalidades/financeiro/FinanceiroHero.tsx`: o ternário de `deltaOk`
+>   só tinha o ramo positivo nos dados do mockup — o `#C0392B` nunca
+>   executava. O campo saiu dos três KPIs e a cor virou literal.
+>
+> Duas armadilhas encontradas na execução:
+> - **`vitest.setup.ts` ganhou um stub de `IntersectionObserver`.** O jsdom
+>   não implementa a API, e `ui/Reveal.tsx` instancia uma no mount — sem o
+>   stub *qualquer* render de seção quebraria com `ReferenceError`. O stub
+>   guarda as instâncias em `intersectionObservers` para o teste do próprio
+>   `Reveal` disparar o callback à mão.
+> - **`NavDropdown` abre por hover e por clique ao mesmo tempo**, e um
+>   clique real de mouse do `user-event` passa antes pelo `onMouseEnter` do
+>   wrapper: quando o `onClick` chega, o painel já está aberto e o toggle o
+>   fecha de volta. O `skipHover` do `user-event` não muda isso. O teste do
+>   caminho sem ponteiro (teclado, toque) usa `fireEvent.click`; o do hover
+>   usa `user.hover`/`user.unhover`. Vale registrar que, com mouse, clicar
+>   no gatilho hoje fecha o menu que o hover acabou de abrir.
+>
+> O `playwright` órfão em `devDependencies` continua sem destino — a decisão
+> segue marcada para a Fase 12, como o plano previa.
+
 ### Fase 12 — site: rotas — fecha o site
 
 **Escopo:** `src/app/` (18).
@@ -618,13 +649,14 @@ da Fase 13, ou sai.
 
 > **Executado em 2026-09-04:** os 18 arquivos de `src/app/` fecharam em 100%
 > nas quatro métricas — 70 testes em 18 specs, threshold `src/app/**` em
-> `vitest.config.ts`. **O site ainda não está em 100%**: a Fase 11
-> (`components/`, `lib/`) continua aberta, e é ela que fecha o app. O que a
-> Fase 12 cobre já arrasta `components/` para ~95% de linhas como efeito
-> colateral de renderizar as páginas inteiras — mas cobertura por arrasto não
-> é asserção; a Fase 11 segue valendo por inteiro.
+> `vitest.config.ts`. Com a Fase 11 já em `main`, **o site fecha aqui**:
+> `npm run test:cov -w orbien-site` dá 100% global nas quatro métricas — 280
+> testes em 75 specs, 279 statements, 119 branches, 183 functions, 276 lines.
+> (Escrita antes da Fase 11 entrar, esta fase mediu `components/` em ~95% de
+> linhas só por arrasto de renderizar as páginas inteiras; a Fase 11 fez o
+> trabalho de asserção que o arrasto não faz.)
 >
-> Três armadilhas encontradas na execução:
+> Duas armadilhas encontradas na execução:
 > - **`next/font/google` não funciona fora do build.** O módulo só existe como
 >   transformação do compilador do Next; importado pelo Vitest ele não expõe os
 >   loaders e `DM_Sans()` estoura com `is not a function`. `layout.test.tsx`
@@ -636,11 +668,13 @@ da Fase 13, ou sai.
 >   realm (`Unsupported input ... of type object`). `icon.test.tsx` e
 >   `apple-icon.test.tsx` levam `@vitest-environment node` no topo e conferem a
 >   assinatura PNG dos primeiros bytes.
-> - **`IntersectionObserver` não existe no jsdom** e `components/ui/Reveal.tsx`
->   embrulha quase toda seção do site — sem stub, qualquer render de página
->   quebra no efeito do Reveal. O stub entrou em `vitest.setup.ts` e entrega o
->   elemento como visível ao ser observado, que é o comportamento do navegador
->   para conteúdo já na viewport.
+>
+> A terceira armadilha — `IntersectionObserver`, que o jsdom não implementa e
+> `ui/Reveal.tsx` instancia em quase toda seção — foi resolvida em paralelo
+> pela Fase 11, e o stub dela é o que ficou: as duas fases escreveram um stub
+> cada, e no merge o desta saiu. O da Fase 11 guarda as instâncias em
+> `intersectionObservers` para o teste do próprio `Reveal` disparar o callback
+> à mão; os testes de rota só precisam que o construtor exista.
 >
 > **Divergência de conteúdo encontrada, mantida por decisão do dono do
 > código:** dos CTAs de lista de espera do site, 8 apontam para
