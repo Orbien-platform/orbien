@@ -23,7 +23,18 @@ export default defineConfig({
       reporter: ["text-summary", "lcov"],
       // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
       // global. O piso nunca desce.
-      thresholds: { statements: 0, branches: 0, functions: 0, lines: 0 },
+      thresholds: {
+        statements: 0,
+        branches: 0,
+        functions: 0,
+        lines: 0,
+        // Fase 11 — componentes e `lib/`. O único ramo que fica de fora é o
+        // `if (!el) return` do `Reveal`: o `ref` está sempre preenchido
+        // quando o effect roda, e forçá-lo a `null` exigiria fingir o
+        // próprio React.
+        "src/components/**": { statements: 99, branches: 98, functions: 100, lines: 100 },
+        "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+      },
     },
   },
 });
