@@ -190,7 +190,10 @@ describe("PessoasPage", () => {
       expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("page=2"))
     );
 
-    await user.click(screen.getByRole("button", { name: "Página anterior" }));
+    // O botão some enquanto `isLoading` fica true entre o clique e o
+    // próximo render — `findByRole` espera reaparecer, `getByRole` pega a
+    // janela de corrida e falha de forma intermitente.
+    await user.click(await screen.findByRole("button", { name: "Página anterior" }));
     await waitFor(() =>
       expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("page=1"))
     );
