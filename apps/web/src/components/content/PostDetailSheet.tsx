@@ -34,7 +34,7 @@ function filenameFromUploadUrl(url: string): string {
 
 interface Segment { id: string; name: string; }
 
-interface Post {
+export interface Post {
   id: string;
   title: string;
   body?: string;

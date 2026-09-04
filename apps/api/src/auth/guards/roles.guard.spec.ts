@@ -1,10 +1,12 @@
 /**
  * O que este arquivo prende é uma decisão de segurança, não uma função.
  *
- * `support_session` satisfaz qualquer `@Roles`. É uma exceção larga de
- * propósito — sem ela a impersonação não leva a nada — e por isso os limites
- * dela precisam estar afirmados: só vale com a marca vinda de um token
- * assinado, e não muda nada para quem não a tem.
+ * `support_session` satisfaz qualquer `@Roles`, mas só para leitura (GET/HEAD)
+ * — decisão da Fase 5, que fecha a exceção mais larga que a Fase 1 tinha
+ * deixado aberta (a sessão de suporte também escrevia). É uma exceção de
+ * propósito — sem ela a impersonação não leva a lugar nenhum — e por isso os
+ * limites dela precisam estar afirmados: só vale com a marca vinda de um token
+ * assinado, só em métodos seguros, e não muda nada para quem não a tem.
  */
 
 import { ExecutionContext } from '@nestjs/common';
@@ -15,11 +17,12 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 function contextWith(
   user: Partial<JwtPayload> | undefined,
   params: Record<string, string> = {},
+  method = 'GET',
 ): ExecutionContext {
   return {
     getHandler: () => function handler() {},
     getClass: () => class Controller {},
-    switchToHttp: () => ({ getRequest: () => ({ user, params }) }),
+    switchToHttp: () => ({ getRequest: () => ({ user, params, method }) }),
   } as unknown as ExecutionContext;
 }
 
@@ -61,14 +64,21 @@ describe('RolesGuard', () => {
   });
 
   describe('com sessão de suporte', () => {
-    it('libera rota cujo papel o usuário não tem', () => {
+    it('libera GET de rota cujo papel o usuário não tem', () => {
       const guard = guardRequiring(['tenant_admin', 'admin_congregation']);
-      expect(guard.canActivate(contextWith(suporte))).toBe(true);
+      expect(guard.canActivate(contextWith(suporte, {}, 'GET'))).toBe(true);
     });
 
-    it('libera também rota de escrita', () => {
+    it('libera HEAD pelo mesmo motivo que GET — os dois são leitura', () => {
       const guard = guardRequiring(['tenant_admin']);
-      expect(guard.canActivate(contextWith(suporte))).toBe(true);
+      expect(guard.canActivate(contextWith(suporte, {}, 'HEAD'))).toBe(true);
+    });
+
+    it('barra rota de escrita — Fase 5: sessão de suporte só lê', () => {
+      const guard = guardRequiring(['tenant_admin']);
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        expect(guard.canActivate(contextWith(suporte, {}, method))).toBe(false);
+      }
     });
 
     it('exige o booleano verdadeiro — valor ausente ou falso não libera', () => {

@@ -25,10 +25,10 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☑ |
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☑ |
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
-| 9 | web — componentes de domínio | `components/` restantes | 28 | ☐ |
+| 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☑ |
-| 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
-| 12 | site — rotas | `app/` | 18 | ☐ |
+| 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
+| 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
 
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
@@ -552,6 +552,28 @@ campo obrigatório, submete chamando o service certo, fecha; e o caminho de
 erro da API. `ImportCsvModal.tsx` e `MediaUploadField.tsx` envolvem arquivo —
 use `File` e `DataTransfer` do jsdom.
 
+> **Executado em 2026-09-04:** os 28 arquivos fecharam em `statements` 99–100%,
+> `functions` 100%, `lines` 100% e `branches` 89–98% por diretório — ver as
+> entradas em `vitest.config.ts` (`coverage.thresholds`). O que falta de
+> `branches`/`statements` é sempre o mesmo padrão: guards `if (!x) return` no
+> início de handlers (`handleDeactivate`, `toggleAttendance`,
+> `confirmRemoveMaterial` etc.) cujo botão de disparo só existe depois que `x`
+> já está preenchido — o ramo "ausente" não é alcançável pela UI real, só
+> chamando a função interna direto. Cada teste correspondente documenta o caso
+> específico. Duas armadilhas encontradas na execução:
+> - **Bug real corrigido:** `GroupTypesModal.tsx`, `CategoriesModal.tsx` e
+>   `GroupDetailSheet.tsx` tinham diálogos de confirmação (desativar tipo,
+>   excluir categoria, remover material) como `<div>` fixa comum fora de
+>   qualquer `Dialog.Root`. Com o modal principal aberto, o Base UI marca
+>   *toda* a árvore fora do `Dialog` ativo como `inert` para isolar o foco —
+>   incluindo essa div, tornando o botão de confirmar inacessível a leitor de
+>   tela e, em navegador real, fisicamente inclicável. Corrigido trocando por
+>   um `Dialog.Root` aninhado (mesmo padrão já usado no form de criar/editar).
+> - Testar fechar um diálogo aninhado via `{Escape}` é frágil sob execução
+>   completa da suíte (falha por ordem/timing mesmo passando isolado); clicar
+>   no backdrop (`document.querySelector('.bg-black\\/NN')`) é equivalente e
+>   estável.
+
 ### Fase 10 — web: rotas — fecha o web
 
 **Escopo:** `src/app/` (14).
@@ -670,6 +692,37 @@ Todos apresentacionais. Teste: renderiza, mostra o texto esperado, links
 apontam para o href certo. `layout/NavDropdown.tsx` e `layout/Header.tsx` são
 os únicos com interação real.
 
+> **Executado em 2026-09-04:** os 57 arquivos do escopo (56 componentes +
+> `lib/utils.ts`) fecharam em **100% nas quatro métricas** — thresholds por
+> caminho em `vitest.config.ts`.
+>
+> **Dois ramos mortos removidos** (mesmo tratamento que a Fase 8 deu ao
+> `StatusBadge.tsx`), decisão tomada com o dev depois que os testes os
+> expuseram:
+> - `ui/Reveal.tsx`: o guard `if (!el) return` protegia um ref que o React
+>   sempre preenche antes de o efeito rodar. Virou `ref.current!` com o
+>   porquê no comentário.
+> - `funcionalidades/financeiro/FinanceiroHero.tsx`: o ternário de `deltaOk`
+>   só tinha o ramo positivo nos dados do mockup — o `#C0392B` nunca
+>   executava. O campo saiu dos três KPIs e a cor virou literal.
+>
+> Duas armadilhas encontradas na execução:
+> - **`vitest.setup.ts` ganhou um stub de `IntersectionObserver`.** O jsdom
+>   não implementa a API, e `ui/Reveal.tsx` instancia uma no mount — sem o
+>   stub *qualquer* render de seção quebraria com `ReferenceError`. O stub
+>   guarda as instâncias em `intersectionObservers` para o teste do próprio
+>   `Reveal` disparar o callback à mão.
+> - **`NavDropdown` abre por hover e por clique ao mesmo tempo**, e um
+>   clique real de mouse do `user-event` passa antes pelo `onMouseEnter` do
+>   wrapper: quando o `onClick` chega, o painel já está aberto e o toggle o
+>   fecha de volta. O `skipHover` do `user-event` não muda isso. O teste do
+>   caminho sem ponteiro (teclado, toque) usa `fireEvent.click`; o do hover
+>   usa `user.hover`/`user.unhover`. Vale registrar que, com mouse, clicar
+>   no gatilho hoje fecha o menu que o hover acabou de abrir.
+>
+> O `playwright` órfão em `devDependencies` continua sem destino — a decisão
+> segue marcada para a Fase 12, como o plano previa.
+
 ### Fase 12 — site: rotas — fecha o site
 
 **Escopo:** `src/app/` (18).
@@ -681,6 +734,55 @@ comparar pixel.
 
 Decida aqui o destino do `playwright` órfão em `devDependencies`: vira o smoke
 da Fase 13, ou sai.
+
+> **Executado em 2026-09-04:** os 18 arquivos de `src/app/` fecharam em 100%
+> nas quatro métricas — 70 testes em 18 specs, threshold `src/app/**` em
+> `vitest.config.ts`. Com a Fase 11 já em `main`, **o site fecha aqui**:
+> `npm run test:cov -w orbien-site` dá 100% global nas quatro métricas — 280
+> testes em 75 specs, 279 statements, 119 branches, 183 functions, 276 lines.
+> (Escrita antes da Fase 11 entrar, esta fase mediu `components/` em ~95% de
+> linhas só por arrasto de renderizar as páginas inteiras; a Fase 11 fez o
+> trabalho de asserção que o arrasto não faz.)
+>
+> Duas armadilhas encontradas na execução:
+> - **`next/font/google` não funciona fora do build.** O módulo só existe como
+>   transformação do compilador do Next; importado pelo Vitest ele não expõe os
+>   loaders e `DM_Sans()` estoura com `is not a function`. `layout.test.tsx`
+>   mocka o módulo devolvendo `{ variable }`, que é o contrato que o layout usa.
+>   `<html>`/`<body>` também não podem ser montados no container do jsdom — o
+>   teste renderiza com `renderToStaticMarkup` para asserir os atributos da raiz.
+> - **`ImageResponse` precisa do ambiente `node`.** Sob jsdom o Satori gera o
+>   SVG normalmente, mas o `sharp` rejeita o `Uint8Array` que vem de outro
+>   realm (`Unsupported input ... of type object`). `icon.test.tsx` e
+>   `apple-icon.test.tsx` levam `@vitest-environment node` no topo e conferem a
+>   assinatura PNG dos primeiros bytes.
+>
+> A terceira armadilha — `IntersectionObserver`, que o jsdom não implementa e
+> `ui/Reveal.tsx` instancia em quase toda seção — foi resolvida em paralelo
+> pela Fase 11, e o stub dela é o que ficou: as duas fases escreveram um stub
+> cada, e no merge o desta saiu. O da Fase 11 guarda as instâncias em
+> `intersectionObservers` para o teste do próprio `Reveal` disparar o callback
+> à mão; os testes de rota só precisam que o construtor exista.
+>
+> **Divergência de conteúdo encontrada, mantida por decisão do dono do
+> código:** dos CTAs de lista de espera do site, 8 apontam para
+> `href="#waitlist"` e 3 apontam para `href="#"` — `home/FinalCta.tsx`,
+> `precos/PrecosCta.tsx` e `contato/ContatoContent.tsx`. `#` rola para o topo e
+> não faz nada; `#waitlist` também não faz nada hoje (não existe elemento com
+> esse id), mas é a âncora que os outros 8 usam e a que a Fase 13 quer no smoke.
+> **Decidido em 2026-09-04: padronizar fica para quando a waitlist existir de
+> verdade** — enquanto nenhum dos dois hrefs funciona, unificar seria trocar um
+> placeholder por outro. O teste da home fixa o estado atual dos dois casos com
+> comentário explícito, então ligar a waitlist faz o teste falhar e cobrar a
+> atualização — em vez de passar em silêncio.
+>
+> **`playwright` órfão: removido.** A dependência era o pacote `playwright`,
+> não `@playwright/test`, e não havia `e2e/`, `playwright.config.ts` nem script
+> que a usasse no site — ela não sustentava o smoke da Fase 13 como estava.
+> Saiu de `apps/site/package.json` nesta fase; se a Fase 13 decidir fazer o
+> smoke das 18 rotas, instala `@playwright/test` (que é o runner, como em
+> `apps/web`). O `exclude: ["e2e/**"]` do `vitest.config.ts` fica onde está:
+> custa nada e já está certo no dia em que existir um `e2e/` no site.
 
 ---
 
@@ -697,7 +799,11 @@ da Fase 13, ou sai.
    `workers: 1` e `fullyParallel: false` — os specs montam e desmontam dados
    no mesmo tenant, e paralelizar faria um apagar o template do outro.
 3. **Smoke do site**, se decidido na Fase 12: as 18 rotas respondem 200,
-   header e footer renderizam, âncora `#waitlist` existe.
+   header e footer renderizam, âncora `#waitlist` existe. A Fase 12 deixou a
+   porta aberta mas **sem dependência instalada** — o `playwright` órfão saiu;
+   quem fizer o smoke instala `@playwright/test -w orbien-site`. A checagem da
+   âncora `#waitlist` só faz sentido depois que a waitlist for ligada: hoje
+   nenhum CTA do site tem destino real (ver a nota da Fase 12).
 
 ### Pronto quando
 

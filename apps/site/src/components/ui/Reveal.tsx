@@ -11,8 +11,10 @@ export function Reveal({ children, className = "" }: RevealProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    // O ref aponta para o div logo abaixo, montado por este mesmo
+    // componente — o React o preenche antes de o efeito rodar, então não há
+    // caminho em que seja null.
+    const el = ref.current!;
     const obs = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
+import { Dialog } from "@base-ui/react/dialog";
 import {
   Sheet,
   SheetContent,
@@ -651,13 +652,19 @@ export function GroupDetailSheet({
         />
       )}
 
-      {removingMaterial && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
-            <p className="text-sm font-medium text-ink dark:text-white">Remover material?</p>
-            <p className="mt-1.5 text-sm text-stone">
+      <Dialog.Root
+        open={removingMaterial !== null}
+        onOpenChange={(v) => { if (!v) setRemovingMaterial(null); }}
+      >
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-[60] bg-black/40 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-[60] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[12px] bg-[var(--surface-card)] p-5 transition duration-150 data-ending-style:opacity-0 data-ending-style:scale-95 data-starting-style:opacity-0 data-starting-style:scale-95">
+            <Dialog.Title className="text-sm font-medium text-ink dark:text-white">
+              Remover material?
+            </Dialog.Title>
+            <Dialog.Description className="mt-1.5 text-sm text-stone">
               O material continua disponível na biblioteca, apenas o vínculo com este encontro será removido.
-            </p>
+            </Dialog.Description>
             <div className="mt-4 flex gap-2">
               <Button
                 variant="outline"
@@ -675,9 +682,9 @@ export function GroupDetailSheet({
                 {isRemovingMaterial ? <Loader2 size={14} className="animate-spin" /> : "Remover"}
               </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   );
 }

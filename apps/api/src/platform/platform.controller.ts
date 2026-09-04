@@ -16,8 +16,10 @@ import { PlatformRoute } from '../common/decorators/platform-route.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { ProvisionTenantService, ProvisionedTenant } from './provision-tenant.service';
 import { ListTenantsService, TenantListPage } from './list-tenants.service';
+import { ListAuditLogsService, AuditLogPage } from './list-audit-logs.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
+import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 
 /**
  * Plano de plataforma: opera acima dos tenants, não dentro de um.
@@ -38,6 +40,7 @@ export class PlatformController {
   constructor(
     private readonly provisionTenant: ProvisionTenantService,
     private readonly listTenants: ListTenantsService,
+    private readonly listAuditLogs: ListAuditLogsService,
   ) {}
 
   @Get('tenants')
@@ -49,5 +52,11 @@ export class PlatformController {
   @HttpCode(HttpStatus.CREATED)
   provision(@Body() dto: ProvisionTenantDto): Promise<ProvisionedTenant> {
     return this.provisionTenant.provision(dto);
+  }
+
+  // Fixa em `support_access` — ver o cabeçalho de `ListAuditLogsService`.
+  @Get('audit-logs/support-access')
+  listSupportAccess(@Query() query: ListAuditLogsQueryDto): Promise<AuditLogPage> {
+    return this.listAuditLogs.list(query);
   }
 }

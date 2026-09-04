@@ -3,6 +3,15 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
+// Sessão de suporte só lê. Fase 5 revisita a decisão da Fase 1 ("libera também
+// rota de escrita") e fecha essa porta: o suporte da plataforma abre um tenant
+// inteiro por `POST /auth/impersonate`, e nada nesse fluxo hoje precisa
+// escrever no tenant do cliente — só ver o que ele vê para diagnosticar. GET e
+// HEAD não têm efeito colateral; qualquer outro verbo é escrita, e cai na
+// checagem normal de papel — que nega, porque `platform_support` não está em
+// nenhuma lista de `@Roles` de dado de igreja, de propósito.
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -17,7 +26,7 @@ export class RolesGuard implements CanActivate {
 
     const request = context
       .switchToHttp()
-      .getRequest<{ user: JwtPayload; params: Record<string, string> }>();
+      .getRequest<{ user: JwtPayload; params: Record<string, string>; method: string }>();
     const { user } = request;
 
     // Ticket de upload não carrega papel: quem autorizou foi a rota que o
@@ -31,7 +40,7 @@ export class RolesGuard implements CanActivate {
       );
     }
 
-    // Sessão de suporte satisfaz qualquer @Roles.
+    // Sessão de suporte satisfaz qualquer @Roles, mas só em leitura.
     //
     // `platform_support` não está em nenhuma das ~156 listas de @Roles do
     // projeto, e isso é deliberado: a conta de suporte da plataforma não tem
@@ -51,7 +60,12 @@ export class RolesGuard implements CanActivate {
     //
     // O RLS continua valendo por cima: o token traz um tenant só, e o
     // interceptor de contexto o fixa. Sessão de suporte não cruza tenant.
-    if (user.support_session === true) return true;
+    //
+    // Mas só em GET/HEAD: fora deles a resposta é `false` direto, sem olhar
+    // `required` — o mesmo efeito do 403 que a linha de baixo produziria para
+    // `roles: ['platform_support']`, que não está em nenhuma dessas listas,
+    // só que sem depender de a lista continuar vazia disso.
+    if (user.support_session === true) return SAFE_METHODS.has(request.method);
 
     return required.some((role) => user.roles.includes(role));
   }
