@@ -201,39 +201,48 @@ describe("interceptor de resposta — refresh de token", () => {
     }
   });
 
-  // O caminho "sem refresh token" retorna antes do try/finally que zera
-  // `isRefreshing`, então o módulo fica com isRefreshing=true para sempre
-  // depois dele — por isso os dois casos abaixo reimportam o módulo do zero
-  // (vi.resetModules) em vez de reusar o `api` do topo do arquivo. Ver nota
-  // no relatório da Fase 7.
   it("sem refresh token: limpa tudo e manda para /login", async () => {
-    vi.resetModules();
-    const auth = await import("./auth");
-    vi.mocked(auth.getRefreshToken).mockReturnValue(null);
-    const freshApi = (await import("./api")).default;
+    vi.mocked(getRefreshToken).mockReturnValue(null);
     const error = makeError();
 
-    await expect(responseRejected(freshApi)(error)).rejects.toBe(error);
+    await expect(responseRejected()(error)).rejects.toBe(error);
 
-    expect(auth.clearTokens).toHaveBeenCalled();
+    expect(clearTokens).toHaveBeenCalled();
     expect(window.location.href).toBe("/login");
   });
 
   it("sem refresh token e sem window: não tenta redirecionar", async () => {
-    vi.resetModules();
-    const auth = await import("./auth");
-    vi.mocked(auth.getRefreshToken).mockReturnValue(null);
-    const freshApi = (await import("./api")).default;
+    vi.mocked(getRefreshToken).mockReturnValue(null);
     const originalWindow = globalThis.window;
     // @ts-expect-error simula ambiente sem window (SSR)
     delete globalThis.window;
 
     try {
       const error = makeError();
-      await expect(responseRejected(freshApi)(error)).rejects.toBe(error);
-      expect(auth.clearTokens).toHaveBeenCalled();
+      await expect(responseRejected()(error)).rejects.toBe(error);
+      expect(clearTokens).toHaveBeenCalled();
     } finally {
       globalThis.window = originalWindow;
     }
+  });
+
+  it("isRefreshing volta a false depois do caminho sem refresh token, liberando o próximo 401", async () => {
+    vi.mocked(getRefreshToken).mockReturnValueOnce(null).mockReturnValueOnce("refresh-token");
+    await expect(responseRejected()(makeError())).rejects.toBeDefined();
+
+    vi.spyOn(axios, "post").mockResolvedValue({
+      data: { access_token: "new-access", refresh_token: "new-refresh" },
+    });
+    api.defaults.adapter = vi.fn().mockResolvedValue({
+      data: {},
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: {},
+    });
+
+    await responseRejected()(makeError());
+
+    expect(axios.post).toHaveBeenCalled();
   });
 });

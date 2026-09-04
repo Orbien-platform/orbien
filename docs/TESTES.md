@@ -504,13 +504,16 @@ usuário quando falha. `useFileUpload.ts` e `AuthContext.tsx` pedem
 > `vitest.config.ts`. `useHydrated.ts` precisou de `renderToString` (não só
 > `renderHook`) para cobrir o branch de `getServerSnapshot`.
 >
-> **Achado durante a escrita dos testes, não corrigido (fora do escopo desta
-> fase):** em `lib/api.ts`, o branch "401 sem refresh token" (linhas 56-60)
-> retorna antes do `try/finally` que zera `isRefreshing`, então o módulo fica
-> com `isRefreshing=true` permanentemente depois desse caminho — qualquer
-> 401 seguinte cairia para sempre na fila de retry em vez de tentar de novo.
-> Os testes desse caminho em `lib/api.test.ts` isolam o efeito com
-> `vi.resetModules()`; o comportamento em produção não foi alterado.
+> **Achado durante a escrita dos testes, corrigido em seguida:** em
+> `lib/api.ts`, o branch "401 sem refresh token" retornava antes do
+> `try/finally` que zera `isRefreshing`, então o módulo ficava com
+> `isRefreshing=true` permanentemente depois desse caminho — qualquer 401
+> seguinte cairia para sempre na fila de retry em vez de tentar de novo, o
+> que travaria a sessão do usuário até um reload da página. Fix: o check de
+> `refreshToken` entrou para dentro do `try`, então qualquer retorno desse
+> branch passa pelo `finally`. `lib/api.test.ts` ganhou um teste de
+> regressão que prova que um 401 seguinte volta a acionar o refresh
+> normalmente.
 
 **Escopo:** `src/components/ui/` (16), `layout/` (2), `dashboard/` (2),
 `providers/theme-provider.tsx`.
