@@ -1,4 +1,8 @@
-import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
+import {
+  ForbiddenException,
+  UnauthorizedException,
+  type ExecutionContext,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
@@ -21,9 +25,9 @@ const base: JwtPayload = {
   plan: 'starter',
 };
 
-function contexto(user: JwtPayload): ExecutionContext {
+function contexto(user: JwtPayload, method = 'GET'): ExecutionContext {
   return {
-    switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    switchToHttp: () => ({ getRequest: () => ({ user, method }) }),
     getHandler: () => 'handler',
     getClass: () => 'class',
   } as unknown as ExecutionContext;
@@ -58,14 +62,53 @@ describe('JwtAuthGuard', () => {
 
   it('recusa ticket de upload em rota que não é a de upload', async () => {
     const ticket: JwtPayload = { ...base, roles: [], scope: 'upload', upload_target: 'p-1' };
-    await expect(guard(undefined).canActivate(contexto(ticket))).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      guard(undefined).canActivate(contexto(ticket, 'POST')),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('deixa o ticket passar na rota marcada com @UploadTicketRoute', async () => {
     const ticket: JwtPayload = { ...base, roles: [], scope: 'upload', upload_target: 'p-1' };
-    await expect(guard(true).canActivate(contexto(ticket))).resolves.toBe(true);
+    await expect(guard(true).canActivate(contexto(ticket, 'POST'))).resolves.toBe(true);
+  });
+
+  describe('sessão de suporte é somente leitura', () => {
+    // O corte é na API, não na UI. Esconder o botão não impede a requisição, e
+    // o AuditInterceptor só conta a história depois do fato.
+    const suporte: JwtPayload = { ...base, support_session: true };
+
+    it.each(['GET', 'HEAD', 'OPTIONS'])('deixa passar %s', async (method) => {
+      await expect(
+        guard(undefined).canActivate(contexto(suporte, method)),
+      ).resolves.toBe(true);
+    });
+
+    it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('recusa %s', async (method) => {
+      await expect(
+        guard(undefined).canActivate(contexto(suporte, method)),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('a regra é da marca, não do método: usuário comum segue escrevendo', async () => {
+      await expect(
+        guard(undefined).canActivate(contexto(base, 'POST')),
+      ).resolves.toBe(true);
+    });
+
+    it('vale antes do ticket: nem com ticket a sessão de suporte escreve', async () => {
+      // O ticket copia `support_session` para o AuditInterceptor ver. Isso não
+      // pode virar uma porta de escrita por cima da regra.
+      const ticketDeSuporte: JwtPayload = {
+        ...base,
+        roles: [],
+        scope: 'upload',
+        upload_target: 'p-1',
+        support_session: true,
+      };
+      await expect(
+        guard(true).canActivate(contexto(ticketDeSuporte, 'POST')),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   it('não deixa passar quando o passport já recusou', async () => {

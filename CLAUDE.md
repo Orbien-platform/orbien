@@ -93,9 +93,13 @@ leia o do app antes de mexer nele.
 - `platform_support` não está em nenhuma lista de `@Roles` de dados de igreja, e
   isso é deliberado: o acesso dela é pontual, por `POST /auth/impersonate`, que
   emite token com `support_session: true` — e essa marca satisfaz qualquer
-  `@Roles` no `RolesGuard`. O contrapeso é o `AuditInterceptor`, global, que
-  grava `support_access` em `audit_logs` por `audit_insert()`. Se você mexer em
-  um dos três, mexeu no acordo inteiro. O mesmo interceptor grava
+  `@Roles` no `RolesGuard`, **para leitura**. O `JwtAuthGuard` recusa
+  POST/PUT/PATCH/DELETE com essa marca: sessão de suporte vê tudo dentro do
+  tenant e não altera nada. O outro contrapeso é o `AuditInterceptor`, global,
+  que grava `support_access` em `audit_logs` por `audit_insert()`. E o token
+  vale 5 minutos (`SUPPORT_SESSION_TTL`), não os 15 de um access token comum,
+  porque não se renova — o prazo é o único limite automático que existe. Se
+  você mexer em um dos quatro, mexeu no acordo inteiro. O mesmo interceptor grava
   `platform_access` nas rotas marcadas com `@PlatformRoute()` — ali não há
   impersonação, mas há o ramo de RLS que abre os N tenants, e ele também
   precisa de rastro.

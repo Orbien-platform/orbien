@@ -51,6 +51,11 @@ export class RolesGuard implements CanActivate {
     //
     // O RLS continua valendo por cima: o token traz um tenant só, e o
     // interceptor de contexto o fixa. Sessão de suporte não cruza tenant.
+    //
+    // E, desde a Fase 5, a exceção só vale para leitura: o `JwtAuthGuard`
+    // recusa POST/PUT/PATCH/DELETE com `support_session`. Quem lê este ramo
+    // não deve concluir que a sessão de suporte pode tudo dentro do tenant —
+    // ela pode ver tudo.
     if (user.support_session === true) return true;
 
     return required.some((role) => user.roles.includes(role));

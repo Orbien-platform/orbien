@@ -196,6 +196,32 @@ describe('sessão de suporte', () => {
     expect(nomes).toContain(pessoaAlvoNome);
   });
 
+  it('lê, mas não escreve: a sessão de suporte é somente leitura', async () => {
+    // A decisão está no `JwtAuthGuard`, e é a que fecha o buraco que o
+    // `AuditInterceptor` sozinho não fechava: auditoria diz depois quem fez,
+    // não impede. Aqui o que se prova é que a recusa acontece no HTTP, com o
+    // token real — teste de unidade prova a regra, não a montagem.
+    const token = await loginSuporte();
+    const imp = await http()
+      .post('/api/auth/impersonate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ target_tenant_id: tenantAlvoId })
+      .expect(200);
+
+    const suporte = `Bearer ${imp.body.access_token}`;
+
+    // Leitura continua valendo — é o ponto inteiro da sessão de suporte.
+    await http().get('/api/persons?limit=1').set('Authorization', suporte).expect(200);
+
+    // Escrita, não. E o 403 vem antes da validação do corpo: a recusa é da
+    // marca no token, não do que foi enviado.
+    await http()
+      .post('/api/persons')
+      .set('Authorization', suporte)
+      .send({ full_name: 'Pessoa criada por suporte' })
+      .expect(403);
+  });
+
   it('não cruza tenant: só o alvo aparece, nunca o tenant do suporte', async () => {
     // O tenant do suporte não tem pessoas, então a asserção útil é sobre o
     // congregation_id: tudo que voltar tem que ser da congregação do alvo.

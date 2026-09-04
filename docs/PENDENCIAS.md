@@ -714,7 +714,23 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   por cookie `HttpOnly` (ver abaixo): o token do fragmento é postado em `POST
   /api/session/suporte` e vira cookie ali mesmo, então a janela em que ele é
   legível por script é o intervalo entre o `location.hash` e essa chamada.
-- **A sessão pode escrever**, não só ler. Decisão adiada.
+- ~~**A sessão pode escrever**, não só ler. Decisão adiada.~~ Decidida na
+  Fase 5: **somente leitura**. O `JwtAuthGuard` recusa
+  POST/PUT/PATCH/DELETE quando o token traz `support_session`.
+
+  O corte é na API e não na UI porque UI que esconde o botão não impede a
+  requisição. E vem antes do ramo do ticket de upload, senão o ticket — que
+  copia `support_session` para o `AuditInterceptor` ver — seria uma porta de
+  escrita por cima da regra.
+
+  A razão: o `AuditInterceptor` é controle detectivo, diz depois quem fez e não
+  impede, e a sessão de suporte satisfaz qualquer `@Roles` — o operador tem,
+  dentro do tenant, mais poder que a maioria dos usuários daquela igreja. Não
+  existia fluxo de suporte que escrevesse, então cortar agora não tirou nada de
+  ninguém, e a assimetria pesa: soltar depois é uma linha de guard; recuperar
+  confiança depois de um operador alterar dado de igreja alheia por engano,
+  não. Quando aparecer o caso "corrige pra mim", o caminho é um decorator de
+  exceção declarada por rota, não afrouxar a regra.
 - **Sem limite de tentativa no login da plataforma.** `POST
   /auth/platform/login` (Fase 3) não tem rate limit, e nem `POST /auth/login`
   tem — só `forgot-password` tem, e é em memória, o que não sobrevive a mais de
