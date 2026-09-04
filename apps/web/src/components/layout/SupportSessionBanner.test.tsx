@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/hooks/useAuth";
 import type { SessionUser } from "@/lib/session";
@@ -22,13 +23,15 @@ const BASE_USER: SessionUser = {
 };
 
 function setup(user: SessionUser | null) {
+  const logout = vi.fn(async () => {});
   mockedUseAuth.mockReturnValue({
     user,
     isLoading: false,
     isAuthenticated: !!user,
     login: vi.fn(),
-    logout: vi.fn(async () => {}),
+    logout,
   });
+  return { logout };
 }
 
 describe("SupportSessionBanner", () => {
@@ -58,5 +61,14 @@ describe("SupportSessionBanner", () => {
     render(<SupportSessionBanner />);
     const banner = screen.getByRole("status");
     expect(banner).toHaveTextContent("Sessão de suporte da plataforma.");
+  });
+
+  it("chama logout ao clicar em Encerrar sessão", async () => {
+    const { logout } = setup({ ...BASE_USER, support_session: true, support_tenant_name: "Igreja Vida Nova" });
+    render(<SupportSessionBanner />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Encerrar sessão" }));
+
+    expect(logout).toHaveBeenCalled();
   });
 });
