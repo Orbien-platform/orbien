@@ -41,6 +41,10 @@ export default defineConfig({
         "src/components/precos/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/components/sem-cnpj/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/components/sobre/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        // Fase 12 — rotas. Todos os arquivos de `src/app/` são Server
+        // Components sem `async` (invocáveis como função) ou geradores de
+        // metadata; `icon`/`apple-icon` devolvem `ImageResponse`.
+        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },
