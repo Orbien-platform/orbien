@@ -25,7 +25,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 6 | API — conteúdo e apoio | `content/`, `settings/`, `study-materials/`, `mail/`, `storage/` | 30 | ☑ |
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☐ |
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☐ |
-| 9 | web — componentes de domínio | `components/` restantes | 28 | ☐ |
+| 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
 | 12 | site — rotas | `app/` | 18 | ☐ |
@@ -515,6 +515,28 @@ São majoritariamente modais e sheets. Padrão por componente: abre, valida
 campo obrigatório, submete chamando o service certo, fecha; e o caminho de
 erro da API. `ImportCsvModal.tsx` e `MediaUploadField.tsx` envolvem arquivo —
 use `File` e `DataTransfer` do jsdom.
+
+> **Executado em 2026-09-04:** os 28 arquivos fecharam em `statements` 99–100%,
+> `functions` 100%, `lines` 100% e `branches` 89–98% por diretório — ver as
+> entradas em `vitest.config.ts` (`coverage.thresholds`). O que falta de
+> `branches`/`statements` é sempre o mesmo padrão: guards `if (!x) return` no
+> início de handlers (`handleDeactivate`, `toggleAttendance`,
+> `confirmRemoveMaterial` etc.) cujo botão de disparo só existe depois que `x`
+> já está preenchido — o ramo "ausente" não é alcançável pela UI real, só
+> chamando a função interna direto. Cada teste correspondente documenta o caso
+> específico. Duas armadilhas encontradas na execução:
+> - **Bug real corrigido:** `GroupTypesModal.tsx`, `CategoriesModal.tsx` e
+>   `GroupDetailSheet.tsx` tinham diálogos de confirmação (desativar tipo,
+>   excluir categoria, remover material) como `<div>` fixa comum fora de
+>   qualquer `Dialog.Root`. Com o modal principal aberto, o Base UI marca
+>   *toda* a árvore fora do `Dialog` ativo como `inert` para isolar o foco —
+>   incluindo essa div, tornando o botão de confirmar inacessível a leitor de
+>   tela e, em navegador real, fisicamente inclicável. Corrigido trocando por
+>   um `Dialog.Root` aninhado (mesmo padrão já usado no form de criar/editar).
+> - Testar fechar um diálogo aninhado via `{Escape}` é frágil sob execução
+>   completa da suíte (falha por ordem/timing mesmo passando isolado); clicar
+>   no backdrop (`document.querySelector('.bg-black\\/NN')`) é equivalente e
+>   estável.
 
 ### Fase 10 — web: rotas — fecha o web
 

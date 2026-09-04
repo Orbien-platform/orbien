@@ -317,13 +317,19 @@ export function GroupTypesModal({ open, onOpenChange, onChanged }: GroupTypesMod
       </Dialog.Root>
 
       {/* Deactivate confirmation */}
-      {confirmDeactivateId && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
-            <p className="text-sm font-medium text-ink dark:text-white">Desativar tipo?</p>
-            <p className="mt-1.5 text-sm text-stone">
+      <Dialog.Root
+        open={confirmDeactivateId !== null}
+        onOpenChange={(v) => { if (!v) setConfirmDeactivateId(null); }}
+      >
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-[70] bg-black/40 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-[70] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[12px] bg-[var(--surface-card)] p-5 transition duration-150 data-ending-style:opacity-0 data-ending-style:scale-95 data-starting-style:opacity-0 data-starting-style:scale-95">
+            <Dialog.Title className="text-sm font-medium text-ink dark:text-white">
+              Desativar tipo?
+            </Dialog.Title>
+            <Dialog.Description className="mt-1.5 text-sm text-stone">
               O tipo deixará de aparecer como opção ao criar novos grupos.
-            </p>
+            </Dialog.Description>
             <div className="mt-4 flex gap-2">
               <Button
                 variant="outline"
@@ -341,9 +347,9 @@ export function GroupTypesModal({ open, onOpenChange, onChanged }: GroupTypesMod
                 {isDeactivating ? <Loader2 size={14} className="animate-spin" /> : "Desativar"}
               </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {toastMsg && (
         <div className="fixed bottom-4 right-4 z-[80] rounded-[8px] bg-ink px-4 py-2.5 text-sm text-white shadow-lg dark:bg-white dark:text-ink">
