@@ -107,6 +107,7 @@ module.exports = {
     './src/persons/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/visitor/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/waitlist/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/celebrations/': { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
 
   verbose: true,
