@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JwtModule } from '@nestjs/jwt';
 import { CelebrationsModule } from './celebrations.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ContentModule } from '../content/content.module';
@@ -18,7 +19,13 @@ import { PdfExportService } from './pdf-export.service';
 describe('CelebrationsModule', () => {
   it('compila e registra todos os providers', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule, ContentModule, StorageModule, CelebrationsModule],
+      imports: [
+        JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
+        PrismaModule,
+        ContentModule,
+        StorageModule,
+        CelebrationsModule,
+      ],
     }).compile();
 
     expect(moduleRef.get(CelebrationsService)).toBeInstanceOf(CelebrationsService);

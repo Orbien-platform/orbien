@@ -21,13 +21,28 @@ Não rode `npm install` dentro desta pasta — o `package-lock.json` fica na rai
 ## Como a app fala com a API
 
 O browser **nunca** chama o backend direto. Ele bate em `/api-proxy/*`, e o
-rewrite definido em `next.config.ts` encaminha para `API_BACKEND_URL` no
-servidor. É isso que elimina o CORS.
+Route Handler em `src/app/api-proxy/[...path]/route.ts` encaminha para
+`API_BACKEND_URL` no servidor. É isso que elimina o CORS.
+
+Era um `rewrite` do `next.config.ts` até a sessão virar cookie `HttpOnly`.
+Rewrite repassa a requisição como ela chegou, e a requisição chega sem
+`Authorization`: o token está num cookie que o JavaScript da página não lê.
+Quem lê o cookie e monta o cabeçalho é o handler — o único ponto do web que
+enxerga o access token.
 
 | Variável | Valor | Escopo |
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | URL real do backend | **apenas servidor** |
+| `NEXT_PUBLIC_API_UPLOAD_URL` | URL real do backend | browser — só o upload |
+
+Uma exceção ao "nunca chama direto": o **upload de mídia**. O `/api-proxy` é
+uma função da Vercel, com teto de 4,5 MB de corpo, e o produto aceita 50 MB.
+O arquivo vai direto para a API, em dois passos — `POST
+/content/posts/:id/upload-ticket` pelo proxy devolve um ticket de 5 minutos,
+preso àquele post e recusado em qualquer outra rota, e o arquivo sobe com ele
+no cabeçalho. É a única chamada cross-origin do web, então o domínio precisa
+estar em `ALLOWED_ORIGINS` no Render.
 
 `API_BACKEND_URL` não pode ganhar o prefixo `NEXT_PUBLIC_`: isso a exporia no
 bundle do cliente e quebraria o esquema sem-CORS. Localmente ela vive em
@@ -36,7 +51,9 @@ bundle do cliente e quebraria o esquema sem-CORS. Localmente ela vive em
 ## Autenticação
 
 `src/proxy.ts` intercepta as rotas privadas e redireciona para
-`/login?from=<rota>` quando não há cookie `auth_session`. Rotas cobertas:
+`/login?from=<rota>` quando não há `orbien_at` nem `orbien_rt`. Os dois contam
+por motivos diferentes: sessão normal costuma chegar com o access vencido e o
+refresh vivo, e sessão de suporte não tem refresh nenhum. Rotas cobertas:
 `/dashboard`, `/pessoas`, `/grupos`, `/financeiro`, `/conteudo`,
 `/voluntarios`, `/celebracoes`, `/configuracoes`.
 
@@ -110,9 +127,11 @@ falha dispara uma retentativa já instrumentada. Localmente, para forçar:
 npx playwright test --retries=1 --trace=on-first-retry
 ```
 
-A sessão é criada por HTTP contra a API e semeada direto no `localStorage` e no
-cookie `auth_session` (fixture `page` em `e2e/fixtures.ts`) — o formulário de
-login não é exercitado, o que mantém o teste focado na tela em análise.
+A sessão é criada por HTTP contra a API e semeada direto nos cookies
+`orbien_at`/`orbien_rt`/`orbien_id` (fixture `page` em `e2e/fixtures.ts`) — o
+formulário de login não é exercitado, o que mantém o teste focado na tela em
+análise. Como os cookies são `HttpOnly`, a semeadura é `addCookies` no contexto
+do Playwright, e não `page.evaluate` no storage.
 
 Funciona contra qualquer ambiente:
 

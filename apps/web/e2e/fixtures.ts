@@ -16,6 +16,7 @@ import path from "node:path";
 import { test as base, expect, type Page } from "@playwright/test";
 
 const API_URL = process.env.E2E_API_URL ?? "http://localhost:3000/api";
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
 
 /**
  * Capturas para inspeção visual, sempre em `e2e/screenshots/` (ignorado pelo
@@ -226,12 +227,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   /**
    * Sobrescreve a `page` padrão para entregá-la já autenticada, sem passar pelo
    * formulário de login: o login é feito por HTTP contra a API e o resultado é
-   * semeado direto no storage que o app usa (`src/lib/auth.ts`) — tokens em
-   * localStorage e o cookie `auth_session`, que é apenas um flag lido pelo
-   * proxy de SSR.
+   * semeado direto nos cookies que o app usa (`src/lib/session.ts`).
    *
-   * Além de evitar digitar senha em campo de formulário, isso deixa o teste
-   * focado na tela sob análise em vez de reexercitar o login a cada execução.
+   * São cookies `HttpOnly`, e é por isso que a semeadura passou a ser
+   * `addCookies` no contexto em vez de `page.evaluate` no storage: script de
+   * página não os enxerga — que é justamente o ponto deles.
+   *
+   * Semear em vez de logar pela rota `/api/session` mantém um login por
+   * worker. Contra o Render, cada login extra é um cold start possível.
    *
    * Mantemos a `page` embutida (em vez de criar contexto à mão) para não perder
    * trace, vídeo e screenshot-on-failure que o runner já gerencia.
@@ -245,18 +248,15 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       if (res.status() >= 400) errorLog.http.push(`${res.status()} ${res.url()}`);
     });
 
-    // O storage precisa ser semeado com a origem do app já carregada, por isso
-    // navegamos para `/login` antes — é a única rota que o proxy deixa passar
-    // sem sessão.
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      ([access, refresh, email]) => {
-        localStorage.setItem("access_token", access);
-        localStorage.setItem("refresh_token", refresh);
-        localStorage.setItem("user_email", email);
-        document.cookie = `auth_session=1; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
-      },
-      [api.tokens.access_token, api.tokens.refresh_token, process.env.E2E_EMAIL ?? ""]
+    const identity = encodeURIComponent(
+      JSON.stringify({ email: process.env.E2E_EMAIL ?? "" })
+    );
+    await page.context().addCookies(
+      [
+        { name: "orbien_at", value: api.tokens.access_token },
+        { name: "orbien_rt", value: api.tokens.refresh_token },
+        { name: "orbien_id", value: identity },
+      ].map((c) => ({ ...c, url: BASE_URL, httpOnly: true, sameSite: "Lax" as const }))
     );
 
     await provide(page);

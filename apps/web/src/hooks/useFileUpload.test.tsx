@@ -1,13 +1,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
-  default: { defaults: { baseURL: "http://api.test" } },
-}));
-vi.mock("@/lib/auth", () => ({
-  getAccessToken: vi.fn(() => "token-123"),
+  default: { post: vi.fn() },
 }));
 
+import api from "@/lib/api";
 import {
   ACCEPTED_MIME_TYPES,
   formatFileSize,
@@ -77,15 +75,25 @@ describe("uploadPostMedia", () => {
   beforeEach(() => {
     FakeXHR.instances = [];
     vi.stubGlobal("XMLHttpRequest", FakeXHR);
+    vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "http://upload.test");
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.post).mockResolvedValue({ data: { upload_token: "ticket-abc" } });
   });
 
-  it("resolve com o corpo quando a resposta é 2xx", async () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("pede o ticket pelo proxy antes de subir o arquivo direto na API", async () => {
     const onProgress = vi.fn();
     const promise = uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), onProgress);
 
+    await vi.waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    expect(api.post).toHaveBeenCalledWith("/content/posts/post1/upload-ticket");
+
     const xhr = FakeXHR.instances[0];
-    expect(xhr.openedUrl).toBe("http://api.test/content/posts/post1/upload");
-    expect(xhr.headers.Authorization).toBe("Bearer token-123");
+    expect(xhr.openedUrl).toBe("http://upload.test/content/posts/post1/upload");
+    expect(xhr.headers.Authorization).toBe("Bearer ticket-abc");
 
     xhr.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 } as ProgressEvent);
     expect(onProgress).toHaveBeenCalledWith(50);
@@ -100,6 +108,7 @@ describe("uploadPostMedia", () => {
   it("ignora progresso não computável", async () => {
     const onProgress = vi.fn();
     const promise = uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), onProgress);
+    await vi.waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     const xhr = FakeXHR.instances[0];
 
     xhr.upload.onprogress?.({ lengthComputable: false, loaded: 50, total: 100 } as ProgressEvent);
@@ -113,6 +122,7 @@ describe("uploadPostMedia", () => {
 
   it("rejeita quando o status não é 2xx", async () => {
     const promise = uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), vi.fn());
+    await vi.waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     const xhr = FakeXHR.instances[0];
     xhr.status = 500;
     xhr.onload?.();
@@ -122,6 +132,7 @@ describe("uploadPostMedia", () => {
 
   it("rejeita quando a resposta 2xx não é JSON válido", async () => {
     const promise = uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), vi.fn());
+    await vi.waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     const xhr = FakeXHR.instances[0];
     xhr.status = 200;
     xhr.responseText = "not-json";
@@ -132,22 +143,28 @@ describe("uploadPostMedia", () => {
 
   it("rejeita em erro de rede", async () => {
     const promise = uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), vi.fn());
+    await vi.waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     const xhr = FakeXHR.instances[0];
     xhr.onerror?.();
 
     await expect(promise).rejects.toThrow("network_error");
   });
 
-  it("não envia Authorization quando não há token", async () => {
-    vi.mocked((await import("@/lib/auth")).getAccessToken).mockReturnValueOnce(null);
-    const promise = uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), vi.fn());
-    const xhr = FakeXHR.instances[0];
-    expect(xhr.headers.Authorization).toBeUndefined();
+  it("propaga o erro do ticket sem chegar a abrir o XHR", async () => {
+    vi.mocked(api.post).mockRejectedValue(new Error("upload-ticket falhou"));
 
-    xhr.status = 200;
-    xhr.responseText = "{}";
-    xhr.onload?.();
-    await promise;
+    await expect(
+      uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), vi.fn())
+    ).rejects.toThrow("upload-ticket falhou");
+    expect(FakeXHR.instances).toHaveLength(0);
+  });
+
+  it("lança quando NEXT_PUBLIC_API_UPLOAD_URL não está definida", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "");
+
+    await expect(
+      uploadPostMedia("post1", makeFile("a.pdf", 10, "application/pdf"), vi.fn())
+    ).rejects.toThrow("NEXT_PUBLIC_API_UPLOAD_URL");
   });
 });
 
@@ -155,6 +172,13 @@ describe("useFileUpload", () => {
   beforeEach(() => {
     FakeXHR.instances = [];
     vi.stubGlobal("XMLHttpRequest", FakeXHR);
+    vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "http://upload.test");
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.post).mockResolvedValue({ data: { upload_token: "ticket-abc" } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("seleciona um arquivo válido via input e permite limpar", () => {
@@ -270,6 +294,7 @@ describe("useFileUpload", () => {
     });
 
     await waitFor(() => expect(result.current.isUploading).toBe(true));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
 
     const xhr = FakeXHR.instances[0];
     xhr.status = 200;

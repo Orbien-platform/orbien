@@ -36,6 +36,13 @@ leia o do app antes de mexer nele.
 - No web, `<Button>` é para botões primários (com `bg-navy` na className). Para
   ícone ou link, use `<button>` puro: o `variant` padrão do componente pinta um
   fundo escuro que a className não remove.
+- A sessão do web vive em cookie `HttpOnly` (`orbien_at`/`orbien_rt`/
+  `orbien_id`), nunca em `localStorage`. O token só é visto no servidor, pelo
+  Route Handler de `/api-proxy` — que substituiu o `rewrite` justamente por
+  isso. Renovação tem rota própria (`/api/session/refresh`) e **uma por vez**:
+  a API revoga a família inteira ao detectar reuso de refresh token, então
+  rotação concorrente derruba a sessão. Quem serializa é a fila do interceptor
+  em `src/lib/api.ts`.
 - Busca de dados no web é `useEffect` + axios (`src/lib/api.ts`), em todas as
   telas. `@tanstack/react-query` está no package.json mas **não tem provider
   nem uso** — não é o padrão da base; siga o que está em volta.

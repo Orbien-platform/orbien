@@ -15,7 +15,21 @@ export class RolesGuard implements CanActivate {
 
     if (!required || required.length === 0) return true;
 
-    const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<{ user: JwtPayload; params: Record<string, string> }>();
+    const { user } = request;
+
+    // Ticket de upload não carrega papel: quem autorizou foi a rota que o
+    // emitiu, que exigiu WRITE_ROLES antes de assinar. O que ele carrega é o
+    // recurso, e é só para ele que vale — um ticket do post A não sobe arquivo
+    // no post B. Vem antes do ramo de suporte de propósito: ticket emitido
+    // dentro de uma sessão de suporte continua preso ao seu alvo.
+    if (user.scope === 'upload') {
+      return (
+        user.upload_target !== undefined && user.upload_target === request.params['id']
+      );
+    }
 
     // Sessão de suporte satisfaz qualquer @Roles.
     //

@@ -6,41 +6,24 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
-vi.mock("@/lib/api", () => ({
-  default: { post: vi.fn() },
+vi.mock("axios", () => ({
+  default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock("@/lib/auth", () => ({
-  saveTokens: vi.fn(),
-  clearTokens: vi.fn(),
-  getAccessToken: vi.fn(),
-  getRefreshToken: vi.fn(),
-  getUserEmail: vi.fn(),
-  decodeJwtPayload: vi.fn(),
-  isTokenExpired: vi.fn(),
-}));
-
-import api from "@/lib/api";
-import {
-  clearTokens,
-  decodeJwtPayload,
-  getAccessToken,
-  getRefreshToken,
-  getUserEmail,
-  isTokenExpired,
-  saveTokens,
-} from "@/lib/auth";
+import axios from "axios";
 import { AuthProvider } from "./AuthContext";
 import { useAuth } from "@/hooks/useAuth";
+import type { SessionUser } from "@/lib/session";
 
-const payload = {
-  sub: "user-1",
+const USER: SessionUser = {
+  id: "user-1",
+  name: "joao silva",
+  email: "joao.silva@example.com",
+  roles: ["tenant_admin"],
   tenant_id: "tenant-1",
   congregation_id: "cong-1",
-  roles: ["tenant_admin"],
-  plan: "pro",
-  iat: 0,
-  exp: 9999999999,
+  support_session: false,
+  support_tenant_name: null,
 };
 
 function renderAuth() {
@@ -50,17 +33,25 @@ function renderAuth() {
 describe("AuthProvider", () => {
   beforeEach(() => {
     push.mockClear();
-    vi.mocked(getAccessToken).mockReturnValue(null);
-    vi.mocked(getUserEmail).mockReturnValue(null);
-    vi.mocked(getRefreshToken).mockReturnValue("refresh-token");
-    vi.mocked(decodeJwtPayload).mockReturnValue(payload);
-    vi.mocked(isTokenExpired).mockReturnValue(false);
-    vi.mocked(saveTokens).mockClear();
-    vi.mocked(clearTokens).mockClear();
-    vi.mocked(api.post).mockReset();
+    vi.mocked(axios.get).mockReset();
+    vi.mocked(axios.post).mockReset();
+    vi.mocked(axios.delete).mockReset();
   });
 
-  it("sem token salvo: termina o loading sem usuário", async () => {
+  it("com sessão válida: monta o usuário a partir de GET /api/session", async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: { user: USER } });
+
+    const { result } = renderAuth();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(axios.get).toHaveBeenCalledWith("/api/session");
+    expect(result.current.user).toEqual(USER);
+    expect(result.current.isAuthenticated).toBe(true);
+  });
+
+  it("sem sessão (401 ou erro): termina o loading sem usuário", async () => {
+    vi.mocked(axios.get).mockRejectedValue(new Error("401"));
+
     const { result } = renderAuth();
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -68,50 +59,9 @@ describe("AuthProvider", () => {
     expect(result.current.isAuthenticated).toBe(false);
   });
 
-  it("com token válido salvo: monta o usuário a partir do payload", async () => {
-    vi.mocked(getAccessToken).mockReturnValue("valid-token");
-    vi.mocked(getUserEmail).mockReturnValue("joao.silva@example.com");
-
-    const { result } = renderAuth();
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.user).toEqual({
-      id: "user-1",
-      name: "joao silva",
-      email: "joao.silva@example.com",
-      roles: ["tenant_admin"],
-      tenant_id: "tenant-1",
-      congregation_id: "cong-1",
-    });
-    expect(result.current.isAuthenticated).toBe(true);
-  });
-
-  it("com token expirado: ainda monta o usuário para renderizar a shell", async () => {
-    vi.mocked(getAccessToken).mockReturnValue("expired-token");
-    vi.mocked(getUserEmail).mockReturnValue("user@example.com");
-    vi.mocked(isTokenExpired).mockReturnValue(true);
-
-    const { result } = renderAuth();
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.user?.id).toBe("user-1");
-  });
-
-  it("quando o payload não decodifica, o usuário fica nulo", async () => {
-    vi.mocked(getAccessToken).mockReturnValue("token");
-    vi.mocked(getUserEmail).mockReturnValue("user@example.com");
-    vi.mocked(decodeJwtPayload).mockReturnValue(null);
-
-    const { result } = renderAuth();
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.user).toBeNull();
-  });
-
-  it("login: salva tokens, monta usuário e navega para o dashboard", async () => {
-    vi.mocked(api.post).mockResolvedValue({
-      data: { access_token: "new-token", refresh_token: "new-refresh", expires_in: 900 },
-    });
+  it("login: chama POST /api/session, monta usuário e navega para o dashboard", async () => {
+    vi.mocked(axios.get).mockRejectedValue(new Error("401"));
+    vi.mocked(axios.post).mockResolvedValue({ data: { user: USER } });
 
     const { result } = renderAuth();
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -120,18 +70,23 @@ describe("AuthProvider", () => {
       await result.current.login("joao@example.com", "senha", "igreja-x");
     });
 
-    expect(api.post).toHaveBeenCalledWith("/auth/login", {
+    expect(axios.post).toHaveBeenCalledWith("/api/session", {
       email: "joao@example.com",
       password: "senha",
       tenant_slug: "igreja-x",
     });
-    expect(saveTokens).toHaveBeenCalledWith("new-token", "new-refresh", "joao@example.com");
-    expect(result.current.user?.email).toBe("joao@example.com");
+    expect(result.current.user).toEqual(USER);
     expect(push).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("logout: limpa tokens e navega para o login mesmo se a chamada à API falhar", async () => {
-    vi.mocked(api.post).mockRejectedValue(new Error("network"));
+  it("logout: chama DELETE /api/session, limpa o usuário e navega para o login mesmo se a chamada falhar", async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: { user: USER } });
+    vi.mocked(axios.delete).mockRejectedValue(new Error("network"));
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, replace: vi.fn() },
+    });
 
     const { result } = renderAuth();
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -140,8 +95,27 @@ describe("AuthProvider", () => {
       await result.current.logout();
     });
 
-    expect(clearTokens).toHaveBeenCalled();
+    expect(axios.delete).toHaveBeenCalledWith("/api/session");
     expect(result.current.user).toBeNull();
-    expect(push).toHaveBeenCalledWith("/login");
+    expect(window.location.replace).toHaveBeenCalledWith("/login");
+
+    Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+  });
+
+  it("desmontado antes do GET /api/session responder: não tenta atualizar estado", async () => {
+    let resolveGet: (value: { data: { user: SessionUser | null } }) => void = () => {};
+    vi.mocked(axios.get).mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      })
+    );
+
+    const { unmount } = renderAuth();
+    unmount();
+
+    // Resolve depois do unmount: sem `ativo`, o React acusaria "state update
+    // on an unmounted component" — o teste falha se isso disparar.
+    resolveGet({ data: { user: USER } });
+    await Promise.resolve();
   });
 });
