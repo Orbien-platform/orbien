@@ -1,6 +1,12 @@
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 const USER_EMAIL_KEY = "user_email";
+// Marcadores da sessão de suporte, gravados por /suporte/sessao. Servem para a
+// UI dizer, sem ambiguidade, que quem está logado é o suporte da plataforma
+// dentro de outra igreja. Não são credencial e não abrem nada: o que autoriza é
+// o `support_session: true` dentro do JWT assinado.
+const SUPPORT_SESSION_KEY = "support_session";
+const SUPPORT_TENANT_KEY = "support_session_tenant";
 
 export function saveTokens(
   accessToken: string,
@@ -35,6 +41,8 @@ export function clearTokens(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_EMAIL_KEY);
+  localStorage.removeItem(SUPPORT_SESSION_KEY);
+  localStorage.removeItem(SUPPORT_TENANT_KEY);
   document.cookie = "auth_session=; path=/; max-age=0";
 }
 
@@ -46,6 +54,23 @@ export interface JwtPayload {
   plan: string;
   iat: number;
   exp: number;
+  /** Sessão de suporte da plataforma. Satisfaz qualquer @Roles no RolesGuard. */
+  support_session?: boolean;
+  impersonated_by?: string;
+}
+
+export function isSupportSession(): boolean {
+  if (typeof window === "undefined") return false;
+  if (localStorage.getItem(SUPPORT_SESSION_KEY) !== "1") return false;
+  // O marcador é conveniência; a fonte é o token. Se os dois discordarem —
+  // marcador esquecido de uma sessão anterior, por exemplo — vale o token.
+  const token = getAccessToken();
+  return token ? decodeJwtPayload(token)?.support_session === true : false;
+}
+
+export function getSupportTenantName(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(SUPPORT_TENANT_KEY);
 }
 
 export function decodeJwtPayload(token: string): JwtPayload | null {

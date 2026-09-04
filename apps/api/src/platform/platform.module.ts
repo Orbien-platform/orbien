@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { PlatformController } from './platform.controller';
 import { ProvisionTenantService } from './provision-tenant.service';
+import { ListTenantsService } from './list-tenants.service';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 
 @Module({
   controllers: [PlatformController],
-  providers: [ProvisionTenantService, TenantContextInterceptor],
+  providers: [ProvisionTenantService, ListTenantsService, TenantContextInterceptor],
   exports: [ProvisionTenantService],
 })
 export class PlatformModule {}

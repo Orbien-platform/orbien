@@ -9,6 +9,7 @@ npm workspaces + Turborepo. Node 22.
 | `apps/api` | `orbien-backend` | NestJS 10, Prisma 6, Postgres (Supabase) | Render (runtime Node) |
 | `apps/site` | `orbien-site` | Next.js 16 (App Router), Tailwind 4 | Vercel |
 | `apps/web` | `orbien-web` | Next.js 16 (App Router), Tailwind 4 | Vercel |
+| `apps/admin` | `orbien-admin` | Next.js 16 (App Router), Tailwind 4 | Vercel (subdomínio `admin.`) |
 
 Cada app tem seu próprio `CLAUDE.md`/`AGENTS.md` com as regras específicas —
 leia o do app antes de mexer nele.
@@ -72,6 +73,16 @@ leia o do app antes de mexer nele.
   fixa `app.tenant_id`) e o interceptor em si. Quem responde por elas no banco
   é `app_platform_access()`, que exige contexto sem tenant **e** o papel em
   `role_assignments` — o papel vem do banco, não de `app.role_codes`.
+- `POST /auth/impersonate` resolve `platform_support` em `role_assignments`, não
+  no `roles` do JWT. É de propósito, e é o mesmo princípio que o cabeçalho de
+  `004_rls_platform_plane.sql` declara para `app_is_platform_support()`: o
+  predicado que abre tenant é o último lugar onde vale depender de valor que
+  veio de fora do banco. O que depende disso é uma coisa: papel revogado vale na
+  hora — o token vive até 15 minutos e a cadeia de refresh segue renovando. O
+  `is_active` na mesma consulta é redundância; quem barra conta desativada é o
+  `JwtStrategy.validate`, em toda requisição. O `@Roles` do controller continua
+  lá como rejeição barata — não é a autoridade. Trocar essa consulta por
+  `user.roles.includes(...)` reabre a janela dos 15 minutos.
 - `platform_support` não está em nenhuma lista de `@Roles` de dados de igreja, e
   isso é deliberado: o acesso dela é pontual, por `POST /auth/impersonate`, que
   emite token com `support_session: true` — e essa marca satisfaz qualquer
@@ -83,3 +94,40 @@ leia o do app antes de mexer nele.
   precisa de rastro.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.
+- `apps/admin` é o console da plataforma e **não** é uma tela do produto. Só
+  entra ali o que opera acima dos tenants — e, na prática, só o que a API expõe
+  como rota de plataforma (`@PlatformRoute()` + `@Roles('platform_support')`).
+  Dado de igreja não passa por lá; para ver dado de igreja o suporte abre uma
+  sessão de suporte no `apps/web`. Se você se pegar precisando de uma rota de
+  tenant no admin, o desenho está errado em algum lugar.
+- O console tem login próprio: `POST /auth/platform/login`, **sem
+  `tenant_slug`**. Quem administra a plataforma não está dentro de tenant
+  nenhum, e o desempate vem do papel — só contas com `platform_support` em
+  `role_assignments` são candidatas. Mas o token continua carregando o tenant
+  de origem da conta, resolvido no servidor: as rotas de plataforma o ignoram
+  (o `@PlatformRoute()` não o fixa), e o `AuditInterceptor` o usa como
+  `audit_logs.tenant_id`, que é NOT NULL com FK. Token sem tenant faria toda
+  linha `platform_access` falhar em silêncio, porque a auditoria é
+  best-effort. Não "simplifique" tirando o tenant do token.
+- Conta sem `platform_support` recebe o mesmo 401 de senha errada, de
+  propósito: credencial válida de `tenant_admin` não deve descobrir pela
+  mensagem que serve em outro lugar. Se você mexer nas mensagens dessa rota,
+  mantenha as três indistinguíveis (senha errada, sem papel, inativa).
+- `platform_support` entra no token mesmo quando a atribuição está em outra
+  congregação do tenant — é o que `rolesForToken()` em `auth.service.ts` faz.
+  O papel é global por definição (`app_is_platform_support()` não filtra por
+  tenant nem congregação); sem a união, um refresh o perderia e o console
+  cairia a cada 15 minutos sem motivo aparente. **Não é verdade que
+  `platform_support` esteja fora de toda lista de `@Roles`** — estão nela
+  `POST /internal/celebrations/*` e `POST /auth/impersonate`.
+- A sessão de suporte cruza duas origens (`admin.` → app do tenant), e
+  `localStorage` é por origem: o token vai no **fragmento** da URL, nunca na
+  query. Fragmento não chega ao servidor — fica fora do log de acesso da
+  Vercel, do `Referer` e de qualquer proxy no caminho. Ver
+  `apps/admin/src/lib/support-session.ts` e
+  `apps/web/src/app/(public)/suporte/sessao/page.tsx`. O token de
+  `POST /auth/impersonate` não traz refresh token: a sessão vale 15 minutos e
+  não se renova, de propósito.
+- Enquanto a sessão for de suporte, o `apps/web` mostra a faixa do
+  `SupportSessionBanner`. Ela é o par visível do `AuditInterceptor`: um grava o
+  rastro, o outro avisa quem está operando. Não some nenhum dos dois sozinho.

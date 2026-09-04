@@ -701,11 +701,31 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
 
 ### Continua em aberto, por desenho
 
-- **Não existe UI.** `impersonate` e `support_session` não aparecem em nenhum
-  lugar do `apps/web`. A sessão de suporte só é utilizável por HTTP direto.
-  É a Fase 3/4 do plano de plataforma.
+- ~~**Não existe UI.**~~ Fechado na Fase 3, em 2026-09-03. A sessão é aberta
+  pela lista de tenants do `apps/admin` ("Entrar no web como suporte"), que
+  chama `POST /auth/impersonate` e entrega o token ao `apps/web` em
+  `/suporte/sessao`, pelo **fragmento** da URL — as duas origens são
+  diferentes (`admin.` e o app do tenant) e `localStorage` é por origem, então
+  não havia caminho por baixo. Fragmento e não query porque fragmento não
+  chega ao servidor: fica fora do log da Vercel, do `Referer` e de qualquer
+  proxy. Enquanto a sessão vale, o `web` mostra a faixa do
+  `SupportSessionBanner` — o par visível do `AuditInterceptor`.
 - **A sessão pode escrever**, não só ler. Decisão adiada.
-- **TTL** do token de impersonação é o padrão de access token.
+- **Sem limite de tentativa no login da plataforma.** `POST
+  /auth/platform/login` (Fase 3) não tem rate limit, e nem `POST /auth/login`
+  tem — só `forgot-password` tem, e é em memória, o que não sobrevive a mais de
+  uma instância no Render. A porta do console é a que mais interessa fechar:
+  ela dá acesso a `POST /auth/impersonate`, e daí a qualquer tenant. Fica
+  registrado, não corrigido nesta fase: limitador que preste é
+  compartilhado (Redis ou tabela), não um `Map` por processo — unidade de
+  trabalho própria, e vale para as duas rotas de login de uma vez.
+- **TTL** do token de impersonação é o padrão de access token — 15 minutos.
+  Continua sendo o padrão, mas agora tem consequência visível: `impersonate`
+  não emite refresh token, então a sessão de suporte **não se renova**. Aos 15
+  minutos o interceptor do Axios não acha refresh e devolve o suporte para
+  `/login`. É o comportamento desejado; renovar sozinha uma sessão que enxerga
+  dado de igreja alheia é o que não se quer. O que falta é aviso antes de
+  expirar, hoje inexistente.
 - **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
   token fixa um tenant, e o `IS NULL` de `app_platform_access()` fecha o ramo
   de plataforma justamente quando há tenant fixado. Suporte a vários clientes
@@ -953,6 +973,92 @@ Não criar um estado de "sem permissão" em uma única tela: seria um padrão de
 página só, divergindo das outras sete. O tratamento certo é igual para as oito —
 filtrar o sidebar por papel, e distinguir 403 de lista vazia no `catch` — e é
 unidade de trabalho própria, não parte de uma limpeza de lint.
+
+---
+
+## `refresh()` não reconfere `is_active` — aberta
+
+Apareceu na revisão da Fase 3, em 2026-09-03, na dimensão de isolamento, junto
+de um achado sobre o `impersonate` que foi fechado na própria fase (ver abaixo).
+Não é introduzida pela fase; o que a fase faz é passar a depender dela.
+
+### O achado vizinho, que fechou
+
+`AuthService.impersonate` autorizava com
+`requestingUser.roles.includes('platform_support')` e nada mais — sem predicado
+de banco, diferente das rotas de plataforma, que respondem a
+`app_is_platform_support()`. E o token que ela emite carrega
+`support_session: true`, marca que satisfaz **qualquer** `@Roles` no
+`RolesGuard`. É a rota mais poderosa do sistema, e era a única do plano de
+plataforma decidindo por valor vindo de fora do banco.
+
+Fechado na Fase 3: `impersonate` passou a resolver o papel em
+`role_assignments`. O ganho é um só e é o que importa — papel revogado vale na
+hora, onde antes o `roles` do JWT continuava afirmando `platform_support` por
+até 15 minutos, com a cadeia de refresh renovando. De passagem, a união de
+`rolesForToken()` deixou de ampliar quem chega ali.
+
+O `is_active: true` entrou na mesma consulta, mas é redundância deliberada, não
+ganho: **`JwtStrategy.validate` já confere `is_active` em toda requisição
+autenticada**, então conta desativada leva 401 antes de alcançar o serviço.
+Descoberto ao ver o teste novo esperar 403 e receber 401 — a expectativa estava
+errada, não o código.
+
+### O que continua aberto
+
+`AuthService.refresh` valida existência do hash, `revoked_at` e `expires_at` —
+não relê `is_active`. Desativar uma conta não impede a **rotação**: o refresh
+continua trocando o token e emitindo access tokens com `platform_support`.
+
+O impacto é menor do que a primeira leitura sugeria, e é por causa do
+`JwtStrategy`: os tokens emitidos assim não servem para nada, porque toda
+requisição autenticada relê `is_active` e devolve 401. Ou seja, desativar a
+conta **corta o acesso**; o que não corta é a cadeia girando. Fica registrado
+como higiene — refresh token de conta desativada devia ser revogado, não
+renovado — e porque o console de plataforma agora vive de refresh a cada 15
+minutos, o que torna esse caminho quente onde antes era eventual.
+
+Verificado por leitura de `refresh()` e de `jwt.strategy.ts`, e pelo 401 do
+teste `conta desativada não abre sessão de suporte`.
+
+---
+
+## Adiado por decisão — provisionar a partir do lead da waitlist (Fase 4)
+
+Não é achado: é escopo declarado fora da Fase 3, em 2026-09-03. Fica escrito
+porque hoje só existe como comentário no `apps/admin/src/app/(platform)/waitlist/page.tsx`,
+e comentário não é lugar de guardar decisão de escopo.
+
+### O que está de fora
+
+A waitlist no console é **somente leitura**. `PATCH /admin/waitlist/:id` existe,
+move o `status` e preenche `contacted_at` / `activated_at` — e não foi ligado na
+tela.
+
+### Por que não é só um botão
+
+`ProvisionTenantService` não toca em `waitlist_subscribers`. As colunas
+`tenant_id` e `activated_at` da tabela existem e ficam nulas para sempre: nada
+no produto liga o lead à igreja que ele virou. Um seletor de status na tela
+deixaria alguém marcar "ativado" à mão e o vínculo continuaria faltando — ou
+seja, a informação que de fato importa depois ("de onde veio este cliente")
+seguiria fora do banco, com a tela dando a impressão contrária. Meia-medida que
+parece pronta é pior que ausência declarada.
+
+### A forma certa, quando for feita
+
+Provisionar **a partir do lead**: o formulário de novo tenant abre preenchido
+com os dados dele, e o `ProvisionTenantService` grava `status=activated`,
+`activated_at` e `tenant_id` **dentro da mesma transação** que cria o tenant. A
+transação já roda sob RLS pelo ramo `app_platform_access()`, e
+`waitlist_subscribers` já está nesse ramo desde o `004` — a policy não precisa
+mudar. O que muda é o serviço, e ele é atômico de propósito: um tenant criado
+com o lead não marcado é o mesmo tipo de estado meio-feito que a atomicidade
+atual existe para evitar.
+
+Mexer em `ProvisionTenantService` é mexer no caminho que abre igreja nova. É
+unidade de trabalho própria, com teste próprio, não apêndice de uma tela de
+listagem.
 
 ---
 

@@ -1,6 +1,6 @@
 # Testes — plano para 100% de cobertura
 
-Meta declarada: **100% de cobertura nos três apps** (`statements`, `branches`,
+Meta declarada: **100% de cobertura nos quatro apps** (`statements`, `branches`,
 `functions`, `lines`), travada no CI.
 
 O plano é dividido em fases que podem ser executadas **uma por sessão de
@@ -156,6 +156,17 @@ Scripts em `apps/api/package.json`:
 "test:rls": "jest --selectProjects rls --runInBand --forceExit",
 "test:cov": "jest --selectProjects unit integration --coverage --passWithNoTests"
 ```
+
+> **`test:cov` roda a suíte de integração em paralelo** — só `test:integration`
+> e `test:rls` usam `--runInBand`. Consequência prática: fixture compartilhada
+> entre suítes de integração precisa ser criada de forma atômica. Semear papéis
+> com `role.upsert()` **não** serve: é find-then-create, e duas workers que não
+> acham a linha criam as duas — a segunda morre com P2002. Use
+> `ensureRole()` de `test/helpers/rls.ts`, que é um
+> `INSERT ... ON CONFLICT DO NOTHING`. Encontrado em 2026-09-03, ao acrescentar
+> a terceira suíte de integração; as anteriores conviviam com a corrida sem
+> nunca perdê-la, e a quarta a fez falhar de verdade. As quatro passam pelo
+> helper — se você escrever a quinta, passe também.
 
 `npm run test:rls` continua fazendo exatamente o que fazia. Isso é requisito:
 o job `rls` do CI depende dele. **É o único sem `--passWithNoTests`**: ele tem
@@ -543,7 +554,7 @@ da Fase 13, ou sai.
 
 **Pré-requisito:** fases 1–12.
 
-1. **Trocar todos os thresholds por caminho por `global: 100`** nos três apps,
+1. **Trocar todos os thresholds por caminho por `global: 100`** nos quatro apps,
    e apagar as entradas parciais. A partir daqui, código novo sem teste
    quebra o CI — que é o ponto da meta.
 2. **e2e dos fluxos não cobertos.** Os 2 testes atuais estão ambos em escalas.
@@ -562,6 +573,7 @@ npx turbo run test
 npm run test:cov -w orbien-backend   # 100% nas 4 métricas
 npm run test:cov -w orbien-web       # 100%
 npm run test:cov -w orbien-site      # 100%
+npm run test:cov -w orbien-admin     # 100%
 npm run test:rls -w orbien-backend   # 39 testes verdes
 ```
 

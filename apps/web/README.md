@@ -62,6 +62,8 @@ capturas em `e2e/screenshots/`:
 - [`e2e/schedule.spec.ts`](e2e/schedule.spec.ts) — montagem de escala (criar,
   aplicar template, ministérios, voluntários) e indisponibilidade do voluntário
 - [`e2e/templates.spec.ts`](e2e/templates.spec.ts) — CRUD de templates de escala
+- [`e2e/suporte.spec.ts`](e2e/suporte.spec.ts) — entrada da sessão de suporte
+  (`/suporte/sessao`), o handoff que vem do `apps/admin`
 - [`e2e/fixtures.ts`](e2e/fixtures.ts) — sessão autenticada, coleta de erros de
   console/rede e os dados de apoio
 
@@ -71,6 +73,19 @@ A partir da raiz do monorepo:
 E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=doca-church \
   npm run e2e -w orbien-web
 ```
+
+`suporte.spec.ts` precisa de duas variáveis a mais, porque monta o handoff de
+verdade — login de plataforma, listar tenants, `impersonate` — em vez de
+fabricar um token:
+
+```bash
+E2E_SUPPORT_EMAIL=... E2E_SUPPORT_PASSWORD=...
+```
+
+Sem elas o spec **se pula**, e não falha: a suíte tem que continuar rodando
+apontada para um ambiente que não tenha conta de plataforma. Ele também é o
+único spec que não usa a fixture `page` — aquela entrega a página já
+autenticada, e ali o ponto é chegar sem sessão e ver o handoff criar uma.
 
 Comandos úteis (todos com `-w orbien-web` a partir da raiz, ou direto nesta
 pasta):

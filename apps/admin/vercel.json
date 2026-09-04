@@ -1,0 +1,5 @@
+{
+  "framework": "nextjs",
+  "devCommand": "next dev --port 3003",
+  "ignoreCommand": "npx --yes turbo-ignore orbien-admin"
+}

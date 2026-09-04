@@ -6,6 +6,10 @@ name: CI
 # Nenhum job precisa de secret. O banco é um Postgres descartável provisionado
 # por apps/api/scripts/bootstrap-db.sh, e as credenciais do e2e saem do seed do
 # próprio repositório. Um PR de fork roda igual.
+#
+# `turbo run <task>` sem --filter cobre todos os workspaces: apps novos entram
+# nos portões de build, lint e test sem editar este arquivo. O que precisa ser
+# adicionado à mão é só a cobertura, que é medida app por app.
 
 on:
   pull_request:
@@ -37,7 +41,7 @@ jobs:
       - name: Sanidade das skills
         run: node scripts/check-skills.mjs
 
-      - name: Build dos 3 apps
+      - name: Build dos 4 apps
         run: npx turbo run build
 
       # nest build não checa a pasta test/, e é lá que estão os testes de RLS.
@@ -93,7 +97,7 @@ jobs:
 
       # `turbo run test` depende de ^build por causa do Prisma Client: sem
       # `prisma generate`, os imports de @prisma/client não resolvem.
-      - name: Suítes de unidade dos 3 apps
+      - name: Suítes de unidade dos 4 apps
         run: npx turbo run test
 
       # Sem --seed: a suíte de integração monta as próprias fixtures e as
@@ -112,6 +116,9 @@ jobs:
 
       - name: Cobertura do site
         run: npm run test:cov -w orbien-site
+
+      - name: Cobertura do admin
+        run: npm run test:cov -w orbien-admin
 
   # ── Fase 2 — isolamento multi-tenant contra Postgres efêmero ─────────────
   rls:
@@ -234,6 +241,11 @@ jobs:
           E2E_EMAIL: fvargaspf@gmail.com
           E2E_PASSWORD: A3dodfemf
           E2E_TENANT: doca-church
+          # A conta de plataforma do seed. `suporte.spec.ts` precisa dela para
+          # montar o handoff de verdade (login de plataforma → listar tenants →
+          # impersonate); sem estas duas o spec se pula em vez de falhar.
+          E2E_SUPPORT_EMAIL: fernando.vargas@fill.tech
+          E2E_SUPPORT_PASSWORD: A3dodfemf
         run: npm run e2e -w orbien-web
 
       # É o que transforma "quebrou no CI" em diagnóstico de dois minutos.

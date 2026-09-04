@@ -222,3 +222,74 @@ describe('POST /api/platform/tenants', () => {
       .expect(409);
   });
 });
+
+/**
+ * A listagem é a outra metade do par: `POST` cria, `GET` é o que o
+ * `apps/admin` mostra. Ela carrega as mesmas três marcas, e é o `@PlatformRoute()`
+ * que decide se ela devolve os N tenants ou um só — sem ele o interceptor fixa
+ * `app.tenant_id` e o ramo `app_platform_access()` fecha, sem erro nenhum.
+ * Por isso o teste não checa "devolve alguma coisa": checa que o tenant da
+ * plataforma **e** o tenant criado aparecem juntos na mesma resposta.
+ */
+describe('GET /api/platform/tenants', () => {
+  it('exige autenticação', async () => {
+    await http().get('/api/platform/tenants').expect(401);
+  });
+
+  it('barra quem não é platform_support', async () => {
+    const token = await login(comumEmail, SENHA, slugPlataforma);
+
+    await http()
+      .get('/api/platform/tenants')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+  });
+
+  it('atravessa tenants: lista o da plataforma e o provisionado juntos', async () => {
+    const token = await login(supportEmail, SENHA, slugPlataforma);
+
+    const res = await http()
+      .get('/api/platform/tenants?limit=100')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = res.body as {
+      data: { id: string; slug: string; congregations_count: number }[];
+      total: number;
+      page: number;
+      limit: number;
+    };
+
+    const ids = body.data.map((t) => t.id);
+    expect(ids).toContain(tenantPlataformaId);
+    expect(ids).toContain(tenantNovoId);
+    expect(body.total).toBeGreaterThanOrEqual(2);
+    expect(body).toMatchObject({ page: 1, limit: 100 });
+
+    const novo = body.data.find((t) => t.id === tenantNovoId);
+    expect(novo?.slug).toBe(slugNovo);
+    expect(novo?.congregations_count).toBe(1);
+  });
+
+  it('a busca filtra por slug', async () => {
+    const token = await login(supportEmail, SENHA, slugPlataforma);
+
+    const res = await http()
+      .get(`/api/platform/tenants?search=${slugNovo}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = res.body as { data: { id: string }[]; total: number };
+    expect(body.data.map((t) => t.id)).toEqual([tenantNovoId]);
+    expect(body.total).toBe(1);
+  });
+
+  it('limit acima do teto é rejeitado', async () => {
+    const token = await login(supportEmail, SENHA, slugPlataforma);
+
+    await http()
+      .get('/api/platform/tenants?limit=1000')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+});

@@ -264,4 +264,71 @@ describe('sessão de suporte', () => {
       .send({ target_tenant_id: '00000000-0000-4000-8000-000000000000' })
       .expect(404);
   });
+
+  // Os dois casos abaixo são a diferença entre autorizar pelo token e
+  // autorizar pelo banco, e nenhum deles passava antes: o token continua
+  // válido e assinado, carregando `platform_support` — o que muda é só a
+  // linha em `role_assignments` (ou o `is_active`). Se alguém trocar a
+  // consulta de `impersonate` de volta por `user.roles.includes(...)`, estes
+  // dois testes caem, e é para isso que existem.
+  it('papel revogado no banco vale na hora, com o token ainda válido', async () => {
+    const token = await loginSuporte();
+
+    // Prova que o token serve ANTES de revogar — senão o 403 depois poderia
+    // ser por qualquer outro motivo.
+    await http()
+      .post('/api/auth/impersonate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ target_tenant_id: tenantAlvoId })
+      .expect(200);
+
+    const atribuicao = await admin.roleAssignment.findFirstOrThrow({
+      where: { user_account_id: supportUserId, role_code: 'platform_support' },
+    });
+    await admin.roleAssignment.delete({ where: { id: atribuicao.id } });
+
+    try {
+      await http()
+        .post('/api/auth/impersonate')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ target_tenant_id: tenantAlvoId })
+        .expect(403);
+    } finally {
+      await admin.roleAssignment.create({
+        data: {
+          tenant_id: atribuicao.tenant_id,
+          congregation_id: atribuicao.congregation_id,
+          user_account_id: atribuicao.user_account_id,
+          role_code: atribuicao.role_code,
+        },
+      });
+    }
+  }, 30_000);
+
+  // 401 e não 403, e a diferença diz onde a conta é barrada: o
+  // `JwtStrategy.validate` confere `is_active` em TODA requisição autenticada,
+  // então o pedido nem chega ao serviço. O `is_active` na consulta do
+  // `impersonate` é redundância deliberada — o serviço não deve depender de o
+  // guard estar montado — mas quem fecha este caso é o guard, não ela.
+  it('conta desativada não abre sessão de suporte', async () => {
+    const token = await loginSuporte();
+
+    await admin.userAccount.update({
+      where: { id: supportUserId },
+      data: { is_active: false },
+    });
+
+    try {
+      await http()
+        .post('/api/auth/impersonate')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ target_tenant_id: tenantAlvoId })
+        .expect(401);
+    } finally {
+      await admin.userAccount.update({
+        where: { id: supportUserId },
+        data: { is_active: true },
+      });
+    }
+  }, 30_000);
 });

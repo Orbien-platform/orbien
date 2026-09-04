@@ -9,6 +9,11 @@ histórico de commits** (via `git subtree`), mas **sem unificar os deploys**:
 - `apps/api` continua sendo uma imagem Docker publicada no **Render**.
 - `apps/site` e `apps/web` continuam em **projetos Vercel separados**.
 
+`apps/admin` é o quarto app e nasceu aqui, na Fase 3 do plano de plataforma —
+não veio de repositório nenhum. É o console da plataforma, roda no subdomínio
+`admin.` e tem projeto Vercel próprio, pela mesma forma dos outros dois: deploy
+independente, e nada que rode na Vercel importa código de `apps/api`.
+
 O que passou a ser compartilhado é apenas o gerenciamento de dependências
 (um `package-lock.json` na raiz) e a orquestração de tarefas (Turborepo).
 
@@ -39,10 +44,16 @@ build de forma não óbvia.
 | `apps/api` | 3000 |
 | `apps/web` | 3001 |
 | `apps/site` | 3002 |
+| `apps/admin` | 3003 |
 
-`npm run dev` sobe os três em paralelo sem colisão. As portas dos fronts estão
-fixadas nos próprios scripts `dev` de cada app, e não no `next dev` padrão,
-justamente para não brigarem com a API na 3000.
+`npm run dev` sobe os quatro em paralelo sem colisão. As portas dos fronts
+estão fixadas nos próprios scripts `dev` de cada app, e não no `next dev`
+padrão, justamente para não brigarem com a API na 3000.
+
+Para exercitar a sessão de suporte de ponta a ponta são necessários três: a API
+na 3000, o `admin` na 3003 (de onde a sessão é aberta) e o `web` na 3001 (para
+onde ela é entregue). O destino sai de `NEXT_PUBLIC_WEB_URL`, no
+`.env.local` do admin.
 
 ## Deploy
 
@@ -52,10 +63,11 @@ O passo a passo de configuração do Render e da Vercel está em
 - **API (Render):** o build context do Docker passou a ser a **raiz** do repo,
   porque o `package-lock.json` mora lá. Ver `dockerContext` / `dockerfilePath` /
   `buildFilter` em `apps/api/render.yaml`.
-- **site e web (Vercel):** dois projetos separados, cada um com Root Directory
-  em `apps/site` / `apps/web` e *"Include files outside of the Root Directory"*
-  habilitado. Cada um tem `ignoreCommand` com `turbo-ignore` no seu
-  `vercel.json`, para não deployar quando o commit não afetou aquele app.
+- **site, web e admin (Vercel):** três projetos separados, cada um com Root
+  Directory em `apps/site` / `apps/web` / `apps/admin` e *"Include files
+  outside of the Root Directory"* habilitado. Cada um tem `ignoreCommand` com
+  `turbo-ignore` no seu `vercel.json`, para não deployar quando o commit não
+  afetou aquele app.
 - **Variáveis de ambiente:** não mudaram, em nenhuma das três plataformas.
 
 Os repositórios antigos (`orbien-api`, `orbien-site`, `orbien-web`) devem ser

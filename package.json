@@ -11,10 +11,12 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "dev:admin": "turbo run dev --filter=orbien-admin",
     "dev:api": "turbo run dev --filter=orbien-backend",
     "dev:site": "turbo run dev --filter=orbien-site",
     "dev:web": "turbo run dev --filter=orbien-web",
     "build": "turbo run build",
+    "build:admin": "turbo run build --filter=orbien-admin",
     "build:api": "turbo run build --filter=orbien-backend",
     "build:site": "turbo run build --filter=orbien-site",
     "build:web": "turbo run build --filter=orbien-web",

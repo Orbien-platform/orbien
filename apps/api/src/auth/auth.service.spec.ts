@@ -32,7 +32,7 @@ function mailMock() {
 function serviceWith(prismaOverrides: Record<string, unknown>, mail = mailMock()) {
   const prisma = {
     tenant: { findUnique: jest.fn() },
-    userAccount: { findUnique: jest.fn() },
+    userAccount: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
     refreshToken: { findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     system: {
@@ -242,6 +242,120 @@ describe('AuthService.logout', () => {
   });
 });
 
+describe('AuthService.platformLogin', () => {
+  /**
+   * A rota do console tinha só cobertura de integração. Estes testes prendem as
+   * decisões que o teste por HTTP não distingue bem: o `where` que restringe as
+   * candidatas, a indistinguibilidade das três recusas, e a ambiguidade.
+   */
+  async function contaComSenha(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'u1',
+      tenant_id: 't1',
+      congregation_id: 'c1',
+      password_hash: await argon2.hash('senha-certa'),
+      roleAssignments: [{ role_code: 'platform_support', congregation_id: 'c1' }],
+      tenant: { tenantPlan: { plan: 'premium' } },
+      ...overrides,
+    };
+  }
+
+  const credenciais = { email: 'suporte@orbien.test', password: 'senha-certa' };
+
+  it('só considera conta ativa e com o papel de plataforma', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([]);
+
+    await expect(service.platformLogin(credenciais)).rejects.toMatchObject({
+      response: { code: 'INVALID_CREDENTIALS' },
+    });
+
+    const [args] = (prisma.userAccount.findMany as jest.Mock).mock.calls[0];
+    expect(args.where).toMatchObject({
+      email: credenciais.email,
+      is_active: true,
+      roleAssignments: { some: { role_code: 'platform_support' } },
+    });
+  });
+
+  // O ponto não é o status, é a indistinguibilidade: quem tenta entrar com
+  // credencial boa de tenant_admin não pode descobrir pela mensagem que ela
+  // serve em outro lugar.
+  it('senha errada devolve o mesmo INVALID_CREDENTIALS da conta sem papel', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([await contaComSenha()]);
+
+    await expect(
+      service.platformLogin({ ...credenciais, password: 'senha-errada' }),
+    ).rejects.toMatchObject({ response: { code: 'INVALID_CREDENTIALS' } });
+  });
+
+  it('mesmo e-mail com o papel em dois tenants falha alto, não escolhe um', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([
+      await contaComSenha({ id: 'u1', tenant_id: 't1' }),
+      await contaComSenha({ id: 'u2', tenant_id: 't2' }),
+    ]);
+
+    await expect(service.platformLogin(credenciais)).rejects.toMatchObject({
+      response: { code: 'PLATFORM_ACCOUNT_AMBIGUOUS' },
+    });
+    // Nenhum token emitido: escolher um poria o tenant errado em audit_logs.
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('emite token com o tenant e a congregação resolvidos no servidor', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([await contaComSenha()]);
+    (prisma.refreshToken.create as jest.Mock).mockResolvedValue({});
+
+    const result = await service.platformLogin(credenciais);
+
+    expect(result).toMatchObject({ access_token: 'signed-token', expires_in: 900 });
+    const [payload] = (jwtService.sign as jest.Mock).mock.calls[0];
+    expect(payload).toMatchObject({
+      sub: 'u1',
+      tenant_id: 't1',
+      congregation_id: 'c1',
+      plan: 'premium',
+    });
+    expect(payload.roles).toContain('platform_support');
+  });
+
+  // O tenant de origem pode não ter plano (provisionamento interrompido). O
+  // fallback existe para o token sair mesmo assim.
+  it('conta sem plano no tenant sai como starter', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([
+      await contaComSenha({ tenant: { tenantPlan: null } }),
+    ]);
+    (prisma.refreshToken.create as jest.Mock).mockResolvedValue({});
+
+    await service.platformLogin(credenciais);
+
+    const [payload] = (jwtService.sign as jest.Mock).mock.calls[0];
+    expect(payload.plan).toBe('starter');
+  });
+
+  // `platform_support` é global: `app_is_platform_support()` não filtra por
+  // congregação. Sem a união em `rolesForToken`, uma atribuicao feita em outra
+  // congregação do tenant sumiria do token e o console cairia a cada renovação.
+  it('inclui platform_support atribuído em outra congregação do tenant', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([
+      await contaComSenha({
+        roleAssignments: [{ role_code: 'platform_support', congregation_id: 'outra' }],
+      }),
+    ]);
+    (prisma.refreshToken.create as jest.Mock).mockResolvedValue({});
+
+    await service.platformLogin(credenciais);
+
+    const [payload] = (jwtService.sign as jest.Mock).mock.calls[0];
+    expect(payload.roles).toEqual(['platform_support']);
+  });
+});
+
 describe('AuthService.impersonate', () => {
   const requester: JwtPayload = {
     sub: 'support-1',
@@ -251,17 +365,68 @@ describe('AuthService.impersonate', () => {
     plan: 'starter',
   };
 
-  it('barra quem não tem platform_support', async () => {
-    const { service } = serviceWith({});
-    const naoSuporte: JwtPayload = { ...requester, roles: ['tenant_admin'] };
+  /**
+   * O papel vem de `role_assignments`, não do `roles` do JWT — e os dois
+   * primeiros testes existem para prender a inversão nos dois sentidos. Antes
+   * era `requestingUser.roles.includes('platform_support')`, o que fazia um
+   * papel revogado continuar valendo por até 15 minutos, com a cadeia de
+   * refresh renovando.
+   */
+  function comAtor(prisma: PrismaService, encontrado: boolean): void {
+    (prisma.userAccount.findFirst as jest.Mock).mockResolvedValue(
+      encontrado ? { id: requester.sub } : null,
+    );
+  }
+
+  it('barra quem o banco não confirma, mesmo com o papel no token', async () => {
+    const { service, prisma } = serviceWith({});
+    comAtor(prisma, false);
 
     await expect(
-      service.impersonate(naoSuporte, { target_tenant_id: 'target' }),
+      service.impersonate(requester, { target_tenant_id: 'target' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+
+    // Nem chega a olhar o tenant alvo: a autorização vem antes.
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('libera quem o banco confirma, mesmo sem o papel no token', async () => {
+    const { service, prisma } = serviceWith({});
+    comAtor(prisma, true);
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
+      id: 'target',
+      tenantPlan: null,
+      congregations: [{ id: 'target-cong' }],
+    });
+    const semPapelNoToken: JwtPayload = { ...requester, roles: [] };
+
+    await expect(
+      service.impersonate(semPapelNoToken, { target_tenant_id: 'target' }),
+    ).resolves.toMatchObject({ access_token: 'signed-token' });
+  });
+
+  // A consulta filtra por conta ativa e pelo papel de uma vez — o `is_active`
+  // é redundância deliberada (o `JwtStrategy` já o confere em toda requisição),
+  // mas o serviço não deve depender de o guard estar montado.
+  it('procura o ator por id, ativo e com o papel', async () => {
+    const { service, prisma } = serviceWith({});
+    comAtor(prisma, false);
+
+    await expect(
+      service.impersonate(requester, { target_tenant_id: 'target' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const [args] = (prisma.userAccount.findFirst as jest.Mock).mock.calls[0];
+    expect(args.where).toMatchObject({
+      id: requester.sub,
+      is_active: true,
+      roleAssignments: { some: { role_code: 'platform_support' } },
+    });
   });
 
   it('rejeita tenant alvo inexistente', async () => {
     const { service, prisma } = serviceWith({});
+    comAtor(prisma, true);
     (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(null);
 
     await expect(
@@ -271,6 +436,7 @@ describe('AuthService.impersonate', () => {
 
   it('rejeita tenant sem nenhuma congregação', async () => {
     const { service, prisma } = serviceWith({});
+    comAtor(prisma, true);
     (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
       id: 'target',
       tenantPlan: null,
@@ -284,6 +450,7 @@ describe('AuthService.impersonate', () => {
 
   it('emite token marcado support_session, com o tenant e a congregação do alvo', async () => {
     const { service, prisma } = serviceWith({});
+    comAtor(prisma, true);
     (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
       id: 'target',
       tenantPlan: { plan: 'premium' },
@@ -305,6 +472,7 @@ describe('AuthService.impersonate', () => {
 
   it('usa "starter" quando o tenant alvo não tem plano', async () => {
     const { service, prisma } = serviceWith({});
+    comAtor(prisma, true);
     (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
       id: 'target',
       tenantPlan: null,

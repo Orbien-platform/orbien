@@ -364,7 +364,7 @@ bash scripts/pre-push.sh --e2e        # inclui a suíte de tela
 bash scripts/pre-push.sh --review     # inclui revisão por IA, com veredito
 ```
 
-Ele roda o que o CI rodaria — build dos 3 apps, tipos da API incluindo `test/`,
+Ele roda o que o CI rodaria — build dos 4 apps, tipos da API incluindo `test/`,
 lint, sanidade das skills — e dispara os testes de RLS sozinho quando o diff
 toca `apps/api`. Sai com código 1 quando bloqueia, então serve de hook.
 

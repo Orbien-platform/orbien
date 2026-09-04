@@ -1,16 +1,18 @@
 # Deploy
 
-Passo a passo para configurar o deploy dos três apps do monorepo.
+Passo a passo para configurar o deploy dos quatro apps do monorepo.
 
 Os deploys são **independentes**: a API roda no Render (runtime Node) e
-`site` e `web` rodam em **dois projetos Vercel separados**. Nada disso muda por
-causa do monorepo — o que muda é onde cada plataforma procura os arquivos.
+`site`, `web` e `admin` rodam em **três projetos Vercel separados**. Nada disso
+muda por causa do monorepo — o que muda é onde cada plataforma procura os
+arquivos.
 
 | App | Package | Plataforma | O que muda com o monorepo |
 |---|---|---|---|
 | `apps/api` | `orbien-backend` | Render (Node) | Root Directory vazio; build e start rodam da **raiz** |
 | `apps/site` | `orbien-site` | Vercel | Root Directory = `apps/site` |
 | `apps/web` | `orbien-web` | Vercel | Root Directory = `apps/web` |
+| `apps/admin` | `orbien-admin` | Vercel | Root Directory = `apps/admin`; domínio `admin.<domínio>` |
 
 > Este documento substitui o antigo `apps/api/DEPLOY.md`, que descrevia o setup
 > de quando a API tinha repositório próprio.
@@ -341,7 +343,58 @@ Verificar: abrir a home, `/precos`, `/funcionalidades` e conferir que
 
 ---
 
-## Depois que os três estiverem verdes
+## Parte 4 — `admin` na Vercel
+
+O console da plataforma. Projeto Vercel **novo** — não existe projeto antigo
+para reconectar, como nos outros dois.
+
+### 4.1 Configuração do projeto
+
+1. **Add New → Project** → repositório `Orbien-platform/orbien`.
+2. **Root Directory** → `apps/admin`
+3. Marcar **"Include files outside of the Root Directory in the Build Step"**.
+4. Não sobrescrever Install Command nem Build Command.
+5. **Node.js Version**: 22.x
+6. **Domains** → `admin.<domínio>`. O subdomínio não é cosmético: ele é o que
+   dá ao console uma origem própria, e portanto um `localStorage` próprio. A
+   sessão do console e a sessão do produto não se veem nem se sobrescrevem —
+   é por isso que a sessão de suporte precisa ser entregue ao `web` por URL.
+
+`apps/admin/vercel.json` já traz o `turbo-ignore`
+(`npx --yes turbo-ignore orbien-admin`).
+
+### 4.2 Variáveis de ambiente
+
+| Variável | Valor | Escopo |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
+| `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
+| `NEXT_PUBLIC_WEB_URL` | `https://<domínio do web>` | browser |
+
+As duas primeiras são iguais às do `web`, e pelo mesmo motivo: o browser nunca
+chama a API direto. `NEXT_PUBLIC_WEB_URL` é para onde a sessão de suporte é
+aberta — sem ela, o botão da lista de tenants falha com mensagem explícita em
+vez de abrir uma aba em branco.
+
+O domínio do `admin` precisa entrar em `ALLOWED_ORIGINS` no Render? **Não.**
+O tráfego sai da própria origem do admin (`/api-proxy/*`) e o rewrite acontece
+no servidor da Vercel — não há requisição cross-origin para o browser barrar.
+
+### 4.3 Verificar
+
+1. Abrir `admin.<domínio>` e logar com uma conta que tenha
+   `platform_support` em `role_assignments` — **só e-mail e senha**, sem slug
+   de tenant. Conta sem o papel tem que receber o mesmo 401 de senha errada
+   (indistinguível de propósito), e não passar para as telas internas.
+2. `/tenants` lista **mais de um** tenant. Um só é o sintoma clássico de
+   contexto de tenant fixado — ver a nota do `ListTenantsService`.
+3. "Entrar no web como suporte" abre o `web` em outra aba, com a faixa
+   vermelha de sessão de suporte visível.
+4. Conferir que a linha `support_access` apareceu em `audit_logs`.
+
+---
+
+## Depois que os quatro estiverem verdes
 
 1. Confirmar que os domínios customizados (`app.useorbien.com` e o do site)
    apontam para os projetos novos.
@@ -378,15 +431,16 @@ como já vazada e não a reaproveite fora do ambiente de desenvolvimento.
 
 ## Deploys do dia a dia
 
-Com o monorepo, um `git push` na `main` pode disparar até três deploys. O que
+Com o monorepo, um `git push` na `main` pode disparar até quatro deploys. O que
 dispara o quê:
 
-| Commit toca | API (Render) | site (Vercel) | web (Vercel) |
-|---|---|---|---|
-| `apps/api/**` | deploya | ignora | ignora |
-| `apps/site/**` | ignora | deploya | ignora |
-| `apps/web/**` | ignora | ignora | deploya |
-| `package-lock.json` / raiz | deploya | deploya | deploya |
+| Commit toca | API (Render) | site (Vercel) | web (Vercel) | admin (Vercel) |
+|---|---|---|---|---|
+| `apps/api/**` | deploya | ignora | ignora | ignora |
+| `apps/site/**` | ignora | deploya | ignora | ignora |
+| `apps/web/**` | ignora | ignora | deploya | ignora |
+| `apps/admin/**` | ignora | ignora | ignora | deploya |
+| `package-lock.json` / raiz | deploya | deploya | deploya | deploya |
 
 No Render, o filtro é o `buildFilter` do `render.yaml`. Na Vercel, é o
 `turbo-ignore`. Mudança na raiz reconstrói tudo — o que é o comportamento
