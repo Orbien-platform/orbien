@@ -571,11 +571,31 @@ cobrir por integração.
 > nas quatro métricas — thresholds por caminho em `vitest.config.ts`
 > (`"src/app/**"`). Os três Server Components sem `async` (`layout.tsx`,
 > `(admin)/layout.tsx`, `page.tsx`) seguem invocáveis como função, confirmando
-> a premissa registrada na Fase 0. `npx turbo run build --filter=orbien-web`
-> continua falhando em `/_global-error` com o mesmo `TypeError: Cannot read
-> properties of null (reading 'useContext')` já registrado como pré-existente
-> na Fase 7 (confirmado de novo com `git stash` antes desta fase) — não é
-> regressão desta fase e não foi investigado, por não ser escopo dela.
+> a premissa registrada na Fase 0.
+>
+> **A falha de build em `/_global-error` (registrada como pré-existente na
+> Fase 7) foi investigada nesta fase e isolada:** não é código nosso. Provas,
+> na ordem em que foram descartando hipóteses — `git stash` confirmando que já
+> falhava no `main` antes de qualquer mudança; troca de bundler
+> (`next build --webpack`) reproduzindo igual; `experimental.cpus: 1`
+> reproduzindo igual (descarta corrida entre workers); patch bump
+> `16.2.9` → `16.2.12` reproduzindo igual; minor bump para `16.3.4`
+> reproduzindo igual assim que o build passa do typecheck; um `root layout`
+> reduzido ao mínimo — sem `next/font`, sem `ThemeProvider`/`AuthProvider`/
+> `TooltipProvider`, só `<html><body>{children}</body></html>` —
+> reproduzindo igual; e, decisivo, um app Next 16.2.9 novo em folha, fora
+> deste repositório, com layout mínimo em JS puro (sem TypeScript), também
+> quebra com o mesmo `TypeError: Cannot read properties of null (reading
+> 'useContext')` no mesmo `/_global-error`/`/_not-found`. É bug do
+> Next 16.2.x (Turbopack e Webpack) neste ambiente de sandbox, não algo que
+> uma mudança de código neste repositório resolve. Adicionado
+> `app/global-error.tsx` mesmo assim (com teste) — é a prática recomendada
+> pelo próprio Next e algo que este projeto deveria ter de qualquer forma,
+> mas **não é o que corrige o build**: o crash acontece na infraestrutura
+> interna do Next antes de alcançar qualquer componente da aplicação.
+> Registrado em "Pendências abertas" para decisão do dono do projeto —
+> possivelmente só reproduz neste ambiente de sandbox, e vale conferir se o
+> build da Vercel (ambiente real de deploy) passa normalmente.
 >
 > **Achados durante a escrita dos testes, corrigidos em seguida — todos no
 > mesmo padrão do achado do `StatusBadge.tsx` na Fase 8 (branch morto por
@@ -615,14 +635,22 @@ cobrir por integração.
 >   pego ao escrever o teste do banner de não-escaladas. Corrigido para
 >   `${n} ${n > 1 ? "celebrações" : "celebração"}`.
 >
-> **Pendência aberta, não desta fase:** `src/lib/session.ts` (adicionado no
-> PR #16, depois da Fase 7 fechar) está em 87,5% de branch — falta cobrir
-> `secure: process.env.NODE_ENV === "production"` em `base` — e isso já
-> quebra `npm run test:cov -w orbien-web` no `main` de hoje, antes de
-> qualquer mudança desta fase (confirmado com `git stash`). Ver seção
-> "Pendências abertas" abaixo — não corrigido aqui por não ser escopo da
-> Fase 10 e por ser exatamente o tipo de achado de portão que este projeto
-> trata como pergunta, não decisão unilateral.
+> **Achado de portão pré-existente, fora do escopo original da fase, mas
+> corrigido a pedido do dono do projeto:** `src/lib/session.ts` (adicionado
+> no PR #16, depois da Fase 7 fechar) estava em 87,5% de branch — faltava
+> cobrir o ramo "sem `API_BACKEND_URL` no ambiente" do `BACKEND_URL` (o `??`
+> de `session.ts:33`; havia teste só para o ramo "com a variável definida",
+> em `session.backend-url.test.ts`). Isso já quebrava
+> `npm run test:cov -w orbien-web` no `main` de hoje, antes de qualquer
+> mudança desta fase (confirmado com `git stash`). Adicionado
+> `session.backend-url-default.test.ts` cobrindo o ramo que faltava, e um
+> teste em `session.test.ts` para `secure: true` (produção) via
+> `vi.resetModules()` + `vi.stubEnv` + reimport, já que `secure` é resolvido
+> uma vez na importação do módulo. Junto, um segundo achado de portão do
+> mesmo tipo: `src/components/layout/header.test.tsx` tinha um objeto de
+> usuário sem `support_session`/`support_tenant_name` (campos que entraram no
+> mesmo PR #16), quebrando o `tsc` do build — corrigido acrescentando os dois
+> campos ao fixture.
 
 ---
 
@@ -697,17 +725,27 @@ A primeira toca este plano: enquanto o job `Testes de RLS` estiver vermelho, o
 CI não fica verde de ponta a ponta — o que não impede as Fases 1 a 12, mas
 impede a Fase 13 de declarar fechamento.
 
-**`npm run test:cov -w orbien-web` já está vermelho no `main`, independente
-desta fase.** `src/lib/session.ts` chegou no PR #16 (a sessão em cookie
-HttpOnly), depois da Fase 7 ter fechado `src/lib/**` em 100%, e ficou em
-87,5% de branch: falta cobrir `secure: process.env.NODE_ENV === "production"`
-em `base` (o objeto de opções dos cookies). Confirmado com `git stash` antes
-da Fase 10: o mesmo erro de threshold aparece com a árvore de trabalho limpa,
-no `main` de hoje. Não é regressão de nenhuma fase deste plano — é um gap que
-ficou para trás quando o threshold de `src/lib/**` já estava travado em 100 e
-o PR #16 não tocou `docs/TESTES.md`. Registrado aqui em vez de corrigido por
-decisão unilateral, porque é exatamente o tipo de achado de portão que a regra
-do `CLAUDE.md` pede para virar pergunta.
+**`npm run test:cov -w orbien-web` e o `tsc` do build de `orbien-web` estavam
+vermelhos no `main`, independente desta fase — corrigidos na Fase 10 a pedido
+do dono do projeto.** Dois achados que ficaram para trás quando o PR #16 (a
+sessão em cookie HttpOnly) chegou depois da Fase 7 fechar `src/lib/**` e a
+Fase 8 fechar `components/layout/**`, sem atualizar nem os testes nem
+`docs/TESTES.md`: `src/lib/session.ts` em 87,5% de branch (ramo default de
+`BACKEND_URL` sem teste) e `src/components/layout/header.test.tsx` com um
+fixture de usuário sem os dois campos novos de `SessionUser`. Ver a nota
+"Executado em 2026-09-04" da Fase 10 acima para o detalhe de cada um.
+
+**`npx turbo run build --filter=orbien-web` continua vermelho, mas por um bug
+de ambiente, não do código.** Falha pré-renderizando `/_global-error` (e
+`/_not-found`) com `TypeError: Cannot read properties of null (reading
+'useContext')` — investigado a fundo na Fase 10 (ver a nota acima) e isolado a
+um bug do Next 16.2.x (Turbopack **e** Webpack) neste ambiente de sandbox:
+reproduz até num app novo em folha, fora deste repositório, com layout
+mínimo. Não é algo que uma mudança de código neste repositório resolve.
+Precisa de decisão do dono do projeto: vale conferir se o build da Vercel
+(ambiente real de deploy, provavelmente com Node/SO diferentes deste sandbox)
+passa normalmente — se passar, é só um problema deste ambiente de
+desenvolvimento remoto, não do produto.
 
 ## Registro de decisões
 
