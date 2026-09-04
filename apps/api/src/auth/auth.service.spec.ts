@@ -436,6 +436,58 @@ describe('AuthService.forgotPassword', () => {
     expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.any(String), '');
   });
 
+  it('usa FRONTEND_URL do ambiente quando definida, em vez do default de localhost', async () => {
+    const original = process.env['FRONTEND_URL'];
+    process.env['FRONTEND_URL'] = 'https://app.orbien.com.br';
+    try {
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        is_active: true,
+        person: null,
+      });
+
+      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringMatching(/^https:\/\/app\.orbien\.com\.br\/redefinir-senha\?token=/),
+        '',
+      );
+    } finally {
+      if (original === undefined) delete process.env['FRONTEND_URL'];
+      else process.env['FRONTEND_URL'] = original;
+    }
+  });
+
+  it('cai no default de localhost quando FRONTEND_URL não está definida', async () => {
+    const original = process.env['FRONTEND_URL'];
+    delete process.env['FRONTEND_URL'];
+    try {
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        is_active: true,
+        person: null,
+      });
+
+      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringMatching(/^http:\/\/localhost:3001\/redefinir-senha\?token=/),
+        '',
+      );
+    } finally {
+      if (original === undefined) delete process.env['FRONTEND_URL'];
+      else process.env['FRONTEND_URL'] = original;
+    }
+  });
+
   it('acima do limite de tentativas por hora, devolve genérico sem consultar o tenant', async () => {
     const { service, prisma } = serviceWith({});
     (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue(null);

@@ -117,7 +117,12 @@ test.describe("sessão de suporte no web", () => {
     await expect(
       page.getByRole("heading", { name: "Sessão de suporte não iniciada" })
     ).toBeVisible();
-    await expect(page.getByRole("alert")).toContainText("ilegível");
+    // Não `getByRole("alert")`: o Next mantém um
+    // `<div role="alert" id="__next-route-announcer__">` em toda página, então
+    // o papel casa com dois elementos e o strict mode do Playwright recusa.
+    await expect(
+      page.getByText("Token de sessão de suporte ilegível.")
+    ).toBeVisible();
 
     // O ramo de erro também limpa o fragmento — era o segundo defeito.
     expect(page.url()).not.toContain("access_token");
@@ -134,6 +139,8 @@ test.describe("sessão de suporte no web", () => {
   test("link sem token nenhum é recusado", async ({ page }) => {
     await page.goto("/suporte/sessao");
 
-    await expect(page.getByRole("alert")).toContainText("inválido ou incompleto");
+    await expect(
+      page.getByText("Link de sessão de suporte inválido ou incompleto.")
+    ).toBeVisible();
   });
 });

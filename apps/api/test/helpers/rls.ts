@@ -29,6 +29,35 @@ export const prisma = new PrismaClient({
 });
 
 /**
+ * Garante que um `role` existe, sem correr contra outra suíte fazendo o
+ * mesmo.
+ *
+ * `client.role.upsert()` não é seguro aqui: o `DIRECT_URL`/`DATABASE_URL`
+ * passam por PgBouncer em modo transaction pooling, que desabilita prepared
+ * statements — o Prisma cai para o upsert emulado (SELECT, depois CREATE ou
+ * UPDATE), que não é atômico. Quando `test/integration/impersonation.spec.ts`
+ * e `test/integration/platform-provisioning.spec.ts` rodam em workers Jest
+ * paralelos (é o que `npm run test:cov` faz — ao contrário de
+ * `test:integration`, não passa `--runInBand`), os dois fazem
+ * `upsert({ where: { code: 'platform_support' } })` ao mesmo tempo no
+ * `beforeAll`, e o segundo recebe uma violação de unique constraint de
+ * verdade em vez do upsert resolver.
+ *
+ * `INSERT ... ON CONFLICT DO NOTHING` é atômico no Postgres independente de
+ * prepared statement, então não corre.
+ */
+export async function ensureRole(
+  client: Pick<PrismaClient, '$executeRaw'>,
+  code: string,
+  name: string,
+): Promise<void> {
+  await client.$executeRaw`
+    INSERT INTO roles (code, name) VALUES (${code}, ${name})
+    ON CONFLICT (code) DO NOTHING
+  `;
+}
+
+/**
  * Mimics TenantContextInterceptor: opens a transaction and applies
  * SET LOCAL for tenant context vars — no role switch.
  *

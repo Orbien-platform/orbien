@@ -26,6 +26,7 @@ import { PlanStatus, PlanType, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { ensureRole } from '../helpers/rls';
 
 const SENHA = 'senha-de-teste-platform-login';
 
@@ -94,19 +95,13 @@ function platformLogin(email: string, password: string) {
 }
 
 beforeAll(async () => {
-  // `createMany` com `skipDuplicates`, e não `upsert`: as suítes de integração
-  // rodam em paralelo sob `test:cov` (só `test:integration` usa --runInBand) e
-  // todas semeiam os mesmos papéis. `upsert` faz find-then-create, então duas
-  // workers que não acham a linha criam as duas e a segunda morre com P2002.
-  // `createMany` vira um INSERT ... ON CONFLICT DO NOTHING — uma ida, sem
-  // janela de corrida.
-  await admin.role.createMany({
-    data: [
-      { code: 'platform_support', name: 'Platform Support' },
-      { code: 'tenant_admin', name: 'Admin Tenant' },
-    ],
-    skipDuplicates: true,
-  });
+  // `ensureRole` e não `upsert`: as suítes de integração rodam em paralelo sob
+  // `test:cov` (só `test:integration` usa --runInBand) e todas semeiam os
+  // mesmos papéis. `upsert` faz find-then-create, então duas workers que não
+  // acham a linha criam as duas e a segunda morre com P2002. O helper é um
+  // `INSERT ... ON CONFLICT DO NOTHING`, sem janela.
+  await ensureRole(admin, 'platform_support', 'Platform Support');
+  await ensureRole(admin, 'tenant_admin', 'Admin Tenant');
 
   const a = await criarTenant(`plogin-a-${ts}`, 'Tenant A');
   const b = await criarTenant(`plogin-b-${ts}`, 'Tenant B');
