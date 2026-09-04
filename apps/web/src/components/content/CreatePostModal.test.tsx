@@ -278,10 +278,12 @@ describe("CreatePostModal", () => {
       FakeXHR.shouldFail = false;
       // @ts-expect-error - fake XHR for jsdom
       global.XMLHttpRequest = FakeXHR;
+      vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "http://upload.test");
     });
 
     afterEach(() => {
       global.XMLHttpRequest = originalXHR;
+      vi.unstubAllEnvs();
     });
 
     it("creates the post then uploads the selected file", async () => {

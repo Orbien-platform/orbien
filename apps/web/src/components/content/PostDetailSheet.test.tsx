@@ -368,6 +368,8 @@ describe("PostDetailSheet", () => {
     }
     // @ts-expect-error - fake XHR for jsdom
     global.XMLHttpRequest = FakeXHR;
+    vi.mocked(api.post).mockResolvedValue({ data: { upload_token: "tok" } });
+    vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "http://upload.test");
 
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup();
@@ -400,6 +402,7 @@ describe("PostDetailSheet", () => {
     vi.useRealTimers();
 
     global.XMLHttpRequest = originalXHR;
+    vi.unstubAllEnvs();
   });
 
   it("keeps editing open and reports an error when the file upload fails during save", async () => {
