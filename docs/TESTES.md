@@ -27,7 +27,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
-| 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
+| 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
 | 12 | site — rotas | `app/` | 18 | ☐ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
 
@@ -603,6 +603,38 @@ delas é sobretudo regressão visual e de conteúdo, não de comportamento.
 Todos apresentacionais. Teste: renderiza, mostra o texto esperado, links
 apontam para o href certo. `layout/NavDropdown.tsx` e `layout/Header.tsx` são
 os únicos com interação real.
+
+> **Executado em 2026-09-04:** os 57 arquivos do escopo (56 componentes +
+> `lib/utils.ts`) fecharam em `functions` e `lines` 100%, `statements` 100%
+> (94% em `ui/`) e `branches` 100% (95% em `ui/`, 97% em `funcionalidades/`)
+> — thresholds por caminho em `vitest.config.ts`. Dois ramos ficaram de
+> fora, ambos inalcançáveis pela UI real e documentados no teste
+> correspondente:
+> - `ui/Reveal.tsx`: o guard `if (!el) return` do efeito protege um ref que
+>   o React sempre preenche antes de o efeito rodar.
+> - `funcionalidades/financeiro/FinanceiroHero.tsx`: o ternário de `deltaOk`
+>   só tem o ramo positivo nos dados do mockup — o `#C0392B` é código morto.
+>
+> Nenhum dos dois foi mexido: são achados de revisão, e a decisão de limpar
+> (como a Fase 8 fez em `StatusBadge.tsx`) ou manter é do dev. Se limpar, as
+> duas entradas de threshold acima sobem para 100.
+>
+> Duas armadilhas encontradas na execução:
+> - **`vitest.setup.ts` ganhou um stub de `IntersectionObserver`.** O jsdom
+>   não implementa a API, e `ui/Reveal.tsx` instancia uma no mount — sem o
+>   stub *qualquer* render de seção quebraria com `ReferenceError`. O stub
+>   guarda as instâncias em `intersectionObservers` para o teste do próprio
+>   `Reveal` disparar o callback à mão.
+> - **`NavDropdown` abre por hover e por clique ao mesmo tempo**, e um
+>   clique real de mouse do `user-event` passa antes pelo `onMouseEnter` do
+>   wrapper: quando o `onClick` chega, o painel já está aberto e o toggle o
+>   fecha de volta. O `skipHover` do `user-event` não muda isso. O teste do
+>   caminho sem ponteiro (teclado, toque) usa `fireEvent.click`; o do hover
+>   usa `user.hover`/`user.unhover`. Vale registrar que, com mouse, clicar
+>   no gatilho hoje fecha o menu que o hover acabou de abrir.
+>
+> O `playwright` órfão em `devDependencies` continua sem destino — a decisão
+> segue marcada para a Fase 12, como o plano previa.
 
 ### Fase 12 — site: rotas — fecha o site
 
