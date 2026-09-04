@@ -42,7 +42,9 @@ bundle do cliente e quebraria o esquema sem-CORS. Localmente ela vive em
 ## Autenticação
 
 `src/proxy.ts` intercepta as rotas privadas e redireciona para
-`/login?from=<rota>` quando não há cookie `auth_session`. Rotas cobertas:
+`/login?from=<rota>` quando não há `orbien_at` nem `orbien_rt`. Os dois contam
+por motivos diferentes: sessão normal costuma chegar com o access vencido e o
+refresh vivo, e sessão de suporte não tem refresh nenhum. Rotas cobertas:
 `/dashboard`, `/pessoas`, `/grupos`, `/financeiro`, `/conteudo`,
 `/voluntarios`, `/celebracoes`, `/configuracoes`.
 
