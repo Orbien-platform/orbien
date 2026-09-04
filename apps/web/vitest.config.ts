@@ -23,7 +23,16 @@ export default defineConfig({
       reporter: ["text-summary", "lcov"],
       // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
       // global. O piso nunca desce.
-      thresholds: { statements: 0, branches: 0, functions: 0, lines: 0 },
+      thresholds: {
+        statements: 0,
+        branches: 0,
+        functions: 0,
+        lines: 0,
+        "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/hooks/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/contexts/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/proxy.ts": { statements: 100, branches: 100, functions: 100, lines: 100 },
+      },
     },
   },
 });
