@@ -1,33 +1,51 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { useAuth } from "@/hooks/useAuth";
+import type { SessionUser } from "@/lib/session";
 import { SupportSessionBanner } from "./SupportSessionBanner";
 
-const SUPPORT_TOKEN =
-  "eyJhbGciOiAibm9uZSIsICJ0eXAiOiAiSldUIn0.eyJzdWIiOiAidTEiLCAidGVuYW50X2lkIjogInQxIiwgImNvbmdyZWdhdGlvbl9pZCI6ICJjMSIsICJyb2xlcyI6IFsicGxhdGZvcm1fc3VwcG9ydCJdLCAicGxhbiI6ICJwcm8iLCAiaWF0IjogMCwgImV4cCI6IDk5OTk5OTk5OTksICJzdXBwb3J0X3Nlc3Npb24iOiB0cnVlfQ.sig";
-const NORMAL_TOKEN =
-  "eyJhbGciOiAibm9uZSIsICJ0eXAiOiAiSldUIn0.eyJzdWIiOiAidTEiLCAidGVuYW50X2lkIjogInQxIiwgImNvbmdyZWdhdGlvbl9pZCI6ICJjMSIsICJyb2xlcyI6IFsidGVuYW50X2FkbWluIl0sICJwbGFuIjogInBybyIsICJpYXQiOiAwLCAiZXhwIjogOTk5OTk5OTk5OX0.sig";
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: vi.fn(),
+}));
 
-afterEach(() => {
-  localStorage.clear();
-});
+const mockedUseAuth = vi.mocked(useAuth);
+
+const BASE_USER: SessionUser = {
+  id: "u1",
+  name: "ana",
+  email: "ana@example.com",
+  roles: ["tenant_admin"],
+  tenant_id: "t1",
+  congregation_id: "c1",
+  support_session: false,
+  support_tenant_name: null,
+};
+
+function setup(user: SessionUser | null) {
+  mockedUseAuth.mockReturnValue({
+    user,
+    isLoading: false,
+    isAuthenticated: !!user,
+    login: vi.fn(),
+    logout: vi.fn(async () => {}),
+  });
+}
 
 describe("SupportSessionBanner", () => {
-  it("não renderiza nada quando não há sessão de suporte", () => {
+  it("não renderiza nada quando não há usuário", () => {
+    setup(null);
     render(<SupportSessionBanner />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("não renderiza quando o marcador está presente mas o token não é de suporte", () => {
-    localStorage.setItem("support_session", "1");
-    localStorage.setItem("access_token", NORMAL_TOKEN);
+  it("não renderiza quando a sessão não é de suporte", () => {
+    setup(BASE_USER);
     render(<SupportSessionBanner />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("renderiza a faixa quando a sessão é de suporte, com o nome do tenant", () => {
-    localStorage.setItem("support_session", "1");
-    localStorage.setItem("access_token", SUPPORT_TOKEN);
-    localStorage.setItem("support_session_tenant", "Igreja Vida Nova");
+    setup({ ...BASE_USER, support_session: true, support_tenant_name: "Igreja Vida Nova" });
     render(<SupportSessionBanner />);
     const banner = screen.getByRole("status");
     expect(banner).toHaveTextContent("Sessão de suporte da plataforma");
@@ -36,8 +54,7 @@ describe("SupportSessionBanner", () => {
   });
 
   it("renderiza a faixa sem nome de tenant quando ele não está salvo", () => {
-    localStorage.setItem("support_session", "1");
-    localStorage.setItem("access_token", SUPPORT_TOKEN);
+    setup({ ...BASE_USER, support_session: true, support_tenant_name: null });
     render(<SupportSessionBanner />);
     const banner = screen.getByRole("status");
     expect(banner).toHaveTextContent("Sessão de suporte da plataforma.");
