@@ -28,7 +28,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
-| 12 | site — rotas | `app/` | 18 | ☐ |
+| 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
 
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
@@ -615,6 +615,50 @@ comparar pixel.
 
 Decida aqui o destino do `playwright` órfão em `devDependencies`: vira o smoke
 da Fase 13, ou sai.
+
+> **Executado em 2026-09-04:** os 18 arquivos de `src/app/` fecharam em 100%
+> nas quatro métricas — 70 testes em 18 specs, threshold `src/app/**` em
+> `vitest.config.ts`. **O site ainda não está em 100%**: a Fase 11
+> (`components/`, `lib/`) continua aberta, e é ela que fecha o app. O que a
+> Fase 12 cobre já arrasta `components/` para ~95% de linhas como efeito
+> colateral de renderizar as páginas inteiras — mas cobertura por arrasto não
+> é asserção; a Fase 11 segue valendo por inteiro.
+>
+> Três armadilhas encontradas na execução:
+> - **`next/font/google` não funciona fora do build.** O módulo só existe como
+>   transformação do compilador do Next; importado pelo Vitest ele não expõe os
+>   loaders e `DM_Sans()` estoura com `is not a function`. `layout.test.tsx`
+>   mocka o módulo devolvendo `{ variable }`, que é o contrato que o layout usa.
+>   `<html>`/`<body>` também não podem ser montados no container do jsdom — o
+>   teste renderiza com `renderToStaticMarkup` para asserir os atributos da raiz.
+> - **`ImageResponse` precisa do ambiente `node`.** Sob jsdom o Satori gera o
+>   SVG normalmente, mas o `sharp` rejeita o `Uint8Array` que vem de outro
+>   realm (`Unsupported input ... of type object`). `icon.test.tsx` e
+>   `apple-icon.test.tsx` levam `@vitest-environment node` no topo e conferem a
+>   assinatura PNG dos primeiros bytes.
+> - **`IntersectionObserver` não existe no jsdom** e `components/ui/Reveal.tsx`
+>   embrulha quase toda seção do site — sem stub, qualquer render de página
+>   quebra no efeito do Reveal. O stub entrou em `vitest.setup.ts` e entrega o
+>   elemento como visível ao ser observado, que é o comportamento do navegador
+>   para conteúdo já na viewport.
+>
+> **Divergência de conteúdo encontrada, não corrigida** (a decisão é do dono do
+> código, ver a regra de achado no `CLAUDE.md`): dos CTAs de lista de espera do
+> site, 8 apontam para `href="#waitlist"` e 3 apontam para `href="#"` —
+> `home/FinalCta.tsx`, `precos/PrecosCta.tsx` e `contato/ContatoContent.tsx`.
+> `#` rola para o topo e não faz nada; `#waitlist` também não faz nada hoje
+> (não existe elemento com esse id), mas é a âncora que os outros 8 usam e a
+> que a Fase 13 quer no smoke. O teste da home fixa o estado atual dos dois
+> casos com comentário explícito, então ligar a waitlist faz o teste falhar e
+> cobrar a atualização — em vez de passar em silêncio.
+>
+> **`playwright` órfão:** a decisão ficou aberta, com recomendação registrada.
+> A dependência é o pacote `playwright`, não `@playwright/test`, e não há
+> `e2e/`, `playwright.config.ts` nem script que a use no site — ela não
+> sustenta o smoke da Fase 13 como está. Recomendação: **sai** agora, e a
+> Fase 13 instala `@playwright/test` se decidir fazer o smoke das 18 rotas.
+> Não foi removida aqui porque mexer em `devDependencies` de um app é
+> escolha do dono, não efeito colateral de uma fase de testes.
 
 ---
 
