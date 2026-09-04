@@ -642,23 +642,25 @@ da Fase 13, ou sai.
 >   elemento como visível ao ser observado, que é o comportamento do navegador
 >   para conteúdo já na viewport.
 >
-> **Divergência de conteúdo encontrada, não corrigida** (a decisão é do dono do
-> código, ver a regra de achado no `CLAUDE.md`): dos CTAs de lista de espera do
-> site, 8 apontam para `href="#waitlist"` e 3 apontam para `href="#"` —
-> `home/FinalCta.tsx`, `precos/PrecosCta.tsx` e `contato/ContatoContent.tsx`.
-> `#` rola para o topo e não faz nada; `#waitlist` também não faz nada hoje
-> (não existe elemento com esse id), mas é a âncora que os outros 8 usam e a
-> que a Fase 13 quer no smoke. O teste da home fixa o estado atual dos dois
-> casos com comentário explícito, então ligar a waitlist faz o teste falhar e
-> cobrar a atualização — em vez de passar em silêncio.
+> **Divergência de conteúdo encontrada, mantida por decisão do dono do
+> código:** dos CTAs de lista de espera do site, 8 apontam para
+> `href="#waitlist"` e 3 apontam para `href="#"` — `home/FinalCta.tsx`,
+> `precos/PrecosCta.tsx` e `contato/ContatoContent.tsx`. `#` rola para o topo e
+> não faz nada; `#waitlist` também não faz nada hoje (não existe elemento com
+> esse id), mas é a âncora que os outros 8 usam e a que a Fase 13 quer no smoke.
+> **Decidido em 2026-09-04: padronizar fica para quando a waitlist existir de
+> verdade** — enquanto nenhum dos dois hrefs funciona, unificar seria trocar um
+> placeholder por outro. O teste da home fixa o estado atual dos dois casos com
+> comentário explícito, então ligar a waitlist faz o teste falhar e cobrar a
+> atualização — em vez de passar em silêncio.
 >
-> **`playwright` órfão:** a decisão ficou aberta, com recomendação registrada.
-> A dependência é o pacote `playwright`, não `@playwright/test`, e não há
-> `e2e/`, `playwright.config.ts` nem script que a use no site — ela não
-> sustenta o smoke da Fase 13 como está. Recomendação: **sai** agora, e a
-> Fase 13 instala `@playwright/test` se decidir fazer o smoke das 18 rotas.
-> Não foi removida aqui porque mexer em `devDependencies` de um app é
-> escolha do dono, não efeito colateral de uma fase de testes.
+> **`playwright` órfão: removido.** A dependência era o pacote `playwright`,
+> não `@playwright/test`, e não havia `e2e/`, `playwright.config.ts` nem script
+> que a usasse no site — ela não sustentava o smoke da Fase 13 como estava.
+> Saiu de `apps/site/package.json` nesta fase; se a Fase 13 decidir fazer o
+> smoke das 18 rotas, instala `@playwright/test` (que é o runner, como em
+> `apps/web`). O `exclude: ["e2e/**"]` do `vitest.config.ts` fica onde está:
+> custa nada e já está certo no dia em que existir um `e2e/` no site.
 
 ---
 
@@ -675,7 +677,11 @@ da Fase 13, ou sai.
    `workers: 1` e `fullyParallel: false` — os specs montam e desmontam dados
    no mesmo tenant, e paralelizar faria um apagar o template do outro.
 3. **Smoke do site**, se decidido na Fase 12: as 18 rotas respondem 200,
-   header e footer renderizam, âncora `#waitlist` existe.
+   header e footer renderizam, âncora `#waitlist` existe. A Fase 12 deixou a
+   porta aberta mas **sem dependência instalada** — o `playwright` órfão saiu;
+   quem fizer o smoke instala `@playwright/test -w orbien-site`. A checagem da
+   âncora `#waitlist` só faz sentido depois que a waitlist for ligada: hoje
+   nenhum CTA do site tem destino real (ver a nota da Fase 12).
 
 ### Pronto quando
 
