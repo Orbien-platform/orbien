@@ -783,6 +783,36 @@ exibição, não credencial).
 - O middleware lê os cookies da sessão direto, e o flag `auth_session` sumiu
   junto com o risco de ele discordar da verdade.
 
+### O que quebrou junto, e como foi fechado
+
+Trocar o `rewrite` por Route Handler pôs toda chamada de dado dentro de uma
+função da Vercel — e função da Vercel tem teto de **4,5 MB de corpo de
+requisição**. O upload de mídia aceita 50 MB dos dois lados
+(`useFileUpload.ts` e `posts.controller.ts`). O `rewrite` resolvia na camada
+de roteamento e o corpo ia direto para o Render, sem passar por função; o
+handler não. Achado pela revisão, não pelos testes: `next dev` não impõe
+limite nenhum, então o defeito só apareceria depois do deploy.
+
+O upload saiu do proxy. Vai direto do browser para a API, em dois passos:
+
+1. `POST /content/posts/:id/upload-ticket`, pelo proxy — corpo minúsculo, o
+   cookie faz o trabalho. Exige `WRITE_ROLES` e confirma que o post existe,
+   para o 404 não chegar depois de 50 MB de rede.
+2. O arquivo sobe direto para a API com o **ticket** no `Authorization`.
+
+O ticket é o único token que o JavaScript da página chega a ver, então foi
+desenhado para não servir para mais nada: 5 minutos, `roles: []`, preso ao
+post em `upload_target`, e recusado em qualquer rota que não tenha
+`@UploadTicketRoute()`. A recusa mora no `JwtAuthGuard`, e não no
+`RolesGuard`, porque `RolesGuard` libera cedo toda rota sem `@Roles` — um
+ticket vazado alcançaria justamente essas. O ramo do ticket no `RolesGuard`
+vem **antes** do de `support_session`: ticket emitido dentro de uma sessão de
+suporte continua preso ao seu alvo, senão deixaria de ser um ticket.
+
+O preço é o upload virar a única chamada cross-origin do `web`: o domínio dele
+precisa estar em `ALLOWED_ORIGINS` no Render, e `NEXT_PUBLIC_API_UPLOAD_URL`
+expõe a URL da API no bundle — que nunca foi segredo, só não era usada de lá.
+
 Cookie `HttpOnly` não fecha o XSS. Troca "roubar a credencial e usar de
 qualquer lugar por 7 dias" por "agir de dentro da aba enquanto ela existe",
 que é bem menos. O que continua aberto é `SameSite=Lax` como única defesa de

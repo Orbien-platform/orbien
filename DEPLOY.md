@@ -313,8 +313,30 @@ esperado.
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
+| `NEXT_PUBLIC_API_UPLOAD_URL` | `https://orbien-api.onrender.com/api` | browser — **só o upload** |
 
-O browser nunca chama a API direto: ele bate em `/api-proxy/*`, e o Route
+`NEXT_PUBLIC_API_UPLOAD_URL` é nova e já vem versionada em
+`apps/web/.env.production`; só precisa entrar no dashboard se o domínio da API
+mudar. Ela existe por uma razão só: **o upload de mídia não passa pelo
+`/api-proxy`**. O proxy é uma função da Vercel, e função da Vercel tem teto de
+4,5 MB de corpo de requisição — o produto aceita 50 MB. Acima do teto a
+plataforma devolve 413 antes de a requisição chegar ao Render, e só em
+produção: `next dev` não impõe limite, então o defeito não aparece no
+desenvolvimento.
+
+O arquivo vai direto do browser para a API. Isso exige um `Authorization` que
+o JavaScript da página consiga montar, e o access token está em cookie
+`HttpOnly`, fora do alcance dele. Por isso são dois passos: `POST
+/content/posts/:id/upload-ticket` pelo proxy devolve um **ticket** de 5
+minutos, sem papel nenhum, preso àquele post e recusado em qualquer outra rota
+da API; o arquivo sobe direto com esse ticket no cabeçalho.
+
+**Consequência para o Render:** o upload é a única chamada cross-origin do
+`web`. O domínio dele **precisa** estar em `ALLOWED_ORIGINS`, senão o browser
+bloqueia o preflight e o upload falha — enquanto todo o resto continua
+funcionando, o que torna o sintoma confuso.
+
+O browser nunca chama a API direto — exceto no upload, acima: ele bate em `/api-proxy/*`, e o Route
 Handler em `src/app/api-proxy/[...path]/route.ts` encaminha para
 `API_BACKEND_URL`. Por isso `API_BACKEND_URL` **não** pode ter o prefixo
 `NEXT_PUBLIC_` — isso a exporia no bundle do cliente e ainda quebraria o
@@ -387,6 +409,7 @@ aberta — sem ela, o botão da lista de tenants falha com mensagem explícita e
 vez de abrir uma aba em branco.
 
 O domínio do `admin` precisa entrar em `ALLOWED_ORIGINS` no Render? **Não.**
+(O do `web` precisa, por causa do upload — ver Parte 2.)
 O tráfego sai da própria origem do admin (`/api-proxy/*`) e o rewrite acontece
 no servidor da Vercel — não há requisição cross-origin para o browser barrar.
 

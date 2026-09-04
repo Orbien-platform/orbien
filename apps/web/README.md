@@ -34,6 +34,15 @@ enxerga o access token.
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | URL real do backend | **apenas servidor** |
+| `NEXT_PUBLIC_API_UPLOAD_URL` | URL real do backend | browser — só o upload |
+
+Uma exceção ao "nunca chama direto": o **upload de mídia**. O `/api-proxy` é
+uma função da Vercel, com teto de 4,5 MB de corpo, e o produto aceita 50 MB.
+O arquivo vai direto para a API, em dois passos — `POST
+/content/posts/:id/upload-ticket` pelo proxy devolve um ticket de 5 minutos,
+preso àquele post e recusado em qualquer outra rota, e o arquivo sobe com ele
+no cabeçalho. É a única chamada cross-origin do web, então o domínio precisa
+estar em `ALLOWED_ORIGINS` no Render.
 
 `API_BACKEND_URL` não pode ganhar o prefixo `NEXT_PUBLIC_`: isso a exporia no
 bundle do cliente e quebraria o esquema sem-CORS. Localmente ela vive em
