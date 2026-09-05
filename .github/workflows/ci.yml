@@ -162,6 +162,56 @@ jobs:
       - name: Suíte de isolamento
         run: npm run test:rls -w orbien-backend
 
+  # ── Fase 13 — smoke do site: sem banco, sem API ──────────────────────────
+  #
+  # Job separado do `e2e` de propósito. O site é estático: não fala com a API,
+  # não tem banco, não tem sessão. Pendurá-lo no job do web faria o smoke
+  # esperar o Postgres subir e a API acordar para verificar páginas que não
+  # dependem de nenhum dos dois — e, pior, ficaria vermelho por falha alheia a
+  # ele. Assim roda em paralelo e em menos de um minuto.
+  smoke-site:
+    name: Smoke do site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+
+      - name: Build do site
+        run: npx turbo run build --filter=orbien-site
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Subir o site
+        run: |
+          npm run start -w orbien-site -- --port 3002 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3002/ >/dev/null && exit 0
+            sleep 2
+          done
+          echo "site não respondeu em 120s"; exit 1
+
+      - name: Smoke
+        env:
+          E2E_BASE_URL: http://localhost:3002
+        run: npm run e2e -w orbien-site
+
+      - name: Relatório e traces quando falhar
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-site
+          path: |
+            apps/site/playwright-report/
+            apps/site/test-results/
+          retention-days: 7
+
   # ── Fase 3 — e2e autocontido: API e web sobem no próprio runner ──────────
   e2e:
     name: E2E

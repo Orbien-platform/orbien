@@ -33,6 +33,8 @@ function setup({
     roles: ["tenant_admin"],
     tenant_id: "t1",
     congregation_id: "c1",
+    support_session: false,
+    support_tenant_name: null,
   },
   setTheme = vi.fn(),
   logout = vi.fn(async () => {}),

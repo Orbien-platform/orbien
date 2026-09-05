@@ -8,8 +8,13 @@ vi.mock("@/lib/api", () => ({
   default: { post: vi.fn() },
 }));
 
+// `detected_columns` é o nome real do campo na resposta da API
+// (`apps/api/src/persons/dto/import-preview.dto.ts`). Estes mocks diziam
+// `columns`, e por isso passavam verdes enquanto a importação estava quebrada
+// de verdade — o mock afirmava um contrato que a API nunca enviou. Quem pegou
+// foi o e2e, contra a API real; ver `apps/web/e2e/pessoas.spec.ts`.
 const preview = {
-  columns: ["nome", "telefone"],
+  detected_columns: ["nome", "telefone"],
   preview_rows: [{ nome: "Ana", telefone: "54999998888" }],
   suggested_mapping: { nome: "full_name", telefone: "phone" },
 };
@@ -245,7 +250,7 @@ describe("ImportCsvModal", () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockResolvedValue({
       data: {
-        columns: ["nome", "observacao"],
+        detected_columns: ["nome", "observacao"],
         preview_rows: [{ nome: "Ana", observacao: "vip" }],
         suggested_mapping: { nome: "full_name" },
       },

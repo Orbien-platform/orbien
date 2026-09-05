@@ -50,6 +50,8 @@ export default defineConfig({
         "src/components/groups/**": { statements: 98, branches: 92, functions: 100, lines: 100 },
         "src/components/persons/**": { statements: 99, branches: 89, functions: 100, lines: 100 },
         "src/components/volunteers/**": { statements: 100, branches: 95, functions: 100, lines: 100 },
+        // Fase 10
+        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

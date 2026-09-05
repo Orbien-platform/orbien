@@ -23,7 +23,22 @@ export default defineConfig({
       reporter: ["text-summary", "lcov"],
       // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
       // global. O piso nunca desce.
-      thresholds: { statements: 0, branches: 0, functions: 0, lines: 0 },
+      // Fase 14 — o console inteiro. Linhas e funções fecham em 100%; os três
+      // ramos que sobram são inalcançáveis pela UI e cada um tem o `it()`
+      // vizinho explicando:
+      // - `CreateTenantModal`, o `next === true` do `onOpenChange`: quem abre
+      //   o modal é a tela, o `Modal` só emite `false`;
+      // - `AuthContext.buildUser`, o `payload` nulo: `hasPlatformRole` já
+      //   barrou o token ilegível antes;
+      // - `api.ts`, o `typeof window === "undefined"` do ramo de refresh
+      //   recusado: exercitá-lo exigiria o axios sem `window`, que ele
+      //   próprio precisa para rodar.
+      thresholds: {
+        statements: 99,
+        branches: 98,
+        functions: 100,
+        lines: 100,
+      },
     },
   },
 });
