@@ -35,6 +35,7 @@ function setup({
     congregation_id: "c1",
     support_session: false,
     support_tenant_name: null,
+    expires_at: Math.floor(Date.now() / 1000) + 300,
   },
   setTheme = vi.fn(),
   logout = vi.fn(async () => {}),
