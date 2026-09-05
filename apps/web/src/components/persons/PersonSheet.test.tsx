@@ -3,10 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PersonSheet } from "./PersonSheet";
 import api from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 vi.mock("@/lib/api", () => ({
-  default: { get: vi.fn(), patch: vi.fn() },
+  default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() },
 }));
+
+vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
+
+const mockedUseAuth = vi.mocked(useAuth);
 
 const person = {
   id: "p1",
@@ -24,6 +29,13 @@ const person = {
 describe("PersonSheet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedUseAuth.mockReturnValue({
+      user: null,
+      isLoading: false,
+      isAuthenticated: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
   });
 
   it("does not render content when closed", () => {
@@ -339,5 +351,124 @@ describe("PersonSheet", () => {
 
     expect(screen.queryByRole("button", { name: "Salvar" })).not.toBeInTheDocument();
     expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  describe("acesso ao sistema", () => {
+    function asTenantAdmin() {
+      mockedUseAuth.mockReturnValue({
+        user: { roles: ["tenant_admin"] } as ReturnType<typeof useAuth>["user"],
+        isLoading: false,
+        isAuthenticated: true,
+        login: vi.fn(),
+        logout: vi.fn(),
+      });
+    }
+
+    it("hides the section for a role without tenant_admin or pastor", async () => {
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      expect(screen.queryByText("Acesso ao sistema")).not.toBeInTheDocument();
+    });
+
+    it("sends the invite with the pre-filled email and chosen role", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      vi.mocked(api.post).mockResolvedValue({ data: { id: "u1", email: person.email } });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      const emailInput = screen.getByDisplayValue(person.email);
+      await user.clear(emailInput);
+      await user.type(emailInput, "outro@email.com");
+
+      await user.selectOptions(screen.getByRole("combobox"), "secretary");
+      await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
+
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith("/users", {
+          person_id: "p1",
+          email: "outro@email.com",
+          role_code: "secretary",
+        })
+      );
+      expect(await screen.findByText(/Convite enviado por e-mail/)).toBeInTheDocument();
+    });
+
+    it("shows a conflict message when the person already has access", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      vi.mocked(api.post).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 409 },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
+
+      expect(
+        await screen.findByText("Esta pessoa já tem acesso ao sistema.")
+      ).toBeInTheDocument();
+    });
+
+    it("shows a permission message when the actor can't grant the chosen role", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      vi.mocked(api.post).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 403 },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
+
+      expect(
+        await screen.findByText("Você não tem permissão para conceder este papel.")
+      ).toBeInTheDocument();
+    });
+
+    it("shows a generic error message for any other failure", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      vi.mocked(api.post).mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
+
+      expect(
+        await screen.findByText("Erro ao enviar o convite. Tente novamente.")
+      ).toBeInTheDocument();
+    });
+
+    it("cancels the invite form without calling the API", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      expect(screen.queryByRole("button", { name: /Enviar convite/ })).not.toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+    });
   });
 });
