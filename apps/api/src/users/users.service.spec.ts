@@ -119,4 +119,46 @@ describe('UsersService', () => {
 
     await expect(service.create(dto, actor)).rejects.toThrow(ConflictException);
   });
+
+  it('propaga sem embrulhar um erro do banco que não é de e-mail duplicado', async () => {
+    const { service } = serviceWith({
+      createUserAccount: async () => {
+        throw new Error('conexão perdida');
+      },
+    });
+
+    await expect(service.create(dto, actor)).rejects.toThrow('conexão perdida');
+  });
+
+  it('usa FRONTEND_URL do ambiente no link do convite, em vez do default de localhost', async () => {
+    const original = process.env['FRONTEND_URL'];
+    process.env['FRONTEND_URL'] = 'https://app.orbien.com.br';
+    try {
+      const { service, mail } = serviceWith();
+      await service.create(dto, actor);
+      expect(mail.sendInvite).toHaveBeenCalledWith(
+        dto.email,
+        expect.stringMatching(/^https:\/\/app\.orbien\.com\.br\/redefinir-senha\?token=/),
+      );
+    } finally {
+      if (original === undefined) delete process.env['FRONTEND_URL'];
+      else process.env['FRONTEND_URL'] = original;
+    }
+  });
+
+  it('cai no default de localhost quando FRONTEND_URL não está definida', async () => {
+    const original = process.env['FRONTEND_URL'];
+    delete process.env['FRONTEND_URL'];
+    try {
+      const { service, mail } = serviceWith();
+      await service.create(dto, actor);
+      expect(mail.sendInvite).toHaveBeenCalledWith(
+        dto.email,
+        expect.stringMatching(/^http:\/\/localhost:3001\/redefinir-senha\?token=/),
+      );
+    } finally {
+      if (original === undefined) delete process.env['FRONTEND_URL'];
+      else process.env['FRONTEND_URL'] = original;
+    }
+  });
 });
