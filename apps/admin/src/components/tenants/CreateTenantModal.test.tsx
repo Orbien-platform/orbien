@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,10 +33,15 @@ function montar() {
   );
 }
 
-async function preencher(
-  user: ReturnType<typeof userEvent.setup>,
-  overrides: Partial<Record<string, string>> = {}
-) {
+/**
+ * Preenche os cinco campos obrigatórios de uma vez.
+ *
+ * `fireEvent.change` em vez de `user.type`: são ~60 teclas por chamada, e no
+ * runner do CI (2 vCPUs) isso estourava o timeout de 5s — o teste falhava por
+ * tempo de digitação, não por comportamento. O caminho de digitação de
+ * verdade continua coberto pelo `it` que digita o slug tecla a tecla.
+ */
+function preencher(overrides: Partial<Record<string, string>> = {}) {
   const valores: Record<string, string> = {
     "Nome da igreja": "Igreja Nova",
     Slug: "igreja-nova",
@@ -47,9 +52,9 @@ async function preencher(
   };
 
   for (const [rotulo, valor] of Object.entries(valores)) {
-    const campo = screen.getByLabelText(rotulo);
-    await user.clear(campo);
-    if (valor) await user.type(campo, valor);
+    fireEvent.change(screen.getByLabelText(rotulo), {
+      target: { value: valor },
+    });
   }
 }
 
@@ -75,7 +80,7 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     montar();
 
-    await preencher(user, { Slug: "  Igreja-Nova  " });
+    preencher({ Slug: "  Igreja-Nova  " });
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     await waitFor(() =>
@@ -96,11 +101,10 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     montar();
 
-    await preencher(user);
-    await user.type(
-      screen.getByLabelText("E-mail de contato (opcional)"),
-      " contato@igreja-nova.com "
-    );
+    preencher();
+    fireEvent.change(screen.getByLabelText("E-mail de contato (opcional)"), {
+      target: { value: " contato@igreja-nova.com " },
+    });
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     await waitFor(() =>
@@ -114,7 +118,7 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     montar();
 
-    await preencher(user, { Slug: "Igreja Nova!" });
+    preencher({ Slug: "Igreja Nova!" });
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -127,7 +131,7 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     montar();
 
-    await preencher(user, { Slug: "ab" });
+    preencher({ Slug: "ab" });
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Slug:");
@@ -138,7 +142,7 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     montar();
 
-    await preencher(user, { "Senha inicial": "1234567" });
+    preencher({ "Senha inicial": "1234567" });
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -152,7 +156,7 @@ describe("CreateTenantModal", () => {
     postMock.mockRejectedValue(axiosError(409));
     montar();
 
-    await preencher(user);
+    preencher();
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -161,22 +165,27 @@ describe("CreateTenantModal", () => {
     expect(onCreated).not.toHaveBeenCalled();
   });
 
-  it("400 pede revisão dos campos e qualquer outro erro vira mensagem genérica", async () => {
+  it("400 pede revisão dos campos", async () => {
     const user = userEvent.setup();
     postMock.mockRejectedValue(axiosError(400));
-    const { unmount } = montar();
+    montar();
 
-    await preencher(user);
+    preencher();
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
+
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Dados inválidos. Revise os campos."
     );
-    unmount();
+  });
 
+  it("qualquer outro erro vira mensagem genérica", async () => {
+    const user = userEvent.setup();
     postMock.mockRejectedValue(new Error("ECONNREFUSED"));
     montar();
-    await preencher(user);
+
+    preencher();
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
+
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Não foi possível criar o tenant. Tente novamente."
     );
@@ -190,7 +199,7 @@ describe("CreateTenantModal", () => {
     );
     montar();
 
-    await preencher(user);
+    preencher();
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     expect(await screen.findByText("Criando…")).toBeInTheDocument();
@@ -205,7 +214,7 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     const { rerender } = montar();
 
-    await preencher(user);
+    preencher();
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -222,10 +231,25 @@ describe("CreateTenantModal", () => {
     const user = userEvent.setup();
     montar();
 
-    await preencher(user, { Slug: "igreja-nova" });
+    preencher({ Slug: "igreja-nova" });
     await user.click(screen.getByRole("button", { name: "Fechar" }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("o slug digitado tecla a tecla chega normalizado à API", async () => {
+    const user = userEvent.setup();
+    montar();
+
+    // O único teste que passa pelo `user.type`: prova que o `onChange` do
+    // campo controlado acompanha a digitação real, sem pagar isso em todos.
+    preencher({ Slug: "" });
+    await user.type(screen.getByLabelText("Slug"), "Igreja-Nova");
+    await user.click(screen.getByRole("button", { name: "Criar tenant" }));
+
+    await waitFor(() =>
+      expect(postMock.mock.calls[0][1]).toMatchObject({ slug: "igreja-nova" })
+    );
   });
 
   it("o slug avisa que não muda depois", () => {
