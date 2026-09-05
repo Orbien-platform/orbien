@@ -21,7 +21,7 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; **falta rodar o bootstrap** |
 | 8 | As duas rotas públicas do produto estavam mortas: `PrismaService.client` devolvia o cliente sem delegates de modelo | defeito | ✔ fechada |
 | 9 | Cadastro de visitante por QR nunca conseguiu gravar sob RLS — rota pública sem contexto de tenant | defeito | ✔ fechada — contexto vem do QR token |
-| 10 | Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — vale para as 8 telas de `(admin)` | UX | aberta — decisão registrada |
+| 10 | Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — vale para as 8 telas de `(admin)` | UX | ✔ fechada — 403 distinguido de lista vazia, sidebar filtrada por papel |
 
 > Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
 > nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
@@ -730,22 +730,48 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   `005_rls_audit_platform_read.sql` abre `audit_logs` para
   `app_platform_access()` no `USING`, sem tocar o `WITH CHECK`, que não existe
   numa policy `FOR SELECT`: a escrita segue reservada a `audit_insert()`.
-- **Sem limite de tentativa no login da plataforma.** `POST
-  /auth/platform/login` (Fase 3) não tem rate limit, e nem `POST /auth/login`
-  tem — só `forgot-password` tem, e é em memória, o que não sobrevive a mais de
-  uma instância no Render. A porta do console é a que mais interessa fechar:
-  ela dá acesso a `POST /auth/impersonate`, e daí a qualquer tenant. Fica
-  registrado, não corrigido nesta fase: limitador que preste é
-  compartilhado (Redis ou tabela), não um `Map` por processo — unidade de
-  trabalho própria, e vale para as duas rotas de login de uma vez.
+- ~~**Sem limite de tentativa no login da plataforma.**~~ Fechado em
+  2026-09-05, por tabela e não por Redis — não há Redis provisionado, e a
+  escolha foi declarada. `login_attempts` (migration comum
+  `20260905000000_add_login_attempts`, com `ENABLE`+`FORCE ROW LEVEL SECURITY`
+  e nenhuma policy, o mesmo desenho de `password_reset_tokens`: só
+  `prisma.system` alcança, porque a tabela guarda o e-mail tentado). O
+  `LoginRateLimitService` cobre as três rotas de credencial de uma vez:
+  `POST /auth/login` e `POST /auth/platform/login` com 5 **falhas** por 15
+  minutos — acerto zera a janela, então quem sabe a senha nunca esbarra no
+  limite —, e `forgot-password` com os mesmos 3 pedidos por hora que já tinha,
+  agora fora do `Map` por processo, que com N instâncias no Render valia 1/N e
+  sumia a cada deploy. As chaves são por rota e, no login do produto, por
+  tenant: bloquear um e-mail numa igreja não bloqueia a mesma pessoa em outra,
+  que é outra conta. O 429 do `forgot-password` não sai — a resposta segue
+  genérica, senão ela contaria que alguém andou pedindo redefinição para
+  aquele e-mail.
+
+  **Continua em aberto o recorte por origem:** o limite é por identificador,
+  não por IP. Quem varre muitos e-mails diferentes do mesmo lugar não bate no
+  limite. Fechar isso exige `X-Forwarded-For` confiável atrás do Render —
+  decisão de infra, não deste trabalho.
+
+  **A migration precisa rodar antes do deploy da API.** Ela é comum (sai por
+  `prisma migrate deploy`, sem depender do `bootstrap-db.sh`), mas as
+  migrations do projeto são manuais: subir o código antes de aplicá-la deixa as
+  rotas de login batendo numa tabela que não existe.
 - ~~**TTL** do token de impersonação é o padrão de access token — 15 minutos.~~
   Fechado na Fase 5, em 2026-09-04: caiu para 5 minutos, dedicado
   (`IMPERSONATE_TOKEN_TTL`, separado de `ACCESS_TOKEN_TTL`). Continua sem
   refresh token, então a sessão de suporte **não se renova** — 5 minutos
   depois `GET /api/session` responde 401, o middleware barra a navegação e o
   suporte volta para `/login`. É o comportamento desejado; renovar sozinha uma
-  sessão que enxerga dado de igreja alheia é o que não se quer. O que falta é
-  aviso antes de expirar, hoje inexistente.
+  sessão que enxerga dado de igreja alheia é o que não se quer. ~~O que falta é
+  aviso antes de expirar, hoje inexistente.~~ Fechado em 2026-09-05: a faixa do
+  `SupportSessionBanner` conta o tempo restante e, no último minuto, muda de
+  tom e passa a se anunciar (`aria-live`). O prazo vem do `exp` do próprio
+  token, exposto como `support_expires_at` **só** quando a sessão é de suporte
+  — numa sessão comum o access token é renovado por baixo, e um relógio ali
+  contaria uma coisa que não acontece. O relógio recalcula a partir de
+  `Date.now()` a cada tique em vez de decrementar o estado: aba em segundo
+  plano tem `setInterval` estrangulado pelo browser, e um contador cego
+  atrasaria em relação ao token.
 - **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
   token fixa um tenant, e o `IS NULL` de `app_platform_access()` fecha o ramo
   de plataforma justamente quando há tenant fixado. Suporte a vários clientes
@@ -1048,7 +1074,7 @@ com o mesmo 42501.
 
 ---
 
-## 10. Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — aberta
+## 10. Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — resolvida
 
 ### O que apareceu
 
@@ -1078,9 +1104,52 @@ página só, divergindo das outras sete. O tratamento certo é igual para as oit
 filtrar o sidebar por papel, e distinguir 403 de lista vazia no `catch` — e é
 unidade de trabalho própria, não parte de uma limpeza de lint.
 
+### Fechada em 2026-09-05 — as duas metades, nas oito telas
+
+`canView` já tinha saído; o que faltava era o padrão. Entraram três peças
+compartilhadas, e nenhuma tela ganhou solução própria:
+
+- **`isForbidden(error)`** em `src/lib/api.ts` — 403 e só 403. O 401 fica de
+  fora de propósito: quem o trata é o interceptor de renovação logo acima, e o
+  que sobra dele já é redirecionamento para `/login`.
+- **`<NoAccessState resource=…>`** em `src/components/ui/` — ocupa o lugar do
+  estado vazio, dentro da tabela ou do card que já têm borda. Sem moldura
+  própria, para não empilhar caixas.
+- **`canAccessRoute()`** em `src/lib/permissions.ts` — o mapa rota → papéis que
+  o sidebar usa para não desenhar link que só levaria a 403.
+
+Cada tela passou a guardar `accessDenied` e a alimentá-lo do `catch`:
+`pessoas`, `grupos`, `celebracoes` (nas duas abas), `conteudo`, `voluntarios` e
+`financeiro`. O `dashboard` é diferente e ficou diferente: ele monta de quatro
+chamadas em `allSettled` e já renderizava o que carregasse; o que mudou é que
+**quatro** 403 deixam de virar "Não foi possível carregar os dados" e passam a
+dizer que o painel está fora do alcance do papel — uma falha de rede continua
+sendo erro. `configuracoes` não entrou porque não tem o defeito: `GET /settings`
+não tem `@Roles`, e a tela já mostrava erro de carga, não estado vazio.
+
+**A autoridade continua sendo o servidor.** O mapa de `permissions.ts` é
+conveniência de navegação: divergir dele do `@Roles` da API é cosmético nos dois
+sentidos — link a menos (a tela segue alcançável pela URL) ou link a mais (a
+tela responde "sem acesso"). Em nenhum caso abre dado. Um teste trava que o mapa
+só cite papéis que existem em `prisma/seed.ts`, porque papel escrito errado ali
+vira link que nunca aparece — falha silenciosa.
+
+A sessão de suporte vê tudo, como já via: `support_session` satisfaz qualquer
+`@Roles` em GET no `RolesGuard`, e esconder links dela seria mentir sobre o que
+ela alcança — o rastro em `audit_logs` é o contrapeso, e ele existe.
+
+Coberto por: `permissions.test.ts`, `NoAccessState.test.tsx`, cinco casos novos
+em `sidebar.test.tsx` (voluntário, tesoureiro, líder de ministério, sessão de
+suporte, sem sessão), o par 403/500 em cada tela alterada, e o caso de corrida
+do `financeiro` — um 403 atrasado de um refresh anterior não apaga a tela já
+carregada. Cobertura de `src/app/**` e `src/lib/**` segue em 100%, que é o
+piso que o `vitest.config.ts` exige.
+
+### Nada em aberto nesta pendência
+
 ---
 
-## `refresh()` não reconfere `is_active` — aberta
+## `refresh()` não reconferia `is_active` — resolvida
 
 Apareceu na revisão da Fase 3, em 2026-09-03, na dimensão de isolamento, junto
 de um achado sobre o `impersonate` que foi fechado na própria fase (ver abaixo).
@@ -1108,7 +1177,7 @@ autenticada**, então conta desativada leva 401 antes de alcançar o serviço.
 Descoberto ao ver o teste novo esperar 403 e receber 401 — a expectativa estava
 errada, não o código.
 
-### O que continua aberto
+### O que estava aberto
 
 `AuthService.refresh` valida existência do hash, `revoked_at` e `expires_at` —
 não relê `is_active`. Desativar uma conta não impede a **rotação**: o refresh
@@ -1124,6 +1193,22 @@ minutos, o que torna esse caminho quente onde antes era eventual.
 
 Verificado por leitura de `refresh()` e de `jwt.strategy.ts`, e pelo 401 do
 teste `conta desativada não abre sessão de suporte`.
+
+### Fechada em 2026-09-05
+
+`refresh` passou a conferir `is_active` depois do `revoked_at` e do
+`expires_at`, e conta desativada **derruba a família inteira** de refresh
+tokens — a mesma contenção da detecção de reuso logo acima, e pela mesma razão:
+o que se quer é encerrar a sessão, não invalidar um elo e deixar os outros de
+pé. O `include` já trazia o `userAccount`, então não custou consulta nova.
+
+O ganho continua sendo o que estava escrito acima — higiene, não fechamento de
+brecha: quem barra o acesso é o `JwtStrategy.validate`, em toda requisição. O
+que muda é que a cadeia para de girar.
+
+Coberto por `conta desativada não rotaciona, e a família inteira é revogada`,
+que afirma as três coisas: nenhum refresh token novo, nenhum access token
+assinado, e o `updateMany` que revoga tudo que estava ativo.
 
 ---
 
