@@ -22,6 +22,7 @@
  */
 
 import { expect, shot, test, realConsoleErrors, unexpectedHttp, type Page } from "./fixtures";
+import type { Locator } from "@playwright/test";
 
 interface Category {
   id: string;
@@ -63,11 +64,20 @@ async function openTab(page: Page, name: string, sinal: () => Promise<void>): Pr
  *
  * A Qtd é a penúltima célula — [Conta, Total, Qtd, Δ]. No perfil de pastor a
  * coluna Total não é renderizada, e a penúltima continua sendo a Qtd.
+ *
+ * As células saem de `querySelectorAll("td")`, não de `innerText` quebrado por
+ * `\n`: o `innerText` de um `<tr>` separa célula com **tab**, não com quebra de
+ * linha. Dividir por `\n` devolvia a linha inteira como se fosse a primeira
+ * célula, nenhuma linha casava com o nome, e a função respondia 0 para tudo —
+ * inclusive para a categoria que tinha lançamento.
  */
-function dreCount(rows: string[], nome: string): number {
-  const row = rows.map((r) => r.split("\n")).find((cells) => cells[0]?.trim() === nome);
+async function dreCount(rows: Locator, nome: string): Promise<number> {
+  const linhas = await rows.evaluateAll((trs) =>
+    trs.map((tr) => Array.from(tr.querySelectorAll("td")).map((td) => (td.textContent ?? "").trim())),
+  );
+  const row = linhas.find((cells) => cells[0] === nome);
   if (!row) return 0;
-  const qtd = row[row.length - 2]?.trim() ?? "";
+  const qtd = row[row.length - 2] ?? "";
   return qtd === "—" || qtd === "" ? 0 : Number(qtd);
 }
 
@@ -95,7 +105,6 @@ test.describe("financeiro", () => {
     // Escopo pela tabela que tem a coluna "Conta": as abas do Base UI mantêm
     // os painéis montados, e a aba de Lançamentos tem uma tabela também.
     const dreRows = page.locator('table:has(th:text-is("Conta")) tbody tr');
-    const dreTexts = () => dreRows.allInnerTexts();
     let qtdAntes = 0;
 
     await test.step("DRE abre no período do mês e registra o ponto de partida", async () => {
@@ -109,7 +118,7 @@ test.describe("financeiro", () => {
       await expect(page.getByRole("cell", { name: "RECEITAS" })).toBeVisible();
       await expect(page.getByRole("cell", { name: "DESPESAS" })).toBeVisible();
 
-      qtdAntes = dreCount(await dreTexts(), receita.name);
+      qtdAntes = await dreCount(dreRows, receita.name);
       await shot(page, "30-financeiro-dre-antes");
     });
 
@@ -147,15 +156,22 @@ test.describe("financeiro", () => {
     });
 
     await test.step("DRE soma o lançamento na categoria escolhida", async () => {
+      // `page.reload()` e não só a troca de aba: o efeito do DRE guarda o
+      // período já buscado em `prevDreKey` e **não** refaz o fetch ao voltar
+      // para a aba com o mesmo período (financeiro/page.tsx). Sem recarregar,
+      // o teste leria para sempre o agregado anterior ao lançamento — passaria
+      // a afirmar o cache do componente em vez do relatório.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "Financeiro" })).toBeVisible();
+
       await openTab(page, "DRE", async () => {
         await expect(dreRows.first()).toBeVisible({ timeout: 3_000 });
       });
 
-      // O DRE recarrega ao voltar para a aba; o `toPass` cobre a janela entre
-      // o skeleton e o agregado novo.
+      // O `toPass` cobre a janela entre o skeleton e o agregado carregado.
       await expect(async () => {
         expect(
-          dreCount(await dreTexts(), receita.name),
+          await dreCount(dreRows, receita.name),
           `a Qtd de "${receita.name}" no DRE não subiu para ${qtdAntes + 1} — o lançamento não chegou ao relatório`,
         ).toBe(qtdAntes + 1);
       }).toPass({ timeout: 60_000 });

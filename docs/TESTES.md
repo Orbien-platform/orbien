@@ -657,7 +657,7 @@ metades — a que não depende delas rodou, a que depende não.
 | 1. `global: 100` na API | ☑ travado, e verde |
 | 1. `global: 100` no web, site e admin | ☐ bloqueado pelas fases 10-12 |
 | 2. e2e de financeiro (transação → DRE) | ☑ `apps/web/e2e/financeiro.spec.ts` |
-| 2. e2e de pessoas (cadastro e importação) | ☑ cadastro já existia; importação em `pessoas.spec.ts` |
+| 2. e2e de pessoas (cadastro e importação) | ◐ cadastro já existia; importação **bloqueada por R2 no CI** |
 | 2. e2e de login / redefinir senha | ☑ `apps/web/e2e/login.spec.ts` |
 | 3. Smoke do site | ☑ `apps/site/e2e/smoke.spec.ts`, 18 testes |
 
@@ -692,10 +692,11 @@ acrescentaram (conteúdo, grupos, pessoas, suporte).
   lançamentos esta conta tem" antes e depois não depende de nenhum outro dado
   do tenant, enquanto prender o total em reais faria o teste depender de tudo
   o mais lançado no mês.
-- **`pessoas.spec.ts`** — o cadastro já estava coberto; entrou a **importação
-  de CSV**, com cabeçalhos deliberadamente diferentes dos campos do Orbien
-  ("Nome do membro", não `full_name`) para que o passo de mapeamento seja de
-  fato exercido, e não resolvido pela sugestão automática.
+- **`pessoas.spec.ts`** — o cadastro já estava coberto. A **importação de CSV**
+  foi escrita, rodou, **achou um defeito real** e depois esbarrou em um
+  impedimento de ambiente; não ficou no PR. A história inteira está em
+  "O que a importação de CSV custou" abaixo, porque é o achado mais caro desta
+  fase e o que mais diz sobre o valor de e2e.
 - **`login.spec.ts`** — o único fluxo sem sessão, e por isso o único que a
   fixture `page` não serve pronta: cada teste começa limpando os cookies que
   ela semeou. Cobre as três mensagens de erro distintas do login (tenant
@@ -738,6 +739,42 @@ página nova não quebra build nenhum), tem a navegação principal, e traz um
 texto próprio dela (sem isso, duas rotas apontando para o mesmo componente
 passariam iguais). O 404 é verificado como 404 de verdade: página de erro
 servida com 200 é indexada como conteúdo.
+
+### O que a importação de CSV custou
+
+O e2e de importação foi escrito, rodou no CI, e **achou um defeito real de
+produto**: `ImportCsvModal.tsx` declarava e lia `columns`, mas a API manda
+`detected_columns` (`apps/api/src/persons/dto/import-preview.dto.ts:14`). Com
+isso `data.columns` chegava `undefined`, o `for…of` seguinte lançava
+`TypeError`, o `catch` do `uploadFile` transformava a exceção na mensagem "Não
+foi possível processar o arquivo" — e a importação nunca saía do passo de
+upload. **A funcionalidade estava quebrada em produção.**
+
+O detalhe que interessa é *por que ninguém tinha visto*: o modal tem 16 testes
+de unidade, todos verdes, e os mocks deles inventavam `columns`. O mock foi
+escrito a partir do componente, não do contrato da API, então a suíte
+confirmava o próprio erro. É o limite estrutural de teste com mock escrito à
+mão, e o argumento concreto a favor de e2e contra a API real.
+
+A correção entrou (modal + os dois mocks). A prova, no nível que dispensa
+infraestrutura: com os mocks corrigidos para o contrato real, o componente
+**antigo** falha 9 dos 16 testes; o corrigido passa os 16.
+
+**O teste em si não ficou**, e o motivo é ambiente, não desistência.
+`POST /persons/import` grava o arquivo temporário no R2 antes de devolver a
+prévia (`PersonsImportService.preview` → `StorageService.upload`), e o job de
+e2e do CI não configura R2 — decisão registrada em [CI.md](CI.md), que mantém
+o pipeline sem segredo externo. Sem `R2_BUCKET_NAME` a rota responde 500
+(`No value provided for input HTTP label: Bucket`), e o teste falharia por
+infraestrutura ausente, não por regressão — um portão que acusa o que não
+deve não é portão.
+
+Para reativá-lo é preciso antes decidir o storage do CI. O caminho de menor
+atrito seria um MinIO como service container, mas ele exige tornar o endpoint
+do `StorageService` configurável: hoje é fixo em
+`https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`. Isso é mudança de produto
+e não cabia num PR de testes. Fica registrado como a próxima pergunta, não
+como pendência silenciosa.
 
 ### Achados desta sessão
 

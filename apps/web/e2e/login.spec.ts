@@ -32,6 +32,31 @@ async function comoAnonimo(page: Page): Promise<void> {
   await page.context().clearCookies();
 }
 
+/**
+ * O parágrafo de erro do formulário.
+ *
+ * `getByRole("alert")` sozinho não serve: o Next injeta em toda página um
+ * `<div role="alert" id="__next-route-announcer__">` (vazio, para leitor de
+ * tela), então o papel casa dois elementos e o modo estrito do runner reprova
+ * antes de comparar texto. O seletor abaixo pega só o alerta da tela.
+ */
+function alerta(page: Page) {
+  return page.locator('p[role="alert"]');
+}
+
+/**
+ * Respostas com erro que **são** o comportamento correto para uma sessão
+ * ausente, e não defeito.
+ *
+ * `GET /api/session` responde 401 quando não há cookie de sessão — é como o
+ * app descobre que ninguém está logado, e é o estado inicial obrigatório de
+ * todo teste deste arquivo, que começa limpando os cookies. Contar isso como
+ * falha seria exigir que a tela de login já tivesse sessão.
+ */
+function semSessao(entradas: string[]): string[] {
+  return entradas.filter((e) => !/^401 .*\/api\/session$/.test(e));
+}
+
 const EMAIL = process.env.E2E_EMAIL ?? "";
 const SENHA = process.env.E2E_PASSWORD ?? "";
 const TENANT = process.env.E2E_TENANT ?? "";
@@ -66,7 +91,7 @@ test.describe("login", () => {
       await email.fill("");
       await senha.fill("");
       await entrar.click();
-      await expect(page.getByRole("alert")).toHaveText("Todos os campos são obrigatórios.");
+      await expect(alerta(page)).toHaveText("Todos os campos são obrigatórios.");
     });
 
     await test.step("código de igreja inexistente diz que é o código", async () => {
@@ -78,7 +103,7 @@ test.describe("login", () => {
       await email.fill(EMAIL);
       await senha.fill(SENHA);
       await entrar.click();
-      await expect(page.getByRole("alert")).toHaveText(
+      await expect(alerta(page)).toHaveText(
         "Código de igreja não encontrado. Verifique e tente novamente.",
       );
     });
@@ -88,7 +113,7 @@ test.describe("login", () => {
       await email.fill(EMAIL);
       await senha.fill("senha-definitivamente-errada");
       await entrar.click();
-      await expect(page.getByRole("alert")).toHaveText("E-mail ou senha incorretos.");
+      await expect(alerta(page)).toHaveText("E-mail ou senha incorretos.");
       await shot(page, "41-login-erro");
     });
 
@@ -109,7 +134,7 @@ test.describe("login", () => {
       expect(realConsoleErrors(errorLog), "erros de console na tela de login").toEqual([]);
       // As duas credenciais erradas produzem 4xx **esperados**. Qualquer outra
       // resposta com erro é defeito, e é isso que a asserção separa.
-      const inesperados = unexpectedHttp(errorLog).filter(
+      const inesperados = semSessao(unexpectedHttp(errorLog)).filter(
         (e) => !/^(400|401|404) .*\/auth\/login/.test(e),
       );
       expect(inesperados, "respostas HTTP com erro fora dos logins reprovados").toEqual([]);
@@ -154,7 +179,7 @@ test.describe("login", () => {
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {
       expect(realConsoleErrors(errorLog), "erros de console na recuperação").toEqual([]);
-      expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+      expect(semSessao(unexpectedHttp(errorLog)), "respostas HTTP com erro").toEqual([]);
     });
   });
 
@@ -205,7 +230,7 @@ test.describe("login", () => {
 
     await test.step("sem erro de console; o 400 visto é o token inválido", async () => {
       expect(realConsoleErrors(errorLog), "erros de console na redefinição").toEqual([]);
-      const inesperados = unexpectedHttp(errorLog).filter(
+      const inesperados = semSessao(unexpectedHttp(errorLog)).filter(
         (e) => !/^400 .*\/auth\/reset-password/.test(e),
       );
       expect(inesperados, "respostas HTTP com erro fora do token inválido").toEqual([]);
