@@ -13,6 +13,11 @@ import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import {
+  LoginRateLimitService,
+  LOGIN_POLICY,
+  PASSWORD_RESET_POLICY,
+} from './login-rate-limit.service';
 import { LoginDto } from './dto/login.dto';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -32,8 +37,6 @@ const EXPIRES_IN = 900;
 const IMPERSONATE_TOKEN_TTL = '5m';
 const IMPERSONATE_EXPIRES_IN = 300;
 const RESET_TOKEN_TTL_MINUTES = 30;
-const RATE_LIMIT_MAX = 3;
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 /** Papel que dá acesso ao console da plataforma. Global, não por tenant. */
 const PLATFORM_ROLE = 'platform_support';
@@ -82,19 +85,24 @@ function rolesForToken(
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  // key: email — value: { count, resetAt }
-  private readonly resetRateLimit = new Map<string, { count: number; resetAt: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly mail: MailService,
+    private readonly rateLimit: LoginRateLimitService,
   ) {}
 
   async login(
     dto: LoginDto,
   ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+    // A janela é conferida antes de tocar no banco de contas, e a chave inclui
+    // o tenant: bloquear um e-mail numa igreja não bloqueia o mesmo e-mail em
+    // outra, que é conta diferente.
+    const limitKey = LoginRateLimitService.key(`login:${dto.tenant_slug}`, dto.email);
+    await this.rateLimit.assert(limitKey, LOGIN_POLICY);
+
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenant_slug },
       include: { tenantPlan: { select: { plan: true } } },
@@ -109,12 +117,19 @@ export class AuthService {
       },
     });
 
-    if (!user || !user.is_active)
+    if (!user || !user.is_active) {
+      await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+    }
 
     const valid = await argon2.verify(user.password_hash, dto.password);
-    if (!valid)
+    if (!valid) {
+      await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+    }
+
+    // Credencial certa zera a janela: quem sabe a senha nunca esbarra no limite.
+    await this.rateLimit.clear(limitKey);
 
     const roles = rolesForToken(user.roleAssignments, user.congregation_id);
 
@@ -164,6 +179,11 @@ export class AuthService {
       code: 'INVALID_CREDENTIALS',
     });
 
+    // A porta do console é a que mais interessa fechar: daqui se chega a
+    // `POST /auth/impersonate`, e de lá a qualquer tenant.
+    const limitKey = LoginRateLimitService.key('platform-login', dto.email);
+    await this.rateLimit.assert(limitKey, LOGIN_POLICY);
+
     // Busca por e-mail sem tenant não usa a unique `(tenant_id, email)` — é
     // varredura. Aceitável e deliberado: o `where` do papel corta para as
     // poucas contas de plataforma, e este login é de um punhado de pessoas.
@@ -189,7 +209,10 @@ export class AuthService {
       }
     }
 
-    if (matches.length === 0) throw invalid;
+    if (matches.length === 0) {
+      await this.rateLimit.register(limitKey, LOGIN_POLICY);
+      throw invalid;
+    }
 
     // O mesmo e-mail pode existir em dois tenants — a unique é por par. Se os
     // dois tiverem `platform_support` e a mesma senha, não há como saber qual
@@ -203,6 +226,8 @@ export class AuthService {
         code: 'PLATFORM_ACCOUNT_AMBIGUOUS',
       });
     }
+
+    await this.rateLimit.clear(limitKey);
 
     const user = matches[0]!;
     const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
@@ -251,6 +276,27 @@ export class AuthService {
 
     if (stored.expires_at < new Date()) {
       throw new UnauthorizedException('Sessão expirada');
+    }
+
+    // Conta desativada não renova — e a família inteira cai junto.
+    //
+    // Sem isto, `refresh` só olhava hash, `revoked_at` e `expires_at`: desativar
+    // uma conta não impedia a ROTAÇÃO, e a cadeia seguia girando indefinidamente,
+    // emitindo access tokens novos. Não havia exposição — `JwtStrategy.validate`
+    // relê `is_active` em toda requisição autenticada e devolve 401, então o
+    // acesso já estava cortado. O que continuava vivo era a cadeia, e é ela que
+    // se derruba aqui: refresh token de conta desativada devia ser revogado, não
+    // renovado.
+    //
+    // Derruba a família toda, e não só este token, pela mesma razão da detecção
+    // de reuso logo acima: o que se quer é encerrar a sessão, não invalidar um
+    // elo e deixar os outros de pé.
+    if (!stored.userAccount.is_active) {
+      await this.prisma.refreshToken.updateMany({
+        where: { user_account_id: stored.user_account_id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      });
+      throw new UnauthorizedException('Sessão encerrada. Faça login novamente.');
     }
 
     const newRaw = randomBytes(64).toString('hex');
@@ -367,10 +413,15 @@ export class AuthService {
       message: 'Se o email estiver cadastrado, você receberá um link de redefinição.',
     };
 
-    if (!this.checkResetRateLimit(dto.email)) {
-      // Return generic response to avoid leaking rate limit info
+    // Mesmo limitador das rotas de login, mesma tabela — e não mais um `Map` por
+    // processo, que com N instâncias no Render valia 1/N e sumia a cada deploy.
+    // A resposta segue genérica: dizer "muitas tentativas" contaria que alguém
+    // andou pedindo redefinição para este e-mail.
+    const limitKey = LoginRateLimitService.key(`reset:${dto.tenant_slug}`, dto.email);
+    if (!(await this.rateLimit.check(limitKey, PASSWORD_RESET_POLICY))) {
       return genericResponse;
     }
+    await this.rateLimit.register(limitKey, PASSWORD_RESET_POLICY);
 
     const tenant = await this.prisma.system.tenant.findUnique({
       where: { slug: dto.tenant_slug },
@@ -435,21 +486,6 @@ export class AuthService {
     });
 
     return { message: 'Senha redefinida com sucesso.' };
-  }
-
-  private checkResetRateLimit(email: string): boolean {
-    const now = Date.now();
-    const entry = this.resetRateLimit.get(email);
-
-    if (!entry || now > entry.resetAt) {
-      this.resetRateLimit.set(email, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-      return true;
-    }
-
-    if (entry.count >= RATE_LIMIT_MAX) return false;
-
-    entry.count++;
-    return true;
   }
 
   private async createRefreshToken(userAccountId: string): Promise<string> {
