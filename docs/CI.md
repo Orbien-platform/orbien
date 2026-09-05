@@ -158,15 +158,50 @@ Requisitos:
 - Publicar `playwright-report/` e os traces como artifact quando falhar: é o
   que transforma "quebrou no CI" em diagnóstico de dois minutos
 
-A suíte tem 5 specs desde 2026-09-03: escala, templates, pessoas, grupos e
-conteúdo. As três últimas entraram para cobrir as telas que o `c84fc02`
-reescreveu — ver a pendência nº 4 de [PENDENCIAS.md](PENDENCIAS.md). Elas
-limpam pela API o que criam, e duas execuções seguidas devolvem o banco ao
-estado do seed.
+A suíte tem **8 specs desde 2026-09-04**: escala, templates, pessoas, grupos,
+conteúdo, suporte, financeiro e login — 12 testes. Pessoas, grupos e conteúdo
+entraram para cobrir as telas que o `c84fc02` reescreveu (ver a pendência nº 4
+de [PENDENCIAS.md](PENDENCIAS.md)); financeiro e login entraram na Fase 13 do
+[TESTES.md](TESTES.md). Todos limpam pela API o que criam, e duas execuções
+seguidas devolvem o banco ao estado do seed.
+
+`login.spec.ts` é o único que roda **sem sessão** — ele limpa os cookies que a
+fixture semeia, porque o formulário de login é o objeto do teste. Isso o faz
+depender das mesmas credenciais do seed, e de mais nada.
+
+**O que este job não cobre, por decisão deste documento:** qualquer fluxo que
+passe por upload. O job não configura R2, e `POST /persons/import` grava o
+arquivo temporário lá antes de devolver a prévia — sem `R2_BUCKET_NAME` a rota
+responde 500 (`No value provided for input HTTP label: Bucket`). O e2e de
+importação de CSV chegou a ser escrito na Fase 13, achou um defeito real (ver
+[TESTES.md](TESTES.md)) e foi retirado por isso: teste que falha por
+infraestrutura ausente não é portão, é ruído.
+
+Desbloquear exige uma escolha de infraestrutura, não mais um teste: um MinIO
+como service container resolveria, mas depende de tornar configurável o
+endpoint do `StorageService`, hoje fixo em
+`https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`. Enquanto isso não for
+decidido, upload fica fora do e2e — e é melhor que fique dito aqui do que
+descoberto de novo daqui a seis meses.
 
 Tempo estimado: 6–10 min no runner (~22s contra build local). Vale rodar em PR,
 mas é o primeiro candidato a virar `workflow_dispatch` ou noturno se o tempo
 incomodar.
+
+### Fase 3b — Smoke do site
+
+Job próprio (`smoke-site`), não um passo do job de e2e. O site é estático: não
+fala com a API, não tem banco, não tem sessão. Pendurá-lo no job do web faria o
+smoke esperar o Postgres subir e a API acordar para verificar páginas que não
+dependem de nenhum dos dois — e ficaria vermelho por falha alheia a ele.
+
+Sequência: `turbo run build --filter=orbien-site` → `next start` na porta 3002
+→ Playwright com `E2E_BASE_URL=http://localhost:3002`. Sem segredo nenhum, sem
+banco. 18 testes, menos de um minuto.
+
+O que ele pega e nenhum build pega: header e footer são importados **por
+página** no site, não pelo `layout.tsx`. Página nova sem um dos dois compila,
+builda e sobe — só não navega.
 
 ### Fase 4 — Revisão: local, não no CI
 

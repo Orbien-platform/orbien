@@ -93,34 +93,18 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text-summary', 'lcov'],
 
-  // Sobe por caminho a cada fase concluída; a Fase 13 troca tudo por um
-  // global em 100. O piso nunca desce.
+  // Fase 13 — fechamento. Os thresholds por caminho saíram: a meta agora é um
+  // `global` em 100 nas quatro métricas, e é ele que reprova código novo sem
+  // teste. Um piso por caminho, aqui, só teria como efeito deixar passar
+  // arquivo fora de todos os caminhos listados — que foi exatamente o que
+  // aconteceu com `src/platform/`: nasceu depois das fases 1-6, não entrou em
+  // nenhuma entrada da lista, e ficou dois DTOs abaixo de 100% sem reprovar
+  // nada. `global` não tem esse ponto cego.
+  //
+  // O piso nunca desce. Se um arquivo novo derrubar o número, o caminho é
+  // testar o arquivo — não reduzir o threshold nem voltar a listar caminhos.
   coverageThreshold: {
-    global: { statements: 0, branches: 0, functions: 0, lines: 0 },
-    // Fase 1 (financeiro) fechada — achados #1 e #3 do docs/PENDENCIAS.md já
-    // estão marcados ✔ fechados, o que destravou o threshold por caminho.
-    './src/financial/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/common/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/prisma/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/auth/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/app.controller.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/app.module.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/persons/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/visitor/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/waitlist/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/celebrations/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/volunteers/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/small-groups/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    // Fase 6 (conteúdo e apoio). NÃO virou `global: 100` ainda porque
-    // `./src/financial/` (Fase 1) e `./src/common/` seguem parciais — só 4
-    // dos 35 arquivos de financial têm spec. Ver docs/TESTES.md, Fase 6, e o
-    // relatório desta sessão: travar `global` agora quebraria `test:cov` por
-    // um motivo alheio a esta fase.
-    './src/content/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/settings/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/study-materials/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/mail/': { statements: 100, branches: 100, functions: 100, lines: 100 },
-    './src/storage/': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    global: { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
 
   verbose: true,

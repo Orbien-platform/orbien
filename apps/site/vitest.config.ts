@@ -21,31 +21,12 @@ export default defineConfig({
       include: ["src/**"],
       exclude: ["src/**/*.d.ts"],
       reporter: ["text-summary", "lcov"],
-      // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
-      // global. O piso nunca desce.
-      thresholds: {
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
-        // Fase 11 — componentes do site. Tudo aqui é apresentacional e
-        // estático, então o teste é de renderização: o texto esperado
-        // aparece e os links apontam para o href certo.
-        "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/ui/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/layout/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/contato/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/funcionalidades/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/home/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/lgpd/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/precos/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/sem-cnpj/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/components/sobre/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        // Fase 12 — rotas. Todos os arquivos de `src/app/` são Server
-        // Components sem `async` (invocáveis como função) ou geradores de
-        // metadata; `icon`/`apple-icon` devolvem `ImageResponse`.
-        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-      },
+      // Fase 13 — fechamento. As 11 entradas por caminho saíram: com as Fases
+      // 11 e 12 fechadas, `src/` inteiro está em 100%, e o `global` cobre o
+      // que a lista por caminho não cobria — arquivo novo criado fora de todos
+      // os caminhos listados não era cobrado por ninguém. O piso nunca desce:
+      // se um arquivo novo derrubar o número, o caminho é testar o arquivo.
+      thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 },
     },
   },
 });
