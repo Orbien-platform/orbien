@@ -26,10 +26,16 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 7 | web — lib, hooks, contexts | `lib/`, `hooks/`, `contexts/`, `proxy.ts` | 10 | ☑ |
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
-| 10 | web — rotas | `app/` | 14 | ☑ |
+| 10 | web — rotas | `app/` | 19 | ☑ |
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
 | 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ◐ |
+| 14 | admin — console da plataforma | `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `proxy.ts` | 25 | ☑ |
+
+A Fase 14 não estava no plano original: o `apps/admin` nasceu depois dele, e
+a Fase 13 já cobrava `npm run test:cov -w orbien-admin` em 100% sem que
+existisse fase para chegar lá. Ela fecha esse buraco e é independente das
+demais — foi feita em paralelo com 10 a 13.
 
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
 `test/rls/isolation.spec.ts`), **2 testes e2e no web** (escalas e templates),
@@ -809,6 +815,50 @@ da Fase 13, ou sai.
 > smoke das 18 rotas, instala `@playwright/test` (que é o runner, como em
 > `apps/web`). O `exclude: ["e2e/**"]` do `vitest.config.ts` fica onde está:
 > custa nada e já está certo no dia em que existir um `e2e/` no site.
+
+---
+
+## Fase 14 — admin: o console da plataforma
+
+**Pré-requisito:** Fase 0 (o `apps/admin` já nasceu com `vitest.config.ts`).
+**Escopo:** `src/` inteiro do `apps/admin` (25 arquivos).
+
+Independente das fases 10 a 13 — o console não compartilha código com o web
+nem com o site, e foi feita em paralelo com elas.
+
+Três coisas específicas desta fase:
+
+- **Os sete componentes de `components/ui/` são byte a byte iguais aos do
+  `apps/web`**, copiados de lá quando o console nasceu. As specs também são
+  cópia, com um cabeçalho dizendo isso. Enquanto os componentes forem
+  duplicados, as specs são; se um dia virarem pacote compartilhado, as duas
+  metades somem juntas.
+- **`lib/api.ts` guarda estado de módulo** (`isRefreshing`, `failedQueue`).
+  A spec importa o módulo de novo a cada teste (`vi.resetModules()`), senão
+  um teste herda a fila do anterior e o seguinte estoura por timeout.
+- **`contexts/AuthContext.tsx` usa `useSyncExternalStore`** com snapshot de
+  servidor. Os dois snapshots de servidor só rodam fora do browser: quem os
+  cobre é um `renderToString` de `react-dom/server`.
+
+### Pronto quando
+
+```bash
+npm run test:cov -w orbien-admin
+```
+
+sai verde com o threshold do app (linhas e funções em 100%).
+
+> **Executado em 2026-09-05:** 143 testes em 20 specs; 99,74% statements,
+> 98,52% branches, 100% functions e 100% lines, com threshold em
+> `vitest.config.ts`. Os três ramos que ficam de fora são inalcançáveis pela
+> UI e estão comentados no próprio threshold.
+>
+> **Achado registrado sem correção, com teste fixando o comportamento atual**
+> (`src/lib/api.test.ts`): no ramo "401 sem refresh token" o `return` acontece
+> antes do `try`, então o `finally` que zera `isRefreshing` não roda — dali em
+> diante todo 401 entra na fila e espera por uma renovação que ninguém
+> dispara. O `apps/web` tinha o mesmo defeito e o corrigiu em `88bf9ee`; este
+> arquivo veio de lá antes disso.
 
 ---
 
