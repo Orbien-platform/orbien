@@ -9,6 +9,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { PersonsModule } from './persons/persons.module';
+import { UsersModule } from './users/users.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import { VisitorModule } from './visitor/visitor.module';
 import { SmallGroupsModule } from './small-groups/small-groups.module';
@@ -41,6 +42,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PrismaModule,
     AuthModule,
     PersonsModule,
+    UsersModule,
     WaitlistModule,
     VisitorModule,
     ScheduleModule.forRoot(),

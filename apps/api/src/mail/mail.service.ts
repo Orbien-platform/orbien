@@ -54,4 +54,44 @@ export class MailService {
 
     this.logger.log(`Password reset email sent to ${to}`);
   }
+
+  async sendInvite(to: string, inviteUrl: string): Promise<void> {
+    if (!this.resend) {
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new InternalServerErrorException('Email service not configured (missing RESEND_API_KEY)');
+      }
+      this.logger.log(`[DEV] Invite URL for ${to}: ${inviteUrl}`);
+      return;
+    }
+
+    const { error } = await this.resend.emails.send({
+      from: process.env['MAIL_FROM'] ?? 'Orbien <naoresponda@useorbien.com>',
+      to,
+      subject: 'Você foi convidado para o Orbien',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2 style="color: #1E3A7B;">Bem-vindo(a) ao Orbien</h2>
+          <p>Você recebeu acesso ao sistema. Clique no botão abaixo para criar sua senha:</p>
+          <a href="${inviteUrl}"
+             style="display: inline-block; background: #1E3A7B; color: white;
+                    padding: 12px 24px; border-radius: 6px; text-decoration: none;
+                    margin: 16px 0;">
+            Criar minha senha
+          </a>
+          <p style="color: #5C5A56; font-size: 14px;">
+            Este link expira em 7 dias. Se você não esperava este convite, ignore este email.
+          </p>
+          <hr style="border: none; border-top: 1px solid #E0DDD9; margin: 24px 0;" />
+          <p style="color: #9B9893; font-size: 12px;">Orbien — Gestão inteligente para igrejas</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      this.logger.error(`Resend error sending to ${to}: ${JSON.stringify(error)}`);
+      throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
+    }
+
+    this.logger.log(`Invite email sent to ${to}`);
+  }
 }
