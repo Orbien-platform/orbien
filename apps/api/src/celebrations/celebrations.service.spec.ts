@@ -67,10 +67,10 @@ describe('CelebrationsService', () => {
       client.celebration.findMany.mockResolvedValue([{ id: 'c1' }]);
       const service = new CelebrationsService({ client } as unknown as PrismaService);
 
-      const result = await service.findAll('t1', 'g1', { type: 'sunday_service' } as never);
+      const result = await service.findAll('t1', { type: 'sunday_service' } as never);
 
       expect(client.celebration.findMany).toHaveBeenCalledWith({
-        where: { tenant_id: 't1', congregation_id: 'g1', type: 'sunday_service', is_active: true },
+        where: { tenant_id: 't1', type: 'sunday_service', is_active: true },
         orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
       });
       expect(result).toEqual([{ id: 'c1' }]);
@@ -81,10 +81,10 @@ describe('CelebrationsService', () => {
       client.celebration.findMany.mockResolvedValue([]);
       const service = new CelebrationsService({ client } as unknown as PrismaService);
 
-      await service.findAll('t1', 'g1', { is_active: false } as never);
+      await service.findAll('t1', { is_active: false } as never);
 
       expect(client.celebration.findMany).toHaveBeenCalledWith({
-        where: { tenant_id: 't1', congregation_id: 'g1', is_active: false },
+        where: { tenant_id: 't1', is_active: false },
         orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
       });
     });

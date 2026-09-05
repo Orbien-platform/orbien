@@ -27,15 +27,16 @@ export class CelebrationsService {
     });
   }
 
-  async findAll(
-    tenantId: string,
-    congregationId: string,
-    query: ListCelebrationsQueryDto,
-  ): Promise<Celebration[]> {
+  async findAll(tenantId: string, query: ListCelebrationsQueryDto): Promise<Celebration[]> {
+    // Sem `congregation_id` no `where`, de propósito: quem decide o alcance é
+    // a RLS (`tenant_isolation` em `celebrations`), que já abre a congregação
+    // inteira do tenant para `tenant_admin`/`denomination_admin`. Filtrar aqui
+    // também travaria esses papéis na própria congregação mesmo com a policy
+    // corrigida — foi exatamente o defeito que deixava `tenant_admin` sem ver
+    // celebrações de outras congregações do mesmo tenant.
     return this.prisma.client.celebration.findMany({
       where: {
         tenant_id: tenantId,
-        congregation_id: congregationId,
         ...(query.type !== undefined && { type: query.type as CelebrationType }),
         is_active: query.is_active ?? true,
       },

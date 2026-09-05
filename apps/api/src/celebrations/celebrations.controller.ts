@@ -37,7 +37,7 @@ export class CelebrationsController {
   @Get()
   @Roles(...READ_ROLES)
   findAll(@Query() query: ListCelebrationsQueryDto, @CurrentUser() user: JwtPayload) {
-    return this.celebrationsService.findAll(user.tenant_id, user.congregation_id, query);
+    return this.celebrationsService.findAll(user.tenant_id, query);
   }
 
   @Get(':id')
