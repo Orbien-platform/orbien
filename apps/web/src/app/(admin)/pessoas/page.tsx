@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { PersonSheet } from "@/components/persons/PersonSheet";
 import { CreateVisitorModal } from "@/components/persons/CreateVisitorModal";
 import { ImportCsvModal } from "@/components/persons/ImportCsvModal";
 import { ImportHelpModal } from "@/components/persons/ImportHelpModal";
 import { useAuth } from "@/hooks/useAuth";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,7 @@ export default function PessoasPage() {
 
   const [persons, setPersons] = useState<Person[]>([]);
   const [total, setTotal] = useState(0);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [classification, setClassification] = useState("");
@@ -91,11 +93,15 @@ export default function PessoasPage() {
         if (signal.cancelled) return;
         setPersons(data.data);
         setTotal(data.total);
+        setAccessDenied(false);
       })
-      .catch(() => {
+      .catch((error) => {
         if (signal.cancelled) return;
         setPersons([]);
         setTotal(0);
+        // 403 não é lista vazia: sem isto, quem não tem o papel lia
+        // "Nenhuma pessoa cadastrada ainda".
+        setAccessDenied(isForbidden(error));
       })
       .finally(() => {
         if (!signal.cancelled) setLoadedKey(requestKey);
@@ -217,9 +223,13 @@ export default function PessoasPage() {
         onRowClick={(p) => { setSelectedId(p.id); setSheetOpen(true); }}
         isLoading={isLoading}
         emptyState={
-          search || classification
-            ? "Nenhuma pessoa encontrada com esses filtros."
-            : "Nenhuma pessoa cadastrada ainda."
+          accessDenied ? (
+            <NoAccessState resource="Pessoas" />
+          ) : search || classification ? (
+            "Nenhuma pessoa encontrada com esses filtros."
+          ) : (
+            "Nenhuma pessoa cadastrada ainda."
+          )
         }
       />
 

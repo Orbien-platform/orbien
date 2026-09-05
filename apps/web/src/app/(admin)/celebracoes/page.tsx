@@ -5,6 +5,7 @@ import { Plus, FileText, Calendar } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/components/celebrations/CreateCelebrationModal";
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
@@ -13,7 +14,7 @@ import { TemplatesPanel } from "@/components/celebrations/TemplatesPanel";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export default function CelebracoesPage() {
 
   // ── Celebrations tab state ──
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [celebrationsLoading, setCelebrationsLoading] = useState(true);
   const hasFetchedCel = useRef(false);
 
@@ -96,8 +98,16 @@ export default function CelebracoesPage() {
     // The API doesn't support pagination here — it always returns the full list.
     return api
       .get<Celebration[]>("/celebrations")
-      .then(({ data }) => setCelebrations(Array.isArray(data) ? data : []))
-      .catch(() => setCelebrations([]))
+      .then(({ data }) => {
+        setCelebrations(Array.isArray(data) ? data : []);
+        setAccessDenied(false);
+      })
+      .catch((error) => {
+        setCelebrations([]);
+        // Esta é a tela que originou a pendência: `volunteer` e `member` levam
+        // 403 em `GET /celebrations` e liam "Nenhuma celebração cadastrada".
+        setAccessDenied(isForbidden(error));
+      })
       .finally(() => setCelebrationsLoading(false));
   }, []);
 
@@ -233,6 +243,9 @@ export default function CelebracoesPage() {
             isLoading={celebrationsLoading}
             onRowClick={(row) => openDetail(row.id)}
             emptyState={
+              accessDenied ? (
+                <NoAccessState resource="Celebrações" />
+              ) : (
               <div className="flex flex-col items-center gap-3 py-10">
                 <Calendar size={32} strokeWidth={1} className="text-stone" />
                 <p className="text-sm text-stone">Nenhuma celebração cadastrada.</p>
@@ -245,6 +258,7 @@ export default function CelebracoesPage() {
                   </Button>
                 )}
               </div>
+              )
             }
           />
         </Tabs.Panel>
@@ -263,6 +277,8 @@ export default function CelebracoesPage() {
                 </div>
               ))}
             </div>
+          ) : accessDenied ? (
+            <NoAccessState resource="Celebrações" />
           ) : upcomingInstances.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
               <Calendar size={32} strokeWidth={1} className="text-stone" />

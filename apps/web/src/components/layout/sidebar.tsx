@@ -13,6 +13,8 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { canAccessRoute } from "@/lib/permissions";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -31,6 +33,12 @@ interface SidebarProps {
 
 export function Sidebar({ congregationName = "Doca Church" }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  // Link que só levaria a um 403 não é desenhado. Isto é conveniência, não
+  // controle de acesso: quem digitar a URL chega à tela e recebe de lá o
+  // "sem acesso" — a autoridade continua sendo o `@Roles` da API.
+  const visibleItems = navItems.filter(({ href }) => canAccessRoute(user, href));
 
   return (
     <aside className="flex h-full w-[260px] flex-col border-r border-[var(--border-default)] bg-[var(--surface-base)] dark:bg-[var(--surface-base)]">
@@ -45,7 +53,7 @@ export function Sidebar({ congregationName = "Doca Church" }: SidebarProps) {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-0.5">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {visibleItems.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(href + "/");
             return (
               <li key={href}>

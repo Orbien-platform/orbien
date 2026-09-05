@@ -8,6 +8,9 @@ import { useAuth } from "@/hooks/useAuth";
 import FinanceiroPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -112,6 +115,7 @@ function setup(roles: string[] = ["tenant_admin"]) {
       congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
+    support_expires_at: null,
     },
     isLoading: false,
     isAuthenticated: true,
@@ -152,11 +156,14 @@ function mockApi(opts: {
   recurring?: unknown[];
   dre?: unknown;
   txError?: boolean;
+  /** 403 do servidor: sem permissão, que é diferente de sem dado. */
+  txForbidden?: boolean;
   recurringError?: boolean;
   dreError?: boolean;
 } = {}) {
   mockedApi.get.mockImplementation((url: string) => {
     if (url.startsWith("/financial/transactions")) {
+      if (opts.txForbidden) return Promise.reject({ response: { status: 403 } });
       return opts.txError
         ? Promise.reject(new Error("boom"))
         : Promise.resolve({ data: { data: opts.transactions ?? [], total: (opts.transactions ?? []).length } });
@@ -210,6 +217,7 @@ describe("FinanceiroPage — visão geral e permissões", () => {
         congregation_id: "c1",
         support_session: false,
         support_tenant_name: null,
+    support_expires_at: null,
       },
       isLoading: false,
       isAuthenticated: true,
@@ -348,6 +356,17 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
     expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
+  });
+
+  it("403 nas transações diz sem-acesso, e não \"nenhum lançamento\"", async () => {
+    setup();
+    mockApi({ txForbidden: true });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+
+    expect(await screen.findByText("Você não tem acesso a Financeiro.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum lançamento registrado.")).not.toBeInTheDocument();
   });
 
   it("trata resposta sem `data` como lista vazia (fallback ?? [])", async () => {
@@ -871,6 +890,44 @@ describe("FinanceiroPage — corridas e casos-limite", () => {
     resolveFirst({ data: { data: [tx({ id: "1", description: "Primeira Carga (atrasada)" })], total: 1 } });
     await new Promise((r) => setTimeout(r, 10));
     expect(screen.queryByText("Primeira Carga (atrasada)")).not.toBeInTheDocument();
+    expect(screen.getByText("Segunda Carga")).toBeInTheDocument();
+  });
+
+  it("um 403 atrasado de refresh anterior não apaga a tela já carregada", async () => {
+    // O par do caso acima, do lado do erro: sem a guarda de sequência no
+    // `catch`, uma negativa que chega depois trocaria a lista boa por
+    // "sem acesso" — e o usuário perderia a tela por uma resposta vencida.
+    setup();
+    let rejectFirst!: (e: unknown) => void;
+    const first = new Promise((_, reject) => { rejectFirst = reject; });
+    let call = 0;
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/financial/transactions")) {
+        call += 1;
+        if (call === 1) return first as never;
+        return Promise.resolve({
+          data: { data: [tx({ id: "2", description: "Segunda Carga" })], total: 1 },
+        });
+      }
+      if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/recurring-rules")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/dre")) return Promise.resolve({ data: dre() });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await waitFor(() => expect(call).toBe(1));
+
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await user.click(screen.getByRole("button", { name: "Novo lançamento" }));
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await waitFor(() => expect(call).toBe(2));
+    await screen.findByText("Segunda Carga");
+
+    rejectFirst({ response: { status: 403 } });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(screen.queryByText("Você não tem acesso a Financeiro.")).not.toBeInTheDocument();
     expect(screen.getByText("Segunda Carga")).toBeInTheDocument();
   });
 

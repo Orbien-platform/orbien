@@ -6,6 +6,9 @@ import { useAuth } from "@/hooks/useAuth";
 import PessoasPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -64,6 +67,7 @@ function setup(roles: string[] = ["tenant_admin"]) {
       congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
+    support_expires_at: null,
     },
     isLoading: false,
     isAuthenticated: true,
@@ -137,6 +141,26 @@ describe("PessoasPage", () => {
     mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<PessoasPage />);
     expect(await screen.findByText("Nenhuma pessoa cadastrada ainda.")).toBeInTheDocument();
+  });
+
+  it("403 diz \"sem acesso\", não \"nada cadastrado\"", async () => {
+    // A distinção que a pendência nº 10 pedia: sem ela, quem não tem o papel
+    // lia "Nenhuma pessoa cadastrada ainda" e concluía que a igreja está vazia.
+    setup();
+    mockedApi.get.mockRejectedValue({ response: { status: 403 } });
+    render(<PessoasPage />);
+
+    expect(await screen.findByText("Você não tem acesso a Pessoas.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhuma pessoa cadastrada ainda.")).not.toBeInTheDocument();
+  });
+
+  it("falha que não é 403 continua caindo no estado vazio comum", async () => {
+    setup();
+    mockedApi.get.mockRejectedValue({ response: { status: 500 } });
+    render(<PessoasPage />);
+
+    expect(await screen.findByText("Nenhuma pessoa cadastrada ainda.")).toBeInTheDocument();
+    expect(screen.queryByText("Você não tem acesso a Pessoas.")).not.toBeInTheDocument();
   });
 
   it("busca dispara nova requisição com o parâmetro search", async () => {
@@ -270,6 +294,7 @@ describe("PessoasPage", () => {
         congregation_id: "c1",
         support_session: false,
         support_tenant_name: null,
+    support_expires_at: null,
       },
       isLoading: false,
       isAuthenticated: true,

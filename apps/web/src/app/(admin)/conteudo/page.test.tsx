@@ -6,6 +6,9 @@ import { useAuth } from "@/hooks/useAuth";
 import ConteudoPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -82,6 +85,7 @@ function setup(roles: string[] = ["tenant_admin"]) {
       congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
+    support_expires_at: null,
     },
     isLoading: false,
     isAuthenticated: true,
@@ -131,6 +135,18 @@ describe("ConteudoPage", () => {
     mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<ConteudoPage />);
     expect(await screen.findByText("Nenhum post encontrado.")).toBeInTheDocument();
+  });
+
+  it("403 em /content/posts diz sem-acesso, e não \"nenhum post\"", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.reject({ response: { status: 403 } });
+      return Promise.resolve({ data: [] });
+    });
+    render(<ConteudoPage />);
+
+    expect(await screen.findByText("Você não tem acesso a Conteúdo.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum post encontrado.")).not.toBeInTheDocument();
   });
 
   it("filtra por tipo e por status, disparando novas requisições", async () => {
@@ -325,6 +341,7 @@ describe("ConteudoPage", () => {
         congregation_id: "c1",
         support_session: false,
         support_tenant_name: null,
+    support_expires_at: null,
       },
       isLoading: false,
       isAuthenticated: true,
