@@ -121,7 +121,19 @@ describe("buildSessionUser", () => {
       congregation_id: "c1",
       support_session: true,
       support_tenant_name: "Igreja X",
+      // 9999999999 em segundos — o `exp` do token, que é o prazo da faixa.
+      support_expires_at: 9999999999 * 1000,
     });
+  });
+
+  it("só a sessão de suporte tem prazo: a comum não expõe o exp", () => {
+    const suporte = buildSessionUser({ ...payload, support_session: true }, { email: "ana@x.com" });
+    const comum = buildSessionUser(payload, { email: "ana@x.com" });
+
+    expect(suporte.support_expires_at).toBe(9999999999 * 1000);
+    // Numa sessão comum o access token é renovado por baixo; um relógio ali
+    // contaria uma coisa que não acontece.
+    expect(comum.support_expires_at).toBeNull();
   });
 
   it("support_session fica false sem o marcador no payload, e support_tenant_name null sem tenantName", () => {

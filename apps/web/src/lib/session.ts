@@ -107,6 +107,16 @@ export interface SessionUser {
   congregation_id: string;
   support_session: boolean;
   support_tenant_name: string | null;
+  /**
+   * Quando a sessão de suporte expira, em epoch ms. Nulo em sessão normal.
+   *
+   * Só faz sentido para a sessão de suporte porque só ela não se renova: o
+   * token de `POST /auth/impersonate` vem sem refresh token, de propósito, e
+   * vale 5 minutos. Numa sessão comum o `exp` do access token não diz nada ao
+   * usuário — a fila de `/api/session/refresh` o renova por baixo —, e expor
+   * um relógio ali seria contar uma coisa que não acontece.
+   */
+  support_expires_at: number | null;
 }
 
 /**
@@ -128,6 +138,10 @@ export function buildSessionUser(
     congregation_id: payload.congregation_id,
     support_session: payload.support_session === true,
     support_tenant_name: identity.tenantName ?? null,
+    support_expires_at:
+      payload.support_session === true && typeof payload.exp === "number"
+        ? payload.exp * 1000
+        : null,
   };
 }
 
