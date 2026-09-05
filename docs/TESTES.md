@@ -30,7 +30,7 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
 | 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ☐ |
-| 14 | admin — console da plataforma | `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `proxy.ts` | 25 | ☐ |
+| 14 | admin — console da plataforma | `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `proxy.ts` | 25 | ☑ |
 
 A Fase 14 não estava no plano original: o `apps/admin` nasceu depois dele, e
 a Fase 13 já cobrava `npm run test:cov -w orbien-admin` em 100% sem que
@@ -632,6 +632,38 @@ pega o que só quebra no build do Next (fonte que não carrega, `ImageResponse`
 que falha no runtime real, âncora `#waitlist` que some do HTML gerado). Um
 smoke de Playwright contra `next start` é o portão que falta, e removê-lo
 agora só faria a Fase 13 reinstalar a mesma dependência.
+
+---
+
+## Fase 14 — admin: o console da plataforma
+
+**Pré-requisito:** Fase 0 (o `apps/admin` já nasceu com `vitest.config.ts`).
+**Escopo:** `src/` inteiro do `apps/admin` (25 arquivos).
+
+Independente das fases 10 a 12 — o console não compartilha código com o web
+nem com o site, e pode ser feito em paralelo.
+
+Três coisas específicas desta fase:
+
+- **Os sete componentes de `components/ui/` são byte a byte iguais aos do
+  `apps/web`**, copiados de lá quando o console nasceu. As specs também são
+  cópia, com um cabeçalho dizendo isso. Enquanto os componentes forem
+  duplicados, as specs são; se um dia virarem pacote compartilhado, as duas
+  metades somem juntas.
+- **`lib/api.ts` guarda estado de módulo** (`isRefreshing`, `failedQueue`).
+  A spec importa o módulo de novo a cada teste (`vi.resetModules()`), senão
+  um teste herda a fila do anterior e o seguinte estoura por timeout.
+- **`contexts/AuthContext.tsx` usa `useSyncExternalStore`** com snapshot de
+  servidor. Os dois snapshots de servidor só rodam fora do browser: quem os
+  cobre é um `renderToString` de `react-dom/server`.
+
+### Pronto quando
+
+```bash
+npm run test:cov -w orbien-admin
+```
+
+sai verde com o threshold do app (linhas e funções em 100%).
 
 ---
 
