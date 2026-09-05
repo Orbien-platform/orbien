@@ -55,7 +55,7 @@ describe('CelebrationInstancesController', () => {
 
     const result = await controller.findAll({ status: 'draft' } as never, user);
 
-    expect(instancesService.findAll).toHaveBeenCalledWith('tenant-1', 'cong-1', { status: 'draft' });
+    expect(instancesService.findAll).toHaveBeenCalledWith('tenant-1', { status: 'draft' });
     expect(result).toEqual([{ id: 'i1' }]);
     expect(rolesFor('findAll')).toEqual(READ_ROLES);
   });

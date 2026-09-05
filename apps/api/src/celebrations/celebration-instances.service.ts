@@ -34,13 +34,14 @@ export class CelebrationInstancesService {
 
   async findAll(
     tenantId: string,
-    congregationId: string,
     query: ListCelebrationInstancesQueryDto,
   ): Promise<CelebrationInstance[]> {
+    // Sem `congregation_id` no `where` — mesmo motivo de `CelebrationsService.findAll`:
+    // quem decide o alcance é a RLS, que abre a congregação inteira do tenant
+    // para `tenant_admin`/`denomination_admin`.
     return this.prisma.client.celebrationInstance.findMany({
       where: {
         tenant_id: tenantId,
-        congregation_id: congregationId,
         ...(query.celebration_id && { celebration_id: query.celebration_id }),
         ...(query.status && { status: query.status as CelebrationInstanceStatus }),
         ...(query.date_from || query.date_to

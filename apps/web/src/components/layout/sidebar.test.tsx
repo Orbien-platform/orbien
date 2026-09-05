@@ -22,7 +22,7 @@ const BASE_USER: SessionUser = {
   congregation_id: "c1",
   support_session: false,
   support_tenant_name: null,
-  support_expires_at: null,
+  expires_at: Math.floor(Date.now() / 1000) + 300,
 };
 
 function signedInAs(overrides: Partial<SessionUser> = {}) {

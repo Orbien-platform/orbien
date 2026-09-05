@@ -79,7 +79,7 @@ describe('CelebrationInstancesService', () => {
       client.celebrationInstance.findMany.mockResolvedValue([{ id: 'i1' }]);
       const service = serviceWith(client);
 
-      await service.findAll('t1', 'g1', {
+      await service.findAll('t1', {
         celebration_id: 'c1',
         status: 'draft',
         date_from: '2026-09-01',
@@ -90,7 +90,6 @@ describe('CelebrationInstancesService', () => {
         expect.objectContaining({
           where: {
             tenant_id: 't1',
-            congregation_id: 'g1',
             celebration_id: 'c1',
             status: 'draft',
             scheduled_date: { gte: new Date('2026-09-01'), lte: new Date('2026-09-30') },
@@ -104,10 +103,10 @@ describe('CelebrationInstancesService', () => {
       client.celebrationInstance.findMany.mockResolvedValue([]);
       const service = serviceWith(client);
 
-      await service.findAll('t1', 'g1', {} as never);
+      await service.findAll('t1', {} as never);
 
       expect(client.celebrationInstance.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { tenant_id: 't1', congregation_id: 'g1' } }),
+        expect.objectContaining({ where: { tenant_id: 't1' } }),
       );
     });
 
@@ -116,7 +115,7 @@ describe('CelebrationInstancesService', () => {
       client.celebrationInstance.findMany.mockResolvedValue([]);
       const service = serviceWith(client);
 
-      await service.findAll('t1', 'g1', { date_from: '2026-09-01' } as never);
+      await service.findAll('t1', { date_from: '2026-09-01' } as never);
 
       expect(client.celebrationInstance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({

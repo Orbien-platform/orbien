@@ -763,15 +763,21 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   depois `GET /api/session` responde 401, o middleware barra a navegação e o
   suporte volta para `/login`. É o comportamento desejado; renovar sozinha uma
   sessão que enxerga dado de igreja alheia é o que não se quer. ~~O que falta é
-  aviso antes de expirar, hoje inexistente.~~ Fechado em 2026-09-05: a faixa do
-  `SupportSessionBanner` conta o tempo restante e, no último minuto, muda de
-  tom e passa a se anunciar (`aria-live`). O prazo vem do `exp` do próprio
-  token, exposto como `support_expires_at` **só** quando a sessão é de suporte
-  — numa sessão comum o access token é renovado por baixo, e um relógio ali
-  contaria uma coisa que não acontece. O relógio recalcula a partir de
-  `Date.now()` a cada tique em vez de decrementar o estado: aba em segundo
-  plano tem `setInterval` estrangulado pelo browser, e um contador cego
-  atrasaria em relação ao token.
+  aviso antes de expirar, hoje inexistente.~~ Fechado em 2026-09-05, na `main`,
+  por `fa85de2`: a faixa do `SupportSessionBanner` conta o tempo restante e
+  muda de cor no último minuto. O prazo vem do `exp` do token, exposto em
+  `SessionUser.expires_at`, e o relógio recalcula a partir de `Date.now()` a
+  cada tique em vez de decrementar o estado — aba em segundo plano tem
+  `setInterval` estrangulado pelo browser, e um contador cego atrasaria em
+  relação ao token.
+
+  **Foi implementado duas vezes, em paralelo.** Esta branch tinha a mesma
+  feature, escrita sem saber da outra, e a duplicata foi descartada no merge —
+  a da `main` já estava mesclada, e divergir dela custaria mais do que ganharia.
+  Não é acidente isolado: o próprio `fa85de2` diz ter refeito o trabalho por
+  cima da `main` pelo mesmo motivo. O que evita a terceira vez é olhar as
+  branches abertas antes de pegar um item deste documento — e marcar aqui,
+  quando pegar, que o item está sendo feito.
 - **A sessão de impersonação não cruza tenant**, e isso continua estrutural: o
   token fixa um tenant, e o `IS NULL` de `app_platform_access()` fecha o ramo
   de plataforma justamente quando há tenant fixado. Suporte a vários clientes

@@ -24,7 +24,7 @@ const USER: SessionUser = {
   congregation_id: "cong-1",
   support_session: false,
   support_tenant_name: null,
-    support_expires_at: null,
+  expires_at: Math.floor(Date.now() / 1000) + 300,
 };
 
 function renderAuth() {
