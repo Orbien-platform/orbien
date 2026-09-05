@@ -29,7 +29,7 @@ export class CelebrationInstancesController {
   @Get()
   @Roles(...READ_ROLES)
   findAll(@Query() query: ListCelebrationInstancesQueryDto, @CurrentUser() user: JwtPayload) {
-    return this.instancesService.findAll(user.tenant_id, user.congregation_id, query);
+    return this.instancesService.findAll(user.tenant_id, query);
   }
 
   @Get(':id')
