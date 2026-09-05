@@ -5,7 +5,7 @@ import { DrePdfService } from './dre-pdf.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
-const DRE_ROLES = ['tesoureiro', 'admin_congregation', 'pastor', 'tenant_admin'];
+const DRE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_admin'];
 
 function rolesFor(methodName: keyof DreController): string[] | undefined {
   const reflector = new Reflector();
@@ -17,7 +17,7 @@ function baseUser(overrides: Partial<JwtPayload> = {}): JwtPayload {
     sub: 'user-1',
     tenant_id: 'tenant-1',
     congregation_id: 'cong-1',
-    roles: ['tesoureiro'],
+    roles: ['treasurer'],
     plan: 'starter',
     ...overrides,
   };
@@ -43,7 +43,7 @@ describe('DreController', () => {
       dreService.buildDre.mockResolvedValue({} as never);
       const query = { period_start: '2026-01-01', period_end: '2026-01-31' };
 
-      await controller.getDre(query as never, baseUser({ roles: ['tesoureiro'] }));
+      await controller.getDre(query as never, baseUser({ roles: ['treasurer'] }));
 
       expect(dreService.buildDre).toHaveBeenCalledWith('tenant-1', 'cong-1', query, false);
     });

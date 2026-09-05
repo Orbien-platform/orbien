@@ -18,13 +18,13 @@ import { StorageService } from '../../storage/storage.service';
 import { ROLES_KEY } from '../../auth/decorators/roles.decorator';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 
-const EXPORT_ROLES = ['tesoureiro', 'admin_congregation', 'tenant_admin'];
+const EXPORT_ROLES = ['treasurer', 'admin_congregation', 'tenant_admin'];
 
 const user: JwtPayload = {
   sub: 'user-1',
   tenant_id: 'tenant-1',
   congregation_id: 'cong-1',
-  roles: ['tesoureiro'],
+  roles: ['treasurer'],
   plan: 'starter',
 };
 

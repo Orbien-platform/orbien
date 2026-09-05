@@ -67,3 +67,95 @@ describe('Invariante: todo controller usa @Roles, exceto a allowlist explícita'
     },
   );
 });
+
+/**
+ * Papel citado em controller tem que existir na tabela `roles`.
+ *
+ * O `RolesGuard` compara o literal com `user.roles`, que vem de
+ * `role_assignments` — ou seja, com o **código** do papel. Um literal que não é
+ * código nenhum não casa com ninguém e a rota fica fechada para todos os
+ * papéis daquela lista, em silêncio: o guard nega, e negar é o que ele faz o
+ * dia inteiro.
+ *
+ * Foi o que aconteceu com `'tesoureiro'` (o nome em português, não o código)
+ * em `DRE_ROLES` e `EXPORT_ROLES`: o tesoureiro de verdade — `treasurer` —
+ * levava 403 no DRE e na exportação financeira, e no `isPastor` do DRE um
+ * pastor que também é tesoureiro era tratado como pastor restrito. Nenhum
+ * teste de rota pegaria, porque cada um testa o que foi escrito.
+ */
+const ROLE_CODES = new Set([
+  'platform_support',
+  'tenant_admin',
+  'admin_congregation',
+  'pastor',
+  'secretary',
+  'treasurer',
+  'cell_leader',
+  'ministry_leader',
+  'volunteer',
+  'member',
+]);
+
+/**
+ * Divergência conhecida, ainda não decidida — não é permissão para novas.
+ *
+ * `MATERIALIZE_ROLES` cita `'leader'`, que não é código de papel nenhum: hoje
+ * `POST /celebrations/:id/materialize` está fechado para quem é só líder. A
+ * constante irmã logo abaixo dela (`SCHEDULE_MATERIALIZE_ROLES`) usa
+ * `ministry_leader`, o que sugere que era essa a intenção — mas corrigir aqui
+ * **amplia acesso**, e ampliar acesso é decisão de produto, não conserto de
+ * digitação. Fica registrado em docs/PENDENCIAS.md.
+ *
+ * Cada entrada é conferida abaixo: se o literal sumir do arquivo, o teste
+ * cobra a remoção da entrada — exceção que sobrevive ao próprio motivo é como
+ * um invariante apodrece.
+ */
+const KNOWN_DIVERGENCES: Array<[string, string]> = [
+  ['celebrations/celebrations.controller.ts', 'leader'],
+];
+
+describe('Invariante: papel citado em controller existe na tabela `roles`', () => {
+  const controllerFiles = findControllerFiles(SRC_ROOT);
+
+  it.each(KNOWN_DIVERGENCES)('%s ainda cita "%s" — a exceção continua valendo', (relPath, role) => {
+    const source = readFileSync(join(SRC_ROOT, relPath), 'utf-8');
+    expect(source).toContain(`'${role}'`);
+  });
+
+  it('a lista de códigos acompanha o seed', () => {
+    // Se `prisma/seed.ts` ganhar um papel, esta lista precisa ganhar também —
+    // senão o invariante passa a acusar papel legítimo.
+    const seed = readFileSync(join(SRC_ROOT, '..', 'prisma', 'seed.ts'), 'utf-8');
+    const codes = [...seed.matchAll(/\{ code: '([a-z_]+)'/g)].map((m) => m[1]);
+
+    expect(codes.length).toBeGreaterThan(0);
+    expect(new Set(codes)).toEqual(ROLE_CODES);
+  });
+
+  it.each(controllerFiles.map((f) => [relative(SRC_ROOT, f), f] as const))(
+    '%s só cita papéis que existem',
+    (_relPath, fullPath) => {
+      const source = readFileSync(fullPath, 'utf-8');
+
+      // Os papéis chegam ao guard por dois caminhos, e os dois são varridos:
+      // a constante (`const X_ROLES = [...]`, com ou sem spread de outra) e o
+      // `@Roles(...)` inline. Só o que está dentro deles conta — varrer todos
+      // os literais do arquivo tropeçaria em rota, chave de DTO e mensagem.
+      const roleLists = [
+        ...source.matchAll(/const\s+\w*ROLES\b[^=]*=\s*\[([^\]]*)\]/g),
+        ...source.matchAll(/@Roles\(([^)]*)\)/g),
+      ];
+
+      const excused = new Set(
+        KNOWN_DIVERGENCES.filter(([file]) => file === _relPath).map(([, role]) => role),
+      );
+
+      for (const [, body] of roleLists) {
+        for (const [, role] of body!.matchAll(/'([^']+)'/g)) {
+          if (excused.has(role!)) continue;
+          expect(ROLE_CODES.has(role!)).toBe(true);
+        }
+      }
+    },
+  );
+});

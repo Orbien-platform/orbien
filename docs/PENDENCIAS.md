@@ -1212,6 +1212,54 @@ assinado, e o `updateMany` que revoga tudo que estava ativo.
 
 ---
 
+## `@Roles` citando papel que não existe na tabela `roles`
+
+Apareceu em 2026-09-05, ao montar o mapa de papéis do sidebar (nº 10): as listas
+do front precisavam espelhar as da API, e duas delas citavam coisas que não são
+código de papel.
+
+### O que era
+
+O `RolesGuard` compara o literal do `@Roles` com `user.roles`, que vem de
+`role_assignments` — ou seja, com o **código**. Literal que não é código não
+casa com ninguém, e a rota fica fechada para aquele papel em silêncio: o guard
+nega, e negar é o que ele faz o dia inteiro. Nenhum teste de rota pega, porque
+cada um testa o que foi escrito.
+
+- **`'tesoureiro'`** — o nome em português, não o código (`treasurer`) — em
+  `DRE_ROLES` (`financial/dre.controller.ts`) e `EXPORT_ROLES`
+  (`financial/export/export.controller.ts`). Efeito: o tesoureiro levava 403 no
+  DRE e na exportação financeira. E no `isPastor` do DRE, um pastor que também
+  é tesoureiro era tratado como pastor restrito, vendo a versão sem a coluna de
+  total.
+- **`'leader'`** em `MATERIALIZE_ROLES`
+  (`celebrations/celebrations.controller.ts:18`) — os códigos são `cell_leader`
+  e `ministry_leader`.
+
+### Decisão — 2026-09-05
+
+`'tesoureiro'` **corrigido** para `treasurer` nos dois controllers: é digitação,
+e corrigi-la devolve o acesso a quem o desenho sempre disse que o tinha.
+
+`'leader'` **não corrigido, e é a pendência que fica aberta.** A constante irmã
+logo abaixo (`SCHEDULE_MATERIALIZE_ROLES`) usa `ministry_leader`, o que sugere
+que era essa a intenção — mas trocar aqui **amplia** acesso a
+`POST /celebrations/:id/materialize`, e ampliar acesso é decisão de produto, não
+conserto de digitação. Hoje a rota está fechada para quem é só líder, e é assim
+que ela vem se comportando desde sempre.
+
+### O portão que passou a existir
+
+`src/auth/roles-invariant.spec.ts` ganhou um segundo invariante: todo literal
+dentro de `const *_ROLES = [...]` e de `@Roles(...)` tem que existir na lista de
+códigos de `prisma/seed.ts` — e um terceiro teste confere que essa lista
+acompanha o seed, para o invariante não passar a acusar papel legítimo. O
+`'leader'` está numa allowlist nomeada, com o motivo escrito, e há teste que
+cobra a remoção da entrada se o literal sumir do arquivo: exceção que sobrevive
+ao próprio motivo é como um invariante apodrece.
+
+---
+
 ## Adiado por decisão — provisionar a partir do lead da waitlist (Fase 4)
 
 Não é achado: é escopo declarado fora da Fase 3, em 2026-09-03. Fica escrito
