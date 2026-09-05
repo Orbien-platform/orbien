@@ -144,8 +144,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
     onOpenChange(next);
   }
 
-  function startGrantAccess() {
-    if (!person) return;
+  function startGrantAccess(person: PersonDetail) {
     setAccessEmail(person.email ?? "");
     setAccessRole("member");
     setAccessError("");
@@ -153,9 +152,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
     setShowAccessForm(true);
   }
 
-  async function handleGrantAccess(e: FormEvent) {
+  async function handleGrantAccess(e: FormEvent, person: PersonDetail) {
     e.preventDefault();
-    if (!person) return;
     setAccessError("");
     setIsInviting(true);
     try {
@@ -469,7 +467,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                           variant="outline"
                           size="sm"
                           className="gap-1.5 rounded-[8px]"
-                          onClick={startGrantAccess}
+                          onClick={() => startGrantAccess(person)}
                         >
                           <KeyRound size={13} strokeWidth={1.5} />
                           Conceder acesso
@@ -479,7 +477,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                           Convite enviado por e-mail. A pessoa define a própria senha pelo link.
                         </p>
                       ) : (
-                        <form onSubmit={handleGrantAccess} className="flex flex-col gap-3">
+                        <form onSubmit={(e) => handleGrantAccess(e, person)} className="flex flex-col gap-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs font-medium text-stone uppercase tracking-wide">
                               E-mail

@@ -382,7 +382,9 @@ describe("PersonSheet", () => {
       await screen.findByText("Ana Souza");
 
       await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
-      expect(screen.getByDisplayValue(person.email)).toBeInTheDocument();
+      const emailInput = screen.getByDisplayValue(person.email);
+      await user.clear(emailInput);
+      await user.type(emailInput, "outro@email.com");
 
       await user.selectOptions(screen.getByRole("combobox"), "secretary");
       await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
@@ -390,7 +392,7 @@ describe("PersonSheet", () => {
       await waitFor(() =>
         expect(api.post).toHaveBeenCalledWith("/users", {
           person_id: "p1",
-          email: person.email,
+          email: "outro@email.com",
           role_code: "secretary",
         })
       );
@@ -415,6 +417,58 @@ describe("PersonSheet", () => {
       expect(
         await screen.findByText("Esta pessoa já tem acesso ao sistema.")
       ).toBeInTheDocument();
+    });
+
+    it("shows a permission message when the actor can't grant the chosen role", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      vi.mocked(api.post).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 403 },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
+
+      expect(
+        await screen.findByText("Você não tem permissão para conceder este papel.")
+      ).toBeInTheDocument();
+    });
+
+    it("shows a generic error message for any other failure", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      vi.mocked(api.post).mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: /Enviar convite/ }));
+
+      expect(
+        await screen.findByText("Erro ao enviar o convite. Tente novamente.")
+      ).toBeInTheDocument();
+    });
+
+    it("cancels the invite form without calling the API", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      expect(screen.queryByRole("button", { name: /Enviar convite/ })).not.toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
     });
   });
 });
