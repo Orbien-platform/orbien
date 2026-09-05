@@ -1,4 +1,5 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Quantas marcações a janela tolera, e por quanto tempo ela dura. */
@@ -41,10 +42,40 @@ export const PASSWORD_RESET_POLICY: RateLimitPolicy = { max: 3, windowMs: 60 * 6
  * origem. Quem varre muitos e-mails diferentes de um mesmo IP não bate no
  * limite. Fechar isso exige `X-Forwarded-For` confiável — decisão de infra que
  * não cabe aqui.
+ *
+ * **Tabela ausente não derruba o login.** As migrations do projeto são manuais
+ * (ver DEPLOY.md) e o deploy da API é automático no push para `main`: entre um
+ * e outro existe uma janela em que o código novo roda contra o banco antigo.
+ * Sem tratamento, toda tentativa de login responderia 500 nessa janela — o
+ * limitador teria virado uma indisponibilidade pior do que a ausência dele.
+ * Então falta de tabela (P2021) é registrada como ERROR e o pedido segue **sem
+ * limite**, que é exatamente o estado anterior a este serviço. É degradação
+ * declarada, e barulhenta: o log diz o que rodar. Qualquer outra falha de banco
+ * sobe — se o Postgres está fora, o login não ia funcionar mesmo.
  */
 @Injectable()
 export class LoginRateLimitService {
+  private readonly logger = new Logger(LoginRateLimitService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * A tabela ainda não existe neste banco?
+   *
+   * P2021 é o "table does not exist" do Prisma. Só ele: qualquer outro erro é
+   * problema de verdade e tem que subir.
+   */
+  private missingTable(error: unknown): boolean {
+    const missing =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021';
+    if (missing) {
+      this.logger.error(
+        'Tabela `login_attempts` não existe: o limite de tentativas está DESLIGADO. ' +
+          'Rode `prisma migrate deploy` (migration 20260905000000_add_login_attempts).',
+      );
+    }
+    return missing;
+  }
 
   /** Chave da janela. Separa as rotas: bloquear em uma não bloqueia a outra. */
   static key(route: string, identifier: string): string {
@@ -59,7 +90,14 @@ export class LoginRateLimitService {
    * alguém andou pedindo redefinição para aquele e-mail.
    */
   async check(key: string, policy: RateLimitPolicy): Promise<boolean> {
-    const row = await this.prisma.system.loginAttempt.findUnique({ where: { identifier: key } });
+    let row;
+    try {
+      row = await this.prisma.system.loginAttempt.findUnique({ where: { identifier: key } });
+    } catch (error) {
+      if (this.missingTable(error)) return true;
+      throw error;
+    }
+
     if (!row?.blocked_at) return true;
 
     if (row.blocked_at.getTime() + policy.windowMs > Date.now()) return false;
@@ -84,7 +122,13 @@ export class LoginRateLimitService {
   /** Marca uma tentativa e bloqueia quando a conta estoura a política. */
   async register(key: string, policy: RateLimitPolicy): Promise<void> {
     const now = new Date();
-    const row = await this.prisma.system.loginAttempt.findUnique({ where: { identifier: key } });
+    let row;
+    try {
+      row = await this.prisma.system.loginAttempt.findUnique({ where: { identifier: key } });
+    } catch (error) {
+      if (this.missingTable(error)) return;
+      throw error;
+    }
 
     // Janela vencida (ou inexistente): começa de novo, em 1.
     if (!row || row.window_at.getTime() + policy.windowMs <= now.getTime()) {
@@ -105,6 +149,11 @@ export class LoginRateLimitService {
 
   /** Credencial correta zera a janela. */
   async clear(key: string): Promise<void> {
-    await this.prisma.system.loginAttempt.deleteMany({ where: { identifier: key } });
+    try {
+      await this.prisma.system.loginAttempt.deleteMany({ where: { identifier: key } });
+    } catch (error) {
+      if (this.missingTable(error)) return;
+      throw error;
+    }
   }
 }

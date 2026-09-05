@@ -6,7 +6,8 @@
  * contagem sobrevive fora do processo (aqui, um fake com estado no lugar da
  * tabela), o bloqueio expira sozinho, e credencial certa zera a janela.
  */
-import { HttpStatus } from '@nestjs/common';
+import { HttpStatus, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   LoginRateLimitService,
   LOGIN_POLICY,
@@ -153,5 +154,62 @@ describe('LoginRateLimitService', () => {
 
     // É `blocked_at` que barra, não a contagem: sem ele a janela segue aberta.
     expect(await service.check(key, LOGIN_POLICY)).toBe(true);
+  });
+});
+
+describe('LoginRateLimitService — banco sem a tabela', () => {
+  // As migrations do projeto são manuais e o deploy da API é automático: entre
+  // um e outro o código novo roda contra o banco antigo. Nessa janela o
+  // limitador tem que sair da frente, não derrubar o login.
+  function serviceWithMissingTable() {
+    const missing = new Prisma.PrismaClientKnownRequestError('table does not exist', {
+      code: 'P2021',
+      clientVersion: 'test',
+    });
+    const reject = jest.fn().mockRejectedValue(missing);
+    const prisma = {
+      system: {
+        loginAttempt: { findUnique: reject, deleteMany: reject, upsert: reject, update: reject },
+      },
+    } as unknown as PrismaService;
+    return { service: new LoginRateLimitService(prisma), reject };
+  }
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('libera o pedido, registra ERROR dizendo o que rodar, e não lança', async () => {
+    const { service } = serviceWithMissingTable();
+
+    await expect(service.check('k', LOGIN_POLICY)).resolves.toBe(true);
+    await expect(service.assert('k', LOGIN_POLICY)).resolves.toBeUndefined();
+    await expect(service.register('k', LOGIN_POLICY)).resolves.toBeUndefined();
+    await expect(service.clear('k')).resolves.toBeUndefined();
+
+    expect(Logger.prototype.error).toHaveBeenCalledWith(
+      expect.stringContaining('20260905000000_add_login_attempts'),
+    );
+  });
+
+  it('qualquer outra falha de banco sobe — Postgres fora não é degradação silenciosa', async () => {
+    const boom = new Error('connection refused');
+    const prisma = {
+      system: {
+        loginAttempt: {
+          findUnique: jest.fn().mockRejectedValue(boom),
+          deleteMany: jest.fn().mockRejectedValue(boom),
+        },
+      },
+    } as unknown as PrismaService;
+    const service = new LoginRateLimitService(prisma);
+
+    await expect(service.check('k', LOGIN_POLICY)).rejects.toThrow('connection refused');
+    await expect(service.register('k', LOGIN_POLICY)).rejects.toThrow('connection refused');
+    await expect(service.clear('k')).rejects.toThrow('connection refused');
   });
 });
