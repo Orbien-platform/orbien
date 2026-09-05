@@ -26,8 +26,29 @@ describe("cookies de sessão", () => {
     expect(jar.set).toHaveBeenCalledWith(
       ACCESS_COOKIE,
       "token",
-      expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/", maxAge: 123 })
+      expect.objectContaining({ httpOnly: true, secure: false, sameSite: "lax", path: "/", maxAge: 123 })
     );
+  });
+
+  it("grava secure:true quando NODE_ENV é production", async () => {
+    // `secure` vem de `process.env.NODE_ENV === "production"`, lido uma vez
+    // no módulo — para cobrir o ramo `true` é preciso reimportar o módulo
+    // com a env já trocada, não só setar a variável depois do import.
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const prodSession = await import("./session");
+      const jar = makeJar();
+      prodSession.setAccessCookie(jar, "token", 123);
+      expect(jar.set).toHaveBeenCalledWith(
+        ACCESS_COOKIE,
+        "token",
+        expect.objectContaining({ secure: true })
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 
   it("setRefreshCookie grava com o prazo de 7 dias", () => {

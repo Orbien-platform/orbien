@@ -102,8 +102,11 @@ export default function CelebracoesPage() {
   }, []);
 
   // ── Load upcoming instances ──
+  // Sem guarda de "já buscou": os dois chamadores (o effect de troca de aba e
+  // o `onChanged` da escala, abaixo) sempre zeram `hasFetchedUpcoming.current`
+  // no mesmo tick antes de chamar esta função — branch morto, removido ao
+  // fechar a Fase 10 (docs/TESTES.md tem o registro).
   const loadUpcoming = useCallback(() => {
-    if (hasFetchedUpcoming.current) return;
     hasFetchedUpcoming.current = true;
     // No `limit`/`upcoming` support — filter with date_from and cap client-side.
     const todayIso = new Date().toISOString().slice(0, 10);
