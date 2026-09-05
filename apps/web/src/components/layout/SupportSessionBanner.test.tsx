@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/hooks/useAuth";
 import type { SessionUser } from "@/lib/session";
 import { SupportSessionBanner } from "./SupportSessionBanner";
@@ -20,6 +20,7 @@ const BASE_USER: SessionUser = {
   congregation_id: "c1",
   support_session: false,
   support_tenant_name: null,
+  expires_at: Math.floor(Date.now() / 1000) + 300,
 };
 
 function setup(user: SessionUser | null) {
@@ -70,5 +71,65 @@ describe("SupportSessionBanner", () => {
     await userEvent.click(screen.getByRole("button", { name: "Encerrar sessão" }));
 
     expect(logout).toHaveBeenCalled();
+  });
+
+  describe("contagem regressiva", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("mostra o tempo restante e não muda de cor acima de um minuto", () => {
+      setup({
+        ...BASE_USER,
+        support_session: true,
+        expires_at: Math.floor(Date.now() / 1000) + 125,
+      });
+      render(<SupportSessionBanner />);
+
+      const banner = screen.getByRole("status");
+      expect(banner).toHaveTextContent("Expira em 2:05");
+      expect(banner.className).toContain("bg-burgundy");
+      expect(banner.className).not.toContain("bg-red-700");
+    });
+
+    it("muda de cor e atualiza a cada segundo quando falta um minuto ou menos", () => {
+      setup({
+        ...BASE_USER,
+        support_session: true,
+        expires_at: Math.floor(Date.now() / 1000) + 61,
+      });
+      render(<SupportSessionBanner />);
+
+      const banner = screen.getByRole("status");
+      expect(banner).toHaveTextContent("Expira em 1:01");
+      expect(banner.className).not.toContain("bg-red-700");
+
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+
+      expect(banner).toHaveTextContent("Expira em 0:59");
+      expect(banner.className).toContain("bg-red-700");
+    });
+
+    it("mostra Expirada quando o tempo acaba", () => {
+      setup({
+        ...BASE_USER,
+        support_session: true,
+        expires_at: Math.floor(Date.now() / 1000) + 1,
+      });
+      render(<SupportSessionBanner />);
+
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent("Expirada");
+    });
   });
 });
