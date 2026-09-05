@@ -1212,6 +1212,56 @@ assinado, e o `updateMany` que revoga tudo que estava ativo.
 
 ---
 
+## O front duplica as listas de papéis da API — aberta, por decisão
+
+Não é defeito: é a dívida que a nº 10 aceitou conscientemente, escrita aqui
+porque decisão que só existe na cabeça de quem decidiu não sobrevive ao próximo
+mês.
+
+### O que existe hoje
+
+`apps/web/src/lib/permissions.ts` repete, em `NAV_READ_ROLES`, os papéis de
+leitura de seis áreas — a mesma informação que vive no `@Roles` de cada
+controller da API. O sidebar a usa para não desenhar link que só levaria a 403.
+
+Repetir foi a escolha porque a alternativa direta está barrada pela regra do
+monorepo: nada que roda na Vercel importa código de `apps/api`, e os deploys são
+independentes. Um pacote compartilhado resolveria o import e criaria outro
+problema — front e API passariam a subir acoplados por versão de pacote, que é
+exatamente o que a independência dos deploys existe para evitar.
+
+### Por que não dói hoje
+
+Divergir do servidor é cosmético nos dois sentidos: link a menos (a tela segue
+alcançável pela URL, e responde "sem acesso" se for o caso) ou link a mais (a
+tela responde "sem acesso"). Em nenhum caso abre dado — a autoridade é o
+`@Roles`, avaliado pelo `RolesGuard`, e por baixo dele o RLS.
+
+O modo de falha silenciosa — papel escrito errado virando link que nunca
+aparece, que foi exatamente o defeito do `'tesoureiro'` do lado da API — já tem
+portão: um teste em `permissions.test.ts` trava que o mapa só cite papéis que
+existem em `prisma/seed.ts`.
+
+### A forma certa, quando for feita
+
+A API expõe o que a sessão lê, e o front para de adivinhar: um
+`GET /me/permissions` (ou um campo no que `/api/session` já devolve) respondendo
+a lista de áreas legíveis por aquele token. Aí o mapa some, e com ele a chance
+de divergir.
+
+Tem decisão embutida que não é pequena: onde mora a lista canônica de "área do
+produto" — hoje ela não existe em lugar nenhum, está espalhada nos `@Roles` de
+cada controller. Fazer isso direito é criar esse conceito no backend, não só
+adicionar uma rota.
+
+### O sinal de que chegou a hora
+
+Concreto, e vale esperar por ele: a primeira vez que alguém mexer no `@Roles` da
+API e esquecer do `permissions.ts`. Enquanto o mapa não divergir na prática, o
+custo de mantê-lo é menor que o de criar o conceito novo.
+
+---
+
 ## `@Roles` citando papel que não existe na tabela `roles`
 
 Apareceu em 2026-09-05, ao montar o mapa de papéis do sidebar (nº 10): as listas
