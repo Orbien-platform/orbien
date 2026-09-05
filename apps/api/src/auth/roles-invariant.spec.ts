@@ -97,30 +97,14 @@ const ROLE_CODES = new Set([
 ]);
 
 /**
- * Divergência conhecida, ainda não decidida — não é permissão para novas.
- *
- * `MATERIALIZE_ROLES` cita `'leader'`, que não é código de papel nenhum: hoje
- * `POST /celebrations/:id/materialize` está fechado para quem é só líder. A
- * constante irmã logo abaixo dela (`SCHEDULE_MATERIALIZE_ROLES`) usa
- * `ministry_leader`, o que sugere que era essa a intenção — mas corrigir aqui
- * **amplia acesso**, e ampliar acesso é decisão de produto, não conserto de
- * digitação. Fica registrado em docs/PENDENCIAS.md.
- *
- * Cada entrada é conferida abaixo: se o literal sumir do arquivo, o teste
- * cobra a remoção da entrada — exceção que sobrevive ao próprio motivo é como
- * um invariante apodrece.
+ * Sem exceções. Havia uma — `'leader'` em `MATERIALIZE_ROLES` — e ela foi
+ * corrigida em vez de tolerada; se alguma voltar a ser necessária, ela vem com
+ * o motivo escrito e com teste que cobra sua remoção quando o motivo acabar.
+ * Exceção que sobrevive ao próprio motivo é como um invariante apodrece.
  */
-const KNOWN_DIVERGENCES: Array<[string, string]> = [
-  ['celebrations/celebrations.controller.ts', 'leader'],
-];
 
 describe('Invariante: papel citado em controller existe na tabela `roles`', () => {
   const controllerFiles = findControllerFiles(SRC_ROOT);
-
-  it.each(KNOWN_DIVERGENCES)('%s ainda cita "%s" — a exceção continua valendo', (relPath, role) => {
-    const source = readFileSync(join(SRC_ROOT, relPath), 'utf-8');
-    expect(source).toContain(`'${role}'`);
-  });
 
   it('a lista de códigos acompanha o seed', () => {
     // Se `prisma/seed.ts` ganhar um papel, esta lista precisa ganhar também —
@@ -146,13 +130,8 @@ describe('Invariante: papel citado em controller existe na tabela `roles`', () =
         ...source.matchAll(/@Roles\(([^)]*)\)/g),
       ];
 
-      const excused = new Set(
-        KNOWN_DIVERGENCES.filter(([file]) => file === _relPath).map(([, role]) => role),
-      );
-
       for (const [, body] of roleLists) {
         for (const [, role] of body!.matchAll(/'([^']+)'/g)) {
-          if (excused.has(role!)) continue;
           expect(ROLE_CODES.has(role!)).toBe(true);
         }
       }
