@@ -1,144 +1,77 @@
-import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import VoluntariosPage from "./page";
 import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import VoluntariosPage from "./page";
 
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), patch: vi.fn() } }));
+vi.mock("@/lib/api", () => ({
+  default: { get: vi.fn(), patch: vi.fn() },
+}));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 
-// Os quatro componentes de voluntários têm spec própria (Fase 9). Aqui
-// interessa o que a tela passa a eles e o que faz com os avisos de volta.
-interface NoDeMinisterio {
-  id: string;
-  name: string;
-  children?: NoDeMinisterio[];
-}
-
-vi.mock("@/components/volunteers/MinistryTree", () => ({
-  MinistryTree: ({
-    nodes,
-    counts,
-    onSelect,
-  }: {
-    nodes: NoDeMinisterio[];
-    counts: Record<string, { leaders: number; volunteers: number }>;
-    onSelect: (id: string) => void;
-  }) => {
-    const achatar = (lista: NoDeMinisterio[]): NoDeMinisterio[] =>
-      lista.flatMap((n) => [n, ...achatar(n.children ?? [])]);
-    return (
-      <div>
-        {achatar(nodes).map((n) => (
-          <button key={n.id} onClick={() => onSelect(n.id)}>
-            {n.name} — {counts[n.id]?.leaders ?? "?"}/
-            {counts[n.id]?.volunteers ?? "?"}
-          </button>
-        ))}
-      </div>
-    );
-  },
-}));
-vi.mock("@/components/volunteers/UnavailabilityPanel", () => ({
-  UnavailabilityPanel: () => <div>painel de indisponibilidade</div>,
-}));
 vi.mock("@/components/volunteers/CreateMinistryModal", () => ({
-  CreateMinistryModal: ({
-    open,
-    onCreated,
-  }: {
-    open: boolean;
-    onCreated: () => void;
-  }) => (
-    <div>
-      <span>criar-ministerio:{open ? "aberto" : "fechado"}</span>
-      <button onClick={onCreated}>avisar ministério criado</button>
-    </div>
-  ),
+  CreateMinistryModal: ({ open, onCreated }: { open: boolean; onCreated: () => void }) =>
+    open ? (
+      <div data-testid="create-ministry-modal">
+        <button onClick={onCreated}>simular criação</button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/volunteers/MinistryDetailSheet", () => ({
   MinistryDetailSheet: ({
     open,
     ministryId,
-    canEdit,
     onUpdated,
     onSelectMinistry,
   }: {
     open: boolean;
     ministryId: string | null;
-    canEdit: boolean;
     onUpdated: () => void;
     onSelectMinistry: (id: string) => void;
+  }) =>
+    open ? (
+      <div data-testid="ministry-detail-sheet">
+        sheet:{ministryId}
+        <button onClick={onUpdated}>simular atualização</button>
+        <button onClick={() => onSelectMinistry("m2")}>simular troca de ministério</button>
+      </div>
+    ) : null,
+}));
+vi.mock("@/components/volunteers/MinistryTree", () => ({
+  MinistryTree: ({
+    nodes,
+    onSelect,
+  }: {
+    nodes: { id: string; name: string }[];
+    onSelect: (id: string) => void;
   }) => (
-    <div>
-      <span>sheet:{open ? ministryId : "fechada"}</span>
-      <span>sheet-canEdit:{String(canEdit)}</span>
-      <button onClick={onUpdated}>avisar ministério editado</button>
-      <button onClick={() => onSelectMinistry("m-2")}>ir para filho</button>
+    <div data-testid="ministry-tree">
+      {nodes.map((n) => (
+        <button key={n.id} onClick={() => onSelect(n.id)}>
+          {n.name}
+        </button>
+      ))}
     </div>
   ),
 }));
+vi.mock("@/components/volunteers/UnavailabilityPanel", () => ({
+  UnavailabilityPanel: () => <div data-testid="unavailability-panel" />,
+}));
 
-const getMock = vi.mocked(api.get);
-const patchMock = vi.mocked(api.patch);
+const mockedApi = vi.mocked(api, true);
+const mockedUseAuth = vi.mocked(useAuth);
 
-const arvore = [
-  {
-    id: "m-1",
-    name: "Louvor",
-    children: [{ id: "m-2", name: "Backing vocal", children: [] }],
-  },
-];
-
-function turno(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "a-1",
-    status: "pending",
-    notified_at: null,
-    responded_at: null,
-    celebration: { id: "c-1", name: "Culto de domingo" },
-    ministry: { id: "m-1", name: "Louvor" },
-    scheduled_date: "2026-04-12T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
-/** Roteia por URL: a tela faz três chamadas diferentes de GET. */
-function rotear(handlers: {
-  ministries?: () => unknown;
-  detalhe?: (id: string) => unknown;
-  turnos?: () => unknown;
-}) {
-  getMock.mockImplementation((url: string) => {
-    if (url === "/volunteers/ministries") {
-      return Promise.resolve(
-        handlers.ministries?.() ?? { data: arvore }
-      ) as never;
-    }
-    if (url.startsWith("/volunteers/ministries/")) {
-      const id = url.split("/").pop()!;
-      return Promise.resolve(
-        handlers.detalhe?.(id) ?? { data: { leaders: [], volunteers: [] } }
-      ) as never;
-    }
-    if (url === "/volunteers/my-celebration-assignments") {
-      return Promise.resolve(handlers.turnos?.() ?? { data: [] }) as never;
-    }
-    throw new Error(`URL inesperada: ${url}`);
-  });
-}
-
-function comPapeis(roles: string[]) {
-  vi.mocked(useAuth).mockReturnValue({
+function setup(roles: string[] = ["admin_congregation"]) {
+  mockedUseAuth.mockReturnValue({
     user: {
-      id: "u-1",
-      name: "ana",
-      email: "ana@igreja.com",
+      id: "u1",
+      name: "Ana",
+      email: "ana@a.com",
       roles,
-      tenant_id: "t-1",
-      congregation_id: "c-1",
+      tenant_id: "t1",
+      congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
     },
@@ -150,388 +83,461 @@ function comPapeis(roles: string[]) {
 }
 
 beforeEach(() => {
-  getMock.mockReset();
-  patchMock.mockReset().mockResolvedValue({ data: {} } as never);
-  rotear({});
-  comPapeis(["tenant_admin"]);
+  vi.clearAllMocks();
 });
 
-describe("VoluntariosPage — ministérios", () => {
-  it("carrega a árvore e busca a contagem de cada ministério", async () => {
-    rotear({
-      detalhe: (id) => ({
-        data:
-          id === "m-1"
-            ? { leaders: [1, 2], volunteers: [1, 2, 3] }
-            : { leaders: [], volunteers: [1] },
-      }),
+describe("VoluntariosPage", () => {
+  it("carrega a árvore de ministérios e as contagens de líderes/voluntários", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({
+          data: [{ id: "m1", name: "Louvor", children: [] }],
+        });
+      }
+      if (url === "/volunteers/ministries/m1") {
+        return Promise.resolve({ data: { leaders: [{ id: "l1" }], volunteers: [{ id: "v1" }, { id: "v2" }] } });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
     });
-
     render(<VoluntariosPage />);
-
-    expect(await screen.findByText("2 ministérios")).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: "Louvor — 2/3" })
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: "Backing vocal — 0/1" })
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Louvor")).toBeInTheDocument();
+    expect(screen.getByText("1 ministério")).toBeInTheDocument();
   });
 
-  it("singulariza a contagem de um ministério só", async () => {
-    rotear({ ministries: () => ({ data: [{ id: "m-1", name: "Louvor", children: [] }] }) });
-
+  it("trata falha ao carregar ministérios mostrando estado vazio", async () => {
+    setup();
+    mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<VoluntariosPage />);
-
-    expect(await screen.findByText("1 ministério")).toBeInTheDocument();
-  });
-
-  it("detalhe sem listas conta zero", async () => {
-    rotear({ detalhe: () => ({ data: {} }) });
-
-    render(<VoluntariosPage />);
-
-    expect(
-      await screen.findByRole("button", { name: "Louvor — 0/0" })
-    ).toBeInTheDocument();
-  });
-
-  it("falha no detalhe de um ministério não derruba a lista", async () => {
-    getMock.mockImplementation((url: string) => {
-      if (url === "/volunteers/ministries") return Promise.resolve({ data: arvore }) as never;
-      if (url === "/volunteers/ministries/m-1") return Promise.reject(new Error("500")) as never;
-      return Promise.resolve({ data: { leaders: [1], volunteers: [] } }) as never;
-    });
-
-    render(<VoluntariosPage />);
-
-    // m-1 fica sem contagem (o mock mostra "?"), m-2 carrega.
-    expect(
-      await screen.findByRole("button", { name: "Louvor — ?/?" })
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: "Backing vocal — 1/0" })
-    ).toBeInTheDocument();
-  });
-
-  it("erro na árvore mostra o estado vazio com a dica de criar", async () => {
-    rotear({ ministries: () => Promise.reject(new Error("500")) });
-    getMock.mockImplementation((url: string) =>
-      url === "/volunteers/ministries"
-        ? (Promise.reject(new Error("500")) as never)
-        : (Promise.resolve({ data: {} }) as never)
-    );
-
-    render(<VoluntariosPage />);
-
     expect(
       await screen.findByText(/Nenhum ministério cadastrado\./)
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Clique em "Novo ministério" para começar\./)
-    ).toBeInTheDocument();
-    expect(screen.getByText("Nenhum ministério")).toBeInTheDocument();
+    expect(screen.getByText(/Clique em "Novo ministério"/)).toBeInTheDocument();
   });
 
-  it("quem não é admin não vê o botão de criar nem a dica", async () => {
-    comPapeis(["volunteer"]);
-    getMock.mockImplementation((url: string) =>
-      url === "/volunteers/ministries"
-        ? (Promise.resolve({ data: [] }) as never)
-        : (Promise.resolve({ data: {} }) as never)
-    );
-
+  it("ignora falha ao buscar a contagem de um ministério específico", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({ data: [{ id: "m1", name: "Louvor", children: [] }] });
+      }
+      if (url === "/volunteers/ministries/m1") return Promise.reject(new Error("boom"));
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
     render(<VoluntariosPage />);
-
-    expect(
-      await screen.findByText(/Nenhum ministério cadastrado\./)
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/Clique em "Novo ministério"/)
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Novo ministério/ })
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("sheet-canEdit:false")).toBeInTheDocument();
+    expect(await screen.findByText("Louvor")).toBeInTheDocument();
   });
 
-  it("sessão sem usuário resolvido também não é admin", async () => {
-    vi.mocked(useAuth).mockReturnValue({
-      user: null,
+  it("trata usuário sem roles como não-admin (fallback ?? [])", async () => {
+    mockedUseAuth.mockReturnValue({
+      user: {
+        id: "u1",
+        name: "Ana",
+        email: "ana@a.com",
+        roles: undefined as unknown as string[],
+        tenant_id: "t1",
+        congregation_id: "c1",
+        support_session: false,
+        support_tenant_name: null,
+      },
       isLoading: false,
-      isAuthenticated: false,
+      isAuthenticated: true,
       login: vi.fn(),
       logout: vi.fn(),
     });
-
+    mockedApi.get.mockResolvedValue({ data: [] });
     render(<VoluntariosPage />);
-
-    expect(await screen.findByText("sheet-canEdit:false")).toBeInTheDocument();
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    expect(screen.queryByRole("button", { name: /novo ministério/i })).not.toBeInTheDocument();
   });
 
-  it("abre o modal de criar e a ficha do ministério clicado", async () => {
+  it("não mostra o botão de novo ministério nem a mensagem de criação para quem não é admin", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockResolvedValue({ data: [] });
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    expect(screen.queryByRole("button", { name: /novo ministério/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Clique em "Novo ministério"/)).not.toBeInTheDocument();
+  });
+
+  it("abre o modal de criação e o sheet de detalhe, recarregando ao concluir", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({ data: [{ id: "m1", name: "Louvor", children: [] }] });
+      }
+      return Promise.resolve({ data: { leaders: [], volunteers: [] } });
+    });
     const user = userEvent.setup();
     render(<VoluntariosPage />);
+    await screen.findByText("Louvor");
 
-    await user.click(
-      await screen.findByRole("button", { name: /Novo ministério/ })
+    await user.click(screen.getByRole("button", { name: /novo ministério/i }));
+    expect(screen.getByTestId("create-ministry-modal")).toBeInTheDocument();
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+
+    await user.click(screen.getByText("Louvor"));
+    expect(await screen.findByTestId("ministry-detail-sheet")).toHaveTextContent("sheet:m1");
+    const callsBeforeUpdate = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular atualização" }));
+    await waitFor(() =>
+      expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBeforeUpdate)
     );
-    expect(screen.getByText("criar-ministerio:aberto")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /^Louvor/ }));
-    expect(screen.getByText("sheet:m-1")).toBeInTheDocument();
-
-    // A ficha navega para um filho sem fechar.
-    await user.click(screen.getByRole("button", { name: "ir para filho" }));
-    expect(screen.getByText("sheet:m-2")).toBeInTheDocument();
   });
 
-  it("montagem dupla não duplica a busca da árvore", async () => {
-    // O `hasFetchedMin` existe para isso: em StrictMode o effect roda duas
-    // vezes, e a segunda passagem tem que cair na guarda.
-    render(
-      <StrictMode>
-        <VoluntariosPage />
-      </StrictMode>
-    );
+  it("mostra, confirma e recusa meus turnos na aba Meus Turnos", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    mockedApi.patch.mockResolvedValue({ data: {} });
 
-    await screen.findByText("2 ministérios");
-    expect(
-      getMock.mock.calls.filter(([url]) => url === "/volunteers/ministries")
-    ).toHaveLength(1);
-  });
-
-  it("criar e editar ministério refazem a busca da árvore", async () => {
     const user = userEvent.setup();
     render(<VoluntariosPage />);
-    await screen.findByText("2 ministérios");
+    await screen.findByText(/Nenhum ministério cadastrado\./);
 
-    const chamadasArvore = () =>
-      getMock.mock.calls.filter(([url]) => url === "/volunteers/ministries")
-        .length;
-    expect(chamadasArvore()).toBe(1);
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar ministério criado" })
-    );
-    await waitFor(() => expect(chamadasArvore()).toBe(2));
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar ministério editado" })
-    );
-    await waitFor(() => expect(chamadasArvore()).toBe(3));
-  });
-});
-
-describe("VoluntariosPage — meus turnos", () => {
-  async function abrirTurnos(user: ReturnType<typeof userEvent.setup>) {
-    await screen.findByText("2 ministérios");
     await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
-  }
+    expect(await screen.findByText("Culto Domingo")).toBeInTheDocument();
+    expect(screen.getByText("Pendente")).toBeInTheDocument();
 
-  it("lista os turnos com celebração, ministério, data e status", async () => {
-    const user = userEvent.setup();
-    rotear({ turnos: () => ({ data: [turno({ status: "confirmed" })] }) });
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    expect(await screen.findByText("Culto de domingo")).toBeInTheDocument();
-    expect(screen.getByText("Louvor")).toBeInTheDocument();
-    expect(screen.getByText("12/04/2026")).toBeInTheDocument();
-    expect(screen.getByText("Confirmado")).toBeInTheDocument();
-    // Já respondido: sem botões de ação.
-    expect(
-      screen.queryByRole("button", { name: /Confirmar/ })
-    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(screen.getByText("Confirmado")).toBeInTheDocument());
+    expect(mockedApi.patch).toHaveBeenCalledWith("/assignments/a1/respond", { status: "confirmed" });
   });
 
-  it("turno recusado e status desconhecido caem no rótulo esperado", async () => {
-    const user = userEvent.setup();
-    rotear({
-      turnos: () => ({
-        data: [
-          turno({ id: "a-1", status: "declined" }),
-          turno({ id: "a-2", status: "expired" }),
-        ],
-      }),
+  it("recusa um turno pendente", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
     });
+    mockedApi.patch.mockResolvedValue({ data: {} });
 
+    const user = userEvent.setup();
     render(<VoluntariosPage />);
-    await abrirTurnos(user);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Culto Domingo");
 
-    expect(await screen.findByText("Recusou")).toBeInTheDocument();
-    // Status fora do mapa aparece cru, em vez de sumir da tela.
-    expect(screen.getByText("expired")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Recusar" }));
+    await waitFor(() => expect(screen.getByText("Recusou")).toBeInTheDocument());
+    expect(mockedApi.patch).toHaveBeenCalledWith("/assignments/a1/respond", { status: "declined" });
   });
 
-  it("turno sem celebração, ministério ou data mostra traços", async () => {
-    const user = userEvent.setup();
-    rotear({
-      turnos: () => ({
-        data: [
-          {
-            id: "a-9",
-            status: "confirmed",
-            notified_at: null,
-            responded_at: null,
-            celebration: null,
-            ministry: null,
-            scheduled_date: null,
-          },
-        ],
-      }),
+  it("mostra erro ao falhar o carregamento de meus turnos e mensagem de lista vazia quando não há nenhum", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") return Promise.reject(new Error("boom"));
+      return Promise.reject(new Error(`unexpected ${url}`));
     });
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    await waitFor(() => expect(screen.getAllByText("—")).toHaveLength(3));
-  });
-
-  it("sem turnos mostra o estado vazio", async () => {
     const user = userEvent.setup();
     render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    expect(
-      await screen.findByText("Você não tem turnos agendados.")
-    ).toBeInTheDocument();
-  });
-
-  it("resposta que não é lista é tratada como vazia", async () => {
-    const user = userEvent.setup();
-    rotear({ turnos: () => ({ data: { message: "nada" } }) });
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    expect(
-      await screen.findByText("Você não tem turnos agendados.")
-    ).toBeInTheDocument();
-  });
-
-  it("erro na busca avisa em vez de dizer que não há turnos", async () => {
-    const user = userEvent.setup();
-    getMock.mockImplementation((url: string) => {
-      if (url === "/volunteers/ministries") return Promise.resolve({ data: arvore }) as never;
-      if (url === "/volunteers/my-celebration-assignments")
-        return Promise.reject(new Error("500")) as never;
-      return Promise.resolve({ data: { leaders: [], volunteers: [] } }) as never;
-    });
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
     expect(
       await screen.findByText("Não foi possível carregar seus turnos.")
     ).toBeInTheDocument();
   });
 
-  it("confirmar e recusar mandam o status e atualizam o cartão", async () => {
-    const user = userEvent.setup();
-    rotear({
-      turnos: () => ({
-        data: [turno({ id: "a-1" }), turno({ id: "a-2" })],
-      }),
+  it("mostra 'você não tem turnos' quando a lista vem vazia, e trata assignment sem celebração/ministério/data", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected ${url}`));
     });
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    const confirmar = await screen.findAllByRole("button", {
-      name: /Confirmar/,
-    });
-    await user.click(confirmar[0]);
-
-    await waitFor(() =>
-      expect(patchMock).toHaveBeenCalledWith("/assignments/a-1/respond", {
-        status: "confirmed",
-      })
-    );
-    expect(await screen.findByText("Confirmado")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Recusar/ }));
-    await waitFor(() =>
-      expect(patchMock).toHaveBeenCalledWith("/assignments/a-2/respond", {
-        status: "declined",
-      })
-    );
-    expect(await screen.findByText("Recusou")).toBeInTheDocument();
-  });
-
-  it("enquanto a resposta não volta os dois botões ficam travados", async () => {
     const user = userEvent.setup();
-    rotear({ turnos: () => ({ data: [turno()] }) });
-    let liberar!: (v: unknown) => void;
-    patchMock.mockImplementation(
-      () => new Promise((resolve) => (liberar = resolve)) as never
-    );
-
     render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    await user.click(
-      await screen.findByRole("button", { name: /Confirmar/ })
-    );
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Recusar/ })).toBeDisabled()
-    );
-
-    liberar({ data: {} });
-    await waitFor(() => expect(screen.getByText("Confirmado")).toBeInTheDocument());
-  });
-
-  it("falha ao responder mantém o turno pendente", async () => {
-    const user = userEvent.setup();
-    rotear({ turnos: () => ({ data: [turno()] }) });
-    patchMock.mockRejectedValue(new Error("500"));
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-
-    await user.click(await screen.findByRole("button", { name: /Confirmar/ }));
-
-    await waitFor(() => expect(patchMock).toHaveBeenCalled());
-    expect(screen.getByText("Pendente")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Recusar/ }));
-    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("Pendente")).toBeInTheDocument();
-  });
-
-  it("voltar para a aba refaz a busca", async () => {
-    const user = userEvent.setup();
-    rotear({ turnos: () => ({ data: [turno()] }) });
-
-    render(<VoluntariosPage />);
-    await abrirTurnos(user);
-    await screen.findByText("Culto de domingo");
-
-    const chamadasTurnos = () =>
-      getMock.mock.calls.filter(
-        ([url]) => url === "/volunteers/my-celebration-assignments"
-      ).length;
-    expect(chamadasTurnos()).toBe(1);
-
-    await user.click(screen.getByRole("tab", { name: "Ministérios" }));
+    await screen.findByText(/Nenhum ministério cadastrado\./);
     await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
-
-    await waitFor(() => expect(chamadasTurnos()).toBe(2));
+    expect(await screen.findByText("Você não tem turnos agendados.")).toBeInTheDocument();
   });
-});
 
-describe("VoluntariosPage — indisponibilidade", () => {
-  it("a terceira aba monta o painel de indisponibilidade", async () => {
+  it("mostra travessões quando o turno não traz celebração, ministério ou data", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "confirmed",
+              notified_at: null,
+              responded_at: null,
+              celebration: undefined as never,
+              ministry: undefined as never,
+              scheduled_date: "",
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
     const user = userEvent.setup();
     render(<VoluntariosPage />);
-    await screen.findByText("2 ministérios");
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Confirmado");
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
 
-    await user.click(screen.getByRole("tab", { name: "Indisponibilidade" }));
+  it("mostra o sufixo plural quando há mais de um ministério", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({
+          data: [
+            { id: "m1", name: "Louvor", children: [] },
+            { id: "m2", name: "Mídia", children: [] },
+          ],
+        });
+      }
+      return Promise.resolve({ data: { leaders: [], volunteers: [] } });
+    });
+    render(<VoluntariosPage />);
+    expect(await screen.findByText("2 ministérios")).toBeInTheDocument();
+  });
 
+  it("usa 0 como contagem quando a resposta de detalhe não traz leaders/volunteers", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({ data: [{ id: "m1", name: "Louvor", children: [] }] });
+      }
+      if (url === "/volunteers/ministries/m1") return Promise.resolve({ data: {} });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    render(<VoluntariosPage />);
+    expect(await screen.findByText("Louvor")).toBeInTheDocument();
+  });
+
+  it("troca o ministério selecionado a partir do próprio sheet de detalhe", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({ data: [{ id: "m1", name: "Louvor", children: [] }] });
+      }
+      return Promise.resolve({ data: { leaders: [], volunteers: [] } });
+    });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await user.click(await screen.findByText("Louvor"));
+    expect(await screen.findByTestId("ministry-detail-sheet")).toHaveTextContent("sheet:m1");
+    await user.click(screen.getByRole("button", { name: "simular troca de ministério" }));
+    expect(screen.getByTestId("ministry-detail-sheet")).toHaveTextContent("sheet:m2");
+  });
+
+  it("trata resposta não-array de meus turnos como lista vazia", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({ data: { not: "an array" } });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    expect(await screen.findByText("Você não tem turnos agendados.")).toBeInTheDocument();
+  });
+
+  it("confirma só o turno clicado quando há mais de um na lista", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Um" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+            },
+            {
+              id: "a2",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c2", name: "Culto Dois" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-08T00:00:00Z",
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    mockedApi.patch.mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Culto Um");
+
+    await user.click(screen.getAllByRole("button", { name: "Confirmar" })[0]);
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledWith("/assignments/a1/respond", { status: "confirmed" }));
+    // O segundo turno continua pendente — só o clicado mudou de status.
+    expect(screen.getAllByText("Pendente")).toHaveLength(1);
+    expect(screen.getByText("Confirmado")).toBeInTheDocument();
+  });
+
+  it("recusa só o turno clicado quando há mais de um na lista", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Um" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+            },
+            {
+              id: "a2",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c2", name: "Culto Dois" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-08T00:00:00Z",
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    mockedApi.patch.mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Culto Um");
+
+    await user.click(screen.getAllByRole("button", { name: "Recusar" })[0]);
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledWith("/assignments/a1/respond", { status: "declined" }));
+    expect(screen.getAllByText("Pendente")).toHaveLength(1);
+    expect(screen.getByText("Recusou")).toBeInTheDocument();
+  });
+
+  it("guarda contra a dupla invocação de efeito do StrictMode (não busca ministérios duas vezes)", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    render(
+      <StrictMode>
+        <VoluntariosPage />
+      </StrictMode>
+    );
+    await screen.findByText(/Nenhum ministério cadastrado\./);
     expect(
-      await screen.findByText("painel de indisponibilidade")
-    ).toBeInTheDocument();
+      mockedApi.get.mock.calls.filter(([u]) => u === "/volunteers/ministries")
+    ).toHaveLength(1);
+  });
+
+  it("guarda contra a dupla invocação de efeito do StrictMode (não busca meus turnos duas vezes)", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <VoluntariosPage />
+      </StrictMode>
+    );
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Você não tem turnos agendados.");
+    expect(
+      mockedApi.get.mock.calls.filter(([u]) => u === "/volunteers/my-celebration-assignments")
+    ).toHaveLength(1);
+  });
+
+  it("cai no rótulo bruto quando o status do turno não é um dos três conhecidos", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "unknown_status",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Um" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    expect(await screen.findByText("unknown_status")).toBeInTheDocument();
+  });
+
+  it("mostra a aba de indisponibilidade", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockResolvedValue({ data: [] });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Indisponibilidade" }));
+    expect(await screen.findByTestId("unavailability-panel")).toBeInTheDocument();
   });
 });

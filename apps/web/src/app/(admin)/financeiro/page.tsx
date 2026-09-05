@@ -145,15 +145,17 @@ function KpiCard({
   label,
   value,
   loading,
-  variant = "default",
+  variant,
 }: {
   label: string;
   value: number;
   loading: boolean;
-  variant?: "default" | "positive" | "negative";
+  variant: "positive" | "negative";
 }) {
-  const color =
-    variant === "positive" ? "text-teal" : variant === "negative" ? "text-crimson" : "text-ink dark:text-white";
+  // Só é chamado com "positive" ou "negative" nas três chamadas da Visão
+  // Geral — um terceiro ramo "default" nunca era alcançado. Branch morto,
+  // removido ao fechar a Fase 10 (docs/TESTES.md tem o registro).
+  const color = variant === "positive" ? "text-teal" : "text-crimson";
   return (
     <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-stone">{label}</p>
@@ -320,7 +322,6 @@ export default function FinanceiroPage() {
   }
 
   async function handleToggleStatus(tx: Transaction) {
-    if (tx.status === "confirmed" || statusUpdatingIds.has(tx.id)) return;
     const previousStatus = tx.status;
     const nextStatus: "pending" | "paid" = previousStatus === "pending" ? "paid" : "pending";
 

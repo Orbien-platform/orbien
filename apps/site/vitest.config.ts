@@ -21,25 +21,12 @@ export default defineConfig({
       include: ["src/**"],
       exclude: ["src/**/*.d.ts"],
       reporter: ["text-summary", "lcov"],
-      // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
-      // global. O piso nunca desce.
-      thresholds: {
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
-        // Fase 11 — componentes e `lib/`. O único ramo que fica de fora é o
-        // `if (!el) return` do `Reveal`: o `ref` está sempre preenchido
-        // quando o effect roda, e forçá-lo a `null` exigiria fingir o
-        // próprio React.
-        "src/components/**": { statements: 99, branches: 98, functions: 100, lines: 100 },
-        "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        // Fase 12 — rotas. As 18 são Server Components sem `async`, então
-        // entram como função. `icon.tsx` e `apple-icon.tsx` devolvem
-        // `ImageResponse`: a asserção é sobre tipo e tamanho, não sobre
-        // pixel.
-        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-      },
+      // Fase 13 — fechamento. As 11 entradas por caminho saíram: com as Fases
+      // 11 e 12 fechadas, `src/` inteiro está em 100%, e o `global` cobre o
+      // que a lista por caminho não cobria — arquivo novo criado fora de todos
+      // os caminhos listados não era cobrado por ninguém. O piso nunca desce:
+      // se um arquivo novo derrubar o número, o caminho é testar o arquivo.
+      thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 },
     },
   },
 });

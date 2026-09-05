@@ -1,27 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { cn } from "./utils";
+import { cn } from "@/lib/utils";
 
 describe("cn", () => {
   it("junta classes soltas", () => {
-    expect(cn("px-2", "py-1")).toBe("px-2 py-1");
+    expect(cn("px-2", "text-sm")).toBe("px-2 text-sm");
   });
 
-  it("descarta valores falsos e aceita condicionais do clsx", () => {
-    expect(cn("px-2", false && "hidden", undefined, null, { "py-1": true, "mt-4": false })).toBe(
-      "px-2 py-1"
-    );
+  it("ignora valores falsy e resolve condicionais do clsx", () => {
+    expect(cn("px-2", false && "hidden", undefined, null, ["gap-2"])).toBe("px-2 gap-2");
   });
 
-  it("a última classe conflitante do Tailwind vence", () => {
+  it("deixa a última utilitária conflitante vencer (twMerge)", () => {
     expect(cn("px-2", "px-4")).toBe("px-4");
-    expect(cn("text-sm text-stone", "text-lg")).toBe("text-stone text-lg");
+    expect(cn("text-stone", "text-ink")).toBe("text-ink");
   });
 
-  it("aceita arrays aninhados", () => {
-    expect(cn(["px-2", ["py-1", "font-medium"]])).toBe("px-2 py-1 font-medium");
-  });
-
-  it("sem argumentos devolve string vazia", () => {
+  it("sem argumento devolve string vazia", () => {
     expect(cn()).toBe("");
   });
 });

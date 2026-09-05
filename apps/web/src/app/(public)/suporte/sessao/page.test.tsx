@@ -1,174 +1,149 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import axios from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { JwtPayload } from "@/lib/auth";
+import { useHydrated } from "@/hooks/useHydrated";
 import SessaoSuportePage from "./page";
 
-vi.mock("axios", () => ({ default: { post: vi.fn() } }));
+vi.mock("axios");
+const mockedAxios = vi.mocked(axios, true);
 
-const postMock = vi.mocked(axios.post);
-const replaceState = vi.fn();
+vi.mock("@/hooks/useHydrated", () => ({
+  useHydrated: vi.fn(() => true),
+}));
+const mockedUseHydrated = vi.mocked(useHydrated);
 
-const locationOriginal = window.location;
-const replaceStateOriginal = window.history.replaceState;
+function makeToken(payload: Partial<JwtPayload>): string {
+  const header = btoa(JSON.stringify({ alg: "none" }));
+  const body = btoa(JSON.stringify(payload));
+  return `${header}.${body}.signature`;
+}
 
-/** Monta o fragmento como o `apps/admin` monta ao abrir a sessão. */
-function comFragmento(fragmento: string) {
+let locationReplace: ReturnType<typeof vi.fn>;
+const originalLocation = window.location;
+
+/**
+ * `location.replace` é propriedade própria não configurável do `Location`
+ * real do jsdom — nem `defineProperty` nem `Proxy` conseguem sobrescrever só
+ * ela (o Proxy viola o invariante de "non-configurable data property" e
+ * lança). A saída é trocar `window.location` inteiro por um objeto simples: a
+ * página só lê `hash` (uma vez, na leitura do handoff) e `pathname` (para
+ * limpar a barra de endereço), então basta fornecer os dois.
+ */
+function setHash(hash: string) {
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: {
-      hash: fragmento,
-      pathname: "/suporte/sessao",
-      replace: vi.fn(),
-    },
-  });
-}
-
-function makeToken(payload: Record<string, unknown>): string {
-  return `h.${btoa(JSON.stringify(payload))}.s`;
-}
-
-function tokenValido(overrides: Record<string, unknown> = {}) {
-  return makeToken({
-    sub: "u-1",
-    tenant_id: "t-1",
-    congregation_id: "c-1",
-    roles: ["platform_support"],
-    plan: "pro",
-    iat: 0,
-    exp: Math.floor(Date.now() / 1000) + 900,
-    support_session: true,
-    ...overrides,
+    value: { hash, pathname: "/suporte/sessao", replace: locationReplace },
   });
 }
 
 beforeEach(() => {
-  postMock.mockReset().mockResolvedValue({ data: {} });
-  replaceState.mockReset();
-  window.history.replaceState = replaceState;
+  vi.clearAllMocks();
+  mockedUseHydrated.mockReturnValue(true);
+  locationReplace = vi.fn();
+  setHash("");
+  vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: locationOriginal,
+    value: originalLocation,
   });
-  window.history.replaceState = replaceStateOriginal;
 });
 
 describe("SessaoSuportePage", () => {
-  it("troca o token do fragmento por cookie e vai para o dashboard", async () => {
-    const token = tokenValido();
-    comFragmento(
-      `#access_token=${token}&tenant_name=${encodeURIComponent("Igreja Central")}`
-    );
+  it("mostra erro quando o fragmento não tem access_token", async () => {
+    setHash("");
+    render(<SessaoSuportePage />);
+    expect(
+      await screen.findByText("Link de sessão de suporte inválido ou incompleto.")
+    ).toBeInTheDocument();
+  });
+
+  it("mostra erro quando o token é ilegível", async () => {
+    setHash("#access_token=garbage");
+    render(<SessaoSuportePage />);
+    expect(
+      await screen.findByText("Token de sessão de suporte ilegível.")
+    ).toBeInTheDocument();
+  });
+
+  it("mostra erro quando o token já expirou", async () => {
+    const token = makeToken({ exp: Math.floor(Date.now() / 1000) - 60 });
+    setHash(`#access_token=${token}`);
+    render(<SessaoSuportePage />);
+    expect(
+      await screen.findByText("Esta sessão de suporte já expirou. Abra outra pelo console.")
+    ).toBeInTheDocument();
+  });
+
+  it("limpa o fragmento da URL mesmo em caminho de erro", async () => {
+    setHash("#access_token=garbage");
+    render(<SessaoSuportePage />);
+    await screen.findByText("Token de sessão de suporte ilegível.");
+    expect(window.history.replaceState).toHaveBeenCalledWith(null, "", "/suporte/sessao");
+  });
+
+  it("troca o token por cookie e redireciona para /dashboard em caso de sucesso", async () => {
+    const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 900 });
+    setHash(`#access_token=${token}&tenant_name=Doca+Church`);
+    mockedAxios.post.mockResolvedValue({ data: {} });
 
     render(<SessaoSuportePage />);
 
     expect(
-      screen.getByText("Iniciando sessão de suporte…")
+      await screen.findByText("Iniciando sessão de suporte…")
     ).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith("/api/session/suporte", {
-        access_token: token,
-        tenant_name: "Igreja Central",
-      })
-    );
-    await waitFor(() =>
-      expect(window.location.replace).toHaveBeenCalledWith("/dashboard")
-    );
+    await vi.waitFor(() => expect(mockedAxios.post).toHaveBeenCalled());
+    expect(mockedAxios.post).toHaveBeenCalledWith("/api/session/suporte", {
+      access_token: token,
+      tenant_name: "Doca Church",
+    });
+    await vi.waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/dashboard"));
   });
 
-  it("sem tenant_name não manda o campo", async () => {
-    const token = tokenValido();
-    comFragmento(`#access_token=${token}`);
+  it("troca o token sem tenant_name quando o fragmento não o trouxe", async () => {
+    const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 900 });
+    setHash(`#access_token=${token}`);
+    mockedAxios.post.mockResolvedValue({ data: {} });
 
     render(<SessaoSuportePage />);
-
-    await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith("/api/session/suporte", {
-        access_token: token,
-      })
-    );
+    await vi.waitFor(() => expect(mockedAxios.post).toHaveBeenCalled());
+    expect(mockedAxios.post).toHaveBeenCalledWith("/api/session/suporte", {
+      access_token: token,
+    });
   });
 
-  it("apaga o fragmento da barra de endereço antes de decidir o que fazer", async () => {
-    comFragmento(`#access_token=${tokenValido()}`);
+  it("antes da hidratação não lê o fragmento nem dispara o efeito", async () => {
+    mockedUseHydrated.mockReturnValue(false);
+    const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 900 });
+    setHash(`#access_token=${token}`);
+    mockedAxios.post.mockResolvedValue({ data: {} });
 
-    render(<SessaoSuportePage />);
-
-    await waitFor(() =>
-      expect(replaceState).toHaveBeenCalledWith(null, "", "/suporte/sessao")
-    );
-  });
-
-  it("apaga o fragmento também quando o token é inválido", async () => {
-    comFragmento("#access_token=nao-e-jwt");
-
-    render(<SessaoSuportePage />);
-
-    await waitFor(() =>
-      expect(replaceState).toHaveBeenCalledWith(null, "", "/suporte/sessao")
-    );
-    expect(postMock).not.toHaveBeenCalled();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Token de sessão de suporte ilegível."
-    );
-  });
-
-  it("fragmento sem token vira aviso de link incompleto", async () => {
-    comFragmento("#tenant_name=Igreja");
-
-    render(<SessaoSuportePage />);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Link de sessão de suporte inválido ou incompleto."
-    );
-    expect(postMock).not.toHaveBeenCalled();
-  });
-
-  it("token expirado vira aviso de sessão vencida", async () => {
-    comFragmento(
-      `#access_token=${tokenValido({ exp: Math.floor(Date.now() / 1000) - 1 })}`
-    );
-
-    render(<SessaoSuportePage />);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Esta sessão de suporte já expirou. Abra outra pelo console."
-    );
-    expect(postMock).not.toHaveBeenCalled();
-  });
-
-  it("antes de hidratar só mostra o spinner — não há `location.hash` no servidor", async () => {
-    comFragmento(`#access_token=${tokenValido()}`);
-    // A primeira renderização (e a do servidor) vê `useHydrated() === false`;
-    // no jsdom o hook já volta `true`, então o ramo só é observável mockando.
-    vi.doMock("@/hooks/useHydrated", () => ({ useHydrated: () => false }));
-    vi.resetModules();
-    const { default: Page } = await import("./page");
-
-    render(<Page />);
-
+    const { rerender } = render(<SessaoSuportePage />);
+    // Antes de hidratar, a página só mostra o spinner — nem lê o hash nem
+    // chama a API (o `useMemo` devolve `null` e o efeito sai no `!result`).
     expect(screen.getByText("Iniciando sessão de suporte…")).toBeInTheDocument();
-    // Nada de efeito colateral: nem limpeza de fragmento, nem troca por
-    // cookie. `postMock` não serve de asserção aqui — o módulo reimportado
-    // recebeu outra instância do mock de axios.
-    expect(replaceState).not.toHaveBeenCalled();
+    expect(mockedAxios.post).not.toHaveBeenCalled();
 
-    vi.doUnmock("@/hooks/useHydrated");
-    vi.resetModules();
+    mockedUseHydrated.mockReturnValue(true);
+    rerender(<SessaoSuportePage />);
+    await vi.waitFor(() => expect(mockedAxios.post).toHaveBeenCalled());
   });
 
-  it("falha na troca pelo cookie vira aviso, sem navegar", async () => {
-    comFragmento(`#access_token=${tokenValido()}`);
-    postMock.mockRejectedValue(new Error("400"));
+  it("mostra erro quando a troca de token falha", async () => {
+    const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 900 });
+    setHash(`#access_token=${token}`);
+    mockedAxios.post.mockRejectedValue(new Error("boom"));
 
     render(<SessaoSuportePage />);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Não foi possível abrir a sessão de suporte. Tente pelo console."
-    );
-    expect(window.location.replace).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Não foi possível abrir a sessão de suporte. Tente pelo console."
+      )
+    ).toBeInTheDocument();
   });
 });

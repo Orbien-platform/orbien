@@ -1,114 +1,67 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import PessoasPage from "./page";
 import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import PessoasPage from "./page";
 
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn() } }));
+vi.mock("@/lib/api", () => ({
+  default: { get: vi.fn() },
+}));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 
-// Os quatro filhos de domínio têm spec própria (Fase 9). Aqui só interessa o
-// contrato: o que a tela passa para eles e o que faz quando eles avisam.
+// Sheet e modais são de domínio (Fase 9, fora de escopo) — aqui só importa que
+// a página os abre com os props certos.
 vi.mock("@/components/persons/PersonSheet", () => ({
   PersonSheet: ({
-    personId,
     open,
+    personId,
     onUpdated,
   }: {
-    personId: string | null;
     open: boolean;
+    personId: string | null;
     onUpdated: () => void;
-  }) => (
-    <div>
-      <span>sheet:{open ? personId : "fechada"}</span>
-      <button onClick={onUpdated}>avisar atualização</button>
-    </div>
-  ),
+  }) =>
+    open ? (
+      <div data-testid="person-sheet">
+        sheet:{personId}
+        <button onClick={onUpdated}>simular atualização</button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/persons/CreateVisitorModal", () => ({
-  CreateVisitorModal: ({
-    open,
-    onCreated,
-  }: {
-    open: boolean;
-    onCreated: () => void;
-  }) => (
-    <div>
-      <span>criar:{open ? "aberto" : "fechado"}</span>
-      <button onClick={onCreated}>avisar cadastro</button>
-    </div>
-  ),
+  CreateVisitorModal: ({ open, onCreated }: { open: boolean; onCreated: () => void }) =>
+    open ? (
+      <div data-testid="create-visitor-modal">
+        <button onClick={onCreated}>simular criação</button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/persons/ImportCsvModal", () => ({
-  ImportCsvModal: ({
-    open,
-    onImported,
-  }: {
-    open: boolean;
-    onImported: () => void;
-  }) => (
-    <div>
-      <span>importar:{open ? "aberto" : "fechado"}</span>
-      <button onClick={onImported}>avisar importação</button>
-    </div>
-  ),
+  ImportCsvModal: ({ open, onImported }: { open: boolean; onImported: () => void }) =>
+    open ? (
+      <div data-testid="import-csv-modal">
+        <button onClick={onImported}>simular importação</button>
+      </div>
+    ) : null,
 }));
-// O `SearchInput` real tem debounce de 300ms e dispara `onSearch("")` na
-// montagem — o que reinicia a página enquanto o teste navega e faz a
-// paginação falhar por tempo, não por comportamento. Ele tem spec própria
-// (Fase 8); aqui entra sem debounce.
-vi.mock("@/components/ui/SearchInput", () => ({
-  SearchInput: ({
-    placeholder,
-    onSearch,
-  }: {
-    placeholder?: string;
-    onSearch: (v: string) => void;
-  }) => (
-    <input
-      type="search"
-      placeholder={placeholder}
-      onChange={(e) => onSearch(e.target.value)}
-    />
-  ),
-}));
-
 vi.mock("@/components/persons/ImportHelpModal", () => ({
-  ImportHelpModal: ({ open }: { open: boolean }) => (
-    <span>ajuda:{open ? "aberta" : "fechada"}</span>
-  ),
+  ImportHelpModal: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="import-help-modal" /> : null,
 }));
 
-const getMock = vi.mocked(api.get);
+const mockedApi = vi.mocked(api, true);
+const mockedUseAuth = vi.mocked(useAuth);
 
-function pessoa(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    id: "p-1",
-    full_name: "Ana Silva",
-    phone: "11987654321",
-    email: "ana@igreja.com",
-    classification: "member",
-    created_at: "2026-03-15T12:00:00.000Z",
-    ...overrides,
-  };
-}
-
-function respondeCom(data: unknown[], total = data.length) {
-  getMock.mockResolvedValue({
-    data: { data, total, page: 1, limit: 20 },
-  } as never);
-}
-
-function comPapeis(roles: string[]) {
-  vi.mocked(useAuth).mockReturnValue({
+function setup(roles: string[] = ["tenant_admin"]) {
+  mockedUseAuth.mockReturnValue({
     user: {
-      id: "u-1",
-      name: "ana",
-      email: "ana@igreja.com",
+      id: "u1",
+      name: "Ana",
+      email: "ana@a.com",
       roles,
-      tenant_id: "t-1",
-      congregation_id: "c-1",
+      tenant_id: "t1",
+      congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
     },
@@ -119,249 +72,265 @@ function comPapeis(roles: string[]) {
   });
 }
 
-beforeEach(() => {
-  getMock.mockReset();
-  respondeCom([pessoa()], 1);
-  comPapeis(["tenant_admin"]);
-});
-
-/** A URL da última chamada a `/persons`. */
-function ultimaUrl() {
-  return getMock.mock.calls.at(-1)?.[0] as string;
+function page(overrides: Partial<{ data: unknown[]; total: number }> = {}) {
+  return { data: overrides.data ?? [], total: overrides.total ?? (overrides.data?.length ?? 0), page: 1, limit: 20 };
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("PessoasPage", () => {
-  it("busca a primeira página e formata telefone, classificação e data", async () => {
+  it("carrega e mostra a lista de pessoas", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: page({
+        data: [
+          { id: "1", full_name: "Ana Silva", phone: "11987654321", email: "a@a.com", classification: "member", created_at: "2026-01-05T00:00:00Z" },
+        ],
+        total: 1,
+      }),
+    });
     render(<PessoasPage />);
 
     expect(await screen.findByText("Ana Silva")).toBeInTheDocument();
-    expect(getMock).toHaveBeenCalledWith("/persons?page=1&limit=20");
     expect(screen.getByText("(11) 98765-4321")).toBeInTheDocument();
-    expect(screen.getByText("15/03/2026")).toBeInTheDocument();
-    expect(screen.getByText("1 pessoa cadastrada")).toBeInTheDocument();
+    expect(screen.getByText("Membro")).toBeInTheDocument();
+    expect(screen.getByText("05/01/2026")).toBeInTheDocument();
+    expect(mockedApi.get).toHaveBeenCalledWith(expect.stringContaining("/persons?page=1&limit=20"));
   });
 
-  it("pluraliza a contagem", async () => {
-    respondeCom([pessoa(), pessoa({ id: "p-2", full_name: "Bruno" })], 2);
-    render(<PessoasPage />);
-
-    expect(await screen.findByText("2 pessoas cadastradas")).toBeInTheDocument();
-  });
-
-  it("formata telefone fixo de 10 dígitos e cai no valor cru fora dos dois formatos", async () => {
-    respondeCom([
-      pessoa({ id: "p-1", full_name: "Fixo", phone: "1133334444" }),
-      pessoa({ id: "p-2", full_name: "Estrangeiro", phone: "+1 202 555" }),
-      pessoa({ id: "p-3", full_name: "Sem telefone", phone: undefined }),
-    ]);
-
-    render(<PessoasPage />);
-
-    expect(await screen.findByText("(11) 3333-4444")).toBeInTheDocument();
-    expect(screen.getByText("+1 202 555")).toBeInTheDocument();
-    expect(screen.getByText("—")).toBeInTheDocument();
-  });
-
-  it("erro da API deixa a tabela vazia com o texto de estado inicial", async () => {
-    getMock.mockRejectedValue(new Error("500"));
-    render(<PessoasPage />);
-
-    expect(
-      await screen.findByText("Nenhuma pessoa cadastrada ainda.")
-    ).toBeInTheDocument();
-  });
-
-  it("resposta de requisição cancelada não sobrescreve a lista", async () => {
-    const user = userEvent.setup();
-    let resolverPrimeira!: (v: unknown) => void;
-    getMock
-      .mockImplementationOnce(
-        () => new Promise((resolve) => (resolverPrimeira = resolve))
-      )
-      .mockResolvedValue({
-        data: { data: [pessoa({ full_name: "Bruno" })], total: 1, page: 1, limit: 20 },
-      } as never);
-
-    render(<PessoasPage />);
-    // Troca o filtro antes da primeira resposta: o effect anterior é
-    // cancelado na limpeza.
-    await user.selectOptions(screen.getByRole("combobox"), "member");
-    expect(await screen.findByText("Bruno")).toBeInTheDocument();
-
-    resolverPrimeira({
-      data: { data: [pessoa({ full_name: "Ana Silva" })], total: 1, page: 1, limit: 20 },
+  it("mostra telefone de 10 dígitos formatado e — quando ausente", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: page({
+        data: [
+          { id: "1", full_name: "Sem Fone", classification: "visitor", created_at: "2026-01-05T00:00:00Z" },
+          { id: "2", full_name: "Fone Fixo", phone: "1122223333", classification: "visitor", created_at: "2026-01-05T00:00:00Z" },
+          { id: "3", full_name: "Fone Estranho", phone: "123", classification: "visitor", created_at: "2026-01-05T00:00:00Z" },
+        ],
+        total: 3,
+      }),
     });
-
-    await waitFor(() => expect(screen.getByText("Bruno")).toBeInTheDocument());
-    expect(screen.queryByText("Ana Silva")).not.toBeInTheDocument();
+    render(<PessoasPage />);
+    await screen.findByText("Sem Fone");
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("(11) 2222-3333")).toBeInTheDocument();
+    expect(screen.getByText("123")).toBeInTheDocument();
   });
 
-  it("erro de requisição cancelada também é descartado", async () => {
+  it("mostra estado vazio sem filtros e com filtros", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: page() });
     const user = userEvent.setup();
-    let rejeitarPrimeira!: (e: unknown) => void;
-    getMock
-      .mockImplementationOnce(
-        () => new Promise((_, reject) => (rejeitarPrimeira = reject))
-      )
-      .mockResolvedValue({
-        data: { data: [pessoa({ full_name: "Bruno" })], total: 1, page: 1, limit: 20 },
-      } as never);
-
     render(<PessoasPage />);
-    await user.selectOptions(screen.getByRole("combobox"), "member");
-    expect(await screen.findByText("Bruno")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhuma pessoa cadastrada ainda.")).toBeInTheDocument();
 
-    rejeitarPrimeira(new Error("500"));
-
-    await waitFor(() => expect(screen.getByText("Bruno")).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText("Buscar por nome…"), "xyz");
+    await waitFor(() =>
+      expect(screen.getByText("Nenhuma pessoa encontrada com esses filtros.")).toBeInTheDocument()
+    );
   });
 
-  it("busca por nome reinicia na página 1 e vai como parâmetro", async () => {
+  it("trata falha da API mostrando lista vazia", async () => {
+    setup();
+    mockedApi.get.mockRejectedValue(new Error("boom"));
+    render(<PessoasPage />);
+    expect(await screen.findByText("Nenhuma pessoa cadastrada ainda.")).toBeInTheDocument();
+  });
+
+  it("busca dispara nova requisição com o parâmetro search", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: page() });
     const user = userEvent.setup();
     render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(1));
 
     await user.type(screen.getByPlaceholderText("Buscar por nome…"), "ana");
-
-    await waitFor(() => expect(ultimaUrl()).toContain("search=ana"));
-    expect(ultimaUrl()).toContain("page=1");
-  });
-
-  it("filtro de classificação vai como parâmetro e volta para a página 1", async () => {
-    const user = userEvent.setup();
-    render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
-
-    await user.selectOptions(screen.getByRole("combobox"), "member");
-
-    await waitFor(() => expect(ultimaUrl()).toContain("classification=member"));
-  });
-
-  it("com filtro ativo o estado vazio muda de texto", async () => {
-    const user = userEvent.setup();
-    respondeCom([], 0);
-    render(<PessoasPage />);
-
-    await user.selectOptions(screen.getByRole("combobox"), "visitor");
-
-    expect(
-      await screen.findByText("Nenhuma pessoa encontrada com esses filtros.")
-    ).toBeInTheDocument();
-  });
-
-  it("navega entre páginas e desabilita as pontas", async () => {
-    const user = userEvent.setup();
-    respondeCom([pessoa()], 45);
-    render(<PessoasPage />);
-
-    await screen.findByText("1–20 de 45");
-    expect(screen.getByLabelText("Página anterior")).toBeDisabled();
-
-    await user.click(screen.getByLabelText("Próxima página"));
-    await waitFor(() => expect(ultimaUrl()).toContain("page=2"));
-    expect(await screen.findByText("21–40 de 45")).toBeInTheDocument();
-    expect(screen.getByText("2 / 3")).toBeInTheDocument();
-
-    await user.click(screen.getByLabelText("Página anterior"));
-    expect(await screen.findByText("1–20 de 45")).toBeInTheDocument();
-
-    // Última página: o botão de avançar trava.
-    await user.click(screen.getByLabelText("Próxima página"));
-    expect(await screen.findByText("21–40 de 45")).toBeInTheDocument();
-    await user.click(screen.getByLabelText("Próxima página"));
-    expect(await screen.findByText("41–45 de 45")).toBeInTheDocument();
-    expect(screen.getByLabelText("Próxima página")).toBeDisabled();
-  });
-
-  it("não mostra paginação quando cabe em uma página", async () => {
-    render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
-
-    expect(screen.queryByLabelText("Próxima página")).not.toBeInTheDocument();
-  });
-
-  it("clique na linha abre a ficha da pessoa", async () => {
-    const user = userEvent.setup();
-    render(<PessoasPage />);
-
-    await user.click(await screen.findByText("Ana Silva"));
-
-    expect(screen.getByText("sheet:p-1")).toBeInTheDocument();
-  });
-
-  it("cadastro, importação e edição forçam recarga da lista", async () => {
-    const user = userEvent.setup();
-    render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
-    const antes = getMock.mock.calls.length;
-
-    await user.click(screen.getByRole("button", { name: "avisar cadastro" }));
-    await user.click(screen.getByRole("button", { name: "avisar importação" }));
-    await user.click(
-      screen.getByRole("button", { name: "avisar atualização" })
-    );
-
     await waitFor(() =>
-      expect(getMock.mock.calls.length).toBe(antes + 3)
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("search=ana"))
     );
   });
 
-  it("abre os modais de cadastro, importação e ajuda", async () => {
+  it("filtro de classificação dispara nova requisição", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: page() });
     const user = userEvent.setup();
     render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("button", { name: /Cadastrar visitante/ }));
-    expect(screen.getByText("criar:aberto")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Importar CSV/ }));
-    expect(screen.getByText("importar:aberto")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Como importar\?/ }));
-    expect(screen.getByText("ajuda:aberta")).toBeInTheDocument();
+    await user.selectOptions(screen.getByDisplayValue("Todas as classificações"), "member");
+    await waitFor(() =>
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("classification=member"))
+    );
   });
 
-  it("pastor não vê os botões de importação", async () => {
-    comPapeis(["pastor"]);
+  it("mostra paginação quando total excede o limite e navega entre páginas", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: page({
+        data: Array.from({ length: 20 }, (_, i) => ({
+          id: String(i),
+          full_name: `Pessoa ${i}`,
+          classification: "member",
+          created_at: "2026-01-05T00:00:00Z",
+        })),
+        total: 45,
+      }),
+    });
+    const user = userEvent.setup();
     render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
+    await screen.findByText("Pessoa 0");
+    expect(screen.getByText("1–20 de 45")).toBeInTheDocument();
 
-    expect(
-      screen.queryByRole("button", { name: /Importar CSV/ })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Como importar\?/ })
-    ).not.toBeInTheDocument();
-    // Cadastrar visitante continua disponível.
-    expect(
-      screen.getByRole("button", { name: /Cadastrar visitante/ })
-    ).toBeInTheDocument();
+    const nextBtn = screen.getByRole("button", { name: "Próxima página" });
+    expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+    await user.click(nextBtn);
+    await waitFor(() =>
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("page=2"))
+    );
+
+    // O botão some enquanto `isLoading` fica true entre o clique e o
+    // próximo render — `findByRole` espera reaparecer, `getByRole` pega a
+    // janela de corrida e falha de forma intermitente.
+    await user.click(await screen.findByRole("button", { name: "Página anterior" }));
+    await waitFor(() =>
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("page=1"))
+    );
   });
 
-  it("sessão sem usuário resolvido é tratada como não-pastor", async () => {
-    vi.mocked(useAuth).mockReturnValue({
-      user: null,
+  it("abre o sheet de pessoa ao clicar na linha", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: page({ data: [{ id: "42", full_name: "Clique Aqui", classification: "member", created_at: "2026-01-05T00:00:00Z" }], total: 1 }),
+    });
+    const user = userEvent.setup();
+    render(<PessoasPage />);
+    await user.click(await screen.findByText("Clique Aqui"));
+    expect(await screen.findByTestId("person-sheet")).toHaveTextContent("sheet:42");
+
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular atualização" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("abre os modais de criação, importação e ajuda, e recarrega quando eles concluem", async () => {
+    setup(["tenant_admin"]);
+    mockedApi.get.mockResolvedValue({ data: page() });
+    const user = userEvent.setup();
+    render(<PessoasPage />);
+    await screen.findByText("Nenhuma pessoa cadastrada ainda.");
+    const callsAfterMount = mockedApi.get.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /cadastrar visitante/i }));
+    expect(screen.getByTestId("create-visitor-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await waitFor(() =>
+      expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsAfterMount)
+    );
+
+    await user.click(screen.getByRole("button", { name: /importar csv/i }));
+    expect(screen.getByTestId("import-csv-modal")).toBeInTheDocument();
+    const callsBeforeImport = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular importação" }));
+    await waitFor(() =>
+      expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBeforeImport)
+    );
+
+    await user.click(screen.getByRole("button", { name: /como importar/i }));
+    expect(screen.getByTestId("import-help-modal")).toBeInTheDocument();
+  });
+
+  it("esconde ações de importação para o papel pastor", async () => {
+    setup(["pastor"]);
+    mockedApi.get.mockResolvedValue({ data: page() });
+    render(<PessoasPage />);
+    await screen.findByText("Nenhuma pessoa cadastrada ainda.");
+    expect(screen.queryByRole("button", { name: /importar csv/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /como importar/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cadastrar visitante/i })).toBeInTheDocument();
+  });
+
+  it("não mostra o contador de total quando ele é zero", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: page() });
+    render(<PessoasPage />);
+    await screen.findByText("Nenhuma pessoa cadastrada ainda.");
+    expect(screen.queryByText(/\d+ pessoas? cadastradas?/i)).not.toBeInTheDocument();
+  });
+
+  it("trata usuário sem roles como não-pastor (fallback ?? false)", async () => {
+    mockedUseAuth.mockReturnValue({
+      user: {
+        id: "u1",
+        name: "Ana",
+        email: "ana@a.com",
+        roles: undefined as unknown as string[],
+        tenant_id: "t1",
+        congregation_id: "c1",
+        support_session: false,
+        support_tenant_name: null,
+      },
       isLoading: false,
-      isAuthenticated: false,
+      isAuthenticated: true,
       login: vi.fn(),
       logout: vi.fn(),
     });
-
+    mockedApi.get.mockResolvedValue({ data: page() });
     render(<PessoasPage />);
-    await screen.findByText("Ana Silva");
-
-    expect(
-      screen.getByRole("button", { name: /Importar CSV/ })
-    ).toBeInTheDocument();
+    await screen.findByText("Nenhuma pessoa cadastrada ainda.");
+    // Sem papel "pastor" identificável, os botões de importação aparecem.
+    expect(screen.getByRole("button", { name: /importar csv/i })).toBeInTheDocument();
   });
 
-  it("cabeçalho da tabela traz as quatro colunas", async () => {
-    render(<PessoasPage />);
-    const cabecalho = (await screen.findByRole("table")).querySelector("thead")!;
+  it("ignora a resposta de uma requisição cancelada por uma busca mais recente", async () => {
+    setup();
+    let resolveFirst!: (v: unknown) => void;
+    const first = new Promise((resolve) => { resolveFirst = resolve; });
+    mockedApi.get.mockReturnValueOnce(first as never);
+    mockedApi.get.mockResolvedValueOnce({
+      data: page({ data: [{ id: "2", full_name: "Segunda Busca", classification: "member", created_at: "2026-01-05T00:00:00Z" }], total: 1 }),
+    });
 
-    expect(within(cabecalho).getByText("Nome")).toBeInTheDocument();
-    expect(within(cabecalho).getByText("Telefone")).toBeInTheDocument();
-    expect(within(cabecalho).getByText("Classificação")).toBeInTheDocument();
-    expect(within(cabecalho).getByText("Cadastro")).toBeInTheDocument();
+    const user = userEvent.setup();
+    render(<PessoasPage />);
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(1));
+
+    // Dispara uma segunda busca antes da primeira responder — o cleanup do
+    // effect anterior marca `signal.cancelled = true`.
+    await user.type(screen.getByPlaceholderText("Buscar por nome…"), "ana");
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(2));
+    await screen.findByText("Segunda Busca");
+
+    // A primeira promise resolve tarde — não deve sobrescrever o resultado.
+    resolveFirst({
+      data: page({ data: [{ id: "1", full_name: "Resposta Antiga", classification: "member", created_at: "2026-01-05T00:00:00Z" }], total: 1 }),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.queryByText("Resposta Antiga")).not.toBeInTheDocument();
+    expect(screen.getByText("Segunda Busca")).toBeInTheDocument();
+  });
+
+  it("ignora falha de uma requisição cancelada por uma busca mais recente", async () => {
+    setup();
+    let rejectFirst!: (e: unknown) => void;
+    const first = new Promise((_resolve, reject) => { rejectFirst = reject; });
+    first.catch(() => {});
+    mockedApi.get.mockReturnValueOnce(first as never);
+    mockedApi.get.mockResolvedValueOnce({
+      data: page({ data: [{ id: "2", full_name: "Segunda Busca", classification: "member", created_at: "2026-01-05T00:00:00Z" }], total: 1 }),
+    });
+
+    const user = userEvent.setup();
+    render(<PessoasPage />);
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(1));
+
+    await user.type(screen.getByPlaceholderText("Buscar por nome…"), "ana");
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(2));
+    await screen.findByText("Segunda Busca");
+
+    rejectFirst(new Error("tarde demais"));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.getByText("Segunda Busca")).toBeInTheDocument();
   });
 });

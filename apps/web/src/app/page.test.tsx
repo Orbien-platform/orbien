@@ -7,8 +7,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("RootPage", () => {
-  it("manda a raiz para o dashboard", () => {
+  it("redireciona para /dashboard", () => {
     RootPage();
-    expect(vi.mocked(redirect)).toHaveBeenCalledWith("/dashboard");
+    expect(redirect).toHaveBeenCalledWith("/dashboard");
   });
 });

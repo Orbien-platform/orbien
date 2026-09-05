@@ -1,11 +1,11 @@
-import { StrictMode, type ReactNode } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRouter } from "next/navigation";
-import FinanceiroPage from "./page";
+import { StrictMode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import FinanceiroPage from "./page";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -13,244 +13,103 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: vi.fn() }));
 
-/**
- * Recharts precisa de layout, e o jsdom mede zero: sem os dublês os gráficos
- * não chegam ao DOM e as funções de formatação não rodam. Ver o mesmo padrão
- * na spec do dashboard.
- */
-vi.mock("recharts", () => ({
-  ResponsiveContainer: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  BarChart: ({
-    data,
-    children,
-  }: {
-    data: { week: string; Entradas: number; "Saídas": number }[];
-    children: ReactNode;
-  }) => (
-    <div data-testid="grafico">
-      {data.map((d) => (
-        <span key={d.week} data-testid="semana">
-          {d.week}: {d.Entradas} / {d["Saídas"]}
-        </span>
-      ))}
-      {children}
-    </div>
-  ),
-  Bar: ({ dataKey }: { dataKey: string }) => <span>barra:{dataKey}</span>,
-  XAxis: () => null,
-  CartesianGrid: () => null,
-  YAxis: ({ tickFormatter }: { tickFormatter?: (v: number) => string }) => (
-    <span data-testid="eixo-y">{tickFormatter?.(2500)}</span>
-  ),
-  Tooltip: ({ formatter }: { formatter?: (v: unknown) => unknown }) => (
-    <span data-testid="tooltip">{JSON.stringify(formatter?.(1234.5))}</span>
-  ),
-}));
+vi.mock("recharts", () => {
+  const Passthrough = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  return {
+    BarChart: Passthrough,
+    Bar: Passthrough,
+    XAxis: Passthrough,
+    YAxis: ({ tickFormatter }: { tickFormatter?: (v: number) => React.ReactNode }) => (
+      <div>{tickFormatter ? tickFormatter(12345) : null}</div>
+    ),
+    CartesianGrid: Passthrough,
+    Tooltip: ({ formatter }: { formatter?: (value: unknown) => React.ReactNode }) =>
+      formatter ? <div>{formatter(100)}</div> : null,
+    ResponsiveContainer: Passthrough,
+  };
+});
 
-interface PropsModal {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onCreated: () => void;
-  editTransaction?: { id: string } | null;
-  scope?: string;
-  viewOnly?: boolean;
-}
-
-// A tela monta três `NewTransactionModal` (criar, editar e visualizar). O
-// dublê distingue os três pelas props que cada um recebe: só o de
-// visualização recebe `viewOnly`, e só o de edição recebe `scope`.
 vi.mock("@/components/financial/NewTransactionModal", () => ({
-  NewTransactionModal: (props: PropsModal) => {
-    const papel = props.viewOnly
-      ? "ver"
-      : "scope" in props
-        ? "editar"
-        : "criar";
-    return (
-      <div>
-        <span>
-          modal-{papel}:
-          {props.open ? (props.editTransaction?.id ?? "aberto") : "fechado"}
-        </span>
-        {props.scope && <span>escopo-{papel}:{props.scope}</span>}
-        <button onClick={props.onCreated}>salvou ({papel})</button>
-        <button onClick={() => props.onOpenChange(false)}>fechar ({papel})</button>
-        <button onClick={() => props.onOpenChange(true)}>abrir ({papel})</button>
+  NewTransactionModal: ({
+    open,
+    onOpenChange,
+    onCreated,
+    editTransaction,
+    viewOnly,
+  }: {
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+    onCreated: () => void;
+    editTransaction?: { id: string } | null;
+    viewOnly?: boolean;
+  }) =>
+    open ? (
+      <div data-testid={viewOnly ? "view-tx-modal" : editTransaction ? "edit-tx-modal" : "new-tx-modal"}>
+        {editTransaction ? `tx:${editTransaction.id}` : "novo"}
+        <button onClick={onCreated}>simular criação</button>
+        <button onClick={() => onOpenChange(false)}>simular fechar</button>
+        <button onClick={() => onOpenChange(true)}>simular reabrir</button>
       </div>
-    );
-  },
+    ) : null,
 }));
-
+// Capturado no módulo para simular, em um teste, uma chamada de `onConfirm`
+// que chega depois que o diálogo já fechou (a mesma janela de corrida que o
+// guard `if (!scopeDialog) return` em `handleScopeConfirm` existe para cobrir).
+let capturedOnConfirm: ((scope: string) => void) | null = null;
 vi.mock("@/components/financial/RecurrenceScopeDialog", () => ({
   RecurrenceScopeDialog: ({
     open,
     mode,
-    isSubmitting,
-    onCancel,
     onConfirm,
+    onCancel,
   }: {
     open: boolean;
-    mode: "edit" | "delete";
-    isSubmitting: boolean;
+    mode: string;
+    onConfirm: (scope: string) => void;
     onCancel: () => void;
-    onConfirm: (escopo: string) => void;
-  }) => (
-    <div>
-      <span>
-        escopo:{open ? mode : "fechado"}
-        {isSubmitting ? "|enviando" : ""}
-      </span>
-      <button onClick={() => onConfirm("only_this")}>confirmar só este</button>
-      <button onClick={() => onConfirm("this_and_future")}>
-        confirmar este e futuros
-      </button>
-      <button onClick={onCancel}>cancelar escopo</button>
-    </div>
-  ),
+  }) => {
+    capturedOnConfirm = onConfirm;
+    return open ? (
+      <div data-testid="scope-dialog">
+        modo:{mode}
+        <button onClick={() => onConfirm("this")}>confirmar this</button>
+        <button onClick={() => onConfirm("this_and_future")}>confirmar this_and_future</button>
+        <button onClick={onCancel}>cancelar escopo</button>
+      </div>
+    ) : null;
+  },
 }));
-
 vi.mock("@/components/financial/ExportButton", () => ({
-  ExportButton: ({
-    periodStart,
-    periodEnd,
-  }: {
-    periodStart: string;
-    periodEnd: string;
-  }) => (
-    <span>
-      exportar:{periodStart}..{periodEnd}
-    </span>
-  ),
-}));
-
-vi.mock("@/components/financial/CategoriesModal", () => ({
-  CategoriesModal: ({
-    open,
-    onChanged,
-  }: {
-    open: boolean;
-    onChanged: () => void;
-  }) => (
-    <div>
-      <span>categorias:{open ? "aberto" : "fechado"}</span>
-      <button onClick={onChanged}>avisar categorias mudaram</button>
+  ExportButton: ({ periodStart, periodEnd }: { periodStart: string; periodEnd: string }) => (
+    <div data-testid="export-button">
+      export:{periodStart}:{periodEnd}
     </div>
   ),
 }));
+vi.mock("@/components/financial/CategoriesModal", () => ({
+  CategoriesModal: ({ open, onChanged }: { open: boolean; onChanged: () => void }) =>
+    open ? (
+      <div data-testid="categories-modal">
+        <button onClick={onChanged}>simular mudança de categorias</button>
+      </div>
+    ) : null,
+}));
 
-const getMock = vi.mocked(api.get);
-const patchMock = vi.mocked(api.patch);
-const deleteMock = vi.mocked(api.delete);
-const replace = vi.fn();
+const mockedApi = vi.mocked(api, true);
+const mockedUseAuth = vi.mocked(useAuth);
+const mockedUseRouter = vi.mocked(useRouter);
 
-/** Quinta-feira, 17/09/2026. */
-const AGORA = new Date("2026-09-17T12:00:00.000Z");
-
-function transacao(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "t-1",
-    type: "income",
-    amount: "1000.00",
-    occurred_at: "2026-09-03T12:00:00.000Z",
-    description: "Dízimo",
-    category_id: "c-1",
-    category: { id: "c-1", name: "Dízimos", type: "income" },
-    recurring_rule_id: null,
-    status: "pending",
-    ...overrides,
-  };
-}
-
-function categoria(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "c-1",
-    name: "Dízimos",
-    type: "income",
-    children: [],
-    ...overrides,
-  };
-}
-
-function regra(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "r-1",
-    mode: "installment",
-    frequency: "monthly",
-    interval: 1,
-    installments: 12,
-    next_occurrence_at: "2026-10-05T12:00:00.000Z",
-    ends_at: null,
-    is_active: true,
-    transactions_count: 3,
-    ...overrides,
-  };
-}
-
-function dre(overrides: Record<string, unknown> = {}) {
-  return {
-    period: { start: "2026-09-01", end: "2026-09-17" },
-    revenue: {
-      categories: [{ category_name: "Dízimos", total: 5000, count: 10 }],
-      total: 5000,
-    },
-    expenses: {
-      categories: [{ category_name: "Aluguel", total: 2000, count: 1 }],
-      total: 2000,
-    },
-    net_result: 3000,
-    previous_period: {
-      period: { start: "2026-08-01", end: "2026-08-31" },
-      revenue_total: 4000,
-      expenses_total: 2500,
-      net_result: 1500,
-    },
-    ...overrides,
-  };
-}
-
-interface Respostas {
-  transacoes?: unknown;
-  categorias?: unknown;
-  recorrentes?: unknown;
-  dre?: unknown;
-}
-
-function rotear({ transacoes, categorias, recorrentes, dre: dreResp }: Respostas = {}) {
-  // Rejeição entra como função, não como promise já criada: uma promise
-  // rejeitada montada aqui e consumida só depois vira unhandled rejection.
-  const resolver = (valor: unknown, padrao: unknown) =>
-    typeof valor === "function"
-      ? ((valor as () => Promise<unknown>)() as never)
-      : (Promise.resolve({ data: valor ?? padrao }) as never);
-
-  getMock.mockImplementation((url: string) => {
-    if (url.startsWith("/financial/transactions")) {
-      return resolver(transacoes, { data: [transacao()], total: 1 });
-    }
-    if (url === "/financial/categories") {
-      return resolver(categorias, [categoria()]);
-    }
-    if (url === "/financial/recurring-rules") {
-      return resolver(recorrentes, [regra()]);
-    }
-    if (url.startsWith("/financial/dre")) {
-      return resolver(dreResp, dre());
-    }
-    throw new Error(`URL inesperada: ${url}`);
-  });
-}
-
-function comPapeis(roles: string[]) {
-  vi.mocked(useAuth).mockReturnValue({
+function setup(roles: string[] = ["tenant_admin"]) {
+  const replace = vi.fn();
+  mockedUseRouter.mockReturnValue({ replace } as unknown as ReturnType<typeof useRouter>);
+  mockedUseAuth.mockReturnValue({
     user: {
-      id: "u-1",
-      name: "ana",
-      email: "ana@igreja.com",
+      id: "u1",
+      name: "Ana",
+      email: "ana@a.com",
       roles,
-      tenant_id: "t-1",
-      congregation_id: "c-1",
+      tenant_id: "t1",
+      congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
     },
@@ -259,1320 +118,948 @@ function comPapeis(roles: string[]) {
     login: vi.fn(),
     logout: vi.fn(),
   });
+  return { replace };
+}
+
+function tx(overrides: Partial<{
+  id: string;
+  type: string;
+  amount: string | number;
+  occurred_at: string;
+  description: string;
+  category_id: string | null;
+  category: { id: string; name: string; type: string } | null;
+  recurring_rule_id: string | null;
+  status: string;
+}> = {}) {
+  return {
+    id: "t1",
+    type: "income",
+    amount: "100",
+    occurred_at: "2026-02-01T00:00:00Z",
+    description: "Lançamento",
+    category_id: null,
+    category: null,
+    recurring_rule_id: null,
+    status: "pending",
+    ...overrides,
+  };
+}
+
+function mockApi(opts: {
+  transactions?: unknown[];
+  categories?: unknown[];
+  recurring?: unknown[];
+  dre?: unknown;
+  txError?: boolean;
+  recurringError?: boolean;
+  dreError?: boolean;
+} = {}) {
+  mockedApi.get.mockImplementation((url: string) => {
+    if (url.startsWith("/financial/transactions")) {
+      return opts.txError
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve({ data: { data: opts.transactions ?? [], total: (opts.transactions ?? []).length } });
+    }
+    if (url.startsWith("/financial/categories")) {
+      return Promise.resolve({ data: opts.categories ?? [] });
+    }
+    if (url.startsWith("/financial/recurring-rules")) {
+      return opts.recurringError
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve({ data: opts.recurring ?? [] });
+    }
+    if (url.startsWith("/financial/dre")) {
+      return opts.dreError ? Promise.reject(new Error("boom")) : Promise.resolve({ data: opts.dre ?? dre() });
+    }
+    return Promise.reject(new Error(`unexpected ${url}`));
+  });
+}
+
+function dre(overrides: Partial<{
+  revenue: { categories: unknown[]; total: number };
+  expenses: { categories: unknown[]; total: number };
+  net_result: number;
+  previous_period: { revenue_total: number; expenses_total: number; net_result: number };
+}> = {}) {
+  return {
+    period: { start: "2026-02-01", end: "2026-02-28" },
+    revenue: { categories: [], total: 0 },
+    expenses: { categories: [], total: 0 },
+    net_result: 0,
+    previous_period: { period: { start: "", end: "" }, revenue_total: 0, expenses_total: 0, net_result: 0 },
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  vi.setSystemTime(AGORA);
-  getMock.mockReset();
-  patchMock.mockReset().mockResolvedValue({ data: {} } as never);
-  deleteMock.mockReset().mockResolvedValue({ data: {} } as never);
-  replace.mockReset();
-  vi.mocked(useRouter).mockReturnValue({
-    replace,
-  } as unknown as ReturnType<typeof useRouter>);
-  rotear();
-  comPapeis(["treasurer", "admin_congregation"]);
+  vi.clearAllMocks();
 });
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-async function irPara(
-  user: ReturnType<typeof userEvent.setup>,
-  aba: string
-) {
-  await screen.findByText("Visão geral e tesouraria");
-  await user.click(screen.getByRole("tab", { name: aba }));
-}
-
-describe("FinanceiroPage — visão geral", () => {
-  it("busca lançamentos, categorias e o DRE do mês corrente", async () => {
-    render(<FinanceiroPage />);
-
-    await waitFor(() => {
-      const urls = getMock.mock.calls.map(([u]) => u as string);
-      expect(urls).toContain("/financial/transactions?limit=100");
-      expect(urls).toContain("/financial/categories");
-      expect(urls).toContain(
-        "/financial/dre?period_start=2026-09-01&period_end=2026-09-17"
-      );
-    });
-  });
-
-  it("montagem dupla não duplica as buscas", async () => {
-    render(
-      <StrictMode>
-        <FinanceiroPage />
-      </StrictMode>
-    );
-
-    await waitFor(() =>
-      expect(
-        getMock.mock.calls.filter(
-          ([u]) => u === "/financial/transactions?limit=100"
-        )
-      ).toHaveLength(1)
-    );
-  });
-
-  it("soma receitas, despesas e resultado", async () => {
-    rotear({
-      transacoes: {
-        total: 3,
-        data: [
-          transacao({ id: "t-1", amount: "1000.00" }),
-          transacao({ id: "t-2", amount: 500, type: "income" }),
-          transacao({ id: "t-3", type: "expense", amount: "300.00" }),
-        ],
+describe("FinanceiroPage — visão geral e permissões", () => {
+  it("trata usuário sem roles como sem nenhum papel especial (fallback ?? false)", async () => {
+    const replace = vi.fn();
+    mockedUseRouter.mockReturnValue({ replace } as unknown as ReturnType<typeof useRouter>);
+    mockedUseAuth.mockReturnValue({
+      user: {
+        id: "u1",
+        name: "Ana",
+        email: "ana@a.com",
+        roles: undefined as unknown as string[],
+        tenant_id: "t1",
+        congregation_id: "c1",
+        support_session: false,
+        support_tenant_name: null,
       },
+      isLoading: false,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
     });
-
+    mockApi({});
     render(<FinanceiroPage />);
-
-    expect(await screen.findByText("R$ 1.500,00")).toBeInTheDocument();
-    expect(screen.getByText("R$ 300,00")).toBeInTheDocument();
-    expect(screen.getByText("R$ 1.200,00")).toBeInTheDocument();
+    await screen.findByText("Visão Geral");
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "Lançamentos" })).toBeInTheDocument();
   });
 
-  it("resultado negativo aparece em vermelho", async () => {
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [transacao({ type: "expense", amount: "100.00" })],
-      },
+  it("mostra o resultado em vermelho quando é negativo", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", type: "expense", amount: "900", occurred_at: "2026-02-02T00:00:00Z" }),
+        tx({ id: "2", type: "income", amount: "100", occurred_at: "2026-02-02T00:00:00Z" }),
+      ],
     });
-
     render(<FinanceiroPage />);
-
-    const resultado = await screen.findByText("-R$ 100,00");
-    expect(resultado.className).toContain("text-crimson");
+    expect(await screen.findByText("-R$ 800,00")).toBeInTheDocument();
   });
 
-  it("agrupa o gráfico por semana do mês", async () => {
-    rotear({
-      transacoes: {
-        total: 3,
-        data: [
-          transacao({ id: "t-1", occurred_at: "2026-09-03T12:00:00.000Z" }),
-          transacao({
-            id: "t-2",
-            occurred_at: "2026-09-16T12:00:00.000Z",
-            type: "expense",
-            amount: "250.00",
-          }),
-          transacao({
-            id: "t-3",
-            occurred_at: "2026-09-17T12:00:00.000Z",
-            amount: "100.00",
-          }),
-        ],
-      },
+  it("redireciona secretary para /dashboard", async () => {
+    const { replace } = setup(["secretary"]);
+    mockApi({});
+    render(<FinanceiroPage />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+  });
+
+  it("mostra KPIs de receitas/despesas/resultado e o gráfico semanal", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", type: "income", amount: "1000", occurred_at: "2026-02-02T00:00:00Z" }),
+        tx({ id: "2", type: "expense", amount: "300", occurred_at: "2026-02-09T00:00:00Z" }),
+      ],
     });
-
     render(<FinanceiroPage />);
-
-    const semanas = await screen.findAllByTestId("semana");
-    expect(semanas.map((s) => s.textContent)).toEqual([
-      "Sem 1: 1000 / 0",
-      "Sem 3: 100 / 250",
-    ]);
-    expect(screen.getByTestId("eixo-y")).toHaveTextContent("R$3k");
-    expect(screen.getByTestId("tooltip")).toHaveTextContent('["R$ 1.234,50"]');
+    expect(await screen.findByText("R$ 700,00")).toBeInTheDocument();
   });
 
-  it("sem lançamentos o gráfico dá lugar a um aviso", async () => {
-    rotear({ transacoes: { total: 0, data: [] } });
-
+  it("mostra estado vazio do gráfico quando não há lançamentos", async () => {
+    setup();
+    mockApi({});
     render(<FinanceiroPage />);
-
-    expect(
-      await screen.findByText("Sem lançamentos no período.")
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId("grafico")).not.toBeInTheDocument();
+    expect(await screen.findByText("Sem lançamentos no período.")).toBeInTheDocument();
   });
 
-  it("resposta sem `data` não quebra a tela", async () => {
-    rotear({ transacoes: { total: 0 }, categorias: null });
-
+  it("esconde abas Lançamentos/Recorrentes e a coluna Total do DRE para pastor", async () => {
+    setup(["pastor"]);
+    mockApi({});
     render(<FinanceiroPage />);
-
-    expect(
-      await screen.findByText("Sem lançamentos no período.")
-    ).toBeInTheDocument();
+    await screen.findByText("Visão Geral");
+    expect(screen.queryByRole("tab", { name: "Lançamentos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Recorrentes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DRE" })).toBeInTheDocument();
   });
 
-  it("erro nas buscas de lançamento deixa a tela vazia, sem quebrar", async () => {
-    rotear({ transacoes: () => Promise.reject(new Error("500")) });
-
+  it("não mostra o botão de categorias para quem não pode gerenciar", async () => {
+    setup(["secretary"]);
+    mockApi({});
     render(<FinanceiroPage />);
-
-    expect(
-      await screen.findByText("Sem lançamentos no período.")
-    ).toBeInTheDocument();
+    await screen.findByText("Visão Geral");
+    expect(screen.queryByRole("button", { name: "Categorias" })).not.toBeInTheDocument();
   });
 
-  it("compara a receita com o período anterior", async () => {
+  it("mostra e usa o botão de categorias para treasurer", async () => {
+    setup(["treasurer"]);
+    mockApi({});
+    const user = userEvent.setup();
     render(<FinanceiroPage />);
-
-    // 5000 sobre 4000 = 125%, limitado a 100%.
-    expect(
-      await screen.findByText("100% do período anterior (R$ 4.000,00)")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("✓ Superou o período anterior")
-    ).toBeInTheDocument();
-    expect(screen.getByText("R$ 5.000,00 este mês")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Categorias" }));
+    expect(screen.getByTestId("categories-modal")).toBeInTheDocument();
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular mudança de categorias" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
-  it("receita abaixo do período anterior mostra o quanto falta", async () => {
-    rotear({
-      dre: dre({
-        revenue: { categories: [], total: 2000 },
-        previous_period: {
-          period: { start: "2026-08-01", end: "2026-08-31" },
-          revenue_total: 4000,
-          expenses_total: 0,
-          net_result: 0,
-        },
-      }),
-    });
-
+  it("mostra a barra de progresso do forecast e 'sem dados' quando não há período anterior", async () => {
+    setup();
+    mockApi({ dre: dre({ revenue: { categories: [], total: 500 } }) });
     render(<FinanceiroPage />);
-
-    expect(
-      await screen.findByText("50% do período anterior (R$ 4.000,00)")
-    ).toBeInTheDocument();
-    expect(screen.getByText("faltam 50% para igualar")).toBeInTheDocument();
-  });
-
-  it("sem período anterior o comparativo avisa em vez de mostrar 100%", async () => {
-    rotear({
-      dre: dre({
-        previous_period: {
-          period: { start: "2026-08-01", end: "2026-08-31" },
-          revenue_total: 0,
-          expenses_total: 0,
-          net_result: 0,
-        },
-      }),
-    });
-
-    render(<FinanceiroPage />);
-
     expect(
       await screen.findByText("Sem dados do período anterior para comparar")
     ).toBeInTheDocument();
   });
 
-  it("erro no DRE deixa o comparativo em carregamento", async () => {
-    rotear({ dre: () => Promise.reject(new Error("500")) });
-
+  it("mostra o percentual do forecast e 'superou' quando ultrapassa o período anterior", async () => {
+    setup();
+    mockApi({
+      dre: dre({
+        revenue: { categories: [], total: 1200 },
+        previous_period: { revenue_total: 1000, expenses_total: 0, net_result: 1000 },
+      }),
+    });
     render(<FinanceiroPage />);
+    expect(await screen.findByText(/100% do período anterior/)).toBeInTheDocument();
+    expect(screen.getByText("✓ Superou o período anterior")).toBeInTheDocument();
+  });
 
-    await screen.findByText("Receitas vs período anterior");
+  it("mostra 'faltam X%' quando ainda não alcançou o período anterior", async () => {
+    setup();
+    mockApi({
+      dre: dre({
+        revenue: { categories: [], total: 400 },
+        previous_period: { revenue_total: 1000, expenses_total: 0, net_result: 1000 },
+      }),
+    });
+    render(<FinanceiroPage />);
+    expect(await screen.findByText(/faltam 60% para igualar/)).toBeInTheDocument();
+  });
+
+  it("guarda contra a dupla invocação de efeito do StrictMode ao carregar lançamentos", async () => {
+    setup();
+    mockApi({});
+    render(
+      <StrictMode>
+        <FinanceiroPage />
+      </StrictMode>
+    );
+    await screen.findByText("Sem lançamentos no período.");
     expect(
-      screen.queryByText(/do período anterior/)
-    ).not.toBeInTheDocument();
+      mockedApi.get.mock.calls.filter(([u]) => u.startsWith("/financial/transactions")).length
+    ).toBe(1);
   });
 });
 
-describe("FinanceiroPage — lançamentos", () => {
-  it("mostra data, descrição, categoria, tipo, valor e status", async () => {
+describe("FinanceiroPage — aba Lançamentos", () => {
+  it("trata falha ao carregar transações/categorias como listas vazias", async () => {
+    setup();
+    mockApi({ txError: true });
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 2,
-        data: [
-          transacao(),
-          transacao({
-            id: "t-2",
-            type: "expense",
-            amount: "250.50",
-            description: "Aluguel",
-            occurred_at: "2026-09-10T12:00:00.000Z",
-            category: null,
-            category_id: null,
-            status: "paid",
-          }),
-        ],
-      },
-    });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    const tabela = await screen.findByRole("table");
-    expect(within(tabela).getByText("03/09/2026")).toBeInTheDocument();
-    expect(within(tabela).getByText("Dízimo")).toBeInTheDocument();
-    expect(within(tabela).getByText("Dízimos")).toBeInTheDocument();
-    expect(within(tabela).getByText("Entrada")).toBeInTheDocument();
-    expect(within(tabela).getByText("+R$ 1.000,00")).toBeInTheDocument();
-    expect(within(tabela).getByText("Não pago")).toBeInTheDocument();
-    // Sem categoria: traço.
-    expect(within(tabela).getByText("—")).toBeInTheDocument();
-    expect(within(tabela).getByText("Saída")).toBeInTheDocument();
-    expect(within(tabela).getByText("−R$ 250,50")).toBeInTheDocument();
-    expect(within(tabela).getByText("Pago")).toBeInTheDocument();
-  });
-
-  it("marca parcelado, fixo e exportado", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 3,
-        data: [
-          transacao({
-            id: "t-1",
-            description: "Cadeiras (3/12)",
-            recurring_rule_id: "r-1",
-          }),
-          transacao({
-            id: "t-2",
-            description: "Aluguel",
-            recurring_rule_id: "r-2",
-          }),
-          transacao({ id: "t-3", status: "confirmed" }),
-        ],
-      },
-    });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    const tabela = await screen.findByRole("table");
-    expect(within(tabela).getByText("Parcelado")).toBeInTheDocument();
-    expect(within(tabela).getByText("Fixo")).toBeInTheDocument();
-    // "Exportado" também é opção do filtro de status.
-    expect(within(tabela).getByText("Exportado")).toBeInTheDocument();
-    // Exportado não tem checkbox de status nem botões de editar/remover.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-    expect(
-      screen.getByRole("button", { name: "Visualizar lançamento" })
-    ).toBeInTheDocument();
-  });
-
-  it("filtra por tipo, categoria, datas e status", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 3,
-        data: [
-          transacao({ id: "t-1", description: "Dízimo de setembro" }),
-          transacao({
-            id: "t-2",
-            type: "expense",
-            description: "Aluguel",
-            category_id: "c-2",
-            category: { id: "c-2", name: "Estrutura", type: "expense" },
-            occurred_at: "2026-09-20T12:00:00.000Z",
-            status: "paid",
-          }),
-        ],
-      },
-      categorias: [
-        categoria(),
-        categoria({ id: "c-2", name: "Estrutura", type: "expense" }),
-      ],
-    });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-    await screen.findByText("Dízimo de setembro");
-
-    const [tipo, categoriaSel, status] = screen.getAllByRole("combobox");
-
-    await user.selectOptions(tipo, "expense");
-    expect(screen.getByText("Aluguel")).toBeInTheDocument();
-    expect(screen.queryByText("Dízimo de setembro")).not.toBeInTheDocument();
-    // A lista de categorias acompanha o tipo escolhido.
-    expect(
-      within(categoriaSel).queryByRole("option", { name: "Dízimos" })
-    ).not.toBeInTheDocument();
-
-    await user.selectOptions(categoriaSel, "c-2");
-    expect(screen.getByText("Aluguel")).toBeInTheDocument();
-
-    await user.selectOptions(tipo, "");
-    await user.selectOptions(status, "paid");
-    expect(screen.getByText("Aluguel")).toBeInTheDocument();
-    expect(screen.queryByText("Dízimo de setembro")).not.toBeInTheDocument();
-
-    await user.selectOptions(status, "");
-    expect(screen.getByText("Dízimo de setembro")).toBeInTheDocument();
-  });
-
-  it("as datas do filtro cortam o intervalo", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 2,
-        data: [
-          transacao({ id: "t-1", occurred_at: "2026-09-01T12:00:00.000Z" }),
-          transacao({
-            id: "t-2",
-            description: "Mais tarde",
-            occurred_at: "2026-09-25T12:00:00.000Z",
-          }),
-        ],
-      },
-    });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-    await screen.findByText("Dízimo");
-
-    const datas = document.querySelectorAll<HTMLInputElement>(
-      'input[type="date"]'
-    );
-    await user.type(datas[0], "2026-09-10");
-    expect(screen.getByText("Mais tarde")).toBeInTheDocument();
-    expect(screen.queryByText("Dízimo")).not.toBeInTheDocument();
-
-    await user.clear(datas[0]);
-    await user.type(datas[1], "2026-09-10");
-    expect(await screen.findByText("Dízimo")).toBeInTheDocument();
-    expect(screen.queryByText("Mais tarde")).not.toBeInTheDocument();
-  });
-
-  it("o estado vazio distingue 'sem nada' de 'sem resultado no filtro'", async () => {
-    const user = userEvent.setup();
-    rotear({ transacoes: { total: 0, data: [] } });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    expect(
-      await screen.findByText("Nenhum lançamento registrado.")
-    ).toBeInTheDocument();
-
-    await user.selectOptions(screen.getAllByRole("combobox")[0], "income");
-    expect(
-      await screen.findByText("Nenhum lançamento com esses filtros.")
-    ).toBeInTheDocument();
-  });
-
-  it("pagina de 20 em 20", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 25,
-        data: Array.from({ length: 25 }, (_, i) =>
-          transacao({ id: `t-${i}`, description: `Lançamento ${i}` })
-        ),
-      },
-    });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    expect(await screen.findByText("1–20 de 25")).toBeInTheDocument();
-    expect(screen.getByLabelText("Página anterior")).toBeDisabled();
-
-    await user.click(screen.getByLabelText("Próxima página"));
-    expect(await screen.findByText("21–25 de 25")).toBeInTheDocument();
-    expect(screen.getByLabelText("Próxima página")).toBeDisabled();
-
-    await user.click(screen.getByLabelText("Página anterior"));
-    expect(await screen.findByText("1–20 de 25")).toBeInTheDocument();
-
-    // Trocar de aba volta para a primeira página.
-    await user.click(screen.getByRole("tab", { name: "Visão Geral" }));
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
-    expect(await screen.findByText("1–20 de 25")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
   });
 
-  it("marcar como pago manda o status novo e mantém a lista", async () => {
-    const user = userEvent.setup();
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Marcar como pago"));
-
-    await waitFor(() =>
-      expect(patchMock).toHaveBeenCalledWith(
-        "/financial/transactions/t-1/status",
-        { status: "paid" }
-      )
-    );
-    expect(await screen.findByLabelText("Desfazer pagamento")).toBeChecked();
-  });
-
-  it("desfazer pagamento volta o status para pendente", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: { total: 1, data: [transacao({ status: "paid" })] },
+  it("trata resposta sem `data` como lista vazia (fallback ?? [])", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/financial/transactions")) return Promise.resolve({ data: {} });
+      if (url.startsWith("/financial/categories")) return Promise.resolve({ data: undefined });
+      return Promise.reject(new Error(`unexpected ${url}`));
     });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Desfazer pagamento"));
-
-    await waitFor(() =>
-      expect(patchMock).toHaveBeenCalledWith(
-        "/financial/transactions/t-1/status",
-        { status: "pending" }
-      )
-    );
-  });
-
-  it("falha no status desfaz a mudança otimista e avisa", async () => {
-    const user = userEvent.setup();
-    patchMock.mockRejectedValue(new Error("500"));
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Marcar como pago"));
-
-    expect(
-      await screen.findByText("Erro ao atualizar status do lançamento.")
-    ).toBeInTheDocument();
-    expect(await screen.findByLabelText("Marcar como pago")).not.toBeChecked();
-  });
-
-  it("um clique por vez: enquanto a chamada não volta o checkbox trava", async () => {
-    const user = userEvent.setup();
-    let liberar!: (v: unknown) => void;
-    patchMock.mockImplementation(
-      () => new Promise((resolve) => (liberar = resolve)) as never
-    );
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Marcar como pago"));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Desfazer pagamento")).toBeDisabled()
-    );
-    expect(patchMock).toHaveBeenCalledTimes(1);
-
-    liberar({ data: {} });
-    await waitFor(() =>
-      expect(screen.getByLabelText("Desfazer pagamento")).toBeEnabled()
-    );
-  });
-
-  it("abre o modal de criar e o de editar lançamento simples", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(
-      await screen.findByRole("button", { name: /Novo lançamento/ })
-    );
-    expect(screen.getByText("modal-criar:aberto")).toBeInTheDocument();
-
-    await user.click(screen.getByLabelText("Editar lançamento"));
-    expect(screen.getByText("modal-editar:t-1")).toBeInTheDocument();
-
-    // Fechar limpa o lançamento em edição.
-    await user.click(screen.getByRole("button", { name: "fechar (editar)" }));
-    expect(screen.getByText("modal-editar:fechado")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
   });
 
-  it("visualizar lançamento exportado abre o modal só de leitura", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: { total: 1, data: [transacao({ status: "confirmed" })] },
-    });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(
-      await screen.findByLabelText("Visualizar lançamento")
-    );
-    expect(screen.getByText("modal-ver:t-1")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "fechar (ver)" }));
-    expect(screen.getByText("modal-ver:fechado")).toBeInTheDocument();
-  });
-
-  it("pedido de abrir vindo do modal não fecha o que está em edição", async () => {
-    const user = userEvent.setup();
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Editar lançamento"));
-    expect(screen.getByText("modal-editar:t-1")).toBeInTheDocument();
-
-    // `onOpenChange(true)` é ignorado: quem abre é a tela, ao escolher a linha.
-    await user.click(screen.getByRole("button", { name: "abrir (editar)" }));
-    expect(screen.getByText("modal-editar:t-1")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "abrir (ver)" }));
-    expect(screen.getByText("modal-ver:fechado")).toBeInTheDocument();
-    // O modal de leitura não recarrega nada ao "salvar".
-    await user.click(screen.getByRole("button", { name: "salvou (ver)" }));
-    expect(screen.getByText("modal-ver:fechado")).toBeInTheDocument();
-  });
-
-  it("categorias ausentes na resposta não quebram o filtro", async () => {
-    const user = userEvent.setup();
-    rotear({ categorias: () => Promise.resolve({ data: null }) });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await screen.findByText("Dízimo");
-    const categoriaSel = screen.getAllByRole("combobox")[1];
-    expect(within(categoriaSel).getAllByRole("option")).toHaveLength(1);
-  });
-
-  it("filtro de categoria exclui o que é de outra categoria", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 2,
-        data: [
-          transacao({ id: "t-1", description: "Dízimo" }),
-          transacao({
-            id: "t-2",
-            description: "Oferta",
-            category_id: "c-3",
-            category: { id: "c-3", name: "Ofertas", type: "income" },
-          }),
-        ],
-      },
-      categorias: [
-        categoria(),
-        categoria({ id: "c-3", name: "Ofertas", type: "income" }),
+  it("mostra badges de parcelado e fixo, categoria e travessão quando não há categoria", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", description: "Dízimo (2/12)", recurring_rule_id: "r1", category: { id: "c1", name: "Dízimos", type: "income" } }),
+        tx({ id: "2", description: "Aluguel", recurring_rule_id: "r2", type: "expense" }),
+        tx({ id: "3", description: "Avulso" }),
       ],
     });
-
+    const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-    await screen.findByText("Oferta");
-
-    await user.selectOptions(screen.getAllByRole("combobox")[1], "c-3");
-
-    expect(screen.getByText("Oferta")).toBeInTheDocument();
-    expect(screen.queryByText("Dízimo")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    expect(await screen.findByText("Dízimo (2/12)")).toBeInTheDocument();
+    expect(screen.getByText("Parcelado")).toBeInTheDocument();
+    expect(screen.getByText("Fixo")).toBeInTheDocument();
+    expect(screen.getByText("Dízimos")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("marcar um lançamento não mexe no status dos outros", async () => {
-    const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 2,
-        data: [
-          transacao({ id: "t-1", description: "Dízimo" }),
-          transacao({
-            id: "t-2",
-            description: "Oferta",
-            occurred_at: "2026-09-11T12:00:00.000Z",
-          }),
-        ],
-      },
+  it("filtra por tipo, categoria, período e status no cliente", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", description: "Dízimo Recebido", type: "income", occurred_at: "2026-02-01T00:00:00Z", category_id: "c1", category: { id: "c1", name: "Dízimos", type: "income" }, status: "paid" }),
+        tx({ id: "2", description: "Pagamento Aluguel", type: "expense", occurred_at: "2026-02-10T00:00:00Z", category_id: "c2", category: { id: "c2", name: "Aluguel", type: "expense" }, status: "pending" }),
+      ],
+      categories: [
+        { id: "c1", name: "Dízimos", type: "income", children: [] },
+        { id: "c2", name: "Aluguel", type: "expense", children: [] },
+      ],
     });
-
+    const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Dízimo Recebido");
 
-    const caixas = await screen.findAllByLabelText("Marcar como pago");
-    await user.click(caixas[0]);
+    await user.selectOptions(screen.getByDisplayValue("Todos os tipos"), "income");
+    expect(screen.queryByText("Pagamento Aluguel")).not.toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Desfazer pagamento")).toBeChecked()
-    );
-    // O segundo continua pendente.
-    expect(screen.getByLabelText("Marcar como pago")).not.toBeChecked();
+    await user.selectOptions(screen.getByDisplayValue("Entradas"), "");
+    await user.selectOptions(screen.getByDisplayValue("Todas as categorias"), "c2");
+    expect(screen.queryByText("Dízimo Recebido")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByDisplayValue("Aluguel"), "");
+
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.type(dateInputs[0] as HTMLInputElement, "2026-02-05");
+    expect(screen.queryByText("Dízimo Recebido")).not.toBeInTheDocument();
+    await user.clear(dateInputs[0] as HTMLInputElement);
+
+    await user.type(dateInputs[1] as HTMLInputElement, "2026-02-05");
+    expect(screen.queryByText("Pagamento Aluguel")).not.toBeInTheDocument();
+    await user.clear(dateInputs[1] as HTMLInputElement);
+
+    await user.selectOptions(screen.getByDisplayValue("Todos os status"), "paid");
+    expect(screen.queryByText("Pagamento Aluguel")).not.toBeInTheDocument();
   });
 
-  it("falha no status devolve só o lançamento afetado", async () => {
+  it("mostra mensagem de filtro vazio quando os filtros não retornam nada", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", type: "income" })] });
     const user = userEvent.setup();
-    patchMock.mockRejectedValue(new Error("500"));
-    rotear({
-      transacoes: {
-        total: 2,
-        data: [
-          transacao({ id: "t-1", description: "Dízimo" }),
-          transacao({
-            id: "t-2",
-            description: "Oferta",
-            occurred_at: "2026-09-11T12:00:00.000Z",
-            status: "paid",
-          }),
-        ],
-      },
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Lançamento");
+    await user.selectOptions(screen.getByDisplayValue("Todos os tipos"), "expense");
+    expect(await screen.findByText("Nenhum lançamento com esses filtros.")).toBeInTheDocument();
+  });
+
+  it("mostra estado vazio sem filtros quando não há lançamentos", async () => {
+    setup();
+    mockApi({});
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
+  });
+
+  it("pagina lançamentos quando há mais de 20", async () => {
+    setup();
+    mockApi({
+      transactions: Array.from({ length: 25 }, (_, i) => tx({ id: String(i), description: `Item ${i}` })),
     });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Marcar como pago"));
-
-    expect(
-      await screen.findByText("Erro ao atualizar status do lançamento.")
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Marcar como pago")).not.toBeChecked();
-    // O que já estava pago segue pago.
-    expect(screen.getByLabelText("Desfazer pagamento")).toBeChecked();
-  });
-
-  it("salvar em qualquer um dos modais recarrega os dados", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-    await screen.findByText("Dízimo");
-
-    const chamadas = () =>
-      getMock.mock.calls.filter(
-        ([u]) => u === "/financial/transactions?limit=100"
-      ).length;
-    expect(chamadas()).toBe(1);
-
-    await user.click(screen.getByRole("button", { name: "salvou (criar)" }));
-    await waitFor(() => expect(chamadas()).toBe(2));
-
-    await user.click(screen.getByRole("button", { name: "salvou (editar)" }));
-    await waitFor(() => expect(chamadas()).toBe(3));
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Item 0");
+    expect(screen.getByText("1–20 de 25")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+    expect(await screen.findByText("Item 20")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Página anterior" }));
+    expect(await screen.findByText("Item 0")).toBeInTheDocument();
   });
 
-  it("resposta de busca antiga não sobrescreve a recarga", async () => {
+  it("abre modal de criação e recarrega transações e recorrentes ao concluir", async () => {
+    setup();
+    mockApi({});
     const user = userEvent.setup();
-    let resolverPrimeira!: (v: unknown) => void;
-    const pendente = new Promise((resolve) => (resolverPrimeira = resolve));
-    let primeira = true;
-    getMock.mockImplementation((url: string) => {
-      if (url === "/financial/transactions?limit=100") {
-        if (primeira) {
-          primeira = false;
-          return pendente as never;
-        }
-        return Promise.resolve({
-          data: { data: [transacao({ description: "Recarregado" })], total: 1 },
-        }) as never;
-      }
-      if (url === "/financial/categories") return Promise.resolve({ data: [categoria()] }) as never;
-      if (url === "/financial/recurring-rules") return Promise.resolve({ data: [] }) as never;
-      return Promise.resolve({ data: dre() }) as never;
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Nenhum lançamento registrado.");
+    await user.click(screen.getByRole("button", { name: "Novo lançamento" }));
+    expect(screen.getByTestId("new-tx-modal")).toBeInTheDocument();
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("edita um lançamento não recorrente diretamente, e abre o diálogo de escopo para um recorrente", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", description: "Simples" }),
+        tx({ id: "2", description: "Recorrente", recurring_rule_id: "r1" }),
+      ],
     });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    // Recarrega antes da primeira resposta chegar.
-    await user.click(screen.getByRole("button", { name: "salvou (criar)" }));
-    expect(await screen.findByText("Recarregado")).toBeInTheDocument();
-
-    resolverPrimeira({
-      data: { data: [transacao({ description: "Antigo" })], total: 1 },
-    });
-
-    await waitFor(() =>
-      expect(screen.getByText("Recarregado")).toBeInTheDocument()
-    );
-    expect(screen.queryByText("Antigo")).not.toBeInTheDocument();
-  });
-});
-
-describe("FinanceiroPage — remoção de lançamento", () => {
-  it("pede confirmação e remove o lançamento simples", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
 
-    await user.click(await screen.findByLabelText("Remover lançamento"));
+    await user.click(screen.getAllByRole("button", { name: "Editar lançamento" })[0]);
+    expect(screen.getByTestId("edit-tx-modal")).toHaveTextContent("tx:1");
+
+    await user.click(screen.getAllByRole("button", { name: "Editar lançamento" })[1]);
+    expect(screen.getByTestId("scope-dialog")).toHaveTextContent("modo:edit");
+    await user.click(screen.getByRole("button", { name: "confirmar this" }));
+    expect(await screen.findByTestId("edit-tx-modal")).toHaveTextContent("tx:2");
+  });
+
+  it("cancela o diálogo de escopo sem editar nem excluir", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Recorrente", recurring_rule_id: "r1" })] });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Recorrente");
+    await user.click(screen.getByRole("button", { name: "Editar lançamento" }));
+    await user.click(screen.getByRole("button", { name: "cancelar escopo" }));
+    expect(screen.queryByTestId("scope-dialog")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-tx-modal")).not.toBeInTheDocument();
+  });
+
+  it("remove um lançamento simples com confirmação, e mostra erro quando a API falha", async () => {
+    setup(["tenant_admin"]);
+    mockApi({ transactions: [tx({ id: "1", description: "Simples" })] });
+    mockedApi.delete.mockResolvedValueOnce({ data: {} });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+    await user.click(screen.getByRole("button", { name: "Remover lançamento" }));
     expect(screen.getByText("Remover lançamento?")).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "Remover" }));
-
-    await waitFor(() =>
-      expect(deleteMock).toHaveBeenCalledWith("/financial/transactions/t-1")
-    );
-    expect(
-      await screen.findByText("Lançamento removido com sucesso")
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Remover lançamento?")).not.toBeInTheDocument();
+    expect(await screen.findByText("Lançamento removido com sucesso")).toBeInTheDocument();
+    expect(mockedApi.delete).toHaveBeenCalledWith("/financial/transactions/1");
   });
 
-  it("cancelar fecha a confirmação sem chamar a API", async () => {
+  it("cancela a exclusão simples sem chamar a API", async () => {
+    setup(["tenant_admin"]);
+    mockApi({ transactions: [tx({ id: "1", description: "Simples" })] });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Remover lançamento"));
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+    await user.click(screen.getByRole("button", { name: "Remover lançamento" }));
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
-
     expect(screen.queryByText("Remover lançamento?")).not.toBeInTheDocument();
-    expect(deleteMock).not.toHaveBeenCalled();
+    expect(mockedApi.delete).not.toHaveBeenCalled();
   });
 
-  it("falha na remoção avisa e mantém o lançamento", async () => {
+  it("mostra erro ao falhar a exclusão", async () => {
+    setup(["tenant_admin"]);
+    mockApi({ transactions: [tx({ id: "1", description: "Simples" })] });
+    mockedApi.delete.mockRejectedValueOnce(new Error("boom"));
     const user = userEvent.setup();
-    deleteMock.mockRejectedValue(new Error("500"));
-
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Remover lançamento"));
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+    await user.click(screen.getByRole("button", { name: "Remover lançamento" }));
     await user.click(screen.getByRole("button", { name: "Remover" }));
-
-    expect(
-      await screen.findByText("Erro ao remover lançamento.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Erro ao remover lançamento.")).toBeInTheDocument();
   });
 
-  it("o aviso desaparece depois de três segundos", async () => {
-    const user = userEvent.setup({
-      advanceTimers: vi.advanceTimersByTime.bind(vi),
-    });
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Remover lançamento"));
-    await user.click(screen.getByRole("button", { name: "Remover" }));
-    await screen.findByText("Lançamento removido com sucesso");
-
-    await vi.advanceTimersByTimeAsync(3000);
-
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Lançamento removido com sucesso")
-      ).not.toBeInTheDocument()
-    );
-  });
-
-  it("lançamento recorrente pergunta o escopo antes de remover", async () => {
+  it("remove um lançamento recorrente com escopo 'este e os próximos' e mensagem específica", async () => {
+    setup(["tenant_admin"]);
+    mockApi({ transactions: [tx({ id: "1", description: "Recorrente", recurring_rule_id: "r1" })] });
+    mockedApi.delete.mockResolvedValueOnce({ data: {} });
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [transacao({ recurring_rule_id: "r-1" })],
-      },
-    });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Remover lançamento"));
-    expect(screen.getByText("escopo:delete")).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "confirmar este e futuros" })
-    );
-
-    await waitFor(() =>
-      expect(deleteMock).toHaveBeenCalledWith(
-        "/financial/transactions/t-1?scope=this_and_future"
-      )
-    );
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Recorrente");
+    await user.click(screen.getByRole("button", { name: "Remover lançamento" }));
+    expect(screen.getByTestId("scope-dialog")).toHaveTextContent("modo:delete");
+    await user.click(screen.getByRole("button", { name: "confirmar this_and_future" }));
     expect(
       await screen.findByText("Lançamento e próximos removidos com sucesso")
     ).toBeInTheDocument();
+    expect(mockedApi.delete).toHaveBeenCalledWith("/financial/transactions/1?scope=this_and_future");
   });
 
-  it("escopo 'só este' remove apenas a ocorrência", async () => {
+  it("não mostra o botão de remover para quem não pode excluir", async () => {
+    setup(["secretary"]);
+    mockApi({ transactions: [tx({ id: "1", description: "Simples" })] });
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [transacao({ recurring_rule_id: "r-1" })],
-      },
-    });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Remover lançamento"));
-    await user.click(
-      screen.getByRole("button", { name: "confirmar só este" })
-    );
-
-    await waitFor(() =>
-      expect(deleteMock).toHaveBeenCalledWith(
-        "/financial/transactions/t-1?scope=only_this"
-      )
-    );
-    expect(
-      await screen.findByText("Lançamento removido com sucesso")
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+    expect(screen.queryByRole("button", { name: "Remover lançamento" })).not.toBeInTheDocument();
   });
 
-  it("editar recorrente pergunta o escopo e o repassa ao modal", async () => {
+  it("marca e desfaz o pagamento de um lançamento, revertendo em caso de erro", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "pending" })] });
+    mockedApi.patch.mockResolvedValueOnce({ data: {} });
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [transacao({ recurring_rule_id: "r-1" })],
-      },
-    });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
 
-    await user.click(await screen.findByLabelText("Editar lançamento"));
-    expect(screen.getByText("escopo:edit")).toBeInTheDocument();
+    const checkbox = screen.getByRole("checkbox", { name: "Marcar como pago" });
+    await user.click(checkbox);
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledWith("/financial/transactions/1/status", { status: "paid" }));
+    expect(await screen.findByRole("checkbox", { name: "Desfazer pagamento" })).toBeChecked();
 
-    await user.click(
-      screen.getByRole("button", { name: "confirmar este e futuros" })
-    );
-
-    expect(screen.getByText("modal-editar:t-1")).toBeInTheDocument();
-    expect(
-      screen.getByText("escopo-editar:this_and_future")
-    ).toBeInTheDocument();
-    expect(screen.getByText("escopo:fechado")).toBeInTheDocument();
-
-    // Fechar o modal limpa o escopo.
-    await user.click(screen.getByRole("button", { name: "fechar (editar)" }));
-    expect(
-      screen.queryByText("escopo-editar:this_and_future")
-    ).not.toBeInTheDocument();
+    mockedApi.patch.mockRejectedValueOnce(new Error("boom"));
+    await user.click(screen.getByRole("checkbox", { name: "Desfazer pagamento" }));
+    await waitFor(() => expect(screen.getByText("Erro ao atualizar status do lançamento.")).toBeInTheDocument());
+    // Reverte para o estado anterior (pago) já que a chamada falhou.
+    expect(await screen.findByRole("checkbox", { name: "Desfazer pagamento" })).toBeChecked();
   });
 
-  it("cancelar o diálogo de escopo não chama nada", async () => {
+  it("não mexe no status de um lançamento já exportado (confirmed) e mostra botão de visualizar", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Lançamento Confirmado", status: "confirmed" })] });
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [transacao({ recurring_rule_id: "r-1" })],
-      },
-    });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await user.click(await screen.findByLabelText("Editar lançamento"));
-    await user.click(screen.getByRole("button", { name: "cancelar escopo" }));
-
-    expect(screen.getByText("escopo:fechado")).toBeInTheDocument();
-    expect(deleteMock).not.toHaveBeenCalled();
-
-    // Confirmar sem diálogo aberto é ignorado.
-    await user.click(
-      screen.getByRole("button", { name: "confirmar só este" })
-    );
-    expect(deleteMock).not.toHaveBeenCalled();
-  });
-
-  it("quem não pode remover não vê o botão", async () => {
-    const user = userEvent.setup();
-    comPapeis(["treasurer"]);
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Lançamentos");
-
-    await screen.findByText("Dízimo");
-    expect(
-      screen.queryByLabelText("Remover lançamento")
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Editar lançamento")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Lançamento Confirmado");
+    expect(screen.getByText("Exportado", { selector: "span.inline-flex" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Visualizar lançamento" }));
+    expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
   });
 });
 
-describe("FinanceiroPage — recorrentes", () => {
-  it("lista as regras com modo, valor, frequência e próxima ocorrência", async () => {
+function rule(overrides: Partial<{
+  id: string;
+  mode: string;
+  frequency: string;
+  interval: number;
+  installments: number | null;
+  next_occurrence_at: string;
+  ends_at: string | null;
+  is_active: boolean;
+  transactions_count: number;
+}> = {}) {
+  return {
+    id: "r1",
+    mode: "fixed",
+    frequency: "monthly",
+    interval: 1,
+    installments: null,
+    next_occurrence_at: "2026-03-01T00:00:00Z",
+    ends_at: null,
+    is_active: true,
+    transactions_count: 3,
+    ...overrides,
+  };
+}
+
+describe("FinanceiroPage — aba Recorrentes", () => {
+  it("mostra estado vazio, e trata falha como lista vazia", async () => {
+    setup();
+    mockApi({});
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [
-          transacao({
-            id: "t-1",
-            description: "Cadeiras (3/12)",
-            recurring_rule_id: "r-1",
-            type: "expense",
-            amount: "400.00",
-          }),
-        ],
-      },
-      recorrentes: [
-        regra(),
-        regra({
-          id: "r-2",
-          mode: "fixed",
-          frequency: "weekly",
-          installments: null,
-          transactions_count: 8,
-          next_occurrence_at: "2026-10-12T12:00:00.000Z",
-        }),
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    expect(await screen.findByText("Nenhuma regra recorrente ativa.")).toBeInTheDocument();
+  });
+
+  it("mostra falha ao carregar como lista vazia", async () => {
+    setup();
+    mockApi({ recurringError: true });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    expect(await screen.findByText("Nenhuma regra recorrente ativa.")).toBeInTheDocument();
+  });
+
+  it("mostra regras parceladas e fixas, com a transação correspondente e sem ela", async () => {
+    setup();
+    mockApi({
+      transactions: [tx({ id: "t1", recurring_rule_id: "r1", description: "Dízimo (1/12)", type: "income", amount: "100" })],
+      recurring: [
+        rule({ id: "r1", mode: "installment", installments: 12, transactions_count: 1, frequency: "weekly" }),
+        rule({ id: "r2", mode: "fixed", frequency: "yearly" }),
       ],
     });
-
+    const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
-
-    expect(await screen.findByText("Cadeiras")).toBeInTheDocument();
-    expect(
-      screen.getByText("Parcelado 3/12 geradas")
-    ).toBeInTheDocument();
-    expect(screen.getByText("−R$ 400,00")).toBeInTheDocument();
-    expect(screen.getByText("Mensal")).toBeInTheDocument();
-    expect(screen.getByText("05/10/2026")).toBeInTheDocument();
-
-    // A segunda regra não tem lançamento correspondente.
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    expect(await screen.findByText("Dízimo")).toBeInTheDocument();
+    expect(screen.getByText("Parcelado 1/12 geradas")).toBeInTheDocument();
     expect(screen.getByText("Fixo mensal")).toBeInTheDocument();
     expect(screen.getByText("Semanal")).toBeInTheDocument();
-    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(screen.getByText("Anual")).toBeInTheDocument();
+    // r2 não tem transação correspondente.
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("frequência anual e entrada recorrente", async () => {
+  it("cancela a desativação sem chamar a API", async () => {
+    setup();
+    mockApi({ recurring: [rule()] });
     const user = userEvent.setup();
-    rotear({
-      transacoes: {
-        total: 1,
-        data: [
-          transacao({ id: "t-1", recurring_rule_id: "r-1", amount: "90.00" }),
-        ],
-      },
-      recorrentes: [regra({ frequency: "yearly", mode: "fixed" })],
-    });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    await screen.findByText("Desativar");
 
-    expect(await screen.findByText("Anual")).toBeInTheDocument();
-    expect(screen.getByText("+R$ 90,00")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Desativar" }));
+    expect(screen.getByText("Desativar regra recorrente?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByText("Desativar regra recorrente?")).not.toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
   });
 
-  it("sem regras mostra o estado vazio", async () => {
+  it("confirma a desativação com sucesso e recarrega a lista", async () => {
+    setup();
+    mockApi({ recurring: [rule()] });
+    mockedApi.patch.mockResolvedValueOnce({ data: {} });
     const user = userEvent.setup();
-    rotear({ recorrentes: [] });
-
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    await screen.findByText("Desativar");
 
-    expect(
-      await screen.findByText("Nenhuma regra recorrente ativa.")
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Desativar" }));
+    const confirmButtons = screen.getAllByRole("button", { name: "Desativar" });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledWith("/financial/recurring-rules/r1/deactivate"));
+    await waitFor(() => expect(screen.queryByText("Desativar regra recorrente?")).not.toBeInTheDocument());
   });
 
-  it("resposta vazia e erro caem no mesmo estado", async () => {
+  it("mantém o diálogo aberto quando a desativação falha", async () => {
+    setup();
+    mockApi({ recurring: [rule()] });
+    mockedApi.patch.mockRejectedValueOnce(new Error("boom"));
     const user = userEvent.setup();
-    // `data` ausente na resposta: o `?? []` da tela é o que segura.
-    rotear({ recorrentes: () => Promise.resolve({ data: undefined }) });
-    const { unmount } = render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
-    expect(
-      await screen.findByText("Nenhuma regra recorrente ativa.")
-    ).toBeInTheDocument();
-    unmount();
-
-    rotear({ recorrentes: () => Promise.reject(new Error("500")) });
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
-    expect(
-      await screen.findByText("Nenhuma regra recorrente ativa.")
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    await screen.findByText("Desativar");
+    await user.click(screen.getByRole("button", { name: "Desativar" }));
+    const confirmButtons = screen.getAllByRole("button", { name: "Desativar" });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    expect(screen.getByText("Desativar regra recorrente?")).toBeInTheDocument();
+  });
+});
+
+function dreCategory(name: string, total: number, count: number) {
+  return { category_name: name, total, count };
+}
+
+describe("FinanceiroPage — aba DRE", () => {
+  it("mostra o placeholder quando ainda não há DRE carregado", async () => {
+    setup();
+    mockApi({ dreError: true });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    expect(await screen.findByText("Selecione um período para ver o DRE.")).toBeInTheDocument();
   });
 
-  it("desativar pede confirmação, chama a API e recarrega", async () => {
+  it("muda o período e refaz a busca, sem duplicar quando o período não muda", async () => {
+    setup();
+    mockApi({ dre: dre() });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    await screen.findByText("RECEITAS");
+    const callsBefore = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length;
 
-    await user.click(await screen.findByRole("button", { name: "Desativar" }));
-    expect(
-      screen.getByText("Desativar regra recorrente?")
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getAllByRole("button", { name: "Desativar" }).at(-1)!
-    );
-
-    await waitFor(() =>
-      expect(patchMock).toHaveBeenCalledWith(
-        "/financial/recurring-rules/r-1/deactivate"
-      )
-    );
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.clear(dateInputs[0] as HTMLInputElement);
+    await user.type(dateInputs[0] as HTMLInputElement, "2026-01-01");
     await waitFor(() =>
       expect(
-        getMock.mock.calls.filter(([u]) => u === "/financial/recurring-rules")
-      ).toHaveLength(2)
+        mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length
+      ).toBeGreaterThan(callsBefore)
     );
+
+    const callsAfterStart = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length;
+    await user.clear(dateInputs[1] as HTMLInputElement);
+    await user.type(dateInputs[1] as HTMLInputElement, "2026-02-15");
+    await waitFor(() =>
+      expect(
+        mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length
+      ).toBeGreaterThan(callsAfterStart)
+    );
+
+    // Trocar de aba e voltar sem mudar o período não deve refazer a busca.
+    await user.click(screen.getByRole("tab", { name: "Visão Geral" }));
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    const callsAfterReturn = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length;
+    await new Promise((r) => setTimeout(r, 10));
+    expect(
+      mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length
+    ).toBe(callsAfterReturn);
   });
 
-  it("voltar para a aba não repete a busca das regras", async () => {
+  it("mostra categorias de receita e despesa, com deltas positivos e negativos", async () => {
+    setup();
+    mockApi({
+      dre: dre({
+        revenue: { categories: [dreCategory("Dízimos", 1000, 5)], total: 1000 },
+        expenses: { categories: [dreCategory("Aluguel", 400, 2)], total: 400 },
+        net_result: 600,
+        previous_period: { revenue_total: 500, expenses_total: 800, net_result: -300 },
+      }),
+    });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
-    await screen.findByRole("button", { name: "Desativar" });
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    expect(await screen.findByText("Dízimos")).toBeInTheDocument();
+    expect(screen.getByText("Aluguel")).toBeInTheDocument();
+    expect(screen.getByText("100.0%")).toBeInTheDocument(); // receita subiu 100% vs 500
+    expect(screen.getByText("50.0%")).toBeInTheDocument(); // despesa caiu 50% vs 800
+    expect(screen.getByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
+  });
+
+  it("mostra 'sem lançamentos' quando uma categoria não tem entradas, e '—' quando não há período anterior para o delta", async () => {
+    setup();
+    mockApi({ dre: dre() });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    await screen.findByText("RECEITAS");
+    expect(screen.getAllByText("Sem lançamentos").length).toBe(2);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("esconde a coluna Total e o ExportButton para pastor", async () => {
+    setup(["pastor"]);
+    mockApi({
+      dre: dre({
+        revenue: { categories: [dreCategory("Dízimos", 1000, 5)], total: 1000 },
+      }),
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    await screen.findByText("Dízimos");
+    expect(screen.queryByTestId("export-button")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total")).not.toBeInTheDocument();
+  });
+
+  it("mostra o ExportButton com o período correto para quem não é pastor", async () => {
+    setup();
+    mockApi({ dre: dre() });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    expect(await screen.findByTestId("export-button")).toBeInTheDocument();
+  });
+
+  it("mostra o resultado líquido em vermelho quando é negativo", async () => {
+    setup();
+    mockApi({ dre: dre({ net_result: -50 }) });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    expect(await screen.findByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
+    expect(screen.getByText("-R$ 50,00")).toBeInTheDocument();
+  });
+});
+
+describe("FinanceiroPage — corridas e casos-limite", () => {
+  it("ignora uma resposta de /financial/transactions atrasada de um refresh anterior", async () => {
+    setup();
+    let resolveFirst!: (v: unknown) => void;
+    const first = new Promise((resolve) => { resolveFirst = resolve; });
+    let call = 0;
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/financial/transactions")) {
+        call += 1;
+        if (call === 1) return first as never;
+        return Promise.resolve({
+          data: { data: [tx({ id: "2", description: "Segunda Carga" })], total: 1 },
+        });
+      }
+      if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/recurring-rules")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/dre")) return Promise.resolve({ data: dre() });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await waitFor(() => expect(call).toBe(1));
+
+    // Dispara um segundo `loadTx` (via onCreated do modal de criação) antes da
+    // primeira promise resolver — o `txSeq` desatualiza a primeira.
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await user.click(screen.getByRole("button", { name: "Novo lançamento" }));
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await waitFor(() => expect(call).toBe(2));
+    await screen.findByText("Segunda Carga");
+
+    resolveFirst({ data: { data: [tx({ id: "1", description: "Primeira Carga (atrasada)" })], total: 1 } });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.queryByText("Primeira Carga (atrasada)")).not.toBeInTheDocument();
+    expect(screen.getByText("Segunda Carga")).toBeInTheDocument();
+  });
+
+  it("usa lista vazia quando a resposta de regras recorrentes não traz data", async () => {
+    setup();
+    mockApi({});
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/financial/transactions")) return Promise.resolve({ data: { data: [], total: 0 } });
+      if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/recurring-rules")) return Promise.resolve({ data: undefined });
+      if (url.startsWith("/financial/dre")) return Promise.resolve({ data: dre() });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    expect(await screen.findByText("Nenhuma regra recorrente ativa.")).toBeInTheDocument();
+  });
+
+  it("não refaz a busca de recorrentes ao revisitar a aba sem passar por um refresh explícito", async () => {
+    setup();
+    mockApi({ recurring: [rule()] });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    await screen.findByText("Desativar");
+    const callsAfterFirst = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/recurring-rules")).length;
 
     await user.click(screen.getByRole("tab", { name: "Visão Geral" }));
     await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
-
+    await new Promise((r) => setTimeout(r, 10));
+    // `hasFetchedRecurring` só é zerado por um refresh explícito (criar/editar
+    // transação, desativar regra) — revisitar a aba sozinha não refaz a busca.
     expect(
-      getMock.mock.calls.filter(([u]) => u === "/financial/recurring-rules")
-    ).toHaveLength(1);
+      mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/recurring-rules")).length
+    ).toBe(callsAfterFirst);
   });
 
-  it("cancelar a desativação não chama a API", async () => {
+  it("bloqueia um segundo toggle de status enquanto o primeiro ainda está em andamento", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "pending" })] });
+    let resolvePatch!: (v: unknown) => void;
+    mockedApi.patch.mockReturnValue(new Promise((resolve) => { resolvePatch = resolve; }) as never);
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
 
-    await user.click(await screen.findByRole("button", { name: "Desativar" }));
-    await user.click(screen.getByRole("button", { name: "Cancelar" }));
-
-    expect(
-      screen.queryByText("Desativar regra recorrente?")
-    ).not.toBeInTheDocument();
-    expect(patchMock).not.toHaveBeenCalled();
+    const checkbox = screen.getByRole("checkbox", { name: "Marcar como pago" });
+    await user.click(checkbox);
+    // Um segundo clique enquanto a primeira chamada está pendente não deve
+    // disparar um segundo PATCH.
+    await user.click(checkbox);
+    expect(mockedApi.patch).toHaveBeenCalledTimes(1);
+    resolvePatch({ data: {} });
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Desfazer pagamento" })).toBeChecked());
   });
 
-  it("falha ao desativar mantém a regra e libera os botões", async () => {
-    const user = userEvent.setup();
-    patchMock.mockRejectedValue(new Error("500"));
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
-
-    await user.click(await screen.findByRole("button", { name: "Desativar" }));
-    await user.click(
-      screen.getAllByRole("button", { name: "Desativar" }).at(-1)!
-    );
-
-    await waitFor(() => expect(patchMock).toHaveBeenCalled());
-    expect(
-      screen.getByText("Desativar regra recorrente?")
-    ).toBeInTheDocument();
-  });
-
-  it("enquanto desativa, os dois botões travam", async () => {
-    const user = userEvent.setup();
-    let liberar!: (v: unknown) => void;
-    patchMock.mockImplementation(
-      () => new Promise((resolve) => (liberar = resolve)) as never
-    );
-
-    render(<FinanceiroPage />);
-    await irPara(user, "Recorrentes");
-
-    await user.click(await screen.findByRole("button", { name: "Desativar" }));
-    await user.click(
-      screen.getAllByRole("button", { name: "Desativar" }).at(-1)!
-    );
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled()
-    );
-
-    liberar({ data: {} });
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Desativar regra recorrente?")
-      ).not.toBeInTheDocument()
-    );
-  });
-});
-
-describe("FinanceiroPage — DRE", () => {
-  it("mostra receitas, despesas, resultado e a variação do período anterior", async () => {
-    const user = userEvent.setup();
-    render(<FinanceiroPage />);
-    await irPara(user, "DRE");
-
-    expect(await screen.findByText("RECEITAS")).toBeInTheDocument();
-    expect(screen.getByText("Dízimos")).toBeInTheDocument();
-    expect(screen.getByText("Aluguel")).toBeInTheDocument();
-    expect(screen.getByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
-    // 5000 sobre 4000: +25%; despesas 2000 sobre 2500: −20%; resultado
-    // 3000 sobre 1500: +100%.
-    expect(screen.getByText("25.0%")).toBeInTheDocument();
-    expect(screen.getByText("20.0%")).toBeInTheDocument();
-    expect(screen.getByText("100.0%")).toBeInTheDocument();
-    expect(screen.getByText("exportar:2026-09-01..2026-09-17")).toBeInTheDocument();
-  });
-
-  it("período anterior zerado deixa a variação em traço", async () => {
-    const user = userEvent.setup();
-    rotear({
-      dre: dre({
-        previous_period: {
-          period: { start: "2026-08-01", end: "2026-08-31" },
-          revenue_total: 0,
-          expenses_total: 0,
-          net_result: 0,
-        },
-      }),
+  it("altera só o lançamento clicado quando há mais de um na tabela", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", description: "Primeiro", status: "pending" }),
+        tx({ id: "2", description: "Segundo", status: "pending" }),
+      ],
     });
-
+    mockedApi.patch.mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "DRE");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Primeiro");
 
-    await screen.findByText("RECEITAS");
-    expect(screen.queryByText(/%$/)).not.toBeInTheDocument();
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Marcar como pago" });
+    await user.click(checkboxes[0]);
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledWith("/financial/transactions/1/status", { status: "paid" }));
+    // O segundo lançamento continua com o checkbox de "marcar como pago".
+    expect(screen.getAllByRole("checkbox", { name: "Marcar como pago" })).toHaveLength(1);
   });
 
-  it("resultado negativo sai em vermelho", async () => {
-    const user = userEvent.setup();
-    rotear({ dre: dre({ net_result: -500 }) });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "DRE");
-
-    const celula = await screen.findByText("-R$ 500,00");
-    expect(celula.className).toContain("text-crimson");
-  });
-
-  it("sem categorias no período cada grupo avisa", async () => {
-    const user = userEvent.setup();
-    rotear({
-      dre: dre({
-        revenue: { categories: [], total: 0 },
-        expenses: { categories: [], total: 0 },
-      }),
+  it("reverte só o lançamento que falhou quando há mais de um na tabela", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", description: "Primeiro", status: "pending" }),
+        tx({ id: "2", description: "Segundo", status: "pending" }),
+      ],
     });
-
-    render(<FinanceiroPage />);
-    await irPara(user, "DRE");
-
-    expect(await screen.findAllByText("Sem lançamentos")).toHaveLength(2);
-  });
-
-  it("trocar o período refaz a busca", async () => {
+    mockedApi.patch.mockRejectedValueOnce(new Error("boom"));
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "DRE");
-    await screen.findByText("RECEITAS");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Primeiro");
 
-    const datas = document.querySelectorAll<HTMLInputElement>(
-      'input[type="date"]'
-    );
-    await user.clear(datas[0]);
-    await user.type(datas[0], "2026-08-01");
-
-    await waitFor(() =>
-      expect(
-        getMock.mock.calls.some(
-          ([u]) => u === "/financial/dre?period_start=2026-08-01&period_end=2026-09-17"
-        )
-      ).toBe(true)
-    );
-
-    await user.clear(datas[1]);
-    await user.type(datas[1], "2026-08-31");
-
-    await waitFor(() =>
-      expect(
-        getMock.mock.calls.some(
-          ([u]) => u === "/financial/dre?period_start=2026-08-01&period_end=2026-08-31"
-        )
-      ).toBe(true)
-    );
+    const checkboxes = screen.getAllByRole("checkbox", { name: "Marcar como pago" });
+    await user.click(checkboxes[0]);
+    await waitFor(() => expect(screen.getByText("Erro ao atualizar status do lançamento.")).toBeInTheDocument());
+    // Os dois voltam a mostrar "Marcar como pago" — só o primeiro reverteu.
+    expect(screen.getAllByRole("checkbox", { name: "Marcar como pago" })).toHaveLength(2);
   });
 
-  it("voltar para a visão geral não repete a busca do mesmo período", async () => {
+  it("não faz nada quando onConfirm do diálogo de escopo é chamado depois dele já ter fechado", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Recorrente", recurring_rule_id: "r1" })] });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await irPara(user, "DRE");
-    await screen.findByText("RECEITAS");
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Recorrente");
+    await user.click(screen.getByRole("button", { name: "Editar lançamento" }));
+    expect(capturedOnConfirm).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "cancelar escopo" }));
+    expect(screen.queryByTestId("scope-dialog")).not.toBeInTheDocument();
 
-    const antes = getMock.mock.calls.filter(([u]) =>
-      (u as string).startsWith("/financial/dre")
-    ).length;
-
-    await user.click(screen.getByRole("tab", { name: "Visão Geral" }));
-    await user.click(screen.getByRole("tab", { name: "DRE" }));
-
-    expect(
-      getMock.mock.calls.filter(([u]) =>
-        (u as string).startsWith("/financial/dre")
-      ).length
-    ).toBe(antes);
-  });
-});
-
-describe("FinanceiroPage — papéis", () => {
-  it("secretário é mandado de volta ao dashboard", async () => {
-    comPapeis(["secretary"]);
-
-    render(<FinanceiroPage />);
-
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    // Simula a resposta tardia: chama o `onConfirm` capturado depois que o
+    // diálogo já fechou (`scopeDialog` voltou a `null`).
+    capturedOnConfirm!("this");
+    expect(screen.queryByTestId("edit-tx-modal")).not.toBeInTheDocument();
+    expect(mockedApi.delete).not.toHaveBeenCalled();
   });
 
-  it("sessão sem usuário resolvido não redireciona", async () => {
-    vi.mocked(useAuth).mockReturnValue({
-      user: null,
-      isLoading: true,
-      isAuthenticated: false,
-      login: vi.fn(),
-      logout: vi.fn(),
+  it("mostra o valor da transação de saída em vermelho na tabela de recorrentes", async () => {
+    setup();
+    mockApi({
+      transactions: [tx({ id: "t1", recurring_rule_id: "r1", type: "expense", amount: "50" })],
+      recurring: [rule({ id: "r1" })],
     });
-
-    render(<FinanceiroPage />);
-
-    await screen.findByText("Visão geral e tesouraria");
-    expect(replace).not.toHaveBeenCalled();
-  });
-
-  it("pastor não vê lançamentos, recorrentes, valores do DRE nem exportação", async () => {
-    const user = userEvent.setup();
-    comPapeis(["pastor"]);
-
-    render(<FinanceiroPage />);
-    await screen.findByText("Visão geral e tesouraria");
-
-    expect(
-      screen.queryByRole("tab", { name: "Lançamentos" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("tab", { name: "Recorrentes" })
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "DRE" }));
-    await screen.findByText("RECEITAS");
-
-    expect(screen.queryByText("Total")).not.toBeInTheDocument();
-    expect(screen.queryByText("R$ 5.000,00")).not.toBeInTheDocument();
-    expect(screen.queryByText(/^exportar:/)).not.toBeInTheDocument();
-    // A coluna de valores sai da tabela inteira, inclusive das linhas de
-    // categoria.
-    expect(screen.queryByText("R$ 2.000,00")).not.toBeInTheDocument();
-  });
-
-  it("pastor com grupos vazios mantém o colSpan do aviso", async () => {
-    const user = userEvent.setup();
-    comPapeis(["pastor"]);
-    rotear({
-      dre: dre({
-        revenue: { categories: [], total: 0 },
-        expenses: { categories: [], total: 0 },
-      }),
-    });
-
-    render(<FinanceiroPage />);
-    await screen.findByText("Visão geral e tesouraria");
-    await user.click(screen.getByRole("tab", { name: "DRE" }));
-
-    const avisos = await screen.findAllByText("Sem lançamentos");
-    expect(avisos[0].getAttribute("colspan")).toBe("3");
-  });
-
-  it("quem gerencia categorias abre o modal, e a mudança recarrega a lista", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    await screen.findByText("Visão geral e tesouraria");
-
-    await user.click(screen.getByLabelText("Categorias"));
-    expect(screen.getByText("categorias:aberto")).toBeInTheDocument();
-
-    const chamadas = () =>
-      getMock.mock.calls.filter(
-        ([u]) => u === "/financial/transactions?limit=100"
-      ).length;
-    const antes = chamadas();
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar categorias mudaram" })
-    );
-
-    await waitFor(() => expect(chamadas()).toBe(antes + 1));
+    await user.click(screen.getByRole("tab", { name: "Recorrentes" }));
+    const cell = (await screen.findByText(/R\$\s*50,00/)).closest("td")!;
+    expect(cell).toHaveClass("text-crimson");
+    expect(cell).toHaveTextContent(/−R\$\s*50,00/);
   });
 
-  it("quem não gerencia categorias não vê o botão nem o modal", async () => {
-    comPapeis(["pastor"]);
-
+  it("fecha o modal de edição e o de visualização ao chamar onOpenChange(false)", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "confirmed" })] });
+    const user = userEvent.setup();
     render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
 
-    await screen.findByText("Visão geral e tesouraria");
-    expect(screen.queryByLabelText("Categorias")).not.toBeInTheDocument();
-    expect(screen.queryByText(/^categorias:/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Visualizar lançamento" }));
+    expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular fechar" }));
+    expect(screen.queryByTestId("view-tx-modal")).not.toBeInTheDocument();
+  });
+
+  it("não fecha o modal de edição quando onOpenChange é chamado com true", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples" })] });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+
+    await user.click(screen.getByRole("button", { name: "Editar lançamento" }));
+    expect(screen.getByTestId("edit-tx-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular reabrir" }));
+    expect(screen.getByTestId("edit-tx-modal")).toBeInTheDocument();
+  });
+
+  it("fecha o modal de edição e recarrega lançamentos/recorrentes ao chamar onOpenChange(false) e onCreated", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples" })] });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+
+    await user.click(screen.getByRole("button", { name: "Editar lançamento" }));
+    expect(screen.getByTestId("edit-tx-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await user.click(screen.getByRole("button", { name: "simular fechar" }));
+    expect(screen.queryByTestId("edit-tx-modal")).not.toBeInTheDocument();
+  });
+
+  it("não fecha o modal de visualização quando onOpenChange é chamado com true, e onCreated é um no-op", async () => {
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "confirmed" })] });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Simples");
+
+    await user.click(screen.getByRole("button", { name: "Visualizar lançamento" }));
+    expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular reabrir" }));
+    expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
   });
 });

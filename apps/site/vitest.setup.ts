@@ -1,25 +1,53 @@
 import "@testing-library/jest-dom/vitest";
 
 /**
- * `IntersectionObserver` não existe no jsdom, e o `Reveal` — que embrulha
- * quase toda seção do site — o instancia na montagem. Sem este dublê,
- * renderizar qualquer página quebra antes da primeira asserção.
+ * jsdom não implementa IntersectionObserver, e `ui/Reveal.tsx` — usado por
+ * quase toda seção do site — instancia um no mount. Sem este stub qualquer
+ * render quebraria com ReferenceError.
  *
- * O comportamento do próprio `Reveal` (marcar `in` ao entrar na tela) é
- * testado em `src/components/ui/ui.test.tsx`, que substitui este global por
- * um dublê controlável.
+ * As instâncias ficam em `intersectionObservers` para que o teste do próprio
+ * `Reveal` possa disparar o callback à mão; os demais testes só precisam que
+ * o construtor exista.
  */
-class ObservadorDeInterseccaoInerte {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return [];
-  }
-  readonly root = null;
-  readonly rootMargin = "";
-  readonly thresholds: number[] = [];
+export interface FakeIntersectionObserver {
+  callback: IntersectionObserverCallback;
+  observed: Element[];
+  unobserved: Element[];
+  disconnected: boolean;
 }
 
-globalThis.IntersectionObserver =
-  ObservadorDeInterseccaoInerte as unknown as typeof IntersectionObserver;
+export const intersectionObservers: FakeIntersectionObserver[] = [];
+
+class IntersectionObserverStub implements FakeIntersectionObserver {
+  callback: IntersectionObserverCallback;
+  observed: Element[] = [];
+  unobserved: Element[] = [];
+  disconnected = false;
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+    intersectionObservers.push(this);
+  }
+
+  observe(el: Element) {
+    this.observed.push(el);
+  }
+
+  unobserve(el: Element) {
+    this.unobserved.push(el);
+  }
+
+  disconnect() {
+    this.disconnected = true;
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
+
+Object.defineProperty(globalThis, "IntersectionObserver", {
+  writable: true,
+  configurable: true,
+  value: IntersectionObserverStub,
+});

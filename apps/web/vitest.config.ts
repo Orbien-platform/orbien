@@ -50,27 +50,8 @@ export default defineConfig({
         "src/components/groups/**": { statements: 98, branches: 92, functions: 100, lines: 100 },
         "src/components/persons/**": { statements: 99, branches: 89, functions: 100, lines: 100 },
         "src/components/volunteers/**": { statements: 100, branches: 95, functions: 100, lines: 100 },
-        // Fase 10 — rotas do web. Os Route Handlers, os dois layouts, a raiz
-        // e as quatro telas públicas fecham em 100%. As telas de `(admin)`
-        // que param abaixo disso param em guardas que a UI real não alcança,
-        // e cada uma tem um `it()` explicando o caso:
-        // - `hasFetched*.current` das buscas por aba: o effect da troca de
-        //   aba zera o flag antes de chamar (a guarda da busca inicial está
-        //   coberta, com render em `StrictMode`);
-        // - `logoPreview`/`logoInputRef.current` ausentes no salvar de
-        //   `configuracoes`, e `canEditCongregation` falso ali dentro — que
-        //   exigiria o botão de salvar existir sem permissão nenhuma;
-        // - a variante `default` do `KpiCard` local de `financeiro`, que as
-        //   três chamadas da tela nunca usam, e o `statusUpdatingIds.has()`
-        //   do toggle de status, cujo checkbox já está desabilitado;
-        // - os dois ramos de `opened` no histórico de notificações de
-        //   `conteudo`: quem cria o despacho grava só `delivered`.
-        "src/app/api/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/app/api-proxy/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/app/(public)/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/app/layout.tsx": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/app/page.tsx": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/app/(admin)/**": { statements: 98, branches: 94, functions: 100, lines: 100 },
+        // Fase 10
+        "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

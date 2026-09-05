@@ -10,7 +10,14 @@ import { cn } from "@/lib/utils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ImportPreview {
-  columns: string[];
+  // `detected_columns`, e não `columns`: é o nome que a API manda, declarado em
+  // `apps/api/src/persons/dto/import-preview.dto.ts`. Enquanto este tipo dizia
+  // `columns`, `data.columns` chegava `undefined`, o `for…of` logo abaixo
+  // lançava TypeError, e o `catch` do `uploadFile` transformava isso na
+  // mensagem "Não foi possível processar o arquivo" — a importação nunca saía
+  // do passo de upload. O tipo mentia e o TypeScript não tinha como saber:
+  // quem entrega o corpo é o axios, como `any` na fronteira.
+  detected_columns: string[];
   preview_rows: Record<string, string>[];
   suggested_mapping?: Record<string, string>;
 }
@@ -74,7 +81,7 @@ export function ImportCsvModal({
       });
       setPreview(data);
       const initial: Record<string, string> = {};
-      for (const col of data.columns) {
+      for (const col of data.detected_columns) {
         initial[col] = data.suggested_mapping?.[col] ?? "";
       }
       setMapping(initial);
@@ -183,11 +190,11 @@ export function ImportCsvModal({
           </div>
 
           <p className="text-xs text-stone">
-            {preview.preview_rows.length} linha(s) de prévia · {preview.columns.length} colunas detectadas
+            {preview.preview_rows.length} linha(s) de prévia · {preview.detected_columns.length} colunas detectadas
           </p>
 
           <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto pr-1">
-            {preview.columns.map((col) => (
+            {preview.detected_columns.map((col) => (
               <div key={col} className="flex items-center gap-2">
                 <span className="w-1/2 truncate text-xs font-medium text-ink dark:text-white" title={col}>
                   {col}

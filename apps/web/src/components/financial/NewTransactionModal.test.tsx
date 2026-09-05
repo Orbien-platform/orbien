@@ -40,7 +40,10 @@ describe("NewTransactionModal", () => {
     render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/categories"));
-    expect(screen.getAllByText("Dízimos").length).toBeGreaterThan(0);
+    // `findAllByText` espera o render aplicar a resposta do `api.get` — um
+    // `getAllByText` logo depois do `waitFor` da chamada do mock pega a
+    // janela entre a resposta resolver e o próximo render, intermitente.
+    expect((await screen.findAllByText("Dízimos")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Aluguel")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Registrar" }));

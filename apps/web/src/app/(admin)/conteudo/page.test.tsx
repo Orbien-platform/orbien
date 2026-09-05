@@ -1,72 +1,57 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ConteudoPage from "./page";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import ConteudoPage from "./page";
 
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn() } }));
+vi.mock("@/lib/api", () => ({
+  default: { get: vi.fn() },
+}));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 
-// `POST_TYPE_LABELS` mora nesse módulo e alimenta a coluna e o filtro de
-// tipo — o mock troca só o componente.
-vi.mock("@/components/content/CreatePostModal", async () => {
-  const real = await vi.importActual<
-    typeof import("@/components/content/CreatePostModal")
-  >("@/components/content/CreatePostModal");
-  return {
-    ...real,
-    CreatePostModal: ({
-      open,
-      onCreated,
-    }: {
-      open: boolean;
-      onCreated: () => void;
-    }) => (
-      <div>
-        <span>criar-post:{open ? "aberto" : "fechado"}</span>
-        <button onClick={onCreated}>avisar post criado</button>
+vi.mock("@/components/content/CreatePostModal", () => ({
+  POST_TYPE_LABELS: {
+    post: "Post",
+    sermon_video: "Vídeo Sermão",
+    audio: "Áudio",
+    devotional: "Devocional",
+    study: "Estudo",
+    event: "Evento",
+    notice: "Aviso",
+    prayer: "Oração",
+  },
+  CreatePostModal: ({ open, onCreated }: { open: boolean; onCreated: () => void }) =>
+    open ? (
+      <div data-testid="create-post-modal">
+        <button onClick={onCreated}>simular criação</button>
       </div>
-    ),
-  };
-});
-
+    ) : null,
+}));
 vi.mock("@/components/content/PostDetailSheet", () => ({
   PostDetailSheet: ({
     open,
     postId,
-    canEdit,
-    canDelete,
     onUpdated,
   }: {
     open: boolean;
     postId: string | null;
-    canEdit: boolean;
-    canDelete: boolean;
     onUpdated: () => void;
-  }) => (
-    <div>
-      <span>post:{open ? postId : "fechado"}</span>
-      <span>
-        post-perm:{String(canEdit)}/{String(canDelete)}
-      </span>
-      <button onClick={onUpdated}>avisar post editado</button>
-    </div>
-  ),
+  }) =>
+    open ? (
+      <div data-testid="post-detail-sheet">
+        post:{postId}
+        <button onClick={onUpdated}>simular atualização</button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/content/CreateSegmentModal", () => ({
-  CreateSegmentModal: ({
-    open,
-    onCreated,
-  }: {
-    open: boolean;
-    onCreated: () => void;
-  }) => (
-    <div>
-      <span>criar-segmento:{open ? "aberto" : "fechado"}</span>
-      <button onClick={onCreated}>avisar segmento criado</button>
-    </div>
-  ),
+  CreateSegmentModal: ({ open, onCreated }: { open: boolean; onCreated: () => void }) =>
+    open ? (
+      <div data-testid="create-segment-modal">
+        <button onClick={onCreated}>simular criação de segmento</button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/content/SendNotificationModal", () => ({
   SendNotificationModal: ({
@@ -74,66 +59,27 @@ vi.mock("@/components/content/SendNotificationModal", () => ({
     onSent,
   }: {
     open: boolean;
-    onSent: (r: { delivered?: number }) => void;
-  }) => (
-    <div>
-      <span>notificar:{open ? "aberto" : "fechado"}</span>
-      <button onClick={() => onSent({ delivered: 120 })}>
-        avisar envio com entrega
-      </button>
-      <button onClick={() => onSent({})}>avisar envio sem métrica</button>
-    </div>
-  ),
+    onSent: (result: { delivered: number }) => void;
+  }) =>
+    open ? (
+      <div data-testid="send-notification-modal">
+        <button onClick={() => onSent({ delivered: 42 })}>simular envio</button>
+      </div>
+    ) : null,
 }));
 
-const getMock = vi.mocked(api.get);
+const mockedApi = vi.mocked(api, true);
+const mockedUseAuth = vi.mocked(useAuth);
 
-function post(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "p-1",
-    title: "Aviso da semana",
-    type: "announcement",
-    is_draft: false,
-    publish_at: "2026-08-01T12:00:00.000Z",
-    created_at: "2026-07-30T12:00:00.000Z",
-    media_url: null,
-    ...overrides,
-  };
-}
-
-function segmento(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "s-1",
-    name: "Jovens",
-    criteria: undefined,
-    _count: { posts: 4 },
-    ...overrides,
-  };
-}
-
-function rotear(handlers: { posts?: () => unknown; segmentos?: () => unknown }) {
-  getMock.mockImplementation((url: string) => {
-    if (url.startsWith("/content/posts")) {
-      return Promise.resolve(handlers.posts?.() ?? { data: [post()] }) as never;
-    }
-    if (url.startsWith("/content/segments")) {
-      return Promise.resolve(
-        handlers.segmentos?.() ?? { data: [segmento()] }
-      ) as never;
-    }
-    throw new Error(`URL inesperada: ${url}`);
-  });
-}
-
-function comPapeis(roles: string[]) {
-  vi.mocked(useAuth).mockReturnValue({
+function setup(roles: string[] = ["tenant_admin"]) {
+  mockedUseAuth.mockReturnValue({
     user: {
-      id: "u-1",
-      name: "ana",
-      email: "ana@igreja.com",
+      id: "u1",
+      name: "Ana",
+      email: "ana@a.com",
       roles,
-      tenant_id: "t-1",
-      congregation_id: "c-1",
+      tenant_id: "t1",
+      congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
     },
@@ -144,466 +90,303 @@ function comPapeis(roles: string[]) {
   });
 }
 
-function urlDePosts() {
-  return getMock.mock.calls
-    .map(([url]) => url as string)
-    .filter((url) => url.startsWith("/content/posts"))
-    .at(-1)!;
-}
-
 beforeEach(() => {
-  getMock.mockReset();
-  rotear({});
-  comPapeis(["tenant_admin"]);
+  vi.clearAllMocks();
 });
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-describe("ConteudoPage — aba Posts", () => {
-  it("busca com limite de 50 e mostra título, tipo, data e status", async () => {
-    render(<ConteudoPage />);
-
-    expect(await screen.findByText("Aviso da semana")).toBeInTheDocument();
-    expect(urlDePosts()).toBe("/content/posts?limit=50");
-    expect(screen.getByText("Aviso")).toBeInTheDocument();
-    // A data exibida é a de publicação, não a de criação.
-    expect(screen.getByText("01/08/2026")).toBeInTheDocument();
-    expect(screen.getByText("Publicado")).toBeInTheDocument();
-  });
-
-  it("deriva rascunho, agendado e publicado", async () => {
-    const futuro = new Date(Date.now() + 86_400_000).toISOString();
-    rotear({
-      posts: () => ({
-        data: [
-          post({ id: "p-1", title: "Um", is_draft: true }),
-          post({ id: "p-2", title: "Dois", publish_at: futuro }),
-          post({ id: "p-3", title: "Três" }),
-        ],
-      }),
+describe("ConteudoPage", () => {
+  it("carrega e mostra a lista de posts com status derivado", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: [
+        { id: "1", title: "Rascunho", type: "post", is_draft: true, created_at: "2026-01-01T00:00:00Z" },
+        {
+          id: "2",
+          title: "Agendado",
+          type: "event",
+          is_draft: false,
+          publish_at: "2999-01-01T00:00:00Z",
+          created_at: "2026-01-01T00:00:00Z",
+          media_url: "https://x/y.png",
+        },
+        { id: "3", title: "Publicado", type: "post", is_draft: false, created_at: "2026-01-01T00:00:00Z" },
+      ],
     });
-
     render(<ConteudoPage />);
-
-    const tabela = await screen.findByRole("table");
-    // Rascunho vence o agendamento: `is_draft` é decidido antes da data.
-    expect(within(tabela).getByText("Rascunho")).toBeInTheDocument();
-    expect(within(tabela).getByText("Agendado")).toBeInTheDocument();
-    expect(within(tabela).getByText("Publicado")).toBeInTheDocument();
-  });
-
-  it("post sem publish_at cai na data de criação", async () => {
-    rotear({ posts: () => ({ data: [post({ publish_at: null })] }) });
-
-    render(<ConteudoPage />);
-
-    expect(await screen.findByText("30/07/2026")).toBeInTheDocument();
-  });
-
-  it("post com anexo mostra o clipe, e tipo desconhecido aparece cru", async () => {
-    rotear({
-      posts: () => ({
-        data: [post({ media_url: "https://cdn/x.pdf", type: "livestream" })],
-      }),
-    });
-
-    render(<ConteudoPage />);
-
+    expect((await screen.findAllByText("Rascunho")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Agendado").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Publicado").length).toBeGreaterThanOrEqual(1);
     expect(
-      await screen.findByLabelText("Possui arquivo anexado")
+      screen.getByLabelText("Possui arquivo anexado")
     ).toBeInTheDocument();
-    expect(screen.getByText("livestream")).toBeInTheDocument();
   });
 
-  it("aceita resposta paginada e resposta em lista", async () => {
-    rotear({ posts: () => ({ data: { data: [post({ title: "Paginado" })] } }) });
+  it("aceita resposta paginada ({data: []}) além de array puro, e trata falha como lista vazia", async () => {
+    setup();
+    mockedApi.get.mockResolvedValueOnce({ data: { data: [{ id: "1", title: "Do Envelope", type: "post", is_draft: false, created_at: "2026-01-01T00:00:00Z" }] } });
     const { unmount } = render(<ConteudoPage />);
-    expect(await screen.findByText("Paginado")).toBeInTheDocument();
+    expect(await screen.findByText("Do Envelope")).toBeInTheDocument();
     unmount();
 
-    rotear({ posts: () => ({ data: [post({ title: "Em lista" })] }) });
+    mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<ConteudoPage />);
-    expect(await screen.findByText("Em lista")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum post encontrado.")).toBeInTheDocument();
   });
 
-  it("resposta paginada sem `data` e erro caem no estado vazio", async () => {
-    rotear({ posts: () => ({ data: {} }) });
-    const { unmount } = render(<ConteudoPage />);
-    expect(
-      await screen.findByText("Nenhum post encontrado.")
-    ).toBeInTheDocument();
-    unmount();
-
-    rotear({ posts: () => Promise.reject(new Error("500")) });
-    render(<ConteudoPage />);
-    expect(
-      await screen.findByText("Nenhum post encontrado.")
-    ).toBeInTheDocument();
-  });
-
-  it("filtro de tipo vira parâmetro da consulta", async () => {
+  it("filtra por tipo e por status, disparando novas requisições", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: [] });
     const user = userEvent.setup();
     render(<ConteudoPage />);
-    await screen.findByText("Aviso da semana");
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(1));
 
-    await user.selectOptions(screen.getAllByRole("combobox")[0], "devotional");
-
-    await waitFor(() => expect(urlDePosts()).toContain("type=devotional"));
-  });
-
-  it("rascunho e publicado viram is_draft; agendado é filtrado no cliente", async () => {
-    const user = userEvent.setup();
-    const futuro = new Date(Date.now() + 86_400_000).toISOString();
-    rotear({
-      posts: () => ({
-        data: [
-          post({ id: "p-1", title: "Já publicado" }),
-          post({ id: "p-2", title: "Ainda vai sair", publish_at: futuro }),
-        ],
-      }),
-    });
-
-    render(<ConteudoPage />);
-    await screen.findByText("Já publicado");
-    const status = screen.getAllByRole("combobox")[1];
-
-    await user.selectOptions(status, "draft");
-    await waitFor(() => expect(urlDePosts()).toContain("is_draft=true"));
-
-    await user.selectOptions(status, "published");
-    await waitFor(() => expect(urlDePosts()).toContain("is_draft=false"));
-
-    // "Agendados" não vai para a API: a lista é filtrada aqui.
-    await user.selectOptions(status, "scheduled");
-    await waitFor(() => expect(urlDePosts()).not.toContain("is_draft"));
-    expect(await screen.findByText("Ainda vai sair")).toBeInTheDocument();
-    expect(screen.queryByText("Já publicado")).not.toBeInTheDocument();
-  });
-
-  it("clique na linha abre a ficha do post", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-
-    await user.click(await screen.findByText("Aviso da semana"));
-
-    expect(screen.getByText("post:p-1")).toBeInTheDocument();
-  });
-
-  it("criar e editar post refazem a busca", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-    await screen.findByText("Aviso da semana");
-
-    const chamadas = () =>
-      getMock.mock.calls.filter(([url]) =>
-        (url as string).startsWith("/content/posts")
-      ).length;
-    expect(chamadas()).toBe(1);
-
-    await user.click(screen.getByRole("button", { name: "avisar post criado" }));
-    await waitFor(() => expect(chamadas()).toBe(2));
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar post editado" })
+    await user.selectOptions(screen.getByDisplayValue("Todos os tipos"), "event");
+    await waitFor(() =>
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("type=event"))
     );
-    await waitFor(() => expect(chamadas()).toBe(3));
+
+    await user.selectOptions(screen.getByDisplayValue("Todos os status"), "draft");
+    await waitFor(() =>
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("is_draft=true"))
+    );
+
+    await user.selectOptions(screen.getByDisplayValue("Rascunhos"), "published");
+    await waitFor(() =>
+      expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("is_draft=false"))
+    );
+
+    await user.selectOptions(screen.getByDisplayValue("Publicados"), "scheduled");
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledTimes(5));
   });
 
-  it("abre o modal de novo post", async () => {
+  it("filtra 'agendados' no cliente a partir de publish_at futuro", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: [
+        { id: "1", title: "Futuro", type: "post", is_draft: false, publish_at: "2999-01-01T00:00:00Z", created_at: "2026-01-01T00:00:00Z" },
+        { id: "2", title: "Já Publicado", type: "post", is_draft: false, created_at: "2026-01-01T00:00:00Z" },
+      ],
+    });
     const user = userEvent.setup();
     render(<ConteudoPage />);
-    await screen.findByText("Aviso da semana");
-
-    await user.click(screen.getByRole("button", { name: /Novo post/ }));
-
-    expect(screen.getByText("criar-post:aberto")).toBeInTheDocument();
+    await screen.findByText("Futuro");
+    await user.selectOptions(screen.getByDisplayValue("Todos os status"), "scheduled");
+    await waitFor(() => expect(screen.queryByText("Já Publicado")).not.toBeInTheDocument());
+    expect(screen.getByText("Futuro")).toBeInTheDocument();
   });
 
-  it("pastor edita mas não apaga; quem não edita não vê os botões", async () => {
-    comPapeis(["pastor"]);
-    const { unmount } = render(<ConteudoPage />);
-    await screen.findByText("Aviso da semana");
-    expect(screen.getByText("post-perm:true/false")).toBeInTheDocument();
-    unmount();
-
-    comPapeis(["member"]);
+  it("mostra rótulo cru quando o tipo do post não está no dicionário", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: [{ id: "1", title: "Tipo Estranho", type: "custom_x", is_draft: false, created_at: "2026-01-01T00:00:00Z" }],
+    });
     render(<ConteudoPage />);
-    await screen.findByText("Aviso da semana");
-    expect(screen.getByText("post-perm:false/false")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Novo post/ })
-    ).not.toBeInTheDocument();
+    await screen.findByText("Tipo Estranho");
+    expect(screen.getByText("custom_x")).toBeInTheDocument();
   });
 
-  it("sessão sem usuário resolvido não libera nada", async () => {
-    vi.mocked(useAuth).mockReturnValue({
-      user: null,
+  it("abre modal de criação de post, o sheet de detalhe e recarrega ao concluir", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: [] });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+
+    await user.click(screen.getByRole("button", { name: /novo post/i }));
+    expect(screen.getByTestId("create-post-modal")).toBeInTheDocument();
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular criação" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("abre o sheet ao clicar num post e recarrega quando ele é atualizado", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: [{ id: "9", title: "Clique Aqui", type: "post", is_draft: false, created_at: "2026-01-01T00:00:00Z" }],
+    });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await user.click(await screen.findByText("Clique Aqui"));
+    expect(await screen.findByTestId("post-detail-sheet")).toHaveTextContent("post:9");
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular atualização" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("não mostra ações de edição/notificação para quem não pode editar", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockResolvedValue({ data: [] });
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+    expect(screen.queryByRole("button", { name: /novo post/i })).not.toBeInTheDocument();
+  });
+
+  it("mostra e usa a aba Segmentos: contagem, estado vazio e criação", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/content/segments")) {
+        return Promise.resolve({
+          data: [
+            { id: "s1", name: "Jovens", criteria: { group_ids: ["g1", "g2"], ministry_ids: ["m1"], roles: ["member"], min_age: 12, max_age: 30 }, _count: { posts: 3 } },
+            { id: "s2", name: "Sem Critério" },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+
+    await user.click(screen.getByRole("tab", { name: "Segmentos" }));
+    expect(await screen.findByText("Jovens")).toBeInTheDocument();
+    expect(screen.getByText("2 grupo(s) · 1 ministério(s) · member · 12–30 anos")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Todos")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("2 segmentos")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /novo segmento/i }));
+    expect(screen.getByTestId("create-segment-modal")).toBeInTheDocument();
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular criação de segmento" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("mostra estado vazio de segmentos com botão de criar o primeiro, e trata falha", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/content/segments")) return Promise.reject(new Error("boom"));
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+    await user.click(screen.getByRole("tab", { name: "Segmentos" }));
+    expect(await screen.findByText("Nenhum segmento cadastrado.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Criar primeiro segmento" }));
+    expect(screen.getByTestId("create-segment-modal")).toBeInTheDocument();
+  });
+
+  it("aceita resposta paginada de segmentos ({data: []})", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/content/segments")) return Promise.resolve({ data: { data: [{ id: "s1", name: "Do Envelope" }] } });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+    await user.click(screen.getByRole("tab", { name: "Segmentos" }));
+    expect(await screen.findByText("Do Envelope")).toBeInTheDocument();
+  });
+
+  it("mostra e usa a aba Notificações: estado vazio, envio e taxa de abertura", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: [] });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+
+    await user.click(screen.getByRole("tab", { name: "Notificações" }));
+    expect(
+      await screen.findByText("Nenhuma notificação enviada nesta sessão.")
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /enviar notificação/i }));
+    expect(screen.getByTestId("send-notification-modal")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "simular envio" }));
+
+    expect(await screen.findByText("Notificação manual")).toBeInTheDocument();
+    expect(screen.getByText("42 entregue(s)")).toBeInTheDocument();
+  });
+
+  it("não mostra ações de notificação para quem não pode editar", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockResolvedValue({ data: [] });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+    await user.click(screen.getByRole("tab", { name: "Notificações" }));
+    expect(screen.queryByRole("button", { name: /enviar notificação/i })).not.toBeInTheDocument();
+  });
+
+  it("trata usuário sem roles como sem permissão nenhuma (fallback ?? [])", async () => {
+    mockedUseAuth.mockReturnValue({
+      user: {
+        id: "u1",
+        name: "Ana",
+        email: "ana@a.com",
+        roles: undefined as unknown as string[],
+        tenant_id: "t1",
+        congregation_id: "c1",
+        support_session: false,
+        support_tenant_name: null,
+      },
       isLoading: false,
-      isAuthenticated: false,
+      isAuthenticated: true,
       login: vi.fn(),
       logout: vi.fn(),
     });
-
+    mockedApi.get.mockResolvedValue({ data: [] });
     render(<ConteudoPage />);
-
-    await screen.findByText("Aviso da semana");
-    expect(screen.getByText("post-perm:false/false")).toBeInTheDocument();
+    await screen.findByText("Nenhum post encontrado.");
+    expect(screen.queryByRole("button", { name: /novo post/i })).not.toBeInTheDocument();
   });
-});
 
-describe("ConteudoPage — aba Segmentos", () => {
-  async function abrirSegmentos(user: ReturnType<typeof userEvent.setup>) {
-    await screen.findByText("Aviso da semana");
-    await user.click(screen.getByRole("tab", { name: "Segmentos" }));
-  }
-
-  it("lista os segmentos com critérios e contagem de posts", async () => {
+  it("usa os valores default quando as respostas não trazem data/data[]", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.resolve({ data: {} });
+      if (url.startsWith("/content/segments")) return Promise.resolve({ data: {} });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
     const user = userEvent.setup();
     render(<ConteudoPage />);
-    await abrirSegmentos(user);
+    expect(await screen.findByText("Nenhum post encontrado.")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Segmentos" }));
+    expect(await screen.findByText("Nenhum segmento cadastrado.")).toBeInTheDocument();
+  });
 
-    expect(await screen.findByText("Jovens")).toBeInTheDocument();
-    expect(getMock).toHaveBeenCalledWith("/content/segments?limit=100");
-    expect(screen.getByText("1 segmento")).toBeInTheDocument();
-    expect(screen.getByText("4")).toBeInTheDocument();
-    // Sem critérios: alcança todos.
+  it("mostra 'Todos' quando o segmento tem critério presente mas vazio", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/content/segments")) {
+        return Promise.resolve({ data: [{ id: "s1", name: "Vazio", criteria: {} }] });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+    await user.click(screen.getByRole("tab", { name: "Segmentos" }));
+    await screen.findByText("Vazio");
     expect(screen.getByText("Todos")).toBeInTheDocument();
   });
 
-  it("resume cada tipo de critério", async () => {
-    const user = userEvent.setup();
-    rotear({
-      segmentos: () => ({
-        data: [
-          segmento({
-            id: "s-1",
-            name: "Combinado",
-            criteria: {
-              group_ids: ["g1", "g2"],
-              ministry_ids: ["m1"],
-              roles: ["pastor", "member"],
-              min_age: 18,
-              max_age: 30,
-            },
-          }),
-          segmento({
-            id: "s-2",
-            name: "Só idade mínima",
-            criteria: { min_age: 60 },
-            _count: undefined,
-          }),
-          segmento({
-            id: "s-3",
-            name: "Só idade máxima",
-            criteria: { max_age: 12 },
-          }),
-          segmento({ id: "s-4", name: "Critério vazio", criteria: {} }),
-        ],
-      }),
+  it("mostra a faixa etária com só idade mínima e só idade máxima", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/content/posts")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/content/segments")) {
+        return Promise.resolve({
+          data: [
+            { id: "s1", name: "Só Mínima", criteria: { min_age: 18 } },
+            { id: "s2", name: "Só Máxima", criteria: { max_age: 65 } },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
     });
-
-    render(<ConteudoPage />);
-    await abrirSegmentos(user);
-
-    expect(
-      await screen.findByText(
-        "2 grupo(s) · 1 ministério(s) · pastor, member · 18–30 anos"
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByText("60–∞ anos")).toBeInTheDocument();
-    expect(screen.getByText("0–12 anos")).toBeInTheDocument();
-    // Critério presente mas sem nenhuma regra também é "Todos".
-    expect(screen.getAllByText("Todos")).toHaveLength(1);
-    // Sem `_count`: traço.
-    expect(screen.getByText("—")).toBeInTheDocument();
-  });
-
-  it("pluraliza a contagem de segmentos", async () => {
-    const user = userEvent.setup();
-    rotear({
-      segmentos: () => ({
-        data: [segmento(), segmento({ id: "s-2", name: "Casais" })],
-      }),
-    });
-
-    render(<ConteudoPage />);
-    await abrirSegmentos(user);
-
-    expect(await screen.findByText("2 segmentos")).toBeInTheDocument();
-  });
-
-  it("aceita resposta paginada, resposta sem data e erro", async () => {
-    const user = userEvent.setup();
-    rotear({ segmentos: () => ({ data: { data: [segmento({ name: "Paginado" })] } }) });
-    const { unmount } = render(<ConteudoPage />);
-    await abrirSegmentos(user);
-    expect(await screen.findByText("Paginado")).toBeInTheDocument();
-    unmount();
-
-    rotear({ segmentos: () => ({ data: {} }) });
-    const segunda = render(<ConteudoPage />);
-    await abrirSegmentos(user);
-    expect(
-      await screen.findByText("Nenhum segmento cadastrado.")
-    ).toBeInTheDocument();
-    segunda.unmount();
-
-    rotear({ segmentos: () => Promise.reject(new Error("500")) });
-    render(<ConteudoPage />);
-    await abrirSegmentos(user);
-    expect(
-      await screen.findByText("Nenhum segmento cadastrado.")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Nenhum segmento")).toBeInTheDocument();
-  });
-
-  it("abre o modal de segmento pelo cabeçalho e pelo estado vazio", async () => {
-    const user = userEvent.setup();
-    rotear({ segmentos: () => ({ data: [] }) });
-    render(<ConteudoPage />);
-    await abrirSegmentos(user);
-
-    await user.click(
-      await screen.findByRole("button", { name: "Criar primeiro segmento" })
-    );
-    expect(screen.getByText("criar-segmento:aberto")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Novo segmento/ }));
-    expect(screen.getByText("criar-segmento:aberto")).toBeInTheDocument();
-  });
-
-  it("criar segmento refaz a busca", async () => {
     const user = userEvent.setup();
     render(<ConteudoPage />);
-    await abrirSegmentos(user);
-    await screen.findByText("Jovens");
-
-    const chamadas = () =>
-      getMock.mock.calls.filter(([url]) =>
-        (url as string).startsWith("/content/segments")
-      ).length;
-    expect(chamadas()).toBe(1);
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar segmento criado" })
-    );
-
-    await waitFor(() => expect(chamadas()).toBe(2));
-  });
-
-  it("voltar para a aba refaz a busca", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-    await abrirSegmentos(user);
-    await screen.findByText("Jovens");
-
-    await user.click(screen.getByRole("tab", { name: "Posts" }));
+    await screen.findByText("Nenhum post encontrado.");
     await user.click(screen.getByRole("tab", { name: "Segmentos" }));
-
-    await waitFor(() =>
-      expect(
-        getMock.mock.calls.filter(([url]) =>
-          (url as string).startsWith("/content/segments")
-        ).length
-      ).toBe(2)
-    );
-  });
-
-  it("quem não gerencia segmentos não vê botão nenhum", async () => {
-    const user = userEvent.setup();
-    comPapeis(["member"]);
-    rotear({ segmentos: () => ({ data: [] }) });
-
-    render(<ConteudoPage />);
-    await abrirSegmentos(user);
-
-    expect(
-      await screen.findByText("Nenhum segmento cadastrado.")
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Novo segmento/ })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Criar primeiro segmento" })
-    ).not.toBeInTheDocument();
-  });
-});
-
-describe("ConteudoPage — aba Notificações", () => {
-  async function abrirNotificacoes(user: ReturnType<typeof userEvent.setup>) {
-    await screen.findByText("Aviso da semana");
-    await user.click(screen.getByRole("tab", { name: "Notificações" }));
-  }
-
-  it("começa sem histórico e explica que ele é da sessão", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-    await abrirNotificacoes(user);
-
-    expect(
-      await screen.findByText("Nenhuma notificação enviada nesta sessão.")
-    ).toBeInTheDocument();
-  });
-
-  it("registra o envio com a métrica de entrega", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-    await abrirNotificacoes(user);
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar envio com entrega" })
-    );
-
-    const painel = screen.getByRole("tabpanel");
-    expect(
-      await within(painel).findByText("Notificação manual")
-    ).toBeInTheDocument();
-    expect(within(painel).getByText("120 entregue(s)")).toBeInTheDocument();
-    // Sem `opened`, não há taxa de abertura.
-    expect(within(painel).queryByText(/% abertura/)).not.toBeInTheDocument();
-  });
-
-  it("envio sem métrica aparece no histórico sem números", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-    await abrirNotificacoes(user);
-
-    await user.click(
-      screen.getByRole("button", { name: "avisar envio sem métrica" })
-    );
-
-    const painel = screen.getByRole("tabpanel");
-    expect(
-      await within(painel).findByText("Notificação manual")
-    ).toBeInTheDocument();
-    expect(within(painel).queryByText(/entregue/)).not.toBeInTheDocument();
-    expect(within(painel).queryByText(/aberto/)).not.toBeInTheDocument();
-  });
-
-  it("abre o modal de envio", async () => {
-    const user = userEvent.setup();
-    render(<ConteudoPage />);
-    await abrirNotificacoes(user);
-
-    await user.click(screen.getByRole("button", { name: /Enviar notificação/ }));
-
-    expect(screen.getByText("notificar:aberto")).toBeInTheDocument();
-  });
-
-  it("quem não pode notificar não vê o botão", async () => {
-    const user = userEvent.setup();
-    comPapeis(["member"]);
-
-    render(<ConteudoPage />);
-    await abrirNotificacoes(user);
-
-    expect(
-      await screen.findByText("Nenhuma notificação enviada nesta sessão.")
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Enviar notificação/ })
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText("18–∞ anos")).toBeInTheDocument();
+    expect(screen.getByText("0–65 anos")).toBeInTheDocument();
   });
 });

@@ -25,14 +25,14 @@ function DashboardMockup() {
       {/* KPI row */}
       <div className="grid grid-cols-3 divide-x" style={{ borderBottom: "1px solid var(--border)", borderColor: "var(--border)" }}>
         {[
-          { label: "Arrecadação",  value: "R$ 4.820", delta: "+14%",  deltaOk: true  },
-          { label: "Dizimistas",   value: "68%",       delta: "meta 70%", deltaOk: true },
-          { label: "Doadores",     value: "34",        delta: "+3 vs mês ant.", deltaOk: true },
-        ].map(({ label, value, delta, deltaOk }) => (
+          { label: "Arrecadação",  value: "R$ 4.820", delta: "+14%"            },
+          { label: "Dizimistas",   value: "68%",      delta: "meta 70%"        },
+          { label: "Doadores",     value: "34",       delta: "+3 vs mês ant."  },
+        ].map(({ label, value, delta }) => (
           <div key={label} className="px-4 py-3.5" style={{ borderColor: "var(--border)" }}>
             <p className="font-mono text-[9px] uppercase tracking-[.06em] mb-1" style={{ color: "var(--muted)" }}>{label}</p>
             <p className="text-[17px] font-semibold tracking-[-0.025em]" style={{ color: "var(--ink)" }}>{value}</p>
-            <p className="font-mono text-[9px] mt-0.5" style={{ color: deltaOk ? "#00B8A2" : "#C0392B" }}>{delta}</p>
+            <p className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>{delta}</p>
           </div>
         ))}
       </div>

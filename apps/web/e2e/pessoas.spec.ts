@@ -11,6 +11,17 @@
  *   #4 o contador `fetchRef` de pessoas foi substituído por esse cancelamento
  *   #5 criar registro passou de 2 fetches para 1
  *
+ * **A importação de CSV não está coberta aqui, e não é esquecimento.** O e2e
+ * dela foi escrito na Fase 13 e chegou a rodar: encontrou um defeito real
+ * (`ImportCsvModal` lia `columns`, a API manda `detected_columns` — corrigido
+ * no mesmo PR) e esbarrou em um impedimento de ambiente que continua de pé.
+ * `POST /persons/import` grava o arquivo temporário no R2 antes de devolver a
+ * prévia (`PersonsImportService.preview` → `StorageService.upload`), e o job de
+ * e2e do CI não configura R2 por decisão registrada em docs/CI.md — sem
+ * `R2_BUCKET_NAME` a rota responde 500 e o teste falharia por infraestrutura
+ * ausente, não por regressão. Quem quiser reativá-lo precisa antes decidir o
+ * storage do CI; ver "Fase 13" em docs/TESTES.md.
+ *
  * Uso: E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
  */
 
