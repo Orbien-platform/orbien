@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from "axios";
-import api from "./api";
+import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from "axios";
+import { AxiosError } from "axios";
+import api, { isForbidden } from "./api";
 import axios from "axios";
 
 type FakeAxiosError = AxiosError & { config: InternalAxiosRequestConfig & { _retry?: boolean } };
@@ -162,5 +163,33 @@ describe("interceptor de resposta — refresh de token", () => {
     await responseRejected()(makeError());
 
     expect(axios.post).toHaveBeenCalled();
+  });
+});
+
+describe("isForbidden", () => {
+  // O que separa "sem permissão" de "sem dado" nas telas do (admin): um 403
+  // engolido como lista vazia dizia "nada cadastrado" a quem só não tem acesso.
+  it("é verdadeiro só para 403 de resposta do axios", () => {
+    expect(isForbidden(new AxiosError("negado", undefined, undefined, undefined, {
+      status: 403,
+    } as AxiosResponse))).toBe(true);
+  });
+
+  it("é falso para outros status", () => {
+    for (const status of [400, 401, 404, 500]) {
+      expect(
+        isForbidden(
+          new AxiosError("erro", undefined, undefined, undefined, { status } as AxiosResponse)
+        )
+      ).toBe(false);
+    }
+  });
+
+  it("é falso para erro sem resposta, e para o que não é erro do axios", () => {
+    // Rede fora não é negativa de permissão.
+    expect(isForbidden(new AxiosError("network"))).toBe(false);
+    expect(isForbidden(new Error("boom"))).toBe(false);
+    expect(isForbidden(null)).toBe(false);
+    expect(isForbidden({ response: { status: 403 } })).toBe(false);
   });
 });

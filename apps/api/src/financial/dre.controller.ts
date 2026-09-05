@@ -10,7 +10,7 @@ import { DreService } from './dre.service';
 import { DrePdfService } from './dre-pdf.service';
 import { DreQueryDto } from './dto/dre-query.dto';
 
-const DRE_ROLES = ['tesoureiro', 'admin_congregation', 'pastor', 'tenant_admin'] as const;
+const DRE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_admin'] as const;
 
 @Controller('financial/dre')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,7 +24,7 @@ export class DreController {
   @Get()
   @Roles(...DRE_ROLES)
   getDre(@Query() query: DreQueryDto, @CurrentUser() user: JwtPayload) {
-    const isPastor = user.roles.includes('pastor') && !user.roles.some((r) => ['admin_congregation', 'tenant_admin', 'tesoureiro'].includes(r));
+    const isPastor = user.roles.includes('pastor') && !user.roles.some((r) => ['admin_congregation', 'tenant_admin', 'treasurer'].includes(r));
     return this.dreService.buildDre(
       user.tenant_id,
       user.congregation_id,

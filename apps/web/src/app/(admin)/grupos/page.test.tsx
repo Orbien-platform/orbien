@@ -6,6 +6,9 @@ import { useAuth } from "@/hooks/useAuth";
 import GruposPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -244,6 +247,18 @@ describe("GruposPage", () => {
     await screen.findByText("Nenhum grupo encontrado.");
     expect(screen.queryByRole("button", { name: "Novo grupo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tipos de grupo" })).not.toBeInTheDocument();
+  });
+
+  it("403 em /small-groups diz \"sem acesso\", não \"nenhum grupo\"", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/small-groups")) return Promise.reject({ response: { status: 403 } });
+      return Promise.resolve({ data: [] });
+    });
+    render(<GruposPage />);
+
+    expect(await screen.findByText("Você não tem acesso a Grupos.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum grupo encontrado.")).not.toBeInTheDocument();
   });
 
   it("usa os valores default quando a resposta de /small-groups não traz data/total", async () => {

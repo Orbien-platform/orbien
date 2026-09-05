@@ -8,7 +8,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 const MANAGE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
 const READ_ROLES = [...MANAGE_ROLES, 'secretary', 'ministry_leader'];
-const MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'leader'];
+const MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'ministry_leader'];
 const SCHEDULE_MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'ministry_leader'];
 
 const user: JwtPayload = {

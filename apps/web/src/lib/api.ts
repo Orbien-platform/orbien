@@ -63,4 +63,19 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * O servidor negou por papel — e não por qualquer outra coisa.
+ *
+ * Existe porque as telas engoliam todo erro com `.catch(() => setX([]))`, e um
+ * 403 virava lista vazia: quem não tem permissão lia "Nenhuma celebração
+ * cadastrada" e concluía que a igreja não tem culto. São coisas diferentes e
+ * precisam ser ditas diferente.
+ *
+ * 401 não entra aqui de propósito: o interceptor acima o trata renovando a
+ * sessão, e o que sobra dele já é redirecionamento para `/login`.
+ */
+export function isForbidden(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 403;
+}
+
 export default api;

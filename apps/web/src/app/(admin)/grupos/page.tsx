@@ -5,12 +5,13 @@ import { Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { GroupDetailSheet } from "@/components/groups/GroupDetailSheet";
 import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
 import { GroupTypesModal } from "@/components/groups/GroupTypesModal";
 import { fetchGroupTypes, DEFAULT_GROUP_TYPE_COLOR, type GroupTypeDef } from "@/lib/groupTypes";
 import { useAuth } from "@/hooks/useAuth";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ export default function GruposPage() {
 
   // Uma requisição por combinação de página/busca/filtro; `reloadTick` força
   // uma nova quando algo muda fora da tabela (criar grupo, editar tipos).
+  const [accessDenied, setAccessDenied] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const requestKey = `${page}|${search}|${typeFilter}|${reloadTick}`;
@@ -87,11 +89,14 @@ export default function GruposPage() {
         if (signal.cancelled) return;
         setGroups(data.data ?? []);
         setTotal(data.total ?? 0);
+        setAccessDenied(false);
       })
-      .catch(() => {
+      .catch((error) => {
         if (signal.cancelled) return;
         setGroups([]);
         setTotal(0);
+        // 403 não é lista vazia — ver `NoAccessState`.
+        setAccessDenied(isForbidden(error));
       })
       .finally(() => {
         if (!signal.cancelled) setLoadedKey(requestKey);
@@ -231,7 +236,13 @@ export default function GruposPage() {
         getRowKey={(row) => row.id}
         isLoading={isLoading}
         onRowClick={(row) => openSheet(row.id)}
-        emptyState={<p className="py-8 text-center text-sm text-stone">Nenhum grupo encontrado.</p>}
+        emptyState={
+          accessDenied ? (
+            <NoAccessState resource="Grupos" />
+          ) : (
+            <p className="py-8 text-center text-sm text-stone">Nenhum grupo encontrado.</p>
+          )
+        }
       />
 
       {/* Pagination */}

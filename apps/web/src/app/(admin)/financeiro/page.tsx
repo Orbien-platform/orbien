@@ -16,12 +16,13 @@ import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { NewTransactionModal } from "@/components/financial/NewTransactionModal";
 import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financial/RecurrenceScopeDialog";
 import { ExportButton } from "@/components/financial/ExportButton";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { useAuth } from "@/hooks/useAuth";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -205,6 +206,7 @@ export default function FinanceiroPage() {
   // Transactions + categories (shared across tabs)
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [loadingTx, setLoadingTx] = useState(true);
   const hasFetchedTx = useRef(false);
   const txSeq = useRef(0);
@@ -260,8 +262,13 @@ export default function FinanceiroPage() {
         if (seq !== txSeq.current) return;
         setTransactions(txRes.data.data ?? []);
         setCategories(catRes.data ?? []);
+        setAccessDenied(false);
       })
-      .catch(() => {})
+      .catch((error) => {
+        if (seq !== txSeq.current) return;
+        // 403 não é lista vazia — ver `NoAccessState`.
+        setAccessDenied(isForbidden(error));
+      })
       .finally(() => { if (seq === txSeq.current) setLoadingTx(false); });
   }, []);
 
@@ -749,9 +756,13 @@ export default function FinanceiroPage() {
                 getRowKey={(t) => t.id}
                 isLoading={loadingTx}
                 emptyState={
-                  txType || txCatId || txFrom || txTo || txStatus
-                    ? "Nenhum lançamento com esses filtros."
-                    : "Nenhum lançamento registrado."
+                  accessDenied ? (
+                    <NoAccessState resource="Financeiro" />
+                  ) : txType || txCatId || txFrom || txTo || txStatus ? (
+                    "Nenhum lançamento com esses filtros."
+                  ) : (
+                    "Nenhum lançamento registrado."
+                  )
                 }
               />
 

@@ -7,6 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import ConfiguracoesPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));

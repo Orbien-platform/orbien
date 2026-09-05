@@ -277,6 +277,16 @@ passo 7 falha alto se algum invariante quebrar.
 > além desse, e enquanto ele não rodar em produção a tela de auditoria do
 > `apps/admin` responde lista vazia, sem erro.
 
+> **`20260905000000_add_login_attempts` é migration comum, não script de RLS.**
+> Ela cria a tabela do limitador de tentativas de login e já traz o
+> `ENABLE`/`FORCE ROW LEVEL SECURITY` dentro dela — mesmo desenho de
+> `password_reset_tokens`: sem policy nenhuma, só `prisma.system` alcança. Sai
+> por `npm run db:migrate:status` / `prisma migrate deploy`, **sem** depender do
+> `bootstrap-db.sh`. Foi feita assim de propósito: pôr a policy nos scripts
+> `00x` amarraria o limitador ao passo que ainda está pendente em produção.
+> Enquanto a migration não rodar, as rotas de login respondem 500 na primeira
+> tentativa — a tabela não existe.
+
 ---
 
 ## Parte 2 — `web` na Vercel

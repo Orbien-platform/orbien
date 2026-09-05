@@ -268,6 +268,19 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+model LoginAttempt {
+  id         String   @id @default(uuid())
+  /// Chave da janela: "<rota>:<e-mail>" — ver LOGIN_LIMIT em auth.service.ts.
+  identifier String   @unique
+  count      Int      @default(0)
+  window_at  DateTime @default(now())
+  /// Preenchido quando a janela estoura; até lá a rota responde 429.
+  blocked_at DateTime?
+
+  @@index([window_at])
+  @@map("login_attempts")
+}
+
 // =============================================================================
 // GRUPO 3 — PESSOAS
 // =============================================================================

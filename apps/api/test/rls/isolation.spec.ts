@@ -1214,3 +1214,57 @@ describe('21. Positive control — Tenant A sees its own schedule rows', () => {
     expect(missing).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 22. `login_attempts` — a conexão da aplicação não alcança a tabela.
+//
+// A tabela do limitador tem ENABLE + FORCE ROW LEVEL SECURITY e **nenhuma
+// policy**, o mesmo desenho de `password_reset_tokens`: negação por ausência.
+// Ela guarda o e-mail tentado, e essa lista não deve estar ao alcance de rota
+// autenticada nenhuma — nem da própria, que roda como `orbien_app`/`app_user`.
+//
+// Quem escreve nela é `prisma.system`, pela conexão direta com BYPASSRLS. É o
+// controle positivo abaixo: se `prismaAdmin` também não enxergasse, o teste
+// estaria passando por vacuidade, e não por isolamento.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('22. login_attempts — fechada para a conexão da aplicação', () => {
+  const identifier = `rls-test:${Date.now()}@example.com`;
+
+  beforeAll(async () => {
+    await prismaAdmin.loginAttempt.create({
+      data: { identifier, count: 1, window_at: new Date() },
+    });
+  });
+
+  afterAll(async () => {
+    await prismaAdmin.loginAttempt.deleteMany({ where: { identifier } });
+  });
+
+  it('controle positivo: a linha existe, vista pela conexão direta', async () => {
+    const row = await prismaAdmin.loginAttempt.findUnique({ where: { identifier } });
+    expect(row).not.toBeNull();
+  });
+
+  it('app context (runAsTenant): a linha não aparece', async () => {
+    const rows = await runAsTenant(tenantAId, congregationAId, (tx) =>
+      tx.loginAttempt.findMany({ where: { identifier } }),
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it('app_user role: a linha não aparece, e a escrita é negada', async () => {
+    const rows = await runAsTenantWithRole(tenantAId, congregationAId, (tx) =>
+      tx.loginAttempt.findMany({ where: { identifier } }),
+    );
+    expect(rows).toEqual([]);
+
+    await expect(
+      runAsTenantWithRole(tenantAId, congregationAId, (tx) =>
+        tx.loginAttempt.create({
+          data: { identifier: `${identifier}:forjado`, count: 1, window_at: new Date() },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+});

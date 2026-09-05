@@ -5,6 +5,7 @@ import { Plus, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { CreateMinistryModal } from "@/components/volunteers/CreateMinistryModal";
 import { MinistryDetailSheet } from "@/components/volunteers/MinistryDetailSheet";
 import { MinistryTree } from "@/components/volunteers/MinistryTree";
@@ -12,7 +13,7 @@ import { UnavailabilityPanel } from "@/components/volunteers/UnavailabilityPanel
 import { useAuth } from "@/hooks/useAuth";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ export default function VoluntariosPage() {
   // ── Ministérios state ──
   const [ministryTree, setMinistryTree] = useState<MinistryTreeNode[]>([]);
   const [ministryCounts, setMinistryCounts] = useState<Record<string, MinistryCounts>>({});
+  const [accessDenied, setAccessDenied] = useState(false);
   const [ministriesLoading, setMinistriesLoading] = useState(true);
   const hasFetchedMin = useRef(false);
 
@@ -109,10 +111,13 @@ export default function VoluntariosPage() {
       .get<MinistryTreeNode[]>("/volunteers/ministries")
       .then(({ data }) => {
         setMinistryTree(data);
+        setAccessDenied(false);
         return flattenMinistryTree(data).map((m) => m.id);
       })
-      .catch(() => {
+      .catch((error) => {
         setMinistryTree([]);
+        // 403 não é lista vazia — ver `NoAccessState`.
+        setAccessDenied(isForbidden(error));
         return [] as string[];
       })
       .then((ids) => {
@@ -268,6 +273,8 @@ export default function VoluntariosPage() {
                 </div>
               ))}
             </div>
+          ) : accessDenied ? (
+            <NoAccessState resource="Voluntários" />
           ) : ministryTree.length === 0 ? (
             <p className="py-10 text-center text-sm text-stone">
               Nenhum ministério cadastrado.{" "}

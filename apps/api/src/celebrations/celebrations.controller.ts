@@ -15,7 +15,13 @@ import { MaterializeInstancesDto } from './dto/materialize-instances.dto';
 
 const MANAGE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
 const READ_ROLES = [...MANAGE_ROLES, 'secretary', 'ministry_leader'];
-const MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'leader'];
+// `ministry_leader`, e não `'leader'`, que era o que estava aqui: `'leader'` não
+// é código de papel nenhum — é o valor de `role` numa membership de grupo ou de
+// ministério, outro namespace. O `RolesGuard` compara com `user.roles`, que vem
+// de `role_assignments`, então a rota estava fechada para líder em silêncio,
+// enquanto a constante irmã logo abaixo já dizia `ministry_leader` para a
+// materialização de escala. Ver docs/PENDENCIAS.md.
+const MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'ministry_leader'];
 const SCHEDULE_MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'ministry_leader'];
 
 @Controller('celebrations')

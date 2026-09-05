@@ -36,7 +36,7 @@ const EXT_BY_JOB_TYPE: Record<string, string> = {
   dre: 'pdf',
 };
 
-const EXPORT_ROLES = ['tesoureiro', 'admin_congregation', 'tenant_admin'] as const;
+const EXPORT_ROLES = ['treasurer', 'admin_congregation', 'tenant_admin'] as const;
 
 @Controller('financial/export')
 @UseGuards(JwtAuthGuard, RolesGuard)

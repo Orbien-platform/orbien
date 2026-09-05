@@ -7,6 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import VoluntariosPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn(), patch: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -114,6 +117,18 @@ describe("VoluntariosPage", () => {
       await screen.findByText(/Nenhum ministério cadastrado\./)
     ).toBeInTheDocument();
     expect(screen.getByText(/Clique em "Novo ministério"/)).toBeInTheDocument();
+  });
+
+  it("403 em /volunteers/ministries diz sem-acesso, e não \"nenhum ministério\"", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.reject({ response: { status: 403 } });
+      return Promise.resolve({ data: [] });
+    });
+    render(<VoluntariosPage />);
+
+    expect(await screen.findByText("Você não tem acesso a Voluntários.")).toBeInTheDocument();
+    expect(screen.queryByText(/Nenhum ministério cadastrado/)).not.toBeInTheDocument();
   });
 
   it("ignora falha ao buscar a contagem de um ministério específico", async () => {

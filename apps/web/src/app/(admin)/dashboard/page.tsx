@@ -24,9 +24,10 @@ import {
   Legend,
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -128,6 +129,7 @@ export default function DashboardPage() {
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
   const [instances, setInstances] = useState<CelebrationInstance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasFetched = useRef(false);
@@ -162,10 +164,18 @@ export default function DashboardPage() {
         if (instRes.status === "fulfilled")
           setInstances(Array.isArray(instRes.value.data) ? instRes.value.data : []);
 
-        const todasFalharam = [personsRes, txRes, celRes, instRes].every(
-          (r) => r.status === "rejected"
-        );
-        if (todasFalharam) setError("Não foi possível carregar os dados.");
+        const resultados = [personsRes, txRes, celRes, instRes];
+        const todasFalharam = resultados.every((r) => r.status === "rejected");
+
+        // Quatro 403 não é "não foi possível carregar": é a home inteira fora
+        // do alcance deste papel. Uma falha de rede continua sendo erro.
+        if (todasFalharam) {
+          const todas403 = resultados.every(
+            (r) => r.status === "rejected" && isForbidden(r.reason)
+          );
+          if (todas403) setAccessDenied(true);
+          else setError("Não foi possível carregar os dados.");
+        }
       })
       .finally(() => setIsLoading(false));
   }, []);
@@ -292,6 +302,10 @@ export default function DashboardPage() {
   const unscheduled = hasScheduleInfo
     ? upcomingInstances.filter((i) => !i.schedule || i.schedule.status === "draft")
     : [];
+
+  if (accessDenied) {
+    return <NoAccessState resource="este painel" />;
+  }
 
   if (error) {
     return (

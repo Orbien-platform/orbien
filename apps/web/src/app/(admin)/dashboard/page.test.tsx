@@ -4,6 +4,9 @@ import api from "@/lib/api";
 import DashboardPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn() },
 }));
 
@@ -236,6 +239,14 @@ describe("DashboardPage", () => {
     mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<DashboardPage />);
     expect(await screen.findByText("Não foi possível carregar os dados.")).toBeInTheDocument();
+  });
+
+  it("quatro 403 não é erro de carga: é a home fora do alcance do papel", async () => {
+    mockedApi.get.mockRejectedValue({ response: { status: 403 } });
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("Você não tem acesso a este painel.")).toBeInTheDocument();
+    expect(screen.queryByText("Não foi possível carregar os dados.")).not.toBeInTheDocument();
   });
 
   it("renderiza parcialmente quando só algumas chamadas falham (allSettled)", async () => {

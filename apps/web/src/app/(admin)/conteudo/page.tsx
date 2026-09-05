@@ -5,13 +5,14 @@ import { Plus, Bell, Send, Paperclip } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { NoAccessState } from "@/components/ui/NoAccessState";
 import { CreatePostModal, POST_TYPE_LABELS, type PostType } from "@/components/content/CreatePostModal";
 import { PostDetailSheet } from "@/components/content/PostDetailSheet";
 import { CreateSegmentModal } from "@/components/content/CreateSegmentModal";
 import { SendNotificationModal } from "@/components/content/SendNotificationModal";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,7 @@ export default function ConteudoPage() {
 
   // ── Posts ──
   const [posts, setPosts] = useState<Post[]>([]);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [postsLoading, setPostsLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -156,8 +158,15 @@ export default function ConteudoPage() {
     else if (status === "published") params.set("is_draft", "false");
     return api
       .get<{ data: Post[] } | Post[]>(`/content/posts?${params}`)
-      .then(({ data }) => setPosts(Array.isArray(data) ? data : data.data ?? []))
-      .catch(() => setPosts([]))
+      .then(({ data }) => {
+        setPosts(Array.isArray(data) ? data : data.data ?? []);
+        setAccessDenied(false);
+      })
+      .catch((error) => {
+        setPosts([]);
+        // 403 não é lista vazia — ver `NoAccessState`.
+        setAccessDenied(isForbidden(error));
+      })
       .finally(() => setPostsLoading(false));
   }, []);
 
@@ -337,7 +346,13 @@ export default function ConteudoPage() {
             getRowKey={(r) => r.id}
             isLoading={postsLoading}
             onRowClick={(row) => { setSelectedPostId(row.id); setPostSheetOpen(true); }}
-            emptyState={<p className="py-8 text-center text-sm text-stone">Nenhum post encontrado.</p>}
+            emptyState={
+              accessDenied ? (
+                <NoAccessState resource="Conteúdo" />
+              ) : (
+                <p className="py-8 text-center text-sm text-stone">Nenhum post encontrado.</p>
+              )
+            }
           />
         </Tabs.Panel>
 

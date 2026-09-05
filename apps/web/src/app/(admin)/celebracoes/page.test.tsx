@@ -7,6 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import CelebracoesPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  // Espelha o `isForbidden` real: 403 e só 403.
+  isForbidden: (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 403,
   default: { get: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -122,6 +125,17 @@ describe("CelebracoesPage", () => {
     mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<CelebracoesPage />);
     expect(await screen.findByText("Nenhuma celebração cadastrada.")).toBeInTheDocument();
+  });
+
+  it("403 diz \"sem acesso\" nas duas abas, não \"nenhuma celebração\"", async () => {
+    // Esta é a tela que originou a pendência nº 10: `volunteer` e `member`
+    // levam 403 em `GET /celebrations` e liam "Nenhuma celebração cadastrada".
+    setup();
+    mockedApi.get.mockRejectedValue({ response: { status: 403 } });
+    render(<CelebracoesPage />);
+
+    expect(await screen.findByText("Você não tem acesso a Celebrações.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhuma celebração cadastrada.")).not.toBeInTheDocument();
   });
 
   it("trata usuário sem roles como sem permissão (fallback ?? [])", async () => {
