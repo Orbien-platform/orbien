@@ -103,6 +103,11 @@ export class LoginRateLimitService {
     if (row.blocked_at.getTime() + policy.windowMs > Date.now()) return false;
 
     // Bloqueio vencido: a janela recomeça na próxima falha.
+    //
+    // A falha do delete é engolida porque a corrida é esperada e inofensiva:
+    // dois pedidos que chegam juntos com o bloqueio já vencido tentam apagar a
+    // mesma linha, e o segundo acha P2025 (registro não encontrado). O que
+    // importa é o veredito — a janela venceu —, não quem apagou a linha.
     await this.prisma.system.loginAttempt.delete({ where: { identifier: key } }).catch(() => {});
     return true;
   }

@@ -109,6 +109,26 @@ describe('LoginRateLimitService', () => {
     expect(rows.has(key)).toBe(false);
   });
 
+  it('duas limpezas concorrentes: a segunda falha e o veredito não muda', async () => {
+    // Dois pedidos que chegam juntos com o bloqueio já vencido tentam apagar a
+    // mesma linha; o segundo acha P2025. É corrida esperada, e o que importa é
+    // o veredito — a janela venceu —, não quem apagou.
+    const { service, rows } = serviceWithStore();
+
+    for (let i = 0; i < LOGIN_POLICY.max; i++) await service.register(key, LOGIN_POLICY);
+    rows.get(key)!.blocked_at = new Date(Date.now() - LOGIN_POLICY.windowMs - 1);
+
+    const naoEncontrado = new Prisma.PrismaClientKnownRequestError('record not found', {
+      code: 'P2025',
+      clientVersion: 'test',
+    });
+    jest
+      .spyOn(service['prisma'].system.loginAttempt, 'delete')
+      .mockRejectedValueOnce(naoEncontrado);
+
+    await expect(service.check(key, LOGIN_POLICY)).resolves.toBe(true);
+  });
+
   it('janela vencida sem bloqueio recomeça a contagem em 1', async () => {
     const { service, rows } = serviceWithStore();
 
