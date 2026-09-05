@@ -27,25 +27,25 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 8 | web — componentes base | `components/ui/`, `layout/`, `dashboard/`, `providers/` | 21 | ☑ |
 | 9 | web — componentes de domínio | `components/` restantes | 28 | ☑ |
 | 10 | web — rotas | `app/` | 14 | ☐ |
-| 11 | site — componentes | `components/`, `lib/` | 57 | ☐ |
-| 12 | site — rotas | `app/` | 18 | ☐ |
+| 11 | site — componentes | `components/`, `lib/` | 57 | ☑ |
+| 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ◐ |
 
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
 `test/rls/isolation.spec.ts`), **2 testes e2e no web** (escalas e templates),
 **nada no site**. Nenhuma instrumentação de cobertura em lugar nenhum.
 
-`◐` = parcial. A Fase 13 rodou o que não depende das fases 10-12 (e2e dos
-fluxos faltantes, smoke do site, `global: 100` travado na API); o que depende
-delas segue aberto. Ver "Estado da Fase 13" abaixo.
+`◐` = parcial. A Fase 13 rodou o que não depende da Fase 10 (e2e dos fluxos
+faltantes, smoke do site, `global: 100` travado na API e no site); o que
+depende dela segue aberto. Ver "Estado da Fase 13" abaixo.
 
-**Medido em 2026-09-04**, com os thresholds em vigor:
+**Medido em 2026-09-05**, já com as Fases 11 e 12 mescladas da `main`:
 
 | App | Statements | Branches | Functions | Lines | Suítes |
 |---|---|---|---|---|---|
 | api | 100% | 100% | 100% | 100% | 213 (1883 testes) |
 | web | 68,5% | 63,3% | 66,8% | 68,3% | 63 (608 testes) |
-| site | 0% | 0% | 0% | 0% | nenhuma |
+| site | 100% | 100% | 100% | 100% | 75 (280 testes) |
 | admin | 1,5% | 1,0% | 0,8% | 1,6% | 1 (4 testes) |
 
 Dois números aí não estão no quadro de fases, e é isso que eles dizem:
@@ -630,6 +630,37 @@ Todos apresentacionais. Teste: renderiza, mostra o texto esperado, links
 apontam para o href certo. `layout/NavDropdown.tsx` e `layout/Header.tsx` são
 os únicos com interação real.
 
+> **Executado em 2026-09-04:** os 57 arquivos do escopo (56 componentes +
+> `lib/utils.ts`) fecharam em **100% nas quatro métricas** — thresholds por
+> caminho em `vitest.config.ts`.
+>
+> **Dois ramos mortos removidos** (mesmo tratamento que a Fase 8 deu ao
+> `StatusBadge.tsx`), decisão tomada com o dev depois que os testes os
+> expuseram:
+> - `ui/Reveal.tsx`: o guard `if (!el) return` protegia um ref que o React
+>   sempre preenche antes de o efeito rodar. Virou `ref.current!` com o
+>   porquê no comentário.
+> - `funcionalidades/financeiro/FinanceiroHero.tsx`: o ternário de `deltaOk`
+>   só tinha o ramo positivo nos dados do mockup — o `#C0392B` nunca
+>   executava. O campo saiu dos três KPIs e a cor virou literal.
+>
+> Duas armadilhas encontradas na execução:
+> - **`vitest.setup.ts` ganhou um stub de `IntersectionObserver`.** O jsdom
+>   não implementa a API, e `ui/Reveal.tsx` instancia uma no mount — sem o
+>   stub *qualquer* render de seção quebraria com `ReferenceError`. O stub
+>   guarda as instâncias em `intersectionObservers` para o teste do próprio
+>   `Reveal` disparar o callback à mão.
+> - **`NavDropdown` abre por hover e por clique ao mesmo tempo**, e um
+>   clique real de mouse do `user-event` passa antes pelo `onMouseEnter` do
+>   wrapper: quando o `onClick` chega, o painel já está aberto e o toggle o
+>   fecha de volta. O `skipHover` do `user-event` não muda isso. O teste do
+>   caminho sem ponteiro (teclado, toque) usa `fireEvent.click`; o do hover
+>   usa `user.hover`/`user.unhover`. Vale registrar que, com mouse, clicar
+>   no gatilho hoje fecha o menu que o hover acabou de abrir.
+>
+> O `playwright` órfão em `devDependencies` continua sem destino — a decisão
+> segue marcada para a Fase 12, como o plano previa.
+
 ### Fase 12 — site: rotas — fecha o site
 
 **Escopo:** `src/app/` (18).
@@ -642,20 +673,75 @@ comparar pixel.
 Decida aqui o destino do `playwright` órfão em `devDependencies`: vira o smoke
 da Fase 13, ou sai.
 
+> **Executado em 2026-09-04:** os 18 arquivos de `src/app/` fecharam em 100%
+> nas quatro métricas — 70 testes em 18 specs, threshold `src/app/**` em
+> `vitest.config.ts`. Com a Fase 11 já em `main`, **o site fecha aqui**:
+> `npm run test:cov -w orbien-site` dá 100% global nas quatro métricas — 280
+> testes em 75 specs, 279 statements, 119 branches, 183 functions, 276 lines.
+> (Escrita antes da Fase 11 entrar, esta fase mediu `components/` em ~95% de
+> linhas só por arrasto de renderizar as páginas inteiras; a Fase 11 fez o
+> trabalho de asserção que o arrasto não faz.)
+>
+> Duas armadilhas encontradas na execução:
+> - **`next/font/google` não funciona fora do build.** O módulo só existe como
+>   transformação do compilador do Next; importado pelo Vitest ele não expõe os
+>   loaders e `DM_Sans()` estoura com `is not a function`. `layout.test.tsx`
+>   mocka o módulo devolvendo `{ variable }`, que é o contrato que o layout usa.
+>   `<html>`/`<body>` também não podem ser montados no container do jsdom — o
+>   teste renderiza com `renderToStaticMarkup` para asserir os atributos da raiz.
+> - **`ImageResponse` precisa do ambiente `node`.** Sob jsdom o Satori gera o
+>   SVG normalmente, mas o `sharp` rejeita o `Uint8Array` que vem de outro
+>   realm (`Unsupported input ... of type object`). `icon.test.tsx` e
+>   `apple-icon.test.tsx` levam `@vitest-environment node` no topo e conferem a
+>   assinatura PNG dos primeiros bytes.
+>
+> A terceira armadilha — `IntersectionObserver`, que o jsdom não implementa e
+> `ui/Reveal.tsx` instancia em quase toda seção — foi resolvida em paralelo
+> pela Fase 11, e o stub dela é o que ficou: as duas fases escreveram um stub
+> cada, e no merge o desta saiu. O da Fase 11 guarda as instâncias em
+> `intersectionObservers` para o teste do próprio `Reveal` disparar o callback
+> à mão; os testes de rota só precisam que o construtor exista.
+>
+> **Divergência de conteúdo encontrada, mantida por decisão do dono do
+> código:** dos CTAs de lista de espera do site, 8 apontam para
+> `href="#waitlist"` e 3 apontam para `href="#"` — `home/FinalCta.tsx`,
+> `precos/PrecosCta.tsx` e `contato/ContatoContent.tsx`. `#` rola para o topo e
+> não faz nada; `#waitlist` também não faz nada hoje (não existe elemento com
+> esse id), mas é a âncora que os outros 8 usam e a que a Fase 13 quer no smoke.
+> **Decidido em 2026-09-04: padronizar fica para quando a waitlist existir de
+> verdade** — enquanto nenhum dos dois hrefs funciona, unificar seria trocar um
+> placeholder por outro. O teste da home fixa o estado atual dos dois casos com
+> comentário explícito, então ligar a waitlist faz o teste falhar e cobrar a
+> atualização — em vez de passar em silêncio.
+>
+> **`playwright` órfão: removido.** A dependência era o pacote `playwright`,
+> não `@playwright/test`, e não havia `e2e/`, `playwright.config.ts` nem script
+> que a usasse no site — ela não sustentava o smoke da Fase 13 como estava.
+> Saiu de `apps/site/package.json` nesta fase; se a Fase 13 decidir fazer o
+> smoke das 18 rotas, instala `@playwright/test` (que é o runner, como em
+> `apps/web`). O `exclude: ["e2e/**"]` do `vitest.config.ts` fica onde está:
+> custa nada e já está certo no dia em que existir um `e2e/` no site.
+
 ---
 
 ## Fase 13 — Fechamento
 
-**Pré-requisito declarado:** fases 1–12. **Cumprido:** 1–9. As fases 10 (rotas
-do web), 11 e 12 (site) seguem abertas, e é isso que divide esta fase em duas
-metades — a que não depende delas rodou, a que depende não.
+**Pré-requisito declarado:** fases 1–12. **Cumprido:** 1–9 e 11–12. Falta só a
+**Fase 10** (rotas do web), e é ela que divide esta fase em duas metades — a
+que não depende dela rodou, a que depende não.
+
+As Fases 11 e 12 entraram na `main` enquanto esta fase era executada (PRs #26 e
+#27). Isso destravou metade do item 1: o site foi de 0% a 100% e ganhou o
+`global` travado junto com a API. Sobra o web, que a Fase 10 fecha, e o admin,
+que não tem fase.
 
 ### Estado da Fase 13
 
 | Item | Estado |
 |---|---|
 | 1. `global: 100` na API | ☑ travado, e verde |
-| 1. `global: 100` no web, site e admin | ☐ bloqueado pelas fases 10-12 |
+| 1. `global: 100` no site | ☑ travado — destravado pelas Fases 11 e 12 |
+| 1. `global: 100` no web e no admin | ☐ falta a Fase 10; o admin não tem fase |
 | 2. e2e de financeiro (transação → DRE) | ☑ `apps/web/e2e/financeiro.spec.ts` |
 | 2. e2e de pessoas (cadastro e importação) | ◐ cadastro já existia; importação **bloqueada por R2 no CI** |
 | 2. e2e de login / redefinir senha | ☑ `apps/web/e2e/login.spec.ts` |
@@ -663,22 +749,20 @@ metades — a que não depende delas rodou, a que depende não.
 
 ### 1. Thresholds
 
-A API trocou os 18 thresholds por caminho por
-`global: { statements: 100, branches: 100, functions: 100, lines: 100 }`, e
-`test:cov` fecha em 100% nas quatro métricas. A partir daqui, código novo na
-API sem teste quebra o CI — que é o ponto da meta.
+**API e site trocaram os thresholds por caminho por `global: 100`** nas quatro
+métricas — 18 entradas a menos no `jest.config.js`, 11 a menos no
+`vitest.config.ts` do site. Os dois fecham em 100% e, a partir daqui, código
+novo sem teste nesses dois apps quebra o CI, que é o ponto da meta.
 
-**Nos outros três apps o `global` continua em 0, de propósito.** Travá-lo hoje
-não seria "a meta cumprida", seria `test:cov` vermelho em três apps por causa
-de trabalho que ainda não foi feito: web em 68,5% (falta a Fase 10), site em 0%
-(faltam 11 e 12), admin em 1,5% (nunca teve fase). Os thresholds por caminho
-que já existem no web seguem valendo e seguem sendo o piso — o piso nunca
-desce.
+**No web e no admin o `global` continua em 0, de propósito.** Travá-lo hoje não
+seria "a meta cumprida", seria `test:cov` vermelho por trabalho que ainda não
+foi feito: web em 68,5% (falta a Fase 10 — as rotas de `src/app/`) e admin em
+1,5% (nunca teve fase). Os thresholds por caminho do web seguem valendo como
+piso — o piso nunca desce.
 
-Quem fechar as fases 10-12 fecha também esta metade: trocar as listas de
-caminho de `apps/{web,site}/vitest.config.ts` por `thresholds: { statements:
-100, branches: 100, functions: 100, lines: 100 }`. Os comentários nos dois
-arquivos já apontam para cá.
+Quem fechar a Fase 10 fecha o web do mesmo jeito: troca a lista de caminho de
+`apps/web/vitest.config.ts` por `thresholds: { statements: 100, branches: 100,
+functions: 100, lines: 100 }`. O comentário no arquivo aponta para cá.
 
 ### 2. e2e dos fluxos faltantes
 
@@ -785,16 +869,21 @@ achado vira pergunta:
    aponta para `/entrar`; a rota é `/login`. É link morto no header de **todas
    as 13 páginas**. O smoke não o cobre de propósito: um teste que passasse
    com esse link no ar seria teste afrouxado.
-2. **A âncora `#waitlist` só tem destino na home.** O `id="waitlist"` vive em
-   `components/home/FinalCta.tsx`; o `href="#waitlist"` aparece em 6 outros
-   arquivos, em páginas que não têm o alvo. Nelas o CTA não faz nada. O smoke
-   afirma a âncora **na home**, e diz no comentário que é só na home.
+2. **A âncora `#waitlist` tem destino na home, e só nela.** Aqui há uma
+   divergência com a nota da Fase 12, que registrou "não existe elemento com id
+   `waitlist`" e concluiu que a checagem da âncora só faria sentido depois de a
+   waitlist ser ligada. **Existe:** `components/home/FinalCta.tsx:8` traz
+   `id="waitlist"` e `app/page.tsx:35` renderiza o `FinalCta` na home —
+   verificado no estado já mesclado com a Fase 12, e o smoke passa afirmando
+   isso. O que aquela nota descreve corretamente é o **resto** do site: os
+   `href="#waitlist"` de 6 outros arquivos apontam para um alvo que não existe
+   naquelas páginas, e ali o CTA não faz nada. Por isso o smoke afirma a âncora
+   só na home, e diz no comentário que é só na home.
 3. **`tsc --noEmit` do web tem 1 erro pré-existente**, em
    `src/components/layout/header.test.tsx:29`: o mock de `SessionUser` não tem
    `support_session` nem `support_tenant_name`. Confirmado na baseline sem as
    mudanças desta sessão. Não quebra `turbo run lint`, `test` nem `build` —
    nenhum deles roda `tsc` no web.
-
 ### Pronto quando
 
 O que esta fase entrega, e é o que roda verde hoje:
@@ -804,15 +893,20 @@ npx turbo run build                  # 4 successful, 4 total
 npx turbo run test                   # 4 successful, 4 total
 npx turbo run lint                   # 0 errors
 npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
+npm run test:cov -w orbien-site      # 100% nas 4 métricas, com global travado
 npm run test:rls -w orbien-backend   # 54 testes verdes
 node scripts/check-skills.mjs
-npx playwright test --list -c apps/web    # 13 testes em 8 arquivos
-E2E_BASE_URL=http://localhost:3002 npx playwright test -c apps/site   # 18 verdes
+
+# e2e do web, com API e web em pé (é o que o job `E2E` faz)
+npm run e2e -w orbien-web            # 12 testes em 8 arquivos, todos verdes
+
+# smoke do site, com o site em pé (job `smoke-site`)
+E2E_BASE_URL=http://localhost:3002 npm run e2e -w orbien-site   # 18 verdes
 ```
 
-O smoke do site foi verificado contra `next start` de verdade: 18/18. Os e2e do
-web só compilam aqui (`--list`) — rodá-los exige API, web em pé e
-`E2E_EMAIL`/`E2E_PASSWORD`/`E2E_TENANT`, que é o que o CI faz.
+Os dois conjuntos de e2e foram rodados de verdade nesta fase, não só listados:
+o do web contra API e web locais com o banco semeado (12/12), o do site contra
+`next start` (18/18).
 
 O smoke virou portão: job `smoke-site` no `ci.yml`, separado do job de e2e
 porque o site não precisa de banco nem de API para ser verificado. Ver
@@ -823,7 +917,6 @@ original desta checklist:
 
 ```bash
 npm run test:cov -w orbien-web       # hoje 68,5% — falta a Fase 10
-npm run test:cov -w orbien-site      # hoje 0%    — faltam as Fases 11 e 12
 npm run test:cov -w orbien-admin     # hoje 1,5%  — não há fase que o cubra
 ```
 
@@ -844,7 +937,7 @@ dados que o seed não cria. Estão mapeadas com evidência em
 A primeira tocava este plano enquanto o job `Testes de RLS` estava vermelho.
 **Não está mais**: `npm run test:rls -w orbien-backend` fecha em 54 testes
 verdes (o plano falava em 39 — a suíte cresceu desde então). O que impede a
-Fase 13 de declarar fechamento hoje não é o RLS, são as fases 10-12; ver
+Fase 13 de declarar fechamento hoje não é o RLS, é a Fase 10; ver
 "Estado da Fase 13".
 
 ## Registro de decisões
@@ -873,8 +966,10 @@ isso foi a escolha certa. Mas ela tem um ponto cego que só apareceu no
 fechamento: arquivo que nasce **fora** de todos os caminhos listados não é
 cobrado por ninguém. Foi o que houve com `src/platform/` — dois DTOs abaixo de
 100% sem reprovar nada, em módulo que trata do plano de plataforma. Na API a
-lista saiu e o `global` entrou. Nos outros três apps a troca fica para quem
-fechar as fases 10-12, porque lá o `global` hoje só produziria CI vermelho.
+lista saiu e o `global` entrou. No site a troca veio junto, assim que as Fases
+11 e 12 fecharam. No web e no admin ela fica para quem fechar a Fase 10 e para
+quem der ao admin uma fase, porque lá o `global` hoje só produziria CI
+vermelho.
 
 **O `playwright` órfão do site virou o smoke da Fase 13**, e não saiu. O que
 decidiu foi haver uma afirmação que só browser faz e que importa em site
