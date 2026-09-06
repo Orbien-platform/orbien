@@ -16,7 +16,7 @@ describe("robots", () => {
   });
 
   it("aponta para o sitemap no domínio de produção", () => {
-    expect(robots().sitemap).toBe("https://useorbien.com/sitemap.xml");
+    expect(robots().sitemap).toBe("https://useorbien.com.br/sitemap.xml");
   });
 
   it("não bloqueia nenhuma rota que o sitemap anuncia", () => {

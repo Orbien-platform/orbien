@@ -30,7 +30,7 @@ Criar Environment Group "orbien-secrets" com:
 | R2_SECRET_ACCESS_KEY | R2 secret key | Cloudflare → R2 → API Tokens |
 | R2_BUCKET_NAME | Nome do bucket R2 | Cloudflare → R2 |
 | R2_PUBLIC_URL | URL pública do bucket R2 | Cloudflare → R2 → Settings |
-| ALLOWED_ORIGINS | Origens CORS permitidas | https://orbien-web.vercel.app,https://app.useorbien.com |
+| ALLOWED_ORIGINS | Origens CORS permitidas | https://web.useorbien.com.br |
 
 ## Após deploy
 

@@ -136,8 +136,8 @@ do Playwright, e não `page.evaluate` no storage.
 Funciona contra qualquer ambiente:
 
 ```bash
-E2E_BASE_URL=https://orbien-web.vercel.app \
-E2E_API_URL=https://orbien-web.vercel.app/api-proxy \
+E2E_BASE_URL=https://web.useorbien.com.br \
+E2E_API_URL=https://web.useorbien.com.br/api-proxy \
 E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
 ```
 

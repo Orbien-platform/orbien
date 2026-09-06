@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/login", "/api/"],
       },
     ],
-    sitemap: "https://useorbien.com/sitemap.xml",
+    sitemap: "https://useorbien.com.br/sitemap.xml",
   };
 }

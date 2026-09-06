@@ -42,7 +42,7 @@ describe("RootLayout", () => {
   });
 
   it("expõe o metadataBase e o template de título", () => {
-    expect(metadata.metadataBase?.toString()).toBe("https://useorbien.com/");
+    expect(metadata.metadataBase?.toString()).toBe("https://useorbien.com.br/");
     expect(metadata.title).toEqual({
       template: "%s — Orbien",
       default: "Orbien — Gestão que serve. Igreja que cresce.",
