@@ -1,5 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsDateString, IsOptional } from 'class-validator';
+import { IsDate, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
 import { CreatePersonDto } from './create-person.dto';
 
 export class UpdatePersonDto extends PartialType(CreatePersonDto) {
@@ -7,6 +8,7 @@ export class UpdatePersonDto extends PartialType(CreatePersonDto) {
   // exist in the DB. The @ValidateIf from CreatePersonDto would incorrectly reject
   // requests that include classification:'member' but omit the date.
   @IsOptional()
-  @IsDateString({}, { message: 'Data de membresia inválida' })
-  override membership_date?: string;
+  @Type(() => Date)
+  @IsDate({ message: 'Data de membresia inválida' })
+  override membership_date?: Date;
 }

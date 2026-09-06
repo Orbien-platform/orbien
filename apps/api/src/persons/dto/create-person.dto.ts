@@ -1,6 +1,5 @@
 import {
   IsDate,
-  IsDateString,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -79,8 +78,9 @@ export class CreatePersonDto {
   // @IsOptional() is intentionally absent so @ValidateIf can enforce presence.
   @ValidateIf((o: CreatePersonDto) => o.classification === PersonClassification.member)
   @IsNotEmpty({ message: 'Data de membresia é obrigatória para membros' })
-  @IsDateString({}, { message: 'Data de membresia inválida' })
-  membership_date?: string;
+  @Type(() => Date)
+  @IsDate({ message: 'Data de membresia inválida' })
+  membership_date?: Date;
 
   @IsOptional()
   @IsString()
