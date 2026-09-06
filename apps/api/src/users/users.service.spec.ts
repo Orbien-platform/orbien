@@ -45,11 +45,11 @@ function serviceWith(overrides: {
     person: { findUnique: () => Promise.resolve(person) },
     userAccount: { create: userAccountCreate },
     roleAssignment: { create: roleAssignmentCreate },
-    passwordResetToken: { create: passwordResetTokenCreate },
   };
 
   const prisma = {
     runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    system: { passwordResetToken: { create: passwordResetTokenCreate } },
   } as unknown as PrismaService;
 
   const mail = { sendInvite: jest.fn().mockResolvedValue(undefined) } as unknown as MailService;
