@@ -24,7 +24,7 @@ describe("sitemap", () => {
 
   it("usa o domínio de produção em todas as entradas", () => {
     for (const entry of sitemap()) {
-      expect(entry.url.startsWith("https://useorbien.com")).toBe(true);
+      expect(entry.url.startsWith("https://useorbien.com.br")).toBe(true);
     }
   });
 
