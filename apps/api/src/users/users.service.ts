@@ -33,7 +33,7 @@ export class UsersService {
       throw new ForbiddenException('Apenas um admin do tenant pode conceder o papel de admin do tenant.');
     }
 
-    const { user, rawToken } = await this.prisma.runInTx(async (tx) => {
+    const user = await this.prisma.runInTx(async (tx) => {
       const person = await tx.person.findUnique({
         where: { id: dto.person_id },
         include: { userAccounts: { where: { is_active: true }, select: { id: true } } },
@@ -75,13 +75,17 @@ export class UsersService {
         },
       });
 
-      const raw = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + INVITE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
-      await tx.passwordResetToken.create({
-        data: { user_id: created.id, token: raw, expires_at: expiresAt },
-      });
+      return created;
+    });
 
-      return { user: created, rawToken: raw };
+    // password_reset_tokens só aceita gravação via `system` (BYPASSRLS): a
+    // policy nega `app_user` de propósito (ver migration
+    // 20260614001415_add_password_reset_tokens). `tx` roda como `app_user` e
+    // derrubaria isto com 42501.
+    const rawToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + INVITE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+    await this.prisma.system.passwordResetToken.create({
+      data: { user_id: user.id, token: rawToken, expires_at: expiresAt },
     });
 
     // Fora da transação: envio de e-mail não deve segurar a conexão do banco.
