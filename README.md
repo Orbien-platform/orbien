@@ -71,3 +71,11 @@ Não são centralizadas — cada app mantém as suas:
 
 Passo a passo completo de configuração das plataformas: [`DEPLOY.md`](DEPLOY.md).
 Estrutura interna do monorepo: [`docs/MONOREPO.md`](docs/MONOREPO.md).
+
+## Documentação de produto e roadmap
+
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — o que já foi entregue, onde o plano
+  original ficou para trás e a visão de próximos ciclos de entrega.
+- [`docs/produto/`](docs/produto/README.md) — ADRs, especificação de
+  produto, pricing, mapeamento LGPD, minutas de contrato e briefings de
+  sprint que guiaram o desenvolvimento.
