@@ -63,6 +63,48 @@ describe("DataTable", () => {
     expect(onRowClick).toHaveBeenCalledWith(rows[0]);
   });
 
+  it("mostra o erro em vez do estado vazio quando o carregamento falha", () => {
+    render(
+      <DataTable
+        columns={columns}
+        rows={[]}
+        getRowKey={(r) => r.id}
+        error="Não foi possível carregar."
+      />
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar.");
+    expect(screen.queryByText("Nenhum resultado encontrado.")).not.toBeInTheDocument();
+  });
+
+  it("chama onRetry ao clicar em tentar de novo", async () => {
+    const onRetry = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        rows={[]}
+        getRowKey={(r) => r.id}
+        error="Falhou."
+        onRetry={onRetry}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /tentar de novo/i }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("prioriza loading sobre erro quando ambos estão presentes", () => {
+    render(
+      <DataTable
+        columns={columns}
+        rows={[]}
+        getRowKey={(r) => r.id}
+        isLoading
+        error="Falhou."
+        skeletonRows={2}
+      />
+    );
+    expect(screen.queryByText("Falhou.")).not.toBeInTheDocument();
+  });
+
   it("aplica width da coluna quando informado", () => {
     const withWidth: Column<Row>[] = [{ key: "name", header: "Nome", width: "120px", render: (r) => r.name }];
     render(<DataTable columns={withWidth} rows={[]} getRowKey={(r) => r.id} />);

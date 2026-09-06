@@ -198,18 +198,18 @@ describe('DashboardService.getWeeklyDashboard', () => {
     }
   });
 
-  it('quando "hoje" não é domingo, a última segunda-feira usa 1 - dow (ramo else)', async () => {
-    // As demais suítes acima não travam o relógio, então cobrem este ramo só
-    // por acidente — nos dias em que "agora" de verdade não cai num domingo.
-    // Quando a suíte roda num domingo (como a de cima trava de propósito),
-    // ninguém mais exercita o `else`, e a cobertura de branch cai. Trava
-    // numa quarta-feira para não depender do dia real.
+  it('quando "hoje" não é domingo, a última segunda-feira usa 1 - dow (ramo dow!==0)', async () => {
+    // Par do teste acima: aquele trava um domingo para exercitar o `-6`
+    // explícito; sem travar um dia de semana em algum teste, o outro ramo do
+    // ternário (`1 - dow`) fica descoberto sempre que a suíte rodar num
+    // domingo — os demais testes usam o relógio real, e nesse dia caem no
+    // mesmo ramo do teste acima.
     jest.useFakeTimers().setSystemTime(new Date('2026-02-04T12:00:00.000Z')); // quarta-feira
     try {
       const { service } = serviceWith();
       const result = await service.getWeeklyDashboard(user);
-      // Última semana (índice 7) começa na segunda-feira da mesma semana da
-      // quarta-feira travada, isto é, 02/02/2026 — 2 dias antes, não 6.
+      // A semana mais recente (índice 7) começa na segunda-feira daquela
+      // semana, 02/02/2026 — dois dias antes, via `1 - dow`.
       expect(result.weekly[7]!.week_start.toISOString().slice(0, 10)).toBe('2026-02-02');
     } finally {
       jest.useRealTimers();

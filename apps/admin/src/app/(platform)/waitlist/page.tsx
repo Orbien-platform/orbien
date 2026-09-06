@@ -71,37 +71,52 @@ function fmtDate(iso: string): string {
 export default function WaitlistPage() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState<"" | WaitlistStatus>("");
   const [error, setError] = useState("");
 
-  const load = useCallback((filter: "" | WaitlistStatus) => {
+  // Cancelamento por request, não só por filtro: alternar as abas rápido
+  // (Pendentes → Ativados → Pendentes) dispara três requisições, e sem isto a
+  // que responder por último decide a tela — mesmo sendo a de uma aba que já
+  // não está mais selecionada. `isLoading` derivado de "esta busca já
+  // terminou" pelo mesmo motivo de `tenants/page.tsx`: setState direto no
+  // corpo do efeito dispara render em cascata.
+  const [reloadTick, setReloadTick] = useState(0);
+  const requestKey = `${status}|${reloadTick}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const isLoading = loadedKey !== requestKey;
+
+  useEffect(() => {
+    const signal = { cancelled: false };
     const params = new URLSearchParams({ limit: "100" });
-    if (filter) params.set("status", filter);
-    return api
+    if (status) params.set("status", status);
+    api
       .get<{ data: Subscriber[]; total: number }>(`/admin/waitlist?${params}`)
       .then(({ data }) => {
+        if (signal.cancelled) return;
         setSubscribers(data.data);
         setTotal(data.total);
         setError("");
       })
       .catch(() => {
+        if (signal.cancelled) return;
         setSubscribers([]);
         setTotal(0);
         setError("Não foi possível carregar a waitlist.");
       })
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  useEffect(() => {
-    load(status);
-  }, [load, status]);
+      .finally(() => {
+        if (!signal.cancelled) setLoadedKey(requestKey);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [requestKey, status]);
 
   function handleStatus(next: "" | WaitlistStatus) {
     if (next === status) return;
-    setIsLoading(true);
     setStatus(next);
   }
+
+  const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
   const columns: Column<Subscriber>[] = [
     {
@@ -199,20 +214,13 @@ export default function WaitlistPage() {
         ))}
       </div>
 
-      {error && (
-        <p
-          className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
-          role="alert"
-        >
-          {error}
-        </p>
-      )}
-
       <DataTable
         columns={columns}
         rows={subscribers}
         getRowKey={(s) => s.id}
         isLoading={isLoading}
+        error={error || undefined}
+        onRetry={reload}
         emptyState="Nenhum inscrito com este filtro."
       />
     </div>

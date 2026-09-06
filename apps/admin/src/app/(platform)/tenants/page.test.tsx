@@ -148,7 +148,7 @@ describe("TenantsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("erro na busca avisa e esvazia a lista", async () => {
+  it("erro na busca mostra o estado de erro da tabela, não o de lista vazia", async () => {
     getMock.mockRejectedValue(new Error("500"));
 
     render(<TenantsPage />);
@@ -157,8 +157,20 @@ describe("TenantsPage", () => {
       "Não foi possível carregar os tenants."
     );
     expect(
-      screen.getByText("Nenhum tenant na plataforma ainda.")
-    ).toBeInTheDocument();
+      screen.queryByText("Nenhum tenant na plataforma ainda.")
+    ).not.toBeInTheDocument();
+  });
+
+  it("tentar de novo no erro de carregamento refaz a busca", async () => {
+    const user = userEvent.setup();
+    getMock.mockRejectedValue(new Error("500"));
+    render(<TenantsPage />);
+    await screen.findByRole("alert");
+
+    respondeCom([tenant({ name: "Igreja Recuperada" })]);
+    await user.click(screen.getByRole("button", { name: /tentar de novo/i }));
+
+    expect(await screen.findByText("Igreja Recuperada")).toBeInTheDocument();
   });
 
   it("resposta de busca cancelada não sobrescreve a lista", async () => {
