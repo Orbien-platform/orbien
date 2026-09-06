@@ -160,7 +160,7 @@ describe("WaitlistPage", () => {
     expect(await screen.findByText("RS")).toBeInTheDocument();
   });
 
-  it("erro na busca avisa e esvazia a lista", async () => {
+  it("erro na busca mostra o estado de erro da tabela, não o de lista vazia", async () => {
     getMock.mockRejectedValue(new Error("500"));
 
     render(<WaitlistPage />);
@@ -169,8 +169,49 @@ describe("WaitlistPage", () => {
       "Não foi possível carregar a waitlist."
     );
     expect(
-      screen.getByText("Nenhum inscrito com este filtro.")
-    ).toBeInTheDocument();
+      screen.queryByText("Nenhum inscrito com este filtro.")
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/0 inscritos\./)).toBeInTheDocument();
+  });
+
+  it("tentar de novo no erro de carregamento refaz a busca", async () => {
+    const user = userEvent.setup();
+    getMock.mockRejectedValue(new Error("500"));
+    render(<WaitlistPage />);
+    await screen.findByRole("alert");
+
+    respondeCom([inscrito({ pastor_name: "Pastor Recuperado" })]);
+    await user.click(screen.getByRole("button", { name: /tentar de novo/i }));
+
+    expect(await screen.findByText("Pastor Recuperado")).toBeInTheDocument();
+  });
+
+  it("trocar de aba rápido não deixa a resposta antiga sobrescrever a nova", async () => {
+    const user = userEvent.setup();
+    render(<WaitlistPage />);
+    await screen.findByText("Pastor João");
+
+    let resolverPendentes!: (v: unknown) => void;
+    getMock
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (resolverPendentes = resolve))
+      )
+      .mockResolvedValueOnce({
+        data: { data: [inscrito({ pastor_name: "Ativado Recente" })], total: 1 },
+      } as never);
+
+    await user.click(screen.getByRole("button", { name: "Pendentes" }));
+    await user.click(screen.getByRole("button", { name: "Ativados" }));
+
+    expect(await screen.findByText("Ativado Recente")).toBeInTheDocument();
+
+    resolverPendentes({
+      data: { data: [inscrito({ pastor_name: "Pendente Antigo" })], total: 1 },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("Ativado Recente")).toBeInTheDocument()
+    );
+    expect(screen.queryByText("Pendente Antigo")).not.toBeInTheDocument();
   });
 });
