@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import api from "@/lib/api";
 
@@ -40,8 +40,15 @@ function fmtDateTime(iso: string): string {
 export default function AuditoriaPage() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Mesmo desenho de `tenants/page.tsx`: `isLoading` derivado de "esta busca
+  // já terminou" em vez de estado imperativo, para não chamar `setState`
+  // dentro do próprio corpo do efeito.
+  const [reloadTick, setReloadTick] = useState(0);
+  const [loadedTick, setLoadedTick] = useState<number | null>(null);
+  const isLoading = loadedTick !== reloadTick;
+  const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -62,12 +69,12 @@ export default function AuditoriaPage() {
         setError("Não foi possível carregar a auditoria de sessões de suporte.");
       })
       .finally(() => {
-        if (!signal.cancelled) setIsLoading(false);
+        if (!signal.cancelled) setLoadedTick(reloadTick);
       });
     return () => {
       signal.cancelled = true;
     };
-  }, []);
+  }, [reloadTick]);
 
   const columns: Column<AuditLogRow>[] = [
     {
@@ -131,20 +138,13 @@ export default function AuditoriaPage() {
         </p>
       </div>
 
-      {error && (
-        <p
-          className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
-          role="alert"
-        >
-          {error}
-        </p>
-      )}
-
       <DataTable
         columns={columns}
         rows={logs}
         getRowKey={(l) => l.id}
         isLoading={isLoading}
+        error={error || undefined}
+        onRetry={reload}
         emptyState="Nenhuma sessão de suporte registrada ainda."
       />
     </div>

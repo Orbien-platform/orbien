@@ -1,3 +1,4 @@
+import { AlertCircle, RotateCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,12 @@ interface DataTableProps<T> {
   isLoading?: boolean;
   skeletonRows?: number;
   emptyState?: React.ReactNode;
+  // Falha ao carregar é um estado diferente de "carregou e não achou nada":
+  // a linha vazia diz "não há dados", esta diz "não sabemos se há". Misturar
+  // as duas faz o usuário ler uma lista zerada como fato quando na verdade a
+  // requisição falhou.
+  error?: React.ReactNode;
+  onRetry?: () => void;
   className?: string;
 }
 
@@ -27,6 +34,8 @@ export function DataTable<T>({
   isLoading,
   skeletonRows = 8,
   emptyState,
+  error,
+  onRetry,
   className,
 }: DataTableProps<T>) {
   return (
@@ -56,7 +65,31 @@ export function DataTable<T>({
                   ))}
                 </tr>
               ))
-            : rows.length === 0
+            : error
+              ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-4 py-12">
+                    <div
+                      role="alert"
+                      className="flex flex-col items-center gap-2 text-center text-sm text-stone"
+                    >
+                      <AlertCircle size={20} strokeWidth={1.5} className="text-crimson" />
+                      <span>{error}</span>
+                      {onRetry && (
+                        <button
+                          type="button"
+                          onClick={onRetry}
+                          className="mt-1 inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
+                        >
+                          <RotateCw size={13} strokeWidth={1.5} />
+                          Tentar de novo
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+              : rows.length === 0
               ? (
                 <tr>
                   <td

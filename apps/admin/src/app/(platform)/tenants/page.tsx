@@ -54,7 +54,12 @@ export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [error, setError] = useState("");
+  // Duas fontes de erro distintas: uma é "a lista não carregou" (vai na
+  // tabela, ao lado do resultado que ela substitui), a outra é "a ação numa
+  // linha falhou" (vai no banner, porque a lista continua válida ao lado
+  // dela). Um `error` só faria a tabela sumir por causa de um clique.
+  const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
 
   // Mesmo desenho de `apps/web/src/app/(admin)/pessoas/page.tsx`, e pelo mesmo
   // motivo. `isLoading` como estado imperativo travava a tela: o `SearchInput`
@@ -83,12 +88,12 @@ export default function TenantsPage() {
       .then(({ data }) => {
         if (signal.cancelled) return;
         setTenants(data.data);
-        setError("");
+        setLoadError("");
       })
       .catch(() => {
         if (signal.cancelled) return;
         setTenants([]);
-        setError("Não foi possível carregar os tenants.");
+        setLoadError("Não foi possível carregar os tenants.");
       })
       .finally(() => {
         if (!signal.cancelled) setLoadedKey(requestKey);
@@ -106,7 +111,7 @@ export default function TenantsPage() {
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
   async function handleSupportSession(tenant: Tenant) {
-    setError("");
+    setActionError("");
     setOpeningFor(tenant.id);
     try {
       await openSupportSession(tenant.id, tenant.name);
@@ -114,7 +119,7 @@ export default function TenantsPage() {
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         // `impersonate` exige uma congregação: o token precisa fixar
         // `congregation_id`, e sem ela não há sessão possível.
-        setError(
+        setActionError(
           `${tenant.name} não tem congregação — não é possível abrir sessão de suporte.`
         );
       } else if (!axios.isAxiosError(err) && err instanceof Error) {
@@ -122,9 +127,9 @@ export default function TenantsPage() {
         // lança quando `NEXT_PUBLIC_WEB_URL` não está definida. A mensagem
         // nomeia a variável, e engoli-la transformava uma correção de um
         // minuto no painel em tentativa e erro.
-        setError(err.message);
+        setActionError(err.message);
       } else {
-        setError("Não foi possível abrir a sessão de suporte.");
+        setActionError("Não foi possível abrir a sessão de suporte.");
       }
     } finally {
       setOpeningFor(null);
@@ -230,12 +235,12 @@ export default function TenantsPage() {
         </div>
       </div>
 
-      {error && (
+      {actionError && (
         <p
           className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
           role="alert"
         >
-          {error}
+          {actionError}
         </p>
       )}
 
@@ -244,6 +249,8 @@ export default function TenantsPage() {
         rows={tenants}
         getRowKey={(t) => t.id}
         isLoading={isLoading}
+        error={loadError || undefined}
+        onRetry={reload}
         emptyState={
           search
             ? "Nenhum tenant corresponde à busca."

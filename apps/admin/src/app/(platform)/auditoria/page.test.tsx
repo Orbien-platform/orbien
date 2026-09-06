@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AuditoriaPage from "./page";
 import api from "@/lib/api";
@@ -102,7 +103,7 @@ describe("AuditoriaPage", () => {
     );
   });
 
-  it("erro na busca avisa e esvazia a lista", async () => {
+  it("erro na busca mostra o estado de erro da tabela, não o de lista vazia", async () => {
     getMock.mockRejectedValue(new Error("500"));
 
     render(<AuditoriaPage />);
@@ -111,7 +112,21 @@ describe("AuditoriaPage", () => {
       "Não foi possível carregar a auditoria de sessões de suporte."
     );
     expect(
-      screen.getByText("Nenhuma sessão de suporte registrada ainda.")
+      screen.queryByText("Nenhuma sessão de suporte registrada ainda.")
+    ).not.toBeInTheDocument();
+  });
+
+  it("tentar de novo no erro de carregamento refaz a busca", async () => {
+    const user = userEvent.setup();
+    getMock.mockRejectedValue(new Error("500"));
+    render(<AuditoriaPage />);
+    await screen.findByRole("alert");
+
+    respondeCom([registro({ actor_email: "recuperado@orbien.app" })]);
+    await user.click(screen.getByRole("button", { name: /tentar de novo/i }));
+
+    expect(
+      await screen.findByText("recuperado@orbien.app")
     ).toBeInTheDocument();
   });
 

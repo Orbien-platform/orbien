@@ -197,4 +197,22 @@ describe('DashboardService.getWeeklyDashboard', () => {
       jest.useRealTimers();
     }
   });
+
+  it('quando "hoje" não é domingo, a última segunda-feira usa 1 - dow (ramo dow!==0)', async () => {
+    // Par do teste acima: aquele trava um domingo para exercitar o `-6`
+    // explícito; sem travar um dia de semana em algum teste, o outro ramo do
+    // ternário (`1 - dow`) fica descoberto sempre que a suíte rodar num
+    // domingo — os demais testes usam o relógio real, e nesse dia caem no
+    // mesmo ramo do teste acima.
+    jest.useFakeTimers().setSystemTime(new Date('2026-02-04T12:00:00.000Z')); // quarta-feira
+    try {
+      const { service } = serviceWith();
+      const result = await service.getWeeklyDashboard(user);
+      // A semana mais recente (índice 7) começa na segunda-feira daquela
+      // semana, 02/02/2026 — dois dias antes, via `1 - dow`.
+      expect(result.weekly[7]!.week_start.toISOString().slice(0, 10)).toBe('2026-02-02');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
