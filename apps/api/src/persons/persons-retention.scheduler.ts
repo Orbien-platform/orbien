@@ -19,4 +19,13 @@ export class PersonsRetentionScheduler {
     const result = await this.personsService.purgeExpiredSoftDeletes();
     this.logger.log(`Retenção de 30 dias: ${result.purged} pessoa(s) com dados sensíveis eliminados`);
   }
+
+  // Horário distinto do purge de soft delete só para não concorrer com ele
+  // pela mesma janela de baixo tráfego; os dois são idempotentes e podem
+  // rodar em qualquer ordem.
+  @Cron('0 4 * * *')
+  async cronPurgeInactivePersons(): Promise<void> {
+    const result = await this.personsService.purgeInactivePersons();
+    this.logger.log(`Retenção por inatividade: ${result.purged} pessoa(s) anonimizadas`);
+  }
 }

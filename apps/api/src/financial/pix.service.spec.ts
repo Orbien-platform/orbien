@@ -691,6 +691,27 @@ describe('PixService', () => {
       expect(String(cap.transactions[0]?.['amount'])).toBe('75.5');
     });
 
+    it('carrega o donor_person_id do PixPayment para o lançamento — sem isso o job de retenção de Person não vê o vínculo financeiro', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+          donor_person_id: 'pessoa-7',
+        },
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+
+      expect(cap.transactions[0]).toMatchObject({ donor_person_id: 'pessoa-7' });
+    });
+
     it('`PAYMENT_RECEIVED` também confirma', async () => {
       const { service, cap } = harness();
 

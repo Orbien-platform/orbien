@@ -8,6 +8,9 @@ import { JwtPayload } from './interfaces/jwt-payload.interface';
 function serviceMock() {
   return {
     login: jest.fn().mockResolvedValue({ access_token: 'a', refresh_token: 'r', expires_in: 900 }),
+    platformLogin: jest
+      .fn()
+      .mockResolvedValue({ access_token: 'ap', refresh_token: 'rp', expires_in: 900 }),
     refresh: jest.fn().mockResolvedValue({ access_token: 'a2', refresh_token: 'r2', expires_in: 900 }),
     logout: jest.fn().mockResolvedValue({ message: 'Sessão encerrada.' }),
     forgotPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
@@ -36,6 +39,19 @@ describe('AuthController', () => {
       expires_in: 900,
     });
     expect(service.login).toHaveBeenCalledWith(dto);
+  });
+
+  it('platformLogin delega ao AuthService com o DTO', async () => {
+    const service = serviceMock();
+    const controller = new AuthController(service);
+    const dto = { email: 'suporte@orbien.com', password: 'x' };
+
+    await expect(controller.platformLogin(dto)).resolves.toEqual({
+      access_token: 'ap',
+      refresh_token: 'rp',
+      expires_in: 900,
+    });
+    expect(service.platformLogin).toHaveBeenCalledWith(dto);
   });
 
   it('refresh delega ao AuthService com o DTO', async () => {
