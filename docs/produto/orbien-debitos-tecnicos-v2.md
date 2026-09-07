@@ -4,6 +4,14 @@ Cada item tem: contexto, critério de conclusão e prompt pronto para colar no C
 
 ---
 
+> **DT-02 (migração Supabase us-west-1 → sa-east-1) e DT-03 (timeout de
+> transação 30s) foram removidos em 2026-09-07.** Decisão do dev: a migração
+> de região não vai acontecer por ora, e DT-03 só existia como decorrência
+> dela. A numeração salta de DT-01 para DT-04 de propósito — não é lacuna, é
+> o registro de que os dois foram descartados, não esquecidos.
+
+---
+
 ## DT-01 · RLS Isolation Test Suite
 **Prioridade:** ✅ CONCLUÍDO (2026-06-08)
 **Commits:** `f866c37` (fix_rls_enforcement) · `edc40dd` (fix_congregation_isolation_policies)
@@ -33,88 +41,6 @@ Cada item tem: contexto, critério de conclusão e prompt pronto para colar no C
 
 ### Nota operacional
 A `DATABASE_URL` em produção (Render) também precisa apontar para `orbien_app`. Ao fazer deploy, atualizar a variável de ambiente no Render com a mesma string do `.env` local. Sem isso, produção continua rodando como `postgres` sem RLS.
-
----
-
-## DT-02 · Migração Supabase us-west-1 → sa-east-1
-**Prioridade:** 🔴 Bloqueante para go-live
-**Depende de:** Janela de manutenção acordada com Doca Church
-**Resolve junto com:** DT-03 (o timeout de 30s some automaticamente)
-
-### Contexto
-O projeto Supabase está provisionado em `us-west-1` (Oregon, EUA). Dados pessoais de brasileiros armazenados fora do país exigem base legal explícita de transferência internacional (Art. 33 LGPD). A região `sa-east-1` (São Paulo) elimina esse risco.
-
-**Atenção pós DT-01:** ao criar o novo projeto em sa-east-1, será necessário recriar o role `orbien_app` com as mesmas permissões (NOBYPASSRLS, GRANTs em todas as tabelas, FORCE RLS nas 22 tabelas). Incluir o SQL do role no script de migração.
-
-### Critério de conclusão
-- [ ] Novo projeto Supabase criado em `sa-east-1`
-- [ ] Role `orbien_app` criado no novo projeto com mesmas permissões
-- [ ] `pg_dump` do banco atual executado e verificado
-- [ ] `pg_restore` no novo projeto executado e verificado
-- [ ] `FORCE ROW LEVEL SECURITY` confirmado nas 22 tabelas
-- [ ] Variáveis `DATABASE_URL` e `DIRECT_URL` atualizadas no Render
-- [ ] `npx prisma migrate deploy` rodado no novo banco
-- [ ] Seed de credenciais de teste re-executado
-- [ ] Testes RLS passando no novo banco: `npm test -- --testPathPattern=rls`
-- [ ] Health check da API passando (`GET /api/health`)
-- [ ] Latência de query medida — esperado < 50ms vs ~200ms atual
-- [ ] Projeto antigo (us-west-1) pausado (não deletar ainda — 30 dias de quarentena)
-
-### Prompt para Claude Code
-```
-Preciso executar a migração do banco Supabase de us-west-1 para sa-east-1 no projeto Orbien.
-
-Contexto:
-- Backend NestJS no Render, usa DATABASE_URL via variável de ambiente
-- ORM: Prisma 6 — migrations já aplicadas, schema em prisma/schema.prisma
-- Banco atual: Supabase us-west-1 (Oregon)
-- Destino: novo projeto Supabase sa-east-1 (São Paulo)
-- Role de aplicação: orbien_app (NOBYPASSRLS) — precisa ser recriado no novo projeto
-- FORCE RLS aplicado em 22 tabelas — confirmar após restore
-
-Me guie pelo processo completo:
-1. Comando pg_dump correto para exportar o banco atual (incluindo dados, schema e roles)
-2. Como criar o novo projeto Supabase em sa-east-1
-3. SQL para recriar role orbien_app com todas as permissões
-4. Comando pg_restore para importar no novo banco
-5. Como atualizar DATABASE_URL e DIRECT_URL no Render
-6. Verificação: rodar testes RLS + contagem de registros
-7. Como medir a latência antes e depois
-
-Crie um script bash migration-verify.sh que:
-- Conecta em ambos os bancos
-- Compara contagem de registros em todas as tabelas principais
-- Verifica que FORCE RLS está ativo nas 22 tabelas
-- Verifica que orbien_app tem NOBYPASSRLS
-- Retorna diff se houver divergência
-```
-
----
-
-## DT-03 · Transaction Timeout 30s
-**Prioridade:** 🟡 Temporário
-**Depende de:** DT-02 (migração de região)
-**Resolve junto com:** DT-02 — some automaticamente após migração
-
-### Contexto
-O timeout de transação foi aumentado para 30s como workaround para a alta latência do banco em us-west-1 (~200ms por query). Após a migração para sa-east-1, a latência cai para ~30–50ms e o timeout pode voltar para o padrão de 10s. Não exige ação separada — registrado aqui apenas para não esquecer de reverter.
-
-### Critério de conclusão
-- [ ] DT-02 concluído
-- [ ] Timeout revertido para 10s no `PrismaService` ou onde estiver configurado
-- [ ] Nenhum timeout disparado em 48h de operação normal no novo banco
-
-### Prompt para Claude Code
-```
-Após a migração do Supabase para sa-east-1 (DT-02), preciso reverter o timeout
-de transação que foi aumentado para 30s como workaround de latência.
-
-Localize onde o timeout de transação está configurado no projeto NestJS/Prisma
-e reverta para 10s (ou o padrão recomendado para a stack).
-
-Após a mudança, rode o script de testes de integração existente para confirmar
-que nenhuma operação normal está estourando o novo timeout.
-```
 
 ---
 
@@ -288,13 +214,61 @@ Audit log: AuditLog action: 'persons.batch_import' com after: { count: imported 
 | ID | Débito | Prioridade | Status |
 |---|---|---|---|
 | DT-01 | RLS Isolation Test Suite | ✅ Concluído | 14/14 testes passando · 2026-06-08 |
-| DT-02 | Migração Supabase sa-east-1 | 🔴 Bloqueante | Pendente — requer janela de manutenção e credenciais de infra; fora do escopo executável por código |
-| DT-03 | Timeout 30s | 🟡 Temporário | Some com DT-02 |
 | DT-04 | Onboarding de tenant | ✅ Concluído | Person + person_id + 12 categorias · 2026-09-07 |
 | DT-05 | Soft delete + anonimização LGPD | ✅ Concluído | anonymize/soft delete/retenção 30 dias · 2026-09-07 |
 | DT-06 | Importação CSV/Excel | ✅ Concluído | já implementado; fechado o teto de 5.000 linhas · 2026-09-07 |
 
+**Todos os débitos deste documento estão fechados no código.** O que falta é
+operacional, não código — ver `DEPLOY.md` §1.8 e o checklist abaixo: aplicar
+em produção o `bootstrap-db.sh` (RLS de plataforma e de provisionamento) e as
+duas migrations comuns pendentes.
+
 ---
 
-*Atualizado em 2026-09-07 · DT-04, DT-05 e DT-06 fechados. DT-02/DT-03 seguem pendentes: exigem infraestrutura (novo projeto Supabase, janela de manutenção) e credenciais que uma sessão de código não tem acesso.*
+## Pendente em produção — não é código, é passo de deploy
+
+DT-01/04/05/06 estão prontos e testados, mas dependem de peças que só existem
+no banco depois de rodar contra o Supabase de produção. Sem isso, o
+comportamento fica incompleto mesmo com o deploy da API feito:
+
+1. **`bootstrap-db.sh` completo** — aplica, entre outros, `004_rls_platform_plane.sql`,
+   `005_rls_audit_platform_read.sql` e `006_rls_platform_provisioning.sql`.
+   Enquanto não rodar: `POST /platform/tenants` (o onboarding do DT-04) falha
+   com 42501 ao tentar criar `Person`/`FinancialCategory` sem tenant no
+   contexto, e `GET /admin/waitlist` / a tela de auditoria de suporte
+   respondem vazio. Idempotente — pode rodar de novo sem `--seed` contra o
+   banco já provisionado:
+   ```bash
+   cd apps/api
+   DIRECT_URL='postgresql://postgres:<senha>@<host>:5432/postgres' \
+   ORBIEN_APP_PASSWORD='<senha-do-app>' \
+   bash scripts/bootstrap-db.sh
+   ```
+2. **`prisma migrate deploy`** para as duas migrations comuns que ainda não
+   foram para produção:
+   - `20260905000000_add_login_attempts` — sem ela, `login`/`platform/login`/
+     `forgot-password` respondem 500 na primeira tentativa (a tabela do
+     limitador não existe).
+   - `20260907045316_add_person_soft_delete_lgpd` — sustenta o DT-05; sem
+     ela, `deleted_at`/`anonymized_at`/`anonymization_reason` não existem em
+     `persons` e o soft delete/anonimização falham.
+   ```bash
+   npm run db:migrate:status   # confere o que falta antes de aplicar
+   npx prisma migrate deploy   # a partir de apps/api, ou via DIRECT_URL de produção
+   ```
+
+**Ordem recomendada:** rodar o `prisma migrate deploy` (passo 2) antes do
+`bootstrap-db.sh` (passo 1) — o `bootstrap-db.sh` já aplica as migrations do
+Prisma como parte do seu próprio passo 2/8, então rodá-lo sozinho também
+resolve as duas, mas separar deixa claro qual falha se alguma etapa não
+rodar. Nenhum dos dois comandos é executado por esta sessão: exigem
+`DIRECT_URL`/`ORBIEN_APP_PASSWORD` de produção, que uma sessão de código não
+deve ter.
+
+---
+
+*Atualizado em 2026-09-07 · DT-04, DT-05 e DT-06 fechados no código. DT-02 e
+DT-03 removidos — a migração de região não vai acontecer por ora. O que
+resta é aplicar em produção o bootstrap de RLS e as duas migrations comuns
+listadas acima.*
 
