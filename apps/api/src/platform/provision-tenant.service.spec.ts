@@ -5,7 +5,11 @@
  * login de quem recebeu o convite.
  */
 
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import {
+  ConflictException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ProvisionTenantService } from './provision-tenant.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -63,6 +67,16 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
       create: (args: { data: unknown }) => {
         calls.push('roleAssignment');
         captured['assignment'] = args.data;
+        return Promise.resolve({});
+      },
+    },
+    waitlistSubscriber: {
+      findUnique: () => {
+        throw new Error('waitlistSubscriber.findUnique não mockado neste teste');
+      },
+      update: (args: { data: unknown }) => {
+        calls.push('waitlistSubscriber');
+        captured['waitlistUpdate'] = args.data;
         return Promise.resolve({});
       },
     },
@@ -166,5 +180,67 @@ describe('ProvisionTenantService', () => {
     const { service } = serviceWith({ tenant: { create: () => Promise.reject(boom) } });
 
     await expect(service.provision(dto)).rejects.toBe(boom);
+  });
+
+  it('com waitlist_lead_id, ativa o lead na mesma transação', async () => {
+    const { service, calls, captured } = serviceWith({
+      waitlistSubscriber: {
+        findUnique: () => Promise.resolve({ id: 'lead-1', tenant_id: null }),
+        update: (args: { data: unknown }) => {
+          calls.push('waitlistSubscriber');
+          captured['waitlistUpdate'] = args.data;
+          return Promise.resolve({});
+        },
+      },
+    });
+
+    await service.provision({ ...dto, waitlist_lead_id: 'lead-1' });
+
+    expect(calls).toEqual([
+      'tenant',
+      'tenantPlan',
+      'brandingConfig',
+      'congregation',
+      'userAccount',
+      'roleAssignment',
+      'waitlistSubscriber',
+    ]);
+    expect(captured['waitlistUpdate']).toEqual({
+      status: 'activated',
+      activated_at: expect.any(Date),
+      tenant_id: 'tenant-novo',
+    });
+  });
+
+  it('lead inexistente vira 404 e não cria nada', async () => {
+    const { service, calls } = serviceWith({
+      waitlistSubscriber: {
+        findUnique: () => Promise.resolve(null),
+        update: () => {
+          throw new Error('não devia chamar update');
+        },
+      },
+    });
+
+    await expect(
+      service.provision({ ...dto, waitlist_lead_id: 'lead-inexistente' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(calls).toEqual([]);
+  });
+
+  it('lead já vinculado a outro tenant vira 409 e não cria nada', async () => {
+    const { service, calls } = serviceWith({
+      waitlistSubscriber: {
+        findUnique: () => Promise.resolve({ id: 'lead-1', tenant_id: 'outro-tenant' }),
+        update: () => {
+          throw new Error('não devia chamar update');
+        },
+      },
+    });
+
+    await expect(
+      service.provision({ ...dto, waitlist_lead_id: 'lead-1' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(calls).toEqual([]);
   });
 });

@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { UserPlus } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { CreateTenantModal } from "@/components/tenants/CreateTenantModal";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,7 @@ interface Subscriber {
   status: WaitlistStatus;
   source: string | null;
   created_at: string;
+  tenant_id: string | null;
 }
 
 const STATUS_LABELS: Record<WaitlistStatus, string> = {
@@ -59,20 +62,21 @@ function fmtDate(iso: string): string {
 }
 
 /**
- * Somente leitura, de propósito.
+ * A lista em si segue somente leitura — não há seletor de status aqui.
  *
- * `PATCH /admin/waitlist/:id` existe e move o status, mas ligar um seletor aqui
- * seria meia-medida: `ProvisionTenantService` não toca em
- * `waitlist_subscribers`, então `tenant_id` e `activated_at` do lead ficariam
- * nulos de todo jeito — e a tela passaria a impressão contrária. A forma certa
- * é provisionar a partir do lead, na mesma transação. Adiado para a Fase 4;
- * o registro da decisão está em `docs/PENDENCIAS.md`.
+ * O que existe é "Provisionar": abre o mesmo modal de `tenants/`, prefiller
+ * com os dados do lead, e a API ativa o lead (`status`, `activated_at`,
+ * `tenant_id`) dentro da mesma transação que cria o tenant. Ligar um seletor
+ * de status direto nesta tabela seria meia-medida — `tenant_id` continuaria
+ * nulo, e a tela passaria a impressão contrária. Decisão registrada em
+ * `docs/PENDENCIAS.md`.
  */
 export default function WaitlistPage() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState<"" | WaitlistStatus>("");
   const [error, setError] = useState("");
+  const [provisioning, setProvisioning] = useState<Subscriber | null>(null);
 
   // Cancelamento por request, não só por filtro: alternar as abas rápido
   // (Pendentes → Ativados → Pendentes) dispara três requisições, e sem isto a
@@ -184,6 +188,25 @@ export default function WaitlistPage() {
         <span className="text-sm text-stone">{fmtDate(s.created_at)}</span>
       ),
     },
+    {
+      key: "actions",
+      header: "",
+      width: "150px",
+      render: (s) =>
+        s.tenant_id ? (
+          <span className="text-xs text-stone">Já provisionado</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setProvisioning(s)}
+            title="Cria o tenant a partir deste lead e marca a waitlist como ativada."
+            className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10"
+          >
+            <UserPlus size={14} strokeWidth={1.5} />
+            Provisionar
+          </button>
+        ),
+    },
   ];
 
   return (
@@ -222,6 +245,16 @@ export default function WaitlistPage() {
         error={error || undefined}
         onRetry={reload}
         emptyState="Nenhum inscrito com este filtro."
+      />
+
+      <CreateTenantModal
+        key={provisioning?.id ?? "none"}
+        open={provisioning !== null}
+        onOpenChange={(open) => {
+          if (!open) setProvisioning(null);
+        }}
+        onCreated={reload}
+        lead={provisioning}
       />
     </div>
   );

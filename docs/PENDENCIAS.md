@@ -1316,42 +1316,47 @@ ao próprio motivo é como um invariante apodrece.
 
 ---
 
-## Adiado por decisão — provisionar a partir do lead da waitlist (Fase 4)
+## Provisionar a partir do lead da waitlist (Fase 4) — resolvido
 
-Não é achado: é escopo declarado fora da Fase 3, em 2026-09-03. Fica escrito
-porque hoje só existe como comentário no `apps/admin/src/app/(platform)/waitlist/page.tsx`,
-e comentário não é lugar de guardar decisão de escopo.
+Estava adiada por decisão desde 2026-09-03, registrada só como comentário em
+`apps/admin/src/app/(platform)/waitlist/page.tsx`. Fechada em 2026-09-07.
 
-### O que está de fora
+### O que entrou
 
-A waitlist no console é **somente leitura**. `PATCH /admin/waitlist/:id` existe,
-move o `status` e preenche `contacted_at` / `activated_at` — e não foi ligado na
-tela.
+`ProvisionTenantDto` ganhou `waitlist_lead_id?` (UUID opcional).
+`ProvisionTenantService.provision`, dentro da mesma transação que já cria
+tenant/plano/branding/congregação/admin/papel:
 
-### Por que não é só um botão
+1. Se `waitlist_lead_id` vier preenchido, busca o lead **antes** de criar
+   qualquer coisa — lead inexistente vira 404, lead já vinculado a outro
+   tenant (`tenant_id` não nulo) vira 409. Falhar cedo evita tenant órfão.
+2. Depois de criar tudo, grava no lead `status=activated`, `activated_at` e
+   `tenant_id` do tenant recém-criado — último passo da transação, então um
+   tenant criado sem o lead marcado nunca fica persistido.
 
-`ProvisionTenantService` não toca em `waitlist_subscribers`. As colunas
-`tenant_id` e `activated_at` da tabela existem e ficam nulas para sempre: nada
-no produto liga o lead à igreja que ele virou. Um seletor de status na tela
-deixaria alguém marcar "ativado" à mão e o vínculo continuaria faltando — ou
-seja, a informação que de fato importa depois ("de onde veio este cliente")
-seguiria fora do banco, com a tela dando a impressão contrária. Meia-medida que
-parece pronta é pior que ausência declarada.
+Não precisou de RLS novo: `waitlist_subscribers` já está no ramo
+`app_platform_access()` desde o `004_rls_platform_plane.sql`.
 
-### A forma certa, quando for feita
+No `apps/admin`, o `CreateTenantModal` (compartilhado entre `tenants/` e
+`waitlist/`) ganhou uma prop `lead?` opcional: quando presente, prefille nome
+(igreja ou, na falta, o nome do pastor), slug derivado, congregação sede e
+e-mail do admin, manda `waitlist_lead_id` no POST e troca o texto do
+título/botão para deixar claro que é provisionamento, não criação avulsa. A
+tela da waitlist ganhou a coluna de ação "Provisionar" (some quando o lead já
+tem `tenant_id`) que abre o mesmo modal.
 
-Provisionar **a partir do lead**: o formulário de novo tenant abre preenchido
-com os dados dele, e o `ProvisionTenantService` grava `status=activated`,
-`activated_at` e `tenant_id` **dentro da mesma transação** que cria o tenant. A
-transação já roda sob RLS pelo ramo `app_platform_access()`, e
-`waitlist_subscribers` já está nesse ramo desde o `004` — a policy não precisa
-mudar. O que muda é o serviço, e ele é atômico de propósito: um tenant criado
-com o lead não marcado é o mesmo tipo de estado meio-feito que a atomicidade
-atual existe para evitar.
+O prefill é feito por `key` no componente, não por `useEffect` com `setState`
+— trocar de lead remonta o modal com o estado inicial certo, sem cascata de
+render nem o efeito colateral que o lint do projeto já rejeita noutro lugar.
 
-Mexer em `ProvisionTenantService` é mexer no caminho que abre igreja nova. É
-unidade de trabalho própria, com teste próprio, não apêndice de uma tela de
-listagem.
+### Verificação
+
+`provision-tenant.service.spec.ts`: lead ativado na mesma transação (na
+ordem certa, depois de `roleAssignment`), lead inexistente vira 404 sem criar
+nada, lead já vinculado vira 409 sem criar nada. `CreateTenantModal.test.tsx`
+e `waitlist/page.test.tsx`: prefill, envio do `waitlist_lead_id`, mensagem
+própria para o 409 de corrida (duas abas provisionando o mesmo lead), e o
+rótulo "Já provisionado" no lugar do botão quando `tenant_id` já existe.
 
 ---
 

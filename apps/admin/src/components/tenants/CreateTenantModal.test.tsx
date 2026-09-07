@@ -260,3 +260,93 @@ describe("CreateTenantModal", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("CreateTenantModal — a partir de um lead da waitlist", () => {
+  const lead = {
+    id: "lead-1",
+    email: "pastor@igreja-nova.com",
+    pastor_name: "Pastor João",
+    church_name: "Igreja Nova",
+  };
+
+  function montarComLead() {
+    return render(
+      <CreateTenantModal
+        open
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+        lead={lead}
+      />
+    );
+  }
+
+  it("prefille nome, slug, congregação e e-mail do admin a partir do lead", () => {
+    montarComLead();
+
+    expect(screen.getByLabelText("Nome da igreja")).toHaveValue("Igreja Nova");
+    expect(screen.getByLabelText("Slug")).toHaveValue("igreja-nova");
+    expect(screen.getByLabelText("Congregação sede")).toHaveValue(
+      "Igreja Nova — Sede"
+    );
+    expect(screen.getByLabelText("E-mail do admin")).toHaveValue(
+      "pastor@igreja-nova.com"
+    );
+  });
+
+  it("sem nome de igreja, usa o nome do pastor", () => {
+    render(
+      <CreateTenantModal
+        open
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+        lead={{ ...lead, church_name: null }}
+      />
+    );
+
+    expect(screen.getByLabelText("Nome da igreja")).toHaveValue("Pastor João");
+  });
+
+  it("envia waitlist_lead_id no POST", async () => {
+    const user = userEvent.setup();
+    montarComLead();
+
+    fireEvent.change(screen.getByLabelText("Senha inicial"), {
+      target: { value: "senha12345" },
+    });
+    await user.click(screen.getByRole("button", { name: "Provisionar" }));
+
+    await waitFor(() =>
+      expect(postMock.mock.calls[0][1]).toMatchObject({
+        waitlist_lead_id: "lead-1",
+      })
+    );
+  });
+
+  it("explica que o lead será marcado como ativado", () => {
+    montarComLead();
+
+    expect(screen.getByText("Provisionar a partir do lead")).toBeInTheDocument();
+    expect(
+      screen.getByText(/marca este lead da waitlist como ativado/)
+    ).toBeInTheDocument();
+  });
+
+  it("409 do lead já provisionado por outra aba vira mensagem própria", async () => {
+    const user = userEvent.setup();
+    const err = axiosError(409);
+    (err.response as { data: unknown }).data = {
+      message: "Lead 'lead-1' já está vinculado a outro tenant.",
+    };
+    postMock.mockRejectedValue(err);
+    montarComLead();
+
+    fireEvent.change(screen.getByLabelText("Senha inicial"), {
+      target: { value: "senha12345" },
+    });
+    await user.click(screen.getByRole("button", { name: "Provisionar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Este lead já foi provisionado para outro tenant."
+    );
+  });
+});
