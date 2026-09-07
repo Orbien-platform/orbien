@@ -10,11 +10,20 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 import { StorageModule } from '../storage/storage.module';
 import { PersonsImportController } from './import/persons-import.controller';
 import { PersonsImportService } from './import/persons-import.service';
+import { PersonsRetentionScheduler } from './persons-retention.scheduler';
 
 @Module({
   imports: [StorageModule],
   controllers: [DemographicsController, PersonsController, PersonsImportController, VisitsController],
-  providers: [PersonsService, ClassificationService, VisitsService, DemographicsService, TenantContextInterceptor, PersonsImportService],
+  providers: [
+    PersonsService,
+    ClassificationService,
+    VisitsService,
+    DemographicsService,
+    TenantContextInterceptor,
+    PersonsImportService,
+    PersonsRetentionScheduler,
+  ],
   exports: [ClassificationService, VisitsService],
 })
 export class PersonsModule {}

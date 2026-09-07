@@ -116,6 +116,12 @@ fi
 if [ -f prisma/migrations/005_rls_audit_platform_read.sql ]; then
   run_sql_file prisma/migrations/005_rls_audit_platform_read.sql
 fi
+# DT-04: ProvisionTenantService cria Person + FinancialCategory sem tenant no
+# contexto. Também depende de app_platform_access(); roda depois de 004 pelo
+# mesmo motivo de 005.
+if [ -f prisma/migrations/006_rls_platform_provisioning.sql ]; then
+  run_sql_file prisma/migrations/006_rls_platform_provisioning.sql
+fi
 
 echo ""
 echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
@@ -252,6 +258,20 @@ BEGIN
   RAISE NOTICE 'audit_logs com o ramo de plataforma: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'audit_logs sem o ramo de plataforma na policy tenant_read — 005_rls_audit_platform_read.sql rodou?';
+  END IF;
+
+  -- 006: sem isto, ProvisionTenantService falha com 42501 ao criar o Person
+  -- do admin ou as categorias financeiras — depois de já ter criado tenant,
+  -- plano, branding, congregação, conta admin e papel na mesma transação.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename IN ('persons', 'financial_categories')
+     AND qual LIKE '%app_platform_access%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'persons/financial_categories com o ramo de plataforma: %', n;
+  IF n <> 2 THEN
+    RAISE EXCEPTION 'esperava 2 policies (persons, financial_categories) com app_platform_access simétrico, encontrei % — 006_rls_platform_provisioning.sql rodou?', n;
   END IF;
 END $$;
 SQL
