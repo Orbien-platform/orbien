@@ -218,57 +218,39 @@ Audit log: AuditLog action: 'persons.batch_import' com after: { count: imported 
 | DT-05 | Soft delete + anonimização LGPD | ✅ Concluído | anonymize/soft delete/retenção 30 dias · 2026-09-07 |
 | DT-06 | Importação CSV/Excel | ✅ Concluído | já implementado; fechado o teto de 5.000 linhas · 2026-09-07 |
 
-**Todos os débitos deste documento estão fechados no código.** O que falta é
-operacional, não código — ver `DEPLOY.md` §1.8 e o checklist abaixo: aplicar
-em produção o `bootstrap-db.sh` (RLS de plataforma e de provisionamento) e as
-duas migrations comuns pendentes.
+**Todos os débitos deste documento estão fechados — no código e em produção.**
+O passo operacional (`bootstrap-db.sh` + migrations comuns) foi executado em
+2026-09-07, com um incidente no caminho — ver abaixo e `PENDENCIAS.md`,
+pendência nº 7.
 
 ---
 
-## Pendente em produção — não é código, é passo de deploy
+## Aplicado em produção — 2026-09-07
 
-DT-01/04/05/06 estão prontos e testados, mas dependem de peças que só existem
-no banco depois de rodar contra o Supabase de produção. Sem isso, o
-comportamento fica incompleto mesmo com o deploy da API feito:
+`bootstrap-db.sh` completo (`004_rls_platform_plane.sql`,
+`005_rls_audit_platform_read.sql`, `006_rls_platform_provisioning.sql`) e as
+duas migrations comuns (`20260905000000_add_login_attempts` já estava
+aplicada; `20260907045316_add_person_soft_delete_lgpd` foi aplicada nesta
+rodada, via `prisma migrate deploy` dentro do próprio script). `POST
+/platform/tenants`, `GET /admin/waitlist`, a tela de auditoria de suporte e o
+soft delete/anonimização do DT-05 respondem de verdade em produção agora.
 
-1. **`bootstrap-db.sh` completo** — aplica, entre outros, `004_rls_platform_plane.sql`,
-   `005_rls_audit_platform_read.sql` e `006_rls_platform_provisioning.sql`.
-   Enquanto não rodar: `POST /platform/tenants` (o onboarding do DT-04) falha
-   com 42501 ao tentar criar `Person`/`FinancialCategory` sem tenant no
-   contexto, e `GET /admin/waitlist` / a tela de auditoria de suporte
-   respondem vazio. Idempotente — pode rodar de novo sem `--seed` contra o
-   banco já provisionado:
-   ```bash
-   cd apps/api
-   DIRECT_URL='postgresql://postgres:<senha>@<host>:5432/postgres' \
-   ORBIEN_APP_PASSWORD='<senha-do-app>' \
-   bash scripts/bootstrap-db.sh
-   ```
-2. **`prisma migrate deploy`** para as duas migrations comuns que ainda não
-   foram para produção:
-   - `20260905000000_add_login_attempts` — sem ela, `login`/`platform/login`/
-     `forgot-password` respondem 500 na primeira tentativa (a tabela do
-     limitador não existe).
-   - `20260907045316_add_person_soft_delete_lgpd` — sustenta o DT-05; sem
-     ela, `deleted_at`/`anonymized_at`/`anonymization_reason` não existem em
-     `persons` e o soft delete/anonimização falham.
-   ```bash
-   npm run db:migrate:status   # confere o que falta antes de aplicar
-   npx prisma migrate deploy   # a partir de apps/api, ou via DIRECT_URL de produção
-   ```
-
-**Ordem recomendada:** rodar o `prisma migrate deploy` (passo 2) antes do
-`bootstrap-db.sh` (passo 1) — o `bootstrap-db.sh` já aplica as migrations do
-Prisma como parte do seu próprio passo 2/8, então rodá-lo sozinho também
-resolve as duas, mas separar deixa claro qual falha se alguma etapa não
-rodar. Nenhum dos dois comandos é executado por esta sessão: exigem
-`DIRECT_URL`/`ORBIEN_APP_PASSWORD` de produção, que uma sessão de código não
-deve ter.
+**Incidente no caminho, ~25min de indisponibilidade total da API:**
+`ORBIEN_APP_PASSWORD` foi passada com uma senha de login (de uma conta de
+teste) em vez da senha do role `orbien_app` — o passo 6 do script
+(`ALTER ROLE orbien_app LOGIN PASSWORD ...`) não é condicional, então a senha
+do role no banco mudou ali mesmo, e a `DATABASE_URL` do Render, que continuou
+com a senha antiga, passou a receber `Authentication failed ... orbien_app
+are not valid` em toda rota que toca o Postgres — login incluído. Diagnosticado
+pelos logs do Render e corrigido rodando o script de novo com a senha
+correta (revertendo o `ALTER ROLE`), sem precisar tocar no Render. Um aviso
+permanente foi adicionado em `DEPLOY.md`, no passo 6 do bootstrap, para quem
+for rodar de novo: **`ORBIEN_APP_PASSWORD` tem que ser copiada de
+`DATABASE_URL`, nunca digitada de memória**, a menos que a troca de senha
+seja deliberada.
 
 ---
 
-*Atualizado em 2026-09-07 · DT-04, DT-05 e DT-06 fechados no código. DT-02 e
-DT-03 removidos — a migração de região não vai acontecer por ora. O que
-resta é aplicar em produção o bootstrap de RLS e as duas migrations comuns
-listadas acima.*
+*Atualizado em 2026-09-07 · DT-01/04/05/06 fechados no código e em produção.
+DT-02 e DT-03 removidos — a migração de região não vai acontecer por ora.*
 
