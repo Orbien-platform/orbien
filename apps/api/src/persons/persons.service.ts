@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -64,7 +65,7 @@ export class PersonsService {
   async findAll(query: ListPersonsQueryDto): Promise<PaginatedPersons> {
     const { classification, gender, tag, search, page, limit } = query;
 
-    const where: Prisma.PersonWhereInput = {};
+    const where: Prisma.PersonWhereInput = { deleted_at: null };
     if (classification) where.classification = classification;
     if (gender) where.gender = gender;
     if (search) where.full_name = { contains: search, mode: 'insensitive' };
@@ -118,15 +119,115 @@ export class PersonsService {
     return this.prisma.client.person.update({ where: { id }, data: dto });
   }
 
-  async remove(id: string): Promise<Person> {
+  // DT-05 (LGPD, Art. 18): soft delete, não hard delete. Pessoa com doação
+  // vinculada não pode ser removida — só anonimizada, porque
+  // `financial_transaction.donor_person_id` precisa continuar íntegro para
+  // relatórios contábeis e prestação de contas.
+  async remove(id: string, user: JwtPayload): Promise<Person> {
     const existing = await this.prisma.client.person.findUnique({
       where: { id },
+      select: { id: true, tenant_id: true, congregation_id: true, deleted_at: true },
+    });
+
+    if (!existing || existing.deleted_at) throw new NotFoundException('Pessoa não encontrada');
+
+    const hasDonations = await this.prisma.client.financialTransaction.findFirst({
+      where: { donor_person_id: id },
       select: { id: true },
+    });
+    if (hasDonations) {
+      throw new ConflictException('Pessoa tem histórico financeiro. Use anonimização.');
+    }
+
+    const person = await this.prisma.client.person.update({
+      where: { id },
+      data: { deleted_at: new Date() },
+    });
+
+    await this.prisma.client.auditLog.create({
+      data: {
+        tenant_id: existing.tenant_id,
+        congregation_id: existing.congregation_id,
+        actor_user_id: user.sub,
+        subject_person_id: id,
+        entity: 'person',
+        action: 'person.deleted',
+      },
+    });
+
+    return person;
+  }
+
+  // DT-05 (LGPD, Art. 18, IV): zera os dados de identificação e revoga os
+  // consentimentos. `donor_person_id` em financial_transaction permanece —
+  // o join volta com a pessoa já anonimizada.
+  async anonymize(id: string, user: JwtPayload): Promise<Person> {
+    const existing = await this.prisma.client.person.findUnique({
+      where: { id },
+      select: { id: true, tenant_id: true, congregation_id: true },
     });
 
     if (!existing) throw new NotFoundException('Pessoa não encontrada');
 
-    return this.prisma.client.person.delete({ where: { id } });
+    const person = await this.prisma.client.person.update({
+      where: { id },
+      data: this.anonymizedFields('Solicitação do titular - Art. 18, LGPD'),
+    });
+
+    await this.prisma.client.consentRecord.updateMany({
+      where: { person_id: id, revoked_at: null },
+      data: { revoked_at: new Date(), revocation_reason: 'Anonimização solicitada' },
+    });
+
+    await this.prisma.client.auditLog.create({
+      data: {
+        tenant_id: existing.tenant_id,
+        congregation_id: existing.congregation_id,
+        actor_user_id: user.sub,
+        subject_person_id: id,
+        entity: 'person',
+        action: 'person.anonymized',
+      },
+    });
+
+    return person;
+  }
+
+  // Chamado também pelo job de retenção (30 dias após o soft delete), com o
+  // mesmo formato de campos — a diferença é só o motivo registrado.
+  private anonymizedFields(reason: string): Prisma.PersonUpdateInput {
+    return {
+      full_name: 'ANONIMIZADO',
+      phone: null,
+      email: null,
+      photo_url: null,
+      birth_date: null,
+      anonymized_at: new Date(),
+      anonymization_reason: reason,
+    };
+  }
+
+  // Job cron diário (ver PersonsRetentionScheduler): pessoas soft-deletadas
+  // há mais de `retentionDays` e ainda não anonimizadas têm os dados
+  // sensíveis eliminados, mas o registro permanece — é o que preserva a
+  // integridade referencial com financial_transaction e audit_logs.
+  async purgeExpiredSoftDeletes(retentionDays = 30): Promise<{ purged: number }> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    const expired = await this.prisma.system.person.findMany({
+      where: { deleted_at: { lte: cutoff }, anonymized_at: null },
+      select: { id: true },
+    });
+
+    for (const { id } of expired) {
+      await this.prisma.system.person.update({
+        where: { id },
+        data: this.anonymizedFields('Eliminação automática — 30 dias após solicitação de exclusão'),
+      });
+    }
+
+    return { purged: expired.length };
   }
 
   async createHousehold(dto: CreateHouseholdDto, user: JwtPayload): Promise<Household> {

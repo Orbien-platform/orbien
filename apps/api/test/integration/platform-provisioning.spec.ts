@@ -143,6 +143,7 @@ const payload = {
   slug: '',
   name: 'Igreja Provisionada',
   congregation_name: 'Igreja Provisionada — Sede',
+  admin_name: 'Pastor Novo',
   admin_email: '',
   admin_password: SENHA_NOVO_ADMIN,
 };
@@ -191,6 +192,20 @@ describe('POST /api/platform/tenants', () => {
     expect(criado.congregations).toHaveLength(1);
     expect(criado.userAccounts).toHaveLength(1);
     expect(criado.roleAssignments[0]?.role_code).toBe('tenant_admin');
+
+    // DT-04: admin vira Person vinculado, e a congregação nasce com o plano
+    // de contas padrão.
+    expect(criado.userAccounts[0]?.person_id).toBeTruthy();
+    const adminPerson = await admin.person.findUnique({
+      where: { id: criado.userAccounts[0]!.person_id! },
+    });
+    expect(adminPerson?.full_name).toBe('Pastor Novo');
+    expect(adminPerson?.email).toBe(`pastor-${ts}@nova.test`);
+
+    const categorias = await admin.financialCategory.findMany({
+      where: { tenant_id: tenantNovoId },
+    });
+    expect(categorias).toHaveLength(12);
   });
 
   it('o admin criado consegue logar no tenant novo', async () => {

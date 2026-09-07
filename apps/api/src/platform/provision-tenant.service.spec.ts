@@ -15,6 +15,7 @@ const dto: ProvisionTenantDto = {
   slug: 'igreja-nova',
   name: 'Igreja Nova',
   congregation_name: 'Igreja Nova — Sede',
+  admin_name: 'Pastor Novo',
   admin_email: 'pastor@igreja-nova.test',
   admin_password: 'senha-forte-123',
 };
@@ -22,6 +23,7 @@ const dto: ProvisionTenantDto = {
 function serviceWith(overrides: Record<string, unknown> = {}) {
   const calls: string[] = [];
   const captured: Record<string, unknown> = {};
+  const categories: unknown[] = [];
 
   const tx = {
     role: { findUnique: () => Promise.resolve({ code: 'tenant_admin', name: 'Admin' }) },
@@ -52,6 +54,13 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
         return Promise.resolve({ id: 'cong-nova' });
       },
     },
+    person: {
+      create: (args: { data: unknown }) => {
+        calls.push('person');
+        captured['person'] = args.data;
+        return Promise.resolve({ id: 'person-novo' });
+      },
+    },
     userAccount: {
       create: (args: { data: { password_hash: string } }) => {
         calls.push('userAccount');
@@ -66,6 +75,13 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
         return Promise.resolve({});
       },
     },
+    financialCategory: {
+      create: (args: { data: unknown }) => {
+        calls.push('financialCategory');
+        categories.push(args.data);
+        return Promise.resolve({});
+      },
+    },
     ...overrides,
   };
 
@@ -73,11 +89,11 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
     runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   } as unknown as PrismaService;
 
-  return { service: new ProvisionTenantService(prisma), calls, captured };
+  return { service: new ProvisionTenantService(prisma), calls, captured, categories };
 }
 
 describe('ProvisionTenantService', () => {
-  it('cria as seis peças numa transação só, nessa ordem', async () => {
+  it('cria as peças numa transação só, nessa ordem', async () => {
     const { service, calls } = serviceWith();
 
     const result = await service.provision(dto);
@@ -87,8 +103,10 @@ describe('ProvisionTenantService', () => {
       'tenantPlan',
       'brandingConfig',
       'congregation',
+      'person',
       'userAccount',
       'roleAssignment',
+      ...Array(12).fill('financialCategory'),
     ]);
     expect(result).toEqual({
       tenant_id: 'tenant-novo',
@@ -96,6 +114,34 @@ describe('ProvisionTenantService', () => {
       congregation_id: 'cong-nova',
       admin_user_id: 'user-novo',
     });
+  });
+
+  it('DT-04: cria a Person do admin e vincula person_id no UserAccount', async () => {
+    const { service, captured } = serviceWith();
+    await service.provision(dto);
+
+    expect(captured['person']).toEqual({
+      tenant_id: 'tenant-novo',
+      congregation_id: 'cong-nova',
+      full_name: 'Pastor Novo',
+      email: 'pastor@igreja-nova.test',
+    });
+    expect((captured['user'] as { person_id: string }).person_id).toBe('person-novo');
+  });
+
+  it('DT-04: semeia as 12 categorias financeiras padrão na congregação', async () => {
+    const { service, categories } = serviceWith();
+    await service.provision(dto);
+
+    expect(categories).toHaveLength(12);
+    expect(categories.every((c) => (c as { tenant_id: string }).tenant_id === 'tenant-novo')).toBe(
+      true,
+    );
+    expect(categories.every((c) => (c as { congregation_id: string }).congregation_id === 'cong-nova')).toBe(
+      true,
+    );
+    expect(categories.filter((c) => (c as { type: string }).type === 'income')).toHaveLength(6);
+    expect(categories.filter((c) => (c as { type: string }).type === 'expense')).toHaveLength(6);
   });
 
   it('nunca grava a senha em claro', async () => {

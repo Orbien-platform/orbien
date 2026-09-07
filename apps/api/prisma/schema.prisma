@@ -310,6 +310,9 @@ model Person {
   origin_congregation  String?
   classification       PersonClassification @default(visitor)
   household_id         String?
+  deleted_at           DateTime?
+  anonymized_at        DateTime?
+  anonymization_reason String?
   created_at           DateTime             @default(now())
   updated_at           DateTime             @updatedAt
 
@@ -337,6 +340,7 @@ model Person {
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, phone])
+  @@index([deleted_at])
   @@map("persons")
 }
 

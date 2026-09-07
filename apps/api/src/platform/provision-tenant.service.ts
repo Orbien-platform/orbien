@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { PlanStatus, PlanType, Prisma } from '@prisma/client';
+import { FinancialCategoryType, PlanStatus, PlanType, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
@@ -9,6 +9,27 @@ const TRIAL_DAYS = 30;
 
 /** Papel da conta inicial: transversal às congregações do tenant. */
 const INITIAL_ADMIN_ROLE = 'tenant_admin';
+
+/**
+ * As mesmas 12 categorias de `prisma/seed.ts` — mantidas em sincronia
+ * manualmente porque o seed roda fora da aplicação (BYPASSRLS) e este
+ * serviço roda dentro dela (RLS). DT-04: sem isso, todo tenant provisionado
+ * pelo produto nascia sem plano de contas.
+ */
+const DEFAULT_FINANCIAL_CATEGORIES: { name: string; type: FinancialCategoryType }[] = [
+  { name: 'Dízimo', type: FinancialCategoryType.income },
+  { name: 'Oferta', type: FinancialCategoryType.income },
+  { name: 'Oferta Missionária', type: FinancialCategoryType.income },
+  { name: 'Oferta de Construção', type: FinancialCategoryType.income },
+  { name: 'Doação Especial', type: FinancialCategoryType.income },
+  { name: 'Outros (Receita)', type: FinancialCategoryType.income },
+  { name: 'Aluguel', type: FinancialCategoryType.expense },
+  { name: 'Água / Luz / Internet', type: FinancialCategoryType.expense },
+  { name: 'Material de Limpeza', type: FinancialCategoryType.expense },
+  { name: 'Eventos', type: FinancialCategoryType.expense },
+  { name: 'Missões', type: FinancialCategoryType.expense },
+  { name: 'Outros (Despesa)', type: FinancialCategoryType.expense },
+];
 
 export interface ProvisionedTenant {
   tenant_id: string;
@@ -89,12 +110,25 @@ export class ProvisionTenantService {
           },
         });
 
+        // DT-04: o admin do tenant precisa existir como Person — sem isso não
+        // aparece em listagens, não pode ser escalado como voluntário nem tem
+        // histórico de doações. `person_id` vai preenchido desde a criação.
+        const adminPerson = await tx.person.create({
+          data: {
+            tenant_id: tenant.id,
+            congregation_id: congregation.id,
+            full_name: dto.admin_name,
+            email: dto.admin_email,
+          },
+        });
+
         const adminUser = await tx.userAccount.create({
           data: {
             tenant_id: tenant.id,
             congregation_id: congregation.id,
             email: dto.admin_email,
             password_hash: passwordHash,
+            person_id: adminPerson.id,
           },
         });
 
@@ -106,6 +140,18 @@ export class ProvisionTenantService {
             role_code: INITIAL_ADMIN_ROLE,
           },
         });
+
+        for (const category of DEFAULT_FINANCIAL_CATEGORIES) {
+          await tx.financialCategory.create({
+            data: {
+              tenant_id: tenant.id,
+              congregation_id: congregation.id,
+              name: category.name,
+              type: category.type,
+              is_system: true,
+            },
+          });
+        }
 
         return {
           tenant_id: tenant.id,

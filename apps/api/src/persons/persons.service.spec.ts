@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PersonsService } from './persons.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,11 +29,27 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
     householdMember: {
       create: jest.fn(),
     },
-    ...overrides,
+    financialTransaction: {
+      findFirst: jest.fn(),
+    },
+    consentRecord: {
+      updateMany: jest.fn(),
+    },
+    auditLog: {
+      create: jest.fn(),
+    },
   };
 
-  const prisma = { client } as unknown as PrismaService;
-  return { service: new PersonsService(prisma), client };
+  const system = {
+    person: {
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
+  };
+
+  const mergedClient = { ...client, ...overrides };
+  const prisma = { client: mergedClient, system } as unknown as PrismaService;
+  return { service: new PersonsService(prisma), client: mergedClient, system };
 }
 
 describe('PersonsService', () => {
@@ -86,6 +102,7 @@ describe('PersonsService', () => {
 
       expect(client.person.findMany).toHaveBeenCalledWith({
         where: {
+          deleted_at: null,
           classification: 'member',
           gender: 'male',
           full_name: { contains: 'ana', mode: 'insensitive' },
@@ -106,7 +123,7 @@ describe('PersonsService', () => {
       await service.findAll({ page: 1, limit: 20 } as never);
 
       expect(client.person.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: {}, skip: 0, take: 20 }),
+        expect.objectContaining({ where: { deleted_at: null }, skip: 0, take: 20 }),
       );
     });
   });
@@ -190,18 +207,138 @@ describe('PersonsService', () => {
       const { service, client } = serviceWith();
       client.person.findUnique.mockResolvedValue(null);
 
-      await expect(service.remove('nope')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.remove('nope', user)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('remove a pessoa existente', async () => {
+    it('lança NotFoundException quando a pessoa já está soft-deletada', async () => {
       const { service, client } = serviceWith();
-      client.person.findUnique.mockResolvedValue({ id: 'p1' });
-      client.person.delete.mockResolvedValue({ id: 'p1' });
+      client.person.findUnique.mockResolvedValue({ id: 'p1', deleted_at: new Date() });
 
-      const result = await service.remove('p1');
+      await expect(service.remove('p1', user)).rejects.toBeInstanceOf(NotFoundException);
+    });
 
-      expect(client.person.delete).toHaveBeenCalledWith({ where: { id: 'p1' } });
-      expect(result).toEqual({ id: 'p1' });
+    it('rejeita com 409 quando a pessoa tem histórico financeiro', async () => {
+      const { service, client } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        tenant_id: 'tenant-1',
+        congregation_id: 'cong-1',
+        deleted_at: null,
+      });
+      client.financialTransaction.findFirst.mockResolvedValue({ id: 'tx1' });
+
+      await expect(service.remove('p1', user)).rejects.toBeInstanceOf(ConflictException);
+      expect(client.person.update).not.toHaveBeenCalled();
+    });
+
+    it('faz soft delete e grava audit log quando não há doações', async () => {
+      const { service, client } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        tenant_id: 'tenant-1',
+        congregation_id: 'cong-1',
+        deleted_at: null,
+      });
+      client.financialTransaction.findFirst.mockResolvedValue(null);
+      client.person.update.mockResolvedValue({ id: 'p1', deleted_at: new Date() });
+
+      const result = await service.remove('p1', user);
+
+      expect(client.person.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { deleted_at: expect.any(Date) },
+      });
+      expect(client.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 'tenant-1',
+          congregation_id: 'cong-1',
+          actor_user_id: 'user-1',
+          subject_person_id: 'p1',
+          entity: 'person',
+          action: 'person.deleted',
+        },
+      });
+      expect(result).toEqual({ id: 'p1', deleted_at: expect.any(Date) });
+    });
+  });
+
+  describe('anonymize', () => {
+    it('lança NotFoundException quando a pessoa não existe', async () => {
+      const { service, client } = serviceWith();
+      client.person.findUnique.mockResolvedValue(null);
+
+      await expect(service.anonymize('nope', user)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('zera os dados de identificação, revoga consentimentos e grava audit log', async () => {
+      const { service, client } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        tenant_id: 'tenant-1',
+        congregation_id: 'cong-1',
+      });
+      client.person.update.mockResolvedValue({ id: 'p1', full_name: 'ANONIMIZADO' });
+
+      const result = await service.anonymize('p1', user);
+
+      expect(client.person.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          full_name: 'ANONIMIZADO',
+          phone: null,
+          email: null,
+          photo_url: null,
+          birth_date: null,
+          anonymized_at: expect.any(Date),
+          anonymization_reason: 'Solicitação do titular - Art. 18, LGPD',
+        },
+      });
+      expect(client.consentRecord.updateMany).toHaveBeenCalledWith({
+        where: { person_id: 'p1', revoked_at: null },
+        data: { revoked_at: expect.any(Date), revocation_reason: 'Anonimização solicitada' },
+      });
+      expect(client.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 'tenant-1',
+          congregation_id: 'cong-1',
+          actor_user_id: 'user-1',
+          subject_person_id: 'p1',
+          entity: 'person',
+          action: 'person.anonymized',
+        },
+      });
+      expect(result).toEqual({ id: 'p1', full_name: 'ANONIMIZADO' });
+    });
+  });
+
+  describe('purgeExpiredSoftDeletes', () => {
+    it('elimina dados sensíveis de quem foi soft-deletado há mais de 30 dias e não foi anonimizado', async () => {
+      const { service, system } = serviceWith();
+      system.person.findMany.mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+      system.person.update.mockResolvedValue({});
+
+      const result = await service.purgeExpiredSoftDeletes();
+
+      expect(system.person.findMany).toHaveBeenCalledWith({
+        where: { deleted_at: { lte: expect.any(Date) }, anonymized_at: null },
+        select: { id: true },
+      });
+      expect(system.person.update).toHaveBeenCalledTimes(2);
+      expect(system.person.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: expect.objectContaining({ full_name: 'ANONIMIZADO' }),
+      });
+      expect(result).toEqual({ purged: 2 });
+    });
+
+    it('não chama update quando não há ninguém a purgar', async () => {
+      const { service, system } = serviceWith();
+      system.person.findMany.mockResolvedValue([]);
+
+      const result = await service.purgeExpiredSoftDeletes();
+
+      expect(system.person.update).not.toHaveBeenCalled();
+      expect(result).toEqual({ purged: 0 });
     });
   });
 
