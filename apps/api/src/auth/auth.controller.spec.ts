@@ -1,4 +1,5 @@
 import { Reflector } from '@nestjs/core';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ROLES_KEY } from './decorators/roles.decorator';
@@ -90,6 +91,34 @@ describe('AuthController', () => {
       expect(
         reflector.get(ROLES_KEY, AuthController.prototype[handler]),
       ).toBeUndefined();
+    }
+  });
+
+  it('login, platformLogin e forgotPassword têm ThrottlerGuard por IP, além do limite por e-mail do serviço', () => {
+    const reflector = new Reflector();
+
+    const cases = [
+      { handler: 'login', limit: 20, ttl: 900_000 },
+      { handler: 'platformLogin', limit: 10, ttl: 900_000 },
+      { handler: 'forgotPassword', limit: 10, ttl: 3_600_000 },
+    ] as const;
+
+    for (const { handler, limit, ttl } of cases) {
+      const method = AuthController.prototype[handler];
+      const guards = Reflect.getMetadata('__guards__', method) as unknown[];
+      expect(guards).toContain(ThrottlerGuard);
+      expect(reflector.get<number>('THROTTLER:LIMITdefault', method)).toBe(limit);
+      expect(reflector.get<number>('THROTTLER:TTLdefault', method)).toBe(ttl);
+    }
+
+    // refresh e resetPassword não guardam credencial nova por identificador
+    // (o primeiro exige posse do refresh token; o segundo, do token de reset) —
+    // não levam o guard de IP.
+    for (const handler of ['refresh', 'resetPassword'] as const) {
+      const guards = Reflect.getMetadata('__guards__', AuthController.prototype[handler]) as
+        | unknown[]
+        | undefined;
+      expect(guards ?? []).not.toContain(ThrottlerGuard);
     }
   });
 });

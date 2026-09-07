@@ -38,10 +38,11 @@ export const PASSWORD_RESET_POLICY: RateLimitPolicy = { max: 3, windowMs: 60 * 6
  * nunca esbarra no limite, e quem não sabe tem cinco chances a cada 15 minutos —
  * por e-mail e por rota, que é o mesmo recorte que o limitador antigo usava.
  *
- * O que isto não resolve, e fica dito: o recorte é por identificador, não por
- * origem. Quem varre muitos e-mails diferentes de um mesmo IP não bate no
- * limite. Fechar isso exige `X-Forwarded-For` confiável — decisão de infra que
- * não cabe aqui.
+ * O recorte aqui é só por identificador (e-mail). O recorte por origem (IP) é
+ * responsabilidade do `ThrottlerGuard` nas rotas de credencial
+ * (`auth.controller.ts`) — os dois se complementam. O IP depende de
+ * `app.set('trust proxy', 1)` em `main.ts`: sem isso `req.ip` é o proxy da
+ * Render, igual para todo mundo, e o limite por IP não isola nada.
  *
  * **Tabela ausente não derruba o login.** As migrations do projeto são manuais
  * (ver DEPLOY.md) e o deploy da API é automático no push para `main`: entre um
