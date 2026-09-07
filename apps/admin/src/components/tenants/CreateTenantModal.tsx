@@ -54,7 +54,7 @@ function formFromLead(lead: WaitlistLead | null | undefined): typeof EMPTY {
     ...EMPTY,
     name,
     slug: slugify(name),
-    congregation_name: name ? `${name} — Sede` : "",
+    congregation_name: `${name} — Sede`,
     admin_email: lead.email,
   };
 }
