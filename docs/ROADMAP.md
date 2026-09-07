@@ -76,16 +76,24 @@ O trabalho já não segue mais os sprints numerados dos briefings originais
 mostra entrega contínua por PR, com CI (`docs/CI.md`) como portão. A visão de
 ciclo daqui para frente:
 
-### Ciclo atual — fechamento do plano de plataforma e consolidação de segurança
+### Ciclo anterior — fechamento do plano de plataforma e consolidação de segurança (concluído)
 
-Com o plano de plataforma (Nível 0) e o módulo de Celebrações entregues, o
-ciclo em andamento é sobre fechar o que ficou pendente na régua de segurança
-multi-tenant e no controle de acesso — a régua que o próprio `CLAUDE.md`
-descreve em detalhe (RLS por congregação, `platform_support`, auditoria de
-sessão de suporte, rate limiting de login). `docs/PENDENCIAS.md` é o
-registro vivo desse trabalho.
+As dez pendências abertas pelo primeiro run de CI (RLS por congregação e por
+plataforma, auditoria de sessão de suporte, rate limiting de login, rotas
+públicas mortas, cadastro por QR, telas sem estado de "sem acesso") estão
+todas fechadas em `docs/PENDENCIAS.md`. Três resíduos ficaram registrados
+como "aberto por desenho" — decisão consciente, não trabalho esquecido — e
+não bloqueiam o ciclo:
 
-### Próximo ciclo — fechamento de conformidade
+- rodar o `bootstrap-db.sh` completo em produção (ação operacional, não
+  código — sem isso o RLS do plano de plataforma não vale em produção);
+- rate limit de login por IP, além do atual por identificador — depende de
+  `X-Forwarded-For` confiável atrás do Render, decisão de infra;
+- `user_accounts`/`role_assignments`/`audit_logs` seguem com
+  `orbien_app_auth USING (true)` — só importa se nascer rota pública nova
+  que as toque.
+
+### Ciclo atual — fechamento de conformidade
 
 - Revisão jurídica formal dos documentos legais e do contrato v4
 - Resolução dos itens marcados `[REVISÃO JURÍDICA OBRIGATÓRIA]`

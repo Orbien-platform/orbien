@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MinLength,
 } from 'class-validator';
@@ -52,4 +53,11 @@ export class ProvisionTenantDto {
   @IsString()
   @MinLength(8)
   admin_password!: string;
+
+  // Presente quando o tenant nasce de um lead da waitlist: a mesma transação
+  // que cria o tenant marca o lead como ativado e grava o vínculo. Ver
+  // ProvisionTenantService — sem isso a origem do cliente fica fora do banco.
+  @IsOptional()
+  @IsUUID()
+  waitlist_lead_id?: string;
 }

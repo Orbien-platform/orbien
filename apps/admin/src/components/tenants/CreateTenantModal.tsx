@@ -9,10 +9,21 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 
+/** O bastante do lead da waitlist pra prefiller o formulário. */
+export interface WaitlistLead {
+  id: string;
+  email: string;
+  pastor_name: string;
+  church_name: string | null;
+}
+
 interface CreateTenantModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  /** Presente quando o tenant nasce de um lead — prefille o form e manda
+   * `waitlist_lead_id` no POST, para a API ativar o lead na mesma transação. */
+  lead?: WaitlistLead | null;
 }
 
 const EMPTY = {
@@ -28,12 +39,39 @@ const EMPTY = {
 /** Mesma regra do `ProvisionTenantDto`, para o erro aparecer antes do 400. */
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
+function slugify(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function formFromLead(lead: WaitlistLead | null | undefined): typeof EMPTY {
+  if (!lead) return EMPTY;
+  const name = lead.church_name ?? lead.pastor_name;
+  return {
+    ...EMPTY,
+    name,
+    slug: slugify(name),
+    congregation_name: `${name} — Sede`,
+    admin_name: lead.pastor_name,
+    admin_email: lead.email,
+  };
+}
+
 export function CreateTenantModal({
   open,
   onOpenChange,
   onCreated,
+  lead,
 }: CreateTenantModalProps) {
-  const [form, setForm] = useState(EMPTY);
+  // Prefill fixado na montagem: quando `lead` muda, quem chama passa uma
+  // `key` diferente (o id do lead) e o React remonta o componente em vez de
+  // reaproveitar o estado do lead anterior. Sem isso um `useEffect` faria a
+  // mesma coisa disparando setState dentro do próprio efeito.
+  const [form, setForm] = useState(() => formFromLead(lead));
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -78,11 +116,27 @@ export function CreateTenantModal({
         admin_name: form.admin_name.trim(),
         admin_email: form.admin_email.trim(),
         admin_password: form.admin_password,
+        ...(lead ? { waitlist_lead_id: lead.id } : {}),
       });
       close();
       onCreated();
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.status === 409) {
+      const apiMessage =
+        axios.isAxiosError(err) &&
+        typeof err.response?.data === "object" &&
+        err.response?.data !== null &&
+        "message" in err.response.data
+          ? String((err.response.data as { message: unknown }).message)
+          : "";
+
+      if (
+        axios.isAxiosError(err) &&
+        err.response?.status === 409 &&
+        apiMessage.toLowerCase().includes("vinculado a outro tenant")
+      ) {
+        // O lead foi provisionado por outra aba entre a tela abrir e o submit.
+        setError("Este lead já foi provisionado para outro tenant.");
+      } else if (axios.isAxiosError(err) && err.response?.status === 409) {
         setError(`Já existe um tenant com o slug "${slug}".`);
       } else if (axios.isAxiosError(err) && err.response?.status === 400) {
         setError("Dados inválidos. Revise os campos.");
@@ -98,8 +152,12 @@ export function CreateTenantModal({
     <Modal
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      title="Novo tenant"
-      description="Cria a igreja, o plano em trial, a congregação sede e a conta do primeiro admin."
+      title={lead ? "Provisionar a partir do lead" : "Novo tenant"}
+      description={
+        lead
+          ? "Cria a igreja, o plano em trial, a congregação sede e a conta do primeiro admin — e marca este lead da waitlist como ativado."
+          : "Cria a igreja, o plano em trial, a congregação sede e a conta do primeiro admin."
+      }
       className="max-w-lg"
     >
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
@@ -200,6 +258,8 @@ export function CreateTenantModal({
                 <Loader2 size={15} className="mr-2 animate-spin" />
                 Criando…
               </>
+            ) : lead ? (
+              "Provisionar"
             ) : (
               "Criar tenant"
             )}

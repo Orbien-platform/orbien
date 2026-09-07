@@ -23,11 +23,14 @@ export default defineConfig({
       reporter: ["text-summary", "lcov"],
       // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
       // global. O piso nunca desce.
-      // Fase 14 — o console inteiro. Linhas e funções fecham em 100%; os três
+      // Fase 14 — o console inteiro. Linhas e funções fecham em 100%; os
       // ramos que sobram são inalcançáveis pela UI e cada um tem o `it()`
       // vizinho explicando:
       // - `CreateTenantModal`, o `next === true` do `onOpenChange`: quem abre
       //   o modal é a tela, o `Modal` só emite `false`;
+      // - `waitlist/page.tsx`, o mesmo `next === true` do `onOpenChange` do
+      //   `CreateTenantModal` visto do lado de quem o chama — pela mesma
+      //   razão, esse handler nunca recebe `true`;
       // - `AuthContext.buildUser`, o `payload` nulo: `hasPlatformRole` já
       //   barrou o token ilegível antes;
       // - `api.ts`, o `typeof window === "undefined"` do ramo de refresh

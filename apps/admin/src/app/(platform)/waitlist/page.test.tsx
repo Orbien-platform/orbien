@@ -6,6 +6,27 @@ import api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn() } }));
 
+vi.mock("@/components/tenants/CreateTenantModal", () => ({
+  CreateTenantModal: ({
+    open,
+    onOpenChange,
+    onCreated,
+    lead,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated: () => void;
+    lead: { id: string; pastor_name: string } | null;
+  }) => (
+    <div>
+      <span>provisionar:{open ? "aberto" : "fechado"}</span>
+      <span>lead:{lead ? lead.pastor_name : "nenhum"}</span>
+      <button onClick={onCreated}>avisar tenant criado</button>
+      <button onClick={() => onOpenChange(false)}>fechar provisionar</button>
+    </div>
+  ),
+}));
+
 const getMock = vi.mocked(api.get);
 
 function inscrito(overrides: Record<string, unknown> = {}) {
@@ -20,6 +41,7 @@ function inscrito(overrides: Record<string, unknown> = {}) {
     status: "pending",
     source: "site",
     created_at: "2026-08-20T12:00:00.000Z",
+    tenant_id: null,
     ...overrides,
   };
 }
@@ -213,5 +235,79 @@ describe("WaitlistPage", () => {
       expect(screen.getByText("Ativado Recente")).toBeInTheDocument()
     );
     expect(screen.queryByText("Pendente Antigo")).not.toBeInTheDocument();
+  });
+
+  it("erro de busca cancelada também é descartado", async () => {
+    const user = userEvent.setup();
+    render(<WaitlistPage />);
+    await screen.findByText("Pastor João");
+
+    let rejeitarPendentes!: (e: unknown) => void;
+    getMock
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejeitarPendentes = reject))
+      )
+      .mockResolvedValueOnce({
+        data: { data: [inscrito({ pastor_name: "Ativado Recente" })], total: 1 },
+      } as never);
+
+    await user.click(screen.getByRole("button", { name: "Pendentes" }));
+    await user.click(screen.getByRole("button", { name: "Ativados" }));
+
+    expect(await screen.findByText("Ativado Recente")).toBeInTheDocument();
+
+    rejeitarPendentes(new Error("500"));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    );
+    expect(screen.getByText("Ativado Recente")).toBeInTheDocument();
+  });
+
+  it("abre o modal de provisionar com o lead da linha, e recarrega a lista ao criar", async () => {
+    const user = userEvent.setup();
+    render(<WaitlistPage />);
+    await screen.findByText("Pastor João");
+
+    expect(screen.getByText("provisionar:fechado")).toBeInTheDocument();
+    expect(screen.getByText("lead:nenhum")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Provisionar/ }));
+
+    expect(screen.getByText("provisionar:aberto")).toBeInTheDocument();
+    expect(screen.getByText("lead:Pastor João")).toBeInTheDocument();
+
+    const antes = getMock.mock.calls.length;
+    await user.click(
+      screen.getByRole("button", { name: "avisar tenant criado" })
+    );
+
+    await waitFor(() => expect(getMock.mock.calls.length).toBe(antes + 1));
+  });
+
+  it("fechar o modal sem criar limpa o lead selecionado", async () => {
+    const user = userEvent.setup();
+    render(<WaitlistPage />);
+    await screen.findByText("Pastor João");
+
+    await user.click(screen.getByRole("button", { name: /Provisionar/ }));
+    expect(screen.getByText("lead:Pastor João")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "fechar provisionar" }));
+
+    expect(screen.getByText("provisionar:fechado")).toBeInTheDocument();
+    expect(screen.getByText("lead:nenhum")).toBeInTheDocument();
+  });
+
+  it("lead já provisionado não tem botão — mostra o rótulo em vez dele", async () => {
+    respondeCom([inscrito({ tenant_id: "tenant-existente" })]);
+
+    render(<WaitlistPage />);
+
+    await screen.findByText("Pastor João");
+    expect(screen.getByText("Já provisionado")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Provisionar/ })
+    ).not.toBeInTheDocument();
   });
 });
