@@ -984,8 +984,24 @@ simétricas.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) segue passando por cima. É o mesmo
   desenho do `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
-- **Falta rodar o bootstrap em produção**, como na nº 6. Até lá as rotas de
-  plataforma respondem vazio.
+- ~~**Falta rodar o bootstrap em produção**, como na nº 6.~~ Rodado em
+  2026-09-07. O `004`/`005`/`006` estão aplicados; as rotas de plataforma e o
+  onboarding de tenant do DT-04 respondem de verdade.
+
+  **Incidente no caminho:** `ORBIEN_APP_PASSWORD` foi passada com uma senha
+  de login em vez da senha do role — o `ALTER ROLE` do passo 6 do
+  `bootstrap-db.sh` sobrescreveu a senha do `orbien_app` no banco, e a API
+  caiu inteira (todo acesso ao Postgres respondendo `Authentication failed`)
+  até a `DATABASE_URL` do Render e a senha real do role divergirem.
+  Diagnosticado pelos logs do Render (`Authentication failed against
+  database server, the provided database credentials for orbien_app are not
+  valid`) e corrigido revertendo a senha do role para o valor que já estava
+  em produção — sem precisar tocar no Render. Sem dado perdido, só a janela
+  de indisponibilidade entre o bootstrap e a correção. O script não
+  distingue "rodando de novo para reaplicar RLS" de "trocando a senha de
+  propósito": `ALTER ROLE ... PASSWORD` roda incondicionalmente todas as
+  vezes. Aviso permanente adicionado em `DEPLOY.md`, no passo 6 do
+  bootstrap, para quem for rodar de novo.
 
 ---
 

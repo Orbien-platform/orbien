@@ -186,6 +186,29 @@ O script é idempotente e faz, nesta ordem:
     criadas no passo anterior;
 6. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
    (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
+
+   > **`ORBIEN_APP_PASSWORD` SOBRESCREVE a senha do role no banco — sempre,
+   > mesmo rodando contra um banco já provisionado.** `ALTER ROLE orbien_app
+   > LOGIN PASSWORD '${ORBIEN_APP_PASSWORD}'` não é condicional: se o valor
+   > passado for diferente do que já está em produção, a senha muda ali, na
+   > hora, e o Render — que continua com a `DATABASE_URL` antiga — passa a
+   > receber `Authentication failed ... orbien_app are not valid` em toda
+   > rota que toca o banco, login incluído. Não há downtime parcial: é a API
+   > inteira.
+   >
+   > Aconteceu em produção em 2026-09-07 (ver `PENDENCIAS.md`, pendência
+   > nº 7): `ORBIEN_APP_PASSWORD` foi preenchida com uma senha de login de
+   > teste em vez da senha do role, por engano. Corrigido rodando o script de
+   > novo com a senha certa — o `ALTER ROLE` é idempotente na direção
+   > contrária também, então bastou passar o valor correto para reverter, sem
+   > precisar tocar no Render.
+   >
+   > **Antes de rodar contra produção**, confirme que `ORBIEN_APP_PASSWORD`
+   > é **exatamente** a senha que já está em `DATABASE_URL` no Render (copie
+   > de lá, não digite de memória) — a menos que a intenção seja
+   > deliberadamente trocar a senha, caso em que o passo seguinte é atualizar
+   > `DATABASE_URL` no Render **antes** do redeploy pegar tráfego real.
+
 7. verifica tabelas, login do role, herança e seis invariantes de RLS,
    falhando alto se algo faltar: nenhuma tabela pode ter `tenant_isolation`
    sombreando `tenant_congregation_isolation`, nenhuma policy de congregação
@@ -260,32 +283,38 @@ passo 7 falha alto se algum invariante quebrar.
 > sem `id`, coluna NOT NULL sem DEFAULT, e falhava com 23502 desde sempre.
 > Sessão de suporte agora deixa rastro.
 >
-> **Pendente no banco de produção:** o `004_rls_platform_plane.sql`. Enquanto
-> ele não rodar, as rotas de plataforma (`POST /platform/tenants`,
-> `GET /admin/waitlist`) respondem vazio ou falham com 42501 — o interceptor já
-> deixa de fixar tenant nelas, mas não há policy que responda por isso.
+> **Aplicado em produção em 2026-09-07:** `004_rls_platform_plane.sql`,
+> `005_rls_audit_platform_read.sql` e `006_rls_platform_provisioning.sql`,
+> pelo `bootstrap-db.sh` inteiro (nunca colados no SQL Editor — `004` faz
+> `ALTER POLICY tenant_isolation`, e é o passo 4 do script que decide em quais
+> tabelas essa policy sobrevive; aplicar fora de ordem é o defeito que a
+> pendência nº 1 documentou). As rotas de plataforma
+> (`POST /platform/tenants`, `GET /admin/waitlist`), a tela de auditoria do
+> `apps/admin` e o onboarding de tenant do DT-04 (que grava `Person` e
+> `FinancialCategory` sem tenant no contexto) já respondem de verdade em
+> produção.
 >
-> Aplique rodando o `bootstrap-db.sh` inteiro, **não** colando o `004` no SQL
-> Editor: ele faz `ALTER POLICY tenant_isolation`, e é o passo 4 do script que
-> decide em quais tabelas essa policy sobrevive. Aplicar script de RLS fora de
-> ordem é o defeito que a pendência nº 1 documentou.
->
-> **`005_rls_audit_platform_read.sql` é novo, da Fase 5** (2026-09-04): abre
-> `GET /platform/audit-logs/support-access` para leitura cross-tenant, do
-> mesmo jeito que o `004` abriu para `tenants`. Roda pelo mesmo
-> `bootstrap-db.sh`, depois do `004` — não precisa de cuidado extra de ordem
-> além desse, e enquanto ele não rodar em produção a tela de auditoria do
-> `apps/admin` responde lista vazia, sem erro.
+> **Incidente na mesma aplicação:** `ORBIEN_APP_PASSWORD` foi preenchida por
+> engano com uma senha de login em vez da senha do role — o `ALTER ROLE` do
+> passo 6 sobrescreveu a senha real do `orbien_app` no banco, e a API caiu
+> inteira (`Authentication failed ... orbien_app are not valid` em toda rota
+> que toca o banco) até a `DATABASE_URL` do Render e a senha do role
+> divergirem menos de 30 minutos depois. Corrigido revertendo a senha do role
+> para o valor que já estava em `DATABASE_URL`. Ver o aviso dentro do passo 6
+> acima, adicionado por causa disso — **leia-o antes de rodar o script contra
+> produção de novo.**
 
-> **`20260905000000_add_login_attempts` é migration comum, não script de RLS.**
-> Ela cria a tabela do limitador de tentativas de login e já traz o
-> `ENABLE`/`FORCE ROW LEVEL SECURITY` dentro dela — mesmo desenho de
-> `password_reset_tokens`: sem policy nenhuma, só `prisma.system` alcança. Sai
-> por `npm run db:migrate:status` / `prisma migrate deploy`, **sem** depender do
-> `bootstrap-db.sh`. Foi feita assim de propósito: pôr a policy nos scripts
-> `00x` amarraria o limitador ao passo que ainda está pendente em produção.
-> Enquanto a migration não rodar, as rotas de login respondem 500 na primeira
-> tentativa — a tabela não existe.
+> **`20260905000000_add_login_attempts` e
+> `20260907045316_add_person_soft_delete_lgpd` são migrations comuns, não
+> scripts de RLS.** A primeira cria a tabela do limitador de tentativas de
+> login com `ENABLE`/`FORCE ROW LEVEL SECURITY` e nenhuma policy — mesmo
+> desenho de `password_reset_tokens`, só `prisma.system` alcança. Saem por
+> `npm run db:migrate:status` / `prisma migrate deploy`, **sem** depender do
+> `bootstrap-db.sh` — mas o próprio `bootstrap-db.sh` já roda `prisma migrate
+> deploy` no seu passo 2, então rodá-lo aplica as duas de qualquer forma.
+> Ambas aplicadas em produção em 2026-09-07. Enquanto uma migration comum não
+> roda, o sintoma é sempre 500 na primeira tentativa da rota que depende dela
+> — a tabela ou coluna não existe.
 
 ---
 
