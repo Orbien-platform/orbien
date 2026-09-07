@@ -1355,6 +1355,58 @@ listagem.
 
 ---
 
+## `persons` e `financial_categories` entram no plano de plataforma — DT-04
+
+Achado ao implementar DT-04 (`docs/produto/orbien-debitos-tecnicos-v2.md`),
+em 2026-09-07: `ProvisionTenantService.provision()` passou a criar também o
+`Person` do admin e as 12 categorias financeiras padrão, na mesma transação
+atômica que já cria tenant, plano, branding, congregação, conta admin e
+papel — sem tenant fixado no contexto, porque é assim que `platform_support`
+provisiona (`app_platform_access()` exige `app_current_tenant() IS NULL`).
+
+### O que estava errado
+
+`persons` e `financial_categories` usam `tenant_congregation_isolation` (ver
+pendência nº 1), não a `tenant_isolation` simples que `004_rls_platform_plane.sql`
+já abre em seis tabelas. O INSERT falhava com 42501 no meio da transação —
+depois de já ter criado tenant, plano, branding, congregação, conta admin e
+papel. `test/integration/platform-provisioning.spec.ts` pegou: 6 dos 7 testes
+do describe caíram em cascata a partir do primeiro 500.
+
+### Decisão — 2026-09-07, apresentada e confirmada pelo usuário
+
+Estender o ramo de plataforma para essas duas tabelas, do mesmo jeito que
+`004` já fez para `user_accounts`/`role_assignments` pelo mesmo motivo (o
+próprio script já documentava esse precedente). Duas alternativas descartadas:
+
+- `prisma.system` (BYPASSRLS) só para essas duas escritas — quebraria a
+  atomicidade da transação única, que o serviço trata como propriedade
+  importante (comentário no arquivo: "um tenant meio criado é pior que
+  nenhum").
+- Reverter a criação de `Person`/categorias e deixar DT-04 pela metade —
+  descartada porque é justamente o que fecha o débito.
+
+### O que entrou
+
+`006_rls_platform_provisioning.sql`, rodando depois de `004` (depende de
+`app_platform_access()`). Faz `ALTER POLICY tenant_congregation_isolation`
+só em `persons` e `financial_categories`, por nome de tabela — não pelo loop
+de `pg_policies` que `003_rls_admin_write.sql` usa, porque esse loop pegaria
+as 22 tabelas que compartilham o nome da policy, e abrir o ramo de plataforma
+nas outras 20 não tem motivo nenhum. `bootstrap-db.sh` ganhou o passo e mais
+uma asserção na verificação, no mesmo formato das de `004`/`005`.
+
+### Alcance
+
+`app_platform_access()` continua exigindo `platform_support` resolvido no
+banco **e** ausência de tenant no contexto. Qualquer rota autenticada normal
+roda com tenant fixado (o `TenantContextInterceptor` sempre faz `set_config`),
+então o primeiro termo do `OR` já resolve e o ramo de plataforma nunca chega
+a ser avaliado fora de `ProvisionTenantService.provision()`. Não abre leitura
+nem escrita de pessoas de tenants já existentes para o suporte.
+
+---
+
 ## Registro
 
 Ao resolver uma pendência, remova a seção e registre no commit o que foi

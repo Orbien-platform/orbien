@@ -139,6 +139,8 @@ Quando um novo tenant é criado, o fluxo atual **não cria automaticamente** um 
 
 Não existe (e não é o desenho do produto) um `POST /auth/register` self-service — onboarding de tenant é sempre operação de `platform_support` via `POST /platform/tenants`, ver `PENDENCIAS.md`.
 
+**Achado no caminho, registrado e fechado em `PENDENCIAS.md`:** `persons` e `financial_categories` não faziam parte do ramo de plataforma que `004_rls_platform_plane.sql` abre — o INSERT falhava com 42501 dentro da transação de provisionamento. `006_rls_platform_provisioning.sql` estende o mesmo ramo (`app_platform_access()`) só a essas duas tabelas.
+
 ### Prompt para Claude Code
 ```
 Preciso implementar o fluxo completo de onboarding de tenant no Orbien.
