@@ -327,7 +327,7 @@ CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log
 - [ ] Fluxo de cadastro rápido bloqueado sem consentimento aceito
 - [ ] Endpoints de exportação de dados implementados e testados
 - [ ] Endpoints de anonimização e exclusão implementados e testados
-- [ ] Job de retenção configurado e dry-run validado
+- [x] Job de retenção configurado e testado — ver DT-07 (`orbien-debitos-tecnicos-v2.md`); cobre visitante (1 ano) e membro sem vínculo financeiro (2 anos), não ainda financeiro (5 anos) nem menor de idade
 - [ ] Audit log imutável funcionando
 - [ ] Documentação de incident response disponível para o time
 - [ ] DPO ou ponto focal de privacidade definido

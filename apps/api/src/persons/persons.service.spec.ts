@@ -45,6 +45,7 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn(),
       update: jest.fn(),
     },
+    $queryRaw: jest.fn(),
   };
 
   const mergedClient = { ...client, ...overrides };
@@ -336,6 +337,46 @@ describe('PersonsService', () => {
       system.person.findMany.mockResolvedValue([]);
 
       const result = await service.purgeExpiredSoftDeletes();
+
+      expect(system.person.update).not.toHaveBeenCalled();
+      expect(result).toEqual({ purged: 0 });
+    });
+  });
+
+  describe('purgeInactivePersons', () => {
+    it('anonimiza visitante e membro inativos, com o motivo certo para cada um', async () => {
+      const { service, system } = serviceWith();
+      system.$queryRaw.mockResolvedValue([
+        { id: 'v1', classification: 'visitor' },
+        { id: 'm1', classification: 'member' },
+      ]);
+      system.person.update.mockResolvedValue({});
+
+      const result = await service.purgeInactivePersons();
+
+      expect(system.person.update).toHaveBeenCalledTimes(2);
+      expect(system.person.update).toHaveBeenCalledWith({
+        where: { id: 'v1' },
+        data: expect.objectContaining({
+          full_name: 'ANONIMIZADO',
+          anonymization_reason: expect.stringContaining('1 ano'),
+        }),
+      });
+      expect(system.person.update).toHaveBeenCalledWith({
+        where: { id: 'm1' },
+        data: expect.objectContaining({
+          full_name: 'ANONIMIZADO',
+          anonymization_reason: expect.stringContaining('2 anos'),
+        }),
+      });
+      expect(result).toEqual({ purged: 2 });
+    });
+
+    it('não chama update quando ninguém está inativo há tempo suficiente', async () => {
+      const { service, system } = serviceWith();
+      system.$queryRaw.mockResolvedValue([]);
+
+      const result = await service.purgeInactivePersons();
 
       expect(system.person.update).not.toHaveBeenCalled();
       expect(result).toEqual({ purged: 0 });

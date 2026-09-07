@@ -33,6 +33,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     },
     groupMeeting: { findMany: jest.fn() },
     attendanceRecord: { findMany: jest.fn() },
+    $queryRaw: jest.fn(),
     ...overrides,
   };
 }
@@ -352,6 +353,50 @@ describe('SmallGroupsService', () => {
       const service = serviceWith(client);
 
       expect(await service.removeMember('sg1', 'p1')).toEqual({ id: 'mem1' });
+    });
+  });
+
+  describe('getHierarchy', () => {
+    const row = (id: string, parent: string | null, depth: number) => ({
+      id,
+      name: `Grupo ${id}`,
+      group_type_id: 'gt1',
+      group_type_name: 'Célula',
+      parent_group_id: parent,
+      leader_person_id: 'lider',
+      is_public: true,
+      meeting_time: null,
+      recurrence: null,
+      depth,
+    });
+
+    it('retorna null quando o grupo raiz não está no resultado', async () => {
+      const client = clientWith();
+      client.$queryRaw.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      expect(await service.getHierarchy('sg1')).toBeNull();
+    });
+
+    it('monta a árvore com filhos aninhados, sem a coluna depth', async () => {
+      const client = clientWith();
+      client.$queryRaw.mockResolvedValue([
+        row('sg1', null, 1),
+        row('sg2', 'sg1', 2),
+        row('sg3', 'sg1', 2),
+        row('sg4', 'sg2', 3),
+      ]);
+      const service = serviceWith(client);
+
+      const tree = await service.getHierarchy('sg1');
+
+      expect(tree).not.toHaveProperty('depth');
+      expect(tree?.id).toBe('sg1');
+      expect(tree?.children.map((c) => c.id)).toEqual(['sg2', 'sg3']);
+      expect(tree?.children.find((c) => c.id === 'sg2')?.children.map((c) => c.id)).toEqual([
+        'sg4',
+      ]);
+      expect(tree?.children.find((c) => c.id === 'sg3')?.children).toEqual([]);
     });
   });
 
