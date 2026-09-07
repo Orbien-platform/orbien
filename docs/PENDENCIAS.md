@@ -747,10 +747,25 @@ sessão não tem acesso ao banco de produção e não repetiu as leituras.
   genérica, senão ela contaria que alguém andou pedindo redefinição para
   aquele e-mail.
 
-  **Continua em aberto o recorte por origem:** o limite é por identificador,
-  não por IP. Quem varre muitos e-mails diferentes do mesmo lugar não bate no
-  limite. Fechar isso exige `X-Forwarded-For` confiável atrás do Render —
-  decisão de infra, não deste trabalho.
+  **O recorte por origem foi fechado em 2026-09-07.** `main.ts` passou a
+  chamar `app.set('trust proxy', 1)`: a Render termina TLS na borda e
+  encaminha por um único proxy interno, que escreve `X-Forwarded-For` com o IP
+  real do cliente — cabeçalho que quem faz a requisição não alcança, só a
+  borda da Render o define. Sem isso `req.ip` era o endereço desse proxy,
+  igual para todo mundo, e qualquer limite por IP agrupava o tráfego inteiro
+  numa origem só (ou nenhuma, dependendo de como a Render reutiliza conexões).
+  `1` diz ao Express para confiar só nesse último salto.
+
+  Com `req.ip` confiável, `login`, `platform/login` e `forgot-password` em
+  `auth.controller.ts` ganharam `ThrottlerGuard` — o mesmo mecanismo que já
+  protegia `waitlist` e `visitor/register` por IP, reaproveitado em vez de
+  inventar um segundo limitador. Os dois recortes convivem porque cobrem
+  ataques diferentes: o `LoginRateLimitService` (por e-mail) barra quem tenta
+  muitas senhas contra a mesma conta, de qualquer lugar; o `ThrottlerGuard`
+  (por IP, `req.ip` — 20/15min em `login`, 10/15min em `platform/login`,
+  10/hora em `forgot-password`) barra quem varre muitos e-mails diferentes do
+  mesmo lugar. `platform/login` ficou mais apertado por ser a porta que leva
+  ao console da plataforma.
 
   **A migration precisa rodar antes do deploy da API.** Ela é comum (sai por
   `prisma migrate deploy`, sem depender do `bootstrap-db.sh`), mas as
