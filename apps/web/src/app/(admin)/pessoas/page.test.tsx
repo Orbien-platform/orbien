@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
@@ -215,9 +215,15 @@ describe("PessoasPage", () => {
     );
 
     // O botão some enquanto `isLoading` fica true entre o clique e o
-    // próximo render — `findByRole` espera reaparecer, `getByRole` pega a
-    // janela de corrida e falha de forma intermitente.
-    await user.click(await screen.findByRole("button", { name: "Página anterior" }));
+    // próximo render. `user.click` dispara ponteiro/mouse em ticks
+    // separados — cada um dá ao React uma chance de re-renderizar e trocar
+    // o nó entre o `find` e o clique de fato, o que sob carga (suíte cheia)
+    // faz o clique não pegar em nenhum nó válido. `fireEvent.click` dentro
+    // do `waitFor` busca e clica no mesmo tick: só para de tentar quando o
+    // botão existir e o clique já tiver disparado.
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Página anterior" }));
+    });
     await waitFor(() =>
       expect(mockedApi.get).toHaveBeenLastCalledWith(expect.stringContaining("page=1"))
     );
