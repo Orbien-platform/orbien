@@ -23,6 +23,16 @@ describe('CreateSetlistSongDto', () => {
     expect(errors.some((e) => e.property === 'setlist_id')).toBe(true);
   });
 
+  it('aceita song_id como UUID válido', async () => {
+    const errors = await errorsFor({ song_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6' });
+    expect(errors.some((e) => e.property === 'song_id')).toBe(false);
+  });
+
+  it('rejeita song_id que não é UUID', async () => {
+    const errors = await errorsFor({ song_id: 'not-a-uuid' });
+    expect(errors.some((e) => e.property === 'song_id')).toBe(true);
+  });
+
   it('rejeita sequence menor que 1', async () => {
     const errors = await errorsFor({ sequence: 0 });
     expect(errors.some((e) => e.property === 'sequence')).toBe(true);
