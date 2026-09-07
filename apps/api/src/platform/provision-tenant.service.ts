@@ -1,5 +1,10 @@
-import { ConflictException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { PlanStatus, PlanType, Prisma } from '@prisma/client';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PlanStatus, PlanType, Prisma, WaitlistStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
@@ -29,7 +34,10 @@ export interface ProvisionedTenant {
  *
  * Atômico de propósito: um tenant com plano e sem congregação, ou com
  * congregação e sem conta admin, é pior que nenhum tenant — fica invisível
- * para quem provisionou e quebra o login de quem recebeu o convite.
+ * para quem provisionou e quebra o login de quem recebeu o convite. Pelo
+ * mesmo motivo, quando `waitlist_lead_id` vem preenchido o lead é ativado
+ * dentro da mesma transação: um tenant criado sem o lead marcado é o mesmo
+ * tipo de estado meio-feito.
  */
 @Injectable()
 export class ProvisionTenantService {
@@ -54,6 +62,24 @@ export class ProvisionTenantService {
           throw new InternalServerErrorException(
             `Papel '${INITIAL_ADMIN_ROLE}' não existe na tabela roles — banco não semeado.`,
           );
+        }
+
+        // Falhar cedo, antes de criar qualquer coisa: lead inexistente ou já
+        // vinculado a outro tenant não deve custar um tenant órfão.
+        if (dto.waitlist_lead_id) {
+          const lead = await tx.waitlistSubscriber.findUnique({
+            where: { id: dto.waitlist_lead_id },
+          });
+          if (!lead) {
+            throw new NotFoundException(
+              `Lead '${dto.waitlist_lead_id}' não encontrado na waitlist.`,
+            );
+          }
+          if (lead.tenant_id) {
+            throw new ConflictException(
+              `Lead '${dto.waitlist_lead_id}' já está vinculado a outro tenant.`,
+            );
+          }
         }
 
         const tenant = await tx.tenant.create({
@@ -106,6 +132,17 @@ export class ProvisionTenantService {
             role_code: INITIAL_ADMIN_ROLE,
           },
         });
+
+        if (dto.waitlist_lead_id) {
+          await tx.waitlistSubscriber.update({
+            where: { id: dto.waitlist_lead_id },
+            data: {
+              status: WaitlistStatus.activated,
+              activated_at: new Date(),
+              tenant_id: tenant.id,
+            },
+          });
+        }
 
         return {
           tenant_id: tenant.id,
