@@ -96,6 +96,15 @@ describe('PersonsImportService', () => {
       await expect(service.preview(fileOf(emptyCsv), 'tenant-1')).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it('rejeita arquivo com mais de 5.000 linhas (DT-06)', async () => {
+      const { service } = serviceWith();
+      const header = 'nome,telefone,email,sexo,nascimento,classificação';
+      const linhas = Array.from({ length: 5001 }, (_, i) => `Pessoa ${i},,,,,`);
+      const csv = [header, ...linhas].join('\n');
+
+      await expect(service.preview(fileOf(csv), 'tenant-1')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
     it('lê colunas, sugere mapeamento e sobe o arquivo temporário', async () => {
       const { service, storage } = serviceWith();
 

@@ -13,6 +13,7 @@ import { ImportPreviewDto, SuggestedMapping } from '../dto/import-preview.dto';
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const SYNC_ROW_LIMIT = 500;
+const MAX_IMPORT_ROWS = 5000;
 const PREVIEW_ROWS = 5;
 
 // Canonical field names for suggested mapping
@@ -60,6 +61,9 @@ export class PersonsImportService {
 
     const rows = this.parseBuffer(file.buffer, ext);
     if (rows.length === 0) throw new BadRequestException('Arquivo vazio ou sem dados válidos');
+    if (rows.length > MAX_IMPORT_ROWS) {
+      throw new BadRequestException(`Limite de ${MAX_IMPORT_ROWS} linhas por importação excedido`);
+    }
 
     const detectedColumns = Object.keys(rows[0]);
     const suggestedMapping = this.buildSuggestedMapping(detectedColumns);

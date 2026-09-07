@@ -43,6 +43,10 @@ export class ProvisionTenantDto {
   @IsString()
   congregation_timezone?: string;
 
+  @IsString()
+  @MinLength(2)
+  admin_name!: string;
+
   @IsEmail()
   admin_email!: string;
 

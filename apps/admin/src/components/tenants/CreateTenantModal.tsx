@@ -31,6 +31,7 @@ const EMPTY = {
   name: "",
   email: "",
   congregation_name: "",
+  admin_name: "",
   admin_email: "",
   admin_password: "",
 };
@@ -55,6 +56,7 @@ function formFromLead(lead: WaitlistLead | null | undefined): typeof EMPTY {
     name,
     slug: slugify(name),
     congregation_name: `${name} — Sede`,
+    admin_name: lead.pastor_name,
     admin_email: lead.email,
   };
 }
@@ -92,6 +94,10 @@ export function CreateTenantModal({
       setError("Slug: só minúsculas, números e hífens, a partir de 3 caracteres.");
       return;
     }
+    if (form.admin_name.trim().length < 2) {
+      setError("Informe o nome do admin.");
+      return;
+    }
     if (form.admin_password.length < 8) {
       setError("A senha do admin precisa de ao menos 8 caracteres.");
       return;
@@ -107,6 +113,7 @@ export function CreateTenantModal({
         name: form.name.trim(),
         ...(form.email.trim() ? { email: form.email.trim() } : {}),
         congregation_name: form.congregation_name.trim(),
+        admin_name: form.admin_name.trim(),
         admin_email: form.admin_email.trim(),
         admin_password: form.admin_password,
         ...(lead ? { waitlist_lead_id: lead.id } : {}),
@@ -191,6 +198,15 @@ export function CreateTenantModal({
           onChange={(v) => set("email", v)}
           disabled={isSubmitting}
           placeholder="contato@igreja-nova.com"
+        />
+
+        <Field
+          id="admin_name"
+          label="Nome do admin"
+          value={form.admin_name}
+          onChange={(v) => set("admin_name", v)}
+          disabled={isSubmitting}
+          placeholder="Nome completo do primeiro admin"
         />
 
         <div className="grid gap-4 sm:grid-cols-2">

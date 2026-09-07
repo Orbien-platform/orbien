@@ -33,6 +33,7 @@ describe('PersonsController', () => {
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      anonymize: jest.fn(),
       createHousehold: jest.fn(),
       findHousehold: jest.fn(),
       addHouseholdMember: jest.fn(),
@@ -149,13 +150,23 @@ describe('PersonsController', () => {
     expect(rolesFor('update')).toEqual(WRITE_ROLES);
   });
 
-  it('remove delega ao service e exige papel restrito a admins', async () => {
+  it('remove delega ao service com o usuário atual e exige papel restrito a admins', async () => {
     personsService.remove.mockResolvedValue({ id: 'p1' } as never);
 
-    const result = await controller.remove('p1');
+    const result = await controller.remove('p1', user);
 
-    expect(personsService.remove).toHaveBeenCalledWith('p1');
+    expect(personsService.remove).toHaveBeenCalledWith('p1', user);
     expect(result).toEqual({ id: 'p1' });
     expect(rolesFor('remove')).toEqual(['tenant_admin', 'admin_congregation']);
+  });
+
+  it('anonymize delega ao service com o usuário atual e exige papel restrito a admins', async () => {
+    personsService.anonymize.mockResolvedValue({ id: 'p1', full_name: 'ANONIMIZADO' } as never);
+
+    const result = await controller.anonymize('p1', user);
+
+    expect(personsService.anonymize).toHaveBeenCalledWith('p1', user);
+    expect(result).toEqual({ id: 'p1', full_name: 'ANONIMIZADO' });
+    expect(rolesFor('anonymize')).toEqual(['tenant_admin', 'admin_congregation']);
   });
 });

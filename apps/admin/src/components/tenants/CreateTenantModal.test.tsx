@@ -34,7 +34,7 @@ function montar() {
 }
 
 /**
- * Preenche os cinco campos obrigatórios de uma vez.
+ * Preenche os seis campos obrigatórios de uma vez.
  *
  * `fireEvent.change` em vez de `user.type`: são ~60 teclas por chamada, e no
  * runner do CI (2 vCPUs) isso estourava o timeout de 5s — o teste falhava por
@@ -46,6 +46,7 @@ function preencher(overrides: Partial<Record<string, string>> = {}) {
     "Nome da igreja": "Igreja Nova",
     Slug: "igreja-nova",
     "Congregação sede": "Igreja Nova — Sede",
+    "Nome do admin": "Pastor Novo",
     "E-mail do admin": "pastor@igreja-nova.com",
     "Senha inicial": "senha12345",
     ...overrides,
@@ -88,6 +89,7 @@ describe("CreateTenantModal", () => {
         slug: "igreja-nova",
         name: "Igreja Nova",
         congregation_name: "Igreja Nova — Sede",
+        admin_name: "Pastor Novo",
         admin_email: "pastor@igreja-nova.com",
         admin_password: "senha12345",
       })
@@ -135,6 +137,19 @@ describe("CreateTenantModal", () => {
     await user.click(screen.getByRole("button", { name: "Criar tenant" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Slug:");
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa nome do admin vazio", async () => {
+    const user = userEvent.setup();
+    montar();
+
+    preencher({ "Nome do admin": " " });
+    await user.click(screen.getByRole("button", { name: "Criar tenant" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Informe o nome do admin."
+    );
     expect(postMock).not.toHaveBeenCalled();
   });
 
@@ -280,7 +295,7 @@ describe("CreateTenantModal — a partir de um lead da waitlist", () => {
     );
   }
 
-  it("prefille nome, slug, congregação e e-mail do admin a partir do lead", () => {
+  it("prefille nome, slug, congregação, nome e e-mail do admin a partir do lead", () => {
     montarComLead();
 
     expect(screen.getByLabelText("Nome da igreja")).toHaveValue("Igreja Nova");
@@ -288,6 +303,7 @@ describe("CreateTenantModal — a partir de um lead da waitlist", () => {
     expect(screen.getByLabelText("Congregação sede")).toHaveValue(
       "Igreja Nova — Sede"
     );
+    expect(screen.getByLabelText("Nome do admin")).toHaveValue("Pastor João");
     expect(screen.getByLabelText("E-mail do admin")).toHaveValue(
       "pastor@igreja-nova.com"
     );

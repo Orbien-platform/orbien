@@ -108,7 +108,13 @@ export class PersonsController {
 
   @Delete(':id')
   @Roles('tenant_admin', 'admin_congregation')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.personsService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.personsService.remove(id, user);
+  }
+
+  @Patch(':id/anonymize')
+  @Roles('tenant_admin', 'admin_congregation')
+  anonymize(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.personsService.anonymize(id, user);
   }
 }
