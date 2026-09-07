@@ -68,6 +68,7 @@ model Tenant {
   serviceOrderItems       ServiceOrderItem[]
   setlists                Setlist[]
   setlistSongs            SetlistSong[]
+  songs                   Song[]
   auditLogs               AuditLog[]
   qrTokens                QrToken[]
   exportJobs              ExportJob[]
@@ -125,6 +126,7 @@ model Congregation {
   serviceOrderItems       ServiceOrderItem[]
   setlists                Setlist[]
   setlistSongs            SetlistSong[]
+  songs                   Song[]
   materialOpenRecords     MaterialOpenRecord[]
   groupMeetingMaterials   GroupMeetingMaterial[]
   qrTokens                QrToken[]
@@ -1173,6 +1175,7 @@ model SetlistSong {
   tenant_id       String
   congregation_id String
   setlist_id      String
+  song_id         String?
   sequence        Int
   title           String
   key             String?
@@ -1185,10 +1188,32 @@ model SetlistSong {
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   setlist      Setlist      @relation(fields: [setlist_id], references: [id], onDelete: Cascade)
+  song         Song?        @relation(fields: [song_id], references: [id], onDelete: SetNull)
 
   @@index([setlist_id])
   @@index([tenant_id, setlist_id])
   @@map("setlist_songs")
+}
+
+model Song {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  title           String
+  key             String?
+  bpm             Int?
+  link            String?
+  notes           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  setlistSongs SetlistSong[]
+
+  @@index([tenant_id, congregation_id])
+  @@index([tenant_id, id])
+  @@map("songs")
 }
 
 model CelebrationSchedule {
