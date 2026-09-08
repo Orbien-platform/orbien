@@ -2,8 +2,8 @@
 // - sem sessão salva -> status resolve para unauthenticated
 // - com sessão salva válida -> status resolve para authenticated
 // - logout() chamado no contexto reflete unauthenticated imediatamente
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { Text, TouchableOpacity } from "react-native";
+import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { Text } from "react-native";
 
 const mockOnSessionExpired = jest.fn();
 
@@ -28,16 +28,20 @@ function StatusProbe() {
   return <Text testID="status">{status}</Text>;
 }
 
-function StatusAndLogoutProbe() {
+// Captura `logout` do contexto sem depender de simulação de toque nativa
+// (TouchableOpacity + fireEvent.press mostrou-se intermitentemente lento
+// no CI, estourando o timeout do Jest mesmo em 20s — a asserção real deste
+// teste é sobre o comportamento de AuthProvider.logout(), não sobre como um
+// toque físico dispara onPress, então chamar a função direta é tão fiel ao
+// contrato quanto simular o toque, e remove essa fonte de flake).
+function StatusAndLogoutProbe({
+  onLogoutCaptured,
+}: {
+  onLogoutCaptured: (logout: () => Promise<void>) => void;
+}) {
   const { status, logout } = useAuth();
-  return (
-    <>
-      <Text testID="status">{status}</Text>
-      <TouchableOpacity testID="logout-button" onPress={logout}>
-        <Text>sair</Text>
-      </TouchableOpacity>
-    </>
-  );
+  onLogoutCaptured(logout);
+  return <Text testID="status">{status}</Text>;
 }
 
 describe("AuthProvider", () => {
@@ -77,10 +81,15 @@ describe("AuthProvider", () => {
   it("logout() chamado no contexto reflete status unauthenticated imediatamente, sem esperar reload", async () => {
     (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
     (authLogout as jest.Mock).mockResolvedValue(undefined);
+    let capturedLogout: (() => Promise<void>) | undefined;
 
     await render(
       <AuthProvider>
-        <StatusAndLogoutProbe />
+        <StatusAndLogoutProbe
+          onLogoutCaptured={(logout) => {
+            capturedLogout = logout;
+          }}
+        />
       </AuthProvider>,
     );
 
@@ -88,16 +97,11 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("status").props.children).toBe("authenticated");
     });
 
-    await fireEvent.press(screen.getByTestId("logout-button"));
-
-    // Mesmo padrão já usado no resto da suíte (login.test.tsx): aguarda a
-    // asserção via waitFor em vez de checar direto após o await de
-    // fireEvent.press — mais robusto a diferenças de timing entre
-    // ambientes (o `await` de fireEvent.press por si só não garante que o
-    // setState assíncrono dentro do handler já tenha sido refletido).
-    await waitFor(() => {
-      expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    await act(async () => {
+      await capturedLogout?.();
     });
+
+    expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
     expect(authLogout).toHaveBeenCalledTimes(1);
   });
 
