@@ -795,3 +795,1039 @@ todos passando) && `npm run build:mobile` && `turbo run lint --filter=orbien-mob
 (0 erros).
 
 **Requirement**: MOB-01, MOB-12
+
+---
+
+# Rodada 2 — Tasks: MOB-04, MOB-05
+
+**Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 2 —
+MOB-04 (Membros e Voluntários — escala)".
+**Status**: In Progress
+**Escopo**: as 4 ACs da story "P1: Membros e Voluntários" — listar escala
+(MOB-04, AC1), confirmar/recusar (MOB-04, AC2), check-in (MOB-04, AC3,
+inclui o endpoint novo em `apps/api` que a rodada de Design encontrou
+faltando), indisponibilidade (MOB-05, AC4). Cross-app: `apps/api`
+(Fase 1) + `apps/mobile` (Fases 2-4).
+
+## Test Coverage Matrix
+
+> Guidelines found: `apps/api/jest.config.js` (project `unit`,
+> `testMatch: src/**/*.spec.ts`, colocado com o código — confirmado via
+> `celebration-assignment.service.spec.ts`/`celebration-volunteer.controller.spec.ts`
+> existentes, mesmo padrão de mock de `PrismaService`); `apps/mobile/jest.config.js`
+> (`jest-expo` + Testing Library, mesmo padrão já usado em
+> `theme-provider.test.tsx`/`auth-provider.test.tsx` da Rodada 1).
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+|---|---|---|---|---|
+| `CelebrationAssignmentService.checkInAssignment` (novo) | unit | 1:1 com os cenários de erro do design (403 dono errado, 422 não-confirmado, 409 já feito check-in) + caminho feliz | `apps/api/src/celebrations/celebration-assignment.service.spec.ts` | `npm run test -w orbien-backend` |
+| `CelebrationRespondController` (novo método `checkIn`) | unit | delega ao service com `sub`/`tenant_id`, exige `@Roles` de voluntário (mesmo padrão do `respond` existente) | `apps/api/src/celebrations/celebration-volunteer.controller.spec.ts` | `npm run test -w orbien-backend` |
+| `EscalaClient` (`lib/escala/escala-client.ts`) | unit | 1:1 com AC de MOB-04 (list, respond, check-in) e MOB-05 (get/save unavailability) relevantes a essa camada | `apps/mobile/src/lib/escala/**/*.test.ts` | `npm run test -w orbien-mobile` |
+| Tela Escala (`app/index.tsx`) | component | Caminho feliz (lista renderiza, confirmar/recusar atualiza estado local, check-in habilita só para `confirmed` e desaparece após sucesso) + erro genérico de rede | `apps/mobile/src/app/index.test.tsx` | `npm run test -w orbien-mobile` |
+| Tela Indisponibilidade (`app/indisponibilidade.tsx`) | component | AC4: carrega mês corrente, salva, cancela request obsoleta ao trocar de mês rápido (mesmo princípio do `signal.cancelled` do `apps/web`) | `apps/mobile/src/app/indisponibilidade.test.tsx` | `npm run test -w orbien-mobile` |
+| Prisma schema (coluna `checked_in_at`) | none | build gate only (não é tabela nova — RLS já cobre) | `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/*_add_checked_in_at*` | `npm run build:api` |
+
+## Gate Check Commands
+
+| Gate Level | When to Use | Command |
+|---|---|---|
+| Quick (API) | Após task de service/controller com só unit | `npm run test -w orbien-backend` |
+| Quick (mobile) | Após task com só teste unit/component | `npm run test -w orbien-mobile` |
+| Build (API) | Fechamento da Fase 1 (migration + endpoint) | `npm run test -w orbien-backend` && `npm run build:api` && `turbo run lint --filter=orbien-backend` |
+| Full (mobile) | Fechamento de fase mobile | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
+
+---
+
+## Execution Plan
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+```
+
+### Phase 1: Backend — endpoint de check-in (gap da AC3, apps/api)
+
+```
+T1 → T2 → T3
+```
+
+### Phase 2: Mobile — tipos e `EscalaClient` (MOB-04, MOB-05)
+
+```
+T4 → T5 → T6
+```
+
+### Phase 3: Mobile — tela Escala (MOB-04)
+
+```
+T7
+```
+
+### Phase 4: Mobile — tela Indisponibilidade (MOB-05)
+
+```
+T8
+```
+
+---
+
+## Task Breakdown
+
+### T1: Migration — coluna `checked_in_at` em `CelebrationAssignment`
+
+**What**: Adicionar `checked_in_at DateTime?` ao model `CelebrationAssignment`
+em `schema.prisma` e gerar a migration Prisma correspondente
+(`prisma migrate dev --name add_checked_in_at_to_celebration_assignments`).
+**Where**: `apps/api/prisma/schema.prisma`,
+`apps/api/prisma/migrations/<timestamp>_add_checked_in_at_to_celebration_assignments/migration.sql`
+**Depends on**: None
+**Reuses**: nenhum — coluna nova em tabela existente; RLS da tabela já
+cobre (não é `00N_rls_*.sql`, `AD-001` só vale para tabela nova).
+**Requirement**: MOB-04 (AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] `npx prisma migrate dev` roda sem erro contra o banco local
+- [ ] `checked_in_at` aparece como `DateTime?` (nullable) no client gerado
+- [ ] Gate check passa: `npm run build:api` (typecheck reconhece o campo novo)
+
+**Tests**: none (schema/migration)
+**Gate**: build
+
+---
+
+### T2: `checkInAssignment` no `CelebrationAssignmentService`
+
+**What**: Novo método `checkInAssignment(assignmentId, userId, tenantId): Promise<CelebrationAssignment>`
+em `celebration-assignment.service.ts`, espelhando `respondToAssignment`
+(`:276-311`): resolve `personId`, busca assignment por `id`+`tenant_id`
+com `volunteerProfile.person_id`, `ForbiddenException` se não for dono,
+`UnprocessableEntityException` se `status !== confirmed`,
+`ConflictException` se `checked_in_at` já setado, senão `update` com
+`checked_in_at: new Date()`.
+**Where**: `apps/api/src/celebrations/celebration-assignment.service.ts`
+**Depends on**: T1
+**Reuses**: `resolvePersonId` (helper já existente, `:32-39`); mesma
+estrutura de `respondToAssignment` (`:276-311`).
+**Requirement**: MOB-04 (AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: dono correto + status `confirmed` + sem check-in prévio →
+      `checked_in_at` setado, retorna assignment atualizado
+- [ ] Teste: `volunteerProfile.person_id` diferente do usuário →
+      `ForbiddenException`
+- [ ] Teste: `status` `pending`/`declined` → `UnprocessableEntityException`
+- [ ] Teste: `checked_in_at` já setado → `ConflictException`
+- [ ] Teste: assignment inexistente (`id`+`tenant_id` não bate) →
+      `NotFoundException`
+- [ ] Gate check passa: `npm run test -w orbien-backend`
+
+**Tests**: unit
+**Gate**: quick
+
+---
+
+### T3: `PATCH /assignments/:id/check-in` no `CelebrationRespondController`
+
+**What**: Novo método `checkIn` no `CelebrationRespondController`
+(mesmo controller de `:id/respond`), `@Roles(...VOLUNTEER_ROLES)`, sem
+`@Body()` (timestamp é sempre "agora" no servidor — design.md, Tech
+Decisions), delega a `assignmentService.checkInAssignment(id, user.sub, user.tenant_id)`.
+**Where**: `apps/api/src/celebrations/celebration-volunteer.controller.ts`
+**Depends on**: T2
+**Reuses**: mesmo controller/guards do método `respond` (`:24-36`).
+**Requirement**: MOB-04 (AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `checkIn` delega ao service com `id`, `user.sub`, `user.tenant_id`
+- [ ] Teste: rota exige um dos `VOLUNTEER_ROLES` (mesmo padrão do teste
+      existente de `respond` no mesmo arquivo)
+- [ ] Gate check passa (full): `npm run test -w orbien-backend` &&
+      `npm run build:api` && `turbo run lint --filter=orbien-backend`
+
+**Tests**: unit
+**Gate**: build
+
+**Commit**: `feat(api): endpoint de check-in em celebration assignments (MOB-04 AC3)`
+
+---
+
+### T4: Tipos de Escala e Indisponibilidade (mobile)
+
+**What**: `Assignment`, `SetlistSong`, `Unavailability` (interfaces do
+Data Models do design, incluindo `checked_in_at`) em arquivo de tipo puro.
+**Where**: `apps/mobile/src/lib/escala/types.ts`
+**Depends on**: None (independe do backend estar pronto — só shape)
+**Reuses**: shape espelhado de `getMyAssignments`
+(`celebration-assignment.service.ts:353-370`) e `UnavailabilityQueryDto`/
+`VolunteerUnavailability` (contrato, não import — mesma regra do
+monorepo que a Rodada 1 já seguiu para `LoginResponse`/`Branding`).
+**Requirement**: MOB-04, MOB-05
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Tipos exportados batem com os campos documentados no `design.md`
+      (Data Models, Rodada 2)
+- [ ] Sem erro de TypeScript
+
+**Tests**: none (tipos puros)
+**Gate**: build
+
+---
+
+### T5: `EscalaClient` — listar, responder, check-in
+
+**What**: `getMyAssignments(includePast?)`, `respondToAssignment(id, status)`,
+`checkIn(id)` — wrappers tipados sobre `authenticatedRequest` (import de
+`../auth/auth-client`) para `GET /volunteers/my-celebration-assignments`,
+`PATCH /assignments/:id/respond`, `PATCH /assignments/:id/check-in`.
+**Where**: `apps/mobile/src/lib/escala/escala-client.ts`
+**Depends on**: T4
+**Reuses**: `authenticatedRequest<T>()` (`auth-client.ts`, já existe desde
+o Fix F1 da Rodada 1 — mesmo helper que `theme-provider.tsx` usa).
+**Requirement**: MOB-04 (AC1, AC2, AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getMyAssignments()` chama `authenticatedRequest("get", "/volunteers/my-celebration-assignments")`
+      e repassa `includePast` como query string quando informado
+- [ ] Teste: `respondToAssignment(id, "confirmed")` chama
+      `authenticatedRequest("patch", "/assignments/{id}/respond", {body: {status: "confirmed"}})`
+- [ ] Teste: `checkIn(id)` chama `authenticatedRequest("patch", "/assignments/{id}/check-in")`
+      sem body
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+---
+
+### T6: `EscalaClient` — indisponibilidade
+
+**What**: Extensão do mesmo módulo com `getUnavailability(month, year)` e
+`saveUnavailability(month, year, dates, notes?)`, mapeando
+`GET`/`POST /volunteers/unavailability`.
+**Where**: `apps/mobile/src/lib/escala/escala-client.ts` (extensão)
+**Depends on**: T5
+**Reuses**: mesmo `authenticatedRequest`; contrato de
+`CreateUnavailabilityDto`/`UnavailabilityQueryDto` (`apps/api/src/volunteers/dto/`).
+**Requirement**: MOB-05 (AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getUnavailability(month, year)` chama `authenticatedRequest("get", "/volunteers/unavailability?month=...&year=...")`
+- [ ] Teste: `saveUnavailability(...)` chama `authenticatedRequest("post", "/volunteers/unavailability", {body: {...}})`
+      com o shape exato de `CreateUnavailabilityDto`
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: unit
+**Gate**: full
+
+**Commit**: `feat(mobile): EscalaClient — listar, responder, check-in e indisponibilidade (MOB-04, MOB-05)`
+
+---
+
+### T7: Tela Escala — lista, confirmar/recusar, check-in
+
+**What**: `app/index.tsx` passa a ser a tela de Escala (substitui o
+placeholder): `useEffect` carrega `getMyAssignments()` no mount, lista
+os slots (nome da celebração, ministério, data), botões
+Confirmar/Recusar para `status === "pending"` (atualização otimista local
+após sucesso, sem refetch — mesmo princípio de
+`apps/web/src/app/(admin)/voluntarios/page.tsx:169-232`), botão Check-in
+para `status === "confirmed" && !checked_in_at` (some após sucesso), link
+para a tela de Indisponibilidade (T8).
+**Where**: `apps/mobile/src/app/index.tsx` (substitui o placeholder atual)
+**Depends on**: T5
+**Reuses**: `EscalaClient` (T5); padrão de estado local
+(`useState`/`useEffect`) já usado em `theme-provider.tsx`.
+**Requirement**: MOB-04 (AC1, AC2, AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component: lista renderiza os slots retornados por
+      `getMyAssignments` (mock)
+- [ ] Teste component: confirmar um slot `pending` chama
+      `respondToAssignment(id, "confirmed")` e atualiza o item na lista
+      sem refetch (mock conta 1 chamada a `getMyAssignments`)
+- [ ] Teste component: recusar segue o mesmo padrão para `"declined"`
+- [ ] Teste component: check-in em slot `confirmed` chama `checkIn(id)` e
+      o botão desaparece após sucesso
+- [ ] Teste component: erro de rede (mock rejeita) mostra estado de erro
+      explícito, não lista vazia (Edge Case da spec)
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): tela de Escala com confirmar/recusar e check-in (MOB-04)`
+
+---
+
+### T8: Tela Indisponibilidade
+
+**What**: Nova rota `app/indisponibilidade.tsx`: carrega
+`getUnavailability(mês atual, ano atual)` no mount, permite marcar/desmarcar
+dias do mês, salva via `saveUnavailability`; ao trocar de mês, cancela a
+request anterior obsoleta antes de aplicar a nova resposta (mesmo padrão
+de `signal.cancelled` do `apps/web/src/components/volunteers/UnavailabilityPanel.tsx`).
+**Where**: `apps/mobile/src/app/indisponibilidade.tsx`
+**Depends on**: T6
+**Reuses**: `EscalaClient` (T6); padrão de cancelamento de request
+obsoleta de `UnavailabilityPanel.tsx`.
+**Requirement**: MOB-05 (AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component: carrega e mostra as datas indisponíveis do mês
+      corrente (mock de `getUnavailability`)
+- [ ] Teste component: salvar chama `saveUnavailability` com o mês/ano/
+      datas selecionadas
+- [ ] Teste component: trocar de mês rapidamente (duas respostas fora de
+      ordem) aplica só a resposta do mês selecionado por último, não a
+      resposta que chegou por último no tempo
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): tela de Indisponibilidade (MOB-05)`
+
+---
+
+## Phase Execution Map
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+
+Phase 1:  T1 ──→ T2 ──→ T3
+Phase 2:  T4 ──→ T5 ──→ T6
+Phase 3:  T7
+Phase 4:  T8
+```
+
+Execução é estritamente sequencial. Fase 1 (backend) precede as fases de
+mobile porque T5 (Fase 2) chama o endpoint que T3 cria — sem isso o
+`EscalaClient.checkIn` não teria contrato real para testar contra (os
+testes são unitários com mock, então tecnicamente não bloqueiam
+tecnicamente, mas a ordem evita retrabalho se o contrato mudar durante o
+Execute de T1-T3).
+
+---
+
+## Task Granularity Check
+
+| Task | Scope | Status |
+|---|---|---|
+| T1: Migration `checked_in_at` | 1 arquivo de schema + 1 migration | ✅ Granular |
+| T2: `checkInAssignment` service | 1 método | ✅ Granular |
+| T3: Controller + rota | 1 método de controller | ✅ Granular |
+| T4: Tipos | 1 arquivo de tipo puro | ✅ Granular |
+| T5: `EscalaClient` (list/respond/check-in) | 1 componente (cliente), 3 métodos cohesivos (mesma origem de dados) | ✅ Granular |
+| T6: `EscalaClient` (indisponibilidade) | 1 componente (extensão), 2 métodos cohesivos | ✅ Granular |
+| T7: Tela Escala | 1 tela | ✅ Granular |
+| T8: Tela Indisponibilidade | 1 tela | ✅ Granular |
+
+---
+
+## Diagram-Definition Cross-Check
+
+| Task | Depends On (task body) | Diagram Shows | Status |
+|---|---|---|---|
+| T1 | None | — | ✅ Match |
+| T2 | T1 | T1→T2 | ✅ Match |
+| T3 | T2 | T2→T3 | ✅ Match |
+| T4 | None | Fase 2 inicia após Fase 1 | ✅ Match |
+| T5 | T4 | T4→T5 | ✅ Match |
+| T6 | T5 | T5→T6 | ✅ Match |
+| T7 | T5 | Fase 3 inicia após Fase 2 | ✅ Match |
+| T8 | T6 | Fase 4 inicia após Fase 3 | ✅ Match |
+
+Nenhuma task depende de uma task de fase posterior. ✅
+
+---
+
+## Test Co-location Validation
+
+| Task | Code Layer Created/Modified | Matrix Requires | Task Says | Status |
+|---|---|---|---|---|
+| T1 | Prisma schema | none | none | ✅ OK |
+| T2 | `CelebrationAssignmentService.checkInAssignment` | unit | unit | ✅ OK |
+| T3 | `CelebrationRespondController` | unit | unit | ✅ OK |
+| T4 | Tipos puros | none | none | ✅ OK |
+| T5 | `EscalaClient` (domínio) | unit | unit | ✅ OK |
+| T6 | `EscalaClient` — indisponibilidade (domínio) | unit | unit | ✅ OK |
+| T7 | Tela Escala (componente) | component | component | ✅ OK |
+| T8 | Tela Indisponibilidade (componente) | component | component | ✅ OK |
+
+Nenhuma violação. ✅
+
+---
+
+# Rodada 3 — Tasks: MOB-06
+
+**Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 3 — MOB-06 (Conteúdos — feed)".
+**Status**: In Progress
+**Escopo**: AC2 da história "P1: Conteúdos e Notificações" — listar posts
+publicados. Inclui a introdução da tab bar (Expo Router `Tabs`), decisão
+de navegação registrada no design desta rodada (segundo módulo de domínio
+justifica o custo, conforme a Rodada 2 já havia previsto).
+
+## Test Coverage Matrix
+
+> Guidelines: `apps/mobile/jest.config.js` (`jest-expo` + Testing
+> Library), mesmo padrão das Rodadas 1/2 (`theme-provider.test.tsx`,
+> `escala-client.test.ts`, `index.test.tsx`).
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+|---|---|---|---|---|
+| `(tabs)/_layout.tsx` (Tabs) | component | Renderiza as 2 abas (Escala, Conteúdo); `/` continua resolvendo para a aba Escala após a migração de rota | `apps/mobile/src/app/(tabs)/_layout.test.tsx` | `npm run test -w orbien-mobile` |
+| `(tabs)/index.tsx` (Escala, movida) | component | Testes existentes de `index.test.tsx` (Rodada 2) movidos e passando sem alteração de comportamento | `apps/mobile/src/app/(tabs)/index.test.tsx` | `npm run test -w orbien-mobile` |
+| `ContentClient` (`lib/content/content-client.ts`) | unit | 1:1 com AC2: request correto (path, page/limit), propagação de erro | `apps/mobile/src/lib/content/**/*.test.ts` | `npm run test -w orbien-mobile` |
+| `(tabs)/conteudo.tsx` | component | Caminho feliz (lista renderiza), lista vazia (estado explícito, não confundir com erro), erro de rede no load inicial, "carregar mais" (concatena sem perder os já carregados, erro pontual não limpa lista) | `apps/mobile/src/app/(tabs)/conteudo.test.tsx` | `npm run test -w orbien-mobile` |
+| Tipos (`lib/content/types.ts`) | none | build gate only | `apps/mobile/src/lib/content/types.ts` | `npm run build:mobile` |
+
+## Gate Check Commands
+
+| Gate Level | When to Use | Command |
+|---|---|---|
+| Quick | Após task com só unit/component | `npm run test -w orbien-mobile` |
+| Full | Fechamento de fase | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
+
+---
+
+## Execution Plan
+
+```
+Phase 1 → Phase 2 → Phase 3
+```
+
+### Phase 1: Navegação — introduz tab bar (Escala + Conteúdo)
+
+```
+T1
+```
+
+### Phase 2: `ContentClient` (tipos + cliente)
+
+```
+T2 → T3
+```
+
+### Phase 3: Tela Conteúdo
+
+```
+T4
+```
+
+---
+
+## Task Breakdown
+
+### T1: `(tabs)/_layout.tsx` — introduz Tabs, move a tela Escala
+
+**What**: Cria `apps/mobile/src/app/(tabs)/_layout.tsx` (Expo Router
+`Tabs`, duas abas: Escala e Conteúdo — a de Conteúdo aponta para uma rota
+que ainda não existe até T4, então usa um placeholder mínimo nesta task
+só para o Tabs resolver as duas rotas sem erro de "rota não encontrada");
+move `apps/mobile/src/app/index.tsx` → `apps/mobile/src/app/(tabs)/index.tsx`
+e `apps/mobile/src/app/index.test.tsx` → `apps/mobile/src/app/(tabs)/index.test.tsx`
+(ajustando imports relativos de `../lib/...` para `../../lib/...`).
+**Where**: `apps/mobile/src/app/(tabs)/_layout.tsx` (novo),
+`apps/mobile/src/app/(tabs)/index.tsx` (movido),
+`apps/mobile/src/app/(tabs)/index.test.tsx` (movido),
+`apps/mobile/src/app/(tabs)/conteudo.tsx` (placeholder — texto fixo,
+substituído de verdade em T4)
+**Depends on**: None
+**Reuses**: `Stack` do Expo Router já usado em `_layout.tsx` raiz — `Tabs`
+é do mesmo framework, sem lib nova.
+**Requirement**: MOB-06 (infra de navegação)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component novo (`(tabs)/_layout.test.tsx`): renderiza as 2
+      abas
+- [ ] Testes movidos de `index.test.tsx` (Rodada 2, 6 testes) passam sem
+      alteração de asserções, só de caminho/import
+- [ ] `router.replace("/")` (usado em `login.tsx` após login) continua
+      resolvendo para a tela Escala — smoke test manual documentado no
+      Done (grupo `(tabs)` não entra na URL, comportamento nativo do Expo
+      Router, sem código extra necessário)
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: component
+**Gate**: quick
+
+---
+
+### T2: Tipos `Post`/`PostsPage`
+
+**What**: Interfaces puras espelhando o shape de `GET /content/posts`
+(`{data: Post[], total: number}`).
+**Where**: `apps/mobile/src/lib/content/types.ts`
+**Depends on**: None
+**Reuses**: mesmo princípio de contrato-não-import de `escala/types.ts`
+(Rodada 2).
+**Requirement**: MOB-06
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Tipos batem com os campos documentados no `design.md` (Data
+      Models, Rodada 3)
+- [ ] Sem erro de TypeScript
+
+**Tests**: none (tipos puros)
+**Gate**: build
+
+---
+
+### T3: `ContentClient` — `getPosts`
+
+**What**: `getPosts(page?, limit?): Promise<PostsPage>` — wrapper sobre
+`authenticatedRequest` para `GET /content/posts`.
+**Where**: `apps/mobile/src/lib/content/content-client.ts`
+**Depends on**: T2
+**Reuses**: `authenticatedRequest` (mesmo padrão de `escala-client.ts`).
+**Requirement**: MOB-06 (AC2)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getPosts()` sem argumentos chama
+      `authenticatedRequest("get", "/content/posts")`
+- [ ] Teste: `getPosts(2, 10)` monta a query `?page=2&limit=10`
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+---
+
+### T4: Tela Conteúdo — lista, vazio, erro, carregar mais
+
+**What**: `(tabs)/conteudo.tsx` substitui o placeholder de T1 pela tela
+real: `useEffect` carrega a página 1 no mount; lista os posts (título,
+corpo truncado se houver); estado vazio explícito quando `total === 0`;
+erro de rede visível no load inicial (mesmo padrão de `escala-error`);
+botão "Carregar mais" quando `page * limit < total`, que concatena a
+próxima página sem descartar a atual e mostra erro pontual (sem limpar a
+lista) se a paginação falhar.
+**Where**: `apps/mobile/src/app/(tabs)/conteudo.tsx`
+**Depends on**: T1, T3
+**Reuses**: `ContentClient` (T3); padrão de erro/estado vazio de
+`(tabs)/index.tsx` (Escala).
+**Requirement**: MOB-06 (AC2)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component: lista renderiza os posts da página 1 (mock)
+- [ ] Teste component: `total: 0` mostra estado vazio explícito, não erro
+- [ ] Teste component: erro de rede no load inicial mostra estado de erro
+      visível, não lista vazia
+- [ ] Teste component: "Carregar mais" concatena a página 2 aos posts já
+      exibidos (sem substituir a lista)
+- [ ] Teste component: "Carregar mais" falha → posts já carregados
+      continuam visíveis, erro pontual aparece
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): tela de Conteúdo com paginação (MOB-06)`
+
+---
+
+## Phase Execution Map
+
+```
+Phase 1 → Phase 2 → Phase 3
+
+Phase 1:  T1
+Phase 2:  T2 ──→ T3
+Phase 3:  T4
+```
+
+---
+
+## Task Granularity Check
+
+| Task | Scope | Status |
+|---|---|---|
+| T1: `(tabs)/_layout.tsx` + move Escala | 1 layout novo + 1 move de arquivo (mesmo componente, sem mudança de comportamento) | ✅ Granular |
+| T2: Tipos | 1 arquivo de tipo puro | ✅ Granular |
+| T3: `ContentClient` | 1 componente (cliente), 1 método | ✅ Granular |
+| T4: Tela Conteúdo | 1 tela | ✅ Granular |
+
+---
+
+## Diagram-Definition Cross-Check
+
+| Task | Depends On (task body) | Diagram Shows | Status |
+|---|---|---|---|
+| T1 | None | — | ✅ Match |
+| T2 | None | Fase 2 inicia após Fase 1 | ✅ Match |
+| T3 | T2 | T2→T3 | ✅ Match |
+| T4 | T1, T3 | Fase 3 inicia após Fase 2 (T1 da Fase 1 transitivo) | ✅ Match |
+
+Nenhuma task depende de uma task de fase posterior. ✅
+
+---
+
+## Test Co-location Validation
+
+| Task | Code Layer Created/Modified | Matrix Requires | Task Says | Status |
+|---|---|---|---|---|
+| T1 | `(tabs)/_layout.tsx` + tela Escala movida | component | component | ✅ OK |
+| T2 | Tipos puros | none | none | ✅ OK |
+| T3 | `ContentClient` (domínio) | unit | unit | ✅ OK |
+| T4 | Tela Conteúdo (componente) | component | component | ✅ OK |
+
+Nenhuma violação. ✅
+
+---
+
+# Rodada 4 — Tasks: MOB-07
+
+**Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 4 —
+MOB-07 (Conteúdos — push: registro OneSignal + deep link)".
+**Status**: In Progress
+**Escopo**: AC1 (registrar dispositivo no OneSignal com `external_id` +
+tags de segmentação), AC4 (toque na push abre o post, não a lista) da
+história "P1: Conteúdos e Notificações". AC3 (push chega ponta a ponta)
+depende só do backend já existente + deste registro — sem código extra.
+Inclui a correção de `PostsService.findOne` (gap encontrado na Pesquisa
+do design desta rodada, necessário para o Edge Case "post despublicado
+→ não encontrado" ter suporte real).
+
+## Test Coverage Matrix
+
+> Guidelines mobile: `apps/mobile/jest.config.js` (`jest-expo` +
+> Testing Library), mesmo padrão das rodadas anteriores — SDK externo
+> (`react-native-onesignal`) mockado por arquivo (`jest.mock`), mesmo
+> padrão já usado para `expo-secure-store` em `auth-client.test.ts`.
+> Guidelines backend: `apps/api` Jest `unit` project (`posts.service.spec.ts`
+> já existe — a task estende o describe existente).
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+|---|---|---|---|---|
+| `PostsService.findOne` (`apps/api/src/content/posts.service.ts`) | unit | Member com post despublicado → `NotFoundException`; admin (`roles` != `['member']` ou omitido) continua vendo rascunho | `apps/api/src/content/posts.service.spec.ts` | `npm run test -w orbien-backend` |
+| `PostsController.findOne` (`apps/api/src/content/posts.controller.ts`) | — | Sem teste novo — só passa a repassar `user.roles`, já coberto por e2e/spec existente se houver; mudança de 1 linha | — | — |
+| `decodeJwtPayload` (`lib/auth/jwt.ts`) | unit | Token válido → claims; token malformado → `null` | `apps/mobile/src/lib/auth/jwt.test.ts` | `npm run test -w orbien-mobile` |
+| `onesignal-client` (`lib/notifications/onesignal-client.ts`) | unit | `registerDevice` chama `login`+`addTags` com os valores certos do token; token inválido → no-op; `unregisterDevice` chama `logout`; `onNotificationClick` extrai `post_id` e ignora clique sem `post_id` | `apps/mobile/src/lib/notifications/onesignal-client.test.ts` | `npm run test -w orbien-mobile` |
+| `NotificationsProvider` (`lib/notifications/notifications-provider.tsx`) | component | Sessão aparece → `registerDevice`; sessão some → `unregisterDevice`; clique em push navega para `/post/:id` | `apps/mobile/src/lib/notifications/notifications-provider.test.tsx` | `npm run test -w orbien-mobile` |
+| `ContentClient.getPost` (`lib/content/content-client.ts`) | unit | Chama `authenticatedRequest("get", "/content/posts/:id")` | `apps/mobile/src/lib/content/content-client.test.ts` (estende o describe existente) | `npm run test -w orbien-mobile` |
+| Tela "Post" (`app/post/[id].tsx`) | component | Caminho feliz (mostra título/corpo); 404 → "Post não encontrado"; erro de rede → estado de erro genérico | `apps/mobile/src/app/post/[id].test.tsx` | `npm run test -w orbien-mobile` |
+| `(tabs)/conteudo.tsx` (ajuste) | component | Tocar num item navega para `/post/:id` (teste novo no describe existente) | `apps/mobile/src/__tests__/app/(tabs)/conteudo.test.tsx` | `npm run test -w orbien-mobile` |
+
+## Gate Check Commands
+
+| Gate Level | When to Use | Command |
+|---|---|---|
+| Quick (mobile) | Após task só unit/component no mobile | `npm run test -w orbien-mobile` |
+| Quick (backend) | Após T1 | `npm run test -w orbien-backend` |
+| Full (mobile) | Fechamento de fase | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
+
+---
+
+## Execution Plan
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+```
+
+### Phase 1: Backend fix + utilitários sem dependência entre si
+
+```
+T1   (backend: findOne filtra rascunho para member)
+T2   (mobile: decodeJwtPayload)
+T3   (mobile: instala SDK + plugin no app.config.js)
+T6   (mobile: ContentClient.getPost)
+```
+
+### Phase 2: `onesignal-client` (depende de T2 + T3)
+
+```
+T4
+```
+
+### Phase 3: Wiring de push + tela de destino
+
+```
+T5   (NotificationsProvider, depende de T4)
+T7   (Tela Post, depende de T1 + T6)
+```
+
+### Phase 4: Fecha a navegação lista→detalhe
+
+```
+T8   (depende de T7)
+```
+
+---
+
+## Task Breakdown
+
+### T1: `PostsService.findOne` filtra rascunho para member
+
+**What**: `findOne` ganha um 4º parâmetro opcional `roles?: string[]`;
+quando `roles.length === 1 && roles[0] === 'member'` (mesmo critério
+`isMember` de `findAll`), aplica `published_at: {not: null}` no `where`
+— replica para o detalhe o mesmo filtro que a listagem já tem. Sem o
+parâmetro (chamadas internas de `update`/`remove`), comportamento
+inalterado. `PostsController.findOne` passa `user.roles`.
+**Where**: `apps/api/src/content/posts.service.ts` (`findOne`),
+`apps/api/src/content/posts.controller.ts` (método `findOne`)
+**Depends on**: None
+**Reuses**: mesmo critério `isMember` já escrito em `findAll`
+(`posts.service.ts:72`).
+**Requirement**: MOB-07 (Edge Case: post despublicado → "não encontrado")
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `findOne(tenantId, congId, id, ['member'])` com post
+      `is_draft: true`/`published_at: null` lança `NotFoundException`
+- [ ] Teste: `findOne(tenantId, congId, id, ['admin_congregation'])` (ou
+      sem `roles`) continua devolvendo o post mesmo despublicado —
+      comportamento existente preservado
+- [ ] Gate check passa: `npm run test -w orbien-backend`
+
+**Tests**: unit
+**Gate**: quick (backend)
+
+**Commit**: `fix(api): findOne de posts esconde rascunho de member (MOB-07)`
+
+---
+
+### T2: `decodeJwtPayload` (mobile)
+
+**What**: Utilitário puro que decodifica o payload de um JWT (sem
+validar assinatura) — mesmo algoritmo de `apps/web/src/lib/auth.ts`.
+Retorna `null` em token malformado, nunca lança.
+**Where**: `apps/mobile/src/lib/auth/jwt.ts` (novo)
+**Depends on**: None
+**Reuses**: mesmo algoritmo de `apps/web/src/lib/auth.ts:27-35`, adaptado
+(claims do `JwtPayload` do mobile: `sub`, `tenant_id`, `congregation_id`,
+`roles`, `exp`).
+**Requirement**: MOB-07 (base para tags do OneSignal)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: token válido (3 partes, payload base64url válido) → objeto
+      com os claims esperados
+- [ ] Teste: token malformado (menos de 3 partes, ou payload não-JSON)
+      → `null`, sem lançar
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(mobile): decodeJwtPayload — leitura de claims sem validar assinatura (MOB-07)`
+
+---
+
+### T3: Instala SDK do OneSignal + config plugin
+
+**What**: `npm install react-native-onesignal onesignal-expo-plugin -w
+orbien-mobile`. `app.config.js` ganha `plugins: [["onesignal-expo-plugin",
+{ mode: process.env.EAS_BUILD_PROFILE === "production" ? "production" :
+"development" }]]` — primeiro plugin do array (exigência do próprio
+plugin, evita erro de header nativo não encontrado). Nenhuma mudança em
+`extra.oneSignalAppId` (já existe desde o MOB-12).
+**Where**: `apps/mobile/package.json`, `apps/mobile/app.config.js`
+**Depends on**: None
+**Reuses**: `extra.oneSignalAppId` já resolvido por `app.config.js`
+(MOB-12).
+**Requirement**: MOB-07 (infra — sem SDK, nenhum outro AC é alcançável)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] `app.config.test.js` (já existe, valida `app.config.js`) continua
+      passando com o `plugins` novo — se o teste hoje faz snapshot/asserção
+      explícita de ausência de `plugins`, ajustar a asserção
+- [ ] `npx expo config` (smoke check manual, documentado no commit) lista
+      o plugin resolvido sem erro
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit (o teste existente de `app.config.js`)
+**Gate**: quick
+
+**Commit**: `chore(mobile): instala react-native-onesignal + config plugin (MOB-07)`
+
+---
+
+### T4: `onesignal-client` — init, registro, de-registro, clique
+
+**What**: `initializeOneSignal()`, `registerDevice(accessToken)`
+(decodifica via `decodeJwtPayload`, `OneSignal.login(sub)` +
+`OneSignal.User.addTags({tenant_id, congregation_id, role: roles[0]})`;
+token indecodificável → no-op), `unregisterDevice()` (`OneSignal.logout()`),
+`onNotificationClick(handler)` (lê `event.notification.additionalData.post_id`,
+ignora clique sem esse campo, devolve função de remoção do listener).
+**Where**: `apps/mobile/src/lib/notifications/onesignal-client.ts` (novo)
+**Depends on**: T2, T3
+**Reuses**: `decodeJwtPayload` (T2); `Constants.expoConfig.extra.oneSignalAppId`
+(MOB-12); mesmo padrão de listener removível de `onSessionExpired`
+(`auth-client.ts:40-45`).
+**Requirement**: MOB-07 (AC1, AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `registerDevice(token)` com token válido chama
+      `OneSignal.login` com o `sub` certo e `OneSignal.User.addTags` com
+      `tenant_id`/`congregation_id`/`role` (`roles[0]`) do token
+- [ ] Teste: `registerDevice(token)` com token indecodificável não chama
+      `OneSignal.login`/`addTags` (no-op silencioso)
+- [ ] Teste: `unregisterDevice()` chama `OneSignal.logout()`
+- [ ] Teste: `onNotificationClick` chama o handler com o `post_id` do
+      evento simulado
+- [ ] Teste: `onNotificationClick` não chama o handler quando o evento
+      simulado não tem `post_id` em `additionalData`
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(mobile): onesignal-client — registro de dispositivo e clique em push (MOB-07)`
+
+---
+
+### T5: `NotificationsProvider` — wiring no `_layout.tsx`
+
+**What**: Provider sem contexto próprio (só efeito colateral) — no
+mount, `initializeOneSignal()` uma vez e registra o listener de clique
+(`onNotificationClick`, navega via `router.push(\`/post/${postId}\`)`);
+`useEffect([session])` chama `registerDevice(session.accessToken)`
+quando `session` passa a existir, `unregisterDevice()` quando deixa de
+existir (mesma forma do `useEffect([session])` de `theme-provider.tsx`).
+Entra em `_layout.tsx` dentro de `AuthGate`, fora de `ThemeProvider`.
+**Where**: `apps/mobile/src/lib/notifications/notifications-provider.tsx`
+(novo), `apps/mobile/src/app/_layout.tsx` (wiring)
+**Depends on**: T4
+**Reuses**: forma de `theme-provider.tsx:57-93`; `useAuth()`.
+**Requirement**: MOB-07 (AC1, AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: sessão aparece (`session` muda de `null` para um objeto) →
+      `registerDevice` chamado com o `accessToken` certo
+- [ ] Teste: sessão some (`session` muda para `null`) → `unregisterDevice`
+      chamado
+- [ ] Teste: evento de clique simulado com `post_id` → `router.push`
+      chamado com `/post/<id>`
+- [ ] `_layout.tsx` renderiza `NotificationsProvider` dentro de
+      `AuthGate`, envolvendo `ThemeProvider`
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): registra e de-registra o dispositivo por sessão (MOB-07)`
+
+---
+
+### T6: `ContentClient.getPost`
+
+**What**: `getPost(id: string): Promise<Post>` — `GET /content/posts/:id`
+via `authenticatedRequest`. Mesmo arquivo de `getPosts` (MOB-06).
+**Where**: `apps/mobile/src/lib/content/content-client.ts`
+**Depends on**: None
+**Reuses**: `authenticatedRequest`; tipo `Post` (MOB-06, `content/types.ts`,
+sem alteração — já cobre os campos que a tela de detalhe usa).
+**Requirement**: MOB-07 (AC4, base de dados da tela de detalhe)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getPost("abc")` chama
+      `authenticatedRequest("get", "/content/posts/abc")`
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(mobile): ContentClient.getPost (MOB-07)`
+
+---
+
+### T7: Tela "Post" (rota de detalhe)
+
+**What**: `app/post/[id].tsx` — lê `id` via `useLocalSearchParams`,
+carrega com `ContentClient.getPost` no mount, mostra título/corpo/mídia;
+`HttpError` com `status === 404` → "Post não encontrado"; qualquer outro
+erro → estado de erro de rede genérico (mesmo texto/padrão das outras
+telas).
+**Where**: `apps/mobile/src/app/post/[id].tsx` (novo)
+**Depends on**: T1 (o 404 só existe de verdade para member depois do
+fix), T6
+**Reuses**: `ContentClient.getPost` (T6); `HttpError`/`.status`
+(`lib/api/errors.ts`); mesmo padrão de estado de erro/carregamento das
+telas de Escala/Conteúdo.
+**Requirement**: MOB-07 (AC4, Edge Case "post despublicado")
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: caminho feliz — mostra título e corpo do post carregado
+- [ ] Teste: `getPost` rejeita com `HttpError(404, ...)` → mostra "Post
+      não encontrado", não trava/quebra
+- [ ] Teste: `getPost` rejeita com erro de rede (`NetworkError`) → mostra
+      estado de erro genérico
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: component
+**Gate**: quick
+
+**Commit**: `feat(mobile): tela de detalhe do post (MOB-07)`
+
+---
+
+### T8: `(tabs)/conteudo.tsx` — item da lista navega para o post
+
+**What**: Cada item da `FlatList` passa a ser tocável
+(`Pressable`/`TouchableOpacity`), chamando `router.push(\`/post/${item.id}\`)`
+no toque — mesmo `useRouter()` já usado em `(tabs)/index.tsx` para
+`/indisponibilidade`.
+**Where**: `apps/mobile/src/app/(tabs)/conteudo.tsx`
+**Depends on**: T7
+**Reuses**: `useRouter()` (mesmo padrão de `(tabs)/index.tsx`).
+**Requirement**: MOB-07 (consistência de navegação — mesmo destino do
+clique em push, agora também alcançável pela lista)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: tocar num item da lista chama `router.push` com
+      `/post/<id>` do item tocado
+- [ ] Testes existentes de MOB-06 (lista, vazio, erro, carregar mais)
+      continuam passando sem alteração de asserção
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): item do feed abre o post ao tocar (MOB-07)`
+
+---
+
+## Phase Execution Map
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+
+Phase 1:  T1   T2   T3   T6
+Phase 2:  T2, T3 ──→ T4
+Phase 3:  T1, T6 ──→ T7        T4 ──→ T5
+Phase 4:  T7 ──→ T8
+```
+
+---
+
+## Task Granularity Check
+
+| Task | Scope | Status |
+|---|---|---|
+| T1: `findOne` filtra rascunho | 1 método (backend), 1 linha de controller | ✅ Granular |
+| T2: `decodeJwtPayload` | 1 utilitário puro | ✅ Granular |
+| T3: instala SDK + plugin | 1 dependência + 1 bloco de config | ✅ Granular |
+| T4: `onesignal-client` | 1 módulo, 4 funções coesas (init/registro/de-registro/clique — todas em torno do mesmo SDK) | ✅ Granular |
+| T5: `NotificationsProvider` | 1 componente (provider) + wiring de 1 linha em `_layout.tsx` | ✅ Granular |
+| T6: `ContentClient.getPost` | 1 método, mesmo arquivo de T MOB-06 | ✅ Granular |
+| T7: Tela Post | 1 tela | ✅ Granular |
+| T8: Ajuste tela Conteúdo | 1 tela (alteração pontual) | ✅ Granular |
+
+---
+
+## Diagram-Definition Cross-Check
+
+| Task | Depends On (task body) | Diagram Shows | Status |
+|---|---|---|---|
+| T1 | None | Fase 1 | ✅ Match |
+| T2 | None | Fase 1 | ✅ Match |
+| T3 | None | Fase 1 | ✅ Match |
+| T4 | T2, T3 | Fase 2 | ✅ Match |
+| T5 | T4 | Fase 3 | ✅ Match |
+| T6 | None | Fase 1 | ✅ Match |
+| T7 | T1, T6 | Fase 3 | ✅ Match |
+| T8 | T7 | Fase 4 | ✅ Match |
+
+Nenhuma task depende de uma task de fase posterior. ✅
+
+---
+
+## Test Co-location Validation
+
+| Task | Code Layer Created/Modified | Matrix Requires | Task Says | Status |
+|---|---|---|---|---|
+| T1 | `PostsService`/`PostsController` (backend) | unit | unit | ✅ OK |
+| T2 | Utilitário puro (mobile) | unit | unit | ✅ OK |
+| T3 | Config (`app.config.js`) | unit (teste existente) | unit | ✅ OK |
+| T4 | `onesignal-client` (domínio) | unit | unit | ✅ OK |
+| T5 | `NotificationsProvider` (componente) | component | component | ✅ OK |
+| T6 | `ContentClient` (domínio) | unit | unit | ✅ OK |
+| T7 | Tela Post (componente) | component | component | ✅ OK |
+| T8 | Tela Conteúdo (componente) | component | component | ✅ OK |
+
+Nenhuma violação. ✅

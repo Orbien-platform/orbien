@@ -1,3 +1,7 @@
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Testes derivados do Done-when de T13 (tasks.md) e do AC 2 de MOB-01
 // (spec.md): mesma mensagem de erro genérica, independente do motivo.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
@@ -8,11 +12,11 @@ jest.mock("expo-router", () => ({
 }));
 
 const mockLogin = jest.fn();
-jest.mock("../lib/auth/auth-provider", () => ({
+jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => ({ login: mockLogin }),
 }));
 
-import LoginScreen from "./login";
+import LoginScreen from "../../app/login";
 
 describe("LoginScreen", () => {
   beforeEach(() => {

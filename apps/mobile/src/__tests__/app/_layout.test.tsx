@@ -1,3 +1,7 @@
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Testes derivados do Done-when de T14 (tasks.md):
 // - unauthenticated renderiza a tela de login (via router mock)
 // - authenticated renderiza o shell placeholder
@@ -6,7 +10,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockUseAuth = jest.fn();
-jest.mock("../lib/auth/auth-provider", () => ({
+jest.mock("../../lib/auth/auth-provider", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => mockUseAuth(),
 }));
@@ -19,8 +23,16 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 const mockAuthenticatedRequest = jest.fn();
-jest.mock("../lib/auth/auth-client", () => ({
+jest.mock("../../lib/auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
+}));
+
+// NotificationsProvider (MOB-07) usa o SDK real do OneSignal, que não
+// resolve em Jest (sem binário nativo linkado) — este teste cobre só o
+// wiring de AuthGate/ThemeProvider, o comportamento de push já tem
+// cobertura própria em notifications-provider.test.tsx.
+jest.mock("../../lib/notifications/notifications-provider", () => ({
+  NotificationsProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 jest.mock("expo-router", () => {
@@ -43,7 +55,7 @@ jest.mock("expo-router", () => {
   };
 });
 
-import RootLayout from "./_layout";
+import RootLayout from "../../app/_layout";
 
 describe("RootLayout — guarda de navegação", () => {
   beforeEach(() => {

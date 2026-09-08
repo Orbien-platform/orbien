@@ -22,6 +22,7 @@ describe("app.config.js", () => {
     delete process.env.ORBIEN_APP_SCHEME;
     delete process.env.ORBIEN_BUNDLE_ID;
     delete process.env.ORBIEN_ONESIGNAL_APP_ID;
+    delete process.env.EAS_BUILD_PROFILE;
   });
 
   afterAll(() => {
@@ -59,6 +60,24 @@ describe("app.config.js", () => {
     expect(resolved.extra.oneSignalAppId).toBe(
       "11111111-1111-1111-1111-111111111111",
     );
+  });
+
+  it("resolve o plugin do OneSignal em modo development por padrão (fora de EAS)", () => {
+    delete process.env.EAS_BUILD_PROFILE;
+    const withDefaults = loadConfig();
+
+    const resolved = withDefaults({ config: {} });
+
+    expect(resolved.plugins[0]).toEqual(["onesignal-expo-plugin", { mode: "development" }]);
+  });
+
+  it("resolve o plugin do OneSignal em modo production quando EAS_BUILD_PROFILE=production", () => {
+    process.env.EAS_BUILD_PROFILE = "production";
+    const withProdProfile = loadConfig();
+
+    const resolved = withProdProfile({ config: {} });
+
+    expect(resolved.plugins[0]).toEqual(["onesignal-expo-plugin", { mode: "production" }]);
   });
 
   it("preserva o restante da config recebida (spread de config), sem sobrescrever campos não relacionados a identidade", () => {

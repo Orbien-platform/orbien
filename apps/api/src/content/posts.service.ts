@@ -97,9 +97,28 @@ export class PostsService {
     return { data, total };
   }
 
-  async findOne(tenantId: string, congregationId: string, id: string): Promise<ContentPost> {
+  // `roles` opcional: chamadas internas (update/remove, sempre WRITE_ROLES)
+  // não passam — mantêm acesso total, mesmo comportamento de antes. A rota
+  // pública GET /content/posts/:id passa `user.roles` para replicar aqui o
+  // mesmo filtro que findAll já aplica a member puro (published_at IS NOT
+  // NULL) — sem isso, um rascunho despublicado continuava visível pelo id
+  // direto mesmo depois de sumir da listagem (MOB-07, Edge Case da spec:
+  // post despublicado entre o disparo da push e o toque do usuário deve
+  // parecer "não encontrado", não vazar o rascunho).
+  async findOne(
+    tenantId: string,
+    congregationId: string,
+    id: string,
+    roles?: string[],
+  ): Promise<ContentPost> {
+    const isMember = roles !== undefined && roles.length === 1 && roles[0] === 'member';
     const post = await this.prisma.client.contentPost.findFirst({
-      where: { id, tenant_id: tenantId, congregation_id: congregationId },
+      where: {
+        id,
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        ...(isMember ? { published_at: { not: null } } : {}),
+      },
       include: {
         postSegments: {
           include: { segment: true },

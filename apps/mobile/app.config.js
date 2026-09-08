@@ -32,6 +32,13 @@ module.exports = ({ config }) => {
     process.env.ORBIEN_ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID;
   const apiUrl = process.env.ORBIEN_API_URL || DEFAULT_API_URL;
 
+  // Modo do plugin (ambiente de APNs, iOS) — não é campo de identidade
+  // (MOB-12): EAS injeta EAS_BUILD_PROFILE automaticamente em todo build,
+  // sem precisar de env nova por profile em eas.json (design.md, Rodada 4,
+  // Tech Decisions).
+  const oneSignalPluginMode =
+    process.env.EAS_BUILD_PROFILE === "production" ? "production" : "development";
+
   return {
     ...config,
     name: appName,
@@ -45,6 +52,10 @@ module.exports = ({ config }) => {
       ...config.android,
       package: bundleId,
     },
+    // onesignal-expo-plugin precisa ser o primeiro do array — exigência do
+    // próprio plugin (evita erro de header nativo "OneSignal/OneSignal.h
+    // not found"), ver design.md Rodada 4 (MOB-07).
+    plugins: [["onesignal-expo-plugin", { mode: oneSignalPluginMode }], ...(config.plugins ?? [])],
     extra: {
       ...config.extra,
       oneSignalAppId,

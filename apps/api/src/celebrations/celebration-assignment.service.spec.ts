@@ -578,6 +578,106 @@ describe('CelebrationAssignmentService', () => {
     });
   });
 
+  describe('checkInAssignment', () => {
+    it('lança NotFoundException quando o usuário não tem vínculo de pessoa', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+      const { service } = serviceWith(client);
+
+      await expect(service.checkInAssignment('a1', 'u1', 't1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('lança NotFoundException quando a atribuição não existe', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.celebrationAssignment.findFirst.mockResolvedValue(null);
+      const { service } = serviceWith(client);
+
+      await expect(service.checkInAssignment('a1', 'u1', 't1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('lança ForbiddenException quando a atribuição não é da pessoa do usuário', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'confirmed',
+        checked_in_at: null,
+        volunteerProfile: { person_id: 'outra-pessoa' },
+      });
+      const { service } = serviceWith(client);
+
+      await expect(service.checkInAssignment('a1', 'u1', 't1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('lança UnprocessableEntityException quando a atribuição não está confirmada', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'pending',
+        checked_in_at: null,
+        volunteerProfile: { person_id: 'p1' },
+      });
+      const { service } = serviceWith(client);
+
+      await expect(service.checkInAssignment('a1', 'u1', 't1')).rejects.toBeInstanceOf(
+        UnprocessableEntityException,
+      );
+    });
+
+    it('lança ConflictException quando o check-in já foi feito', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'confirmed',
+        checked_in_at: new Date('2026-09-01T10:00:00Z'),
+        volunteerProfile: { person_id: 'p1' },
+      });
+      const { service } = serviceWith(client);
+
+      await expect(service.checkInAssignment('a1', 'u1', 't1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('grava checked_in_at quando tudo é válido', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'confirmed',
+        checked_in_at: null,
+        volunteerProfile: { person_id: 'p1' },
+      });
+      client.celebrationAssignment.update.mockResolvedValue({
+        id: 'a1',
+        status: 'confirmed',
+        checked_in_at: new Date('2026-09-08T15:00:00Z'),
+      });
+      const { service } = serviceWith(client);
+
+      const result = await service.checkInAssignment('a1', 'u1', 't1');
+
+      expect(client.celebrationAssignment.update).toHaveBeenCalledWith({
+        where: { id: 'a1' },
+        data: { checked_in_at: expect.any(Date) },
+      });
+      expect(result).toEqual({
+        id: 'a1',
+        status: 'confirmed',
+        checked_in_at: new Date('2026-09-08T15:00:00Z'),
+      });
+    });
+  });
+
   describe('getMyAssignments', () => {
     it('lança NotFoundException quando o usuário não tem vínculo de pessoa', async () => {
       const client = clientWith();

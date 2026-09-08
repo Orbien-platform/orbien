@@ -94,7 +94,7 @@ describe('PostsController', () => {
 
     const result = await controller.findOne('p1', USER);
 
-    expect(service.findOne).toHaveBeenCalledWith('t1', 'g1', 'p1');
+    expect(service.findOne).toHaveBeenCalledWith('t1', 'g1', 'p1', USER.roles);
     expect(result).toEqual({ id: 'p1' });
   });
 

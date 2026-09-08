@@ -582,4 +582,4 @@ sobreviveu, logo nenhuma fix task). Relatório completo em `validation.md`.
 Único **spec-precision gap**: o Edge Case "título longo trunca **sem quebrar o
 layout**" — a truncagem está asserida (`SongPicker.test.tsx:165`), mas "sem
 quebrar o layout" não tem observável definido na spec e não é mensurável em
-jsdom. Registrado como lição `L-004` (candidate).
+jsdom. Registrado como lição `L-006` (candidate — nasceu como L-004 e foi re-registrada pelo script na resolução do conflito com a main, que já havia levado L-004 e L-005 do app-mobile).

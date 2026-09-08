@@ -31,6 +31,7 @@ describe('CelebrationRespondController', () => {
   beforeEach(() => {
     assignmentService = {
       respondToAssignment: jest.fn(),
+      checkInAssignment: jest.fn(),
     } as unknown as jest.Mocked<CelebrationAssignmentService>;
 
     controller = new CelebrationRespondController(assignmentService);
@@ -49,6 +50,28 @@ describe('CelebrationRespondController', () => {
     const reflector = new Reflector();
     expect(
       reflector.get<string[] | undefined>(ROLES_KEY, CelebrationRespondController.prototype.respond),
+    ).toEqual(VOLUNTEER_ROLES);
+  });
+
+  it('checkIn delega ao service com o sub do usuário e exige papel de voluntário', async () => {
+    assignmentService.checkInAssignment.mockResolvedValue({
+      id: 'a1',
+      status: 'confirmed',
+      checked_in_at: new Date('2026-09-08T15:00:00Z'),
+    } as never);
+
+    const result = await controller.checkIn('a1', user);
+
+    expect(assignmentService.checkInAssignment).toHaveBeenCalledWith('a1', 'user-1', 'tenant-1');
+    expect(result).toEqual({
+      id: 'a1',
+      status: 'confirmed',
+      checked_in_at: new Date('2026-09-08T15:00:00Z'),
+    });
+
+    const reflector = new Reflector();
+    expect(
+      reflector.get<string[] | undefined>(ROLES_KEY, CelebrationRespondController.prototype.checkIn),
     ).toEqual(VOLUNTEER_ROLES);
   });
 });
