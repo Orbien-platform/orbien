@@ -32,6 +32,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: Edge case: título vazio/só espaço / apps/api/src/celebrations/dto/create-song.dto.ts, create-setlist-song.dto.ts (api/dto)
 - last seen: 2026-09-08T00:47:32Z
 
+### L-004 — When spec.md leaves an operational detail (pagination, empty state, retry behavior) undefined for an AC, capture the concrete decision explicitly in design.md and treat it as the acceptance criterion for that round, rather than leaving it implicit in the implementation.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `mobile` · harmful: 0
+- features: app-mobile
+- evidence: spec.md AC2 (P1: Conteúdos e Notificações) — pagination/empty-state/load-more not detailed in spec.md (mobile)
+- last seen: 2026-09-08T16:11:44Z
+
+### L-005 — When an implementation intentionally diverges from an AC's literal wording based on a backend finding, update spec.md's AC text to match the confirmed decision, not just design.md — a reader of spec.md alone should not be misled.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `mobile` · harmful: 0
+- features: app-mobile
+- evidence: spec.md AC2 wording ('visíveis para os segmentos de audiência') vs. design.md finding (listing endpoint does not filter by segment) (mobile)
+- last seen: 2026-09-08T16:11:44Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

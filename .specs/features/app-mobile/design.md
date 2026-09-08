@@ -226,3 +226,356 @@ responder (spec MOB-03, AC 3).
 > `AD-002`: single-codebase multi-profile via `app.config.js`/`eas.json`
 > é o padrão adotado para `apps/mobile` cobrir Starter e (futura) Premium.
 > Ver seção Assumptions do `spec.md` para o texto completo da decisão.
+
+---
+
+# Rodada 2 — MOB-04 (Membros e Voluntários — escala)
+
+**Spec**: `.specs/features/app-mobile/spec.md`, story "P1: Membros e
+Voluntários", AC 1-4.
+**Status**: Draft
+**Escopo desta rodada**: as 4 ACs da story — listar escala (AC1),
+confirmar/recusar slot pendente (AC2), check-in em evento (AC3), editar
+indisponibilidade (AC4). MOB-05 a MOB-10 continuam fora.
+
+## Gap encontrado ao pesquisar o backend (Knowledge Verification Chain, Step 1)
+
+O sistema de escala antigo (`ScheduleSlot`/`Assignment`,
+`apps/api/docs/sprint11.2-fatia4.md`) foi substituído pelo atual
+`CelebrationAssignment` (`schema.prisma:1258-1277`). Uma migration antiga
+(`20260611135344_add_swap_requests_checkin`) chegou a criar
+`volunteer_swap_requests` e um `checked_in_at` em `schedule_assignments` —
+mas **nenhum dos dois existe no schema atual**: foram descartados quando o
+sistema mudou para `CelebrationAssignment`. Hoje:
+
+- **AC1** (listar escala) — já coberto: `GET /volunteers/my-celebration-assignments`
+  (`celebration-volunteer.controller.ts:44`, `celebration-assignment.service.ts:319-375`).
+- **AC2** (confirmar/recusar) — já coberto: `PATCH /assignments/:id/respond`
+  (`celebration-volunteer.controller.ts:27`, `respondToAssignment`,
+  `celebration-assignment.service.ts:276-311`). A spec menciona "trocas,
+  SwapRequest" só como referência de princípio (mesma regra de negócio já
+  aplicada pela API) — não existe endpoint de troca separado, e não é
+  necessário: responder `declined` já é a operação que a API expõe.
+- **AC3** (check-in) — **sem backend**. Não há rota, nem campo no modelo.
+- **AC4** (indisponibilidade) — já coberto:
+  `POST`/`GET /volunteers/unavailability` (`unavailability.controller.ts:30,36`).
+
+**Decisão**: implementar o que falta de AC3 nesta mesma rodada, no
+`apps/api`, em vez de cortar a AC do escopo mobile ou fingir que o app
+resolve sem servidor. É mudança pequena e localizada (uma coluna + uma
+rota), segue exatamente o padrão que `respondToAssignment` já estabelece
+para essa mesma tabela, e sem ela o app teria uma aba "Escala" com 3 dos 4
+comportamentos da própria user story do MVP.
+
+## Novo endpoint: `PATCH /assignments/:id/check-in`
+
+- **Controller**: `CelebrationRespondController` (mesmo controller de
+  `:id/respond` — mesmo recurso, mesmas guards), novo método `checkIn`.
+- **Guard/Roles**: `@Roles(...VOLUNTEER_ROLES)` — idêntico a `respond`.
+- **Regra de negócio** (`checkInAssignment`, novo método em
+  `celebration-assignment.service.ts`, mesmo formato de `respondToAssignment`):
+  1. Busca a assignment por `id` + `tenant_id` (RLS/escopo, mesmo padrão).
+  2. `ForbiddenException` se `assignment.volunteerProfile.person_id !== personId`
+     (mesma checagem "belt-and-suspenders" de `respondToAssignment:295-297`).
+  3. `UnprocessableEntityException` se `assignment.status !== confirmed` —
+     só se pode fazer check-in de um slot que a pessoa já confirmou (não
+     faz sentido check-in de `pending`/`declined`).
+  4. `ConflictException` se `checked_in_at` já estiver setado (idempotência
+     — segundo toque no botão não deve sobrescrever o horário do primeiro).
+  5. `update` com `checked_in_at: new Date()`.
+- **Response**: o `CelebrationAssignment` atualizado (mesmo shape de
+  `respond`).
+- **Sem RLS novo**: `checked_in_at` é coluna em tabela existente
+  (`celebration_assignments`), já coberta pela policy de RLS que a tabela
+  já tem — não é uma tabela nova, não entra em `00N_rls_*.sql`
+  (`AD-001` só se aplica a tabela nova).
+
+### Data Model — alteração
+
+```prisma
+model CelebrationAssignment {
+  // ...campos existentes
+  checked_in_at DateTime? // novo — null até o check-in; setado 1x, imutável depois
+}
+```
+
+Migration Prisma padrão (`prisma migrate dev`), **não** um script RLS
+numerado — só uma coluna nullable em tabela já existente, RLS de linha já
+cobre a coluna.
+
+### DTO
+
+Sem body — `PATCH /assignments/:id/check-in` não recebe payload (o
+`checked_in_at` é sempre "agora", resolvido no servidor; cliente não deve
+poder informar um horário arbitrário).
+
+## Components (mobile)
+
+Não existe tab bar hoje — `app/_layout.tsx` usa um `Stack` único e
+`app/index.tsx` é a rota-raiz placeholder pós-login (ver trecho acima,
+`ThemedShell`). Introduzir uma tab bar por causa de um módulo só (Escala)
+seria arquitetura prematura — essa decisão fica para quando um segundo
+módulo de domínio (MOB-06+) justificar o custo. Esta rodada troca o
+placeholder de `index.tsx` pela tela real e adiciona uma rota-filha no
+mesmo `Stack`.
+
+### Tela "Escala" (rota raiz autenticada)
+
+- **Purpose**: lista os próximos slots do usuário (AC1), permite
+  confirmar/recusar um slot `pending` (AC2) e fazer check-in de um slot
+  `confirmed` no dia do evento (AC3).
+- **Location**: `apps/mobile/src/app/index.tsx` (substitui o placeholder
+  atual — texto do nome do app move para o header, que `ThemedShell` já
+  preenche via `theme.appName`/`theme.logoUrl`)
+- **Dependencies**: `useAuth()` (sessão), `authenticatedRequest` (mesmo
+  helper que `theme-provider.tsx` já usa para chamadas autenticadas com
+  fila de refresh — ver `auth-client.ts`, Fix F1 do `tasks.md` da rodada 1).
+- **Reuses**: `authenticatedRequest<T>()` (já existe, T-F1); padrão de
+  estado local (`useState` + `useEffect`) — mesmo princípio do
+  `apps/web/src/app/(admin)/voluntarios/page.tsx:169-232` (atualização
+  otimista local após responder, sem refetch completo).
+
+### `EscalaClient` (biblioteca interna)
+
+- **Purpose**: wrapper tipado sobre `authenticatedRequest` para as 3 rotas
+  de escala (my-assignments, respond, check-in).
+- **Location**: `apps/mobile/src/lib/escala/escala-client.ts`
+- **Interfaces**:
+  - `getMyAssignments(includePast?: boolean): Promise<Assignment[]>`
+  - `respondToAssignment(id: string, status: 'confirmed' | 'declined'): Promise<Assignment>`
+  - `checkIn(id: string): Promise<Assignment>`
+- **Dependencies**: `authenticatedRequest` (auth-client.ts).
+- **Reuses**: mesmo princípio de separação `*-client.ts` (lógica) vs. tela
+  (UI) que `auth-client.ts`/`theme-provider.tsx` já seguem.
+
+### Tela "Indisponibilidade" (rota-filha)
+
+- **Purpose**: ver/editar datas indisponíveis do mês (AC4).
+- **Location**: `apps/mobile/src/app/indisponibilidade.tsx` (nova rota do
+  `Stack` existente, navegada a partir de um botão/link na tela de Escala)
+- **Dependencies**: `EscalaClient` (extensão com `getUnavailability`/`saveUnavailability`).
+- **Reuses**: mesmo contrato de `apps/web/src/components/volunteers/UnavailabilityPanel.tsx`
+  (`referenceMonth`/`referenceYear`/`dates[]`), incluindo o padrão de
+  cancelamento de request obsoleta (`signal.cancelled`) ao trocar de mês
+  rápido.
+
+## Data Models (mobile)
+
+```typescript
+// apps/mobile/src/lib/escala/types.ts
+interface Assignment {
+  id: string
+  status: 'pending' | 'confirmed' | 'declined' | 'swapped'
+  notified_at: string | null
+  responded_at: string | null
+  checked_in_at: string | null // novo campo do backend
+  celebration: { id: string; name: string }
+  ministry: { id: string; name: string }
+  scheduled_date: string
+  setlist: { songs: SetlistSong[] } | null
+}
+
+interface SetlistSong {
+  id: string
+  sequence: number
+  title: string
+  key: string | null
+  bpm: number | null
+  link: string | null
+}
+
+interface Unavailability {
+  dates: { date: string }[]
+}
+```
+
+**Relationships**: espelha 1:1 o shape que `getMyAssignments`
+(`celebration-assignment.service.ts:353-370`) já devolve, mais o campo
+`checked_in_at` novo. Sem estado próprio no cliente além de cache de tela
+(sem persistência local — spec não pede offline, Out of Scope da spec
+original já corta isso).
+
+## Error Handling Strategy
+
+| Error Scenario | Handling | User Impact |
+| --- | --- | --- |
+| `respond`/`check-in` em assignment que não é do usuário | `403` do backend (já existe/novo, mesma checagem) | Erro genérico — não deveria acontecer via UI normal (a lista só mostra assignments do próprio usuário), tratado como erro inesperado |
+| Check-in de slot ainda `pending`/`declined` | `422` do backend | Botão de check-in só aparece/habilita para status `confirmed` na UI — o erro do backend é a segunda linha de defesa, não a primeira |
+| Check-in duplicado (`checked_in_at` já setado) | `409` do backend | UI já esconde o botão após o primeiro check-in bem-sucedido (estado local atualizado); erro tratado como no-op silencioso se a race acontecer |
+| `respond`/`check-in`/`unavailability` sem rede | `NetworkError` do `ApiClient` (já existe) | Mesmo tratamento genérico de erro de rede que o resto do app (Edge Cases da spec) |
+
+## Risks & Concerns
+
+| Concern | Location (file:line) | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Novo endpoint de check-in não tem proteção contra check-in "no dia errado" (ex.: fazer check-in de um evento daqui a 3 semanas) | `celebration-assignment.service.ts` (a criar `checkInAssignment`) | Dado incorreto de presença se alguém chamar a rota fora do fluxo normal da UI | Fora de escopo agora — a spec não pede validação de janela de tempo para check-in (só "enviar o check-in e mostrar confirmação visual imediata", AC3). Registrar aqui para não ser esquecido se um requisito de janela aparecer depois; não é AD-NNN (não é decisão de arquitetura, é lacuna de regra de negócio reconhecida). |
+| `EscalaClient`/tela nova é o primeiro consumidor real de `authenticatedRequest` fora do `ThemeProvider` — valida que o helper genérico realmente serve para múltiplos domínios, não só o caso original | `apps/mobile/src/lib/auth/auth-client.ts` (`authenticatedRequest`) | Baixo — é reuso direto, não há sinal de acoplamento ao domínio de tema no helper atual | Nenhuma ação necessária; mencionado para registro, não é um risco que bloqueia. |
+
+## Tech Decisions (only non-obvious ones)
+
+| Decision | Choice | Rationale |
+| --- | --- | --- |
+| Onde implementar check-in | Novo endpoint em `apps/api` (`celebration_assignments.checked_in_at`), não um campo local no mobile | AC3 pede "enviar o check-in" — implica persistência no servidor (outros dispositivos/telas precisam ver o mesmo estado); sem isso a feature não é real, só um toggle visual local. |
+| Reaproveitar `volunteer_swap_requests`/`schedule_assignments` da migration descartada | Não — construir em cima de `CelebrationAssignment`, o modelo atual | O sistema de escala mudou de arquitetura depois daquela migration (schedule_assignments não existe mais); ressuscitar uma tabela órfã do sistema antigo introduziria dois modelos de escala paralelos. `CelebrationAssignment` é a única fonte de verdade viva hoje. |
+| Endpoint de check-in aceita corpo vazio | Sem DTO de request | Timestamp de check-in é sempre "agora, no servidor" — aceitar um horário do cliente abriria brecha para presença retroativa/adiantada forjada. |
+
+---
+
+# Rodada 3 — MOB-06 (Conteúdos — feed)
+
+**Spec**: `.specs/features/app-mobile/spec.md`, story "P1: Conteúdos e
+Notificações", AC2 (listar posts publicados). AC1/3/4 (registro OneSignal,
+push ponta a ponta, deep link) são MOB-07 — fora desta rodada.
+**Status**: Draft
+
+## Pesquisa no backend (Knowledge Verification Chain, Step 1)
+
+- `GET /content/posts` (`apps/api/src/content/posts.controller.ts:51-55`,
+  `ALL_ROLES` inclui `member` — qualquer autenticado da congregação pode
+  chamar, não é rota admin-only mesmo sendo a mesma rota que
+  `apps/web`(admin)/conteudo usa para gestão).
+- Query: `type?`, `is_draft?` (ignorado para `member` puro — service
+  bloqueia), `since?`, `page` (default 1), `limit` (default 20, máx 100) —
+  `apps/api/src/content/dto/list-posts-query.dto.ts`.
+- Resposta: `{ data: ContentPost[], total: number }` — paginação
+  offset/page, **sem** cursor nem `has_more` (`posts.service.ts:66-96`,
+  `findAll`). Cliente calcula `page * limit < total` para saber se há
+  mais.
+- Campos do post (`schema.prisma:895-920`): `id, type, title, body,
+  media_url, is_draft, publish_at, published_at, expires_at,
+  created_by_user_id, created_at, updated_at`.
+- **Achado importante — segmentação de audiência não filtra a listagem**:
+  `AudienceSegment`/`PostSegment` só regem *push targeting* (OneSignal
+  tags, `notifications.service.ts:34-50,156-219`) — a query de listagem
+  (`findAll`) não cruza segmento nenhum, só `published_at IS NOT NULL`
+  para `member` puro. Ou seja, hoje todo `member` autenticado vê todos os
+  posts publicados da própria congregação, independente de segmento.
+  **Confirmado com o usuário**: manter esse comportamento (replicar
+  exatamente o que `apps/web` já faz contra a mesma rota) — "segmento de
+  audiência" continua sendo só um conceito de notificação (MOB-07), não
+  de feed. Implementar filtro de segmento no feed seria mudança de
+  produto que afeta os dois fronts (web + mobile) na mesma rota, fora do
+  escopo desta spec.
+- Reuso confirmado com `apps/web`: `apps/web/src/app/(admin)/conteudo/page.tsx:153-171`
+  (`loadPosts`) chama a mesma rota com `useEffect`/promise chain — mobile
+  replica o mesmo contrato (`{data, total}`), não um contrato próprio.
+
+## Decisão de navegação: tab bar
+
+A Rodada 2 (Risks & Concerns) já registrou que introduzir tab bar era
+prematuro com um módulo de domínio só, e que a decisão ficaria "para
+quando um segundo módulo de domínio (MOB-06+) justificar o custo". MOB-06
+é esse segundo módulo — dois módulos reais (Escala, Conteúdo) sem tabs
+forçaria navegação só por link textual, que já não escala visualmente
+bem com dois itens e piora a cada módulo seguinte (MOB-08/09 vêm depois).
+
+**Decisão**: introduzir `app/(tabs)/` (Expo Router, grupo de rota) com
+`Tabs` nesta rodada. `app/index.tsx` (tela Escala, hoje rota-raiz) move
+para `app/(tabs)/index.tsx`; `app/(tabs)/conteudo.tsx` é a nova aba.
+`login.tsx` e `indisponibilidade.tsx` continuam como rotas de `Stack` no
+nível raiz (fora do grupo `(tabs)`) — login por ser pré-auth, e
+indisponibilidade por ser uma tela de detalhe empurrada a partir da aba
+Escala (`router.push`), não uma seção própria de navegação.
+
+```mermaid
+graph TD
+    Root[app/_layout.tsx — Stack] --> Login[login.tsx]
+    Root --> TabsGroup["(tabs)/_layout.tsx — Tabs"]
+    Root --> Indisp[indisponibilidade.tsx]
+    TabsGroup --> Escala["(tabs)/index.tsx — Escala"]
+    TabsGroup --> Conteudo["(tabs)/conteudo.tsx — Feed"]
+    Escala -->|router.push| Indisp
+```
+
+`_layout.test.tsx` (root) não é afetado — mocka `expo-router` inteiro e
+não renderiza rotas-filhas reais (`Stack` mockado só verifica
+`screenOptions`), então a reorganização de arquivos de rota não quebra
+esse teste. O teste de `index.tsx` (Escala) move junto para
+`app/(tabs)/index.test.tsx`, ajustando só os imports relativos (`../../lib/...`
+em vez de `../lib/...`).
+
+## Code Reuse Analysis
+
+| Contrato de origem | Localização | Como o mobile reusa |
+| --- | --- | --- |
+| `{data, total}` de `GET /content/posts` | `apps/api/src/content/posts.service.ts:66-96` | `ContentClient.getPosts` define `Post`/`PostsPage` local espelhando o shape — mesmo princípio de contrato-não-import das rodadas anteriores. |
+| `authenticatedRequest` | `apps/mobile/src/lib/auth/auth-client.ts` | `ContentClient` chama do mesmo jeito que `EscalaClient` (Rodada 2) e `ThemeProvider` (Rodada 1) — nenhum novo mecanismo de auth. |
+| Padrão `*-client.ts` (lógica) vs. tela (UI) | `escala-client.ts`/`theme-provider.tsx` | `ContentClient` segue a mesma separação. |
+| Erro de rede vs. lista vazia | `index.tsx` (`escala-error`, Rodada 2/Fix 1) | Tela de Conteúdo replica o mesmo padrão: erro visível distinto de "sem posts". |
+
+## Components
+
+### `ContentClient`
+
+- **Purpose**: wrapper tipado sobre `authenticatedRequest` para
+  `GET /content/posts`.
+- **Location**: `apps/mobile/src/lib/content/content-client.ts`
+- **Interfaces**: `getPosts(page?: number, limit?: number): Promise<PostsPage>`
+- **Dependencies**: `authenticatedRequest`.
+- **Reuses**: mesmo padrão de `escala-client.ts`.
+
+### Tela "Conteúdo" (nova aba)
+
+- **Purpose**: lista os posts publicados da congregação (AC2), com
+  paginação simples ("carregar mais" — sem cursor, a API é offset/page).
+- **Location**: `apps/mobile/src/app/(tabs)/conteudo.tsx`
+- **Dependencies**: `ContentClient`.
+- **Reuses**: mesmo padrão de carregamento/erro de `(tabs)/index.tsx`
+  (ex-`index.tsx`, Escala) — `useEffect` no mount, estado de erro visível
+  distinto de lista vazia.
+
+### `(tabs)/_layout.tsx`
+
+- **Purpose**: `Tabs` do Expo Router com 2 abas (Escala, Conteúdo).
+- **Location**: `apps/mobile/src/app/(tabs)/_layout.tsx`
+- **Dependencies**: nenhuma chamada de rede — só layout.
+- **Reuses**: nenhum precedente no monorepo (primeiro uso de `Tabs` do
+  Expo Router) — mesma biblioteca já usada para `Stack` (Rodada 1).
+
+## Data Models
+
+```typescript
+// apps/mobile/src/lib/content/types.ts
+interface Post {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  media_url: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+interface PostsPage {
+  data: Post[];
+  total: number;
+}
+```
+
+**Relationships**: `is_draft`/`expires_at`/`created_by_user_id` do
+backend não entram no tipo mobile — a tela é read-only e não precisa
+deles (mesmo princípio de reuso mínimo das rodadas anteriores: só os
+campos que a UI de fato usa).
+
+## Error Handling Strategy
+
+| Error Scenario | Handling | User Impact |
+| --- | --- | --- |
+| `GET /content/posts` falha (rede/5xx) | Estado de erro visível, distinto de lista vazia | Mesmo padrão de `escala-error` — "Não foi possível carregar" |
+| Lista vazia (`total: 0`, sem erro) | Estado vazio explícito ("Nenhum post publicado ainda") | Não confundir com erro — outcome legítimo |
+| "Carregar mais" falha | Mantém os posts já carregados, mostra erro pontual sem limpar a lista | Mesmo princípio do Fix 1 (Rodada 2): erro de ação nunca é rejection silenciosa |
+
+## Risks & Concerns
+
+| Concern | Location | Impact | Mitigation |
+| --- | --- | --- | --- |
+| `findAll`'s `isMember` check (`posts.service.ts:73`) exige `roles.length === 1 && roles[0] === 'member'` — um usuário com `member` + outro papel não tem o filtro `published_at IS NOT NULL` aplicado, potencialmente vendo rascunhos | `apps/api/src/content/posts.service.ts:73` | Fora do escopo desta feature alterar — é comportamento do backend que antecede esta rodada, não introduzido por ela. Registrado aqui para quem mexer nesse service depois. | Nenhuma ação nesta rodada — mobile só consome a rota como está. |
+| Introduzir `(tabs)/` move `index.tsx`→`(tabs)/index.tsx`, alterando o caminho de rota-raiz | `apps/mobile/src/app/index.tsx` | Qualquer referência hardcoded a `/` como rota inicial (ex.: `login.tsx` faz `router.replace("/")`) precisa continuar funcionando — Expo Router resolve `(tabs)/index.tsx` como a rota `/` normalmente (grupo entre parênteses não entra na URL), então `router.replace("/")` continua correto sem mudança. | Confirmar com um teste de fumaça que `/` ainda resolve para a aba Escala após a task de navegação. |
+
+## Tech Decisions
+
+| Decision | Choice | Rationale |
+| --- | --- | --- |
+| Paginação no mobile | "Carregar mais" (concatena página seguinte), não infinite scroll automático | API é offset/page sem cursor; concatenar por botão é mais simples de testar e evita re-fetch acidental por scroll em teste automatizado. Pode evoluir para `onEndReached` depois, sem mudar o contrato do `ContentClient`. |
+| Tab bar via Expo Router `Tabs` | Nativo do próprio Expo Router, não uma lib de navegação separada | Mesmo framework já em uso para `Stack`; Expo Router resolve `Tabs` dentro de um grupo de rota nativamente, sem dependência nova. |
+| Segmentação de audiência no feed | Não implementada — mobile replica o filtro atual (congregação inteira, publicado) | Confirmado com o usuário: mudar isso é decisão de produto que afeta a mesma rota usada pelo `apps/web`, fora do escopo de MOB-06. |

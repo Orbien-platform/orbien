@@ -33,6 +33,12 @@ export class CelebrationRespondController {
   ) {
     return this.assignmentService.respondToAssignment(id, user.sub, user.tenant_id, dto);
   }
+
+  @Patch(':id/check-in')
+  @Roles(...VOLUNTEER_ROLES)
+  checkIn(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.assignmentService.checkInAssignment(id, user.sub, user.tenant_id);
+  }
 }
 
 @Controller('volunteers')
