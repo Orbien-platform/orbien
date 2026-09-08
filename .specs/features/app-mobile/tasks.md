@@ -430,6 +430,8 @@ Ainda **sem** a fila de refresh (T11).
 
 ### T11: Fila de refresh serializada (MOB-02)
 
+**Status**: ✅ Done (commit `8194ee2`)
+
 **What**: Adicionar a `AuthClient` (ou módulo companion
 `refresh-queue.ts`) a máquina de estados `isRefreshing`/`failedQueue`
 (espelhando `apps/web/src/lib/api.ts:34-64`, adaptada para
