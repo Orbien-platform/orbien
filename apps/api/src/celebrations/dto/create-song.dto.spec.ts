@@ -27,6 +27,20 @@ describe('CreateSongDto', () => {
     expect(errors.some((e) => e.property === 'title')).toBe(true);
   });
 
+  it('rejeita title vazio', async () => {
+    const errors = await errorsFor({ title: '' });
+    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  });
+
+  it('rejeita title só com espaço', async () => {
+    const errors = await errorsFor({ title: '   ' });
+    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  });
+
+  it('aceita title válido', async () => {
+    expect(await errorsFor({ title: 'Grande é o Senhor' })).toHaveLength(0);
+  });
+
   it('aceita key como string', async () => {
     expect(await errorsFor({ key: 'G' })).toHaveLength(0);
   });
