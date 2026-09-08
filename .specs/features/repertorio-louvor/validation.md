@@ -203,3 +203,67 @@ None of the field names or routes the two components call match the real API sur
 4. (Documentation-only) T1-T9 checkboxes in `tasks.md` remain unticked despite being done and commit-verified; T10-T14 are ticked. Cosmetic — recommend ticking T1-T9 to keep the file consistent with the "Status" line at the top.
 
 **Next steps**: Route issues 1-3 as fix tasks to an implementer (issue 4 is a doc-only touch-up, not a fix cycle). Achados 1 and 2 (pre-existing, out-of-scope) are informational only per this session's instructions — do not fix without an explicit go-ahead, per CLAUDE.md's review-finding-becomes-a-question rule; Achado 2 in particular blocks the "Ordem de Celebração" item-management UI end-to-end and is worth a dedicated ticket regardless of this feature's disposition.
+
+---
+
+## Segunda rodada — fix→re-verify (2026-09-08)
+
+**Diff desta rodada**: três commits atômicos sobre a HEAD da primeira rodada, `dae4a56..2d42484` — `b672a0a`, `4c7d14e`, `2d42484`. Branch `claude/product-roadmap-web-api-admin-q41fy3`, working tree limpa, `nothing to commit`.
+
+### Gap 1 — título vazio/só espaço em `CreateSongDto`
+
+**Fechado.** `apps/api/src/celebrations/dto/create-song.dto.ts:1-8` agora tem `@Transform` (trim) + `@IsString()` + `@IsNotEmpty()` no campo `title`. Testes em `apps/api/src/celebrations/dto/create-song.dto.spec.ts`:
+- `:30-33` — `errorsFor({ title: '' })` → `expect(errors.some(e => e.property === 'title')).toBe(true)`
+- `:35-38` — `errorsFor({ title: '   ' })` → mesma asserção (o `@Transform` faz o trim virar string vazia antes do `@IsNotEmpty()`, então espaço-só também é rejeitado)
+- `:40-42` — título válido continua aceito (não-regressão)
+
+Confirmado com `npm run test:cov -w orbien-backend` (100% branches, os testes do DTO passam).
+
+**Escopo confirmado limpo**: `git diff dae4a56 2d42484 -- apps/api/src/celebrations/dto/create-setlist-song.dto.ts apps/api/src/celebrations/dto/create-setlist-song.dto.spec.ts` retorna vazio — `CreateSetlistSongDto` não foi tocado, como esperado (era explicitamente fora de escopo do gap). `git show --stat b672a0a` toca só `create-song.dto.ts` e seu `.spec.ts`.
+
+### Gap 2 — `tenant_admin` ausente de `canAddSongs`
+
+**Fechado.** `apps/web/src/app/(admin)/celebracoes/page.tsx:65-67`:
+```
+const canAddSongs = roles.some((r) =>
+  ["admin_congregation", "pastor", "tenant_admin", "ministry_leader"].includes(r)
+);
+```
+Agora alinhado (mesmo conjunto de papéis) com `EDIT_ROLES` em `apps/api/src/celebrations/songs.controller.ts:12` — `['admin_congregation', 'pastor', 'tenant_admin', 'ministry_leader']`.
+
+Teste novo em `apps/web/src/app/(admin)/celebracoes/page.test.tsx:270-279` — "dá permissão de edição do repertório para tenant_admin", `setup(["tenant_admin"])` seguido de asserção de que os controles de edição aparecem (mesmo padrão do teste irmão de `:260-269` para `pastor`).
+
+### Gap 3 — mutante sobrevivente do guard `!item.ministry_id` em `attachSetlists`
+
+**Fechado, verificado de forma independente nesta rodada** (não apenas aceito o relato do implementador de que ele "comentou e restaurou").
+
+1. Confirmei primeiro que o service em si não foi tocado pelos 3 commits de fix: `git diff dae4a56 2d42484 -- apps/api/src/celebrations/celebration-assignment.service.ts` retorna **vazio** — ou seja, o implementador de fato restaurou o arquivo ao original, sem deixar a mutação no lugar por engano. Só `celebration-assignment.service.spec.ts` mudou (+57 linhas), no commit `2d42484`.
+2. Repeti o sensor de mutação eu mesmo, em worktree descartável (`git worktree add`, nunca stash, em `/tmp/.../scratchpad/wt-verify`): removi manualmente o `!item.ministry_id ||` da checagem em `celebration-assignment.service.ts` (linha ~408), deixando só `if (!item.setlist) continue;`.
+3. Rodei `npm run test -w orbien-backend -- celebration-assignment.service.spec.ts` na worktree → **FALHOU**, exatamente no teste novo:
+   ```
+   ● CelebrationAssignmentService › getMyAssignments › attachSetlists exclui especificamente o item sem ministry_id...
+   expect(received).toBe(expected) // Object.is equality
+   Expected: false
+   Received: true
+     817 |  expect(setlistByKey.has('inst1:null')).toBe(false);
+   ```
+   Os outros 36 testes do arquivo continuaram passando — só o teste alvo detectou a mutação, como esperado (mutação proporcional/pontual, sensor discriminante).
+4. Removi a worktree (`git worktree remove --force`) e confirmei `git status` limpo na árvore real.
+
+O novo teste (`celebration-assignment.service.spec.ts:768-823`) chama `attachSetlists` diretamente (via cast + `bind`, contornando `private`) em vez de só via `getMyAssignments`, o que resolve o problema estrutural identificado na rodada 1 (a chave `inst1:null` de um item sem ministério nunca colide com a chave de um assignment real). Mutante morto, comprovado de forma independente pelo Verifier.
+
+### Gate completo desta rodada
+
+- `npm run build:api` — ✅ pass (cache hit)
+- `npm run build:web` — ❌ falha, **mesma assinatura exata** da rodada 1: `Error occurred prerendering page "/_global-error"` → `TypeError: Cannot read properties of null (reading 'useContext')`, mesmo digest de erro (`116620949`). Ambiental/pré-existente, não relacionado à feature — já investigado e isolado à `main` antes da feature na rodada 1 (reproduzido no commit `9478996`); nesta rodada só confirmei que a assinatura permanece idêntica.
+- `npx turbo run lint` — ✅ pass, 4/4 pacotes (orbien-admin, orbien-backend, orbien-web, orbien-site)
+- `npm run test:cov -w orbien-backend` — ✅ pass, **2019/2019 testes**, 221 suites, **100% statements/branches/functions/lines** (5248/5248, 1750/1750, 887/887, 4661/4661)
+- `npm run test -w orbien-web` — ✅ pass, **914/914 testes**, 87 suites
+
+**Contagem de testes**: API 2015 → **2019** (+4 líquidos — o commit `b672a0a` soma 3 testes novos ao `create-song.dto.spec.ts` e o commit `2d42484` soma 1 teste novo direto ao `celebration-assignment.service.spec.ts`, mas o total final confirmado pela execução real é 2019, batendo exatamente com o esperado no prompt desta rodada). Web 913 → **914** (+1, o teste de `tenant_admin` em `page.test.tsx`). Nenhuma queda de teste, nenhuma asserção enfraquecida — todas as novas são mais estritas que antes.
+
+### Veredito final
+
+**✅ PASS.** Os 3 gaps da rodada 1 foram corrigidos de forma real e verificável — não apenas declarada pelo implementador. Cada um foi reproduzido/confirmado de forma independente nesta rodada, incluindo repetir o sensor de mutação do zero em worktree isolada (gap 3) e conferir escopo de arquivo tocado via `git diff`/`git show --stat` (gaps 1 e 3). Nenhuma regressão introduzida: gate 100% verde exceto o `build:web` pré-existente e ambiental (mesma assinatura da rodada 1). Achados fora de escopo (Achado 1 e 2, ambos pré-existentes, já registrados na rodada 1) permanecem não corrigidos por decisão consciente — sem mudança nesta rodada.
+
+Nenhuma lição nova a registrar — os 3 gaps fecharam limpo, sem sinal adicional além do que a rodada 1 já capturou.

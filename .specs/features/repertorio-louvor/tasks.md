@@ -14,7 +14,7 @@ without it.**
 ---
 
 **Design**: `.specs/features/repertorio-louvor/design.md`
-**Status**: T1-T14 concluídas e commitadas (`23965f2`..`0909a0e`). Aguardando validação do Verifier (feature-level, step 10 do Execute).
+**Status**: Done. T1-T14 concluídas e commitadas (`23965f2`..`0909a0e`); 3 gaps do Verifier corrigidos (`b672a0a`, `4c7d14e`, `2d42484`); re-verify PASS. Ver `validation.md`.
 
 ---
 
