@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "extends": "generic",
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "extends": "generic",
+      "distribution": "internal"
+    },
+    "production": {
+      "extends": "generic",
+      "autoIncrement": true
+    },
+    "generic": {
+      "env": {
+        "ORBIEN_APP_NAME": "Orbien",
+        "ORBIEN_APP_SLUG": "orbien",
+        "ORBIEN_APP_SCHEME": "orbien",
+        "ORBIEN_BUNDLE_ID": "com.orbien.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
