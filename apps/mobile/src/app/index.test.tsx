@@ -18,6 +18,7 @@ jest.mock("../lib/escala/escala-client", () => ({
   checkIn: (...args: unknown[]) => mockCheckIn(...args),
 }));
 
+import { HttpError } from "../lib/api/errors";
 import EscalaScreen from "./index";
 
 const PENDING_ASSIGNMENT = {
@@ -114,6 +115,63 @@ describe("EscalaScreen", () => {
       expect(mockCheckIn).toHaveBeenCalledWith("a2");
     });
     expect(screen.queryByTestId("check-in-a2")).toBeNull();
+  });
+
+  it("erro ao confirmar/recusar mostra mensagem de erro visível, sem crash silencioso (Fix 1)", async () => {
+    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
+    mockRespondToAssignment.mockRejectedValue(new Error("falha de rede"));
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("confirm-a1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("confirm-a1"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("escala-action-error")).toBeTruthy();
+    });
+    // slot continua pending — nenhuma atualização otimista foi aplicada.
+    expect(screen.getByTestId("confirm-a1")).toBeTruthy();
+  });
+
+  it("erro ao fazer check-in mostra mensagem de erro visível (Fix 1)", async () => {
+    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
+    mockCheckIn.mockRejectedValue(new Error("falha de rede"));
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("check-in-a2"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("check-in-a2"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("escala-action-error")).toBeTruthy();
+    });
+  });
+
+  it("check-in duplicado (409) é no-op silencioso, sem mensagem de erro (design.md)", async () => {
+    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
+    mockCheckIn.mockRejectedValue(new HttpError(409, { message: "já feito" }));
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("check-in-a2"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("check-in-a2"));
+    });
+
+    await waitFor(() => {
+      expect(mockCheckIn).toHaveBeenCalledWith("a2");
+    });
+    expect(screen.queryByTestId("escala-action-error")).toBeNull();
   });
 
   it("erro de rede ao carregar mostra estado de erro explícito, não lista vazia", async () => {

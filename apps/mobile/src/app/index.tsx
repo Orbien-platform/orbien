@@ -9,15 +9,18 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Button, FlatList, Text, View } from "react-native";
 
+import { HttpError } from "../lib/api/errors";
 import { checkIn, getMyAssignments, respondToAssignment } from "../lib/escala/escala-client";
 import type { Assignment } from "../lib/escala/types";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar sua escala. Verifique sua conexão.";
+const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
 
 export default function EscalaScreen() {
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,13 +47,26 @@ export default function EscalaScreen() {
   }
 
   async function handleRespond(id: string, status: "confirmed" | "declined") {
-    const updated = await respondToAssignment(id, status);
-    updateAssignment(id, updated);
+    setActionError(null);
+    try {
+      const updated = await respondToAssignment(id, status);
+      updateAssignment(id, updated);
+    } catch {
+      setActionError(ACTION_ERROR_MESSAGE);
+    }
   }
 
   async function handleCheckIn(id: string) {
-    const updated = await checkIn(id);
-    updateAssignment(id, updated);
+    setActionError(null);
+    try {
+      const updated = await checkIn(id);
+      updateAssignment(id, updated);
+    } catch (err) {
+      // Check-in duplicado (race de duplo toque): design.md trata como
+      // no-op silencioso — o botão já some após o primeiro sucesso.
+      if (err instanceof HttpError && err.status === 409) return;
+      setActionError(ACTION_ERROR_MESSAGE);
+    }
   }
 
   if (error) {
@@ -68,6 +84,7 @@ export default function EscalaScreen() {
         title="Minha indisponibilidade"
         onPress={() => router.push("/indisponibilidade")}
       />
+      {actionError ? <Text testID="escala-action-error">{actionError}</Text> : null}
       <FlatList
         testID="escala-list"
         data={assignments ?? []}

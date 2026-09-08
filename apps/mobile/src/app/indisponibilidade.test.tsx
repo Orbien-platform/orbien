@@ -92,4 +92,35 @@ describe("IndisponibilidadeScreen", () => {
     expect(screen.getByTestId("current-month").props.children).toBe("10/2026");
     expect(screen.getByText("5 ✓")).toBeTruthy();
   });
+
+  it("erro de rede ao carregar mostra mensagem de erro visível (Fix 1)", async () => {
+    mockGetUnavailability.mockRejectedValue(new Error("falha de rede"));
+
+    await act(async () => {
+      render(<IndisponibilidadeScreen />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("load-error")).toBeTruthy();
+    });
+  });
+
+  it("erro ao salvar mostra mensagem de erro visível, sem crash silencioso (Fix 1)", async () => {
+    mockGetUnavailability.mockResolvedValue({ dates: [] });
+    mockSaveUnavailability.mockRejectedValue(new Error("falha de rede"));
+
+    await act(async () => {
+      render(<IndisponibilidadeScreen />);
+    });
+    await waitFor(() => screen.getByTestId("save-button"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("save-button"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("save-error")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("saved-message")).toBeNull();
+  });
 });

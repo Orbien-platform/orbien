@@ -15,6 +15,9 @@ function dayKey(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+const LOAD_ERROR_MESSAGE = "Não foi possível carregar sua indisponibilidade. Verifique sua conexão.";
+const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";
+
 export default function IndisponibilidadeScreen() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -22,6 +25,8 @@ export default function IndisponibilidadeScreen() {
   const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     // Cancelamento evita que a resposta de um mês antigo (fora de ordem)
@@ -32,10 +37,16 @@ export default function IndisponibilidadeScreen() {
         if (signal.cancelled) return;
         setSelectedDays(new Set((result?.dates ?? []).map((d) => d.date.slice(0, 10))));
         setSaved(false);
+        setLoadError(null);
       })
       .catch(() => {
         if (signal.cancelled) return;
         setSelectedDays(new Set());
+        // Erro visível — distingue "falha ao carregar" de "sem
+        // indisponibilidade cadastrada" (tela vazia interpretável como
+        // sem dado, mesmo princípio do Edge Case da spec para 403/lista
+        // vazia).
+        setLoadError(LOAD_ERROR_MESSAGE);
       });
     return () => {
       signal.cancelled = true;
@@ -73,8 +84,13 @@ export default function IndisponibilidadeScreen() {
 
   async function handleSave() {
     setSaved(false);
-    await saveUnavailability(month, year, Array.from(selectedDays).sort(), notes.trim() || undefined);
-    setSaved(true);
+    setSaveError(null);
+    try {
+      await saveUnavailability(month, year, Array.from(selectedDays).sort(), notes.trim() || undefined);
+      setSaved(true);
+    } catch {
+      setSaveError(SAVE_ERROR_MESSAGE);
+    }
   }
 
   const total = daysInMonth(year, month);
@@ -109,6 +125,8 @@ export default function IndisponibilidadeScreen() {
           setSaved(false);
         }}
       />
+      {loadError ? <Text testID="load-error">{loadError}</Text> : null}
+      {saveError ? <Text testID="save-error">{saveError}</Text> : null}
       {saved ? <Text testID="saved-message">Indisponibilidades salvas.</Text> : null}
       <Button testID="save-button" title="Salvar" onPress={handleSave} />
     </View>
