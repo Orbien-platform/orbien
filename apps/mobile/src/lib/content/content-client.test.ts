@@ -6,7 +6,7 @@ jest.mock("../auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
-import { getPosts } from "./content-client";
+import { getPost, getPosts } from "./content-client";
 
 describe("ContentClient", () => {
   beforeEach(() => {
@@ -37,6 +37,18 @@ describe("ContentClient", () => {
       const result = await getPosts(1, 20);
 
       expect(result).toEqual(page);
+    });
+  });
+
+  describe("getPost", () => {
+    it("chama GET /content/posts/:id com o id informado", async () => {
+      const post = { id: "abc", title: "Título" };
+      mockAuthenticatedRequest.mockResolvedValue(post);
+
+      const result = await getPost("abc");
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts/abc");
+      expect(result).toEqual(post);
     });
   });
 });
