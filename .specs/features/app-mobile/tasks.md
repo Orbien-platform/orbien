@@ -475,6 +475,8 @@ efetiva ao `AuthClient" é testada em T11 via mock do `ApiClient`).
 
 ### T12: `AuthProvider` (contexto React + hidratação)
 
+**Status**: ✅ Done (commit `05981ab`)
+
 **What**: Context/hook `useAuth()` que hidrata sessão do SecureStore no
 boot, expõe `session`, `login`, `logout`, e um estado
 `status: 'loading' | 'authenticated' | 'unauthenticated'`.
