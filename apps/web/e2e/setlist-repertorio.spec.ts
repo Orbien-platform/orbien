@@ -13,21 +13,21 @@
  *
  * Uso: E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
  *
- * **Não executado no ambiente onde foi escrito** (2026-09-08). Três motivos,
- * todos de ambiente e nenhum do teste:
- *   1. o Chromium pré-instalado em `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`
- *      é a revisão `chromium_headless_shell-1194`, e o `@playwright/test`
- *      1.62.1 do repositório procura a `-1234` — `browserType.launch` falha
- *      antes de qualquer fixture;
- *   2. `E2E_EMAIL`/`E2E_PASSWORD`/`E2E_TENANT` não estão definidos, e a
- *      fixture `api` exige as três para o login;
- *   3. não há app em `E2E_BASE_URL` (nem API em `E2E_API_URL`) — o runner não
- *      sobe servidor, por decisão do `playwright.config.ts`.
- * O que foi verificado aqui: `tsc --noEmit` do `apps/web` (que inclui `e2e/`)
- * passa, então tipos, fixtures e helpers usados existem e casam.
+ * Escrito sem poder rodar no ambiente de desenvolvimento (Chromium de revisão
+ * incompatível com o `@playwright/test` 1.62.1, sem `E2E_*` e sem app no ar),
+ * e **executado pela primeira vez no CI** em 2026-09-08 (run 34278380190).
+ * Essa primeira execução real derrubou o terceiro teste e revelou um defeito
+ * de escopo dos locators, corrigido em seguida: a sidebar do admin tem um item
+ * de menu com o texto exato "Repertório", igual ao selo da música vinda do
+ * catálogo. `page.getByText("Repertório")` casava com o menu — o que fazia o
+ * `toHaveCount(0)` falhar e, mais grave, fazia os `.first()` dos outros dois
+ * testes passarem sem nunca olhar o selo. Por isso `openServiceOrder` devolve
+ * o diálogo e toda asserção sobre o selo é escopada nele. Lição: em e2e com
+ * chrome de aplicação em volta, texto curto de selo precisa de escopo, e
+ * `.first()` sobre texto ambíguo é asserção que passa por acidente.
  */
 
-import { expect, selectTab, shot, test, type Api, type Page } from "./fixtures";
+import { expect, selectTab, shot, test, type Api, type Locator, type Page } from "./fixtures";
 
 interface Identified {
   id: string;
@@ -71,7 +71,17 @@ async function setupWorship(api: Api): Promise<{ instanceId: string; setlistId: 
 }
 
 /** Abre a Ordem de Celebração da instância pela aba "Próximas". */
-async function openServiceOrder(page: Page, date: Date): Promise<void> {
+/**
+ * Abre a Ordem de Culto e devolve o **diálogo**, não a página.
+ *
+ * Escopo obrigatório: a sidebar do admin tem um item de menu com o texto exato
+ * "Repertório" (`components/layout/sidebar.tsx`), o mesmo texto do selo que
+ * marca a música vinda do catálogo. Um `page.getByText("Repertório")` casa com
+ * o menu e não com o selo — o que faz `toHaveCount(0)` falhar e, pior, faz
+ * `.first()` passar sem nunca ter olhado o selo. Toda asserção sobre o selo
+ * sai deste locator.
+ */
+async function openServiceOrder(page: Page, date: Date): Promise<Locator> {
   await page.goto("/celebracoes", { waitUntil: "domcontentloaded" });
   await selectTab(page, "Próximas");
   const row = page
@@ -81,6 +91,7 @@ async function openServiceOrder(page: Page, date: Date): Promise<void> {
   await expect(row, "instância criada via API não apareceu na aba Próximas").toBeVisible();
   await row.click();
   await expect(page.getByText("Momento de louvor")).toBeVisible();
+  return page.getByRole("dialog");
 }
 
 /** Remove a música do catálogo pelo título (o id do cadastro pela UI é desconhecido). */
@@ -104,7 +115,7 @@ test.describe("setlist × repertório", () => {
       const worship = await setupWorship(api);
       instanceId = worship.instanceId;
 
-      await openServiceOrder(page, worship.date);
+      const oc = await openServiceOrder(page, worship.date);
       await page.getByRole("button", { name: "Adicionar música" }).click();
 
       await page.getByPlaceholder("Buscar no repertório…").fill("E2E busca");
@@ -121,9 +132,9 @@ test.describe("setlist × repertório", () => {
 
       await expect(page.getByText(songTitle, { exact: true })).toBeVisible();
       await expect(
-        page.getByText("Repertório", { exact: true }).first(),
+        oc.getByText("Repertório", { exact: true }),
         "a música adicionada do catálogo não ficou marcada como vinda do repertório"
-      ).toBeVisible();
+      ).toHaveCount(1);
       await shot(page, "24-setlist-com-vinculo");
     } finally {
       if (instanceId) await api.tryCall("DELETE", `/celebrations/instances/${instanceId}`);
@@ -139,7 +150,7 @@ test.describe("setlist × repertório", () => {
       const worship = await setupWorship(api);
       instanceId = worship.instanceId;
 
-      await openServiceOrder(page, worship.date);
+      const oc = await openServiceOrder(page, worship.date);
       await page.getByRole("button", { name: "Adicionar música" }).click();
       await page.getByRole("button", { name: "Cadastrar música no repertório" }).click();
 
@@ -156,7 +167,7 @@ test.describe("setlist × repertório", () => {
       await page.getByRole("button", { name: "Adicionar", exact: true }).click();
 
       await expect(page.getByText(songTitle, { exact: true })).toBeVisible();
-      await expect(page.getByText("Repertório", { exact: true }).first()).toBeVisible();
+      await expect(oc.getByText("Repertório", { exact: true })).toHaveCount(1);
       await shot(page, "25-setlist-cadastro-inline");
     } finally {
       if (instanceId) await api.tryCall("DELETE", `/celebrations/instances/${instanceId}`);
@@ -181,9 +192,9 @@ test.describe("setlist × repertório", () => {
         key: "G",
       });
 
-      await openServiceOrder(page, worship.date);
+      const oc = await openServiceOrder(page, worship.date);
       await expect(page.getByText(avulsaTitle, { exact: true })).toBeVisible();
-      await expect(page.getByText("Repertório", { exact: true })).toHaveCount(0);
+      await expect(oc.getByText("Repertório", { exact: true })).toHaveCount(0);
 
       await page
         .getByRole("button", { name: `Vincular ${avulsaTitle} ao repertório` })
@@ -192,12 +203,12 @@ test.describe("setlist × repertório", () => {
       await page.getByRole("button").filter({ hasText: songTitle }).first().click();
 
       await expect(
-        page.getByText("Repertório", { exact: true }).first(),
+        oc.getByText("Repertório", { exact: true }),
         "vincular pela linha não refletiu a origem na lista"
-      ).toBeVisible();
+      ).toHaveCount(1);
       // O tom digitado na escala continua o mesmo: vincular declara a origem,
       // não reimporta os valores do catálogo (a música do catálogo é em E).
-      await expect(page.getByText("G", { exact: true }).first()).toBeVisible();
+      await expect(oc.getByText("G", { exact: true }).first()).toBeVisible();
       await expect(
         page.getByRole("button", { name: `Desvincular ${avulsaTitle} do repertório` })
       ).toBeVisible();
