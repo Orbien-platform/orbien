@@ -43,6 +43,7 @@ test.describe("repertório do time de louvor", () => {
 
     let instanceId: string | null = null;
     const songId: string = song.id;
+    const uiSongTitle = `E2E música via UI ${Date.now()}`;
 
     try {
       // ── Catálogo: a música criada aparece na aba "Repertório" ──
@@ -56,6 +57,28 @@ test.describe("repertório do time de louvor", () => {
         await expect(page.getByText("Tom D")).toBeVisible();
         await expect(page.getByText("96 BPM")).toBeVisible();
         await shot(page, "20-repertorio-catalogo");
+      });
+
+      // ── Escreve pela tela: cadastra música pelo modal "Nova música" ──
+      // Diferente da música acima (criada via API para testar a leitura), esta
+      // cobre o caminho de escrita real do catálogo pela UI — o único fluxo de
+      // escrita do repertório alcançável por e2e hoje. O seletor de catálogo
+      // dentro de "Adicionar música" (ServiceOrderView/AddSongForm) depende da
+      // tela de Ordem de Celebração, que não carrega contra o backend real
+      // (ver docs/PENDENCIAS.md) — fica fora deste e2e até aquele defeito
+      // pré-existente ser corrigido.
+      await test.step("cadastra uma música pelo modal do catálogo", async () => {
+        await page.getByRole("button", { name: "Nova música" }).click();
+        await page.getByLabel("Título").fill(uiSongTitle);
+        await page.getByLabel("Tom").fill("A");
+        await page.getByLabel("BPM").fill("110");
+        await page.getByRole("button", { name: "Criar" }).click();
+        await expect(
+          page.getByText(uiSongTitle, { exact: true }),
+          "música criada pelo modal não apareceu no catálogo"
+        ).toBeVisible();
+        await expect(page.getByText("Tom A")).toBeVisible();
+        await shot(page, "20b-repertorio-catalogo-criado-via-ui");
       });
 
       // ── Monta a escala do voluntário (a própria conta de e2e tem perfil) ──
@@ -177,6 +200,16 @@ test.describe("repertório do time de louvor", () => {
       // setlist/setlist_songs — um DELETE limpa tudo que este teste montou.
       if (instanceId) await api.tryCall("DELETE", `/celebrations/instances/${instanceId}`);
       await api.tryCall("DELETE", `/songs/${songId}`);
+      // A música criada pelo modal não tem id conhecido de antemão — busca
+      // pelo título único para limpar. Best-effort: falha aqui não deve
+      // esconder o resultado real do teste.
+      try {
+        const catalog = await api.call<{ id: string; title: string }[]>("GET", "/songs");
+        const uiSong = catalog.find((s) => s.title === uiSongTitle);
+        if (uiSong) await api.tryCall("DELETE", `/songs/${uiSong.id}`);
+      } catch {
+        // ignorado — limpeza best-effort
+      }
     }
   });
 });
