@@ -15,6 +15,12 @@ const DEFAULT_BUNDLE_ID = "com.orbien.app";
 // ambiente (EAS secret/env), nunca literal aqui — ver README (seção "Build
 // profiles", T6) para onde configurá-lo por profile.
 const DEFAULT_ONESIGNAL_APP_ID = "REPLACE_WITH_ONESIGNAL_APP_ID";
+// SPEC_DEVIATION (T9, MOB-01): não é campo de identidade (MOB-12) — é a URL
+// da API que o ApiClient (apps/mobile/src/lib/api/client.ts) lê de
+// `Constants.expoConfig.extra.apiUrl`, nunca hardcoded (design.md,
+// Components > ApiClient). Default aponta para a API local (mesma porta
+// default de apps/api/src/main.ts).
+const DEFAULT_API_URL = "http://localhost:3000";
 
 /** @param {{ config: import('expo/config').ExpoConfig }} params */
 module.exports = ({ config }) => {
@@ -24,6 +30,7 @@ module.exports = ({ config }) => {
   const bundleId = process.env.ORBIEN_BUNDLE_ID || DEFAULT_BUNDLE_ID;
   const oneSignalAppId =
     process.env.ORBIEN_ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID;
+  const apiUrl = process.env.ORBIEN_API_URL || DEFAULT_API_URL;
 
   return {
     ...config,
@@ -41,6 +48,7 @@ module.exports = ({ config }) => {
     extra: {
       ...config.extra,
       oneSignalAppId,
+      apiUrl,
     },
   };
 };
