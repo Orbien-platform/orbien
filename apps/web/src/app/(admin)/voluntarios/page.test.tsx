@@ -274,6 +274,87 @@ describe("VoluntariosPage", () => {
     expect(mockedApi.patch).toHaveBeenCalledWith("/assignments/a1/respond", { status: "declined" });
   });
 
+  it("mostra o repertório (título, tom, bpm e link) quando a escala traz setlist", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "confirmed",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+              setlist: {
+                songs: [
+                  { id: "s2", sequence: 2, title: "Segunda", key: null, bpm: null, link: null },
+                  { id: "s1", sequence: 1, title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test" },
+                ],
+              },
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+
+    expect(await screen.findByText("Grande é o Senhor")).toBeInTheDocument();
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.getByText("80 BPM")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Abrir link de Grande é o Senhor" })).toBeInTheDocument();
+
+    // Ordenado por sequence: "Grande é o Senhor" (1) aparece antes de "Segunda" (2).
+    const titles = screen.getAllByText(/Grande é o Senhor|Segunda/).map((el) => el.textContent);
+    expect(titles).toEqual(["Grande é o Senhor", "Segunda"]);
+
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    await user.click(screen.getByRole("button", { name: "Abrir link de Grande é o Senhor" }));
+    expect(openSpy).toHaveBeenCalledWith("http://x.test", "_blank", "noopener,noreferrer");
+  });
+
+  it("mostra 'repertório ainda não publicado' quando a escala não tem setlist", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "pending",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo" },
+              ministry: { id: "m1", name: "Louvor" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+              setlist: null,
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+
+    await screen.findByText("Culto Domingo");
+    expect(
+      screen.getByText("Repertório ainda não publicado para este culto.")
+    ).toBeInTheDocument();
+  });
+
   it("mostra erro ao falhar o carregamento de meus turnos e mensagem de lista vazia quando não há nenhum", async () => {
     setup(["volunteer"]);
     mockedApi.get.mockImplementation((url: string) => {
