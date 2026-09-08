@@ -6,11 +6,19 @@
 #
 # Uso:
 #   DIRECT_URL=postgresql://postgres:...@host:5432/postgres \
-#   ORBIEN_APP_PASSWORD='<senha>' \
+#   [ORBIEN_APP_PASSWORD='<senha>'] \
 #   bash scripts/bootstrap-db.sh [--seed]
 #
 # DIRECT_URL precisa ser a conexão direta (porta 5432) com um role capaz de
 # criar roles — no Supabase, `postgres`. O pooler (6543) não serve aqui.
+#
+# ORBIEN_APP_PASSWORD é OPCIONAL, e é a única diferença entre provisionar um
+# banco novo e atualizar um que já está no ar. Com a variável, o passo 6 faz
+# `ALTER ROLE orbien_app LOGIN PASSWORD` — obrigatório num banco novo, porque
+# o role nasce NOLOGIN. Sem ela, o passo 6 aplica só os GRANTs e não toca na
+# senha: é o modo que o deploy da API usa (ver `npm run db:deploy` e
+# /DEPLOY.md). Trocar a senha do role sem trocar a DATABASE_URL do Render já
+# derrubou a API inteira uma vez — por isso o padrão agora é não mexer nela.
 #
 # É idempotente: pode rodar de novo num banco já provisionado.
 
@@ -18,7 +26,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 : "${DIRECT_URL:?Erro: defina DIRECT_URL (conexão direta, porta 5432)}"
-: "${ORBIEN_APP_PASSWORD:?Erro: defina ORBIEN_APP_PASSWORD}"
 
 SEED=false
 [ "${1:-}" = "--seed" ] && SEED=true
@@ -134,6 +141,13 @@ echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
 # orbien_app é criado NOLOGIN pelas migrations; aqui ele ganha senha e os
 # privilégios de app_user. WITH SET TRUE permite o `SET LOCAL ROLE app_user`
 # que o backend usa para forçar a avaliação das políticas de RLS.
+if [ -n "${ORBIEN_APP_PASSWORD:-}" ]; then
+  echo "  → definindo a senha de orbien_app (ORBIEN_APP_PASSWORD presente)"
+  SET_PASSWORD="ALTER ROLE orbien_app LOGIN PASSWORD '${ORBIEN_APP_PASSWORD}';"
+else
+  echo "  → ORBIEN_APP_PASSWORD ausente: mantendo a senha atual, aplicando só os GRANTs"
+  SET_PASSWORD=""
+fi
 run_sql <<SQL
 DO \$\$
 BEGIN
@@ -142,7 +156,7 @@ BEGIN
   END IF;
 END \$\$;
 
-ALTER ROLE orbien_app LOGIN PASSWORD '${ORBIEN_APP_PASSWORD}';
+${SET_PASSWORD}
 GRANT app_user TO orbien_app WITH SET TRUE;
 GRANT USAGE ON SCHEMA public TO orbien_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO orbien_app;
@@ -278,6 +292,43 @@ BEGIN
   RAISE NOTICE 'persons/financial_categories com o ramo de plataforma: %', n;
   IF n <> 2 THEN
     RAISE EXCEPTION 'esperava 2 policies (persons, financial_categories) com app_platform_access simétrico, encontrei % — 006_rls_platform_provisioning.sql rodou?', n;
+  END IF;
+
+  -- Este é o portão que torna seguro aplicar migration automaticamente no
+  -- deploy (ver `npm run db:deploy` e /DEPLOY.md). Migration comum cria a
+  -- tabela; quem liga o RLS dela é um script 00X, fora do histórico do
+  -- Prisma. Se a migration for aplicada e o script não, a tabela nova fica
+  -- SEM RLS — e `app_user` tem GRANT em tudo em public por
+  -- ALTER DEFAULT PRIVILEGES, então todo tenant lê as linhas de todos os
+  -- outros, em silêncio. Falhar o deploy aqui é a diferença entre "a tela
+  -- nova não abre" e "os dados vazam sem ninguém notar".
+  --
+  -- As três exceções são deliberadas e cada uma tem motivo próprio:
+  --   _prisma_migrations — controle do Prisma, sem dado de tenant;
+  --   roles              — catálogo global de papéis, igual para todo mundo;
+  --   qr_tokens          — TEM tenant_id e continua sem RLS. Não é intenção
+  --                        declarada em lugar nenhum: é lacuna herdada que
+  --                        este portão passa a registrar por escrito, em vez
+  --                        de deixar invisível. Decidir se ela fica é outro
+  --                        trabalho — tirar a tabela desta lista sem escrever
+  --                        a policy só faz o deploy falhar.
+  SELECT count(*) INTO n
+    FROM pg_class c
+    JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+   WHERE c.relkind = 'r'
+     AND NOT c.relrowsecurity
+     AND c.relname NOT IN ('_prisma_migrations', 'roles', 'qr_tokens');
+  RAISE NOTICE 'tabelas sem RLS fora da lista de excecoes: %', n;
+  IF n > 0 THEN
+    RAISE EXCEPTION
+      'ha % tabela(s) em public sem RLS habilitado: %. Migration nova sem script de RLS correspondente — escreva a policy antes de seguir.',
+      n,
+      (SELECT string_agg(c.relname, ', ' ORDER BY c.relname)
+         FROM pg_class c
+         JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+        WHERE c.relkind = 'r'
+          AND NOT c.relrowsecurity
+          AND c.relname NOT IN ('_prisma_migrations', 'roles', 'qr_tokens'));
   END IF;
 END $$;
 SQL

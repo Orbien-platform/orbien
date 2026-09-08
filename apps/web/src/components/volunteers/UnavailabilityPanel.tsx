@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { AlertTriangle, Check, CalendarOff, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,13 +21,6 @@ interface Unavailability {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function errMsg(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && typeof err.response?.data?.message === "string") {
-    return err.response.data.message;
-  }
-  return fallback;
-}
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -100,7 +93,7 @@ export function UnavailabilityPanel() {
       })
       .catch((err: unknown) => {
         if (signal.cancelled) return;
-        setError(errMsg(err, "Não foi possível carregar suas indisponibilidades."));
+        setError(apiErrorMessage(err, "Não foi possível carregar suas indisponibilidades."));
         setSelectedDays(new Set());
         setNotes("");
       })
@@ -137,7 +130,7 @@ export function UnavailabilityPanel() {
       });
       setSaved(true);
     } catch (err) {
-      setError(errMsg(err, "Não foi possível salvar suas indisponibilidades."));
+      setError(apiErrorMessage(err, "Não foi possível salvar suas indisponibilidades."));
     } finally {
       setIsSaving(false);
     }

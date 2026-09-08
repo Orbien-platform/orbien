@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import {
   Loader2,
   Pencil,
@@ -29,6 +28,7 @@ import { MINISTRY_COLORS } from "@/components/volunteers/CreateMinistryModal";
 import { findMinistryNode, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,13 +70,6 @@ interface MinistryDetailSheetProps {
   tree: MinistryTreeNode[];
   onUpdated: () => void;
   onSelectMinistry: (id: string) => void;
-}
-
-function apiErrorMessage(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && typeof err.response?.data?.message === "string") {
-    return err.response.data.message;
-  }
-  return fallback;
 }
 
 // ─── Add Member Modal ──────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@
     "db:generate": "npm run db:generate -w orbien-backend",
     "db:migrate": "npm run db:migrate -w orbien-backend --",
     "db:migrate:status": "npm run db:migrate:status -w orbien-backend",
+    "db:deploy": "npm run db:deploy -w orbien-backend",
     "db:seed": "npm run db:seed -w orbien-backend",
     "db:studio": "npm run db:studio -w orbien-backend"
   },

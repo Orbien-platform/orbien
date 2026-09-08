@@ -32,6 +32,7 @@ import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import type { ScheduleTemplate } from "@/components/celebrations/TemplatesPanel";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,13 +86,6 @@ interface ScheduleSheetProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function errMsg(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && typeof err.response?.data?.message === "string") {
-    return err.response.data.message;
-  }
-  return fallback;
-}
 
 function isNotFound(err: unknown): boolean {
   return axios.isAxiosError(err) && err.response?.status === 404;
@@ -173,7 +167,7 @@ export function ScheduleSheet({
             setNoSchedule(true);
             setError(null);
           } else {
-            setError(errMsg(err, "Não foi possível carregar a escala."));
+            setError(apiErrorMessage(err, "Não foi possível carregar a escala."));
           }
         })
         .finally(() => {
@@ -226,7 +220,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível criar a escala."));
+      setError(apiErrorMessage(err, "Não foi possível criar a escala."));
     } finally {
       setCreating(false);
     }
@@ -252,7 +246,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível adicionar o ministério."));
+      setError(apiErrorMessage(err, "Não foi possível adicionar o ministério."));
     } finally {
       setAddingMinistry(false);
     }
@@ -273,7 +267,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível aplicar o template."));
+      setError(apiErrorMessage(err, "Não foi possível aplicar o template."));
     } finally {
       setApplying(false);
     }
@@ -291,7 +285,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível remover o ministério."));
+      setError(apiErrorMessage(err, "Não foi possível remover o ministério."));
     } finally {
       setBusyId(null);
     }
@@ -311,7 +305,7 @@ export function ScheduleSheet({
       );
       setAvailability(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(errMsg(err, "Não foi possível carregar os voluntários do ministério."));
+      setError(apiErrorMessage(err, "Não foi possível carregar os voluntários do ministério."));
       setOpenPicker(null);
     } finally {
       setAvailLoading(false);
@@ -340,7 +334,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível atribuir o voluntário."));
+      setError(apiErrorMessage(err, "Não foi possível atribuir o voluntário."));
     } finally {
       setBusyId(null);
     }
@@ -357,7 +351,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível remover a atribuição."));
+      setError(apiErrorMessage(err, "Não foi possível remover a atribuição."));
     } finally {
       setBusyId(null);
     }
@@ -378,7 +372,7 @@ export function ScheduleSheet({
       await load();
       onChanged?.();
     } catch (err) {
-      setError(errMsg(err, "Não foi possível publicar a escala."));
+      setError(apiErrorMessage(err, "Não foi possível publicar a escala."));
     } finally {
       setPublishing(false);
     }
