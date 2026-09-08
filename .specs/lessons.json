@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "promote_threshold": 2,
+  "window_days": 45,
+  "quarantine_threshold": 2,
+  "next_id": 4,
+  "lessons": [
+    {
+      "id": "L-001",
+      "key": "spec_precision_gap::when a spec lists an explicit role set for a permission gate grep every place that gate is reused on the frontend not just the backend roles and confirm the role list matches exactly not an older adjacent gate",
+      "text": "When a spec lists an explicit role set for a permission gate, grep every place that gate is reused on the frontend (not just the backend @Roles) and confirm the role list matches exactly, not an older adjacent gate.",
+      "signal": "spec_precision_gap",
+      "scope": "web/permissions",
+      "status": "candidate",
+      "features": [
+        "repertorio-louvor"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "REPERT-01 AC2 / apps/web/src/app/(admin)/celebracoes/page.tsx:65-67 (web/permissions)"
+      ],
+      "created": "2026-09-08T00:47:32Z",
+      "last_seen": "2026-09-08T00:47:32Z"
+    },
+    {
+      "id": "L-002",
+      "key": "surviving_mutant::when a guard filters records that get merged into a keyed map test it by asserting the map result directly for the filtered case not only through a caller whose own key structure already excludes the filtered record by construction",
+      "text": "When a guard filters records that get merged into a keyed map, test it by asserting the map/result directly for the filtered case, not only through a caller whose own key structure already excludes the filtered record by construction.",
+      "signal": "surviving_mutant",
+      "scope": "api/celebrations",
+      "status": "candidate",
+      "features": [
+        "repertorio-louvor"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/celebrations/celebration-assignment.service.ts:408 (mutant 2) (api/celebrations)"
+      ],
+      "created": "2026-09-08T00:47:32Z",
+      "last_seen": "2026-09-08T00:47:32Z"
+    },
+    {
+      "id": "L-003",
+      "key": "ac_gap::a spec s same validation as an existing field claim must be verified against that field s actual dto decorators not assumed isstring alone never rejects empty or whitespace only strings use isnotempty or a trim check when the spec requires non blank text",
+      "text": "A spec's 'same validation as an existing field' claim must be verified against that field's actual DTO decorators, not assumed — @IsString() alone never rejects empty or whitespace-only strings; use @IsNotEmpty() or a trim check when the spec requires non-blank text.",
+      "signal": "ac_gap",
+      "scope": "api/dto",
+      "status": "candidate",
+      "features": [
+        "repertorio-louvor"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "Edge case: título vazio/só espaço / apps/api/src/celebrations/dto/create-song.dto.ts, create-setlist-song.dto.ts (api/dto)"
+      ],
+      "created": "2026-09-08T00:47:32Z",
+      "last_seen": "2026-09-08T00:47:32Z"
+    }
+  ]
+}
