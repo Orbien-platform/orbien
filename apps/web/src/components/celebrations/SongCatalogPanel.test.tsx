@@ -96,6 +96,7 @@ describe("SongCatalogPanel", () => {
     await user.type(screen.getByLabelText("Tom"), "E");
     await user.type(screen.getByLabelText("BPM"), "90");
     await user.type(screen.getByLabelText("Link (cifra, referência)"), "https://cifra.example/x");
+    await user.type(screen.getByLabelText("Notas (opcional)"), "tocar mais lento");
     await user.click(screen.getByRole("button", { name: "Criar" }));
 
     await waitFor(() =>
@@ -104,7 +105,7 @@ describe("SongCatalogPanel", () => {
         key: "E",
         bpm: 90,
         link: "https://cifra.example/x",
-        notes: undefined,
+        notes: "tocar mais lento",
       })
     );
   });
@@ -197,6 +198,41 @@ describe("SongCatalogPanel", () => {
     resolveGet({ data: songs });
     await Promise.resolve();
     await Promise.resolve();
+  });
+
+  it("ignores a stale error if the component unmounts before the request rejects", async () => {
+    let rejectGet!: (err: unknown) => void;
+    vi.mocked(api.get).mockImplementation(() => new Promise((_resolve, reject) => { rejectGet = reject; }));
+    const { unmount } = render(<SongCatalogPanel canEdit={true} />);
+    unmount();
+
+    rejectGet(new Error("falha de rede"));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  it("lists a song without key or bpm, and edits it without pre-filling those fields", async () => {
+    const bare: CatalogSong = {
+      id: "s2",
+      title: "Aleluia",
+      key: null,
+      bpm: null,
+      link: null,
+      notes: null,
+      last_played_at: null,
+    };
+    mockGet([bare]);
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+
+    await screen.findByText("Aleluia");
+    expect(screen.queryByText(/^Tom /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ BPM$/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Editar Aleluia" }));
+    expect(await screen.findByDisplayValue("Aleluia")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tom")).toHaveValue("");
+    expect(screen.getByLabelText("BPM")).toHaveValue(null);
   });
 
   it("falls back to an empty list when the response isn't an array", async () => {

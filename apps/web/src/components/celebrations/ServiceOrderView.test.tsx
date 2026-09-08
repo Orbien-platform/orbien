@@ -734,6 +734,62 @@ describe("ServiceOrderView", () => {
     );
   });
 
+  it("falls back to an empty catalog when the /songs response isn't an array", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
+      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: serviceOrder });
+      if (url === "/songs") return Promise.resolve({ data: null });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await screen.findByPlaceholderText("Título *");
+
+    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+  });
+
+  it("reverts to blank fields when the catalog selection goes back to the placeholder", async () => {
+    mockGet(true, [
+      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    const catalogSelect = await screen.findByLabelText("Escolher do catálogo");
+    await user.selectOptions(catalogSelect, "cs1");
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+
+    await user.selectOptions(catalogSelect, "");
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+  });
+
+  it("fills blank tom/bpm/link when the selected catalog song has none of them set", async () => {
+    mockGet(true, [{ id: "cs2", title: "Aleluia", key: null, bpm: null, link: null }]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs2");
+
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Aleluia");
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("");
+    expect(screen.getByPlaceholderText("BPM")).toHaveValue(null);
+    expect(screen.getByPlaceholderText("Link (YouTube, Cifra Club…)")).toHaveValue("");
+  });
+
   it("keeps song_id set and sends the edited value after overriding a field from the catalog", async () => {
     mockGet(true, [
       { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
@@ -799,6 +855,36 @@ describe("ServiceOrderView", () => {
     await screen.findByPlaceholderText("Título *");
 
     expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+  });
+
+  it("still allows adding a free-text song when loading the catalog fails", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
+      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: serviceOrder });
+      if (url === "/songs") return Promise.reject(new Error("falha de rede"));
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await screen.findByPlaceholderText("Título *");
+
+    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Título *"), "Música avulsa");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", title: "Música avulsa" })
+      )
+    );
   });
 
   it("ignores the instance response if the component unmounts before it settles", async () => {
