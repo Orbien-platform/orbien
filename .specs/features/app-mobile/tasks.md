@@ -340,6 +340,8 @@ O próprio teste pegou um hardcode real: `src/app/index.tsx` (T2) tinha
 
 ### T8: Tipos de sessão e branding
 
+**Status**: ✅ Done (commit `0cb6bba`)
+
 **What**: Definir `LoginResponse`, `Session`, `Branding` (interfaces do
 Data Models do design) em arquivos de tipo puros, sem lógica.
 **Where**: `apps/mobile/src/lib/auth/types.ts`,
