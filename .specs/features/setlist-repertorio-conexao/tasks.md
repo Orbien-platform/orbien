@@ -9,7 +9,7 @@ Implement these tasks with the `fillsd` skill: **activate it by name and follow 
 ---
 
 **Design**: `.specs/features/setlist-repertorio-conexao/design.md`
-**Status**: In Progress — lote 1 (T1-T6) concluído e verificado; lote 2 (T7-T10) em execução
+**Status**: Done — T1-T10 concluídas, Verifier independente com veredito PASS
 
 ---
 
@@ -279,6 +279,8 @@ T10
 
 ### T7: `AddSongForm` passa a consumir o `SongPicker`
 
+> **✅ Concluída** — commit `07a598b`, gate verde antes do commit.
+
 **What**: substitui o `<select>` nativo e o `useEffect` de carga do catálogo pelo `SongPicker`, apagando a declaração local de `CatalogSong`, sem regredir o comportamento de override do REPERT-02.
 **Where**: `apps/web/src/components/celebrations/ServiceOrderView.tsx` (modificar), `ServiceOrderView.test.tsx` (modificar)
 **Depends on**: T6
@@ -305,6 +307,8 @@ T10
 ---
 
 ### T8: Ação de vincular/desvincular música da setlist
+
+> **✅ Concluída** — commit `0d01cbe`, gate verde antes do commit.
 
 **What**: botão de ícone na linha da música que abre o `SongPicker` inline e faz `PATCH` com apenas `song_id` (ou `null` para desvincular).
 **Where**: `apps/web/src/components/celebrations/ServiceOrderView.tsx` (modificar), `ServiceOrderView.test.tsx` (modificar)
@@ -333,6 +337,8 @@ T10
 
 ### T9: Origem e links de referência na linha da setlist
 
+> **✅ Concluída** — commit `58fe05c`, gate verde antes do commit.
+
 **What**: indicação visual de que a música vem do repertório e os links de referência do `Song` (YouTube, Spotify, Cifra Club) na linha, cada um identificável.
 **Where**: `apps/web/src/components/celebrations/ServiceOrderView.tsx` (modificar), `ServiceOrderView.test.tsx` (modificar)
 **Depends on**: T8, T3
@@ -359,6 +365,8 @@ T10
 ---
 
 ### T10: e2e do fluxo setlist ↔ repertório
+
+> **✅ Concluída** — commit `8e43722`, gate verde antes do commit.
 
 **What**: spec de Playwright cobrindo os três fluxos novos ponta a ponta: buscar e escolher do catálogo, cadastrar inline e usar, e vincular uma música avulsa.
 **Where**: `apps/web/e2e/setlist-repertorio.spec.ts` (novo)
@@ -518,3 +526,60 @@ diretórios. Nenhum `SPEC_DEVIATION` marcado.
    runtime (o que AC3 exige); o serviço contorna com
    `dto.song_id as string | null | undefined`. O campo mora em
    `CreateSetlistSongDto`, fora do escopo de T1.
+
+
+---
+
+## Status de execução — lote 2 (T7-T10)
+
+| T | Commit | Testes novos |
+|---|---|---|
+| T7 | `07a598b` | 1 (mais os 10 casos de catálogo reescritos para o picker, virando 11 — sem redução) |
+| T8 | `0d01cbe` | 6 |
+| T9 | `58fe05c` | 5 |
+| T10 | `8e43722` | 3 e2e (não executáveis neste ambiente — ver abaixo) |
+
+Fora do plano original, por decisão do dev sobre o achado nº 1 do lote 1:
+commit `ec0d653` fecha o contrato de `song_id: null` no
+`update-setlist-song.dto.spec.ts` (2 casos). O comentário do teste foi
+corrigido antes do commit: quem deixa o `null` passar é o `@IsOptional()` que
+o `PartialType` injeta, não o do `CreateSetlistSongDto` — a primeira redação
+errava o mecanismo, e a mutação provou o erro.
+
+`components/celebrations/**` fechou em **99,25 / 96,37 / 100 / 100**, acima do
+piso 99/95/100/100 — subiu a cada tarefa (99,24/96,24 → 99,25/96,31 →
+99,25/96,37).
+
+### e2e não executado — motivo técnico
+
+`apps/web/e2e/setlist-repertorio.spec.ts` existe, typechecka
+(`npx tsc --noEmit -p apps/web/tsconfig.json` cobre `e2e/`) e seus seletores
+foram conferidos por inspeção contra o componente, mas **não foi executado**:
+o `@playwright/test` 1.62.1 do repo não encontra em `/opt/pw-browsers` o build
+que espera (há `chromium-1194` e `chromium_headless_shell-1194`), não existe
+nenhuma variável `E2E_*` no ambiente, e não há app nem API no ar. `playwright
+install` não foi rodado. Verde de e2e só em ambiente com app de verdade.
+
+### Achados fora do escopo do lote 2 (não corrigidos)
+
+1. O cabeçalho de `apps/web/e2e/repertorio.spec.ts` diz que o seletor de
+   catálogo da OC "fica fora deste e2e até aquele defeito pré-existente ser
+   corrigido" — a nota está desatualizada agora que
+   `setlist-repertorio.spec.ts` cobre esse caminho.
+2. `docs/PENDENCIAS.md` afirma que `ServiceOrderView.tsx` posta para
+   `/celebrations/service-orders...`; essa parte já foi corrigida antes (usa
+   `/celebrations/orders` e `/celebrations/items`). O que resta quebrado é o
+   `AddItemModal` — a seção merece atualização.
+3. `lucide-react` nesta versão não exporta `Youtube`; o ícone usado é
+   `SquarePlay`. A identidade do link está no rótulo acessível, não no glifo.
+
+### Veredito do Verifier independente
+
+**PASS ✅** — 20/20 ACs com o valor afirmado batendo com o outcome da spec,
+6/6 Edge Cases cobertos, 6 mutações injetadas e **6 mortas** (nenhuma
+sobreviveu, logo nenhuma fix task). Relatório completo em `validation.md`.
+
+Único **spec-precision gap**: o Edge Case "título longo trunca **sem quebrar o
+layout**" — a truncagem está asserida (`SongPicker.test.tsx:165`), mas "sem
+quebrar o layout" não tem observável definido na spec e não é mensurável em
+jsdom. Registrado como lição `L-004` (candidate).

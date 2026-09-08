@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 4,
+  "next_id": 5,
   "lessons": [
     {
       "id": "L-001",
@@ -58,6 +58,24 @@
       ],
       "created": "2026-09-08T00:47:32Z",
       "last_seen": "2026-09-08T00:47:32Z"
+    },
+    {
+      "id": "L-004",
+      "key": "spec_precision_gap::crit rio de layout na spec precisa nomear o observ vel que o teste vai afirmar classe atributo ou limite porque jsdom n o mede layout renderizado",
+      "text": "Critério de layout na spec precisa nomear o observável que o teste vai afirmar (classe, atributo ou limite), porque jsdom não mede layout renderizado",
+      "signal": "spec_precision_gap",
+      "scope": "apps/web",
+      "status": "candidate",
+      "features": [
+        "setlist-repertorio-conexao"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        ".specs/features/setlist-repertorio-conexao/validation.md — Edge Case 'título longo trunca sem quebrar o layout'; asserção em apps/web/src/components/repertorio/SongPicker.test.tsx:165 (apps/web)"
+      ],
+      "created": "2026-09-08T18:21:42Z",
+      "last_seen": "2026-09-08T18:21:42Z"
     }
   ]
 }

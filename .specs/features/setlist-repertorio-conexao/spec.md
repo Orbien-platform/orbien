@@ -259,12 +259,12 @@ só na avulsa.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| SETREP-01 | P1: Vincular ao catálogo uma música já na setlist | Tasks | Pending |
-| SETREP-02 | P1: Escolher do catálogo com busca e contexto | Tasks | Pending |
-| SETREP-03 | P1: Cadastrar no repertório sem sair da ordem de culto | Tasks | Pending |
-| SETREP-04 | P2: Origem e referências visíveis na setlist | Tasks | Pending |
+| SETREP-01 | P1: Vincular ao catálogo uma música já na setlist | T1, T8, T10 (+ `ec0d653` no DTO) | Done — verificado |
+| SETREP-02 | P1: Escolher do catálogo com busca e contexto | T4, T5, T7, T10 | Done — verificado |
+| SETREP-03 | P1: Cadastrar no repertório sem sair da ordem de culto | T6, T7, T10 | Done — verificado |
+| SETREP-04 | P2: Origem e referências visíveis na setlist | T2, T3, T9, T10 | Done — verificado |
 
-**Coverage:** 4 total, 0 mapeados a tasks (fase Tasks pendente), 0 sem mapeamento.
+**Coverage:** 4 total, 4 mapeados a tasks, 0 sem mapeamento. Verifier independente: **PASS**, 20/20 ACs e 6/6 edge cases com evidência `file:line`; 6 mutações injetadas, 6 mortas. Ver `validation.md`.
 
 ---
 
