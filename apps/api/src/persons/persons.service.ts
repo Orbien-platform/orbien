@@ -230,6 +230,49 @@ export class PersonsService {
     return { purged: expired.length };
   }
 
+  // Job cron diário (ver PersonsRetentionScheduler): retenção por
+  // inatividade da tabela do mapeamento LGPD (seção 5), para quem nunca
+  // pediu exclusão. Duas categorias, as únicas que dependem só de
+  // inatividade da própria pessoa:
+  //   - visitante sem evolução: 1 ano sem sinal de atividade;
+  //   - membro/frequentador sem vínculo financeiro: 2 anos sem sinal.
+  // Quem tem alguma doação registrada (donor_person_id) fica de fora —
+  // essa categoria tem prazo de 5 anos ligado ao vínculo financeiro, não à
+  // inatividade, e não entra neste job. "Sinal de atividade" é o mais
+  // recente entre updated_at do cadastro, uma visita e uma presença
+  // registrada — não há login de membro para usar como sinal.
+  async purgeInactivePersons(): Promise<{ purged: number }> {
+    const expired = await this.prisma.system.$queryRaw<
+      Array<{ id: string; classification: PersonClassification }>
+    >(Prisma.sql`
+      SELECT p.id, p.classification
+      FROM persons p
+      WHERE p.deleted_at IS NULL
+        AND p.anonymized_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
+        )
+        AND GREATEST(
+          p.updated_at,
+          COALESCE((SELECT MAX(v.visited_at) FROM visit_records v WHERE v.person_id = p.id), p.created_at),
+          COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at)
+        ) < now() - (CASE WHEN p.classification = 'visitor' THEN INTERVAL '1 year' ELSE INTERVAL '2 years' END)
+    `);
+
+    for (const { id, classification } of expired) {
+      const reason =
+        classification === 'visitor'
+          ? 'Eliminação automática — 1 ano de inatividade (visitante sem evolução)'
+          : 'Eliminação automática — 2 anos de inatividade (sem vínculo financeiro)';
+      await this.prisma.system.person.update({
+        where: { id },
+        data: this.anonymizedFields(reason),
+      });
+    }
+
+    return { purged: expired.length };
+  }
+
   async createHousehold(dto: CreateHouseholdDto, user: JwtPayload): Promise<Household> {
     return this.prisma.client.household.create({
       data: {

@@ -349,6 +349,7 @@ export class PixService {
         amount: true,
         category_id: true,
         status: true,
+        donor_person_id: true,
       },
     });
 
@@ -407,6 +408,7 @@ export class PixService {
           category_id: pixPayment.category_id,
           source: TransactionSource.pix_webhook,
           created_by_user_id: adminUserId,
+          donor_person_id: pixPayment.donor_person_id,
         },
       });
 

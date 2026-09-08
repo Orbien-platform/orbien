@@ -209,6 +209,40 @@ Audit log: AuditLog action: 'persons.batch_import' com after: { count: imported 
 
 ---
 
+## DT-07 · Job de retenção por inatividade (LGPD, seção 5)
+**Prioridade:** ✅ CONCLUÍDO (2026-09-07)
+**Depende de:** DT-05 (soft delete + anonimização)
+**Resolve junto com:** —
+
+### Contexto
+`orbien-lgpd-mapping.md`, seção 5.1, especifica um job diário que identifica `person` com `last_activity` além do prazo de retenção da categoria e aplica anonimização — distinto do `PersonsRetentionScheduler` do DT-05, que só age quando alguém já pediu exclusão explícita (Art. 18). Sem este job, quem nunca pede nada fica retido para sempre, o que descumpre a tabela de prazos da seção 5 (checklist de pré-go-live, `orbien-lgpd-mapping.md` seção 9).
+
+### Escopo desta entrega
+Das quatro categorias da tabela de retenção, entraram as duas que dependem só de inatividade da própria pessoa e são calculáveis com o schema atual:
+- visitante sem evolução — 1 ano sem sinal de atividade;
+- membro/frequentador sem vínculo financeiro — 2 anos sem sinal de atividade.
+
+Ficaram de fora, por decisão (não são esquecimento):
+- **cadastro com histórico financeiro** (5 anos) — o prazo é ligado ao vínculo financeiro/fim de contrato, não à inatividade da pessoa; quem tem qualquer `FinancialTransaction` como doador fica fora deste job;
+- **dado de menor de idade** (30 dias após fim do contrato do tenant) — "fim de contrato" não existe como conceito no schema hoje;
+- **notificação semanal ao admin** sobre dados perto do limite — fica como item separado, é UX nova.
+
+### Critério de conclusão
+- [x] `PersonsService.purgeInactivePersons()` — varre `persons` sem `deleted_at`/`anonymized_at`, exclui quem tem doação registrada, e anonimiza quem passou do prazo por classificação
+- [x] "Sinal de atividade" = mais recente entre `Person.updated_at`, `VisitRecord.visited_at` e `AttendanceRecord.checked_in_at` — não há login de membro para usar
+- [x] `PersonsRetentionScheduler.cronPurgeInactivePersons()` — cron diário às 4h (1h depois do purge de soft delete do DT-05, para não concorrer pela mesma janela)
+- [x] Motivo de anonimização registrado distinto por categoria (`anonymization_reason`)
+- [x] Testes: `persons.service.spec.ts` (as duas categorias, e o caso de ninguém elegível), `persons-retention.scheduler.spec.ts`
+
+### O que foi feito
+
+`PersonsService.purgeInactivePersons()`, ao lado de `purgeExpiredSoftDeletes()` (DT-05) em `apps/api/src/persons/persons.service.ts`. Usa uma única query (`prisma.system.$queryRaw`, cross-tenant/BYPASSRLS, mesmo padrão do DT-05) com `NOT EXISTS` contra `financial_transactions` e um `GREATEST` entre as três fontes de atividade, com o prazo (`INTERVAL '1 year'` ou `'2 years'`) decidido por `classification`. Reaproveita `anonymizedFields()`, já existente do DT-05 — mesmos campos zerados, motivo diferente.
+
+### O que ficou registrado como decisão do dev (2026-09-07)
+Antes de implementar, as três lacunas de especificação acima (sinal de atividade, escopo por categoria, notificação) foram levantadas e decididas explicitamente — não presumidas. Ver `docs/PENDENCIAS.md` se precisar do histórico da decisão.
+
+---
+
 ## Resumo de prioridades
 
 | ID | Débito | Prioridade | Status |
@@ -217,6 +251,7 @@ Audit log: AuditLog action: 'persons.batch_import' com after: { count: imported 
 | DT-04 | Onboarding de tenant | ✅ Concluído | Person + person_id + 12 categorias · 2026-09-07 |
 | DT-05 | Soft delete + anonimização LGPD | ✅ Concluído | anonymize/soft delete/retenção 30 dias · 2026-09-07 |
 | DT-06 | Importação CSV/Excel | ✅ Concluído | já implementado; fechado o teto de 5.000 linhas · 2026-09-07 |
+| DT-07 | Retenção por inatividade | ✅ Concluído | visitante 1 ano + membro sem vínculo financeiro 2 anos · 2026-09-07 |
 
 **Todos os débitos deste documento estão fechados — no código e em produção.**
 O passo operacional (`bootstrap-db.sh` + migrations comuns) foi executado em
