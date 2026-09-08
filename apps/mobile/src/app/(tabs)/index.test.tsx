@@ -12,13 +12,13 @@ jest.mock("expo-router", () => ({
 const mockGetMyAssignments = jest.fn();
 const mockRespondToAssignment = jest.fn();
 const mockCheckIn = jest.fn();
-jest.mock("../lib/escala/escala-client", () => ({
+jest.mock("../../lib/escala/escala-client", () => ({
   getMyAssignments: (...args: unknown[]) => mockGetMyAssignments(...args),
   respondToAssignment: (...args: unknown[]) => mockRespondToAssignment(...args),
   checkIn: (...args: unknown[]) => mockCheckIn(...args),
 }));
 
-import { HttpError } from "../lib/api/errors";
+import { HttpError } from "../../lib/api/errors";
 import EscalaScreen from "./index";
 
 const PENDING_ASSIGNMENT = {

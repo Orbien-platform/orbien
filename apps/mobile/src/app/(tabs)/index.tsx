@@ -9,9 +9,9 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Button, FlatList, Text, View } from "react-native";
 
-import { HttpError } from "../lib/api/errors";
-import { checkIn, getMyAssignments, respondToAssignment } from "../lib/escala/escala-client";
-import type { Assignment } from "../lib/escala/types";
+import { HttpError } from "../../lib/api/errors";
+import { checkIn, getMyAssignments, respondToAssignment } from "../../lib/escala/escala-client";
+import type { Assignment } from "../../lib/escala/types";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar sua escala. Verifique sua conexão.";
 const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
