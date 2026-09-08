@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService, OneSignalFilter } from '../content/notifications.service';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
+import { SONG_REFERENCE_SELECT } from './setlist-songs.service';
 
 @Injectable()
 export class ServiceOrdersService {
@@ -61,7 +62,12 @@ export class ServiceOrdersService {
             person: { select: { id: true, full_name: true } },
             ministry: { select: { id: true, name: true } },
             setlist: {
-              include: { songs: { orderBy: { sequence: 'asc' } } },
+              include: {
+                songs: {
+                  orderBy: { sequence: 'asc' },
+                  include: { song: { select: SONG_REFERENCE_SELECT } },
+                },
+              },
             },
           },
         },
