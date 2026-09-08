@@ -318,9 +318,9 @@ bundle id mudam só por config, sem tocar em código.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MOB-01 | P1: Autenticação e sessão | Design | In Design |
-| MOB-02 | P1: Autenticação e sessão (refresh serializado) | Design | In Design |
-| MOB-03 | P1: Tema por tenant | Design | In Design |
+| MOB-01 | P1: Autenticação e sessão | Design | In Tasks |
+| MOB-02 | P1: Autenticação e sessão (refresh serializado) | Design | In Tasks |
+| MOB-03 | P1: Tema por tenant | Design | In Tasks |
 | MOB-04 | P1: Membros e Voluntários — escala | Design | Pending |
 | MOB-05 | P1: Membros e Voluntários — check-in/indisponibilidade | Design | Pending |
 | MOB-06 | P1: Conteúdos — feed | Design | Pending |
@@ -328,8 +328,8 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-08 | P2: Celebrações e OC | Design | Pending |
 | MOB-09 | P2: Pequenos Grupos | Design | Pending |
 | MOB-10 | P3: Preferências de notificação | Design | Pending |
-| MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | In Design |
-| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | In Design |
+| MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | In Tasks |
+| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | In Tasks |
 
 **ID format:** `MOB-NN`
 
