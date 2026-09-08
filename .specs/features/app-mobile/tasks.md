@@ -833,7 +833,7 @@ faltando), indisponibilidade (MOB-05, AC4). Cross-app: `apps/api`
 |---|---|---|
 | Quick (API) | Após task de service/controller com só unit | `npm run test -w orbien-backend` |
 | Quick (mobile) | Após task com só teste unit/component | `npm run test -w orbien-mobile` |
-| Build (API) | Fechamento da Fase 1 (migration + endpoint) | `npm run test -w orbien-backend` && `npm run build:api` && `turbo run lint --filter=orbien-api` |
+| Build (API) | Fechamento da Fase 1 (migration + endpoint) | `npm run test -w orbien-backend` && `npm run build:api` && `turbo run lint --filter=orbien-backend` |
 | Full (mobile) | Fechamento de fase mobile | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
 
 ---
@@ -953,7 +953,7 @@ Decisions), delega a `assignmentService.checkInAssignment(id, user.sub, user.ten
 - [ ] Teste: rota exige um dos `VOLUNTEER_ROLES` (mesmo padrão do teste
       existente de `respond` no mesmo arquivo)
 - [ ] Gate check passa (full): `npm run test -w orbien-backend` &&
-      `npm run build:api` && `turbo run lint --filter=orbien-api`
+      `npm run build:api` && `turbo run lint --filter=orbien-backend`
 
 **Tests**: unit
 **Gate**: build
