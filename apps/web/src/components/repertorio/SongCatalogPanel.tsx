@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { AlertTriangle, Loader2, Music, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Music, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,13 +27,6 @@ export interface CatalogSong {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function errMsg(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && typeof err.response?.data?.message === "string") {
-    return err.response.data.message;
-  }
-  return fallback;
-}
 
 function fmtLastPlayed(iso: string | null): string {
   if (!iso) return "nunca tocada";
@@ -78,7 +71,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
       })
       .catch((err: unknown) => {
         if (signal.cancelled) return;
-        setError(errMsg(err, "Não foi possível carregar o repertório."));
+        setError(apiErrorMessage(err, "Não foi possível carregar o repertório."));
       })
       .finally(() => {
         if (!signal.cancelled) setLoaded(true);
@@ -146,7 +139,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
       setFormOpen(false);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setFormError(errMsg(err, "Não foi possível salvar a música."));
+      setFormError(apiErrorMessage(err, "Não foi possível salvar a música."));
     } finally {
       setSaving(false);
     }
@@ -159,7 +152,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
       await api.delete(`/songs/${s.id}`);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(errMsg(err, "Não foi possível excluir a música."));
+      setError(apiErrorMessage(err, "Não foi possível excluir a música."));
     } finally {
       setRemovingId(null);
     }
@@ -188,7 +181,21 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
       {error ? (
         <div className="flex items-start gap-2 rounded-[8px] bg-crimson-dim p-3">
           <AlertTriangle size={15} strokeWidth={1.5} className="mt-0.5 flex-shrink-0 text-crimson" />
-          <p className="text-sm text-crimson">{error}</p>
+          <div className="flex min-w-0 flex-col items-start gap-1.5">
+            <p className="text-sm text-crimson">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setLoaded(false);
+                setReloadKey((k) => k + 1);
+              }}
+              className="flex items-center gap-1.5 text-xs text-crimson underline hover:no-underline"
+            >
+              <RotateCcw size={12} strokeWidth={1.5} />
+              Tentar novamente
+            </button>
+          </div>
         </div>
       ) : null}
 

@@ -327,6 +327,16 @@ passo 7 falha alto se algum invariante quebrar.
 > YouTube, Spotify e Cifra Club) se soma à mesma pendência. Rodar
 > `bootstrap-db.sh` inteiro contra produção aplica as três de uma vez —
 > idempotente, mas leia o aviso do passo 6 antes.
+>
+> Confirmado em 2026-09-08 contra o Postgres local, com a tabela ausente e com
+> a coluna ausente: nos dois casos a API respondia 500
+> `{"message":"Internal server error"}`, e o front do Repertório mostrava essa
+> string ao usuário. Desde então essa classe de erro tem tratamento próprio —
+> `SchemaDriftExceptionFilter` (`apps/api/src/common/filters/`) traduz P2021
+> (tabela) e P2022 (coluna) em **503** nomeando a pendência, e loga qual
+> tabela/coluna falta. **Isso muda o sintoma, não a causa:** enquanto as três
+> acima não rodarem em produção, `/repertorio` continua sem catálogo — agora
+> com 503 e mensagem legível em vez de 500 opaco.
 
 ---
 

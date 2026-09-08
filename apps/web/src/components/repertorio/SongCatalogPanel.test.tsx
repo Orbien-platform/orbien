@@ -67,6 +67,37 @@ describe("SongCatalogPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("não mostra 'Internal server error' quando a API responde 500", async () => {
+    // O bug relatado no menu Repertório: o corpo padrão do Nest chegava
+    // inteiro à tela porque o componente repassava err.response.data.message.
+    vi.mocked(api.get).mockRejectedValue(
+      Object.assign(new Error("Request failed with status code 500"), {
+        isAxiosError: true,
+        response: { status: 500, data: { statusCode: 500, message: "Internal server error" } },
+      })
+    );
+    render(<SongCatalogPanel canEdit={true} />);
+
+    expect(
+      await screen.findByText("Não foi possível carregar o repertório.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Internal server error")).not.toBeInTheDocument();
+  });
+
+  it("recarrega a lista ao clicar em 'Tentar novamente'", async () => {
+    vi.mocked(api.get).mockRejectedValueOnce({ isAxiosError: false });
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Não foi possível carregar o repertório.");
+
+    mockGet();
+    await userEvent.click(screen.getByRole("button", { name: /Tentar novamente/ }));
+
+    expect(await screen.findByText("Grande é o Senhor")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Não foi possível carregar o repertório.")
+    ).not.toBeInTheDocument();
+  });
+
   it("does not show create/edit/remove actions when canEdit is false", async () => {
     mockGet();
     render(<SongCatalogPanel canEdit={false} />);
