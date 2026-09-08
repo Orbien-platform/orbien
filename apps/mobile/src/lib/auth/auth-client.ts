@@ -7,9 +7,28 @@
 import * as SecureStore from "expo-secure-store";
 
 import { apiClient } from "../api/client";
+import { SessionExpiredError } from "./session-expired-error";
 import type { LoginResponse, Session } from "./types";
 
 const SESSION_STORAGE_KEY = "orbien.session";
+
+// Fila de refresh serializada (MOB-02) — espelha a máquina de estados de
+// apps/web/src/lib/api.ts:34-64, adaptada para expo-secure-store
+// assíncrono: duas chamadas concorrentes a getValidAccessToken() com token
+// expirado disparam exatamente uma renovação (Edge Case da spec).
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}> = [];
+
+function processQueue(error: unknown, token?: string): void {
+  for (const pending of failedQueue) {
+    if (error) pending.reject(error);
+    else pending.resolve(token as string);
+  }
+  failedQueue = [];
+}
 
 function toSession(response: LoginResponse): Session {
   return {
@@ -63,5 +82,44 @@ export async function logout(): Promise<void> {
     // best-effort: falha de rede/servidor não impede a limpeza local abaixo.
   } finally {
     await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
+  }
+}
+
+/**
+ * Usado pelo ApiClient antes de uma chamada autenticada: retorna o access
+ * token válido, disparando renovação se expirado. N chamadas concorrentes
+ * com token expirado resultam em uma única chamada a `POST /auth/refresh`
+ * (fila acima) — as demais aguardam essa Promise em vez de disparar outra.
+ */
+export async function getValidAccessToken(): Promise<string> {
+  const session = await getSession();
+  if (!session) throw new SessionExpiredError();
+
+  if (session.accessTokenExpiresAt > Date.now()) {
+    return session.accessToken;
+  }
+
+  if (isRefreshing) {
+    return new Promise<string>((resolve, reject) => {
+      failedQueue.push({ resolve, reject });
+    });
+  }
+
+  isRefreshing = true;
+  try {
+    const response = await apiClient.post<LoginResponse>("/auth/refresh", {
+      body: { refresh_token: session.refreshToken },
+    });
+    const newSession = toSession(response);
+    await SecureStore.setItemAsync(SESSION_STORAGE_KEY, JSON.stringify(newSession));
+    processQueue(null, newSession.accessToken);
+    return newSession.accessToken;
+  } catch {
+    await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
+    const sessionExpiredError = new SessionExpiredError();
+    processQueue(sessionExpiredError);
+    throw sessionExpiredError;
+  } finally {
+    isRefreshing = false;
   }
 }
