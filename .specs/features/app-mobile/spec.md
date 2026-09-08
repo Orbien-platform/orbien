@@ -328,14 +328,20 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-08 | P2: Celebrações e OC | Design | Pending |
 | MOB-09 | P2: Pequenos Grupos | Design | Pending |
 | MOB-10 | P3: Preferências de notificação | Design | Pending |
-| MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | In Tasks |
-| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | In Tasks |
+| MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | Implementing |
+| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | Implementing |
 
 **ID format:** `MOB-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
 **Coverage:** 12 total, 0 mapped to tasks (pré-Design), 0 unmapped ⚠️ (aguardando Design)
+
+**Nota (Fase 1/2 do Execute):** MOB-11 e MOB-12 ficam em "Implementing" —
+T1-T7 (`tasks.md`) entregam scaffold do workspace e `app.config.js`
+dinâmico, mas a Fase Verificação (Verifier, fillsd) só roda no fechamento
+da feature inteira (após Fases 3-5, MOB-01/02/03). Não marcar "Verified"
+aqui.
 
 ---
 

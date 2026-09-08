@@ -14,7 +14,9 @@ without it.**
 ---
 
 **Design**: `.specs/features/app-mobile/design.md`
-**Status**: Draft
+**Status**: Phase 1 (T1-T4) e Phase 2 (T5-T7) ✅ Done. Phases 3-5 (T8-T16)
+ainda Pending — outro batch, dependente de T2 (Jest) e T5 (`app.config.js`)
+entregues aqui.
 
 ---
 
@@ -94,6 +96,8 @@ T15 → T16
 
 ### T1: Criar workspace `apps/mobile` (Expo + TypeScript)
 
+**Status**: ✅ Done (commit `dce8c49`)
+
 **What**: `npx create-expo-app` (template TypeScript blank) em
 `apps/mobile`, `package.json` com `name: "orbien-mobile"` seguindo o
 padrão dos outros três apps (`orbien-backend`/`orbien-site`/`orbien-web`/
@@ -111,10 +115,10 @@ raiz).
 - Skill: NONE
 
 **Done when**:
-- [ ] `npm install` na raiz resolve `apps/mobile` como workspace (`npm ls orbien-mobile` funciona)
-- [ ] `npx expo start` sobe o Metro bundler sem erro (verificação manual, registrada no Done — não é gate automatizado)
-- [ ] Nenhum lockfile criado dentro de `apps/mobile`
-- [ ] Gate check passa: `npm run build:mobile` (adicionado em T3) — placeholder aceitável nesta task se T3 ainda não existe: rodar `npx tsc --noEmit` direto em `apps/mobile`
+- [x] `npm install` na raiz resolve `apps/mobile` como workspace (`npm ls orbien-mobile` funciona)
+- [x] `npx expo start` sobe o Metro bundler sem erro (verificação manual, registrada no Done — não é gate automatizado)
+- [x] Nenhum lockfile criado dentro de `apps/mobile`
+- [x] Gate check passa: `npm run build:mobile` (adicionado em T3) — placeholder aceitável nesta task se T3 ainda não existe: rodar `npx tsc --noEmit` direto em `apps/mobile`
 
 **Tests**: none (config/scaffold)
 **Gate**: build
@@ -122,6 +126,8 @@ raiz).
 ---
 
 ### T2: Configurar Expo Router e Jest (`jest-expo` + Testing Library)
+
+**Status**: ✅ Done (commit `a006aa9`)
 
 **What**: Adicionar `expo-router` (navegação file-based, decisão do
 design), `jest-expo`, `@testing-library/react-native`,
@@ -140,8 +146,15 @@ design), `jest-expo`, `@testing-library/react-native`,
 - Skill: NONE
 
 **Done when**:
-- [ ] `npm run test -w orbien-mobile` roda e passa com `--passWithNoTests` (ainda não há teste real)
-- [ ] `expo-router` resolve uma rota placeholder (`app/index.tsx`) sem erro no Metro
+- [x] `npm run test -w orbien-mobile` roda e passa com `--passWithNoTests` (ainda não há teste real)
+- [x] `expo-router` resolve uma rota placeholder (`app/index.tsx`) sem erro no Metro
+
+**SPEC_DEVIATION**: `@testing-library/jest-native` ficou de fora. Seu peer
+`react-test-renderer>=16` resolve numa versão (`19.2.8`) que conflita com o
+`react@19.2.3` fixado pelo Expo SDK 57 (`ERESOLVE`); além disso a lib está
+superada — `@testing-library/react-native@14` já embute os mesmos matchers
+(basta importar de `@testing-library/react-native`, documentado no próprio
+README do pacote). Sem impacto de cobertura.
 
 **Tests**: none (config)
 **Gate**: build
@@ -149,6 +162,8 @@ design), `jest-expo`, `@testing-library/react-native`,
 ---
 
 ### T3: Scripts na raiz + `turbo.json`
+
+**Status**: ✅ Done (commit `23e15f4`)
 
 **What**: Adicionar `dev:mobile` (`turbo run dev --filter=orbien-mobile`)
 e `build:mobile` (`turbo run build --filter=orbien-mobile`, mapeado para
@@ -166,9 +181,9 @@ genérico por task name, aplica a qualquer workspace).
 - Skill: NONE
 
 **Done when**:
-- [ ] `npm run dev:mobile` sobe o Metro bundler
-- [ ] `npm run build:mobile` roda `tsc --noEmit` em `apps/mobile` e passa
-- [ ] `turbo run lint --filter=orbien-mobile` roda (mesmo que só com regra base do ESLint, sem regra específica ainda — cai para T4)
+- [x] `npm run dev:mobile` sobe o Metro bundler
+- [x] `npm run build:mobile` roda `tsc --noEmit` em `apps/mobile` e passa
+- [x] `turbo run lint --filter=orbien-mobile` roda (mesmo que só com regra base do ESLint, sem regra específica ainda — cai para T4)
 
 **Tests**: none (config)
 **Gate**: build
@@ -176,6 +191,8 @@ genérico por task name, aplica a qualquer workspace).
 ---
 
 ### T4: ESLint para `apps/mobile`
+
+**Status**: ✅ Done (commit `d2d1a9d`)
 
 **What**: Config ESLint do mobile seguindo a mesma base
 `typescript-eslint` recommended sem checagem de tipos que a API usa (regra
@@ -192,8 +209,8 @@ do monorepo: "não" adicionar checagem de tipos), mais o preset
 - Skill: NONE
 
 **Done when**:
-- [ ] `turbo run lint --filter=orbien-mobile` roda sem erro no scaffold placeholder
-- [ ] `no-unused-vars` com `argsIgnorePattern: "^_"` replicado (mesma convenção da API)
+- [x] `turbo run lint --filter=orbien-mobile` roda sem erro no scaffold placeholder
+- [x] `no-unused-vars` com `argsIgnorePattern: "^_"` replicado (mesma convenção da API)
 
 **Tests**: none (config)
 **Gate**: build
@@ -203,6 +220,8 @@ do monorepo: "não" adicionar checagem de tipos), mais o preset
 ---
 
 ### T5: `app.config.js` dinâmico (identidade default)
+
+**Status**: ✅ Done (commit `022b7e3`)
 
 **What**: Substituir `app.json` estático (do scaffold do T1) por
 `app.config.js` — função que lê `process.env` e resolve nome, ícone,
@@ -220,14 +239,21 @@ dinâmico) — só a decisão já registrada em `.specs/STATE.md` AD-001.
 - Skill: NONE
 
 **Done when**:
-- [ ] `npx expo config` (sem env setada) mostra nome "Orbien", ícone
+- [x] `npx expo config` (sem env setada) mostra nome "Orbien", ícone
       default, bundle id `com.orbien.app` (ou equivalente decidido em
       Execute), `extra.oneSignalAppId` com o valor default
-- [ ] Nenhum desses valores aparece hardcoded em qualquer arquivo fora de
+- [x] Nenhum desses valores aparece hardcoded em qualquer arquivo fora de
       `app.config.js`/`eas.json`
-- [ ] Teste unitário cobrindo a função exportada por `app.config.js`
+- [x] Teste unitário cobrindo a função exportada por `app.config.js`
       (import direto do módulo, chamado com `{config: {}}`, sem env
       setada) confirma os defaults
+
+**Nota de execução**: bundle id/package default decidido como
+`com.orbien.app` (igual nas duas plataformas). App id do OneSignal default
+é um placeholder explícito (`REPLACE_WITH_ONESIGNAL_APP_ID`) — não existe
+um projeto OneSignal real documentado nesta rodada; o mecanismo de
+resolução é o que a task entrega, a credencial real entra depois via EAS
+secret (ver README, T6).
 
 **Tests**: unit
 **Gate**: quick
@@ -235,6 +261,8 @@ dinâmico) — só a decisão já registrada em `.specs/STATE.md` AD-001.
 ---
 
 ### T6: `eas.json` com profile único (`generic`)
+
+**Status**: ✅ Done (commit `0bd5e64`)
 
 **What**: Criar `apps/mobile/eas.json` com profiles `development`,
 `preview` e `production`, todos usando o profile de identidade `generic`
@@ -253,10 +281,15 @@ profiles")
 - Skill: NONE
 
 **Done when**:
-- [ ] `eas build:configure` (ou edição manual equivalente) produz `eas.json`
+- [x] `eas build:configure` (ou edição manual equivalente) produz `eas.json`
       válido com os 3 profiles
-- [ ] `README.md` do mobile documenta como rodar localmente
+- [x] `README.md` do mobile documenta como rodar localmente
       (`npx expo start`) e como buildar via EAS (comando + profile)
+
+**Nota de execução**: `eas.json` escrito à mão (edição manual, opção já
+prevista no Done when) — `eas build:configure` exige login numa conta
+Expo/EAS, indisponível neste ambiente. Schema seguido manualmente
+(`cli.version`, `build.<profile>.extends`, `submit`).
 
 **Tests**: none (config)
 **Gate**: build
@@ -264,6 +297,8 @@ profiles")
 ---
 
 ### T7: Teste de regressão — nenhum literal hardcoded de identidade
+
+**Status**: ✅ Done (commit `0fe6c90`)
 
 **What**: Teste (grep programático dentro de um teste Jest, ou lint rule
 custom) que falha se `"Orbien"`, o bundle id, ou o app id do OneSignal
@@ -281,9 +316,20 @@ para saber o que comparar).
 - Skill: NONE
 
 **Done when**:
-- [ ] Teste passa no estado atual do código
-- [ ] Teste falha propositalmente se alguém reintroduzir um literal (validado manualmente durante a task, depois revertido)
-- [ ] Gate check passa: `npm run test -w orbien-mobile`
+- [x] Teste passa no estado atual do código
+- [x] Teste falha propositalmente se alguém reintroduzir um literal (validado manualmente durante a task, depois revertido)
+- [x] Gate check passa: `npm run test -w orbien-mobile`
+
+**SPEC_DEVIATION**: o teste deriva os valores de referência direto de
+`app.config.js` (`require` + chamada com `{config: {}}`), não de
+`Constants.expoConfig.extra` como o "Reuses" sugeria — `Constants.expoConfig`
+vem `{}` sob `jest-expo` em ambiente de teste (não há manifest nativo
+resolvido), então `Constants` não tinha o que comparar. `app.config.js` é a
+mesma fonte da verdade que `Constants` leria em runtime real.
+
+O próprio teste pegou um hardcode real: `src/app/index.tsx` (T2) tinha
+`"Orbien"` literal no `<Text>` do placeholder — corrigido para ler
+`Constants.expoConfig?.name`.
 
 **Tests**: unit
 **Gate**: quick
