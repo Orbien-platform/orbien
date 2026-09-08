@@ -10,6 +10,7 @@ import {
   Megaphone,
   CalendarDays,
   Church,
+  Music,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/conteudo", label: "Conteúdo", icon: Megaphone },
   { href: "/voluntarios", label: "Voluntários", icon: CalendarDays },
   { href: "/celebracoes", label: "Celebrações", icon: Church },
+  { href: "/repertorio", label: "Repertório", icon: Music },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 

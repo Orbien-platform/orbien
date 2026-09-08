@@ -271,11 +271,11 @@ model PasswordResetToken {
 }
 
 model LoginAttempt {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   /// Chave da janela: "<rota>:<e-mail>" — ver LOGIN_LIMIT em auth.service.ts.
-  identifier String   @unique
-  count      Int      @default(0)
-  window_at  DateTime @default(now())
+  identifier String    @unique
+  count      Int       @default(0)
+  window_at  DateTime  @default(now())
   /// Preenchido quando a janela estoura; até lá a rota responde 429.
   blocked_at DateTime?
 
@@ -1123,12 +1123,13 @@ model ServiceOrder {
 }
 
 model ServiceOrderItem {
-  id                   String          @id @default(uuid())
+  id                   String               @id @default(uuid())
   tenant_id            String
   congregation_id      String
   service_order_id     String
   sequence             Int
   name                 String
+  type                 ServiceOrderItemType @default(other)
   start_offset_minutes Int
   duration_minutes     Int
   responsible_type     ResponsibleType
@@ -1136,8 +1137,8 @@ model ServiceOrderItem {
   ministry_id          String?
   responsible_label    String?
   notes                String?
-  created_at           DateTime        @default(now())
-  updated_at           DateTime        @updatedAt
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -1565,6 +1566,15 @@ enum ResponsibleType {
   person
   ministry
   free_text
+}
+
+enum ServiceOrderItemType {
+  worship
+  sermon
+  prayer
+  announcements
+  offering
+  other
 }
 
 // =============================================================================

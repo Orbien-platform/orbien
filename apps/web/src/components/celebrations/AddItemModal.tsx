@@ -36,8 +36,28 @@ interface AddItemModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serviceOrderId: string;
-  nextPosition: number;
+  nextSequence: number;
+  /** "HH:mm" de início da celebração — usado para converter o horário digitado em `start_offset_minutes`. */
+  celebrationStartTime?: string;
   onAdded: () => void;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export function timeToMinutes(hhmm: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!match) return null;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+}
+
+// O backend guarda `start_offset_minutes` (minutos desde o início da celebração),
+// não um horário de relógio — a UI continua pedindo "HH:mm" e converte aqui.
+export function computeStartOffsetMinutes(itemTime: string, celebrationStartTime?: string): number {
+  const itemMinutes = timeToMinutes(itemTime);
+  if (itemMinutes === null) return 0;
+  const startMinutes = celebrationStartTime ? timeToMinutes(celebrationStartTime) : null;
+  if (startMinutes === null) return 0;
+  return Math.max(0, itemMinutes - startMinutes);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -46,7 +66,8 @@ export function AddItemModal({
   open,
   onOpenChange,
   serviceOrderId,
-  nextPosition,
+  nextSequence,
+  celebrationStartTime,
   onAdded,
 }: AddItemModalProps) {
   const [name, setName] = useState("");
@@ -87,17 +108,22 @@ export function AddItemModal({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("Nome da etapa é obrigatório."); return; }
+    if (!duration.trim()) { setError("Duração é obrigatória."); return; }
+    if (!startTime) { setError("Horário é obrigatório."); return; }
     setError("");
     setIsSubmitting(true);
     try {
-      await api.post(`/celebrations/service-orders/${serviceOrderId}/items`, {
+      await api.post(`/celebrations/items`, {
+        service_order_id: serviceOrderId,
+        sequence: nextSequence,
         name: name.trim(),
         type,
-        duration_minutes: duration ? parseInt(duration, 10) : undefined,
-        start_time: startTime || undefined,
-        responsible_person_id: responsibleId || undefined,
+        duration_minutes: parseInt(duration, 10),
+        start_offset_minutes: computeStartOffsetMinutes(startTime, celebrationStartTime),
+        responsible_type: responsibleId ? "person" : "free_text",
+        person_id: responsibleId || undefined,
+        responsible_label: responsibleId ? undefined : "A definir",
         notes: notes.trim() || undefined,
-        position: nextPosition,
       });
       onAdded();
       onOpenChange(false);
@@ -154,7 +180,7 @@ export function AddItemModal({
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="ai-duration" className="text-sm font-medium text-ink dark:text-white">
-              Duração (min)
+              Duração (min) <span className="text-crimson">*</span>
             </Label>
             <Input
               id="ai-duration"
@@ -170,7 +196,7 @@ export function AddItemModal({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="ai-time" className="text-sm font-medium text-ink dark:text-white">
-              Horário
+              Horário <span className="text-crimson">*</span>
             </Label>
             <Input
               id="ai-time"
