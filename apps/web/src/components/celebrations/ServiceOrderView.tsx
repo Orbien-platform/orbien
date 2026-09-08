@@ -153,7 +153,10 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
     const song = catalog.find((s) => s.id === id);
     if (song) {
       setTitle(song.title);
-      setKey(song.key ?? "");
+      // Quando só o tom alternativo está cadastrado, ele é a única opção do
+      // seletor abaixo — o estado precisa começar nele para não divergir do
+      // que a tela mostra como selecionado.
+      setKey(song.key ?? song.key_alt ?? "");
       setBpm(song.bpm != null ? String(song.bpm) : "");
       setLink(song.link ?? "");
     }

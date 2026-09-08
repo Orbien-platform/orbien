@@ -968,6 +968,36 @@ describe("ServiceOrderView", () => {
     );
   });
 
+  it("defaults to the alternate tom when it's the catalog song's only one set", async () => {
+    mockGet(true, [
+      { id: "cs4", title: "Aleluia", key: null, key_alt: "C", bpm: null, link: null },
+    ]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs4");
+
+    // Sem tom principal, o seletor só tem a opção do tom alternativo — o
+    // estado precisa nascer nela, e não vazio, para bater com o que a tela
+    // mostra como selecionado sem exigir um clique extra do usuário.
+    expect(screen.getByLabelText("Tom confirmado para a escala")).toHaveValue("C");
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("C");
+
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: "cs4", key: "C" })
+      )
+    );
+  });
+
   it("still allows adding a free-text song without selecting anything from the catalog", async () => {
     mockGet(true, [
       { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
