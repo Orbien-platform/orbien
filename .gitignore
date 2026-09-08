@@ -41,6 +41,7 @@ apps/*/.claude/settings.local.json
 .claude/**/node_modules/
 .claude/**/.skill-meta.json
 .claude/**/.temp-execution-*.js
+.claude/worktrees/
 
 # Capturas geradas pelos scripts de e2e
 apps/*/e2e/screenshots/
