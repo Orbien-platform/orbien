@@ -51,7 +51,7 @@ test.describe("repertório do time de louvor", () => {
           page.getByText(songTitle, { exact: true }),
           "música criada via API não apareceu no catálogo"
         ).toBeVisible();
-        await expect(page.getByText("Tom D")).toBeVisible();
+        await expect(page.getByText("Tom D", { exact: true })).toBeVisible();
         await expect(page.getByText("96 BPM")).toBeVisible();
         await shot(page, "20-repertorio-catalogo");
       });
@@ -74,7 +74,7 @@ test.describe("repertório do time de louvor", () => {
           page.getByText(uiSongTitle, { exact: true }),
           "música criada pelo modal não apareceu no catálogo"
         ).toBeVisible();
-        await expect(page.getByText("Tom A")).toBeVisible();
+        await expect(page.getByText("Tom A", { exact: true })).toBeVisible();
         await shot(page, "20b-repertorio-catalogo-criado-via-ui");
       });
 
