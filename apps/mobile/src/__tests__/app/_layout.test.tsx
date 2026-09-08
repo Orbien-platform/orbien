@@ -27,6 +27,14 @@ jest.mock("../../lib/auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
+// NotificationsProvider (MOB-07) usa o SDK real do OneSignal, que não
+// resolve em Jest (sem binário nativo linkado) — este teste cobre só o
+// wiring de AuthGate/ThemeProvider, o comportamento de push já tem
+// cobertura própria em notifications-provider.test.tsx.
+jest.mock("../../lib/notifications/notifications-provider", () => ({
+  NotificationsProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 jest.mock("expo-router", () => {
   const { Text } = require("react-native");
   return {

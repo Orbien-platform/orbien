@@ -206,6 +206,34 @@ describe('PostsService', () => {
 
       await expect(service.findOne('t1', 'g1', 'p1')).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it('membro comum recebe NotFoundException para post despublicado (rascunho)', async () => {
+      const client = clientWith();
+      client.contentPost.findFirst.mockResolvedValue(null);
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.findOne('t1', 'g1', 'p1', ['member']),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.contentPost.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ published_at: { not: null } }),
+        }),
+      );
+    });
+
+    it('staff (não member puro) continua vendo o post mesmo despublicado', async () => {
+      const client = clientWith();
+      client.contentPost.findFirst.mockResolvedValue({ id: 'p1', is_draft: true });
+      const { service } = serviceWith(client);
+
+      const result = await service.findOne('t1', 'g1', 'p1', ['admin_congregation']);
+
+      expect(result).toEqual({ id: 'p1', is_draft: true });
+      expect(client.contentPost.findFirst.mock.calls[0]![0].where).not.toHaveProperty(
+        'published_at',
+      );
+    });
   });
 
   describe('update', () => {

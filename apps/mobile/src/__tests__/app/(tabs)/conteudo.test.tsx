@@ -13,6 +13,11 @@ jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
 }));
 
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 import ConteudoScreen from "../../../app/(tabs)/conteudo";
 
 const POST_1 = { id: "p1", type: "announcement", title: "Post 1", body: "Corpo 1", media_url: null, published_at: "2026-09-01T10:00:00Z", created_at: "2026-09-01T10:00:00Z" };
@@ -126,5 +131,20 @@ describe("ConteudoScreen", () => {
 
     // 1 chamada inicial (page 1) + 1 de "carregar mais" — nunca 2.
     expect(mockGetPosts).toHaveBeenCalledTimes(2);
+  });
+
+  it("tocar num item da lista navega para /post/:id (MOB-07)", async () => {
+    mockGetPosts.mockResolvedValue({ data: [POST_1], total: 1 });
+
+    await act(async () => {
+      render(<ConteudoScreen />);
+    });
+    await waitFor(() => screen.getByTestId("post-p1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("post-p1"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/post/p1");
   });
 });

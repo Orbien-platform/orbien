@@ -57,7 +57,7 @@ export class PostsController {
   @Get(':id')
   @Roles(...ALL_ROLES)
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
-    return this.postsService.findOne(user.tenant_id, user.congregation_id, id);
+    return this.postsService.findOne(user.tenant_id, user.congregation_id, id, user.roles);
   }
 
   @Patch(':id')

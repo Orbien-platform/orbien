@@ -1423,3 +1423,411 @@ Nenhuma task depende de uma task de fase posterior. ✅
 | T4 | Tela Conteúdo (componente) | component | component | ✅ OK |
 
 Nenhuma violação. ✅
+
+---
+
+# Rodada 4 — Tasks: MOB-07
+
+**Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 4 —
+MOB-07 (Conteúdos — push: registro OneSignal + deep link)".
+**Status**: In Progress
+**Escopo**: AC1 (registrar dispositivo no OneSignal com `external_id` +
+tags de segmentação), AC4 (toque na push abre o post, não a lista) da
+história "P1: Conteúdos e Notificações". AC3 (push chega ponta a ponta)
+depende só do backend já existente + deste registro — sem código extra.
+Inclui a correção de `PostsService.findOne` (gap encontrado na Pesquisa
+do design desta rodada, necessário para o Edge Case "post despublicado
+→ não encontrado" ter suporte real).
+
+## Test Coverage Matrix
+
+> Guidelines mobile: `apps/mobile/jest.config.js` (`jest-expo` +
+> Testing Library), mesmo padrão das rodadas anteriores — SDK externo
+> (`react-native-onesignal`) mockado por arquivo (`jest.mock`), mesmo
+> padrão já usado para `expo-secure-store` em `auth-client.test.ts`.
+> Guidelines backend: `apps/api` Jest `unit` project (`posts.service.spec.ts`
+> já existe — a task estende o describe existente).
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+|---|---|---|---|---|
+| `PostsService.findOne` (`apps/api/src/content/posts.service.ts`) | unit | Member com post despublicado → `NotFoundException`; admin (`roles` != `['member']` ou omitido) continua vendo rascunho | `apps/api/src/content/posts.service.spec.ts` | `npm run test -w orbien-backend` |
+| `PostsController.findOne` (`apps/api/src/content/posts.controller.ts`) | — | Sem teste novo — só passa a repassar `user.roles`, já coberto por e2e/spec existente se houver; mudança de 1 linha | — | — |
+| `decodeJwtPayload` (`lib/auth/jwt.ts`) | unit | Token válido → claims; token malformado → `null` | `apps/mobile/src/lib/auth/jwt.test.ts` | `npm run test -w orbien-mobile` |
+| `onesignal-client` (`lib/notifications/onesignal-client.ts`) | unit | `registerDevice` chama `login`+`addTags` com os valores certos do token; token inválido → no-op; `unregisterDevice` chama `logout`; `onNotificationClick` extrai `post_id` e ignora clique sem `post_id` | `apps/mobile/src/lib/notifications/onesignal-client.test.ts` | `npm run test -w orbien-mobile` |
+| `NotificationsProvider` (`lib/notifications/notifications-provider.tsx`) | component | Sessão aparece → `registerDevice`; sessão some → `unregisterDevice`; clique em push navega para `/post/:id` | `apps/mobile/src/lib/notifications/notifications-provider.test.tsx` | `npm run test -w orbien-mobile` |
+| `ContentClient.getPost` (`lib/content/content-client.ts`) | unit | Chama `authenticatedRequest("get", "/content/posts/:id")` | `apps/mobile/src/lib/content/content-client.test.ts` (estende o describe existente) | `npm run test -w orbien-mobile` |
+| Tela "Post" (`app/post/[id].tsx`) | component | Caminho feliz (mostra título/corpo); 404 → "Post não encontrado"; erro de rede → estado de erro genérico | `apps/mobile/src/app/post/[id].test.tsx` | `npm run test -w orbien-mobile` |
+| `(tabs)/conteudo.tsx` (ajuste) | component | Tocar num item navega para `/post/:id` (teste novo no describe existente) | `apps/mobile/src/__tests__/app/(tabs)/conteudo.test.tsx` | `npm run test -w orbien-mobile` |
+
+## Gate Check Commands
+
+| Gate Level | When to Use | Command |
+|---|---|---|
+| Quick (mobile) | Após task só unit/component no mobile | `npm run test -w orbien-mobile` |
+| Quick (backend) | Após T1 | `npm run test -w orbien-backend` |
+| Full (mobile) | Fechamento de fase | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
+
+---
+
+## Execution Plan
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+```
+
+### Phase 1: Backend fix + utilitários sem dependência entre si
+
+```
+T1   (backend: findOne filtra rascunho para member)
+T2   (mobile: decodeJwtPayload)
+T3   (mobile: instala SDK + plugin no app.config.js)
+T6   (mobile: ContentClient.getPost)
+```
+
+### Phase 2: `onesignal-client` (depende de T2 + T3)
+
+```
+T4
+```
+
+### Phase 3: Wiring de push + tela de destino
+
+```
+T5   (NotificationsProvider, depende de T4)
+T7   (Tela Post, depende de T1 + T6)
+```
+
+### Phase 4: Fecha a navegação lista→detalhe
+
+```
+T8   (depende de T7)
+```
+
+---
+
+## Task Breakdown
+
+### T1: `PostsService.findOne` filtra rascunho para member
+
+**What**: `findOne` ganha um 4º parâmetro opcional `roles?: string[]`;
+quando `roles.length === 1 && roles[0] === 'member'` (mesmo critério
+`isMember` de `findAll`), aplica `published_at: {not: null}` no `where`
+— replica para o detalhe o mesmo filtro que a listagem já tem. Sem o
+parâmetro (chamadas internas de `update`/`remove`), comportamento
+inalterado. `PostsController.findOne` passa `user.roles`.
+**Where**: `apps/api/src/content/posts.service.ts` (`findOne`),
+`apps/api/src/content/posts.controller.ts` (método `findOne`)
+**Depends on**: None
+**Reuses**: mesmo critério `isMember` já escrito em `findAll`
+(`posts.service.ts:72`).
+**Requirement**: MOB-07 (Edge Case: post despublicado → "não encontrado")
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `findOne(tenantId, congId, id, ['member'])` com post
+      `is_draft: true`/`published_at: null` lança `NotFoundException`
+- [ ] Teste: `findOne(tenantId, congId, id, ['admin_congregation'])` (ou
+      sem `roles`) continua devolvendo o post mesmo despublicado —
+      comportamento existente preservado
+- [ ] Gate check passa: `npm run test -w orbien-backend`
+
+**Tests**: unit
+**Gate**: quick (backend)
+
+**Commit**: `fix(api): findOne de posts esconde rascunho de member (MOB-07)`
+
+---
+
+### T2: `decodeJwtPayload` (mobile)
+
+**What**: Utilitário puro que decodifica o payload de um JWT (sem
+validar assinatura) — mesmo algoritmo de `apps/web/src/lib/auth.ts`.
+Retorna `null` em token malformado, nunca lança.
+**Where**: `apps/mobile/src/lib/auth/jwt.ts` (novo)
+**Depends on**: None
+**Reuses**: mesmo algoritmo de `apps/web/src/lib/auth.ts:27-35`, adaptado
+(claims do `JwtPayload` do mobile: `sub`, `tenant_id`, `congregation_id`,
+`roles`, `exp`).
+**Requirement**: MOB-07 (base para tags do OneSignal)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: token válido (3 partes, payload base64url válido) → objeto
+      com os claims esperados
+- [ ] Teste: token malformado (menos de 3 partes, ou payload não-JSON)
+      → `null`, sem lançar
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(mobile): decodeJwtPayload — leitura de claims sem validar assinatura (MOB-07)`
+
+---
+
+### T3: Instala SDK do OneSignal + config plugin
+
+**What**: `npm install react-native-onesignal onesignal-expo-plugin -w
+orbien-mobile`. `app.config.js` ganha `plugins: [["onesignal-expo-plugin",
+{ mode: process.env.EAS_BUILD_PROFILE === "production" ? "production" :
+"development" }]]` — primeiro plugin do array (exigência do próprio
+plugin, evita erro de header nativo não encontrado). Nenhuma mudança em
+`extra.oneSignalAppId` (já existe desde o MOB-12).
+**Where**: `apps/mobile/package.json`, `apps/mobile/app.config.js`
+**Depends on**: None
+**Reuses**: `extra.oneSignalAppId` já resolvido por `app.config.js`
+(MOB-12).
+**Requirement**: MOB-07 (infra — sem SDK, nenhum outro AC é alcançável)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] `app.config.test.js` (já existe, valida `app.config.js`) continua
+      passando com o `plugins` novo — se o teste hoje faz snapshot/asserção
+      explícita de ausência de `plugins`, ajustar a asserção
+- [ ] `npx expo config` (smoke check manual, documentado no commit) lista
+      o plugin resolvido sem erro
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit (o teste existente de `app.config.js`)
+**Gate**: quick
+
+**Commit**: `chore(mobile): instala react-native-onesignal + config plugin (MOB-07)`
+
+---
+
+### T4: `onesignal-client` — init, registro, de-registro, clique
+
+**What**: `initializeOneSignal()`, `registerDevice(accessToken)`
+(decodifica via `decodeJwtPayload`, `OneSignal.login(sub)` +
+`OneSignal.User.addTags({tenant_id, congregation_id, role: roles[0]})`;
+token indecodificável → no-op), `unregisterDevice()` (`OneSignal.logout()`),
+`onNotificationClick(handler)` (lê `event.notification.additionalData.post_id`,
+ignora clique sem esse campo, devolve função de remoção do listener).
+**Where**: `apps/mobile/src/lib/notifications/onesignal-client.ts` (novo)
+**Depends on**: T2, T3
+**Reuses**: `decodeJwtPayload` (T2); `Constants.expoConfig.extra.oneSignalAppId`
+(MOB-12); mesmo padrão de listener removível de `onSessionExpired`
+(`auth-client.ts:40-45`).
+**Requirement**: MOB-07 (AC1, AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `registerDevice(token)` com token válido chama
+      `OneSignal.login` com o `sub` certo e `OneSignal.User.addTags` com
+      `tenant_id`/`congregation_id`/`role` (`roles[0]`) do token
+- [ ] Teste: `registerDevice(token)` com token indecodificável não chama
+      `OneSignal.login`/`addTags` (no-op silencioso)
+- [ ] Teste: `unregisterDevice()` chama `OneSignal.logout()`
+- [ ] Teste: `onNotificationClick` chama o handler com o `post_id` do
+      evento simulado
+- [ ] Teste: `onNotificationClick` não chama o handler quando o evento
+      simulado não tem `post_id` em `additionalData`
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(mobile): onesignal-client — registro de dispositivo e clique em push (MOB-07)`
+
+---
+
+### T5: `NotificationsProvider` — wiring no `_layout.tsx`
+
+**What**: Provider sem contexto próprio (só efeito colateral) — no
+mount, `initializeOneSignal()` uma vez e registra o listener de clique
+(`onNotificationClick`, navega via `router.push(\`/post/${postId}\`)`);
+`useEffect([session])` chama `registerDevice(session.accessToken)`
+quando `session` passa a existir, `unregisterDevice()` quando deixa de
+existir (mesma forma do `useEffect([session])` de `theme-provider.tsx`).
+Entra em `_layout.tsx` dentro de `AuthGate`, fora de `ThemeProvider`.
+**Where**: `apps/mobile/src/lib/notifications/notifications-provider.tsx`
+(novo), `apps/mobile/src/app/_layout.tsx` (wiring)
+**Depends on**: T4
+**Reuses**: forma de `theme-provider.tsx:57-93`; `useAuth()`.
+**Requirement**: MOB-07 (AC1, AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: sessão aparece (`session` muda de `null` para um objeto) →
+      `registerDevice` chamado com o `accessToken` certo
+- [ ] Teste: sessão some (`session` muda para `null`) → `unregisterDevice`
+      chamado
+- [ ] Teste: evento de clique simulado com `post_id` → `router.push`
+      chamado com `/post/<id>`
+- [ ] `_layout.tsx` renderiza `NotificationsProvider` dentro de
+      `AuthGate`, envolvendo `ThemeProvider`
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): registra e de-registra o dispositivo por sessão (MOB-07)`
+
+---
+
+### T6: `ContentClient.getPost`
+
+**What**: `getPost(id: string): Promise<Post>` — `GET /content/posts/:id`
+via `authenticatedRequest`. Mesmo arquivo de `getPosts` (MOB-06).
+**Where**: `apps/mobile/src/lib/content/content-client.ts`
+**Depends on**: None
+**Reuses**: `authenticatedRequest`; tipo `Post` (MOB-06, `content/types.ts`,
+sem alteração — já cobre os campos que a tela de detalhe usa).
+**Requirement**: MOB-07 (AC4, base de dados da tela de detalhe)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getPost("abc")` chama
+      `authenticatedRequest("get", "/content/posts/abc")`
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(mobile): ContentClient.getPost (MOB-07)`
+
+---
+
+### T7: Tela "Post" (rota de detalhe)
+
+**What**: `app/post/[id].tsx` — lê `id` via `useLocalSearchParams`,
+carrega com `ContentClient.getPost` no mount, mostra título/corpo/mídia;
+`HttpError` com `status === 404` → "Post não encontrado"; qualquer outro
+erro → estado de erro de rede genérico (mesmo texto/padrão das outras
+telas).
+**Where**: `apps/mobile/src/app/post/[id].tsx` (novo)
+**Depends on**: T1 (o 404 só existe de verdade para member depois do
+fix), T6
+**Reuses**: `ContentClient.getPost` (T6); `HttpError`/`.status`
+(`lib/api/errors.ts`); mesmo padrão de estado de erro/carregamento das
+telas de Escala/Conteúdo.
+**Requirement**: MOB-07 (AC4, Edge Case "post despublicado")
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: caminho feliz — mostra título e corpo do post carregado
+- [ ] Teste: `getPost` rejeita com `HttpError(404, ...)` → mostra "Post
+      não encontrado", não trava/quebra
+- [ ] Teste: `getPost` rejeita com erro de rede (`NetworkError`) → mostra
+      estado de erro genérico
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: component
+**Gate**: quick
+
+**Commit**: `feat(mobile): tela de detalhe do post (MOB-07)`
+
+---
+
+### T8: `(tabs)/conteudo.tsx` — item da lista navega para o post
+
+**What**: Cada item da `FlatList` passa a ser tocável
+(`Pressable`/`TouchableOpacity`), chamando `router.push(\`/post/${item.id}\`)`
+no toque — mesmo `useRouter()` já usado em `(tabs)/index.tsx` para
+`/indisponibilidade`.
+**Where**: `apps/mobile/src/app/(tabs)/conteudo.tsx`
+**Depends on**: T7
+**Reuses**: `useRouter()` (mesmo padrão de `(tabs)/index.tsx`).
+**Requirement**: MOB-07 (consistência de navegação — mesmo destino do
+clique em push, agora também alcançável pela lista)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: tocar num item da lista chama `router.push` com
+      `/post/<id>` do item tocado
+- [ ] Testes existentes de MOB-06 (lista, vazio, erro, carregar mais)
+      continuam passando sem alteração de asserção
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): item do feed abre o post ao tocar (MOB-07)`
+
+---
+
+## Phase Execution Map
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+
+Phase 1:  T1   T2   T3   T6
+Phase 2:  T2, T3 ──→ T4
+Phase 3:  T1, T6 ──→ T7        T4 ──→ T5
+Phase 4:  T7 ──→ T8
+```
+
+---
+
+## Task Granularity Check
+
+| Task | Scope | Status |
+|---|---|---|
+| T1: `findOne` filtra rascunho | 1 método (backend), 1 linha de controller | ✅ Granular |
+| T2: `decodeJwtPayload` | 1 utilitário puro | ✅ Granular |
+| T3: instala SDK + plugin | 1 dependência + 1 bloco de config | ✅ Granular |
+| T4: `onesignal-client` | 1 módulo, 4 funções coesas (init/registro/de-registro/clique — todas em torno do mesmo SDK) | ✅ Granular |
+| T5: `NotificationsProvider` | 1 componente (provider) + wiring de 1 linha em `_layout.tsx` | ✅ Granular |
+| T6: `ContentClient.getPost` | 1 método, mesmo arquivo de T MOB-06 | ✅ Granular |
+| T7: Tela Post | 1 tela | ✅ Granular |
+| T8: Ajuste tela Conteúdo | 1 tela (alteração pontual) | ✅ Granular |
+
+---
+
+## Diagram-Definition Cross-Check
+
+| Task | Depends On (task body) | Diagram Shows | Status |
+|---|---|---|---|
+| T1 | None | Fase 1 | ✅ Match |
+| T2 | None | Fase 1 | ✅ Match |
+| T3 | None | Fase 1 | ✅ Match |
+| T4 | T2, T3 | Fase 2 | ✅ Match |
+| T5 | T4 | Fase 3 | ✅ Match |
+| T6 | None | Fase 1 | ✅ Match |
+| T7 | T1, T6 | Fase 3 | ✅ Match |
+| T8 | T7 | Fase 4 | ✅ Match |
+
+Nenhuma task depende de uma task de fase posterior. ✅
+
+---
+
+## Test Co-location Validation
+
+| Task | Code Layer Created/Modified | Matrix Requires | Task Says | Status |
+|---|---|---|---|---|
+| T1 | `PostsService`/`PostsController` (backend) | unit | unit | ✅ OK |
+| T2 | Utilitário puro (mobile) | unit | unit | ✅ OK |
+| T3 | Config (`app.config.js`) | unit (teste existente) | unit | ✅ OK |
+| T4 | `onesignal-client` (domínio) | unit | unit | ✅ OK |
+| T5 | `NotificationsProvider` (componente) | component | component | ✅ OK |
+| T6 | `ContentClient` (domínio) | unit | unit | ✅ OK |
+| T7 | Tela Post (componente) | component | component | ✅ OK |
+| T8 | Tela Conteúdo (componente) | component | component | ✅ OK |
+
+Nenhuma violação. ✅

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Image, Text, View } from "react-native";
 
 import { AuthProvider, useAuth } from "../lib/auth/auth-provider";
+import { NotificationsProvider } from "../lib/notifications/notifications-provider";
 import { ThemeProvider, useTheme } from "../lib/theme/theme-provider";
 
 // Guarda de navegação (T14, MOB-01): enquanto a sessão hidrata, mostra
@@ -57,9 +58,11 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <AuthGate>
-        <ThemeProvider>
-          <ThemedShell />
-        </ThemeProvider>
+        <NotificationsProvider>
+          <ThemeProvider>
+            <ThemedShell />
+          </ThemeProvider>
+        </NotificationsProvider>
       </AuthGate>
     </AuthProvider>
   );

@@ -579,3 +579,284 @@ campos que a UI de fato usa).
 | Paginação no mobile | "Carregar mais" (concatena página seguinte), não infinite scroll automático | API é offset/page sem cursor; concatenar por botão é mais simples de testar e evita re-fetch acidental por scroll em teste automatizado. Pode evoluir para `onEndReached` depois, sem mudar o contrato do `ContentClient`. |
 | Tab bar via Expo Router `Tabs` | Nativo do próprio Expo Router, não uma lib de navegação separada | Mesmo framework já em uso para `Stack`; Expo Router resolve `Tabs` dentro de um grupo de rota nativamente, sem dependência nova. |
 | Segmentação de audiência no feed | Não implementada — mobile replica o filtro atual (congregação inteira, publicado) | Confirmado com o usuário: mudar isso é decisão de produto que afeta a mesma rota usada pelo `apps/web`, fora do escopo de MOB-06. |
+
+---
+
+# Rodada 4 — MOB-07 (Conteúdos — push: registro OneSignal + deep link)
+
+**Spec**: `.specs/features/app-mobile/spec.md`, story "P1: Conteúdos e
+Notificações", AC1 (registrar dispositivo), AC3 (push chega — depende do
+backend, já existente) e AC4 (toque abre o post, não a lista). AC2
+(listar posts) é MOB-06, já entregue (Rodada 3).
+**Status**: Draft
+
+## Pesquisa no backend (Knowledge Verification Chain, Step 1)
+
+- `apps/api/src/content/notifications.service.ts` já dispara push via
+  OneSignal REST API (`dispatch`), mas **filtra por tags do dispositivo**,
+  não por `external_id`: sem segmento, filtra `tag tenant_id = <tenantId>`
+  (linha 158); com segmento, monta filtros a partir de `criteria.congregation_ids`
+  (`tag congregation_id`), `criteria.group_ids` (`tag pg_ids`) e
+  `criteria.roles` (`tag role`) — `buildFilters`, linhas 156-219. **A spec
+  (Assumptions, "Identificação no OneSignal") fala só de `external_id`
+  como identidade estável — não basta**: sem o app também gravar essas
+  tags no registro do dispositivo, nenhum segmento por congregação/grupo/
+  papel jamais bate, e só o filtro-fallback por `tenant_id` funcionaria.
+  `external_id` continua necessário (é o que casa dispositivo↔pessoa para
+  reenvio/analytics, e é o que a spec pede), mas as **tags são o que
+  decide se a notificação chega**.
+- `pg_ids` (grupos da pessoa) não tem fonte no mobile ainda — Pequenos
+  Grupos é MOB-09, `Pending`, fora desta rodada. **Decisão**: registrar
+  as tags que já têm fonte disponível no app hoje (`tenant_id`,
+  `congregation_id`, `role`) e deixar `pg_ids` para quando MOB-09
+  existir — um segmento configurado por `group_ids` simplesmente não vai
+  alcançar o dispositivo até lá, mesmo comportamento de "sem tag = não
+  bate no filtro" que a spec já aceita implicitamente (nenhuma AC de
+  MOB-07 pede grupo).
+- `criteria.roles` assume **um** valor por tag `role` — `buildFilters`
+  monta `{key: 'role', value: <role>}` por role do segmento, e o SDK do
+  OneSignal só guarda **um** valor por chave de tag no dispositivo (tag é
+  `key→value`, não `key→value[]`). Uma pessoa com mais de um papel
+  (`roles.length > 1` no JWT) não pode ter os dois representados na mesma
+  tag `role` — é uma limitação que já existe no formato de filtro do
+  backend (mesma classe do achado de `posts.service.ts:73` na Rodada 3:
+  registrado, não corrigido aqui — mudar o formato de tag/filtro afeta
+  segmentos já configurados por tenant admins, fora do escopo de MOB-07).
+  **Decisão**: tag `role` recebe `roles[0]` (primeiro papel do array que
+  o JWT já traz, ordem decidida pelo backend) — cobre o caso comum (um
+  papel) sem inventar um formato de tag novo que o backend não filtra.
+- **Fonte dos valores de tag**: `tenant_id`/`congregation_id`/`roles` já
+  estão no JWT (`JwtPayload`, `apps/api/src/auth/interfaces/jwt-payload.interface.ts`)
+  — os mesmos valores que o próprio backend usa para montar os filtros.
+  O `design.md` (Rodada 1) registrou que "Mobile não decodifica o JWT
+  para lógica de negócio"; ler esses claims só para espelhá-los como tag
+  de push não é lógica de negócio (o backend não decide nada a partir
+  disso no cliente) — é o mesmo tipo de exceção já aberta para `expires_in`
+  (Rodada 1, `AuthClient`). **Precedente direto**: `apps/web/src/lib/auth.ts`
+  já decodifica o JWT no cliente com o comentário "Decodificar não é
+  validar (...) uso legítimo é exibição e desempate de fluxo" — mobile
+  segue o mesmo princípio, mesmo formato de função, adaptado.
+  Confirmado por busca (Step 4): Hermes (motor JS do RN, RN 0.86.3 aqui)
+  expõe `atob`/`btoa` como globais nativos desde que passaram a ser
+  builtins do motor — não precisa de polyfill nem lib nova, mesma
+  implementação do `apps/web` funciona.
+- **`GET /content/posts/:id` (findOne) não filtra rascunho para
+  member** — `posts.service.ts:100-111`: busca só por `id`+`tenant_id`+
+  `congregation_id`, sem o mesmo `isMember ? {published_at: {not: null}} : {}`
+  que `findAll` já aplica (linha 78). A spec (Edge Cases) exige: "post
+  despublicado entre o disparo e o toque → app mostra 'não encontrado'".
+  Hoje, se o post virar rascunho (`is_draft: true`, sem apagar), `findOne`
+  ainda devolve o conteúdo — um member abrindo pelo link da push veria o
+  rascunho, não "não encontrado". **Decisão**: mesmo princípio da Rodada 2
+  (check-in) — mudança pequena e localizada no `apps/api`, corrige o
+  gap em vez de deixar o AC sem suporte real. `findOne` passa a receber
+  `roles: string[]` (opcional — chamadas internas de `update`/`remove`,
+  que são só admin, continuam sem o parâmetro e mantêm acesso total) e
+  aplica o mesmo filtro de `findAll` quando `isMember`. O controller passa
+  `user.roles` na rota pública `GET /content/posts/:id`.
+
+## Novo comportamento: `PostsService.findOne` filtra rascunho para member
+
+```typescript
+// apps/api/src/content/posts.service.ts
+async findOne(
+  tenantId: string,
+  congregationId: string,
+  id: string,
+  roles?: string[],
+): Promise<ContentPost> {
+  const isMember = roles !== undefined && roles.length === 1 && roles[0] === 'member';
+  const post = await this.prisma.client.contentPost.findFirst({
+    where: {
+      id,
+      tenant_id: tenantId,
+      congregation_id: congregationId,
+      ...(isMember ? { published_at: { not: null } } : {}),
+    },
+    include: { postSegments: { include: { segment: true } } },
+  });
+  if (!post) throw new NotFoundException('Post não encontrado');
+  return post;
+}
+```
+
+`update`/`remove` (`posts.service.ts`) continuam chamando
+`this.findOne(tenantId, congregationId, id)` sem o terceiro argumento —
+`WRITE_ROLES` nunca é `['member']`, então mesmo se passassem `roles` o
+filtro não mudaria nada ali; omitir é só não carregar um parâmetro que
+essas rotas não precisam. O controller (`posts.controller.ts`, método
+`findOne`) passa `user.roles`:
+
+```typescript
+@Get(':id')
+@Roles(...ALL_ROLES)
+findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+  return this.postsService.findOne(user.tenant_id, user.congregation_id, id, user.roles);
+}
+```
+
+Sem migration, sem RLS novo — mesma tabela, mesma policy, só a query
+Prisma ganha uma condição a mais (mesmo padrão da Rodada 2: "gap de regra
+de negócio, não de schema").
+
+## Components (mobile)
+
+### `decodeJwtPayload` (utilitário, não UI)
+
+- **Purpose**: extrai `tenant_id`/`congregation_id`/`roles`/`sub` do
+  access token já em memória, para montar as tags do OneSignal. Mesmo
+  princípio e formato de `apps/web/src/lib/auth.ts` — decodificação sem
+  validação de assinatura (quem valida é a API); uso restrito a
+  exibição/config local, nunca decisão de negócio.
+- **Location**: `apps/mobile/src/lib/auth/jwt.ts`
+- **Interfaces**: `decodeJwtPayload(token: string): MobileJwtPayload | null`
+- **Dependencies**: `atob` global (Hermes, sem polyfill — ver Pesquisa
+  acima).
+- **Reuses**: mesmo algoritmo (`split('.')[1]`, replace base64url→base64,
+  `atob`+`JSON.parse`) de `apps/web/src/lib/auth.ts:27-35`.
+
+### `onesignal-client` (biblioteca interna, não UI)
+
+- **Purpose**: encapsula todo uso do SDK `react-native-onesignal` — init,
+  registro/de-registro de identidade+tags, listener de toque em push.
+  Único ponto do app que importa o SDK (mesmo princípio de
+  `auth-client.ts` centralizar `expo-secure-store`).
+- **Location**: `apps/mobile/src/lib/notifications/onesignal-client.ts`
+- **Interfaces**:
+  - `initializeOneSignal(): void` — `OneSignal.initialize(appId)` (lido
+    de `Constants.expoConfig.extra.oneSignalAppId`, nunca hardcoded —
+    MOB-12) + `OneSignal.Notifications.requestPermission(true)`. Chamado
+    uma vez, fora de qualquer efeito ligado à sessão (ver
+    `NotificationsProvider` abaixo).
+  - `registerDevice(accessToken: string): void` — decodifica o token
+    (`decodeJwtPayload`), `OneSignal.login(sub)` (AC1: `external_id` =
+    id do usuário autenticado) + `OneSignal.User.addTags({tenant_id,
+    congregation_id, role: roles[0]})`. Token inválido/indecodificável:
+    no-op (não derruba o app por causa de um efeito colateral de push).
+  - `unregisterDevice(): void` — `OneSignal.logout()`. Volta o
+    dispositivo a anônimo (sem `external_id`, sem as tags da pessoa
+    anterior) — essencial em device compartilhado: sem isso, a próxima
+    pessoa a logar no mesmo aparelho receberia push endereçada à conta
+    anterior até o próximo `registerDevice` sobrescrever.
+  - `onNotificationClick(handler: (postId: string) => void): () => void`
+    — `OneSignal.Notifications.addEventListener('click', ...)`, extrai
+    `event.notification.additionalData.post_id` (o mesmo `data` que
+    `NotificationsService.notifyPost` já envia,
+    `apps/api/src/content/notifications.service.ts:48`) e chama
+    `handler` só quando o campo existe. Retorna função de remoção do
+    listener (mesmo padrão de `onSessionExpired`, `auth-client.ts:40-45`).
+- **Dependencies**: `react-native-onesignal` (SDK), `Constants.expoConfig.extra.oneSignalAppId`.
+- **Reuses**: `decodeJwtPayload`.
+
+### `NotificationsProvider`
+
+- **Purpose**: fecha o ciclo de vida do registro no `_layout.tsx` raiz —
+  inicializa o SDK uma vez, registra/de-registra o dispositivo reagindo
+  à sessão (mesmo padrão de `useEffect` ligado a `session` que
+  `ThemeProvider` já usa), e liga o listener de toque à navegação.
+- **Location**: `apps/mobile/src/lib/notifications/notifications-provider.tsx`
+- **Interfaces**: `<NotificationsProvider>{children}</NotificationsProvider>`
+  — sem hook próprio, é só o efeito colateral (não expõe contexto:
+  nenhuma tela precisa ler estado de push).
+- **Dependencies**: `useAuth()` (sessão), `onesignal-client`,
+  `useRouter()` (Expo Router) para navegar ao `post_id` recebido.
+- **Reuses**: forma do `useEffect([session])` de `theme-provider.tsx:57-93`
+  — aqui sem chamada de rede (só SDK nativo), então sem cache/estado
+  intermediário, apenas `registerDevice`/`unregisterDevice`.
+- **Wiring**: entra em `_layout.tsx` **dentro** de `AuthGate` (só existe
+  sessão autenticada ali) e **fora** de `ThemeProvider` — não depende de
+  tema, e o registro de push não deve esperar `GET /settings` resolver.
+
+```mermaid
+graph TD
+    AG[AuthGate: status=authenticated] --> NP[NotificationsProvider]
+    NP -->|mount, uma vez| INIT["initializeOneSignal()"]
+    NP -->|session muda de null→Session| REG["registerDevice(accessToken)"]
+    NP -->|session muda de Session→null| UNREG["unregisterDevice()"]
+    NP -->|listener global, mount| CLICK["onNotificationClick"]
+    CLICK -->|post_id| NAV["router.push('/post/'+id)"]
+```
+
+### `ContentClient.getPost` (extensão)
+
+- **Purpose**: `GET /content/posts/:id` — usado pela tela de detalhe
+  (AC4) e reutilizável se uma tela de detalhe "tocar no post da lista"
+  vier a existir depois (não pedido nesta rodada, mas o mesmo endpoint
+  serve os dois casos).
+- **Location**: `apps/mobile/src/lib/content/content-client.ts`
+  (adiciona `getPost` ao arquivo existente, mesmo padrão de `getPosts`).
+- **Interfaces**: `getPost(id: string): Promise<Post>`
+- **Dependencies**: `authenticatedRequest`.
+- **Reuses**: mesmo tipo `Post` (MOB-06) — o `findOne` do backend devolve
+  um superset (inclui `postSegments`), mas o mobile só tipa os campos que
+  já usa, mesmo princípio de reuso mínimo da Rodada 3.
+
+### Tela "Post" (rota de detalhe)
+
+- **Purpose**: mostra título/corpo/mídia de um post por id (AC4: destino
+  do toque na push) — também alcançável tocando um item da lista de
+  Conteúdo (a lista antes não navegava para lugar nenhum; passa a
+  navegar, coerente com a UI ter uma tela de destino agora).
+- **Location**: `apps/mobile/src/app/post/[id].tsx` — rota-filha do
+  `Stack` raiz (fora do grupo `(tabs)`), mesmo critério de
+  `indisponibilidade.tsx` (Rodada 2): tela de detalhe empurrada por
+  `router.push`, não uma seção própria de navegação.
+- **Dependencies**: `ContentClient.getPost`, `useLocalSearchParams`
+  (Expo Router, para ler `id` da rota).
+- **Reuses**: mesmo padrão de erro de rede visível vs. estado vazio das
+  telas anteriores; usa `HttpError`/`.status` (`apps/mobile/src/lib/api/errors.ts`)
+  para distinguir 404 ("Post não encontrado" — cobre o Edge Case da
+  spec: post despublicado entre disparo e toque) de outro erro
+  ("Não foi possível carregar").
+
+### Tela "Conteúdo" (ajuste)
+
+- **What muda**: cada item da `FlatList` (`(tabs)/conteudo.tsx`) passa a
+  ser tocável (`Pressable`/`TouchableOpacity`), navegando para
+  `/post/${item.id}` via `useRouter()` — mesmo hook já usado em
+  `(tabs)/index.tsx` (Escala) para `/indisponibilidade`.
+
+## Data Models
+
+```typescript
+// apps/mobile/src/lib/auth/jwt.ts
+interface MobileJwtPayload {
+  sub: string;
+  tenant_id: string;
+  congregation_id: string;
+  roles: string[];
+  exp: number;
+}
+```
+
+`Post` (MOB-06, `content/types.ts`) é reusado sem alteração para a tela
+de detalhe — os mesmos campos (`title`, `body`, `media_url`,
+`published_at`) já cobrem o que a tela mostra.
+
+## Error Handling Strategy
+
+| Error Scenario | Handling | User Impact |
+| --- | --- | --- |
+| Token indecodificável/sem os claims esperados ao registrar push | `registerDevice` vira no-op (sem `OneSignal.login`/`addTags`) | App continua funcionando normalmente, só sem push registrado — nunca derruba a sessão por causa disso |
+| `GET /content/posts/:id` retorna 404 (não encontrado ou despublicado — mesmo filtro de `findAll` agora) | Tela mostra "Post não encontrado" | Cobre o Edge Case da spec (post despublicado entre disparo e toque) |
+| `GET /content/posts/:id` falha por rede/5xx | Estado de erro de rede visível (mesmo padrão das outras telas) | Nunca tela vazia interpretável como sucesso |
+| Toque em push chega antes do `NotificationsProvider` montar (cold start) | SDK do OneSignal buffereia o evento de clique e entrega assim que o listener é registrado (comportamento documentado do `react-native-onesignal`) | Sem tratamento adicional no app — o listener sempre acaba recebendo o evento |
+| Tenant admin configura um segmento por `group_ids` (PG) | Nenhum dispositivo tem a tag `pg_ids` ainda (MOB-09 não existe) — o segmento simplesmente não alcança ninguém no mobile | Sem erro visível a ninguém; registrado como lacuna conhecida, não bug desta rodada |
+
+## Risks & Concerns
+
+| Concern | Location (file:line) | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Tag `role` só guarda o primeiro papel do usuário (limitação do formato de tag do backend, não desta rodada) | `apps/api/src/content/notifications.service.ts:191-202` (`buildFilters`, critério `roles`) | Usuário com múltiplos papéis pode não bater num segmento configurado para o papel "secundário" dele | Fora de escopo mudar o formato de filtro aqui (afeta segmentos já configurados por tenant admins). Registrado para quem futuramente revisar `buildFilters`. |
+| `unregisterDevice` (`OneSignal.logout()`) depende do app chamar `logout()` de fato — se o usuário só desinstalar o app sem sair, o dispositivo continua com a tag/`external_id` da última pessoa até o token OneSignal expirar naturalmente no lado deles | `apps/mobile/src/lib/notifications/onesignal-client.ts` (a criar) | Baixo — mesmo comportamento aceito por qualquer app com push; não é algo que o cliente controla | Nenhuma ação — fora do alcance do app. |
+| `findOne` agora filtra rascunho só quando `roles` é passado E é exatamente `['member']` — mesma regra frágil de `findAll` (`roles.length === 1`) já registrada como gap na Rodada 3 | `apps/api/src/content/posts.service.ts` (`findOne`, a alterar) | Usuário com `member` + outro papel não tem o filtro aplicado (mesmo comportamento pré-existente de `findAll`, só replicado para manter os dois em paridade) | Não é regressão nova — é o mesmo comportamento que `findAll` já tem hoje; corrigir a regra em si é o mesmo gap já registrado no Risks da Rodada 3, fora do escopo de MOB-07. |
+
+## Tech Decisions (only non-obvious ones)
+
+| Decision | Choice | Rationale |
+| --- | --- | --- |
+| SDK de push | `react-native-onesignal` + `onesignal-expo-plugin` (config plugin) | É o SDK oficial que o backend já integra (`ONESIGNAL_APP_ID`/`ONESIGNAL_API_KEY`, `notifications.service.ts`); o config plugin é obrigatório em managed workflow (Expo) para linkar o SDK nativo sem ejetar — mesmo `app.config.js` dinâmico do MOB-12 já previa esse app id (`extra.oneSignalAppId`), só faltava o SDK que o consome. |
+| Modo do plugin (`onesignal-expo-plugin`, `mode: development\|production`) | `process.env.EAS_BUILD_PROFILE === 'production' ? 'production' : 'development'` dentro de `app.config.js` | EAS injeta `EAS_BUILD_PROFILE` automaticamente em todo build — não precisa de env nova por profile em `eas.json`; é config de ambiente de APNs (iOS), não identidade (não é campo do MOB-12). |
+| "Deep link" via dado da própria notificação, não `Linking`/URL scheme | `onNotificationClick` lê `additionalData.post_id` do payload que o backend já envia (`notifyPost`, `data: {post_id, type}`) e navega imperativamente (`router.push`) | A AC4 pede "abrir o post relacionado", não uma URL universal externa ao app — usar o dado que o clique do OneSignal já entrega é mais direto que introduzir `scheme://post/:id` e um `Linking` handler paralelo para o mesmo resultado. Nada impede adicionar isso depois se surgir a necessidade de abrir post a partir de fora do app (ex.: link web); fora do escopo de MOB-07. |
+| Onde decodificar o JWT no mobile | Novo `apps/mobile/src/lib/auth/jwt.ts`, não dentro de `auth-client.ts` | Mantém `auth-client.ts` focado em sessão/fila de refresh (Rodada 1); decodificação é uma preocupação separada (leitura de claims para exibição/config), consumida por quem precisar (aqui, `onesignal-client.ts`) — mesmo tipo de separação que já existe entre `escala-client.ts` e `auth-client.ts`. |
+| Correção do `findOne` (backend) entra nesta rodada, não numa rodada própria | Mudança pequena e localizada, necessária para o AC4/Edge Case terem suporte real (mesmo critério da Rodada 2 para o check-in) | Sem ela, a tela de detalhe (que esta rodada introduz) não tem como cumprir "post despublicado → não encontrado" — a lacuna nasceria já na mesma rodada que a expõe pela primeira vez. |
