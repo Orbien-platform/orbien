@@ -203,7 +203,10 @@ describe('SetlistSongsService', () => {
       client.setlistSong.update.mockResolvedValue({ id: 'song1' });
       const service = serviceWith(client);
 
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog' });
+
       await service.update('t1', 'g1', 'song1', {
+        song_id: 'song-catalog',
         sequence: 2,
         title: 'Novo título',
         key: 'D',
@@ -215,6 +218,7 @@ describe('SetlistSongsService', () => {
       expect(client.setlistSong.update).toHaveBeenCalledWith({
         where: { id: 'song1' },
         data: {
+          song_id: 'song-catalog',
           sequence: 2,
           title: 'Novo título',
           key: 'D',
@@ -234,6 +238,75 @@ describe('SetlistSongsService', () => {
       await service.update('t1', 'g1', 'song1', {} as never);
 
       expect(client.setlistSong.update).toHaveBeenCalledWith({ where: { id: 'song1' }, data: {} });
+    });
+
+    it('grava song_id resolvido na própria congregação (SETREP-01 AC1)', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', song_id: null });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog', key: 'D' });
+      client.setlistSong.update.mockResolvedValue({ id: 'song1', song_id: 'song-catalog' });
+      const service = serviceWith(client);
+
+      const result = await service.update('t1', 'g1', 'song1', { song_id: 'song-catalog' } as never);
+
+      expect(client.song.findFirst).toHaveBeenCalledWith({
+        where: { id: 'song-catalog', tenant_id: 't1', congregation_id: 'g1' },
+      });
+      expect(result).toEqual({ id: 'song1', song_id: 'song-catalog' });
+    });
+
+    it('song_id sozinho não toca title/key/bpm/link/notes (SETREP-01 AC2)', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', key: 'G' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog', key: 'D', bpm: 80, link: 'https://cifra/x' });
+      client.setlistSong.update.mockResolvedValue({ id: 'song1' });
+      const service = serviceWith(client);
+
+      await service.update('t1', 'g1', 'song1', { song_id: 'song-catalog' } as never);
+
+      expect(client.setlistSong.update).toHaveBeenCalledWith({
+        where: { id: 'song1' },
+        data: { song_id: 'song-catalog' },
+      });
+    });
+
+    it('song_id null desvincula preservando os demais campos (SETREP-01 AC3)', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', song_id: 'song-catalog', key: 'G' });
+      client.setlistSong.update.mockResolvedValue({ id: 'song1', song_id: null, key: 'G' });
+      const service = serviceWith(client);
+
+      const result = await service.update('t1', 'g1', 'song1', { song_id: null } as never);
+
+      expect(client.setlistSong.update).toHaveBeenCalledWith({
+        where: { id: 'song1' },
+        data: { song_id: null },
+      });
+      expect(client.song.findFirst).not.toHaveBeenCalled();
+      expect(result).toEqual({ id: 'song1', song_id: null, key: 'G' });
+    });
+
+    it('song_id null numa música já avulsa é no-op efetivo (Edge Case)', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', song_id: null, key: 'G' });
+      client.setlistSong.update.mockResolvedValue({ id: 'song1', song_id: null, key: 'G' });
+      const service = serviceWith(client);
+
+      const result = await service.update('t1', 'g1', 'song1', { song_id: null } as never);
+
+      expect(result).toEqual({ id: 'song1', song_id: null, key: 'G' });
+    });
+
+    it('song_id de outra congregação lança NotFoundException antes de gravar (SETREP-01 AC4)', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', song_id: null });
+      client.song.findFirst.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.update('t1', 'g1', 'song1', { song_id: 'song-de-outro-tenant' } as never),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.setlistSong.update).not.toHaveBeenCalled();
     });
   });
 
