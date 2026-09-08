@@ -318,8 +318,8 @@ bundle id mudam só por config, sem tocar em código.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MOB-01 | P1: Autenticação e sessão | Design | In Tasks |
-| MOB-02 | P1: Autenticação e sessão (refresh serializado) | Design | In Tasks |
+| MOB-01 | P1: Autenticação e sessão | Design | Implementing |
+| MOB-02 | P1: Autenticação e sessão (refresh serializado) | Design | Implementing |
 | MOB-03 | P1: Tema por tenant | Design | In Tasks |
 | MOB-04 | P1: Membros e Voluntários — escala | Design | Pending |
 | MOB-05 | P1: Membros e Voluntários — check-in/indisponibilidade | Design | Pending |
@@ -341,6 +341,13 @@ bundle id mudam só por config, sem tocar em código.
 T1-T7 (`tasks.md`) entregam scaffold do workspace e `app.config.js`
 dinâmico, mas a Fase Verificação (Verifier, fillsd) só roda no fechamento
 da feature inteira (após Fases 3-5, MOB-01/02/03). Não marcar "Verified"
+aqui.
+
+**Nota (Fase 3/4 do Execute):** MOB-01 e MOB-02 ficam em "Implementing" —
+T8-T14 (`tasks.md`) entregam ApiClient, AuthClient (login/logout/fila de
+refresh), AuthProvider, tela de Login e guarda de navegação, mas a Fase 5
+(T15-T16, tema por tenant — MOB-03) ainda está pendente em outro batch, e
+o Verifier só roda no fechamento da feature inteira. Não marcar "Verified"
 aqui.
 
 ---

@@ -14,9 +14,9 @@ without it.**
 ---
 
 **Design**: `.specs/features/app-mobile/design.md`
-**Status**: Phase 1 (T1-T4) e Phase 2 (T5-T7) ✅ Done. Phases 3-5 (T8-T16)
-ainda Pending — outro batch, dependente de T2 (Jest) e T5 (`app.config.js`)
-entregues aqui.
+**Status**: Phase 1 (T1-T4), Phase 2 (T5-T7), Phase 3 (T8-T11) e Phase 4
+(T12-T14) ✅ Done. Phase 5 (T15-T16, tema por tenant) ainda Pending — outro
+batch, dependente do `ApiClient` (T9) entregue aqui.
 
 ---
 
@@ -531,6 +531,8 @@ rota inicial em caso de sucesso.
 ---
 
 ### T14: Guarda de navegação (root layout)
+
+**Status**: ✅ Done (commit `b900717`)
 
 **What**: `app/_layout.tsx` envolve a árvore com `AuthProvider`; enquanto
 `status === 'loading'`, mostra splash; `unauthenticated` força redirect
