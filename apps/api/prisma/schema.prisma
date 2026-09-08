@@ -1264,6 +1264,7 @@ model CelebrationAssignment {
   status                  AssignmentStatus @default(pending)
   notified_at             DateTime?
   responded_at            DateTime?
+  checked_in_at           DateTime?
   created_at              DateTime         @default(now())
   updated_at              DateTime         @updatedAt
 
