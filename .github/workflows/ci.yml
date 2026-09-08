@@ -318,3 +318,71 @@ jobs:
             apps/web/test-results/
             apps/web/e2e/screenshots/
           retention-days: 7
+
+  # ── Build de preview do mobile na EAS ────────────────────────────────────
+  # Só na main (não em todo PR — cada build consome minuto de fila da conta
+  # EAS) e só quando o diff toca apps/mobile — `needs` já garante lint/build/
+  # test (turbo run test cobre o Jest do orbien-mobile) verdes antes de subir
+  # um build pra nuvem da Expo. `--no-wait` porque o build em si roda
+  # assíncrono do lado da Expo (10-20min) — o runner não precisa esperar; o
+  # progresso e o link de instalação ficam em expo.dev/accounts/fernandovargas/projects/orbien.
+  mobile-eas-build:
+    name: Build EAS (mobile preview)
+    runs-on: ubuntu-latest
+    needs: [build, unit]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # git diff --quiet sai 0 (sem diff), 1 (tem diff) ou >1 (erro — ex.:
+      # github.event.before inalcançável após um push que reescreve
+      # histórico na main). Só o "else" de um if/else trata >1 como diff
+      # (changed=true), o que dispararia build para todo push nesse cenário.
+      # Por isso o código é checado explicitamente.
+      - name: Mudou algo em apps/mobile?
+        id: filter
+        run: |
+          set +e
+          git diff --quiet "${{ github.event.before }}" "${{ github.event.after }}" -- apps/mobile
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$rc" -eq 1 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "git diff falhou (rc=$rc) comparando ${{ github.event.before }}..${{ github.event.after }}" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.filter.outputs.changed == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+        if: steps.filter.outputs.changed == 'true'
+
+      # EXPO_TOKEN autentica não-interativo; projectId já está em
+      # app.config.js (extra.eas), então não precisa de `eas init` aqui.
+      - name: Disparar build (Android, profile preview)
+        if: steps.filter.outputs.changed == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli build --platform android --profile preview --non-interactive --no-wait
+
+      # Build de Simulador iOS — não assinado, sem conta Apple Developer
+      # envolvida (profile preview-ios-simulator, ios.simulator=true em
+      # eas.json). Só roda no Simulador do Xcode, não em iPhone físico —
+      # isso exigiria credenciais Apple (ver eas.json/README quando/se
+      # entrar ad-hoc ou TestFlight).
+      - name: Disparar build (iOS, Simulador)
+        if: steps.filter.outputs.changed == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli build --platform ios --profile preview-ios-simulator --non-interactive --no-wait
