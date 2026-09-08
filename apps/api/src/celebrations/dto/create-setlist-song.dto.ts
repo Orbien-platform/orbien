@@ -4,6 +4,10 @@ export class CreateSetlistSongDto {
   @IsUUID()
   setlist_id!: string;
 
+  @IsOptional()
+  @IsUUID()
+  song_id?: string;
+
   @IsInt()
   @Min(1)
   sequence!: number;

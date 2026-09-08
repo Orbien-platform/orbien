@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     setlist: { findFirst: jest.fn() },
+    song: { findFirst: jest.fn() },
     setlistSong: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -49,6 +50,7 @@ describe('SetlistSongsService', () => {
           tenant_id: 't1',
           congregation_id: 'g1',
           setlist_id: 'sl1',
+          song_id: null,
           sequence: 1,
           title: 'Música',
           key: null,
@@ -80,6 +82,78 @@ describe('SetlistSongsService', () => {
           data: expect.objectContaining({ key: 'G', bpm: 90, link: 'https://x', notes: 'obs' }),
         }),
       );
+    });
+
+    it('song_id sem overrides copia key/bpm/link do catálogo (REPERT-02 AC1)', async () => {
+      const client = clientWith();
+      client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog', key: 'D', bpm: 80, link: 'https://cifra/x' });
+      client.setlistSong.create.mockResolvedValue({ id: 'song1' });
+      const service = serviceWith(client);
+
+      await service.create('t1', 'g1', {
+        setlist_id: 'sl1',
+        song_id: 'song-catalog',
+        sequence: 1,
+        title: 'Música do catálogo',
+      } as never);
+
+      expect(client.song.findFirst).toHaveBeenCalledWith({
+        where: { id: 'song-catalog', tenant_id: 't1', congregation_id: 'g1' },
+      });
+      expect(client.setlistSong.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          setlist_id: 'sl1',
+          song_id: 'song-catalog',
+          sequence: 1,
+          title: 'Música do catálogo',
+          key: 'D',
+          bpm: 80,
+          link: 'https://cifra/x',
+          notes: null,
+        },
+      });
+    });
+
+    it('song_id com override em key mantém o valor do body, com song_id ainda setado (REPERT-02 AC2)', async () => {
+      const client = clientWith();
+      client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog', key: 'D', bpm: 80, link: 'https://cifra/x' });
+      client.setlistSong.create.mockResolvedValue({ id: 'song1' });
+      const service = serviceWith(client);
+
+      await service.create('t1', 'g1', {
+        setlist_id: 'sl1',
+        song_id: 'song-catalog',
+        sequence: 1,
+        title: 'Música do catálogo',
+        key: 'E',
+      } as never);
+
+      expect(client.setlistSong.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ song_id: 'song-catalog', key: 'E', bpm: 80, link: 'https://cifra/x' }),
+        }),
+      );
+    });
+
+    it('song_id de outro tenant/congregação lança NotFoundException (REPERT-02 AC4)', async () => {
+      const client = clientWith();
+      client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
+      client.song.findFirst.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.create('t1', 'g1', {
+          setlist_id: 'sl1',
+          song_id: 'song-de-outro-tenant',
+          sequence: 1,
+          title: 'x',
+        } as never),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.setlistSong.create).not.toHaveBeenCalled();
     });
   });
 

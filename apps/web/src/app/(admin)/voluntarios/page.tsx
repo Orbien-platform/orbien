@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Plus, CheckCircle2, XCircle, Loader2, Music, ExternalLink } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +24,15 @@ interface MinistryCounts {
   volunteers: number;
 }
 
+interface RepertoireSong {
+  id: string;
+  sequence: number;
+  title: string;
+  key: string | null;
+  bpm: number | null;
+  link: string | null;
+}
+
 interface MyAssignment {
   id: string;
   status: AssignmentStatus;
@@ -32,6 +41,7 @@ interface MyAssignment {
   celebration: { id: string; name: string };
   ministry: { id: string; name: string };
   scheduled_date: string;
+  setlist: { songs: RepertoireSong[] } | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -316,53 +326,95 @@ export default function VoluntariosPage() {
                 return (
                   <div
                     key={a.id}
-                    className="flex flex-col gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-4"
                   >
-                    {/* Info */}
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium text-ink dark:text-white">
-                        {a.celebration?.name ?? "—"}
-                      </span>
-                      <span className="text-xs text-stone">
-                        {a.ministry?.name ?? "—"}
-                      </span>
-                      <span className="text-xs text-stone">
-                        {a.scheduled_date ? fmtDate(a.scheduled_date) : "—"}
-                      </span>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      {/* Info */}
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium text-ink dark:text-white">
+                          {a.celebration?.name ?? "—"}
+                        </span>
+                        <span className="text-xs text-stone">
+                          {a.ministry?.name ?? "—"}
+                        </span>
+                        <span className="text-xs text-stone">
+                          {a.scheduled_date ? fmtDate(a.scheduled_date) : "—"}
+                        </span>
+                      </div>
+
+                      {/* Status + actions */}
+                      <div className="flex items-center gap-2">
+                        <AssignmentStatusBadge status={a.status} />
+                        {isPending && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              onClick={() => confirmAssignment(a.id)}
+                              disabled={isConfirming || isDeclining}
+                              className="flex items-center gap-1 rounded-[6px] bg-teal px-2.5 py-1 text-xs text-white hover:bg-teal/90"
+                            >
+                              {isConfirming ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <CheckCircle2 size={11} strokeWidth={1.5} />
+                              )}
+                              Confirmar
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => declineAssignment(a.id)}
+                              disabled={isConfirming || isDeclining}
+                              className="flex items-center gap-1 rounded-[6px] bg-crimson px-2.5 py-1 text-xs text-white hover:bg-crimson/90"
+                            >
+                              {isDeclining ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <XCircle size={11} strokeWidth={1.5} />
+                              )}
+                              Recusar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Status + actions */}
-                    <div className="flex items-center gap-2">
-                      <AssignmentStatusBadge status={a.status} />
-                      {isPending && (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            onClick={() => confirmAssignment(a.id)}
-                            disabled={isConfirming || isDeclining}
-                            className="flex items-center gap-1 rounded-[6px] bg-teal px-2.5 py-1 text-xs text-white hover:bg-teal/90"
-                          >
-                            {isConfirming ? (
-                              <Loader2 size={11} className="animate-spin" />
-                            ) : (
-                              <CheckCircle2 size={11} strokeWidth={1.5} />
-                            )}
-                            Confirmar
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={() => declineAssignment(a.id)}
-                            disabled={isConfirming || isDeclining}
-                            className="flex items-center gap-1 rounded-[6px] bg-crimson px-2.5 py-1 text-xs text-white hover:bg-crimson/90"
-                          >
-                            {isDeclining ? (
-                              <Loader2 size={11} className="animate-spin" />
-                            ) : (
-                              <XCircle size={11} strokeWidth={1.5} />
-                            )}
-                            Recusar
-                          </Button>
+                    {/* Repertório (REPERT-03) */}
+                    <div className="border-t border-[var(--border-default)] pt-3">
+                      {a.setlist && a.setlist.songs.length > 0 ? (
+                        <div className="flex flex-col gap-1.5">
+                          {[...a.setlist.songs]
+                            .sort((s1, s2) => s1.sequence - s2.sequence)
+                            .map((song) => (
+                              <div key={song.id} className="flex items-center gap-2 text-xs">
+                                <Music size={11} strokeWidth={1.5} className="flex-shrink-0 text-stone" />
+                                <span className="flex-1 truncate text-ink dark:text-white">
+                                  {song.title}
+                                </span>
+                                {song.key && (
+                                  <span className="flex-shrink-0 rounded px-1 py-0.5 font-mono text-[10px] bg-[var(--surface-subtle)] text-stone border border-[var(--border-default)]">
+                                    {song.key}
+                                  </span>
+                                )}
+                                {song.bpm != null && (
+                                  <span className="flex-shrink-0 text-stone">{song.bpm} BPM</span>
+                                )}
+                                {song.link && (
+                                  <button
+                                    type="button"
+                                    onClick={() => window.open(song.link!, "_blank", "noopener,noreferrer")}
+                                    className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                    aria-label={`Abrir link de ${song.title}`}
+                                  >
+                                    <ExternalLink size={11} strokeWidth={1.5} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
                         </div>
+                      ) : (
+                        <p className="text-xs text-stone">
+                          Repertório ainda não publicado para este culto.
+                        </p>
                       )}
                     </div>
                   </div>

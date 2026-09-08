@@ -83,6 +83,14 @@ function ItemIcon({ type }: { type: ItemType }) {
 
 // ─── Add Song inline form ──────────────────────────────────────────────────────
 
+interface CatalogSong {
+  id: string;
+  title: string;
+  key: string | null;
+  bpm: number | null;
+  link: string | null;
+}
+
 interface AddSongFormProps {
   setlistId: string;
   nextPosition: number;
@@ -91,6 +99,8 @@ interface AddSongFormProps {
 }
 
 function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongFormProps) {
+  const [catalog, setCatalog] = useState<CatalogSong[]>([]);
+  const [songId, setSongId] = useState("");
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
@@ -98,18 +108,46 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    api
+      .get<CatalogSong[]>("/songs")
+      .then(({ data }) => setCatalog(Array.isArray(data) ? data : []))
+      .catch(() => setCatalog([]));
+  }, []);
+
+  // Escolher uma música do catálogo preenche os campos como valores default,
+  // ainda editáveis por baixo — sem travar entrada avulsa (REPERT-02).
+  function handleSelectSong(id: string) {
+    setSongId(id);
+    const song = catalog.find((s) => s.id === id);
+    if (song) {
+      setTitle(song.title);
+      setKey(song.key ?? "");
+      setBpm(song.bpm != null ? String(song.bpm) : "");
+      setLink(song.link ?? "");
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim()) { setError("Título é obrigatório."); return; }
     setError("");
     setIsSubmitting(true);
     try {
-      await api.post(`/celebrations/setlists/${setlistId}/songs`, {
+      // SPEC_DEVIATION: a chamada anterior ia para
+      // `/celebrations/setlists/${setlistId}/songs` com `position` — essa
+      // rota não existe (o controller real é `POST /celebrations/setlists/songs`,
+      // com `setlist_id` no corpo e `sequence`, não `position`). Corrigido
+      // aqui porque T12 precisa deste POST funcionando de verdade para levar
+      // `song_id`; achado pré-existente, fora do escopo de REPERT-02.
+      await api.post(`/celebrations/setlists/songs`, {
+        setlist_id: setlistId,
+        song_id: songId || undefined,
+        sequence: nextPosition,
         title: title.trim(),
         key: key.trim() || undefined,
         bpm: bpm ? parseInt(bpm, 10) : undefined,
         link: link.trim() || undefined,
-        position: nextPosition,
       });
       onAdded();
     } catch {
@@ -121,6 +159,20 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
+      {catalog.length > 0 && (
+        <select
+          aria-label="Escolher do catálogo"
+          value={songId}
+          onChange={(e) => handleSelectSong(e.target.value)}
+          disabled={isSubmitting}
+          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+        >
+          <option value="">Escolher do catálogo (opcional)…</option>
+          {catalog.map((s) => (
+            <option key={s.id} value={s.id}>{s.title}</option>
+          ))}
+        </select>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="col-span-2 sm:col-span-2">
           <Input

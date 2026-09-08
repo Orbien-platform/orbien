@@ -20,16 +20,25 @@ export class SetlistSongsService {
   async create(tenantId: string, congregationId: string, dto: CreateSetlistSongDto): Promise<SetlistSong> {
     await this.resolveSetlist(tenantId, congregationId, dto.setlist_id);
 
+    let catalogSong: { key: string | null; bpm: number | null; link: string | null } | null = null;
+    if (dto.song_id) {
+      catalogSong = await this.prisma.client.song.findFirst({
+        where: { id: dto.song_id, tenant_id: tenantId, congregation_id: congregationId },
+      });
+      if (!catalogSong) throw new NotFoundException('Música não encontrada');
+    }
+
     return this.prisma.client.setlistSong.create({
       data: {
         tenant_id: tenantId,
         congregation_id: congregationId,
         setlist_id: dto.setlist_id,
+        song_id: dto.song_id ?? null,
         sequence: dto.sequence,
         title: dto.title,
-        key: dto.key ?? null,
-        bpm: dto.bpm ?? null,
-        link: dto.link ?? null,
+        key: dto.key ?? catalogSong?.key ?? null,
+        bpm: dto.bpm ?? catalogSong?.bpm ?? null,
+        link: dto.link ?? catalogSong?.link ?? null,
         notes: dto.notes ?? null,
       },
     });

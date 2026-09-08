@@ -11,6 +11,7 @@ import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/com
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
 import { ScheduleSheet } from "@/components/celebrations/ScheduleSheet";
 import { TemplatesPanel } from "@/components/celebrations/TemplatesPanel";
+import { SongCatalogPanel } from "@/components/celebrations/SongCatalogPanel";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -62,7 +63,7 @@ export default function CelebracoesPage() {
     ["admin_congregation", "pastor", "tenant_admin"].includes(r)
   );
   const canAddSongs = roles.some((r) =>
-    ["admin_congregation", "pastor", "ministry_leader"].includes(r)
+    ["admin_congregation", "pastor", "tenant_admin", "ministry_leader"].includes(r)
   );
 
   const [activeTab, setActiveTab] = useState("celebrations");
@@ -215,6 +216,9 @@ export default function CelebracoesPage() {
           <Tabs.Tab value="proximas" className={tabBtn(activeTab === "proximas")}>
             Próximas
           </Tabs.Tab>
+          <Tabs.Tab value="repertorio" className={tabBtn(activeTab === "repertorio")}>
+            Repertório
+          </Tabs.Tab>
         </Tabs.List>
 
         {/* ── Tab: Celebrações ── */}
@@ -363,6 +367,11 @@ export default function CelebracoesPage() {
         {/* ── Tab: Templates de escala ── */}
         <Tabs.Panel value="templates" className="pt-5">
           <TemplatesPanel canEdit={canEdit} />
+        </Tabs.Panel>
+
+        {/* ── Tab: Repertório de músicas ── */}
+        <Tabs.Panel value="repertorio" className="pt-5">
+          <SongCatalogPanel canEdit={canAddSongs} />
         </Tabs.Panel>
       </Tabs.Root>
 

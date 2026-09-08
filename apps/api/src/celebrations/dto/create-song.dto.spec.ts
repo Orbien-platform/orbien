@@ -1,46 +1,44 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateSetlistSongDto } from './create-setlist-song.dto';
+import { CreateSongDto } from './create-song.dto';
 
 const BASE = {
-  setlist_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
-  sequence: 1,
   title: 'Grande é o Senhor',
 };
 
 async function errorsFor(payload: Record<string, unknown>) {
-  const dto = plainToInstance(CreateSetlistSongDto, { ...BASE, ...payload });
+  const dto = plainToInstance(CreateSongDto, { ...BASE, ...payload });
   return validate(dto);
 }
 
-describe('CreateSetlistSongDto', () => {
-  it('aceita apenas os campos obrigatórios', async () => {
+describe('CreateSongDto', () => {
+  it('aceita apenas o campo obrigatório (title)', async () => {
     expect(await errorsFor({})).toHaveLength(0);
   });
 
-  it('rejeita setlist_id que não é UUID', async () => {
-    const errors = await errorsFor({ setlist_id: 'not-a-uuid' });
-    expect(errors.some((e) => e.property === 'setlist_id')).toBe(true);
-  });
-
-  it('aceita song_id como UUID válido', async () => {
-    const errors = await errorsFor({ song_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6' });
-    expect(errors.some((e) => e.property === 'song_id')).toBe(false);
-  });
-
-  it('rejeita song_id que não é UUID', async () => {
-    const errors = await errorsFor({ song_id: 'not-a-uuid' });
-    expect(errors.some((e) => e.property === 'song_id')).toBe(true);
-  });
-
-  it('rejeita sequence menor que 1', async () => {
-    const errors = await errorsFor({ sequence: 0 });
-    expect(errors.some((e) => e.property === 'sequence')).toBe(true);
+  it('rejeita title ausente', async () => {
+    const dto = plainToInstance(CreateSongDto, {});
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'title')).toBe(true);
   });
 
   it('rejeita title que não é string', async () => {
     const errors = await errorsFor({ title: 123 });
     expect(errors.some((e) => e.property === 'title')).toBe(true);
+  });
+
+  it('rejeita title vazio', async () => {
+    const errors = await errorsFor({ title: '' });
+    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  });
+
+  it('rejeita title só com espaço', async () => {
+    const errors = await errorsFor({ title: '   ' });
+    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  });
+
+  it('aceita title válido', async () => {
+    expect(await errorsFor({ title: 'Grande é o Senhor' })).toHaveLength(0);
   });
 
   it('aceita key como string', async () => {
