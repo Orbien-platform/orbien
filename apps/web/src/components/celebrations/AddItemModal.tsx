@@ -44,7 +44,7 @@ interface AddItemModalProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function timeToMinutes(hhmm: string): number | null {
+export function timeToMinutes(hhmm: string): number | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
   if (!match) return null;
   return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
@@ -52,7 +52,7 @@ function timeToMinutes(hhmm: string): number | null {
 
 // O backend guarda `start_offset_minutes` (minutos desde o início da celebração),
 // não um horário de relógio — a UI continua pedindo "HH:mm" e converte aqui.
-function computeStartOffsetMinutes(itemTime: string, celebrationStartTime?: string): number {
+export function computeStartOffsetMinutes(itemTime: string, celebrationStartTime?: string): number {
   const itemMinutes = timeToMinutes(itemTime);
   if (itemMinutes === null) return 0;
   const startMinutes = celebrationStartTime ? timeToMinutes(celebrationStartTime) : null;

@@ -111,6 +111,84 @@ describe("ServiceOrderView", () => {
     expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
   });
 
+  it("does not show a time separator when the celebration's start_time is malformed", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") {
+        return Promise.resolve({
+          data: { ...instanceWithOC, celebration: { ...instanceWithOC.celebration, start_time: "meio-dia" } },
+        });
+      }
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: serviceOrder });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    // O cabeçalho mostra o horário de início cru da celebração (mesmo
+    // malformado); é o cálculo por etapa (`fmtItemTime`) que descarta um
+    // formato inválido e não gera um horário — sem quebrar a tela.
+    await screen.findByText("Louvor de abertura");
+    expect(screen.getByText(/meio-dia/)).toBeInTheDocument();
+    expect(screen.queryByText(/^\d{2}:\d{2}$/)).not.toBeInTheDocument();
+  });
+
+  it("mostra o nome do ministério responsável e trata rótulo/pessoa ausente", async () => {
+    const mixedResponsibleOrder = {
+      id: "so1",
+      title: "OC",
+      items: [
+        {
+          id: "it10",
+          name: "Escala do ministério",
+          type: "other",
+          sequence: 1,
+          duration_minutes: 5,
+          start_offset_minutes: 0,
+          responsible_type: "ministry",
+          ministry: { id: "m1", name: "Ministério de Louvor" },
+          setlist: null,
+        },
+        {
+          id: "it11",
+          name: "Etapa sem responsável definido",
+          type: "other",
+          sequence: 2,
+          duration_minutes: 5,
+          start_offset_minutes: 5,
+          responsible_type: "free_text",
+          responsible_label: null,
+          setlist: null,
+        },
+        {
+          id: "it12",
+          name: "Etapa com pessoa não carregada",
+          type: "other",
+          sequence: 3,
+          duration_minutes: 5,
+          start_offset_minutes: 10,
+          responsible_type: "person",
+          person: null,
+          setlist: null,
+        },
+      ],
+    };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: mixedResponsibleOrder });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    expect(await screen.findByText("Ministério de Louvor")).toBeInTheDocument();
+    expect(screen.getByText("Etapa sem responsável definido")).toBeInTheDocument();
+    expect(screen.getByText("Etapa com pessoa não carregada")).toBeInTheDocument();
+  });
+
   it("does not show a time separator when the celebration has no start_time", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/celebrations/instances/i1") {

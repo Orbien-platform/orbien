@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AddItemModal } from "./AddItemModal";
+import { AddItemModal, computeStartOffsetMinutes, timeToMinutes } from "./AddItemModal";
 import api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -9,6 +9,37 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const persons = [{ id: "p1", full_name: "Ana Souza" }];
+
+describe("timeToMinutes / computeStartOffsetMinutes", () => {
+  it("converte HH:mm em minutos desde a meia-noite", () => {
+    expect(timeToMinutes("10:00")).toBe(600);
+    expect(timeToMinutes("00:05")).toBe(5);
+  });
+
+  it("devolve null para um formato inválido", () => {
+    expect(timeToMinutes("meio-dia")).toBeNull();
+  });
+
+  it("calcula a diferença entre o horário da etapa e o início da celebração", () => {
+    expect(computeStartOffsetMinutes("10:30", "10:00")).toBe(30);
+  });
+
+  it("devolve 0 quando o horário da etapa é inválido", () => {
+    expect(computeStartOffsetMinutes("inválido", "10:00")).toBe(0);
+  });
+
+  it("devolve 0 quando não há horário de início da celebração", () => {
+    expect(computeStartOffsetMinutes("10:30", undefined)).toBe(0);
+  });
+
+  it("devolve 0 quando o horário de início da celebração é inválido", () => {
+    expect(computeStartOffsetMinutes("10:30", "inválido")).toBe(0);
+  });
+
+  it("nunca devolve um valor negativo quando a etapa é 'antes' do início", () => {
+    expect(computeStartOffsetMinutes("09:00", "10:00")).toBe(0);
+  });
+});
 
 describe("AddItemModal", () => {
   beforeEach(() => {

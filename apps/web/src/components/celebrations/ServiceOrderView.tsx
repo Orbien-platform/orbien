@@ -342,12 +342,15 @@ export function ServiceOrderView({
   }
 
   async function handleCreateOC() {
-    if (!instanceId || !instance) return;
+    if (!instanceId) return;
     setIsCreatingOC(true);
     try {
+      // Botão só existe depois que `noOC` vira true, o que só acontece junto
+      // com `setInstance` na mesma resolução do effect — `instance` sempre
+      // está preenchido aqui.
       const { data } = await api.post<ServiceOrder>("/celebrations/orders", {
         celebration_instance_id: instanceId,
-        title: `Ordem de Culto — ${instance.celebration.name}`,
+        title: `Ordem de Culto — ${instance!.celebration.name}`,
       });
       setServiceOrder({ ...data, items: [] });
       setItems([]);
