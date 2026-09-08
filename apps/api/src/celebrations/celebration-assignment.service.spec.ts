@@ -26,6 +26,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       update: jest.fn(),
     },
     celebrationSchedule: { findUnique: jest.fn(), update: jest.fn() },
+    serviceOrder: { findMany: jest.fn().mockResolvedValue([]) },
     ...overrides,
   };
 }
@@ -670,6 +671,129 @@ describe('CelebrationAssignmentService', () => {
               schedule: { status: 'published' },
             }),
           }),
+        }),
+      );
+    });
+
+    function assignmentFixture(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'a1',
+        status: 'confirmed',
+        notified_at: null,
+        responded_at: null,
+        celebrationMinistry: {
+          ministry_id: 'min1',
+          ministry: { id: 'min1', name: 'Louvor' },
+          schedule: {
+            celebrationInstance: {
+              id: 'inst1',
+              scheduled_date: new Date('2026-09-20'),
+              celebration: { id: 'c1', name: 'Culto Noite' },
+            },
+          },
+        },
+        ...overrides,
+      };
+    }
+
+    it('assignment com ServiceOrderItem/Setlist correspondente traz as músicas ordenadas por sequence (AC1)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([assignmentFixture()]);
+      client.serviceOrder.findMany.mockResolvedValue([
+        {
+          celebration_instance_id: 'inst1',
+          items: [
+            {
+              ministry_id: 'min1',
+              setlist: {
+                songs: [
+                  { id: 'sg2', sequence: 2, title: 'Segunda', key: 'D', bpm: 90, link: null },
+                  { id: 'sg1', sequence: 1, title: 'Primeira', key: 'G', bpm: 80, link: 'https://x' },
+                ],
+              },
+            },
+          ],
+        },
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].setlist).toEqual({
+        songs: [
+          { id: 'sg2', sequence: 2, title: 'Segunda', key: 'D', bpm: 90, link: null },
+          { id: 'sg1', sequence: 1, title: 'Primeira', key: 'G', bpm: 80, link: 'https://x' },
+        ],
+      });
+    });
+
+    it('assignment sem ServiceOrder/item/setlist correspondente traz setlist: null, sem erro (AC2)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([assignmentFixture()]);
+      client.serviceOrder.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].setlist).toBeNull();
+    });
+
+    it('item de OC sem ministry_id é ignorado (não vira repertório de ninguém)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([assignmentFixture()]);
+      client.serviceOrder.findMany.mockResolvedValue([
+        {
+          celebration_instance_id: 'inst1',
+          items: [
+            {
+              ministry_id: null,
+              setlist: { songs: [{ id: 'sg1', sequence: 1, title: 'X', key: null, bpm: null, link: null }] },
+            },
+          ],
+        },
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].setlist).toBeNull();
+    });
+
+    it('busca o repertório com uma única query batched, mesmo para múltiplos assignments', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        assignmentFixture({ id: 'a1' }),
+        assignmentFixture({
+          id: 'a2',
+          celebrationMinistry: {
+            ministry_id: 'min2',
+            ministry: { id: 'min2', name: 'Recepção' },
+            schedule: {
+              celebrationInstance: {
+                id: 'inst2',
+                scheduled_date: new Date('2026-09-21'),
+                celebration: { id: 'c1', name: 'Culto Manhã' },
+              },
+            },
+          },
+        }),
+      ]);
+      const { service } = serviceWith(client);
+
+      await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(client.serviceOrder.findMany).toHaveBeenCalledTimes(1);
+      expect(client.serviceOrder.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { celebration_instance_id: { in: ['inst1', 'inst2'] } },
         }),
       );
     });
