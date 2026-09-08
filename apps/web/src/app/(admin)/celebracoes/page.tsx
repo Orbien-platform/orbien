@@ -63,7 +63,7 @@ export default function CelebracoesPage() {
     ["admin_congregation", "pastor", "tenant_admin"].includes(r)
   );
   const canAddSongs = roles.some((r) =>
-    ["admin_congregation", "pastor", "ministry_leader"].includes(r)
+    ["admin_congregation", "pastor", "tenant_admin", "ministry_leader"].includes(r)
   );
 
   const [activeTab, setActiveTab] = useState("celebrations");

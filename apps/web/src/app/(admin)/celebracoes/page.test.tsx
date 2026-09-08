@@ -267,6 +267,16 @@ describe("CelebracoesPage", () => {
     expect(await screen.findByTestId("song-catalog-panel")).toHaveTextContent("repertorio:true");
   });
 
+  it("dá permissão de edição do repertório para tenant_admin", async () => {
+    setup(["tenant_admin"]);
+    mockedApi.get.mockResolvedValue({ data: [] });
+    const user = userEvent.setup();
+    render(<CelebracoesPage />);
+    await screen.findByText("Nenhuma celebração cadastrada.");
+    await user.click(screen.getByRole("tab", { name: "Repertório" }));
+    expect(await screen.findByTestId("song-catalog-panel")).toHaveTextContent("repertorio:true");
+  });
+
   it("carrega instâncias próximas ao entrar na aba, ordenadas por data e limitadas a 30", async () => {
     setup();
     mockedApi.get.mockImplementation((url: string) => {
