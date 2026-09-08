@@ -1152,6 +1152,52 @@ describe("ServiceOrderView", () => {
     );
   });
 
+  // O picker vive ao lado do `<form>` da setlist, não dentro dele: os campos de
+  // texto do picker são descendentes de outra árvore, então Enter neles não
+  // dispara a submissão implícita do form (que tem `type="submit"`). Estes dois
+  // testes trancam isso — sem eles, mover o picker de volta para dentro do
+  // `<form>` voltaria a fazer Enter na busca postar a setlist em silêncio.
+  it("Enter na busca do seletor não submete o form da setlist", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    // Título já preenchido pela escolha no catálogo: se o Enter submetesse,
+    // a validação passaria e sairia um POST de verdade.
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+
+    vi.mocked(api.post).mockClear();
+    await user.type(screen.getByPlaceholderText("Buscar no repertório…"), "digno{Enter}");
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("Enter no cadastro inline não submete o form da setlist", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+    await user.click(screen.getByRole("button", { name: /Cadastrar música no repertório/ }));
+
+    vi.mocked(api.post).mockClear();
+    await user.type(await screen.findByLabelText("Título"), "Outra música{Enter}");
+
+    // Nem o POST da setlist, nem o de /songs — o Enter não é atalho de
+    // cadastro; quem cria é o botão do painel.
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it("still allows adding a free-text song when loading the catalog fails", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });

@@ -188,63 +188,74 @@ function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: 
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
+    // O picker fica FORA do `<form>` de propósito. Ele tem campos de texto
+    // (a busca e o cadastro inline), e o form abaixo tem `type="submit"` —
+    // dentro dele, Enter em qualquer um desses campos disparava a submissão
+    // implícita do form da setlist: com título já preenchido, um POST real em
+    // `/celebrations/setlists/songs`; sem título, o erro "Título é obrigatório"
+    // num form que o usuário nem está vendo. O `<select>` que existia aqui
+    // antes não tinha esse comportamento, então a regressão nasceu com o
+    // picker. Separar as duas árvores resolve a classe do problema, em vez de
+    // barrar a tecla caso a caso.
+    <div className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
       <SongPicker canCreate={canCreate} onSelect={handleSelectSong} />
-      {selectedSong?.key_alt && (
-        <select
-          aria-label="Tom confirmado para a escala"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          disabled={isSubmitting}
-          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-        >
-          {selectedSong.key && <option value={selectedSong.key}>Tom {selectedSong.key}</option>}
-          <option value={selectedSong.key_alt}>Tom alt. {selectedSong.key_alt}</option>
-        </select>
-      )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="col-span-2 sm:col-span-2">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2">
+        {selectedSong?.key_alt && (
+          <select
+            aria-label="Tom confirmado para a escala"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            disabled={isSubmitting}
+            className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+          >
+            {selectedSong.key && <option value={selectedSong.key}>Tom {selectedSong.key}</option>}
+            <option value={selectedSong.key_alt}>Tom alt. {selectedSong.key_alt}</option>
+          </select>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="col-span-2 sm:col-span-2">
+            <Input
+              placeholder="Título *"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isSubmitting}
+              className="rounded-[6px] text-xs h-8"
+            />
+          </div>
           <Input
-            placeholder="Título *"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Tom (ex: G)"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            disabled={isSubmitting}
+            className="rounded-[6px] text-xs h-8"
+          />
+          <Input
+            type="number"
+            placeholder="BPM"
+            value={bpm}
+            onChange={(e) => setBpm(e.target.value)}
             disabled={isSubmitting}
             className="rounded-[6px] text-xs h-8"
           />
         </div>
         <Input
-          placeholder="Tom (ex: G)"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
+          placeholder="Link (YouTube, Cifra Club…)"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
           disabled={isSubmitting}
           className="rounded-[6px] text-xs h-8"
         />
-        <Input
-          type="number"
-          placeholder="BPM"
-          value={bpm}
-          onChange={(e) => setBpm(e.target.value)}
-          disabled={isSubmitting}
-          className="rounded-[6px] text-xs h-8"
-        />
-      </div>
-      <Input
-        placeholder="Link (YouTube, Cifra Club…)"
-        value={link}
-        onChange={(e) => setLink(e.target.value)}
-        disabled={isSubmitting}
-        className="rounded-[6px] text-xs h-8"
-      />
-      {error && <p className="text-xs text-crimson">{error}</p>}
-      <div className="flex gap-2">
-        <Button type="button" variant="outline" className="flex-1 rounded-[6px] text-xs py-1" onClick={onCancel} disabled={isSubmitting}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={isSubmitting} className="flex-1 rounded-[6px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-xs py-1">
-          {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : "Adicionar"}
-        </Button>
-      </div>
-    </form>
+        {error && <p className="text-xs text-crimson">{error}</p>}
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" className="flex-1 rounded-[6px] text-xs py-1" onClick={onCancel} disabled={isSubmitting}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isSubmitting} className="flex-1 rounded-[6px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-xs py-1">
+            {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : "Adicionar"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
