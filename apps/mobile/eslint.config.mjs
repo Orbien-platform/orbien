@@ -1,5 +1,6 @@
 // @ts-check
 import js from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 import expoConfig from "eslint-config-expo/flat.js";
 
@@ -28,6 +29,29 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+    },
+  },
+  {
+    // Configs de ferramenta (app.config.js, jest.config.js, jest.setup.js)
+    // são CommonJS, fora do bundle RN — mesmo motivo do sourceType/globals
+    // que apps/api usa para o próprio código Node.
+    files: ["*.config.js", "jest.setup.js"],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: "commonjs",
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    files: ["**/*.test.{js,jsx,ts,tsx}"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.jest },
+      sourceType: "commonjs",
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 );
