@@ -3,7 +3,7 @@
 // `*-client.ts` (lógica) vs. tela (UI) que `auth-client.ts`/
 // `theme-provider.tsx` já seguem. Ver design.md, "Rodada 2 — MOB-04".
 import { authenticatedRequest } from "../auth/auth-client";
-import type { Assignment, AssignmentStatus } from "./types";
+import type { Assignment, AssignmentStatus, Unavailability } from "./types";
 
 /** `GET /volunteers/my-celebration-assignments` (MOB-04, AC 1). */
 export async function getMyAssignments(includePast?: boolean): Promise<Assignment[]> {
@@ -35,4 +35,31 @@ export async function respondToAssignment(
  */
 export async function checkIn(id: string): Promise<Assignment> {
   return authenticatedRequest<Assignment>("patch", `/assignments/${id}/check-in`);
+}
+
+/** `GET /volunteers/unavailability?month=&year=` (MOB-05, AC 4). */
+export async function getUnavailability(
+  month: number,
+  year: number,
+): Promise<Unavailability | null> {
+  return authenticatedRequest<Unavailability | null>(
+    "get",
+    `/volunteers/unavailability?month=${month}&year=${year}`,
+  );
+}
+
+/**
+ * `POST /volunteers/unavailability` (MOB-05, AC 4) — upsert: substitui o
+ * mês inteiro (mesmo contrato de `CreateUnavailabilityDto`,
+ * `apps/api/src/volunteers/dto/create-unavailability.dto.ts`).
+ */
+export async function saveUnavailability(
+  referenceMonth: number,
+  referenceYear: number,
+  dates: string[],
+  notes?: string,
+): Promise<Unavailability> {
+  return authenticatedRequest<Unavailability>("post", "/volunteers/unavailability", {
+    body: { referenceMonth, referenceYear, dates, notes },
+  });
 }

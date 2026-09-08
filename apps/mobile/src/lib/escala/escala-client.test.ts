@@ -6,7 +6,13 @@ jest.mock("../auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
-import { checkIn, getMyAssignments, respondToAssignment } from "./escala-client";
+import {
+  checkIn,
+  getMyAssignments,
+  getUnavailability,
+  respondToAssignment,
+  saveUnavailability,
+} from "./escala-client";
 
 describe("EscalaClient", () => {
   beforeEach(() => {
@@ -68,6 +74,43 @@ describe("EscalaClient", () => {
 
       expect(mockAuthenticatedRequest).toHaveBeenCalledWith("patch", "/assignments/a1/check-in");
       expect(result).toEqual({ id: "a1", checked_in_at: "2026-09-08T15:00:00Z" });
+    });
+  });
+
+  describe("getUnavailability", () => {
+    it("chama GET /volunteers/unavailability com month e year na query", async () => {
+      mockAuthenticatedRequest.mockResolvedValue({ dates: [{ date: "2026-09-10" }] });
+
+      const result = await getUnavailability(9, 2026);
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
+        "get",
+        "/volunteers/unavailability?month=9&year=2026",
+      );
+      expect(result).toEqual({ dates: [{ date: "2026-09-10" }] });
+    });
+  });
+
+  describe("saveUnavailability", () => {
+    it("chama POST /volunteers/unavailability com o shape de CreateUnavailabilityDto", async () => {
+      mockAuthenticatedRequest.mockResolvedValue({ dates: [{ date: "2026-09-10" }] });
+
+      const result = await saveUnavailability(9, 2026, ["2026-09-10"], "viagem");
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/volunteers/unavailability", {
+        body: { referenceMonth: 9, referenceYear: 2026, dates: ["2026-09-10"], notes: "viagem" },
+      });
+      expect(result).toEqual({ dates: [{ date: "2026-09-10" }] });
+    });
+
+    it("funciona sem notes (opcional)", async () => {
+      mockAuthenticatedRequest.mockResolvedValue({ dates: [] });
+
+      await saveUnavailability(9, 2026, []);
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/volunteers/unavailability", {
+        body: { referenceMonth: 9, referenceYear: 2026, dates: [], notes: undefined },
+      });
     });
   });
 });
