@@ -69,9 +69,9 @@ test.describe("repertório do time de louvor", () => {
       // pré-existente ser corrigido.
       await test.step("cadastra uma música pelo modal do catálogo", async () => {
         await page.getByRole("button", { name: "Nova música" }).click();
-        await page.getByLabelText("Título").fill(uiSongTitle);
-        await page.getByLabelText("Tom").fill("A");
-        await page.getByLabelText("BPM").fill("110");
+        await page.getByLabel("Título").fill(uiSongTitle);
+        await page.getByLabel("Tom").fill("A");
+        await page.getByLabel("BPM").fill("110");
         await page.getByRole("button", { name: "Criar" }).click();
         await expect(
           page.getByText(uiSongTitle, { exact: true }),
