@@ -717,3 +717,49 @@ Contagem de testes esperada por task fica registrada no Execute (task por
 task), já que o número exato de casos depende de detalhes que só aparecem
 ao escrever o mock — o que está fixo aqui é a **cobertura mínima
 obrigatória** (cada `Done when` já lista os cenários que não podem faltar).
+
+---
+
+## Fix Tasks (pós-Verifier, rodada 1)
+
+### F1: Wire `ApiClient`/`AuthClient` — interceptação reativa de 401 (MOB-01 AC 3/AC 4)
+
+**Status**: ✅ Done
+
+**Gap reportado pelo Verifier** (`.specs/features/app-mobile/validation.md`,
+rodada 1 — FAIL): `ThemeProvider` (o único consumidor autenticado real desta
+rodada) passava `session.accessToken` direto para `apiClient.get`, nunca
+passando por `getValidAccessToken()`/a fila de refresh. Isso deixava MOB-01
+AC 3 (renovação automática + reenvio em 401) e AC 4 (sessão encerrada →
+login) sem nenhum caminho real que os exercitasse — a fila de refresh (T11)
+estava correta e bem testada, mas era código morto do ponto de vista do
+app.
+
+**O que foi feito**:
+- `auth-client.ts`: extraída a renovação de fato para `performRefresh`
+  (reusada por `getValidAccessToken`, caminho proativo por relógio, e por
+  `refreshNow`, forçado); adicionado `onSessionExpired`/`notifySessionExpired`
+  (pub-sub) para quem precisar reagir a uma sessão encerrada por qualquer
+  chamada autenticada, não só a que o usuário está olhando; adicionado
+  `authenticatedRequest<T>(method, path, options)` — obtém token válido,
+  chama `apiClient`, e em 401 reativo força uma renovação e repete a
+  chamada original uma vez.
+- `theme-provider.tsx`: passa a chamar `authenticatedRequest("get", "/settings")`
+  em vez de montar o header manualmente.
+- `auth-provider.tsx`: assina `onSessionExpired` para transicionar
+  `status` para `"unauthenticated"` (o `AuthGate` em `_layout.tsx` já
+  redireciona para `/login` a partir daí — nenhuma mudança de navegação
+  necessária).
+- Novo teste `authenticated-request.test.ts` (3 testes: 401 reativo com
+  retentativa e sucesso; renovação falha → `SessionExpiredError` +
+  notificação; erro não-401 propaga sem acionar renovação); teste novo em
+  `auth-provider.test.tsx` (AC 4: `onSessionExpired` → `status`
+  `unauthenticated`, sem chamar `logout()` de novo); testes existentes de
+  `theme-provider.test.tsx`/`_layout.test.tsx` ajustados para mockar
+  `authenticatedRequest` em vez de `apiClient.get` diretamente.
+
+**Gate (full)**: `npm run test -w orbien-mobile` (43 testes, 10 suites,
+todos passando) && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+(0 erros).
+
+**Requirement**: MOB-01, MOB-02

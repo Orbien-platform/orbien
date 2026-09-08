@@ -7,6 +7,7 @@
 import * as SecureStore from "expo-secure-store";
 
 import { apiClient } from "../api/client";
+import { HttpError } from "../api/errors";
 import { SessionExpiredError } from "./session-expired-error";
 import type { LoginResponse, Session } from "./types";
 
@@ -28,6 +29,56 @@ function processQueue(error: unknown, token?: string): void {
     else pending.resolve(token as string);
   }
   failedQueue = [];
+}
+
+// Notifica quem precisar reagir a uma sessão encerrada por falha de refresh
+// (AC 4 da história "Autenticação e sessão": limpar SecureStore já acontece
+// abaixo; navegar para login é responsabilidade de quem assina aqui —
+// AuthProvider, que transiciona o status para "unauthenticated").
+let sessionExpiredListeners: Array<() => void> = [];
+
+export function onSessionExpired(listener: () => void): () => void {
+  sessionExpiredListeners.push(listener);
+  return () => {
+    sessionExpiredListeners = sessionExpiredListeners.filter((l) => l !== listener);
+  };
+}
+
+function notifySessionExpired(): void {
+  for (const listener of sessionExpiredListeners) listener();
+}
+
+/**
+ * Executa a renovação de fato (chamada a `POST /auth/refresh`), serializada
+ * pela mesma fila usada por `getValidAccessToken`. Compartilhado entre o
+ * caminho proativo (token expirado pelo relógio local) e o reativo
+ * (servidor respondeu 401 antes do relógio local achar que expirou).
+ */
+async function performRefresh(session: Session): Promise<string> {
+  if (isRefreshing) {
+    return new Promise<string>((resolve, reject) => {
+      failedQueue.push({ resolve, reject });
+    });
+  }
+
+  isRefreshing = true;
+  try {
+    const response = await apiClient.post<LoginResponse>("/auth/refresh", {
+      body: { refresh_token: session.refreshToken },
+    });
+    const newSession = toSession(response);
+    await SecureStore.setItemAsync(SESSION_STORAGE_KEY, JSON.stringify(newSession));
+    processQueue(null, newSession.accessToken);
+    return newSession.accessToken;
+  } catch {
+    await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
+    const sessionExpiredError = new SessionExpiredError();
+    processQueue(sessionExpiredError);
+    notifySessionExpired();
+    throw sessionExpiredError;
+  } finally {
+    isRefreshing = false;
+  }
 }
 
 function toSession(response: LoginResponse): Session {
@@ -99,27 +150,46 @@ export async function getValidAccessToken(): Promise<string> {
     return session.accessToken;
   }
 
-  if (isRefreshing) {
-    return new Promise<string>((resolve, reject) => {
-      failedQueue.push({ resolve, reject });
-    });
-  }
+  return performRefresh(session);
+}
 
-  isRefreshing = true;
+/**
+ * Força uma renovação mesmo que o relógio local ainda considere o access
+ * token válido — usado por `authenticatedRequest` quando o servidor já
+ * respondeu 401 (token revogado antes do prazo, por exemplo). Passa pela
+ * mesma fila serializada de `getValidAccessToken`.
+ */
+async function refreshNow(): Promise<string> {
+  const session = await getSession();
+  if (!session) throw new SessionExpiredError();
+  return performRefresh(session);
+}
+
+type AuthenticatedMethod = "get" | "post" | "patch" | "delete";
+
+/**
+ * Chamada autenticada de fato usada pelo app (ex.: `ThemeProvider`): obtém
+ * um token válido via `getValidAccessToken` (renovação proativa por
+ * relógio) e, se o servidor ainda assim responder 401 (token revogado antes
+ * do prazo local), força uma renovação e repete a chamada original UMA vez
+ * (AC 3 da história "Autenticação e sessão"). Se a renovação falhar, o
+ * `SessionExpiredError` sobe para quem chamou — `AuthProvider` está
+ * inscrito via `onSessionExpired` para reagir independente do chamador
+ * (AC 4: navegar para login, mesmo que o chamador engula o próprio erro).
+ */
+export async function authenticatedRequest<T>(
+  method: AuthenticatedMethod,
+  path: string,
+  options: { body?: unknown } = {},
+): Promise<T> {
+  const token = await getValidAccessToken();
   try {
-    const response = await apiClient.post<LoginResponse>("/auth/refresh", {
-      body: { refresh_token: session.refreshToken },
-    });
-    const newSession = toSession(response);
-    await SecureStore.setItemAsync(SESSION_STORAGE_KEY, JSON.stringify(newSession));
-    processQueue(null, newSession.accessToken);
-    return newSession.accessToken;
-  } catch {
-    await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
-    const sessionExpiredError = new SessionExpiredError();
-    processQueue(sessionExpiredError);
-    throw sessionExpiredError;
-  } finally {
-    isRefreshing = false;
+    return await apiClient[method]<T>(path, { token, body: options.body });
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 401) {
+      const refreshedToken = await refreshNow();
+      return apiClient[method]<T>(path, { token: refreshedToken, body: options.body });
+    }
+    throw error;
   }
 }

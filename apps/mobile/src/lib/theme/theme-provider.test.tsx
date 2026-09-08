@@ -13,9 +13,9 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
   setItem: (...args: unknown[]) => mockSetItem(...args),
 }));
 
-const mockGet = jest.fn();
-jest.mock("../api/client", () => ({
-  apiClient: { get: (...args: unknown[]) => mockGet(...args) },
+const mockAuthenticatedRequest = jest.fn();
+jest.mock("../auth/auth-client", () => ({
+  authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
 const mockUseAuth = jest.fn();
@@ -57,7 +57,7 @@ describe("ThemeProvider", () => {
     // GET /settings não resolve até o teste liberar (delay controlado) —
     // prova que o cache é aplicado sem esperar a rede.
     let releaseNetwork: (value: unknown) => void = () => {};
-    mockGet.mockReturnValue(
+    mockAuthenticatedRequest.mockReturnValue(
       new Promise((resolve) => {
         releaseNetwork = resolve;
       }),
@@ -79,7 +79,7 @@ describe("ThemeProvider", () => {
 
     // rede ainda não respondeu neste ponto — a asserção acima só passou
     // por causa do cache.
-    expect(mockGet).toHaveBeenCalledWith("/settings", { token: "token-abc" });
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/settings");
 
     await act(async () => {
       releaseNetwork({
@@ -110,7 +110,7 @@ describe("ThemeProvider", () => {
 
   it("AC 2: tenant sem branding customizado (campos nulos) cai no tema default, sem erro visível", async () => {
     mockGetItem.mockResolvedValue(null);
-    mockGet.mockResolvedValue({
+    mockAuthenticatedRequest.mockResolvedValue({
       branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
     });
 
@@ -123,7 +123,7 @@ describe("ThemeProvider", () => {
     });
 
     await waitFor(() => {
-      expect(mockGet).toHaveBeenCalled();
+      expect(mockAuthenticatedRequest).toHaveBeenCalled();
     });
 
     expect(screen.getByTestId("primaryColor").props.children).toBe(DEFAULT_THEME.primaryColor);
@@ -140,7 +140,7 @@ describe("ThemeProvider", () => {
         splash_url: null,
       }),
     );
-    mockGet.mockRejectedValue(new Error("Erro de rede"));
+    mockAuthenticatedRequest.mockRejectedValue(new Error("Erro de rede"));
 
     await act(async () => {
       render(
@@ -155,7 +155,7 @@ describe("ThemeProvider", () => {
     });
 
     await waitFor(() => {
-      expect(mockGet).toHaveBeenCalled();
+      expect(mockAuthenticatedRequest).toHaveBeenCalled();
     });
 
     // erro de rede não derruba o tema já aplicado nem lança/propaga nada
@@ -169,7 +169,7 @@ describe("ThemeProvider", () => {
 
   it("AC 2: sem cache e GET /settings falha -> tema default, sem erro visível", async () => {
     mockGetItem.mockResolvedValue(null);
-    mockGet.mockRejectedValue(new Error("Erro de rede"));
+    mockAuthenticatedRequest.mockRejectedValue(new Error("Erro de rede"));
 
     await act(async () => {
       render(
@@ -180,7 +180,7 @@ describe("ThemeProvider", () => {
     });
 
     await waitFor(() => {
-      expect(mockGet).toHaveBeenCalled();
+      expect(mockAuthenticatedRequest).toHaveBeenCalled();
     });
 
     expect(screen.getByTestId("primaryColor").props.children).toBe(DEFAULT_THEME.primaryColor);

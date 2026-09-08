@@ -2,7 +2,12 @@
 // SecureStore no boot do app e expõe login/logout/status para as telas.
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import { getSession, login as authLogin, logout as authLogout } from "./auth-client";
+import {
+  getSession,
+  login as authLogin,
+  logout as authLogout,
+  onSessionExpired,
+} from "./auth-client";
 import type { Session } from "./types";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -30,6 +35,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // AC 4 da história "Autenticação e sessão": quando uma renovação falha
+  // (refresh revogado/expirado) em QUALQUER chamada autenticada do app —
+  // não só na que o usuário está olhando —, o SecureStore já foi limpo por
+  // `auth-client`; aqui só falta refletir isso no status para o AuthGate
+  // (_layout.tsx) redirecionar para /login.
+  useEffect(() => {
+    return onSessionExpired(() => {
+      setSession(null);
+      setStatus("unauthenticated");
+    });
   }, []);
 
   const login = useCallback(async (tenantSlug: string, email: string, password: string) => {

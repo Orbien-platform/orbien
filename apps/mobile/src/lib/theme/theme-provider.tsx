@@ -12,7 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-import { apiClient } from "../api/client";
+import { authenticatedRequest } from "../auth/auth-client";
 import { useAuth } from "../auth/auth-provider";
 import type { Branding } from "./types";
 
@@ -73,8 +73,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
 
-    apiClient
-      .get<ResolvedSettings>("/settings", { token: session.accessToken })
+    authenticatedRequest<ResolvedSettings>("get", "/settings")
       .then((resolved) => {
         if (cancelled) return;
         setTheme(toThemeValue(resolved.branding));

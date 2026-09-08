@@ -18,9 +18,9 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
   setItem: (...args: unknown[]) => mockSetItem(...args),
 }));
 
-const mockGet = jest.fn();
-jest.mock("../lib/api/client", () => ({
-  apiClient: { get: (...args: unknown[]) => mockGet(...args) },
+const mockAuthenticatedRequest = jest.fn();
+jest.mock("../lib/auth/auth-client", () => ({
+  authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
 jest.mock("expo-router", () => {
@@ -50,7 +50,7 @@ describe("RootLayout — guarda de navegação", () => {
     jest.clearAllMocks();
     mockGetItem.mockResolvedValue(null);
     mockSetItem.mockResolvedValue(undefined);
-    mockGet.mockResolvedValue({
+    mockAuthenticatedRequest.mockResolvedValue({
       branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
     });
   });
@@ -95,7 +95,7 @@ describe("RootLayout — guarda de navegação", () => {
         status: "authenticated",
         session: { accessToken: "token-a", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
-      mockGet.mockResolvedValue({
+      mockAuthenticatedRequest.mockResolvedValue({
         branding: {
           app_name: "Igreja A",
           primary_color: "#111111",
@@ -119,7 +119,7 @@ describe("RootLayout — guarda de navegação", () => {
         status: "authenticated",
         session: { accessToken: "token-b", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
-      mockGet.mockResolvedValue({
+      mockAuthenticatedRequest.mockResolvedValue({
         branding: {
           app_name: "Igreja B",
           primary_color: "#222222",
@@ -145,7 +145,7 @@ describe("RootLayout — guarda de navegação", () => {
         status: "authenticated",
         session: { accessToken: "token-c", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
-      mockGet.mockResolvedValue({
+      mockAuthenticatedRequest.mockResolvedValue({
         branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
       });
 
@@ -154,7 +154,7 @@ describe("RootLayout — guarda de navegação", () => {
       });
 
       await waitFor(() => {
-        expect(mockGet).toHaveBeenCalled();
+        expect(mockAuthenticatedRequest).toHaveBeenCalled();
       });
 
       expect(screen.queryByTestId("header-logo")).toBeNull();
