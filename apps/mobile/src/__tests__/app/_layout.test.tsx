@@ -1,3 +1,11 @@
+// Vive fora de `src/app` de propósito: o `require.context` do expo-router
+// (node_modules/expo-router/_ctx.android.js) varre a raiz de rotas com o
+// filtro /.*\.[tj]sx?$/ e só exclui `+api`/`+html`/`+middleware` — arquivo
+// `.test.tsx` ali dentro entra no bundle como se fosse rota e arrasta o
+// @testing-library/react-native, que faz require("console"). Módulo do Node
+// não resolve no Metro: quebra o bundle na EAS (build de preview de
+// 2026-09-08), sem que jest/tsc/lint percebam — nenhum dos três monta o
+// grafo de rotas.
 // Testes derivados do Done-when de T14 (tasks.md):
 // - unauthenticated renderiza a tela de login (via router mock)
 // - authenticated renderiza o shell placeholder
@@ -6,7 +14,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockUseAuth = jest.fn();
-jest.mock("../lib/auth/auth-provider", () => ({
+jest.mock("../../lib/auth/auth-provider", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => mockUseAuth(),
 }));
@@ -19,7 +27,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 const mockAuthenticatedRequest = jest.fn();
-jest.mock("../lib/auth/auth-client", () => ({
+jest.mock("../../lib/auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
@@ -43,7 +51,7 @@ jest.mock("expo-router", () => {
   };
 });
 
-import RootLayout from "./_layout";
+import RootLayout from "../../app/_layout";
 
 describe("RootLayout — guarda de navegação", () => {
   beforeEach(() => {
