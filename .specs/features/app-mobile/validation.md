@@ -528,3 +528,269 @@ filtragem por segmento que não existe.
 
 **Next steps**: nenhum fix task necessário. MOB-06 pode ser marcado
 ✅ Verified na tabela de Requirement Traceability.
+
+---
+
+# App Mobile Validation — Rodada 4 (MOB-07)
+
+**Date**: 2026-09-08
+**Spec**: `.specs/features/app-mobile/spec.md`, história "P1: Conteúdos e
+Notificações" — AC1, AC3, AC4 (AC2 é MOB-06, já verificado na Rodada 3).
+**Design/Tasks**: `.specs/features/app-mobile/design.md` § "Rodada 4 —
+MOB-07"; `.specs/features/app-mobile/tasks.md` § "Rodada 4 — Tasks: MOB-07"
+(T1-T8).
+**Diff range**: `2ba2a95..HEAD` (9 commits — do commit de docs até
+`b9044ae`).
+**Verifier**: independent sub-agent (author ≠ verifier).
+
+---
+
+## Task Completion
+
+| Task | Status | Notes |
+| --- | --- | --- |
+| T1 — `PostsService.findOne` filtra rascunho para member | ✅ Done | Commit `1e073f1`. Implementação bate com o design; **porém quebrou um teste pré-existente não coberto pela task** (`posts.controller.spec.ts:97`) — ver Gate Check. |
+| T2 — `decodeJwtPayload` | ✅ Done | Commit `558bad0`. |
+| T3 — SDK OneSignal + config plugin | ✅ Done | Commit `f9540c0`. `plugins` é o primeiro item do array, conforme exigência do plugin. |
+| T4 — `onesignal-client` | ✅ Done | Commit `e6aca25`. |
+| T5 — `NotificationsProvider` + wiring | ✅ Done | Commit `64049bd`. Wiring em `_layout.tsx` confere: dentro de `AuthGate`, envolvendo `ThemeProvider`. |
+| T6 — `ContentClient.getPost` | ✅ Done | Commit `ee2253d`. |
+| T7 — Tela "Post" | ✅ Done | Commit `06a5fd1`. |
+| T8 — Item da lista navega para o post | ✅ Done | Commit `b9044ae`. |
+
+Todas as 8 tasks têm commit atômico correspondente, na ordem das fases do
+`tasks.md` (Phase 1→4). Nenhuma task parcial ou bloqueada.
+
+---
+
+## Spec-Anchored Acceptance Criteria
+
+### P1: Conteúdos e Notificações
+
+| Criterion (WHEN X THEN Y) | Spec-defined outcome | `file:line` + assertion expression | Result |
+| --- | --- | --- | --- |
+| AC1: app inicializa após login THEN registra dispositivo no OneSignal com `external_id` = id da pessoa autenticada | `OneSignal.login(sub)` chamado com o `sub` do JWT | `apps/mobile/src/lib/notifications/onesignal-client.ts:38` — `OneSignal.login(payload.sub)`; testado em `apps/mobile/src/lib/notifications/onesignal-client.test.ts:64-81` — `expect(mockLogin).toHaveBeenCalledWith("user-1")` | ✅ PASS |
+| AC1 (tags de segmentação, decisão do design.md — não literal da spec mas necessária para a spec funcionar): `tenant_id`/`congregation_id`/`role` gravados como tags | `OneSignal.User.addTags({tenant_id, congregation_id, role: roles[0]})` | `apps/mobile/src/lib/notifications/onesignal-client.ts:39-43`; testado em `onesignal-client.test.ts:76-80` — `expect(mockAddTags).toHaveBeenCalledWith({tenant_id: "tenant-1", congregation_id: "cong-1", role: "member"})` (token com `roles: ["member","volunteer"]` → só o primeiro papel, conforme design.md Risks & Concerns — **decisão registrada, não gap**) | ✅ PASS |
+| AC1 (wiring: registro ocorre "após login", ligado à sessão) | `registerDevice` chamado quando `session` passa de `null` para um objeto; `unregisterDevice` no de-registro | `apps/mobile/src/lib/notifications/notifications-provider.tsx:37-41`; testado em `notifications-provider.test.tsx:54-68` (registra) e `:84-100` (de-registra, via desmonte do provider — ver nota abaixo) | ✅ PASS (com nota) |
+| AC3: post publicado + dispositivo no segmento THEN push chega (ponta a ponta) | Backend já dispara (`notifications.service.ts`, pré-existente); app só precisa estar registrado com as tags certas — **não há novo código de "recebimento" a testar no app**, é infra do SO/OneSignal | Coberto indiretamente por AC1 (registro correto é a única responsabilidade do app aqui) — nenhuma nova asserção a fazer além do já citado em AC1. Teste real end-to-end (device físico) está fora do alcance deste Verifier (ambiente sem device/simulador); tratado como ⚠️ abaixo. | ⚠️ Spec-precision gap (não testável neste ambiente — ver nota) |
+| AC4: usuário toca numa push THEN app abre diretamente o post relacionado, não a lista | `router.push('/post/'+postId)` chamado com o `post_id` do payload da notificação | `apps/mobile/src/lib/notifications/onesignal-client.ts:67-77` (extrai `post_id`) + `notifications-provider.tsx:23-27` (`router.push(\`/post/${postId}\`)`); testado ponta a ponta em `notifications-provider.test.tsx:102-117` — `expect(mockPush).toHaveBeenCalledWith("/post/post-1")` — e a tela de destino (`app/post/[id].tsx`) existe e renderiza o post carregado (`__tests__/app/post/[id].test.tsx:21-40`) | ✅ PASS |
+| Edge Case (spec.md): post despublicado entre disparo e toque THEN app mostra "não encontrado" | Tela mostra "Post não encontrado.", não trava | `apps/api/src/content/posts.service.ts:108-124` (`findOne` filtra `published_at: {not: null}` quando `isMember`) — confirmado com **teste real rodado** (não só leitura): `apps/api/src/content/posts.service.spec.ts:210-223` PASSOU isoladamente (`npx jest posts.service.spec.ts` → 24/25 passed, a 1 falha é de outro describe, ver Gate Check); `apps/mobile/src/app/post/[id].tsx:34-36` mapeia 404→"Post não encontrado."; testado em `apps/mobile/src/__tests__/app/post/[id].test.tsx:42-52` — `expect(screen.getByText("Post não encontrado.")).toBeTruthy()`, PASSOU | ✅ PASS |
+
+**Nota sobre AC3**: a spec pede o fluxo ponta a ponta observável em
+device físico/simulador ("Independent Test: publicar um post... confirmar
+que a push chega no device"). Este Verifier rodou apenas testes
+automatizados (sem device/simulador disponível no ambiente) — o registro
+de dispositivo (AC1) e o disparo do backend (pré-existente, fora do
+diff desta rodada) estão cada um cobertos por teste automatizado, mas a
+integração real "push chega no aparelho" não foi exercida por este
+Verifier. Marcado como spec-precision gap por falta de meio de teste, não
+como falha de implementação — consistente com o próprio texto do AC3
+("o app só precisa estar registrado e tratar o toque", que são AC1/AC4,
+ambos cobertos).
+
+**Nota sobre a linha "AC1 (wiring)"**: o `tasks.md` (T5, Done-when) pede
+um teste em que "sessão some (`session` muda para `null`)" dispara
+`unregisterDevice`. O teste real (`notifications-provider.test.tsx:84-100`)
+exercita esse mesmo caminho de código (a cleanup function do
+`useEffect([session])`) via desmontagem do componente, não via
+re-render com `session: null` mantendo o componente montado. Como o
+próprio `notifications-provider.tsx` documenta em comentário (linhas
+30-36), o `AuthGate` real sempre desmonta o provider quando a sessão
+some (nunca re-renderiza com `session: null` mantendo-o montado) — então
+o teste cobre o caminho que de fato acontece em produção. Não é um gap:
+é uma interpretação levemente diferente, mas equivalente em cobertura,
+do Done-when literal.
+
+**Status**: ⚠️ 5/6 outcomes com evidência real e PASS; 1 spec-precision
+gap (AC3, sem device disponível neste ambiente — cobertura indireta via
+AC1 é real e testada).
+
+---
+
+## Discrimination Sensor
+
+Executado em `git worktree` descartável (`/tmp/.../mob07-mutant-wt`,
+`node_modules` linkado por symlink a partir do repo real só para rodar os
+testes — nenhuma escrita na árvore de trabalho real). Removido com
+`git worktree remove --force` ao final; `git status` confirmou árvore
+real limpa antes e depois.
+
+| Mutation | File:line | Description | Killed? |
+| --- | --- | --- | --- |
+| 1 | `apps/mobile/src/lib/notifications/onesignal-client.ts:42` | Trocado `role: payload.roles[0] ?? ""` por valor fixo `role: "admin_congregation"` | ✅ Killed — `onesignal-client.test.ts` (1 falha: `registerDevice › chama login com o sub e addTags...`) |
+| 2 | `apps/api/src/content/posts.service.ts:114` | Removida a condição real de `isMember` em `findOne` (`const isMember = false;` — nunca filtra rascunho) | ✅ Killed — `posts.service.spec.ts` (1 falha: `findOne › membro comum recebe NotFoundException para post despublicado`) |
+| 3 | `apps/mobile/src/app/post/[id].tsx:35` | Trocado `err.status === 404` por `err.status === 500` na checagem que decide "Post não encontrado" | ✅ Killed — `[id].test.tsx` (1 falha: `404: mostra 'Post não encontrado', sem travar`) |
+
+**Sensor depth**: lightweight (3 mutações, proporcional ao risco — cobre
+o AC1/tag, o Edge Case do backend e o Edge Case do app, os três pontos
+de maior risco comportamental desta rodada).
+**Result**: 3/3 killed — ✅ PASS. Os testes desta rodada discriminam de
+verdade as três mudanças de comportamento mais arriscadas.
+
+---
+
+## Code Quality
+
+| Check | Pass? |
+| --- | --- |
+| No features beyond what was asked | ✅ — escopo bate com T1-T8 |
+| No abstractions for single-use code | ✅ — `onesignal-client.ts` centraliza o SDK (mesmo princípio de `auth-client.ts`), não introduz camada nova |
+| No unnecessary "flexibility" added | ✅ |
+| Only touched files required for task | ✅ — 24 arquivos no diff, todos rastreáveis a alguma task (T1-T8) ou aos docs da própria rodada |
+| Didn't "improve" unrelated code | ✅ |
+| Matches existing patterns/style | ✅ — `NotificationsProvider` segue a forma de `theme-provider.tsx`; `jwt.ts` segue o mesmo algoritmo de `apps/web/src/lib/auth.ts`; tela Post segue o padrão de erro/loading das telas anteriores |
+| Would senior engineer approve? | ⚠️ — sim, com uma ressalva: T1 alterou a assinatura de `PostsController.findOne` sem atualizar o teste pré-existente que fixava a chamada antiga (`posts.controller.spec.ts:97`), quebrando o gate. O `tasks.md` previu isso ("já coberto por e2e/spec existente se houver") mas a previsão estava errada — havia spec existente, e ele não foi ajustado. |
+| Tests map to acceptance criteria and are non-shallow (spot-check one story) | ✅ — spot-check em `onesignal-client.test.ts`: asserções são sobre valores exatos (`sub`, tags), não só "foi chamado" |
+| Spec-anchored outcome check (asserted values match spec) | ✅ — ver tabela acima |
+| Per-layer Coverage Expectation met (domain 1:1 ACs; routes happy+edge+error) | ✅ — `findOne` (domínio) tem os 2 branches (member/não-member) cobertos; tela Post (rota) cobre happy+404+erro de rede |
+| Every test maps to a spec requirement — no unclaimed tests | ✅ |
+| Documented guidelines followed | `apps/mobile/AGENTS.md` (Expo docs versionados) — sem uso de API nova do Expo nesta rodada além do já existente; `CLAUDE.md` raiz (branch antes de editar, install pela raiz) — ambos seguidos |
+
+❌ **Um "No" real**: o item "Would senior engineer approve?" tem
+ressalva — a tabela de Gate Check abaixo detalha o teste pré-existente
+quebrado.
+
+---
+
+## Edge Cases
+
+- [x] "post despublicado entre disparo e toque → app mostra 'não
+  encontrado'": handled correctly — confirmado com teste real rodado
+  (`posts.service.spec.ts` + `[id].test.tsx`), não só leitura de código.
+- [x] "toque na push abre o post, não a lista": handled correctly —
+  `onNotificationClick` → `router.push` → `app/post/[id].tsx`, fluxo
+  completo confirmado por teste (`notifications-provider.test.tsx`).
+
+---
+
+## Gate Check
+
+- **Gate command (mobile)**: `npm run test -w orbien-mobile` &&
+  `npx tsc --noEmit` && `npx eslint .` (rodados em `apps/mobile`)
+- **Resultado (mobile)**: ✅ 101/101 testes passaram (20 suites), `tsc
+  --noEmit` sem erros, `eslint .` 0 erros / 41 warnings (todos
+  pré-existentes — `no-redeclare` em `screen`/`Text` e `import/first`,
+  mesmo padrão de todas as rodadas anteriores, nenhum novo introduzido
+  por esta rodada além dos arquivos novos seguirem o mesmo padrão)
+- **Gate command (backend)**: `npm run test -w orbien-backend -- content`
+  (equivalente a `posts.service.spec.ts posts.controller`, ajustado
+  porque o nome literal do arquivo do controller é
+  `posts.controller.spec.ts`)
+- **Resultado (backend)**: ❌ **1 falha em 128 testes** (`content`
+  project) — `posts.controller.spec.ts:97`, teste `findOne delega ao
+  service`, esperava `service.findOne` chamado com 3 argumentos
+  (`'t1', 'g1', 'p1'`); T1 mudou o controller para passar `user.roles`
+  como 4º argumento (correto, conforme design.md), mas este teste
+  pré-existente (de uma rodada anterior, fora do diff desta rodada) não
+  foi atualizado para refletir a nova assinatura. **Isso é uma
+  regressão real de gate, não um "gap de spec"**: o comando de gate que
+  o próprio `tasks.md` desta rodada define (T1, Done-when: "Gate check
+  passa: `npm run test -w orbien-backend`") não passa hoje.
+- **Test count before feature (mobile)**: 78 — **medido diretamente**,
+  rodando `npm run test -w orbien-mobile` num `git worktree` descartável
+  no commit `2ba2a95` (início do diff range), depois removido
+  (`git worktree remove --force`; `git stash` evitado de propósito, é
+  operação global e foi bloqueado pelo classificador de permissões ao
+  ser tentado por engano — a árvore de trabalho real nunca foi tocada,
+  confirmado por `git status --short` antes/depois)
+- **Test count after feature (mobile)**: 101 (medido, seção Gate acima)
+- **Delta (mobile)**: +23 novos testes, 0 removidos/enfraquecidos
+- **Test count before feature (backend, `content` project)**: 126 —
+  medido no mesmo worktree do commit `2ba2a95`
+- **Test count after feature (backend, `content` project)**: 128 (127
+  passando + 1 falhando — ver Failures abaixo)
+- **Delta (backend, `content`)**: +2 novos testes (os dois cenários de
+  `findOne`/member em `posts.service.spec.ts`), 0 removidos
+- **Skipped tests**: nenhum
+- **Failures**: `apps/api/src/content/posts.controller.spec.ts:97` —
+  `findOne delega ao service` espera
+  `service.findOne` chamado com `('t1', 'g1', 'p1')`, recebe
+  `('t1', 'g1', 'p1', ['admin_congregation'])`. Root cause: T1 mudou a
+  assinatura de chamada no controller (correto e intencional, conforme
+  design.md) mas não atualizou este teste pré-existente. Fix é
+  mecânico (uma linha: adicionar `USER.roles` à expectativa), mas está
+  fora do meu mandato como Verifier corrigir — reportado como gap.
+
+---
+
+## Fix Plans (if issues found)
+
+### Fix 1: Teste pré-existente do controller não reflete a nova assinatura de `findOne`
+
+- **Root cause**: T1 (`design.md`/`tasks.md`, Rodada 4) mudou
+  `PostsController.findOne` para passar `user.roles` como 4º argumento
+  a `PostsService.findOne` (mudança correta e intencional — é o que
+  faz o Edge Case funcionar). O `tasks.md` assumiu "já coberto por
+  e2e/spec existente se houver; mudança de 1 linha" e não previu
+  atualizar `posts.controller.spec.ts:97`, que fixa a chamada com 3
+  argumentos.
+- **Fix task**: em `apps/api/src/content/posts.controller.spec.ts:97`,
+  trocar `expect(service.findOne).toHaveBeenCalledWith('t1', 'g1',
+  'p1')` por `expect(service.findOne).toHaveBeenCalledWith('t1', 'g1',
+  'p1', USER.roles)` (ou o valor literal de `USER.roles` já definido no
+  topo do arquivo).
+- **Priority**: Blocker — é o próprio gate check que a task definiu
+  (`npm run test -w orbien-backend`) e ele não passa hoje.
+
+---
+
+## Requirement Traceability Update
+
+| Requirement | Previous Status | New Status |
+| --- | --- | --- |
+| MOB-07 | Implementing | ❌ Needs Fix — gate do backend falha (`posts.controller.spec.ts:97`); todos os ACs (AC1/AC4/Edge Case) têm evidência real e passam quando testados isoladamente, mas o gate check formal da task T1 não passa hoje |
+
+---
+
+## Summary
+
+**Overall**: ⚠️ Issues — implementação e cobertura de AC estão corretas
+e comprovadas por teste real; a única pendência é um teste pré-existente
+não atualizado, que quebra o gate formal do backend.
+
+**Spec-anchored check**: 5/6 outcomes com evidência real e PASS; 1
+spec-precision gap (AC3, sem device/simulador disponível neste
+ambiente — mitigado pela cobertura real de AC1, que é o que o app
+controla).
+**Sensor**: 3/3 mutações mortas.
+**Gate**: mobile 101/101 passou, `tsc`/`eslint` limpos; backend 127/128
+passou (1 falha, ver Fix 1).
+
+**What works**: registro de dispositivo com `external_id` + tags
+(`tenant_id`/`congregation_id`/`role`, limitação de papel único
+documentada e aceita); wiring completo do clique-em-push até a tela de
+detalhe (`onNotificationClick` → `router.push` → `app/post/[id].tsx`);
+o Edge Case mais crítico da spec (post despublicado → "não encontrado")
+tem correção real no backend, testada e confirmada por teste rodado,
+não só lido; item da lista de Conteúdo agora navega para o mesmo
+destino da push, sem duplicar lógica.
+
+**Issues found**: 1 (Fix 1 acima) — `posts.controller.spec.ts:97`
+desatualizado depois de T1 mudar a assinatura de `findOne` no
+controller. Fix é de uma linha, mecânico, sem ambiguidade de root
+cause.
+
+**Next steps**: rodar Fix 1 (fora do mandato deste Verifier — reportado
+para quem orquestra decidir corrigir agora ou registrar como pendência
+conhecida) e então re-rodar `npm run test -w orbien-backend` para
+confirmar 128/128 antes de marcar MOB-07 como ✅ Verified na tabela de
+Requirement Traceability do `spec.md`.
+
+---
+
+## Fix 1 — Aplicado
+
+`posts.controller.spec.ts:97` atualizado para
+`expect(service.findOne).toHaveBeenCalledWith('t1', 'g1', 'p1', USER.roles)`,
+mesmo fix mecânico de uma linha apontado acima — commit `0568697`.
+Re-rodado `npm run test -w orbien-backend` (216 suites, 2006 testes) e
+`npm run test -w orbien-mobile` (20 suites, 101 testes): **todos
+passando**, gate formal de T1 (tasks.md) agora satisfeito.
+
+**Overall (atualizado)**: ✅ Ready — os 6 outcomes do Spec-Anchored
+Check continuam válidos (5 PASS + 1 spec-precision gap documentado em
+AC3, que depende de device/simulador fora deste ambiente), o sensor de
+mutação seguiu 3/3 morto (a mudança em Fix 1 é só a expectativa do
+teste, não muda o comportamento mutado), e o gate agora passa nas duas
+apps. `spec.md` (Requirement Traceability) atualizado para MOB-07 ✅
+Verified.
