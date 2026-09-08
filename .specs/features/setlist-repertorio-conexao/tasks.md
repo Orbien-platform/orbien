@@ -9,7 +9,7 @@ Implement these tasks with the `fillsd` skill: **activate it by name and follow 
 ---
 
 **Design**: `.specs/features/setlist-repertorio-conexao/design.md`
-**Status**: Draft
+**Status**: In Progress — lote 1 (T1-T6) concluído e verificado; lote 2 (T7-T10) em execução
 
 ---
 
@@ -104,6 +104,8 @@ T10
 
 ### T1: Persistir `song_id` no `update` de `SetlistSongsService`
 
+> **✅ Concluída** — commit `bf9226b`, gate verde antes do commit.
+
 **What**: `update` passa a gravar `song_id` quando o dto o informa (UUID válido resolvido na própria congregação, ou `null`), sem tocar nos demais campos; a resolução do catálogo que `create` já faz é extraída para `resolveCatalogSong` privado e compartilhada.
 **Where**: `apps/api/src/celebrations/setlist-songs.service.ts` (modificar), `apps/api/src/celebrations/setlist-songs.service.spec.ts` (modificar)
 **Depends on**: None
@@ -121,7 +123,7 @@ T10
 - [ ] Testes cobrem os 4 estados: UUID válido da própria congregação (AC1), só `song_id` sem outros campos (AC2 — asserção de que `data` não contém title/key/bpm/link/notes), `null` (AC3), cross-tenant (AC4)
 - [ ] O teste existente "atualiza todos os campos informados" (`:200-226`) passa a enviar `song_id` e a afirmá-lo no `data` — fecha a lacuna que deixou o bug passar
 - [ ] `npm run test -w orbien-backend` passa; `npm run test:cov -w orbien-backend` mantém global 100
-- [ ] Contagem de testes: 20 existentes em `setlist-songs.service.spec.ts` continuam passando + ~4 novos (nenhuma deleção)
+- [x] Contagem de testes: 15 existentes em `setlist-songs.service.spec.ts` continuam passando + 5 novos (nenhuma deleção). *Correção: o plano dizia "20 existentes" — eram 15; após T1/T2 são 22*
 
 **Tests**: unit
 **Gate**: quick (API) + cobertura
@@ -130,6 +132,8 @@ T10
 ---
 
 ### T2: Devolver a referência do catálogo em `SetlistSongsService`
+
+> **✅ Concluída** — commit `f23a166`, gate verde antes do commit.
 
 **What**: constante `SONG_REFERENCE_SELECT` exportada e `include: { song: { select: ... } }` em `findAll` e `findOne`, para a `SetlistSong` carregar a referência do `Song` vinculado (ou `null`).
 **Where**: `apps/api/src/celebrations/setlist-songs.service.ts` (modificar), `.spec.ts` (modificar)
@@ -156,6 +160,8 @@ T10
 
 ### T3: Aprofundar o `include` da ordem de culto até a referência do catálogo
 
+> **✅ Concluída** — commit `1641946`, gate verde antes do commit.
+
 **What**: `ServiceOrdersService.findOne` passa a incluir `songs.song` com a mesma `SONG_REFERENCE_SELECT`, para a tela da ordem de culto receber a referência junto do payload que já busca.
 **Where**: `apps/api/src/celebrations/service-orders.service.ts` (modificar), `apps/api/src/celebrations/service-orders.service.spec.ts` (modificar)
 **Depends on**: T2
@@ -180,6 +186,8 @@ T10
 ---
 
 ### T4: Criar `lib/repertorio.ts` com o tipo e os helpers do catálogo
+
+> **✅ Concluída** — commit `5124962`, gate verde antes do commit.
 
 **What**: casa única de `CatalogSong` e dos helpers de exibição/busca — move o que hoje está em `SongCatalogPanel` e adiciona a normalização de acento e o casamento de busca.
 **Where**: `apps/web/src/lib/repertorio.ts` (novo), `apps/web/src/lib/repertorio.test.ts` (novo), `apps/web/src/components/repertorio/SongCatalogPanel.tsx` (ajustar imports)
@@ -207,6 +215,8 @@ T10
 ---
 
 ### T5: Criar o `SongPicker` com busca e contexto
+
+> **✅ Concluída** — commit `9836384`, gate verde antes do commit.
 
 **What**: componente que carrega o catálogo, filtra por título com busca insensível a acento e lista título, tom, BPM e última vez tocada, cobrindo os quatro estados (carregando, catálogo vazio, busca sem resultado, erro de carga).
 **Where**: `apps/web/src/components/repertorio/SongPicker.tsx` (novo), `SongPicker.test.tsx` (novo)
@@ -238,6 +248,8 @@ T10
 ---
 
 ### T6: Cadastro inline de música no `SongPicker`
+
+> **✅ Concluída** — commit `7a1edc1`, gate verde antes do commit.
 
 **What**: `SongQuickCreate` interno ao `SongPicker` — cria um `Song` via `POST /songs` e devolve a música já selecionada, sem sair da tela. Fecha também o ponto cego de portão: registra `components/repertorio/**` nas thresholds do `vitest.config.ts`.
 **Where**: `apps/web/src/components/repertorio/SongPicker.tsx` (modificar), `SongPicker.test.tsx` (modificar), `apps/web/vitest.config.ts` (modificar)
@@ -459,3 +471,50 @@ Nenhuma tarefa declara `Tests: none`; nenhuma difere o teste para outra tarefa. 
 | SETREP-04 | T2, T3, T9, T10 |
 
 Cobertura: 4 de 4 requisitos mapeados; nenhuma tarefa sem requisito.
+
+
+---
+
+## Status de execução — lote 1 (T1-T6)
+
+Verificado pelo orquestrador em 2026-09-08, não só relatado pelo worker:
+`npm run test -w orbien-backend` → **2004 testes, 216 suítes, 0 falhas**;
+`npm run test -w orbien-web` → **979 testes, 91 arquivos, 0 falhas**.
+Cobertura da API em 100 nas quatro métricas; web com `test:cov` exit 0 já
+**com** a entrada nova de `components/repertorio/**` ativa.
+
+| T | Commit | Testes novos |
+|---|---|---|
+| T1 | `bf9226b` | 5 |
+| T2 | `f23a166` | 1 |
+| T3 | `1641946` | 1 |
+| T4 | `5124962` | 12 |
+| T5 | `9836384` | 15 |
+| T6 | `7a1edc1` | 8 |
+
+Piso registrado para `components/repertorio/**`: `98 / 91 / 100 / 100`
+(medido 98,73 / 91,54 / 100 / 100). O que falta são as guardas
+`if (signal.cancelled) return` do `useEffect`, alcançáveis só desmontando no
+meio da requisição — mesmo padrão já documentado no arquivo para outros
+diretórios. Nenhum `SPEC_DEVIATION` marcado.
+
+### Achados fora do escopo do lote 1 (não corrigidos — decisão do usuário)
+
+1. **Lacuna de teste na camada de DTO (SETREP-01 AC3)**:
+   `apps/api/src/celebrations/dto/update-setlist-song.dto.spec.ts` não afirma
+   que `song_id: null` passa a validação. Passa hoje (`@IsOptional()` ignora
+   `null`) e o serviço está coberto, mas nada tranca o contrato — trocar
+   `@IsOptional()` por outra combinação quebraria AC3 sem teste vermelho. O
+   400 para não-UUID **está** coberto (herdado de
+   `create-setlist-song.dto.spec.ts:31-33`).
+2. `SetlistSongsService.findAll/findOne` declaram retorno `SetlistSong[]` /
+   `SetlistSong`, sem refletir no tipo a relação `song` que o Prisma passa a
+   devolver. O front tipa a forma em T9; tipo forte na API seria tarefa
+   própria.
+3. `npm run lint -w orbien-web` emite 1 warning pré-existente em
+   `apps/web/coverage/lcov-report/block-navigation.js` — artefato gerado pelo
+   `test:cov`, diretório não versionado. 0 erros.
+4. `UpdateSetlistSongDto` tipa `song_id?: string` embora `null` chegue em
+   runtime (o que AC3 exige); o serviço contorna com
+   `dto.song_id as string | null | undefined`. O campo mora em
+   `CreateSetlistSongDto`, fora do escopo de T1.
