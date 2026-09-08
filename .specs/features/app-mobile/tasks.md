@@ -795,3 +795,397 @@ todos passando) && `npm run build:mobile` && `turbo run lint --filter=orbien-mob
 (0 erros).
 
 **Requirement**: MOB-01, MOB-12
+
+---
+
+# Rodada 2 — Tasks: MOB-04, MOB-05
+
+**Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 2 —
+MOB-04 (Membros e Voluntários — escala)".
+**Status**: In Progress
+**Escopo**: as 4 ACs da story "P1: Membros e Voluntários" — listar escala
+(MOB-04, AC1), confirmar/recusar (MOB-04, AC2), check-in (MOB-04, AC3,
+inclui o endpoint novo em `apps/api` que a rodada de Design encontrou
+faltando), indisponibilidade (MOB-05, AC4). Cross-app: `apps/api`
+(Fase 1) + `apps/mobile` (Fases 2-4).
+
+## Test Coverage Matrix
+
+> Guidelines found: `apps/api/jest.config.js` (project `unit`,
+> `testMatch: src/**/*.spec.ts`, colocado com o código — confirmado via
+> `celebration-assignment.service.spec.ts`/`celebration-volunteer.controller.spec.ts`
+> existentes, mesmo padrão de mock de `PrismaService`); `apps/mobile/jest.config.js`
+> (`jest-expo` + Testing Library, mesmo padrão já usado em
+> `theme-provider.test.tsx`/`auth-provider.test.tsx` da Rodada 1).
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+|---|---|---|---|---|
+| `CelebrationAssignmentService.checkInAssignment` (novo) | unit | 1:1 com os cenários de erro do design (403 dono errado, 422 não-confirmado, 409 já feito check-in) + caminho feliz | `apps/api/src/celebrations/celebration-assignment.service.spec.ts` | `npm run test -w orbien-backend` |
+| `CelebrationRespondController` (novo método `checkIn`) | unit | delega ao service com `sub`/`tenant_id`, exige `@Roles` de voluntário (mesmo padrão do `respond` existente) | `apps/api/src/celebrations/celebration-volunteer.controller.spec.ts` | `npm run test -w orbien-backend` |
+| `EscalaClient` (`lib/escala/escala-client.ts`) | unit | 1:1 com AC de MOB-04 (list, respond, check-in) e MOB-05 (get/save unavailability) relevantes a essa camada | `apps/mobile/src/lib/escala/**/*.test.ts` | `npm run test -w orbien-mobile` |
+| Tela Escala (`app/index.tsx`) | component | Caminho feliz (lista renderiza, confirmar/recusar atualiza estado local, check-in habilita só para `confirmed` e desaparece após sucesso) + erro genérico de rede | `apps/mobile/src/app/index.test.tsx` | `npm run test -w orbien-mobile` |
+| Tela Indisponibilidade (`app/indisponibilidade.tsx`) | component | AC4: carrega mês corrente, salva, cancela request obsoleta ao trocar de mês rápido (mesmo princípio do `signal.cancelled` do `apps/web`) | `apps/mobile/src/app/indisponibilidade.test.tsx` | `npm run test -w orbien-mobile` |
+| Prisma schema (coluna `checked_in_at`) | none | build gate only (não é tabela nova — RLS já cobre) | `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/*_add_checked_in_at*` | `npm run build:api` |
+
+## Gate Check Commands
+
+| Gate Level | When to Use | Command |
+|---|---|---|
+| Quick (API) | Após task de service/controller com só unit | `npm run test -w orbien-backend` |
+| Quick (mobile) | Após task com só teste unit/component | `npm run test -w orbien-mobile` |
+| Build (API) | Fechamento da Fase 1 (migration + endpoint) | `npm run test -w orbien-backend` && `npm run build:api` && `turbo run lint --filter=orbien-api` |
+| Full (mobile) | Fechamento de fase mobile | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
+
+---
+
+## Execution Plan
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+```
+
+### Phase 1: Backend — endpoint de check-in (gap da AC3, apps/api)
+
+```
+T1 → T2 → T3
+```
+
+### Phase 2: Mobile — tipos e `EscalaClient` (MOB-04, MOB-05)
+
+```
+T4 → T5 → T6
+```
+
+### Phase 3: Mobile — tela Escala (MOB-04)
+
+```
+T7
+```
+
+### Phase 4: Mobile — tela Indisponibilidade (MOB-05)
+
+```
+T8
+```
+
+---
+
+## Task Breakdown
+
+### T1: Migration — coluna `checked_in_at` em `CelebrationAssignment`
+
+**What**: Adicionar `checked_in_at DateTime?` ao model `CelebrationAssignment`
+em `schema.prisma` e gerar a migration Prisma correspondente
+(`prisma migrate dev --name add_checked_in_at_to_celebration_assignments`).
+**Where**: `apps/api/prisma/schema.prisma`,
+`apps/api/prisma/migrations/<timestamp>_add_checked_in_at_to_celebration_assignments/migration.sql`
+**Depends on**: None
+**Reuses**: nenhum — coluna nova em tabela existente; RLS da tabela já
+cobre (não é `00N_rls_*.sql`, `AD-001` só vale para tabela nova).
+**Requirement**: MOB-04 (AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] `npx prisma migrate dev` roda sem erro contra o banco local
+- [ ] `checked_in_at` aparece como `DateTime?` (nullable) no client gerado
+- [ ] Gate check passa: `npm run build:api` (typecheck reconhece o campo novo)
+
+**Tests**: none (schema/migration)
+**Gate**: build
+
+---
+
+### T2: `checkInAssignment` no `CelebrationAssignmentService`
+
+**What**: Novo método `checkInAssignment(assignmentId, userId, tenantId): Promise<CelebrationAssignment>`
+em `celebration-assignment.service.ts`, espelhando `respondToAssignment`
+(`:276-311`): resolve `personId`, busca assignment por `id`+`tenant_id`
+com `volunteerProfile.person_id`, `ForbiddenException` se não for dono,
+`UnprocessableEntityException` se `status !== confirmed`,
+`ConflictException` se `checked_in_at` já setado, senão `update` com
+`checked_in_at: new Date()`.
+**Where**: `apps/api/src/celebrations/celebration-assignment.service.ts`
+**Depends on**: T1
+**Reuses**: `resolvePersonId` (helper já existente, `:32-39`); mesma
+estrutura de `respondToAssignment` (`:276-311`).
+**Requirement**: MOB-04 (AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: dono correto + status `confirmed` + sem check-in prévio →
+      `checked_in_at` setado, retorna assignment atualizado
+- [ ] Teste: `volunteerProfile.person_id` diferente do usuário →
+      `ForbiddenException`
+- [ ] Teste: `status` `pending`/`declined` → `UnprocessableEntityException`
+- [ ] Teste: `checked_in_at` já setado → `ConflictException`
+- [ ] Teste: assignment inexistente (`id`+`tenant_id` não bate) →
+      `NotFoundException`
+- [ ] Gate check passa: `npm run test -w orbien-backend`
+
+**Tests**: unit
+**Gate**: quick
+
+---
+
+### T3: `PATCH /assignments/:id/check-in` no `CelebrationRespondController`
+
+**What**: Novo método `checkIn` no `CelebrationRespondController`
+(mesmo controller de `:id/respond`), `@Roles(...VOLUNTEER_ROLES)`, sem
+`@Body()` (timestamp é sempre "agora" no servidor — design.md, Tech
+Decisions), delega a `assignmentService.checkInAssignment(id, user.sub, user.tenant_id)`.
+**Where**: `apps/api/src/celebrations/celebration-volunteer.controller.ts`
+**Depends on**: T2
+**Reuses**: mesmo controller/guards do método `respond` (`:24-36`).
+**Requirement**: MOB-04 (AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `checkIn` delega ao service com `id`, `user.sub`, `user.tenant_id`
+- [ ] Teste: rota exige um dos `VOLUNTEER_ROLES` (mesmo padrão do teste
+      existente de `respond` no mesmo arquivo)
+- [ ] Gate check passa (full): `npm run test -w orbien-backend` &&
+      `npm run build:api` && `turbo run lint --filter=orbien-api`
+
+**Tests**: unit
+**Gate**: build
+
+**Commit**: `feat(api): endpoint de check-in em celebration assignments (MOB-04 AC3)`
+
+---
+
+### T4: Tipos de Escala e Indisponibilidade (mobile)
+
+**What**: `Assignment`, `SetlistSong`, `Unavailability` (interfaces do
+Data Models do design, incluindo `checked_in_at`) em arquivo de tipo puro.
+**Where**: `apps/mobile/src/lib/escala/types.ts`
+**Depends on**: None (independe do backend estar pronto — só shape)
+**Reuses**: shape espelhado de `getMyAssignments`
+(`celebration-assignment.service.ts:353-370`) e `UnavailabilityQueryDto`/
+`VolunteerUnavailability` (contrato, não import — mesma regra do
+monorepo que a Rodada 1 já seguiu para `LoginResponse`/`Branding`).
+**Requirement**: MOB-04, MOB-05
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Tipos exportados batem com os campos documentados no `design.md`
+      (Data Models, Rodada 2)
+- [ ] Sem erro de TypeScript
+
+**Tests**: none (tipos puros)
+**Gate**: build
+
+---
+
+### T5: `EscalaClient` — listar, responder, check-in
+
+**What**: `getMyAssignments(includePast?)`, `respondToAssignment(id, status)`,
+`checkIn(id)` — wrappers tipados sobre `authenticatedRequest` (import de
+`../auth/auth-client`) para `GET /volunteers/my-celebration-assignments`,
+`PATCH /assignments/:id/respond`, `PATCH /assignments/:id/check-in`.
+**Where**: `apps/mobile/src/lib/escala/escala-client.ts`
+**Depends on**: T4
+**Reuses**: `authenticatedRequest<T>()` (`auth-client.ts`, já existe desde
+o Fix F1 da Rodada 1 — mesmo helper que `theme-provider.tsx` usa).
+**Requirement**: MOB-04 (AC1, AC2, AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getMyAssignments()` chama `authenticatedRequest("get", "/volunteers/my-celebration-assignments")`
+      e repassa `includePast` como query string quando informado
+- [ ] Teste: `respondToAssignment(id, "confirmed")` chama
+      `authenticatedRequest("patch", "/assignments/{id}/respond", {body: {status: "confirmed"}})`
+- [ ] Teste: `checkIn(id)` chama `authenticatedRequest("patch", "/assignments/{id}/check-in")`
+      sem body
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+---
+
+### T6: `EscalaClient` — indisponibilidade
+
+**What**: Extensão do mesmo módulo com `getUnavailability(month, year)` e
+`saveUnavailability(month, year, dates, notes?)`, mapeando
+`GET`/`POST /volunteers/unavailability`.
+**Where**: `apps/mobile/src/lib/escala/escala-client.ts` (extensão)
+**Depends on**: T5
+**Reuses**: mesmo `authenticatedRequest`; contrato de
+`CreateUnavailabilityDto`/`UnavailabilityQueryDto` (`apps/api/src/volunteers/dto/`).
+**Requirement**: MOB-05 (AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getUnavailability(month, year)` chama `authenticatedRequest("get", "/volunteers/unavailability?month=...&year=...")`
+- [ ] Teste: `saveUnavailability(...)` chama `authenticatedRequest("post", "/volunteers/unavailability", {body: {...}})`
+      com o shape exato de `CreateUnavailabilityDto`
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: unit
+**Gate**: full
+
+**Commit**: `feat(mobile): EscalaClient — listar, responder, check-in e indisponibilidade (MOB-04, MOB-05)`
+
+---
+
+### T7: Tela Escala — lista, confirmar/recusar, check-in
+
+**What**: `app/index.tsx` passa a ser a tela de Escala (substitui o
+placeholder): `useEffect` carrega `getMyAssignments()` no mount, lista
+os slots (nome da celebração, ministério, data), botões
+Confirmar/Recusar para `status === "pending"` (atualização otimista local
+após sucesso, sem refetch — mesmo princípio de
+`apps/web/src/app/(admin)/voluntarios/page.tsx:169-232`), botão Check-in
+para `status === "confirmed" && !checked_in_at` (some após sucesso), link
+para a tela de Indisponibilidade (T8).
+**Where**: `apps/mobile/src/app/index.tsx` (substitui o placeholder atual)
+**Depends on**: T5
+**Reuses**: `EscalaClient` (T5); padrão de estado local
+(`useState`/`useEffect`) já usado em `theme-provider.tsx`.
+**Requirement**: MOB-04 (AC1, AC2, AC3)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component: lista renderiza os slots retornados por
+      `getMyAssignments` (mock)
+- [ ] Teste component: confirmar um slot `pending` chama
+      `respondToAssignment(id, "confirmed")` e atualiza o item na lista
+      sem refetch (mock conta 1 chamada a `getMyAssignments`)
+- [ ] Teste component: recusar segue o mesmo padrão para `"declined"`
+- [ ] Teste component: check-in em slot `confirmed` chama `checkIn(id)` e
+      o botão desaparece após sucesso
+- [ ] Teste component: erro de rede (mock rejeita) mostra estado de erro
+      explícito, não lista vazia (Edge Case da spec)
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): tela de Escala com confirmar/recusar e check-in (MOB-04)`
+
+---
+
+### T8: Tela Indisponibilidade
+
+**What**: Nova rota `app/indisponibilidade.tsx`: carrega
+`getUnavailability(mês atual, ano atual)` no mount, permite marcar/desmarcar
+dias do mês, salva via `saveUnavailability`; ao trocar de mês, cancela a
+request anterior obsoleta antes de aplicar a nova resposta (mesmo padrão
+de `signal.cancelled` do `apps/web/src/components/volunteers/UnavailabilityPanel.tsx`).
+**Where**: `apps/mobile/src/app/indisponibilidade.tsx`
+**Depends on**: T6
+**Reuses**: `EscalaClient` (T6); padrão de cancelamento de request
+obsoleta de `UnavailabilityPanel.tsx`.
+**Requirement**: MOB-05 (AC4)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component: carrega e mostra as datas indisponíveis do mês
+      corrente (mock de `getUnavailability`)
+- [ ] Teste component: salvar chama `saveUnavailability` com o mês/ano/
+      datas selecionadas
+- [ ] Teste component: trocar de mês rapidamente (duas respostas fora de
+      ordem) aplica só a resposta do mês selecionado por último, não a
+      resposta que chegou por último no tempo
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): tela de Indisponibilidade (MOB-05)`
+
+---
+
+## Phase Execution Map
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+
+Phase 1:  T1 ──→ T2 ──→ T3
+Phase 2:  T4 ──→ T5 ──→ T6
+Phase 3:  T7
+Phase 4:  T8
+```
+
+Execução é estritamente sequencial. Fase 1 (backend) precede as fases de
+mobile porque T5 (Fase 2) chama o endpoint que T3 cria — sem isso o
+`EscalaClient.checkIn` não teria contrato real para testar contra (os
+testes são unitários com mock, então tecnicamente não bloqueiam
+tecnicamente, mas a ordem evita retrabalho se o contrato mudar durante o
+Execute de T1-T3).
+
+---
+
+## Task Granularity Check
+
+| Task | Scope | Status |
+|---|---|---|
+| T1: Migration `checked_in_at` | 1 arquivo de schema + 1 migration | ✅ Granular |
+| T2: `checkInAssignment` service | 1 método | ✅ Granular |
+| T3: Controller + rota | 1 método de controller | ✅ Granular |
+| T4: Tipos | 1 arquivo de tipo puro | ✅ Granular |
+| T5: `EscalaClient` (list/respond/check-in) | 1 componente (cliente), 3 métodos cohesivos (mesma origem de dados) | ✅ Granular |
+| T6: `EscalaClient` (indisponibilidade) | 1 componente (extensão), 2 métodos cohesivos | ✅ Granular |
+| T7: Tela Escala | 1 tela | ✅ Granular |
+| T8: Tela Indisponibilidade | 1 tela | ✅ Granular |
+
+---
+
+## Diagram-Definition Cross-Check
+
+| Task | Depends On (task body) | Diagram Shows | Status |
+|---|---|---|---|
+| T1 | None | — | ✅ Match |
+| T2 | T1 | T1→T2 | ✅ Match |
+| T3 | T2 | T2→T3 | ✅ Match |
+| T4 | None | Fase 2 inicia após Fase 1 | ✅ Match |
+| T5 | T4 | T4→T5 | ✅ Match |
+| T6 | T5 | T5→T6 | ✅ Match |
+| T7 | T5 | Fase 3 inicia após Fase 2 | ✅ Match |
+| T8 | T6 | Fase 4 inicia após Fase 3 | ✅ Match |
+
+Nenhuma task depende de uma task de fase posterior. ✅
+
+---
+
+## Test Co-location Validation
+
+| Task | Code Layer Created/Modified | Matrix Requires | Task Says | Status |
+|---|---|---|---|---|
+| T1 | Prisma schema | none | none | ✅ OK |
+| T2 | `CelebrationAssignmentService.checkInAssignment` | unit | unit | ✅ OK |
+| T3 | `CelebrationRespondController` | unit | unit | ✅ OK |
+| T4 | Tipos puros | none | none | ✅ OK |
+| T5 | `EscalaClient` (domínio) | unit | unit | ✅ OK |
+| T6 | `EscalaClient` — indisponibilidade (domínio) | unit | unit | ✅ OK |
+| T7 | Tela Escala (componente) | component | component | ✅ OK |
+| T8 | Tela Indisponibilidade (componente) | component | component | ✅ OK |
+
+Nenhuma violação. ✅
