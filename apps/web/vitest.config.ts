@@ -20,7 +20,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**"],
       exclude: ["src/**/*.d.ts"],
-      reporter: ["text-summary", "lcov"],
+      reporter: ["text", "text-summary", "lcov"],
       // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
       // global. O piso nunca desce.
       thresholds: {
