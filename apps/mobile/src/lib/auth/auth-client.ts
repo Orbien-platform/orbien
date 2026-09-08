@@ -108,11 +108,21 @@ export async function login(
   return session;
 }
 
-/** Lê a sessão do SecureStore, sem chamada de rede. `null` se não houver. */
+/**
+ * Lê a sessão do SecureStore, sem chamada de rede. `null` se não houver —
+ * inclusive quando o valor salvo está corrompido (JSON inválido de uma
+ * versão anterior, por exemplo): trata como "sem sessão" e limpa a chave, em
+ * vez de propagar o erro e travar o `AuthGate` em "loading" para sempre.
+ */
 export async function getSession(): Promise<Session | null> {
   const raw = await SecureStore.getItemAsync(SESSION_STORAGE_KEY);
   if (!raw) return null;
-  return JSON.parse(raw) as Session;
+  try {
+    return JSON.parse(raw) as Session;
+  } catch {
+    await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
+    return null;
+  }
 }
 
 /**
