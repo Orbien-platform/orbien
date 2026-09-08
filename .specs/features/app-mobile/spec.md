@@ -318,9 +318,9 @@ bundle id mudam só por config, sem tocar em código.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MOB-01 | P1: Autenticação e sessão | Design | Implementing |
-| MOB-02 | P1: Autenticação e sessão (refresh serializado) | Design | Implementing |
-| MOB-03 | P1: Tema por tenant | Design | In Tasks |
+| MOB-01 | P1: Autenticação e sessão | Design | ✅ Verified |
+| MOB-02 | P1: Autenticação e sessão (refresh serializado) | Design | ✅ Verified |
+| MOB-03 | P1: Tema por tenant | Design | ✅ Verified |
 | MOB-04 | P1: Membros e Voluntários — escala | Design | Pending |
 | MOB-05 | P1: Membros e Voluntários — check-in/indisponibilidade | Design | Pending |
 | MOB-06 | P1: Conteúdos — feed | Design | Pending |
@@ -328,14 +328,15 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-08 | P2: Celebrações e OC | Design | Pending |
 | MOB-09 | P2: Pequenos Grupos | Design | Pending |
 | MOB-10 | P3: Preferências de notificação | Design | Pending |
-| MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | Implementing |
-| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | Implementing |
+| MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | ✅ Verified |
+| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | ✅ Verified |
 
 **ID format:** `MOB-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, 0 mapped to tasks (pré-Design), 0 unmapped ⚠️ (aguardando Design)
+**Coverage:** 12 total, 5 verificadas nesta rodada (MOB-01, MOB-02, MOB-03,
+MOB-11, MOB-12), 7 aguardando rodada de Design própria (MOB-04 a MOB-10)
 
 **Nota (Fase 1/2 do Execute):** MOB-11 e MOB-12 ficam em "Implementing" —
 T1-T7 (`tasks.md`) entregam scaffold do workspace e `app.config.js`
