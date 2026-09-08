@@ -109,6 +109,7 @@ describe('ServiceOrderItemsService', () => {
         service_order_id: 'so1',
         sequence: 1,
         name: 'Oração',
+        type: 'prayer',
         start_offset_minutes: 0,
         duration_minutes: 5,
         responsible_type: 'free_text',
@@ -122,6 +123,7 @@ describe('ServiceOrderItemsService', () => {
           service_order_id: 'so1',
           sequence: 1,
           name: 'Oração',
+          type: 'prayer',
           start_offset_minutes: 0,
           duration_minutes: 5,
           responsible_type: 'free_text',
@@ -272,6 +274,7 @@ describe('ServiceOrderItemsService', () => {
       await service.update('t1', 'g1', 'item1', {
         sequence: 2,
         name: 'Novo nome',
+        type: 'sermon',
         start_offset_minutes: 5,
         duration_minutes: 10,
         responsible_type: 'person',
@@ -286,6 +289,7 @@ describe('ServiceOrderItemsService', () => {
         data: {
           sequence: 2,
           name: 'Novo nome',
+          type: 'sermon',
           start_offset_minutes: 5,
           duration_minutes: 10,
           responsible_type: 'person',

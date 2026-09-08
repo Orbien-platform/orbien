@@ -19,6 +19,7 @@ import { FinancialModule } from './financial/financial.module';
 import { ContentModule } from './content/content.module';
 import { VolunteersModule } from './volunteers/volunteers.module';
 import { CelebrationsModule } from './celebrations/celebrations.module';
+import { SongsModule } from './songs/songs.module';
 import { SettingsModule } from './settings/settings.module';
 import { PlatformModule } from './platform/platform.module';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -53,6 +54,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ContentModule,
     VolunteersModule,
     CelebrationsModule,
+    SongsModule,
     SettingsModule,
     PlatformModule,
   ],

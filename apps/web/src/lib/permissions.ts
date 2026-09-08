@@ -19,7 +19,7 @@
  *   /voluntarios   ministries.controller.ts     READ_ROLES
  *   /celebracoes   celebrations.controller.ts   READ_ROLES
  *
- * Duas telas ficam de fora do mapa, e é de propósito:
+ * Três telas ficam de fora do mapa, e é de propósito:
  *
  *   /dashboard      monta-se de quatro chamadas independentes (`allSettled`) e
  *                   já renderiza só o que carregou; recortá-la por papel aqui
@@ -27,6 +27,12 @@
  *   /configuracoes  o `GET /settings` não tem `@Roles` — é aberto a qualquer
  *                   sessão autenticada. Quem não pode gravar recebe 403 no
  *                   PATCH, que é outra conversa.
+ *   /repertorio     o `GET /songs` (songs.controller.ts) também não tem
+ *                   `@Roles` — o catálogo de músicas é próprio, sem depender
+ *                   do módulo de celebrações/OC, e sua leitura é aberta a
+ *                   qualquer sessão autenticada. Escrever (criar/editar/
+ *                   excluir música) continua exigindo papel de edição, mas
+ *                   isso é decidido dentro da própria tela, não aqui.
  */
 
 /** Papéis com leitura, por rota. Rota ausente = visível para todo autenticado. */

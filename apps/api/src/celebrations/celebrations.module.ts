@@ -15,8 +15,6 @@ import { SetlistSongsController } from './setlist-songs.controller';
 import { SetlistSongsService } from './setlist-songs.service';
 import { SetlistsController } from './setlists.controller';
 import { SetlistsService } from './setlists.service';
-import { SongsController } from './songs.controller';
-import { SongsService } from './songs.service';
 import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CelebrationSchedulerController } from './celebration-scheduler.controller';
 import { CelebrationScheduleController } from './celebration-schedule.controller';
@@ -41,7 +39,6 @@ import {
     ServiceOrdersController,
     SetlistSongsController,
     SetlistsController,
-    SongsController,
     CelebrationSchedulerController,
     CelebrationScheduleController,
     CelebrationAssignmentController,
@@ -58,7 +55,6 @@ import {
     ServiceOrderItemsService,
     SetlistsService,
     SetlistSongsService,
-    SongsService,
     CelebrationSchedulerService,
     CelebrationScheduleService,
     CelebrationAssignmentService,
@@ -71,7 +67,6 @@ import {
     ServiceOrderItemsService,
     SetlistsService,
     SetlistSongsService,
-    SongsService,
     CelebrationSchedulerService,
     CelebrationScheduleService,
     CelebrationAssignmentService,

@@ -11,7 +11,6 @@ import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/com
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
 import { ScheduleSheet } from "@/components/celebrations/ScheduleSheet";
 import { TemplatesPanel } from "@/components/celebrations/TemplatesPanel";
-import { SongCatalogPanel } from "@/components/celebrations/SongCatalogPanel";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -65,6 +64,10 @@ export default function CelebracoesPage() {
   const canAddSongs = roles.some((r) =>
     ["admin_congregation", "pastor", "tenant_admin", "ministry_leader"].includes(r)
   );
+  // `canAddSongs` continua aqui: dentro da Ordem de Culto ainda se escolhe
+  // música do catálogo para montar o setlist de uma etapa de louvor. O que
+  // saiu foi só a gestão do catálogo em si (CRUD), que agora mora em
+  // `/repertorio` — a OC apenas consome o repertório, não o administra.
 
   const [activeTab, setActiveTab] = useState("celebrations");
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -216,9 +219,6 @@ export default function CelebracoesPage() {
           <Tabs.Tab value="proximas" className={tabBtn(activeTab === "proximas")}>
             Próximas
           </Tabs.Tab>
-          <Tabs.Tab value="repertorio" className={tabBtn(activeTab === "repertorio")}>
-            Repertório
-          </Tabs.Tab>
         </Tabs.List>
 
         {/* ── Tab: Celebrações ── */}
@@ -367,11 +367,6 @@ export default function CelebracoesPage() {
         {/* ── Tab: Templates de escala ── */}
         <Tabs.Panel value="templates" className="pt-5">
           <TemplatesPanel canEdit={canEdit} />
-        </Tabs.Panel>
-
-        {/* ── Tab: Repertório de músicas ── */}
-        <Tabs.Panel value="repertorio" className="pt-5">
-          <SongCatalogPanel canEdit={canAddSongs} />
         </Tabs.Panel>
       </Tabs.Root>
 

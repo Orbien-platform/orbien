@@ -8,29 +8,38 @@ vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-const instance = {
+const instanceWithOC = {
   id: "i1",
-  date: "2026-09-06T10:00:00.000Z",
-  celebration: { id: "c1", name: "Culto Domingo", time: "10:00" },
+  scheduled_date: "2026-09-06T10:00:00.000Z",
+  celebration: { id: "c1", name: "Culto Domingo", start_time: "10:00" },
+  serviceOrder: { id: "so1", title: "OC Domingo", published_at: null },
+};
+
+const instanceWithoutOC = {
+  id: "i1",
+  scheduled_date: "2026-09-06T10:00:00.000Z",
+  celebration: { id: "c1", name: "Culto Domingo", start_time: "10:00" },
+  serviceOrder: null,
 };
 
 const serviceOrder = {
   id: "so1",
-  status: "draft",
+  title: "OC Domingo",
   items: [
     {
       id: "it1",
       name: "Louvor de abertura",
       type: "worship",
+      sequence: 1,
       duration_minutes: 20,
-      start_time: "10:00",
-      responsible: { id: "p1", full_name: "Ana Souza" },
+      start_offset_minutes: 0,
+      responsible_type: "person",
+      person: { id: "p1", full_name: "Ana Souza" },
       notes: "Observação",
-      position: 1,
       setlist: {
         id: "sl1",
         songs: [
-          { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", position: 1 },
+          { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", sequence: 1 },
         ],
       },
     },
@@ -38,7 +47,11 @@ const serviceOrder = {
       id: "it2",
       name: "Pregação",
       type: "sermon",
-      position: 2,
+      sequence: 2,
+      duration_minutes: 30,
+      start_offset_minutes: 30,
+      responsible_type: "free_text",
+      responsible_label: "A definir",
       setlist: null,
     },
   ],
@@ -47,11 +60,10 @@ const serviceOrder = {
 function mockGet(withOC: boolean, catalog: unknown[] = []) {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === "/celebrations/instances/i1") {
-      return Promise.resolve({ data: instance });
+      return Promise.resolve({ data: withOC ? instanceWithOC : instanceWithoutOC });
     }
-    if (url === "/celebrations/instances/i1/service-order") {
-      if (withOC) return Promise.resolve({ data: serviceOrder });
-      return Promise.reject({ response: { status: 404 } });
+    if (url === "/celebrations/orders/so1") {
+      return Promise.resolve({ data: serviceOrder });
     }
     if (url === "/songs") {
       return Promise.resolve({ data: catalog });
@@ -62,9 +74,7 @@ function mockGet(withOC: boolean, catalog: unknown[] = []) {
 
 describe("ServiceOrderView", () => {
   beforeEach(() => {
-    URL.createObjectURL = vi.fn(() => "blob:mock");
-    URL.revokeObjectURL = vi.fn();
-    HTMLAnchorElement.prototype.click = vi.fn();
+    vi.stubGlobal("open", vi.fn());
   });
 
   it("does not render content when closed", () => {
@@ -97,17 +107,18 @@ describe("ServiceOrderView", () => {
     expect(screen.getByText("Louvor de abertura")).toBeInTheDocument();
     expect(screen.getAllByText("Pregação").length).toBeGreaterThan(0);
     expect(screen.getByText("Ana Souza")).toBeInTheDocument();
+    expect(screen.getByText("A definir")).toBeInTheDocument();
     expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
   });
 
-  it("does not show a time separator when the celebration has no time", async () => {
+  it("does not show a time separator when the celebration has no start_time", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/celebrations/instances/i1") {
         return Promise.resolve({
-          data: { ...instance, celebration: { ...instance.celebration, time: undefined } },
+          data: { ...instanceWithOC, celebration: { ...instanceWithOC.celebration, start_time: undefined } },
         });
       }
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/orders/so1") {
         return Promise.resolve({ data: serviceOrder });
       }
       return Promise.reject(new Error(`unexpected GET ${url}`));
@@ -122,7 +133,7 @@ describe("ServiceOrderView", () => {
 
   it("shows the empty-OC state and creates one on demand", async () => {
     mockGet(false);
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "so-new", items: [] } });
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "so-new", title: "Ordem de Culto — Culto Domingo" } });
     const user = userEvent.setup();
     render(
       <ServiceOrderView
@@ -141,15 +152,16 @@ describe("ServiceOrderView", () => {
     await user.click(screen.getByRole("button", { name: "Criar Ordem de Celebração" }));
 
     await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith("/celebrations/service-orders", {
-        instance_id: "i1",
+      expect(api.post).toHaveBeenCalledWith("/celebrations/orders", {
+        celebration_instance_id: "i1",
+        title: "Ordem de Culto — Culto Domingo",
       })
     );
 
     expect(await screen.findByText("Nenhuma etapa adicionada.")).toBeInTheDocument();
   });
 
-  it("reorders items and persists the new positions", async () => {
+  it("reorders items and persists the new sequence", async () => {
     mockGet(true);
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -169,12 +181,12 @@ describe("ServiceOrderView", () => {
     await user.click(moveDownButtons[0]);
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it1", {
-        position: 2,
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it1", {
+        sequence: 2,
       })
     );
-    expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it2", {
-      position: 1,
+    expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it2", {
+      sequence: 1,
     });
 
     const text = document.body.textContent ?? "";
@@ -200,14 +212,21 @@ describe("ServiceOrderView", () => {
     await user.click(deleteButtons[1]);
 
     await waitFor(() =>
-      expect(api.delete).toHaveBeenCalledWith("/celebrations/service-orders/items/it2")
+      expect(api.delete).toHaveBeenCalledWith("/celebrations/items/it2")
     );
     await waitFor(() => expect(screen.queryAllByText("Pregação")).toHaveLength(0));
   });
 
   it("exports the PDF", async () => {
     mockGet(true);
-    vi.mocked(api.post).mockResolvedValue({ data: new Blob(["pdf"]) });
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url === "/celebrations/orders/so1/pdf") {
+        return Promise.resolve({ data: { pdf_url: "https://storage.test/oc.pdf" } });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
     const user = userEvent.setup();
     render(
       <ServiceOrderView
@@ -222,19 +241,21 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Louvor de abertura");
     await user.click(screen.getByRole("button", { name: /PDF/ }));
 
-    await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith(
-        "/celebrations/instances/i1/export-pdf",
-        {},
-        { responseType: "blob" }
-      )
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/celebrations/orders/so1/pdf"));
+    expect(window.open).toHaveBeenCalledWith(
+      "https://storage.test/oc.pdf",
+      "_blank",
+      "noopener,noreferrer"
     );
-    expect(URL.createObjectURL).toHaveBeenCalled();
   });
 
   it("shows a toast when PDF export fails", async () => {
-    mockGet(true);
-    vi.mocked(api.post).mockRejectedValue(new Error("fail"));
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url === "/celebrations/orders/so1/pdf") return Promise.reject(new Error("fail"));
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
     const user = userEvent.setup();
     render(
       <ServiceOrderView
@@ -255,17 +276,17 @@ describe("ServiceOrderView", () => {
   it("renders the icon for every item type", async () => {
     const mixedOrder = {
       id: "so1",
-      status: "draft",
+      title: "OC",
       items: [
-        { id: "it3", name: "Oração inicial", type: "prayer", position: 1, setlist: null },
-        { id: "it4", name: "Avisos da semana", type: "announcements", position: 2, setlist: null },
-        { id: "it5", name: "Oferta e dízimo", type: "offering", position: 3, setlist: null },
-        { id: "it6", name: "Etapa livre", type: "other", position: 4, setlist: null },
+        { id: "it3", name: "Oração inicial", type: "prayer", sequence: 1, duration_minutes: 5, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: null },
+        { id: "it4", name: "Avisos da semana", type: "announcements", sequence: 2, duration_minutes: 5, start_offset_minutes: 5, responsible_type: "free_text", responsible_label: "x", setlist: null },
+        { id: "it5", name: "Oferta e dízimo", type: "offering", sequence: 3, duration_minutes: 5, start_offset_minutes: 10, responsible_type: "free_text", responsible_label: "x", setlist: null },
+        { id: "it6", name: "Etapa livre", type: "other", sequence: 4, duration_minutes: 5, start_offset_minutes: 15, responsible_type: "free_text", responsible_label: "x", setlist: null },
       ],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: mixedOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: mixedOrder });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     render(
@@ -278,7 +299,7 @@ describe("ServiceOrderView", () => {
     expect(screen.getByText("Etapa livre")).toBeInTheDocument();
   });
 
-  it("moves an item up and persists the new position", async () => {
+  it("moves an item up and persists the new sequence", async () => {
     mockGet(true);
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -293,12 +314,12 @@ describe("ServiceOrderView", () => {
     await user.click(moveUpButtons[1]);
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it2", {
-        position: 1,
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it2", {
+        sequence: 1,
       })
     );
-    expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it1", {
-      position: 2,
+    expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it1", {
+      sequence: 2,
     });
   });
 
@@ -356,10 +377,10 @@ describe("ServiceOrderView", () => {
   });
 
   it("opens the add-item modal from the empty-items state", async () => {
-    const emptyOrder = { id: "so1", status: "draft", items: [] };
+    const emptyOrder = { id: "so1", title: "OC", items: [] };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: emptyOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: emptyOrder });
       if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [] } });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
@@ -374,12 +395,28 @@ describe("ServiceOrderView", () => {
   });
 
   it("adds an item through the top-bar button and reloads the service order", async () => {
-    const emptyOrder = { id: "so1", status: "draft", items: [] };
-    const reloadedOrder = { id: "so1", status: "draft", items: [{ id: "it9", name: "Nova etapa", type: "other", position: 1, setlist: null }] };
+    const emptyOrder = { id: "so1", title: "OC", items: [] };
+    const reloadedOrder = {
+      id: "so1",
+      title: "OC",
+      items: [
+        {
+          id: "it9",
+          name: "Bênção final",
+          type: "other",
+          sequence: 1,
+          duration_minutes: 5,
+          start_offset_minutes: 0,
+          responsible_type: "free_text",
+          responsible_label: "A definir",
+          setlist: null,
+        },
+      ],
+    };
     let getCalls = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
         getCalls += 1;
         return Promise.resolve({ data: getCalls === 1 ? emptyOrder : reloadedOrder });
       }
@@ -395,15 +432,17 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Nenhuma etapa adicionada.");
     await user.click(screen.getByRole("button", { name: "Etapa" }));
     await user.type(screen.getByLabelText(/Nome da etapa/), "Bênção final");
+    await user.type(screen.getByLabelText(/Duração/), "5");
+    await user.type(screen.getByLabelText(/Horário/), "10:30");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
-        "/celebrations/service-orders/so1/items",
-        expect.objectContaining({ name: "Bênção final" })
+        "/celebrations/items",
+        expect.objectContaining({ service_order_id: "so1", name: "Bênção final" })
       )
     );
-    expect(await screen.findByText("Nova etapa")).toBeInTheDocument();
+    expect(await screen.findByText("Bênção final")).toBeInTheDocument();
   });
 
   it("resets state when the dialog is closed", async () => {
@@ -449,7 +488,7 @@ describe("ServiceOrderView", () => {
       <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId={null} canEdit={true} canAddSongs={true} />
     );
 
-    resolveInstance({ data: instance });
+    resolveInstance({ data: instanceWithOC });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -462,8 +501,8 @@ describe("ServiceOrderView", () => {
     let rejectSO!: (e: unknown) => void;
     let callCount = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
         callCount += 1;
         if (callCount === 1) {
           return new Promise((resolve) => { resolveSO = resolve; });
@@ -500,29 +539,33 @@ describe("ServiceOrderView", () => {
     expect(screen.queryByText("Louvor de abertura")).not.toBeInTheDocument();
   });
 
-  it("shows multiple setlist songs sorted by position", async () => {
+  it("shows multiple setlist songs sorted by sequence", async () => {
     const twoSongsOrder = {
       id: "so1",
-      status: "draft",
+      title: "OC",
       items: [
         {
           id: "it7",
           name: "Louvor",
           type: "worship",
-          position: 1,
+          sequence: 1,
+          duration_minutes: 20,
+          start_offset_minutes: 0,
+          responsible_type: "free_text",
+          responsible_label: "x",
           setlist: {
             id: "sl2",
             songs: [
-              { id: "s2", title: "Segunda música", position: 2 },
-              { id: "s1", title: "Primeira música", position: 1 },
+              { id: "s2", title: "Segunda música", sequence: 2 },
+              { id: "s1", title: "Primeira música", sequence: 1 },
             ],
           },
         },
       ],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: twoSongsOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: twoSongsOrder });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     render(
@@ -568,18 +611,18 @@ describe("ServiceOrderView", () => {
   it("creates a setlist on demand and adds a song, reloading the service order", async () => {
     const noSetlistOrder = {
       id: "so1",
-      status: "draft",
-      items: [{ id: "it8", name: "Momento de louvor", type: "worship", position: 1, setlist: null }],
+      title: "OC",
+      items: [{ id: "it8", name: "Momento de louvor", type: "worship", sequence: 1, duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: null }],
     };
     const reloadedOrder = {
       id: "so1",
-      status: "draft",
-      items: [{ id: "it8", name: "Momento de louvor", type: "worship", position: 1, setlist: { id: "sl9", songs: [{ id: "s9", title: "Nova música", position: 1 }] } }],
+      title: "OC",
+      items: [{ id: "it8", name: "Momento de louvor", type: "worship", sequence: 1, duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: { id: "sl9", songs: [{ id: "s9", title: "Nova música", sequence: 1 }] } }],
     };
     let soCalls = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
         soCalls += 1;
         return Promise.resolve({ data: soCalls === 1 ? noSetlistOrder : reloadedOrder });
       }
@@ -617,12 +660,12 @@ describe("ServiceOrderView", () => {
   it("shows a toast when creating a setlist fails", async () => {
     const noSetlistOrder = {
       id: "so1",
-      status: "draft",
-      items: [{ id: "it8", name: "Momento de louvor", type: "worship", position: 1, setlist: null }],
+      title: "OC",
+      items: [{ id: "it8", name: "Momento de louvor", type: "worship", sequence: 1, duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: null }],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: noSetlistOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: noSetlistOrder });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     vi.mocked(api.post).mockRejectedValue(new Error("fail"));
@@ -736,8 +779,8 @@ describe("ServiceOrderView", () => {
 
   it("falls back to an empty catalog when the /songs response isn't an array", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: serviceOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
       if (url === "/songs") return Promise.resolve({ data: null });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
@@ -859,8 +902,8 @@ describe("ServiceOrderView", () => {
 
   it("still allows adding a free-text song when loading the catalog fails", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: serviceOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
       if (url === "/songs") return Promise.reject(new Error("falha de rede"));
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });

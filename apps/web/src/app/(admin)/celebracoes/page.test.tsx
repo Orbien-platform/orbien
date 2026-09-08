@@ -50,11 +50,6 @@ vi.mock("@/components/celebrations/TemplatesPanel", () => ({
     <div data-testid="templates-panel">templates:{String(canEdit)}</div>
   ),
 }));
-vi.mock("@/components/celebrations/SongCatalogPanel", () => ({
-  SongCatalogPanel: ({ canEdit }: { canEdit: boolean }) => (
-    <div data-testid="song-catalog-panel">repertorio:{String(canEdit)}</div>
-  ),
-}));
 vi.mock("@/components/celebrations/ServiceOrderView", () => ({
   ServiceOrderView: ({ open, instanceId }: { open: boolean; instanceId: string | null }) =>
     open ? <div data-testid="service-order-view">so:{instanceId}</div> : null,
@@ -245,36 +240,6 @@ describe("CelebracoesPage", () => {
     await screen.findByText("Nenhuma celebração cadastrada.");
     await user.click(screen.getByRole("tab", { name: "Templates" }));
     expect(await screen.findByTestId("templates-panel")).toHaveTextContent("templates:false");
-  });
-
-  it("mostra o painel de repertório na aba Repertório sem permissão de edição", async () => {
-    setup(["volunteer"]);
-    mockedApi.get.mockResolvedValue({ data: [] });
-    const user = userEvent.setup();
-    render(<CelebracoesPage />);
-    await screen.findByText("Nenhuma celebração cadastrada.");
-    await user.click(screen.getByRole("tab", { name: "Repertório" }));
-    expect(await screen.findByTestId("song-catalog-panel")).toHaveTextContent("repertorio:false");
-  });
-
-  it("dá permissão de edição do repertório para quem pode adicionar músicas na setlist", async () => {
-    setup(["pastor"]);
-    mockedApi.get.mockResolvedValue({ data: [] });
-    const user = userEvent.setup();
-    render(<CelebracoesPage />);
-    await screen.findByText("Nenhuma celebração cadastrada.");
-    await user.click(screen.getByRole("tab", { name: "Repertório" }));
-    expect(await screen.findByTestId("song-catalog-panel")).toHaveTextContent("repertorio:true");
-  });
-
-  it("dá permissão de edição do repertório para tenant_admin", async () => {
-    setup(["tenant_admin"]);
-    mockedApi.get.mockResolvedValue({ data: [] });
-    const user = userEvent.setup();
-    render(<CelebracoesPage />);
-    await screen.findByText("Nenhuma celebração cadastrada.");
-    await user.click(screen.getByRole("tab", { name: "Repertório" }));
-    expect(await screen.findByTestId("song-catalog-panel")).toHaveTextContent("repertorio:true");
   });
 
   it("carrega instâncias próximas ao entrar na aba, ordenadas por data e limitadas a 30", async () => {
