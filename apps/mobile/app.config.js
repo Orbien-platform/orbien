@@ -49,6 +49,12 @@ module.exports = ({ config }) => {
       ...config.extra,
       oneSignalAppId,
       apiUrl,
+      eas: {
+        // Vínculo do workspace ao projeto no EAS (fernandovargas/orbien).
+        // Config dinâmica não recebe isso automaticamente do `eas init` —
+        // ver https://docs.expo.dev/workflow/configuration/#dynamic-configuration-with-appconfigjs
+        projectId: "01382e40-702e-4eb0-b46f-c05723f32575",
+      },
     },
   };
 };

@@ -11,7 +11,10 @@
     },
     "preview": {
       "extends": "generic",
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "ORBIEN_API_URL": "https://orbien-api.onrender.com/api"
+      }
     },
     "production": {
       "extends": "generic",

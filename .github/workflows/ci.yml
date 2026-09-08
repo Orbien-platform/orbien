@@ -318,3 +318,47 @@ jobs:
             apps/web/test-results/
             apps/web/e2e/screenshots/
           retention-days: 7
+
+  # ── Build de preview do mobile na EAS ────────────────────────────────────
+  # Só na main (não em todo PR — cada build consome minuto de fila da conta
+  # EAS) e só quando o diff toca apps/mobile — `needs` já garante lint/build/
+  # test (turbo run test cobre o Jest do orbien-mobile) verdes antes de subir
+  # um build pra nuvem da Expo. `--no-wait` porque o build em si roda
+  # assíncrono do lado da Expo (10-20min) — o runner não precisa esperar; o
+  # progresso e o link de instalação ficam em expo.dev/accounts/fernandovargas/projects/orbien.
+  mobile-eas-build:
+    name: Build EAS (mobile preview)
+    runs-on: ubuntu-latest
+    needs: [build, unit]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Mudou algo em apps/mobile?
+        id: filter
+        run: |
+          if git diff --quiet "${{ github.event.before }}" "${{ github.event.after }}" -- apps/mobile; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.filter.outputs.changed == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+        if: steps.filter.outputs.changed == 'true'
+
+      # EXPO_TOKEN autentica não-interativo; projectId já está em
+      # app.config.js (extra.eas), então não precisa de `eas init` aqui.
+      - name: Disparar build (Android, profile preview)
+        if: steps.filter.outputs.changed == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli build --platform android --profile preview --non-interactive --no-wait
