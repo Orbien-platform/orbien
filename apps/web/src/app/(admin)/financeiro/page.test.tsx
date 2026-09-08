@@ -613,6 +613,41 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     expect(await screen.findByRole("checkbox", { name: "Desfazer pagamento" })).toBeChecked();
   });
 
+  it("some com o toast sozinho depois de 3s", async () => {
+    // O `setTimeout(() => setToastMsg(""), 3000)` de showToast() era a única
+    // função de src/app sem teste: nenhum caso esperava o toast sumir, então
+    // o callback só era executado por acidente — quando outro teste do arquivo
+    // demorava mais de 3s de tempo real e o timer disparava no meio dele.
+    // No CI, com a máquina mais lenta e a ordem diferente, o acidente não
+    // acontecia, e o portão de `src/app/**` reprovava por 1 função e
+    // 1 statement (99,74% / 99,91%). Timer controlado: nada de acidente.
+    setup();
+    mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "pending" })] });
+    mockedApi.patch.mockRejectedValueOnce(new Error("boom"));
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Simples");
+
+      await user.click(screen.getByRole("checkbox", { name: "Marcar como pago" }));
+      await waitFor(() =>
+        expect(screen.getByText("Erro ao atualizar status do lançamento.")).toBeInTheDocument()
+      );
+
+      await vi.advanceTimersByTimeAsync(3000);
+      await waitFor(() =>
+        expect(
+          screen.queryByText("Erro ao atualizar status do lançamento.")
+        ).not.toBeInTheDocument()
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("não mexe no status de um lançamento já exportado (confirmed) e mostra botão de visualizar", async () => {
     setup();
     mockApi({ transactions: [tx({ id: "1", description: "Lançamento Confirmado", status: "confirmed" })] });
