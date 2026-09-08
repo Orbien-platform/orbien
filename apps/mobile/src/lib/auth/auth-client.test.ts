@@ -78,6 +78,13 @@ describe("AuthClient", () => {
 
       await expect(getSession()).resolves.toEqual(stored);
     });
+
+    it("valor salvo corrompido (JSON inválido): trata como sem sessão e limpa a chave, em vez de rejeitar", async () => {
+      mockGetItemAsync.mockResolvedValue("{isso não é JSON");
+
+      await expect(getSession()).resolves.toBeNull();
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith("orbien.session");
+    });
   });
 
   describe("logout", () => {

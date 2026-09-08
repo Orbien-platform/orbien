@@ -64,6 +64,20 @@ describe("AuthProvider", () => {
     });
   });
 
+  it("getSession() rejeita (ex.: leitura do SecureStore falha): status resolve para unauthenticated em vez de travar em loading", async () => {
+    (getSession as jest.Mock).mockRejectedValue(new Error("falha ao ler o SecureStore"));
+
+    await render(
+      <AuthProvider>
+        <StatusProbe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    });
+  });
+
   it("com sessão salva válida: status resolve para authenticated", async () => {
     (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
 

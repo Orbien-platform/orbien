@@ -27,11 +27,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    getSession().then((storedSession) => {
-      if (cancelled) return;
-      setSession(storedSession);
-      setStatus(storedSession ? "authenticated" : "unauthenticated");
-    });
+    getSession()
+      .then((storedSession) => {
+        if (cancelled) return;
+        setSession(storedSession);
+        setStatus(storedSession ? "authenticated" : "unauthenticated");
+      })
+      .catch(() => {
+        // Leitura do SecureStore falhou (ex.: JSON corrompido) — sem sessão
+        // válida para confiar, cai para unauthenticated em vez de travar em
+        // "loading" para sempre (AuthGate ficaria preso no splash).
+        if (cancelled) return;
+        setSession(null);
+        setStatus("unauthenticated");
+      });
     return () => {
       cancelled = true;
     };
