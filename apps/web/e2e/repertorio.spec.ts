@@ -132,6 +132,7 @@ test.describe("repertório do time de louvor", () => {
         service_order_id: serviceOrder.id,
         sequence: 1,
         name: "Momento de louvor",
+        type: "worship",
         start_offset_minutes: 0,
         duration_minutes: 20,
         responsible_type: "ministry",
