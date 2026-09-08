@@ -107,12 +107,13 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
   const [link, setLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
     api
       .get<CatalogSong[]>("/songs")
       .then(({ data }) => setCatalog(Array.isArray(data) ? data : []))
-      .catch(() => setCatalog([]));
+      .catch(() => setCatalogError(true));
   }, []);
 
   // Escolher uma música do catálogo preenche os campos como valores default,
@@ -172,6 +173,11 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
             <option key={s.id} value={s.id}>{s.title}</option>
           ))}
         </select>
+      )}
+      {catalogError && (
+        <p className="text-xs text-stone">
+          Não foi possível carregar o catálogo — digite a música diretamente abaixo.
+        </p>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="col-span-2 sm:col-span-2">

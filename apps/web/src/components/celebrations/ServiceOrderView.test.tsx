@@ -875,6 +875,9 @@ describe("ServiceOrderView", () => {
     await screen.findByPlaceholderText("Título *");
 
     expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Não foi possível carregar o catálogo — digite a música diretamente abaixo.")
+    ).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Título *"), "Música avulsa");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
