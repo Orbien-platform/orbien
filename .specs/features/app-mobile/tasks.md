@@ -14,9 +14,9 @@ without it.**
 ---
 
 **Design**: `.specs/features/app-mobile/design.md`
-**Status**: Phase 1 (T1-T4), Phase 2 (T5-T7), Phase 3 (T8-T11) e Phase 4
-(T12-T14) ✅ Done. Phase 5 (T15-T16, tema por tenant) ainda Pending — outro
-batch, dependente do `ApiClient` (T9) entregue aqui.
+**Status**: Phase 1 (T1-T4), Phase 2 (T5-T7), Phase 3 (T8-T11), Phase 4
+(T12-T14) e Phase 5 (T15-T16, tema por tenant) ✅ Done. MOB-01, MOB-02,
+MOB-03, MOB-11 e MOB-12 entregues nesta rodada de Execute.
 
 ---
 
@@ -593,6 +593,8 @@ sem erro visível (AC 2).
 
 ### T16: Wiring do `ThemeProvider` no shell + teste ponta a ponta de dois tenants
 
+**Status**: ✅ Done (commit `1b9bb5f`)
+
 **What**: `_layout.tsx` passa a envolver o shell autenticado com
 `ThemeProvider`, aplicando `primaryColor`/`logoUrl` no header/tab bar do
 Expo Router; teste component simula dois brandings distintos (mock de
@@ -607,9 +609,9 @@ Expo Router; teste component simula dois brandings distintos (mock de
 - Skill: NONE
 
 **Done when**:
-- [ ] Teste component: dois mocks de branding diferentes produzem cor/
+- [x] Teste component: dois mocks de branding diferentes produzem cor/
       logo diferentes no shell renderizado
-- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+- [x] Gate check passa (full): `npm run test -w orbien-mobile` &&
       `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
 
 **Tests**: component
