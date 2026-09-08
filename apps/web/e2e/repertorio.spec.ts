@@ -1,17 +1,15 @@
 /**
- * Repertório do Time de Louvor: catálogo de músicas (aba "Repertório" em
- * Celebrações) e a visão do músico ("Meus Turnos" em Voluntários).
+ * Repertório do Time de Louvor: catálogo de músicas (tela própria em
+ * `/repertorio`, independente de Celebrações/OC) e a visão do músico
+ * ("Meus Turnos" em Voluntários).
  *
  * A montagem da Ordem de Celebração/Setlist é feita por chamadas diretas à
  * API (como `upcomingInstance`/`scheduleTemplate` já fazem para outras
  * fixtures) em vez de clicar pela tela de "Ordem de Celebração"
- * (`ServiceOrderView`/`AddItemModal`): esses componentes chamam rotas que não
- * existem no backend atual (`/celebrations/service-orders` em vez de
- * `/celebrations/orders`, `type`/`position` em vez de `responsible_type`/
- * `sequence`, etc.) — um defeito pré-existente, sem relação com o repertório,
- * fora do escopo desta feature. O caminho testado aqui via UI é o que
- * realmente funciona contra o backend: o catálogo (`/songs`) e a visão do
- * músico (`/volunteers/my-celebration-assignments`).
+ * (`ServiceOrderView`/`AddItemModal`) — menos passos de UI para montar dado
+ * de apoio que não é o que este teste está verificando. O caminho testado
+ * aqui via UI é o que importa para esta feature: o catálogo (`/repertorio`)
+ * e a visão do músico (`/volunteers/my-celebration-assignments`).
  *
  * Uso: E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
  */
@@ -45,10 +43,9 @@ test.describe("repertório do time de louvor", () => {
     const songId: string = song.id;
 
     try {
-      // ── Catálogo: a música criada aparece na aba "Repertório" ──
-      await test.step("aba Repertório lista a música cadastrada", async () => {
-        await page.goto("/celebracoes", { waitUntil: "domcontentloaded" });
-        await selectTab(page, "Repertório");
+      // ── Catálogo: a música criada aparece na tela própria de Repertório ──
+      await test.step("tela Repertório lista a música cadastrada", async () => {
+        await page.goto("/repertorio", { waitUntil: "domcontentloaded" });
         await expect(
           page.getByText(songTitle, { exact: true }),
           "música criada via API não apareceu no catálogo"
