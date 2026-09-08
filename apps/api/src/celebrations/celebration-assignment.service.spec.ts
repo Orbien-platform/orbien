@@ -765,6 +765,63 @@ describe('CelebrationAssignmentService', () => {
       expect(result[0].setlist).toBeNull();
     });
 
+    it('attachSetlists exclui especificamente o item sem ministry_id — não cria entrada nenhuma pra ele no map de repertório', async () => {
+      // Prova direta da checagem `!item.ministry_id` em attachSetlists, isolada de
+      // getMyAssignments: um assignment real nunca tem `ministry_id: null` (FK
+      // obrigatória em CelebrationMinistry), então a chave de um item sem
+      // ministry_id (`inst1:null`) jamais colide com a chave de um assignment de
+      // verdade — testar só via getMyAssignments não prova que a checagem importa,
+      // porque a ausência de colisão seria a mesma com ou sem ela. Chamando
+      // attachSetlists diretamente, provamos que o guard é a razão da exclusão:
+      // sem ele, o item sem ministry_id entraria no map (mutante sobrevivente
+      // detectado pelo Verifier).
+      const client = clientWith();
+      client.serviceOrder.findMany.mockResolvedValue([
+        {
+          celebration_instance_id: 'inst1',
+          items: [
+            {
+              ministry_id: null,
+              setlist: {
+                songs: [{ id: 'sg-sem-ministerio', sequence: 1, title: 'Órfã', key: null, bpm: null, link: null }],
+              },
+            },
+            {
+              ministry_id: 'min1',
+              setlist: {
+                songs: [{ id: 'sg-com-ministerio', sequence: 1, title: 'Louvor', key: 'G', bpm: 90, link: null }],
+              },
+            },
+          ],
+        },
+      ]);
+      const { service } = serviceWith(client);
+      const attachSetlists = (
+        service as unknown as {
+          attachSetlists: (
+            assignments: Array<{
+              celebrationMinistry: { ministry_id: string; schedule: { celebrationInstance: { id: string } } };
+            }>,
+          ) => Promise<Map<string, { songs: unknown[] }>>;
+        }
+      ).attachSetlists.bind(service);
+
+      const setlistByKey = await attachSetlists([
+        {
+          celebrationMinistry: { ministry_id: 'min1', schedule: { celebrationInstance: { id: 'inst1' } } },
+        },
+      ]);
+
+      // O item sem ministry_id não gera NENHUMA entrada no map — nem sob a chave
+      // literal `inst1:null`, nem em qualquer outra.
+      expect(setlistByKey.has('inst1:null')).toBe(false);
+      expect(setlistByKey.size).toBe(1);
+      // A única entrada é a do item que TEM ministry_id, com as músicas certas.
+      expect(setlistByKey.get('inst1:min1')).toEqual({
+        songs: [{ id: 'sg-com-ministerio', sequence: 1, title: 'Louvor', key: 'G', bpm: 90, link: null }],
+      });
+    });
+
     it('busca o repertório com uma única query batched, mesmo para múltiplos assignments', async () => {
       const client = clientWith();
       client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
