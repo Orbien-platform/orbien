@@ -504,6 +504,8 @@ boot, expõe `session`, `login`, `logout`, e um estado
 
 ### T13: Tela de Login (Expo Router)
 
+**Status**: ✅ Done (commit `8d3e197`)
+
 **What**: Rota `app/login.tsx` com campos `tenant_slug`, `email`, `senha`,
 chama `useAuth().login`, mostra mensagem de erro genérica em qualquer
 falha (AC 2 de MOB-01 — não distinguir tipos de erro na UI), navega para a
