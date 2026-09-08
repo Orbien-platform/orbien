@@ -1,11 +1,7 @@
-// Vive fora de `src/app` de propósito: o `require.context` do expo-router
-// (node_modules/expo-router/_ctx.android.js) varre a raiz de rotas com o
-// filtro /.*\.[tj]sx?$/ e só exclui `+api`/`+html`/`+middleware` — arquivo
-// `.test.tsx` ali dentro entra no bundle como se fosse rota e arrasta o
-// @testing-library/react-native, que faz require("console"). Módulo do Node
-// não resolve no Metro: quebra o bundle na EAS (build de preview de
-// 2026-09-08), sem que jest/tsc/lint percebam — nenhum dos três monta o
-// grafo de rotas.
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Testes derivados do Done-when de T13 (tasks.md) e do AC 2 de MOB-01
 // (spec.md): mesma mensagem de erro genérica, independente do motivo.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";

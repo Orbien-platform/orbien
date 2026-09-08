@@ -1,3 +1,7 @@
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Teste derivado do Done-when de R3-T1 (tasks.md): renderiza as 2 abas
 // (Escala, Conteúdo). Mock de expo-router/js-tabs renderiza o que o
 // layout realmente passa como Tabs.Screen (name/options.title), para o
@@ -23,7 +27,7 @@ jest.mock("expo-router/js-tabs", () => {
   return { Tabs };
 });
 
-import TabsLayout from "./_layout";
+import TabsLayout from "../../../app/(tabs)/_layout";
 
 describe("TabsLayout", () => {
   it("renderiza as abas Escala e Conteúdo", async () => {
