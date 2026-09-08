@@ -65,9 +65,16 @@ No dashboard do Render, serviço `orbien-api` → **Settings**:
 | Source (Repository) | `Orbien-platform/orbien` |
 | Branch | `main` |
 | Root Directory | **vazio** |
-| Build Command | `npm ci --include=dev && npm run build:api` |
+| Build Command | `npm ci --include=dev && npm run build:api && npm run db:deploy` |
 | Start Command | `node apps/api/dist/src/main.js` |
 | Health Check Path | `/api/health` |
+
+> **O `&& npm run db:deploy` no fim do Build Command é novo (2026-09-08) e
+> precisa ser colado no dashboard** — o `render.yaml` deste repositório
+> documenta a configuração, mas não é aplicado automaticamente (o serviço foi
+> criado pelo dashboard). Enquanto o campo não for atualizado, migration
+> continua sendo trabalho manual — e o histórico do 500 em `/repertorio`, na
+> seção 1.9, é o que acontece quando ela é esquecida.
 
 > **Limpe cada campo por inteiro antes de digitar.** O Render não substitui o
 > conteúdo ao colar: o texto novo é inserido onde estiver o cursor, emendando
@@ -187,7 +194,12 @@ O script é idempotente e faz, nesta ordem:
 6. dá `LOGIN` + senha ao `orbien_app` e concede `app_user ... WITH SET TRUE`
    (o backend usa `SET LOCAL ROLE app_user` para forçar a avaliação do RLS);
 
-   > **`ORBIEN_APP_PASSWORD` SOBRESCREVE a senha do role no banco — sempre,
+   > **`ORBIEN_APP_PASSWORD` é opcional, e omiti-la é o caminho seguro.** Sem
+   > a variável, o passo 6 aplica só os GRANTs e não emite `ALTER ROLE` — é
+   > assim que `npm run db:deploy` roda no deploy (seção 1.9). Ela é
+   > obrigatória apenas num banco novo, onde o role nasce `NOLOGIN`.
+   >
+   > **Quando presente, ela SOBRESCREVE a senha do role no banco — sempre,
    > mesmo rodando contra um banco já provisionado.** `ALTER ROLE orbien_app
    > LOGIN PASSWORD '${ORBIEN_APP_PASSWORD}'` não é condicional: se o valor
    > passado for diferente do que já está em produção, a senha muda ali, na
@@ -265,18 +277,24 @@ curl http://localhost:3000/api/health
 
 ### 1.8 Migrations
 
-Continuam manuais, rodadas da máquina local contra o Supabase. A partir da raiz
-do monorepo:
+Criar migration continua sendo trabalho local, contra o Supabase. A partir da
+raiz do monorepo:
 
 ```bash
 npm run db:migrate -- nome_da_migration
 npm run db:migrate:status
 ```
 
-Os scripts de RLS (`001`, `002`, `003`, `004`, `005`) **não** entram nesse comando:
-estão fora do histórico do Prisma e só o `bootstrap-db.sh` os aplica. Rodar o
-bootstrap contra um banco já provisionado é seguro — ele é idempotente e o
-passo 7 falha alto se algum invariante quebrar.
+**Aplicar** em produção, não: desde 2026-09-08 o deploy faz isso por conta
+própria — ver seção 1.9. Rodar o `bootstrap-db.sh` à mão continua válido e
+seguro (é o mesmo comando), e é o caminho quando o Build Command do dashboard
+ainda não foi atualizado.
+
+Os scripts de RLS (`001`, `002`, `003`, `004`, `005`, `006`, `007`) **não** entram
+no `db:migrate`: estão fora do histórico do Prisma e só o `bootstrap-db.sh` os
+aplica. Rodar o bootstrap contra um banco já provisionado é seguro — ele é
+idempotente e o passo 7 falha alto se algum invariante quebrar, inclusive se
+uma tabela nova tiver ficado sem RLS.
 
 > **Aplicado em produção em 2026-09-03:** o `003_rls_admin_write.sql` e o
 > `audit_insert()` corrigido da pendência nº 6 — ele inseria em `audit_logs`
@@ -316,17 +334,51 @@ passo 7 falha alto se algum invariante quebrar.
 > roda, o sintoma é sempre 500 na primeira tentativa da rota que depende dela
 > — a tabela ou coluna não existe.
 
-> **Pendente em produção:** `20260907233843_add_songs_catalog` (cria a
-> tabela `songs`) e `007_rls_songs.sql` (RLS + policy dela) são da feature
-> "Repertório do Time de Louvor", fechada em 2026-09-08. `007` está fora do
-> histórico do Prisma como os demais — só o `bootstrap-db.sh` a aplica — e
-> não há registro acima de tê-lo rodado contra produção. Esse é o suspeito
-> nº 1 do 500 relatado ao abrir `/repertorio`: mesmo padrão desta nota — rota
-> nova cuja tabela/policy ainda não existe no banco de produção. A migration
-> `20260908034555_add_song_refs_and_alt_key` (campos de tom alternativo,
-> YouTube, Spotify e Cifra Club) se soma à mesma pendência. Rodar
-> `bootstrap-db.sh` inteiro contra produção aplica as três de uma vez —
-> idempotente, mas leia o aviso do passo 6 antes.
+### 1.9 Migration no deploy (`npm run db:deploy`)
+
+Migration deixou de ser trabalho manual: o Build Command termina em
+`npm run db:deploy`, que é o `bootstrap-db.sh` **sem** `ORBIEN_APP_PASSWORD`
+— `prisma migrate deploy`, os scripts de RLS que ficam fora do histórico do
+Prisma, e a verificação do passo 7. Três decisões que valem entender antes de
+mexer nisso:
+
+- **Sem `ORBIEN_APP_PASSWORD`, o passo 6 não toca na senha do role** — aplica
+  só os GRANTs. É o que separa "atualizar um banco que está no ar" de
+  "provisionar um novo", e é a resposta ao incidente descrito na seção 1.5:
+  a senha do `orbien_app` só muda quando alguém passa a variável de propósito.
+  Num banco novo ela continua obrigatória, porque o role nasce `NOLOGIN`.
+- **Roda no build, não no start.** Falhar no build aborta o deploy e a versão
+  anterior continua servindo. No start, a API subiria contra um banco que ela
+  não pode usar.
+- **O passo 7 falha o deploy se uma tabela de `public` ficar sem RLS**, com a
+  lista dos nomes. É esse portão que torna a automação segura: migration comum
+  cria a tabela, mas quem liga o RLS dela é um script `00X` fora do histórico
+  do Prisma — aplicar uma sem a outra deixaria a tabela nova legível por todos
+  os tenants, em silêncio, porque `app_user` tem GRANT em tudo em `public` por
+  `ALTER DEFAULT PRIVILEGES`. As exceções são `_prisma_migrations`, `roles` e
+  `qr_tokens`; a lista está comentada no próprio script, `qr_tokens` inclusive,
+  que tem `tenant_id` e segue sem policy.
+
+Escrever migration nova, portanto, é escrever também o script de RLS dela — o
+deploy não passa sem.
+
+> **Histórico — o 500 em `/repertorio` (2026-09-08).** `20260907233843_add_songs_catalog`,
+> `20260908023535_add_service_order_item_type` e
+> `20260908034555_add_song_refs_and_alt_key` ficaram pendentes em produção
+> depois da feature "Repertório do Time de Louvor", e `007_rls_songs.sql`
+> junto. Reproduzido contra o Postgres local nos dois estados — sem a tabela e
+> sem a coluna: a API respondia 500 `{"message":"Internal server error"}`, e o
+> painel do Repertório mostrava essa string ao usuário porque repassava
+> `err.response.data.message` cru.
+>
+> As quatro foram aplicadas em produção em 2026-09-08, via `bootstrap-db.sh`.
+> O que sobrou disso no código: `SchemaDriftExceptionFilter`
+> (`apps/api/src/common/filters/`) traduz P2021 (tabela ausente) e P2022
+> (coluna ausente) em **503** nomeando a pendência e loga qual tabela/coluna
+> falta; `apiErrorMessage()` (`apps/web/src/lib/api-error.ts`) só repassa
+> mensagem do servidor em 4xx, então nenhuma tela volta a exibir
+> "Internal server error"; e o `db:deploy` acima, para a pendência não se
+> repetir.
 
 ---
 

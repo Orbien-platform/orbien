@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { SchemaDriftExceptionFilter } from './common/filters/schema-drift-exception.filter';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -65,6 +66,13 @@ import { ScheduleModule } from '@nestjs/schedule';
     // pior aqui do que em qualquer outro interceptor. Para requisição sem
     // `support_session` ele retorna na primeira linha, sem custo.
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+
+    // Também global, e pelo mesmo motivo: a pendência de migration não é de
+    // uma rota específica — é de toda rota nova enquanto o banco de produção
+    // não recebeu o `prisma migrate deploy`. Registrado aqui (e não em
+    // `main.ts`) para valer igual na suíte de integração, que sobe o
+    // AppModule sem passar por lá.
+    { provide: APP_FILTER, useClass: SchemaDriftExceptionFilter },
   ],
 })
 export class AppModule {}

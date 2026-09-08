@@ -18,8 +18,19 @@ services:
     healthCheckPath: /api/health
 
     # --include=dev é obrigatório: NODE_ENV=production (abaixo) faz o npm
-    # omitir devDependencies, e o build precisa de turbo, nest e typescript.
-    buildCommand: npm ci --include=dev && npm run build:api
+    # omitir devDependencies, e o build precisa de turbo, nest e typescript —
+    # e, para o `db:deploy`, do CLI do Prisma.
+    #
+    # `db:deploy` aplica o schema antes de a versão nova do código entrar no
+    # ar: `prisma migrate deploy`, mais os scripts de RLS que ficam fora do
+    # histórico do Prisma, mais a verificação do passo 7. Roda no build, e não
+    # no start, porque falhar aqui aborta o deploy e a versão anterior
+    # continua servindo — no start, a API subiria contra um banco que ela não
+    # pode usar. Usa a DIRECT_URL (5432) e **não** recebe
+    # ORBIEN_APP_PASSWORD: sem essa variável o script não toca na senha do
+    # role, que precisa continuar batendo com a DATABASE_URL deste serviço.
+    # Ver /DEPLOY.md.
+    buildCommand: npm ci --include=dev && npm run build:api && npm run db:deploy
     startCommand: node apps/api/dist/src/main.js
 
     # Evita redeploy da API quando o commit só toca site/web.

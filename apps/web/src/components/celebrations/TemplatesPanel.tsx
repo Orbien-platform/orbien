@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import axios from "axios";
 import {
   AlertTriangle,
   LayoutTemplate,
@@ -20,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,13 +45,6 @@ interface FormRow {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function errMsg(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && typeof err.response?.data?.message === "string") {
-    return err.response.data.message;
-  }
-  return fallback;
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -85,7 +78,7 @@ export function TemplatesPanel({ canEdit }: { canEdit: boolean }) {
       })
       .catch((err: unknown) => {
         if (signal.cancelled) return;
-        setError(errMsg(err, "Não foi possível carregar os templates."));
+        setError(apiErrorMessage(err, "Não foi possível carregar os templates."));
       })
       .finally(() => {
         if (!signal.cancelled) setLoaded(true);
@@ -169,7 +162,7 @@ export function TemplatesPanel({ canEdit }: { canEdit: boolean }) {
       setFormOpen(false);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setFormError(errMsg(err, "Não foi possível salvar o template."));
+      setFormError(apiErrorMessage(err, "Não foi possível salvar o template."));
     } finally {
       setSaving(false);
     }
@@ -182,7 +175,7 @@ export function TemplatesPanel({ canEdit }: { canEdit: boolean }) {
       await api.delete(`/celebrations/schedule-templates/${t.id}`);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(errMsg(err, "Não foi possível excluir o template."));
+      setError(apiErrorMessage(err, "Não foi possível excluir o template."));
     } finally {
       setRemovingId(null);
     }
