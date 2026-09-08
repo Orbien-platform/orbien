@@ -16,8 +16,12 @@ export interface CatalogSong {
   id: string;
   title: string;
   key: string | null;
+  key_alt: string | null;
   bpm: number | null;
   link: string | null;
+  youtube_link: string | null;
+  spotify_link: string | null;
+  cifra_club_link: string | null;
   notes: string | null;
   last_played_at: string | null;
 }
@@ -51,8 +55,12 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
   const [editing, setEditing] = useState<CatalogSong | null>(null);
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
+  const [keyAlt, setKeyAlt] = useState("");
   const [bpm, setBpm] = useState("");
   const [link, setLink] = useState("");
+  const [youtubeLink, setYoutubeLink] = useState("");
+  const [spotifyLink, setSpotifyLink] = useState("");
+  const [cifraClubLink, setCifraClubLink] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -84,8 +92,12 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
     setEditing(null);
     setTitle("");
     setKey("");
+    setKeyAlt("");
     setBpm("");
     setLink("");
+    setYoutubeLink("");
+    setSpotifyLink("");
+    setCifraClubLink("");
     setNotes("");
     setFormError(null);
     setFormOpen(true);
@@ -95,8 +107,12 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
     setEditing(s);
     setTitle(s.title);
     setKey(s.key ?? "");
+    setKeyAlt(s.key_alt ?? "");
     setBpm(s.bpm != null ? String(s.bpm) : "");
     setLink(s.link ?? "");
+    setYoutubeLink(s.youtube_link ?? "");
+    setSpotifyLink(s.spotify_link ?? "");
+    setCifraClubLink(s.cifra_club_link ?? "");
     setNotes(s.notes ?? "");
     setFormError(null);
     setFormOpen(true);
@@ -114,8 +130,12 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
       const body = {
         title: title.trim(),
         key: key.trim() || undefined,
+        key_alt: keyAlt.trim() || undefined,
         bpm: bpm ? Number(bpm) : undefined,
         link: link.trim() || undefined,
+        youtube_link: youtubeLink.trim() || undefined,
+        spotify_link: spotifyLink.trim() || undefined,
+        cifra_club_link: cifraClubLink.trim() || undefined,
         notes: notes.trim() || undefined,
       };
       if (editing) {
@@ -201,9 +221,44 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-stone">
                     {s.key ? <span>Tom {s.key}</span> : null}
+                    {s.key_alt ? <span>Tom alt. {s.key_alt}</span> : null}
                     {s.bpm != null ? <span>{s.bpm} BPM</span> : null}
                     <span>Última vez tocada: {fmtLastPlayed(s.last_played_at)}</span>
                   </div>
+                  {s.youtube_link || s.spotify_link || s.cifra_club_link ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                      {s.youtube_link ? (
+                        <a
+                          href={s.youtube_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal hover:underline"
+                        >
+                          YouTube
+                        </a>
+                      ) : null}
+                      {s.spotify_link ? (
+                        <a
+                          href={s.spotify_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal hover:underline"
+                        >
+                          Spotify
+                        </a>
+                      ) : null}
+                      {s.cifra_club_link ? (
+                        <a
+                          href={s.cifra_club_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal hover:underline"
+                        >
+                          Cifra Club
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
                 {canEdit ? (
                   <div className="flex flex-shrink-0 items-center gap-1">
@@ -258,7 +313,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="song-key" className="text-xs">
                 Tom
@@ -269,6 +324,18 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
                 onChange={(e) => setKey(e.target.value)}
                 disabled={saving}
                 placeholder="Ex.: G"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="song-key-alt" className="text-xs">
+                Tom alternativo
+              </Label>
+              <Input
+                id="song-key-alt"
+                value={keyAlt}
+                onChange={(e) => setKeyAlt(e.target.value)}
+                disabled={saving}
+                placeholder="Ex.: A"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -285,10 +352,53 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
               />
             </div>
           </div>
+          <p className="text-xs text-stone">
+            Dois tons cadastrados dão para escolher, ao montar a escala, qual versão fica
+            confirmada para aquele culto.
+          </p>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="song-youtube-link" className="text-xs">
+              Link do YouTube
+            </Label>
+            <Input
+              id="song-youtube-link"
+              value={youtubeLink}
+              onChange={(e) => setYoutubeLink(e.target.value)}
+              disabled={saving}
+              placeholder="https://youtube.com/watch?v=..."
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="song-spotify-link" className="text-xs">
+              Link do Spotify
+            </Label>
+            <Input
+              id="song-spotify-link"
+              value={spotifyLink}
+              onChange={(e) => setSpotifyLink(e.target.value)}
+              disabled={saving}
+              placeholder="https://open.spotify.com/track/..."
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="song-cifra-club-link" className="text-xs">
+              Link do Cifra Club
+            </Label>
+            <Input
+              id="song-cifra-club-link"
+              value={cifraClubLink}
+              onChange={(e) => setCifraClubLink(e.target.value)}
+              disabled={saving}
+              placeholder="https://cifraclub.com.br/..."
+            />
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="song-link" className="text-xs">
-              Link (cifra, referência)
+              Outro link (opcional)
             </Label>
             <Input
               id="song-link"

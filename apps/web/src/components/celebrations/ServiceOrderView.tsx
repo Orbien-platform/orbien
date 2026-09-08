@@ -114,6 +114,7 @@ interface CatalogSong {
   id: string;
   title: string;
   key: string | null;
+  key_alt: string | null;
   bpm: number | null;
   link: string | null;
 }
@@ -136,6 +137,8 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
   const [error, setError] = useState("");
   const [catalogError, setCatalogError] = useState(false);
 
+  const selectedSong = catalog.find((s) => s.id === songId) ?? null;
+
   useEffect(() => {
     api
       .get<CatalogSong[]>("/songs")
@@ -150,7 +153,10 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
     const song = catalog.find((s) => s.id === id);
     if (song) {
       setTitle(song.title);
-      setKey(song.key ?? "");
+      // Quando só o tom alternativo está cadastrado, ele é a única opção do
+      // seletor abaixo — o estado precisa começar nele para não divergir do
+      // que a tela mostra como selecionado.
+      setKey(song.key ?? song.key_alt ?? "");
       setBpm(song.bpm != null ? String(song.bpm) : "");
       setLink(song.link ?? "");
     }
@@ -205,6 +211,18 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
         <p className="text-xs text-stone">
           Não foi possível carregar o catálogo — digite a música diretamente abaixo.
         </p>
+      )}
+      {selectedSong?.key_alt && (
+        <select
+          aria-label="Tom confirmado para a escala"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          disabled={isSubmitting}
+          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+        >
+          {selectedSong.key && <option value={selectedSong.key}>Tom {selectedSong.key}</option>}
+          <option value={selectedSong.key_alt}>Tom alt. {selectedSong.key_alt}</option>
+        </select>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="col-span-2 sm:col-span-2">
