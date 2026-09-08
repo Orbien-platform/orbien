@@ -399,6 +399,8 @@ segue o Edge Case da spec ("erro de rede claro, não tela vazia").
 
 ### T10: `AuthClient` — login, logout, guarda de sessão
 
+**Status**: ✅ Done (commit `d658389`)
+
 **What**: `login(tenantSlug, email, password)` chama `POST /auth/login` via
 `ApiClient`, grava `Session` em `expo-secure-store`; `logout()` chama
 `POST /auth/logout` best-effort e sempre limpa o SecureStore mesmo se a
