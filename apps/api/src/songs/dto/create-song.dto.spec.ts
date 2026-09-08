@@ -76,4 +76,40 @@ describe('CreateSongDto', () => {
     const errors = await errorsFor({ notes: 123 });
     expect(errors.some((e) => e.property === 'notes')).toBe(true);
   });
+
+  it('aceita key_alt como string', async () => {
+    expect(await errorsFor({ key_alt: 'E' })).toHaveLength(0);
+  });
+
+  it('rejeita key_alt que não é string', async () => {
+    const errors = await errorsFor({ key_alt: 123 });
+    expect(errors.some((e) => e.property === 'key_alt')).toBe(true);
+  });
+
+  it('aceita youtube_link como URL válida', async () => {
+    expect(await errorsFor({ youtube_link: 'https://youtube.com/watch?v=abc' })).toHaveLength(0);
+  });
+
+  it('rejeita youtube_link que não é URL', async () => {
+    const errors = await errorsFor({ youtube_link: 'não é url' });
+    expect(errors.some((e) => e.property === 'youtube_link')).toBe(true);
+  });
+
+  it('aceita spotify_link como URL válida', async () => {
+    expect(await errorsFor({ spotify_link: 'https://open.spotify.com/track/abc' })).toHaveLength(0);
+  });
+
+  it('rejeita spotify_link que não é URL', async () => {
+    const errors = await errorsFor({ spotify_link: 'não é url' });
+    expect(errors.some((e) => e.property === 'spotify_link')).toBe(true);
+  });
+
+  it('aceita cifra_club_link como URL válida', async () => {
+    expect(await errorsFor({ cifra_club_link: 'https://cifraclub.com.br/abc' })).toHaveLength(0);
+  });
+
+  it('rejeita cifra_club_link que não é URL', async () => {
+    const errors = await errorsFor({ cifra_club_link: 'não é url' });
+    expect(errors.some((e) => e.property === 'cifra_club_link')).toBe(true);
+  });
 });

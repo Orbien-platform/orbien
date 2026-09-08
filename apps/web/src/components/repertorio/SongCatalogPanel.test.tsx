@@ -13,8 +13,12 @@ const songs: CatalogSong[] = [
     id: "s1",
     title: "Grande é o Senhor",
     key: "D",
+    key_alt: null,
     bpm: 80,
     link: null,
+    youtube_link: null,
+    spotify_link: null,
+    cifra_club_link: null,
     notes: null,
     last_played_at: "2026-08-01T00:00:00.000Z",
   },
@@ -94,8 +98,12 @@ describe("SongCatalogPanel", () => {
     await user.click(screen.getByRole("button", { name: "Nova música" }));
     await user.type(screen.getByLabelText("Título"), "Digno é o Senhor");
     await user.type(screen.getByLabelText("Tom"), "E");
+    await user.type(screen.getByLabelText("Tom alternativo"), "F#");
     await user.type(screen.getByLabelText("BPM"), "90");
-    await user.type(screen.getByLabelText("Link (cifra, referência)"), "https://cifra.example/x");
+    await user.type(screen.getByLabelText("Link do YouTube"), "https://youtube.com/watch?v=x");
+    await user.type(screen.getByLabelText("Link do Spotify"), "https://open.spotify.com/track/x");
+    await user.type(screen.getByLabelText("Link do Cifra Club"), "https://cifraclub.com.br/x");
+    await user.type(screen.getByLabelText("Outro link (opcional)"), "https://cifra.example/x");
     await user.type(screen.getByLabelText("Notas (opcional)"), "tocar mais lento");
     await user.click(screen.getByRole("button", { name: "Criar" }));
 
@@ -103,8 +111,12 @@ describe("SongCatalogPanel", () => {
       expect(api.post).toHaveBeenCalledWith("/songs", {
         title: "Digno é o Senhor",
         key: "E",
+        key_alt: "F#",
         bpm: 90,
         link: "https://cifra.example/x",
+        youtube_link: "https://youtube.com/watch?v=x",
+        spotify_link: "https://open.spotify.com/track/x",
+        cifra_club_link: "https://cifraclub.com.br/x",
         notes: "tocar mais lento",
       })
     );
@@ -216,8 +228,12 @@ describe("SongCatalogPanel", () => {
       id: "s2",
       title: "Aleluia",
       key: null,
+      key_alt: null,
       bpm: null,
       link: null,
+      youtube_link: null,
+      spotify_link: null,
+      cifra_club_link: null,
       notes: null,
       last_played_at: null,
     };

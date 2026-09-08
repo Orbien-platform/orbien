@@ -36,15 +36,19 @@ describe('SongsService', () => {
           congregation_id: 'g1',
           title: 'Grande é o Senhor',
           key: null,
+          key_alt: null,
           bpm: null,
           link: null,
+          youtube_link: null,
+          spotify_link: null,
+          cifra_club_link: null,
           notes: null,
         },
       });
       expect(result).toEqual({ id: 's1', title: 'Grande é o Senhor' });
     });
 
-    it('usa os valores informados de key/bpm/link/notes quando presentes', async () => {
+    it('usa os valores informados de key/key_alt/bpm/links/notes quando presentes', async () => {
       const client = clientWith();
       client.song.create.mockResolvedValue({ id: 's1' });
       const service = serviceWith(client);
@@ -52,8 +56,12 @@ describe('SongsService', () => {
       await service.create('t1', 'g1', {
         title: 'Digno é o Senhor',
         key: 'D',
+        key_alt: 'E',
         bpm: 90,
         link: 'https://cifraclub.com/x',
+        youtube_link: 'https://youtube.com/watch?v=x',
+        spotify_link: 'https://open.spotify.com/track/x',
+        cifra_club_link: 'https://cifraclub.com.br/x',
         notes: 'tocar mais lento',
       } as never);
 
@@ -63,8 +71,12 @@ describe('SongsService', () => {
           congregation_id: 'g1',
           title: 'Digno é o Senhor',
           key: 'D',
+          key_alt: 'E',
           bpm: 90,
           link: 'https://cifraclub.com/x',
+          youtube_link: 'https://youtube.com/watch?v=x',
+          spotify_link: 'https://open.spotify.com/track/x',
+          cifra_club_link: 'https://cifraclub.com.br/x',
           notes: 'tocar mais lento',
         },
       });
@@ -148,7 +160,7 @@ describe('SongsService', () => {
       expect(result).toEqual({ id: 's1', title: 'Novo título' });
     });
 
-    it('atualiza key/bpm/link/notes sem alterar title quando title não é informado', async () => {
+    it('atualiza key/key_alt/bpm/links/notes sem alterar title quando title não é informado', async () => {
       const client = clientWith();
       client.song.findFirst.mockResolvedValue({ id: 's1' });
       client.song.update.mockResolvedValue({ id: 's1' });
@@ -156,14 +168,27 @@ describe('SongsService', () => {
 
       await service.update('t1', 'g1', 's1', {
         key: 'E',
+        key_alt: 'F',
         bpm: 100,
         link: 'https://cifraclub.com/y',
+        youtube_link: 'https://youtube.com/watch?v=y',
+        spotify_link: 'https://open.spotify.com/track/y',
+        cifra_club_link: 'https://cifraclub.com.br/y',
         notes: 'transpor',
       } as never);
 
       expect(client.song.update).toHaveBeenCalledWith({
         where: { id: 's1' },
-        data: { key: 'E', bpm: 100, link: 'https://cifraclub.com/y', notes: 'transpor' },
+        data: {
+          key: 'E',
+          key_alt: 'F',
+          bpm: 100,
+          link: 'https://cifraclub.com/y',
+          youtube_link: 'https://youtube.com/watch?v=y',
+          spotify_link: 'https://open.spotify.com/track/y',
+          cifra_club_link: 'https://cifraclub.com.br/y',
+          notes: 'transpor',
+        },
       });
     });
 

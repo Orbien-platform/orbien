@@ -25,8 +25,12 @@ export class SongsService {
         congregation_id: congregationId,
         title: dto.title,
         key: dto.key ?? null,
+        key_alt: dto.key_alt ?? null,
         bpm: dto.bpm ?? null,
         link: dto.link ?? null,
+        youtube_link: dto.youtube_link ?? null,
+        spotify_link: dto.spotify_link ?? null,
+        cifra_club_link: dto.cifra_club_link ?? null,
         notes: dto.notes ?? null,
       },
     });
@@ -86,8 +90,12 @@ export class SongsService {
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.key !== undefined && { key: dto.key }),
+        ...(dto.key_alt !== undefined && { key_alt: dto.key_alt }),
         ...(dto.bpm !== undefined && { bpm: dto.bpm }),
         ...(dto.link !== undefined && { link: dto.link }),
+        ...(dto.youtube_link !== undefined && { youtube_link: dto.youtube_link }),
+        ...(dto.spotify_link !== undefined && { spotify_link: dto.spotify_link }),
+        ...(dto.cifra_club_link !== undefined && { cifra_club_link: dto.cifra_club_link }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
       },
     });

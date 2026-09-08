@@ -940,6 +940,34 @@ describe("ServiceOrderView", () => {
     );
   });
 
+  it("lets the confirmed tom be chosen between the catalog's two versions", async () => {
+    mockGet(true, [
+      { id: "cs3", title: "Digno é o Senhor", key: "E", key_alt: "F#", bpm: 90, link: null },
+    ]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs3");
+
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("E");
+    await user.selectOptions(screen.getByLabelText("Tom confirmado para a escala"), "F#");
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("F#");
+
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: "cs3", key: "F#" })
+      )
+    );
+  });
+
   it("still allows adding a free-text song without selecting anything from the catalog", async () => {
     mockGet(true, [
       { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },

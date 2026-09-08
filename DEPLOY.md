@@ -316,6 +316,18 @@ passo 7 falha alto se algum invariante quebrar.
 > roda, o sintoma é sempre 500 na primeira tentativa da rota que depende dela
 > — a tabela ou coluna não existe.
 
+> **Pendente em produção:** `20260907233843_add_songs_catalog` (cria a
+> tabela `songs`) e `007_rls_songs.sql` (RLS + policy dela) são da feature
+> "Repertório do Time de Louvor", fechada em 2026-09-08. `007` está fora do
+> histórico do Prisma como os demais — só o `bootstrap-db.sh` a aplica — e
+> não há registro acima de tê-lo rodado contra produção. Esse é o suspeito
+> nº 1 do 500 relatado ao abrir `/repertorio`: mesmo padrão desta nota — rota
+> nova cuja tabela/policy ainda não existe no banco de produção. A migration
+> `20260908034555_add_song_refs_and_alt_key` (campos de tom alternativo,
+> YouTube, Spotify e Cifra Club) se soma à mesma pendência. Rodar
+> `bootstrap-db.sh` inteiro contra produção aplica as três de uma vez —
+> idempotente, mas leia o aviso do passo 6 antes.
+
 ---
 
 ## Parte 2 — `web` na Vercel

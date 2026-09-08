@@ -12,6 +12,10 @@ export class CreateSongDto {
   key?: string;
 
   @IsOptional()
+  @IsString()
+  key_alt?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   bpm?: number;
@@ -19,6 +23,18 @@ export class CreateSongDto {
   @IsOptional()
   @IsUrl()
   link?: string;
+
+  @IsOptional()
+  @IsUrl()
+  youtube_link?: string;
+
+  @IsOptional()
+  @IsUrl()
+  spotify_link?: string;
+
+  @IsOptional()
+  @IsUrl()
+  cifra_club_link?: string;
 
   @IsOptional()
   @IsString()

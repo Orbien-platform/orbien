@@ -1197,16 +1197,20 @@ model SetlistSong {
 }
 
 model Song {
-  id              String   @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  title           String
-  key             String?
-  bpm             Int?
-  link            String?
-  notes           String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  id               String   @id @default(uuid())
+  tenant_id        String
+  congregation_id  String
+  title            String
+  key              String?
+  key_alt          String?
+  bpm              Int?
+  link             String?
+  youtube_link     String?
+  spotify_link     String?
+  cifra_club_link  String?
+  notes            String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
