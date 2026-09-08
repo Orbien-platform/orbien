@@ -16,6 +16,23 @@ describe('UpdateSetlistSongDto', () => {
     expect(await errorsFor({ title: 'Novo título', bpm: 90 })).toHaveLength(0);
   });
 
+  it('aceita song_id nulo, que é como se desvincula do repertório (SETREP-01 AC3)', async () => {
+    // O `null` explícito é o contrato de desvincular, e quem o deixa passar é
+    // o `@IsOptional()` que o `PartialType` injeta em todo campo — não o
+    // `@IsOptional()` de `CreateSetlistSongDto` (removê-lo de lá não muda o
+    // resultado aqui). O que esta asserção tranca é o PATCH chegar ao serviço
+    // com `song_id: null` em vez de um 400: declarar o campo neste DTO com
+    // `@ValidateIf(o => o.song_id !== undefined) @IsUUID()` derruba este teste
+    // — verificado por mutação. Sem ele, AC3 quebraria sem nada ficar
+    // vermelho: o serviço está coberto, o contrato do DTO não estava.
+    expect(await errorsFor({ song_id: null })).toHaveLength(0);
+  });
+
+  it('rejeita song_id que não é UUID quando informado', async () => {
+    const errors = await errorsFor({ song_id: 'not-a-uuid' });
+    expect(errors.some((e) => e.property === 'song_id')).toBe(true);
+  });
+
   it('rejeita bpm menor que 1 quando informado', async () => {
     const errors = await errorsFor({ bpm: 0 });
     expect(errors.some((e) => e.property === 'bpm')).toBe(true);

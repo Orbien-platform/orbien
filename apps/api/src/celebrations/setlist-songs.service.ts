@@ -5,6 +5,18 @@ import { CreateSetlistSongDto } from './dto/create-setlist-song.dto';
 import { UpdateSetlistSongDto } from './dto/update-setlist-song.dto';
 import { ReorderSongsDto } from './dto/reorder-songs.dto';
 
+// Campos da referência do catálogo devolvidos junto da SetlistSong (SETREP-04 AC1).
+// Constante compartilhada com o ServiceOrdersService para os dois não divergirem.
+export const SONG_REFERENCE_SELECT = {
+  id: true,
+  title: true,
+  key: true,
+  key_alt: true,
+  youtube_link: true,
+  spotify_link: true,
+  cifra_club_link: true,
+} as const;
+
 @Injectable()
 export class SetlistSongsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,16 +29,20 @@ export class SetlistSongsService {
     return setlist;
   }
 
+  private async resolveCatalogSong(tenantId: string, congregationId: string, songId: string) {
+    const song = await this.prisma.client.song.findFirst({
+      where: { id: songId, tenant_id: tenantId, congregation_id: congregationId },
+    });
+    if (!song) throw new NotFoundException('Música não encontrada');
+    return song;
+  }
+
   async create(tenantId: string, congregationId: string, dto: CreateSetlistSongDto): Promise<SetlistSong> {
     await this.resolveSetlist(tenantId, congregationId, dto.setlist_id);
 
-    let catalogSong: { key: string | null; bpm: number | null; link: string | null } | null = null;
-    if (dto.song_id) {
-      catalogSong = await this.prisma.client.song.findFirst({
-        where: { id: dto.song_id, tenant_id: tenantId, congregation_id: congregationId },
-      });
-      if (!catalogSong) throw new NotFoundException('Música não encontrada');
-    }
+    const catalogSong = dto.song_id
+      ? await this.resolveCatalogSong(tenantId, congregationId, dto.song_id)
+      : null;
 
     return this.prisma.client.setlistSong.create({
       data: {
@@ -49,12 +65,14 @@ export class SetlistSongsService {
     return this.prisma.client.setlistSong.findMany({
       where: { setlist_id: setlistId, tenant_id: tenantId },
       orderBy: { sequence: 'asc' },
+      include: { song: { select: SONG_REFERENCE_SELECT } },
     });
   }
 
   async findOne(tenantId: string, congregationId: string, id: string): Promise<SetlistSong> {
     const song = await this.prisma.client.setlistSong.findFirst({
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
+      include: { song: { select: SONG_REFERENCE_SELECT } },
     });
     if (!song) throw new NotFoundException('Música não encontrada');
     return song;
@@ -68,9 +86,14 @@ export class SetlistSongsService {
   ): Promise<SetlistSong> {
     await this.findOne(tenantId, congregationId, id);
 
+    // song_id ausente não entra no data; null desvincula sem consultar o catálogo.
+    const songId = dto.song_id as string | null | undefined;
+    if (songId) await this.resolveCatalogSong(tenantId, congregationId, songId);
+
     return this.prisma.client.setlistSong.update({
       where: { id },
       data: {
+        ...(songId !== undefined && { song_id: songId }),
         ...(dto.sequence !== undefined && { sequence: dto.sequence }),
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.key !== undefined && { key: dto.key }),

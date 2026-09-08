@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ServiceOrderView } from "./ServiceOrderView";
 import api from "@/lib/api";
+import type { CatalogSong } from "@/lib/repertorio";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -56,6 +57,56 @@ const serviceOrder = {
     },
   ],
 };
+
+/** Música do catálogo no formato que `GET /songs` devolve ao seletor. */
+function catalogSong(overrides: Partial<CatalogSong> = {}): CatalogSong {
+  return {
+    id: "cs1",
+    title: "Digno é o Senhor",
+    key: "E",
+    key_alt: null,
+    bpm: 90,
+    link: null,
+    youtube_link: null,
+    spotify_link: null,
+    cifra_club_link: null,
+    notes: null,
+    last_played_at: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Ordem de culto com uma única música na setlist da etapa de louvor — os
+ * campos congelados são sempre os mesmos; o teste sobrescreve só o vínculo
+ * (`song_id`) e a referência (`song`).
+ */
+function orderWithSetlistSong(overrides: Record<string, unknown>) {
+  return {
+    ...serviceOrder,
+    items: serviceOrder.items.map((item) =>
+      item.id !== "it1"
+        ? item
+        : {
+            ...item,
+            setlist: {
+              id: "sl1",
+              songs: [
+                {
+                  id: "s1",
+                  title: "Grande é o Senhor",
+                  key: "G",
+                  bpm: 80,
+                  link: "http://x.test",
+                  sequence: 1,
+                  ...overrides,
+                },
+              ],
+            },
+          }
+    ),
+  };
+}
 
 function mockGet(withOC: boolean, catalog: unknown[] = []) {
   vi.mocked(api.get).mockImplementation((url: string) => {
@@ -824,9 +875,9 @@ describe("ServiceOrderView", () => {
     );
   });
 
-  it("loads the catalog, fills fields on selection, and sends song_id with the payload", async () => {
+  it("escolhe do catálogo pelo seletor, preenche os campos e envia song_id no POST", async () => {
     mockGet(true, [
-      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+      catalogSong({ id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" }),
     ]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -837,8 +888,7 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
 
-    const catalogSelect = await screen.findByLabelText("Escolher do catálogo");
-    await user.selectOptions(catalogSelect, "cs1");
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
 
     expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
     expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("E");
@@ -855,13 +905,14 @@ describe("ServiceOrderView", () => {
     );
   });
 
-  it("falls back to an empty catalog when the /songs response isn't an array", async () => {
+  it("mantém o form utilizável quando a resposta de /songs não é uma lista", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
       if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
       if (url === "/songs") return Promise.resolve({ data: null });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
     render(
       <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
@@ -869,14 +920,25 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-    await screen.findByPlaceholderText("Título *");
 
-    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Nenhuma música no repertório desta congregação.")
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Título *"), "Avulsa");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: undefined, title: "Avulsa" })
+      )
+    );
   });
 
-  it("reverts to blank fields when the catalog selection goes back to the placeholder", async () => {
+  it("buscar no seletor depois de escolher não apaga os campos já preenchidos", async () => {
     mockGet(true, [
-      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+      catalogSong({ id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" }),
     ]);
     const user = userEvent.setup();
     render(
@@ -885,17 +947,17 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-
-    const catalogSelect = await screen.findByLabelText("Escolher do catálogo");
-    await user.selectOptions(catalogSelect, "cs1");
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
     expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
 
-    await user.selectOptions(catalogSelect, "");
+    await user.type(screen.getByPlaceholderText("Buscar no repertório…"), "zzz");
+
     expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("E");
   });
 
   it("fills blank tom/bpm/link when the selected catalog song has none of them set", async () => {
-    mockGet(true, [{ id: "cs2", title: "Aleluia", key: null, bpm: null, link: null }]);
+    mockGet(true, [catalogSong({ id: "cs2", title: "Aleluia", key: null, bpm: null, link: null })]);
     const user = userEvent.setup();
     render(
       <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
@@ -903,7 +965,7 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs2");
+    await user.click(await screen.findByRole("button", { name: /Aleluia/ }));
 
     expect(screen.getByPlaceholderText("Título *")).toHaveValue("Aleluia");
     expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("");
@@ -913,7 +975,7 @@ describe("ServiceOrderView", () => {
 
   it("keeps song_id set and sends the edited value after overriding a field from the catalog", async () => {
     mockGet(true, [
-      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+      catalogSong({ id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" }),
     ]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -924,7 +986,7 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
 
-    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs1");
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
 
     const keyInput = screen.getByPlaceholderText("Tom (ex: G)");
     await user.clear(keyInput);
@@ -942,7 +1004,7 @@ describe("ServiceOrderView", () => {
 
   it("lets the confirmed tom be chosen between the catalog's two versions", async () => {
     mockGet(true, [
-      { id: "cs3", title: "Digno é o Senhor", key: "E", key_alt: "F#", bpm: 90, link: null },
+      catalogSong({ id: "cs3", title: "Digno é o Senhor", key: "E", key_alt: "F#", bpm: 90, link: null }),
     ]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -952,7 +1014,7 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs3");
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
 
     expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("E");
     await user.selectOptions(screen.getByLabelText("Tom confirmado para a escala"), "F#");
@@ -970,7 +1032,7 @@ describe("ServiceOrderView", () => {
 
   it("defaults to the alternate tom when it's the catalog song's only one set", async () => {
     mockGet(true, [
-      { id: "cs4", title: "Aleluia", key: null, key_alt: "C", bpm: null, link: null },
+      catalogSong({ id: "cs4", title: "Aleluia", key: null, key_alt: "C", bpm: null, link: null }),
     ]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -980,7 +1042,7 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs4");
+    await user.click(await screen.findByRole("button", { name: /Aleluia/ }));
 
     // Sem tom principal, o seletor só tem a opção do tom alternativo — o
     // estado precisa nascer nela, e não vazio, para bater com o que a tela
@@ -1000,7 +1062,7 @@ describe("ServiceOrderView", () => {
 
   it("still allows adding a free-text song without selecting anything from the catalog", async () => {
     mockGet(true, [
-      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+      catalogSong({ id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" }),
     ]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -1022,8 +1084,9 @@ describe("ServiceOrderView", () => {
     );
   });
 
-  it("does not render the catalog selector when the catalog is empty", async () => {
+  it("catálogo vazio informa a ausência e oferece cadastro, sem impedir a entrada avulsa", async () => {
     mockGet(true, []);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
     render(
       <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
@@ -1031,9 +1094,108 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-    await screen.findByPlaceholderText("Título *");
 
-    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Nenhuma música no repertório desta congregação.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Cadastrar música no repertório/ })
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Título *"), "Avulsa");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", title: "Avulsa" })
+      )
+    );
+  });
+
+  it("cadastrar pelo seletor deixa a música nova já selecionada no form", async () => {
+    mockGet(true, []);
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === "/songs") {
+        return Promise.resolve({ data: { id: "novo", title: "Grande é o Nosso Deus", key: "A", bpm: 72, link: null } });
+      }
+      if (url === "/celebrations/setlists/songs") return Promise.resolve({ data: {} });
+      return Promise.reject(new Error(`unexpected POST ${url}`));
+    });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.click(
+      await screen.findByRole("button", { name: /Cadastrar música no repertório/ })
+    );
+
+    await user.type(screen.getByLabelText("Título"), "Grande é o Nosso Deus");
+    await user.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("Título *")).toHaveValue("Grande é o Nosso Deus")
+    );
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("A");
+    expect(screen.getByPlaceholderText("BPM")).toHaveValue(72);
+
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: "novo", title: "Grande é o Nosso Deus" })
+      )
+    );
+  });
+
+  // O picker vive ao lado do `<form>` da setlist, não dentro dele: os campos de
+  // texto do picker são descendentes de outra árvore, então Enter neles não
+  // dispara a submissão implícita do form (que tem `type="submit"`). Estes dois
+  // testes trancam isso — sem eles, mover o picker de volta para dentro do
+  // `<form>` voltaria a fazer Enter na busca postar a setlist em silêncio.
+  it("Enter na busca do seletor não submete o form da setlist", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    // Título já preenchido pela escolha no catálogo: se o Enter submetesse,
+    // a validação passaria e sairia um POST de verdade.
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+
+    vi.mocked(api.post).mockClear();
+    await user.type(screen.getByPlaceholderText("Buscar no repertório…"), "digno{Enter}");
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("Enter no cadastro inline não submete o form da setlist", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+    await user.click(screen.getByRole("button", { name: /Cadastrar música no repertório/ }));
+
+    vi.mocked(api.post).mockClear();
+    await user.type(await screen.findByLabelText("Título"), "Outra música{Enter}");
+
+    // Nem o POST da setlist, nem o de /songs — o Enter não é atalho de
+    // cadastro; quem cria é o botão do painel.
+    expect(api.post).not.toHaveBeenCalled();
   });
 
   it("still allows adding a free-text song when loading the catalog fails", async () => {
@@ -1053,9 +1215,8 @@ describe("ServiceOrderView", () => {
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
     await screen.findByPlaceholderText("Título *");
 
-    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Não foi possível carregar o catálogo — digite a música diretamente abaixo.")
+      await screen.findByText("Não foi possível carregar o catálogo.")
     ).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Título *"), "Música avulsa");
@@ -1067,6 +1228,307 @@ describe("ServiceOrderView", () => {
         expect.objectContaining({ setlist_id: "sl1", title: "Música avulsa" })
       )
     );
+  });
+
+  it("vincula a música avulsa ao catálogo com apenas song_id no corpo (SETREP-01 AC2)", async () => {
+    const linkedOrder = {
+      ...serviceOrder,
+      items: serviceOrder.items.map((item) =>
+        item.id !== "it1"
+          ? item
+          : {
+              ...item,
+              setlist: {
+                id: "sl1",
+                songs: [
+                  { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", sequence: 1, song_id: "cs1" },
+                ],
+              },
+            }
+      ),
+    };
+    let soCalls = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        soCalls += 1;
+        return Promise.resolve({ data: soCalls === 1 ? serviceOrder : linkedOrder });
+      }
+      if (url === "/songs") {
+        return Promise.resolve({ data: [catalogSong({ id: "cs1", title: "Digno é o Senhor" })] });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", { song_id: "cs1" })
+    );
+    // A lista reflete o vínculo pela recarga da própria ordem, sem reload de
+    // página: a linha passa a oferecer desvincular (SETREP-01 AC5).
+    expect(
+      await screen.findByRole("button", { name: "Desvincular Grande é o Senhor do repertório" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
+  });
+
+  it("desvincula a música enviando song_id nulo (SETREP-01 AC3)", async () => {
+    const linkedOrder = {
+      ...serviceOrder,
+      items: serviceOrder.items.map((item) =>
+        item.id !== "it1"
+          ? item
+          : {
+              ...item,
+              setlist: {
+                id: "sl1",
+                songs: [
+                  { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", sequence: 1, song_id: "cs1" },
+                ],
+              },
+            }
+      ),
+    };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: linkedOrder });
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Desvincular Grande é o Senhor do repertório" })
+    );
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", { song_id: null })
+    );
+    // Nada mais é enviado: tom, BPM e link digitados ficam como estavam.
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.getByText("80 BPM")).toBeInTheDocument();
+  });
+
+  it("mostra erro e preserva a lista quando o PATCH de vínculo falha", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    vi.mocked(api.patch).mockRejectedValue(new Error("fail"));
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    );
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+
+    expect(await screen.findByText("Erro ao vincular música.")).toBeInTheDocument();
+    expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
+  });
+
+  it("cancelar o seletor de vínculo fecha sem chamar a API", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    // O mock de `patch` é compartilhado com os testes de reordenação e de
+    // vínculo acima; limpar aqui deixa a asserção de "não chamou" exata.
+    vi.mocked(api.patch).mockClear();
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    );
+    await screen.findByRole("button", { name: /Digno é o Senhor/ });
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("button", { name: /Digno é o Senhor/ })).not.toBeInTheDocument();
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("não oferece a ação de vincular a quem não pode adicionar músicas", async () => {
+    mockGet(true);
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={false} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(
+      screen.queryByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("não oferece a ação de vincular em modo somente leitura", async () => {
+    mockGet(true);
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={false} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(
+      screen.queryByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("música vinculada mostra o indicador de repertório e as referências com rótulos distintos (SETREP-04 AC3)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          song: {
+            id: "cs1",
+            title: "Grande é o Senhor",
+            key: "G",
+            key_alt: null,
+            youtube_link: "http://yt.test/a",
+            spotify_link: "http://spotify.test/a",
+            cifra_club_link: "http://cifraclub.test/a",
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.getByText("Repertório")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir no YouTube: Grande é o Senhor" })
+    ).toHaveAttribute("href", "http://yt.test/a");
+    expect(
+      screen.getByRole("link", { name: "Abrir no Spotify: Grande é o Senhor" })
+    ).toHaveAttribute("href", "http://spotify.test/a");
+    expect(
+      screen.getByRole("link", { name: "Abrir a cifra no Cifra Club: Grande é o Senhor" })
+    ).toHaveAttribute("href", "http://cifraclub.test/a");
+  });
+
+  it("música sem vínculo não mostra o indicador e oferece a ação de vincular (SETREP-04 AC4)", async () => {
+    mockGet(true);
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.queryByText("Repertório")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    ).toBeInTheDocument();
+  });
+
+  it("referência nula renderiza os campos históricos da setlist sem erro (SETREP-04 AC2)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        // `Song` removido do catálogo: `song_id` virou NULL por SetNull e a
+        // referência vem nula, mas a cópia congelada continua na setlist.
+        return Promise.resolve({ data: orderWithSetlistSong({ song_id: null, song: null }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.getByText("80 BPM")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Abrir link" })).toHaveAttribute("href", "http://x.test");
+    expect(screen.queryByText("Repertório")).not.toBeInTheDocument();
+  });
+
+  it("mostra só as referências que a música do catálogo tem", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          song: {
+            id: "cs1",
+            title: "Grande é o Senhor",
+            key: "G",
+            key_alt: null,
+            youtube_link: "http://yt.test/a",
+            spotify_link: null,
+            cifra_club_link: null,
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(
+      screen.getByRole("link", { name: "Abrir no YouTube: Grande é o Senhor" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Abrir no Spotify: Grande é o Senhor" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Abrir a cifra no Cifra Club: Grande é o Senhor" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("o link congelado da setlist não é duplicado pelas referências do catálogo", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          song: {
+            id: "cs1",
+            title: "Grande é o Senhor",
+            key: "D",
+            key_alt: null,
+            youtube_link: "http://yt.test/a",
+            spotify_link: null,
+            cifra_club_link: "http://cifraclub.test/a",
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    // O link que o líder fixou na escala aparece uma vez, com o próprio
+    // rótulo; as referências do catálogo são outros três campos.
+    expect(document.querySelectorAll('a[href="http://x.test"]')).toHaveLength(1);
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+    // O tom exibido continua sendo o congelado na setlist, não o do catálogo.
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.queryByText("D")).not.toBeInTheDocument();
   });
 
   it("ignores the instance response if the component unmounts before it settles", async () => {

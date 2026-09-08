@@ -3,13 +3,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
-  Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown,
+  Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown, Link2, Unlink,
+  SquarePlay, Disc3, FileMusic,
 } from "lucide-react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddItemModal, ITEM_TYPE_LABELS, type ItemType } from "@/components/celebrations/AddItemModal";
+import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
+import { songKey, type CatalogSong } from "@/lib/repertorio";
 import api from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -21,6 +24,21 @@ interface SetlistSong {
   bpm?: number;
   link?: string;
   sequence: number;
+  song_id?: string | null;
+  /**
+   * Referência do catálogo, lida pela relação e não copiada: `null` quando a
+   * música é avulsa ou quando o `Song` foi removido do catálogo (SetNull).
+   * Título, tom, BPM e link da setlist continuam sendo cópia congelada.
+   */
+  song?: {
+    id: string;
+    title: string;
+    key: string | null;
+    key_alt: string | null;
+    youtube_link: string | null;
+    spotify_link: string | null;
+    cifra_club_link: string | null;
+  } | null;
 }
 
 interface Setlist {
@@ -110,56 +128,34 @@ function ItemIcon({ type }: { type: ItemType }) {
 
 // ─── Add Song inline form ──────────────────────────────────────────────────────
 
-interface CatalogSong {
-  id: string;
-  title: string;
-  key: string | null;
-  key_alt: string | null;
-  bpm: number | null;
-  link: string | null;
-}
-
 interface AddSongFormProps {
   setlistId: string;
   nextPosition: number;
+  canCreate: boolean;
   onAdded: () => void;
   onCancel: () => void;
 }
 
-function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongFormProps) {
-  const [catalog, setCatalog] = useState<CatalogSong[]>([]);
-  const [songId, setSongId] = useState("");
+function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: AddSongFormProps) {
+  const [selectedSong, setSelectedSong] = useState<CatalogSong | null>(null);
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
   const [link, setLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [catalogError, setCatalogError] = useState(false);
-
-  const selectedSong = catalog.find((s) => s.id === songId) ?? null;
-
-  useEffect(() => {
-    api
-      .get<CatalogSong[]>("/songs")
-      .then(({ data }) => setCatalog(Array.isArray(data) ? data : []))
-      .catch(() => setCatalogError(true));
-  }, []);
 
   // Escolher uma música do catálogo preenche os campos como valores default,
   // ainda editáveis por baixo — sem travar entrada avulsa (REPERT-02).
-  function handleSelectSong(id: string) {
-    setSongId(id);
-    const song = catalog.find((s) => s.id === id);
-    if (song) {
-      setTitle(song.title);
-      // Quando só o tom alternativo está cadastrado, ele é a única opção do
-      // seletor abaixo — o estado precisa começar nele para não divergir do
-      // que a tela mostra como selecionado.
-      setKey(song.key ?? song.key_alt ?? "");
-      setBpm(song.bpm != null ? String(song.bpm) : "");
-      setLink(song.link ?? "");
-    }
+  function handleSelectSong(song: CatalogSong) {
+    setSelectedSong(song);
+    setTitle(song.title);
+    // Quando só o tom alternativo está cadastrado, ele é a única opção do
+    // seletor abaixo — o estado precisa começar nele para não divergir do
+    // que a tela mostra como selecionado.
+    setKey(songKey(song) ?? "");
+    setBpm(song.bpm != null ? String(song.bpm) : "");
+    setLink(song.link ?? "");
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -176,7 +172,7 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
       // `song_id`; achado pré-existente, fora do escopo de REPERT-02.
       await api.post(`/celebrations/setlists/songs`, {
         setlist_id: setlistId,
-        song_id: songId || undefined,
+        song_id: selectedSong?.id ?? undefined,
         sequence: nextPosition,
         title: title.trim(),
         key: key.trim() || undefined,
@@ -192,81 +188,74 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
-      {catalog.length > 0 && (
-        <select
-          aria-label="Escolher do catálogo"
-          value={songId}
-          onChange={(e) => handleSelectSong(e.target.value)}
-          disabled={isSubmitting}
-          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-        >
-          <option value="">Escolher do catálogo (opcional)…</option>
-          {catalog.map((s) => (
-            <option key={s.id} value={s.id}>{s.title}</option>
-          ))}
-        </select>
-      )}
-      {catalogError && (
-        <p className="text-xs text-stone">
-          Não foi possível carregar o catálogo — digite a música diretamente abaixo.
-        </p>
-      )}
-      {selectedSong?.key_alt && (
-        <select
-          aria-label="Tom confirmado para a escala"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          disabled={isSubmitting}
-          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-        >
-          {selectedSong.key && <option value={selectedSong.key}>Tom {selectedSong.key}</option>}
-          <option value={selectedSong.key_alt}>Tom alt. {selectedSong.key_alt}</option>
-        </select>
-      )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="col-span-2 sm:col-span-2">
+    // O picker fica FORA do `<form>` de propósito. Ele tem campos de texto
+    // (a busca e o cadastro inline), e o form abaixo tem `type="submit"` —
+    // dentro dele, Enter em qualquer um desses campos disparava a submissão
+    // implícita do form da setlist: com título já preenchido, um POST real em
+    // `/celebrations/setlists/songs`; sem título, o erro "Título é obrigatório"
+    // num form que o usuário nem está vendo. O `<select>` que existia aqui
+    // antes não tinha esse comportamento, então a regressão nasceu com o
+    // picker. Separar as duas árvores resolve a classe do problema, em vez de
+    // barrar a tecla caso a caso.
+    <div className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
+      <SongPicker canCreate={canCreate} onSelect={handleSelectSong} />
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2">
+        {selectedSong?.key_alt && (
+          <select
+            aria-label="Tom confirmado para a escala"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            disabled={isSubmitting}
+            className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+          >
+            {selectedSong.key && <option value={selectedSong.key}>Tom {selectedSong.key}</option>}
+            <option value={selectedSong.key_alt}>Tom alt. {selectedSong.key_alt}</option>
+          </select>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="col-span-2 sm:col-span-2">
+            <Input
+              placeholder="Título *"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isSubmitting}
+              className="rounded-[6px] text-xs h-8"
+            />
+          </div>
           <Input
-            placeholder="Título *"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Tom (ex: G)"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            disabled={isSubmitting}
+            className="rounded-[6px] text-xs h-8"
+          />
+          <Input
+            type="number"
+            placeholder="BPM"
+            value={bpm}
+            onChange={(e) => setBpm(e.target.value)}
             disabled={isSubmitting}
             className="rounded-[6px] text-xs h-8"
           />
         </div>
         <Input
-          placeholder="Tom (ex: G)"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
+          placeholder="Link (YouTube, Cifra Club…)"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
           disabled={isSubmitting}
           className="rounded-[6px] text-xs h-8"
         />
-        <Input
-          type="number"
-          placeholder="BPM"
-          value={bpm}
-          onChange={(e) => setBpm(e.target.value)}
-          disabled={isSubmitting}
-          className="rounded-[6px] text-xs h-8"
-        />
-      </div>
-      <Input
-        placeholder="Link (YouTube, Cifra Club…)"
-        value={link}
-        onChange={(e) => setLink(e.target.value)}
-        disabled={isSubmitting}
-        className="rounded-[6px] text-xs h-8"
-      />
-      {error && <p className="text-xs text-crimson">{error}</p>}
-      <div className="flex gap-2">
-        <Button type="button" variant="outline" className="flex-1 rounded-[6px] text-xs py-1" onClick={onCancel} disabled={isSubmitting}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={isSubmitting} className="flex-1 rounded-[6px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-xs py-1">
-          {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : "Adicionar"}
-        </Button>
-      </div>
-    </form>
+        {error && <p className="text-xs text-crimson">{error}</p>}
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" className="flex-1 rounded-[6px] text-xs py-1" onClick={onCancel} disabled={isSubmitting}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isSubmitting} className="flex-1 rounded-[6px] bg-navy text-white hover:bg-[var(--color-navy-dark)] text-xs py-1">
+            {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : "Adicionar"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -286,6 +275,7 @@ export function ServiceOrderView({
   const [isCreatingOC, setIsCreatingOC] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [addSongForItemId, setAddSongForItemId] = useState<string | null>(null);
+  const [linkSongId, setLinkSongId] = useState<string | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -355,6 +345,7 @@ export function ServiceOrderView({
       setNoOC(false);
       setAddItemOpen(false);
       setAddSongForItemId(null);
+      setLinkSongId(null);
       setLoadedKey(null);
     }
     onOpenChange(next);
@@ -443,6 +434,24 @@ export function ServiceOrderView({
       );
     } catch {
       showToast("Erro ao remover música.");
+    }
+  }
+
+  /**
+   * Vincula (ou desvincula, com `song_id: null`) a música da setlist ao
+   * catálogo. O corpo leva **apenas** `song_id`: vincular declara a origem,
+   * não reimporta tom/BPM/link — o que a escala confirmou fica como está
+   * (SETREP-01 AC2/AC3).
+   */
+  async function handleLinkSong(setlistSongId: string, song: CatalogSong | null) {
+    try {
+      await api.patch(`/celebrations/setlists/songs/${setlistSongId}`, {
+        song_id: song ? song.id : null,
+      });
+      setLinkSongId(null);
+      afterAddSong();
+    } catch {
+      showToast("Erro ao vincular música.");
     }
   }
 
@@ -693,14 +702,19 @@ export function ServiceOrderView({
                                 {[...setlist.songs]
                                   .sort((a, b) => a.sequence - b.sequence)
                                   .map((song) => (
+                                    <div key={song.id} className="flex flex-col gap-1">
                                     <div
-                                      key={song.id}
                                       className="flex items-center gap-2 text-xs"
                                     >
                                       <Music size={11} strokeWidth={1.5} className="flex-shrink-0 text-stone" />
                                       <span className="flex-1 truncate text-ink dark:text-white">
                                         {song.title}
                                       </span>
+                                      {song.song && (
+                                        <span className="flex-shrink-0 rounded px-1 py-0.5 text-[10px] bg-teal/10 text-teal">
+                                          Repertório
+                                        </span>
+                                      )}
                                       {song.key && (
                                         <span className="flex-shrink-0 rounded px-1 py-0.5 font-mono text-[10px] bg-[var(--surface-base)] text-stone border border-[var(--border-default)]">
                                           {song.key}
@@ -720,6 +734,67 @@ export function ServiceOrderView({
                                           <ExternalLink size={11} strokeWidth={1.5} />
                                         </a>
                                       )}
+                                      {/*
+                                        Referências do catálogo: cada uma com
+                                        rótulo próprio, para não virarem três
+                                        ícones iguais sem nome (SETREP-04 AC3).
+                                        O link congelado da setlist, acima, é
+                                        outro campo — não há duplicata.
+                                      */}
+                                      {song.song?.youtube_link && (
+                                        <a
+                                          href={song.song.youtube_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                          aria-label={`Abrir no YouTube: ${song.title}`}
+                                        >
+                                          <SquarePlay size={11} strokeWidth={1.5} />
+                                        </a>
+                                      )}
+                                      {song.song?.spotify_link && (
+                                        <a
+                                          href={song.song.spotify_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                          aria-label={`Abrir no Spotify: ${song.title}`}
+                                        >
+                                          <Disc3 size={11} strokeWidth={1.5} />
+                                        </a>
+                                      )}
+                                      {song.song?.cifra_club_link && (
+                                        <a
+                                          href={song.song.cifra_club_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                          aria-label={`Abrir a cifra no Cifra Club: ${song.title}`}
+                                        >
+                                          <FileMusic size={11} strokeWidth={1.5} />
+                                        </a>
+                                      )}
+                                      {canAddSongs && !isReadOnly && (
+                                        song.song_id ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleLinkSong(song.id, null)}
+                                            className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                            aria-label={`Desvincular ${song.title} do repertório`}
+                                          >
+                                            <Unlink size={11} strokeWidth={1.5} />
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setLinkSongId(song.id)}
+                                            className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                            aria-label={`Vincular ${song.title} ao repertório`}
+                                          >
+                                            <Link2 size={11} strokeWidth={1.5} />
+                                          </button>
+                                        )
+                                      )}
                                       {canAddSongs && (
                                         <button
                                           type="button"
@@ -731,6 +806,14 @@ export function ServiceOrderView({
                                         </button>
                                       )}
                                     </div>
+                                    {linkSongId === song.id && (
+                                      <SongPicker
+                                        canCreate={canAddSongs}
+                                        onSelect={(chosen) => handleLinkSong(song.id, chosen)}
+                                        onCancel={() => setLinkSongId(null)}
+                                      />
+                                    )}
+                                    </div>
                                   ))}
                               </div>
                             )}
@@ -741,6 +824,7 @@ export function ServiceOrderView({
                                 <AddSongForm
                                   setlistId={setlist.id}
                                   nextPosition={(setlist.songs.length ?? 0) + 1}
+                                  canCreate={canAddSongs}
                                   onAdded={afterAddSong}
                                   onCancel={() => setAddSongForItemId(null)}
                                 />

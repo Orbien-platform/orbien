@@ -71,6 +71,55 @@ describe('ServiceOrdersService', () => {
       await expect(service.findOne('t1', 'g1', 'so1')).resolves.toEqual({ id: 'so1' });
     });
 
+    it('inclui a referência do catálogo dentro de setlist.songs (SETREP-04 AC1)', async () => {
+      const client = clientWith();
+      client.serviceOrder.findFirst.mockResolvedValue({ id: 'so1' });
+      const { service } = serviceWith(client);
+
+      await service.findOne('t1', 'g1', 'so1');
+
+      expect(client.serviceOrder.findFirst).toHaveBeenCalledWith({
+        where: { id: 'so1', tenant_id: 't1', congregation_id: 'g1' },
+        include: {
+          celebrationInstance: {
+            select: {
+              id: true,
+              scheduled_date: true,
+              status: true,
+              celebration: { select: { id: true, name: true, type: true } },
+            },
+          },
+          items: {
+            orderBy: { sequence: 'asc' },
+            include: {
+              person: { select: { id: true, full_name: true } },
+              ministry: { select: { id: true, name: true } },
+              setlist: {
+                include: {
+                  songs: {
+                    orderBy: { sequence: 'asc' },
+                    include: {
+                      song: {
+                        select: {
+                          id: true,
+                          title: true,
+                          key: true,
+                          key_alt: true,
+                          youtube_link: true,
+                          spotify_link: true,
+                          cifra_club_link: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
     it('lança NotFoundException quando não encontrada', async () => {
       const client = clientWith();
       client.serviceOrder.findFirst.mockResolvedValue(null);

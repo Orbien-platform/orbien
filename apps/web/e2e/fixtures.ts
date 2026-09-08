@@ -13,7 +13,7 @@
  */
 
 import path from "node:path";
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 const API_URL = process.env.E2E_API_URL ?? "http://localhost:3000/api";
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
@@ -366,4 +366,4 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 });
 
-export { expect, type Page };
+export { expect, type Locator, type Page };
