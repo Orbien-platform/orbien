@@ -92,3 +92,36 @@ describe("ApiClient", () => {
     expect(error).not.toBeInstanceOf(HttpError);
   });
 });
+
+describe("ApiClient — apiUrl ausente na config", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock("expo-constants", () => ({
+      __esModule: true,
+      default: { expoConfig: { extra: {} } },
+    }));
+  });
+
+  afterEach(() => {
+    jest.dontMock("expo-constants");
+  });
+
+  it("falha alto (não faz fetch com URL relativa vazia) quando extra.apiUrl não está configurada", async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    // require() de propósito (não import dinâmico): precisa recarregar o
+    // módulo reagindo ao mock de expo-constants sem cache do registry —
+    // mesma técnica já usada em app.config.test.js.
+    const { apiClient: apiClientSemConfig } = require("./client") as typeof import("./client");
+    const { NetworkError: NetworkErrorReloaded } = require("./errors") as typeof import("./errors");
+
+    const error = await apiClientSemConfig.get("/settings").catch((e: unknown) => e);
+
+    expect((error as Error).message).toMatch(/apiUrl/);
+    // erro de config não pode se disfarçar de erro de rede — senão o app
+    // trataria "apiUrl não configurada" como "sem internet".
+    expect(error).not.toBeInstanceOf(NetworkErrorReloaded);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

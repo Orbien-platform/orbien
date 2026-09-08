@@ -16,7 +16,16 @@ export interface RequestOptions {
 
 function getBaseUrl(): string {
   const apiUrl = Constants.expoConfig?.extra?.apiUrl;
-  return typeof apiUrl === "string" ? apiUrl : "";
+  if (typeof apiUrl !== "string" || apiUrl.length === 0) {
+    // Falha alto: sem isso, toda chamada viraria fetch('' + path) — uma URL
+    // relativa sem origem em React Native — e o erro apareceria como falha
+    // de rede genérica, escondendo que o build profile não configurou
+    // extra.apiUrl (app.config.js/eas.json).
+    throw new Error(
+      "apiUrl não configurada em Constants.expoConfig.extra — verifique app.config.js/eas.json",
+    );
+  }
+  return apiUrl;
 }
 
 async function request<T>(
@@ -28,9 +37,15 @@ async function request<T>(
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
 
+  // Fora do try/catch de baixo de propósito: erro de config (apiUrl
+  // ausente) não é erro de rede — misturar os dois faria o app tratar uma
+  // config quebrada como se fosse "sem internet" (NetworkError), escondendo
+  // a causa real.
+  const url = `${getBaseUrl()}${path}`;
+
   let response: Response;
   try {
-    response = await fetch(`${getBaseUrl()}${path}`, {
+    response = await fetch(url, {
       method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

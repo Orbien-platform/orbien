@@ -68,15 +68,24 @@ describe("nenhum literal hardcoded de identidade fora de app.config.js/eas.json"
     expect(sourceFiles.length).toBeGreaterThan(0);
   });
 
+  function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   it.each([
     ["nome do app", identity.name],
     ["bundle id (iOS)", identity.ios.bundleIdentifier],
     ["package (Android)", identity.android.package],
     ["app id do OneSignal", identity.extra.oneSignalAppId],
-  ])("%s ('%s') não aparece como literal em nenhum arquivo de src/", (_label, literal) => {
+  ])("%s ('%s') não aparece como string literal em nenhum arquivo de src/", (_label, literal) => {
+    // Exige o valor entre aspas (', " ou `) — não basta aparecer em texto
+    // (ex.: um comentário mencionando "app do Orbien" não é um hardcode de
+    // identidade; `name: "Orbien"` ou `"Orbien"` numa tela, sim).
+    const literalAsStringLiteral = new RegExp(`["'\`]${escapeRegExp(literal)}["'\`]`);
+
     const offenders = sourceFiles.filter((file) => {
       const content = fs.readFileSync(file, "utf8");
-      return content.includes(literal);
+      return literalAsStringLiteral.test(content);
     });
 
     expect(offenders).toEqual([]);

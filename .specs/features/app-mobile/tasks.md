@@ -763,3 +763,35 @@ todos passando) && `npm run build:mobile` && `turbo run lint --filter=orbien-mob
 (0 erros).
 
 **Requirement**: MOB-01, MOB-02
+
+---
+
+### F2: Endurecer teste anti-hardcode e `getBaseUrl()` (revisão pré-PR)
+
+**Status**: ✅ Done
+
+**Achados da revisão local** (`/code-review`, antes de abrir o PR):
+1. `no-hardcoded-identity.test.ts` comparava por substring
+   (`content.includes(literal)`) — um comentário futuro mencionando
+   "Orbien" em prosa (sem ser um hardcode de fato) derrubaria o teste por
+   motivo errado.
+2. `client.ts`'s `getBaseUrl()` caía silenciosamente em string vazia
+   quando `extra.apiUrl` não vinha configurado, virando
+   `fetch('' + path)` — erro opaco, indistinguível de falha de rede.
+
+**O que foi feito**:
+- Teste anti-hardcode agora exige o literal entre aspas
+  (`["'`]literal["'`]`), não qualquer ocorrência em texto — continua
+  pegando hardcode de fato (`name: "Orbien"`, `"Orbien"` em JSX) sem falso
+  positivo por comentário em prosa.
+- `getBaseUrl()` lança erro explícito ("apiUrl não configurada...") quando
+  `extra.apiUrl` está ausente/vazio, e essa chamada fica **fora** do
+  `try/catch` que envolve o `fetch` — erro de config nunca vira
+  `NetworkError` (evita mascarar a causa real como "sem internet"). Novo
+  teste cobre o caminho (`ApiClient — apiUrl ausente na config`).
+
+**Gate (full)**: `npm run test -w orbien-mobile` (44 testes, 10 suites)
+&& `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+(0 erros).
+
+**Requirement**: MOB-01, MOB-12
