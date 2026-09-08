@@ -34,7 +34,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "tsc --noEmit",
+    "build": "tsc --noEmit && expo export --platform android --output-dir dist",
     "lint": "eslint .",
     "test": "jest --passWithNoTests"
   }

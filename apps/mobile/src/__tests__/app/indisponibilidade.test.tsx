@@ -1,3 +1,7 @@
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Testes derivados do Done-when de T8 (tasks.md, Rodada 2): carrega o mês
 // corrente (AC 4), salva com o shape esperado, e aplica só a resposta do
 // mês selecionado por último quando duas respostas chegam fora de ordem
@@ -6,12 +10,12 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 
 const mockGetUnavailability = jest.fn();
 const mockSaveUnavailability = jest.fn();
-jest.mock("../lib/escala/escala-client", () => ({
+jest.mock("../../lib/escala/escala-client", () => ({
   getUnavailability: (...args: unknown[]) => mockGetUnavailability(...args),
   saveUnavailability: (...args: unknown[]) => mockSaveUnavailability(...args),
 }));
 
-import IndisponibilidadeScreen from "./indisponibilidade";
+import IndisponibilidadeScreen from "../../app/indisponibilidade";
 
 describe("IndisponibilidadeScreen", () => {
   beforeEach(() => {

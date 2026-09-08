@@ -1,3 +1,7 @@
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Testes derivados do Done-when de T7 (tasks.md, Rodada 2): lista
 // renderiza (AC 1), confirmar/recusar atualiza sem refetch (AC 2),
 // check-in some após sucesso (AC 3), erro de rede mostra estado
@@ -12,14 +16,14 @@ jest.mock("expo-router", () => ({
 const mockGetMyAssignments = jest.fn();
 const mockRespondToAssignment = jest.fn();
 const mockCheckIn = jest.fn();
-jest.mock("../../lib/escala/escala-client", () => ({
+jest.mock("../../../lib/escala/escala-client", () => ({
   getMyAssignments: (...args: unknown[]) => mockGetMyAssignments(...args),
   respondToAssignment: (...args: unknown[]) => mockRespondToAssignment(...args),
   checkIn: (...args: unknown[]) => mockCheckIn(...args),
 }));
 
-import { HttpError } from "../../lib/api/errors";
-import EscalaScreen from "./index";
+import { HttpError } from "../../../lib/api/errors";
+import EscalaScreen from "../../../app/(tabs)/index";
 
 const PENDING_ASSIGNMENT = {
   id: "a1",

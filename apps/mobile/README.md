@@ -45,6 +45,29 @@ push na `main` que altere `apps/mobile/**`, depois que lint/build/test
 passarem. `ORBIEN_API_URL` nesses dois profiles aponta para a API publicada
 no Render (`https://orbien-api.onrender.com/api`), não para `localhost`.
 
+### Portão de bundle no `build`
+
+`npm run build` aqui é `tsc --noEmit && expo export --platform android`, e
+o `expo export` não é redundante com o `tsc`: ele é o único portão que monta
+o **grafo de rotas** do expo-router. O `require.context` em
+`node_modules/expo-router/_ctx.android.js` varre a raiz de rotas com o filtro
+`/.*\.[tj]sx?$/` e só exclui `+api`/`+html`/`+middleware` — qualquer arquivo
+`.tsx` ali dentro entra no bundle como se fosse rota. Foi assim que
+`src/app/_layout.test.tsx` arrastou o `@testing-library/react-native` (que faz
+`require("console")`, módulo do Node sem resolução no Metro) e quebrou o bundle
+JS dos builds de preview de 2026-09-08, com jest, tsc e eslint todos verdes —
+nenhum dos três monta esse grafo. É por isso que os testes de rota vivem em
+`src/__tests__/app/`, não ao lado das rotas.
+
+Roda em todo PR pelo step "Build dos 4 apps" (`turbo run build`), custa ~10s
+e derruba a mudança antes de gastar minuto de fila da EAS. `dist/` já está no
+`.gitignore` e já é output declarado da task `build` no `turbo.json`, então
+entra no cache do Turbo.
+
+Só Android de propósito: não existe arquivo `.ios.*`/`.android.*`/`.native.*`
+no `src`, então o grafo é único e uma plataforma basta. Se entrar arquivo
+específico de plataforma, acrescente o export de `ios` ao script.
+
 ### iOS: Simulador vs. dispositivo físico
 
 `preview-ios-simulator` (`ios.simulator: true`) gera um build **não
