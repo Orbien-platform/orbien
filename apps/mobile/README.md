@@ -39,6 +39,24 @@ npx eas build --profile preview --platform android
 npx eas build --profile production --platform all
 ```
 
+O CI (`.github/workflows/ci.yml`, job `mobile-eas-build`) dispara os builds
+`preview` (Android) e `preview-ios-simulator` (iOS) automaticamente a cada
+push na `main` que altere `apps/mobile/**`, depois que lint/build/test
+passarem. `ORBIEN_API_URL` nesses dois profiles aponta para a API publicada
+no Render (`https://orbien-api.onrender.com/api`), não para `localhost`.
+
+### iOS: Simulador vs. dispositivo físico
+
+`preview-ios-simulator` (`ios.simulator: true`) gera um build **não
+assinado**, que só roda no Simulador do Xcode — não precisa de conta Apple
+Developer nem de credencial nenhuma, por isso é o que o CI dispara hoje.
+Rodar em iPhone físico (ad-hoc, via `preview`, ou TestFlight, via
+`production`) exige credenciais de assinatura da Apple que ainda não estão
+configuradas neste projeto: conta Apple Developer Program, o(s)
+dispositivo(s) de teste registrado(s) (`eas device:create`) e, para builds
+não-interativos como o do CI, uma App Store Connect API Key cadastrada via
+`eas credentials`. Nenhum desses dados fica no repositório.
+
 `ORBIEN_ONESIGNAL_APP_ID` não está setado em nenhum profile hoje — sem
 ele, `app.config.js` resolve para um placeholder
 (`REPLACE_WITH_ONESIGNAL_APP_ID`). Antes de um build ir para uso real

@@ -362,3 +362,15 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx eas-cli build --platform android --profile preview --non-interactive --no-wait
+
+      # Build de Simulador iOS — não assinado, sem conta Apple Developer
+      # envolvida (profile preview-ios-simulator, ios.simulator=true em
+      # eas.json). Só roda no Simulador do Xcode, não em iPhone físico —
+      # isso exigiria credenciais Apple (ver eas.json/README quando/se
+      # entrar ad-hoc ou TestFlight).
+      - name: Disparar build (iOS, Simulador)
+        if: steps.filter.outputs.changed == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli build --platform ios --profile preview-ios-simulator --non-interactive --no-wait
