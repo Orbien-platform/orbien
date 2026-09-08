@@ -14,7 +14,7 @@ without it.**
 ---
 
 **Design**: `.specs/features/repertorio-louvor/design.md`
-**Status**: Draft
+**Status**: In Progress — T1-T9 (Fases 1-4, API) concluídas e commitadas (`23965f2`..`b0ee2a4`); T10-T14 (Fases 5-7, web+e2e) em execução
 
 ---
 

@@ -218,12 +218,12 @@ recente das duas.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| REPERT-01 | P1: Cadastrar e listar músicas do catálogo | Design | Pending |
-| REPERT-02 | P1: Reaproveitar música do catálogo numa setlist | Design | Pending |
-| REPERT-03 | P1: Visão do músico — meu repertório na minha escala | Design | Pending |
-| REPERT-04 | P2: "Última vez tocada" no catálogo | Design | Pending |
+| REPERT-01 | P1: Cadastrar e listar músicas do catálogo | Tasks T1-T6 | Implementing (API done) |
+| REPERT-02 | P1: Reaproveitar música do catálogo numa setlist | Tasks T7-T8 | Implementing (API done) |
+| REPERT-03 | P1: Visão do músico — meu repertório na minha escala | Tasks T9, T13 | Implementing (API done, web pendente) |
+| REPERT-04 | P2: "Última vez tocada" no catálogo | Task T5 | Implementing (API done) |
 
-**Coverage:** 4 total, 0 mapeados a tasks ainda, 0 sem mapeamento (aguardando Design/Tasks).
+**Coverage:** 4 total, 4 mapeados a tasks, 0 sem mapeamento. API completa (T1-T9); web+e2e (T10-T14) em execução.
 
 ---
 
