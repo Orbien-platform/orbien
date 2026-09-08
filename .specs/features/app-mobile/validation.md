@@ -355,3 +355,176 @@ indistinguível de "sem indisponibilidade cadastrada".
 re-verificado; sem necessidade de re-rodar o sensor completo (a mudança é
 tratamento de erro em código já coberto pelas mutações 1-3, não lógica
 nova de negócio).
+
+---
+
+# App Mobile Validation — Rodada 3 (MOB-06)
+
+**Date**: 2026-09-08
+**Spec**: `.specs/features/app-mobile/spec.md`, story "P1: Conteúdos e
+Notificações", AC2 (listar posts publicados). AC1/3/4 dessa história são
+MOB-07 (registro OneSignal, push ponta a ponta, deep link) — fora desta
+rodada.
+**Diff range**: `8180528..HEAD` (branch `claude/proxima-funcionalidade-mobile-kpc54g`)
+**Verifier**: independent sub-agent (author ≠ verifier) — fresh-eyes, não
+participou da implementação.
+
+---
+
+## Task Completion
+
+| Task | Status  | Notes |
+| ---- | ------- | ----- |
+| T1: `(tabs)/_layout.tsx` — introduz Tabs, move Escala | ✅ Done | `git diff` confirma rename puro `app/index.tsx` → `app/(tabs)/index.tsx` (similarity 96%), única mudança são os imports relativos (`../lib` → `../../lib`); zero mudança de comportamento. |
+| T2: Tipos `Post`/`PostsPage` | ✅ Done | `apps/mobile/src/lib/content/types.ts` — bate com o Data Models do `design.md` (Rodada 3). |
+| T3: `ContentClient — getPosts` | ✅ Done | `apps/mobile/src/lib/content/content-client.ts` — wrapper fino sobre `authenticatedRequest`, mesmo padrão de `escala-client.ts`. |
+| T4: Tela Conteúdo — lista, vazio, erro, carregar mais | ✅ Done | `apps/mobile/src/app/(tabs)/conteudo.tsx` — placeholder de T1 substituído pela tela real; commit `f323b1e`. |
+
+Todos os 4 commits do range (`bfd77e0`, `14c06dd`, `347a8d9`, `561ae6a`,
+`f323b1e` — 5 commits para 4 tasks, o primeiro é o `docs(specs)` de
+design+tasks) correspondem 1:1 ao `tasks.md`. Nenhuma task bloqueada ou
+parcial.
+
+---
+
+## Spec-Anchored Acceptance Criteria
+
+### P1: Conteúdos e Notificações — AC2
+
+| Criterion (WHEN X THEN Y) | Spec-defined outcome | `file:line` + assertion | Result |
+| -------------------------- | --------------------- | ------------------------ | ------ |
+| WHEN o usuário abre a aba "Conteúdo" THEN o app SHALL listar os posts publicados | Posts da página 1 (`GET /content/posts`) renderizados na tela | `apps/mobile/src/app/(tabs)/conteudo.test.tsx:22-33` — `expect(screen.getByTestId("post-p1")).toBeTruthy()` + `expect(mockGetPosts).toHaveBeenCalledWith(1, 20)` | ✅ PASS |
+| ...lista vazia (outcome não literal na spec, decidido no `design.md` Rodada 3) | Estado vazio explícito, distinto de erro | `apps/mobile/src/app/(tabs)/conteudo.test.tsx:35-46` — `expect(screen.getByTestId("conteudo-empty")).toBeTruthy()` + `expect(screen.queryByTestId("conteudo-error")).toBeNull()` | ⚠️ Spec-precision gap (decidido no design.md desta rodada, não na spec original) — tratado como critério de aceite operacional per instrução; teste bate exatamente com o que o design decidiu. |
+| ...erro de rede no load inicial (Edge Case da spec, ver abaixo) | Estado de erro visível, distinto de lista vazia | `apps/mobile/src/app/(tabs)/conteudo.test.tsx:48-60` — `expect(screen.getByTestId("conteudo-error")).toBeTruthy()` + `queryByTestId("conteudo-list")`/`("conteudo-empty")` ambos `null` | ✅ PASS |
+| ..."carregar mais" concatena sem perder os já carregados (decidido no design.md Rodada 3, Tech Decisions) | Página 2 concatenada à página 1, request com `page=2&limit=20` | `apps/mobile/src/app/(tabs)/conteudo.test.tsx:62-83` — `expect(screen.getByTestId("post-p2")).toBeTruthy()` + `expect(screen.getByTestId("post-p1")).toBeTruthy()` (ambos presentes) + `expect(mockGetPosts).toHaveBeenNthCalledWith(2, 2, 20)` | ⚠️ Spec-precision gap (decisão de design, spec original não especifica paginação) — mesma ressalva acima; teste é preciso e não-raso. |
+| ..."carregar mais" falha não limpa a lista (design.md, Error Handling Strategy) | Posts já carregados continuam visíveis; erro pontual visível | `apps/mobile/src/app/(tabs)/conteudo.test.tsx:85-103` — `expect(screen.getByTestId("load-more-error")).toBeTruthy()` + `expect(screen.getByTestId("post-p1")).toBeTruthy()` | ⚠️ Spec-precision gap (mesma origem — design, não spec.md original) |
+| `ContentClient.getPosts` monta path/query corretamente (base de AC2) | `GET /content/posts` sem query por default; `?page=2&limit=10` quando informado | `apps/mobile/src/lib/content/content-client.test.ts:17-31` — `expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts")` e `...toHaveBeenCalledWith("get", "/content/posts?page=2&limit=10")` | ✅ PASS |
+
+**Nota sobre "segmentos de audiência"**: a redação literal do AC2 na spec
+diz "listar os posts publicados **visíveis para os segmentos de
+audiência do usuário**". O `design.md` desta rodada (seção "Achado
+importante — segmentação de audiência não filtra a listagem") documenta
+que a rota `GET /content/posts` não filtra por segmento — só por
+`published_at IS NOT NULL` — e que isso foi **confirmado com o usuário**
+como comportamento pretendido (replicar exatamente o que `apps/web` já
+faz contra a mesma rota; segmento é conceito só de push/MOB-07, não de
+feed). A implementação (`ContentClient.getPosts` sem nenhum parâmetro de
+segmento) é fiel a essa decisão documentada — mas ela é, na letra, um
+desvio do texto do AC2 original. Isso não é um gap de teste (o teste
+prova exatamente o que foi decidido); é uma nota para quem ler só o
+`spec.md` sem o `design.md` — a spec.md em si não foi atualizada para
+refletir a decisão. Marcado como spec-precision gap, não como falha,
+seguindo a instrução desta rodada de tratar decisões do `design.md` como
+parte do critério de aceite operacional.
+
+**Status**: ✅ Todos os outcomes com evidência real (`file:line` +
+assertion não-rasa). 3 spec-precision gaps flagged — todos rastreáveis a
+decisões explícitas e confirmadas no `design.md` desta rodada, nenhum é
+comportamento não-especificado silenciosamente aceito.
+
+---
+
+## Edge Cases (spec.md)
+
+| Edge Case | Aplica a esta rodada? | Resultado |
+| --------- | ---------------------- | --------- |
+| WHEN o dispositivo está sem internet ao abrir o app THEN o app SHALL mostrar estado de erro de rede claro (não tela vazia interpretável como "sem dado") | Sim — mesmo princípio já usado em Escala (Rodada 2) | ✅ Coberto — `conteudo.test.tsx:48-60` prova que o erro de rede no load inicial produz `conteudo-error` e que nem `conteudo-list` nem `conteudo-empty` aparecem simultaneamente — não há ambiguidade entre "erro" e "lista vazia". |
+| WHEN o usuário não tem papel suficiente para um módulo THEN o app SHALL ocultar a aba, nunca lista vazia como "nada cadastrado" | Não — aba Conteúdo é `member`-wide (`ALL_ROLES` inclui `member`, per `design.md`); não há papel insuficiente possível para esta rota | N/A — fora do escopo de teste desta rodada, consistente com o achado do design.md |
+| Demais edge cases (conta desativada, push de post despublicado, refresh concorrente) | Não — pertencem a MOB-01/02 (já verificados) ou MOB-07 (push, fora de escopo) | N/A |
+
+---
+
+## Gate Check
+
+- **Gate command (Full)**: `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` — todos rodados a partir da raiz (`/home/user/orbien`), como a instrução desta rodada exigiu.
+- **`npm run test -w orbien-mobile`**: 16 test suites, **75/75 testes passaram**, 0 falhas.
+- **`npm run build:mobile -- --force`** (bypass de cache para confirmar execução real, não hit de cache): `tsc --noEmit` limpo, 0 erros.
+- **`turbo run lint --filter=orbien-mobile --force`**: **0 erros**, 34 warnings — todos pré-existentes em padrões já presentes no restante da base (`@typescript-eslint/no-redeclare` em `screen`/`Text` globais do RN, `import/first` em mocks antes de import, `@typescript-eslint/array-type` em `auth-client.ts` que não foi tocado nesta rodada). Nenhum warning novo introduzido pelos arquivos desta rodada além dos mesmos padrões (`(tabs)/_layout.test.tsx`, `(tabs)/conteudo.test.tsx`, `(tabs)/index.test.tsx` têm os mesmos 2 warnings estruturais que todo `*.test.tsx` do repo já carrega).
+- **Test count antes da feature** (checkout `8180528` em worktree descartável): 13 suites, **66 testes**.
+- **Test count depois da feature**: 16 suites, **75 testes**.
+- **Delta**: **+9 testes** (1 `_layout.test.tsx` + 5 `conteudo.test.tsx` + 3 `content-client.test.ts`), nenhum teste removido ou enfraquecido — `(tabs)/index.test.tsx` (Escala movida) preserva as 6 asserções originais de `index.test.tsx`, só path/import mudou (confirmado por `git diff`, similarity 98%).
+- **Skipped tests**: nenhum.
+- **Failures**: nenhuma.
+
+---
+
+## Discrimination Sensor
+
+Sensor rodado em `git worktree add` descartável (`/tmp/.../mob06-sensor`,
+checkout de `HEAD`/`f323b1e`), `node_modules` de cada workspace
+symlinkado do repo real para evitar reinstalação; destruído com
+`git worktree remove --force` ao final. A working tree real nunca foi
+tocada.
+
+| # | File:line | Mutação | Killed? |
+| - | --------- | ------- | ------- |
+| 1 | `apps/mobile/src/app/(tabs)/conteudo.tsx:72` | `const hasMore = posts !== null && page * LIMIT < total;` → `const hasMore = false;` (nunca mostra "Carregar mais") | ✅ Killed — 2 testes falharam (`load-more-button` nunca aparece: os testes de concatenação de página 2 e de erro pontual em "carregar mais" quebram, pois ambos dependem do botão existir). |
+| 2 | `apps/mobile/src/app/(tabs)/conteudo.tsx:48` | `setPosts((current) => (current ?? []).concat(result.data))` → `setPosts(result.data)` (substitui em vez de concatenar) | ✅ Killed — 1 teste falhou (`post-p1` não é mais encontrado após "carregar mais": a asserção `expect(screen.getByTestId("post-p1")).toBeTruthy()` que prova concatenação, não substituição, falha). |
+| 3 | `apps/mobile/src/lib/content/content-client.ts:17` | `` `/content/posts${query ? ...}` `` → `` `/content/posts-x${query ? ...}` `` (path errado) | ✅ Killed — 2 testes falharam (ambas as asserções de path exato `toHaveBeenCalledWith("get", "/content/posts...")` quebram). |
+
+**Sensor depth**: lightweight (3 mutações, padrão de feature P1 não-crítica).
+**Result**: 3/3 killed — ✅ PASS. As suítes cobrem de fato o comportamento
+novo, não só a existência de asserção.
+
+---
+
+## Code Quality
+
+| Check | Pass? |
+| ----- | ----- |
+| No features beyond what was asked | ✅ — `(tabs)/_layout.tsx` tem só 2 abas (Escala, Conteúdo) com `title`, nenhum ícone/estilo elaborado, nenhuma tela extra. `conteudo.tsx` não tem nada além de lista/vazio/erro/carregar-mais (nenhum pull-to-refresh, filtro, busca — não pedidos). |
+| No abstractions for single-use code | ✅ — `ContentClient` é uma função (`getPosts`), não uma classe/factory desnecessária; `types.ts` são interfaces puras sem generics não usados. |
+| No unnecessary "flexibility" added | ✅ — `LIMIT` é uma constante fixa (20), sem prop de configuração não pedida. |
+| Only touched files required for task | ✅ — `git diff --name-only` lista exatamente os arquivos de T1-T4 + os 3 docs de `.specs/`; nenhum arquivo de outro app (`web`/`api`/`admin`/`site`) tocado; `package.json`/`package-lock.json` sem diff (nenhuma dependência nova — `expo-router/js-tabs` já vem do `expo-router` existente). |
+| Didn't "improve" unrelated code | ✅ — o move de `index.tsx` só ajustou os 3 imports relativos que o novo caminho exige; nenhuma linha de lógica da tela Escala foi tocada. |
+| Matches existing patterns/style | ✅ — `conteudo.tsx` replica byte-a-byte o padrão de `(tabs)/index.tsx` (Rodada 2): `useEffect` no mount com `cancelled` flag, `View testID="...-error"` para erro, `FlatList` com `testID`, mensagens de erro como `const` no topo do arquivo. |
+| Would senior engineer approve? | ✅ |
+| Tests map to acceptance criteria and are non-shallow (spot-check one story) | ✅ — spot-checked "carregar mais" concatena: a asserção prova concatenação por checar que `post-p1` (página 1) *continua* presente após carregar a página 2, não só que `post-p2` apareceu — não é um teste raso que passaria com substituição. Confirmado empiricamente pela Mutação 2 acima. |
+| Spec-anchored outcome check (asserted values match spec) | ✅ — ver tabela acima; 3 itens marcados como spec-precision gap (decisão do design.md, não da spec.md original), nenhum FAIL. |
+| Per-layer Coverage Expectation met (domain 1:1 ACs; routes happy+edge+error) | ✅ — `ContentClient` (domain) tem 1:1 com o Test Coverage Matrix do `tasks.md` (path sem query, path com query, retorno); tela (component) cobre caminho feliz + vazio + erro + carregar-mais + erro de carregar-mais, batendo exatamente com o Test Coverage Matrix de `tasks.md` linha "`(tabs)/conteudo.tsx`". |
+| Every test maps to a spec requirement — no unclaimed tests | ✅ — todos os 9 testes novos mapeiam a uma linha do Test Coverage Matrix (`tasks.md`, Rodada 3) ou ao Done-when de T1/T3/T4; nenhum teste órfão encontrado. |
+| Documented guidelines followed | ✅ — `apps/mobile/AGENTS.md` (Expo mudou de versão — código usa `expo-router/js-tabs`, não `expo-router`, com comentário explícito no `_layout.tsx` citando o motivo); `CLAUDE.md` raiz (branch já existia da rodada, commits atômicos por task, 1 commit por task exceto T2+T3 que compartilham commit `docs(specs)`... na verdade cada task tem seu próprio commit: `14c06dd`=T1, `347a8d9`=T2, `561ae6a`=T3, `f323b1e`=T4 — 1:1). |
+
+---
+
+## Requirement Traceability Update
+
+| Requirement | Previous Status | New Status |
+| ----------- | ---------------- | ----------- |
+| MOB-06 | In Tasks | ✅ Verified |
+
+(Aplicado em `spec.md` por este Verifier — ver commit/edit desta rodada.)
+
+---
+
+## Summary
+
+**Overall**: ✅ Ready
+
+**Spec-anchored check**: 6/6 outcomes com evidência real; 3 spec-precision
+gaps flagged (todos rastreáveis a decisões explícitas do `design.md`
+desta rodada — paginação/estado vazio/carregar-mais não estavam
+detalhados na spec original, conforme já esperado pela instrução desta
+rodada).
+**Sensor**: 3/3 mutações mortas.
+**Gate**: 75/75 testes passaram (+9 novos, 0 removidos/enfraquecidos),
+build limpo, lint 0 erros.
+
+**What works**: tab bar introduzida sem regressão na tela Escala (move
+puro, testes originais intactos); `ContentClient.getPosts` monta
+path/query corretamente; tela Conteúdo cobre os 4 estados exigidos
+(lista, vazio, erro, carregar mais) com separação clara entre "erro" e
+"lista vazia" — mesmo princípio já estabelecido nas rodadas anteriores.
+
+**Issues found**: nenhum. A única nota é a divergência entre a redação
+literal do AC2 ("visíveis para os segmentos de audiência") e o
+comportamento implementado (sem filtro de segmento na listagem) — mas
+essa divergência é uma decisão de produto documentada e confirmada no
+`design.md` desta rodada, não um gap de implementação. Recomendação não-
+bloqueante: considerar atualizar a redação do AC2 em `spec.md` numa
+próxima revisão para refletir a decisão já tomada, evitando que um
+leitor futuro do `spec.md` isolado (sem o `design.md`) presuma
+filtragem por segmento que não existe.
+
+**Next steps**: nenhum fix task necessário. MOB-06 pode ser marcado
+✅ Verified na tabela de Requirement Traceability.
