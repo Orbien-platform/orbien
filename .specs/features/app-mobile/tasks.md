@@ -367,6 +367,8 @@ Data Models do design) em arquivos de tipo puros, sem lógica.
 
 ### T9: `ApiClient` (cliente HTTP base, sem refresh ainda)
 
+**Status**: ✅ Done (commit `ba8f1f3`)
+
 **What**: Wrapper de `fetch` com métodos `get/post/patch/delete<T>`, base
 URL lida de `Constants.expoConfig.extra.apiUrl` (nunca hardcoded — mesmo
 princípio do MOB-12 aplicado à URL da API), injeta
