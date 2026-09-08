@@ -348,6 +348,8 @@ export class CelebrationAssignmentService {
       },
     });
 
+    const setlistByKey = await this.attachSetlists(assignments);
+
     const result = assignments.map((a) => ({
       id: a.id,
       status: a.status,
@@ -362,10 +364,69 @@ export class CelebrationAssignmentService {
         name: a.celebrationMinistry.ministry.name,
       },
       scheduled_date: a.celebrationMinistry.schedule.celebrationInstance.scheduled_date,
+      setlist: setlistByKey.get(
+        `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,
+      ) ?? null,
     }));
 
     result.sort((a, b) => a.scheduled_date.getTime() - b.scheduled_date.getTime());
 
     return result;
   }
+
+  /**
+   * Para o conjunto de `celebration_instance_id` dos assignments retornados,
+   * busca o repertório (SetlistSong) do ServiceOrderItem do mesmo ministério
+   * numa única query batched (evita N+1) e casa em memória por
+   * `(celebration_instance_id, ministry_id)`. Item de OC sem `ministry_id`
+   * (responsável é pessoa, não ministério) é ignorado — sem como ligá-lo a
+   * uma escala de ministério (REPERT-03).
+   */
+  private async attachSetlists(
+    assignments: Array<{
+      celebrationMinistry: { ministry_id: string; schedule: { celebrationInstance: { id: string } } };
+    }>,
+  ): Promise<Map<string, { songs: MyAssignmentSetlistSong[] }>> {
+    const instanceIds = [
+      ...new Set(assignments.map((a) => a.celebrationMinistry.schedule.celebrationInstance.id)),
+    ];
+
+    const serviceOrders = await this.prisma.client.serviceOrder.findMany({
+      where: { celebration_instance_id: { in: instanceIds } },
+      include: {
+        items: {
+          include: {
+            setlist: { include: { songs: { orderBy: { sequence: 'asc' } } } },
+          },
+        },
+      },
+    });
+
+    const setlistByKey = new Map<string, { songs: MyAssignmentSetlistSong[] }>();
+    for (const order of serviceOrders) {
+      for (const item of order.items) {
+        if (!item.ministry_id || !item.setlist) continue;
+        setlistByKey.set(`${order.celebration_instance_id}:${item.ministry_id}`, {
+          songs: item.setlist.songs.map((s) => ({
+            id: s.id,
+            sequence: s.sequence,
+            title: s.title,
+            key: s.key,
+            bpm: s.bpm,
+            link: s.link,
+          })),
+        });
+      }
+    }
+    return setlistByKey;
+  }
+}
+
+export interface MyAssignmentSetlistSong {
+  id: string;
+  sequence: number;
+  title: string;
+  key: string | null;
+  bpm: number | null;
+  link: string | null;
 }

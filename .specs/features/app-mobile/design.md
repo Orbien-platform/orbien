@@ -223,6 +223,6 @@ responder (spec MOB-03, AC 3).
 | App id do OneSignal (MOB-12, AC 4) | Vem de `Constants.expoConfig.extra.oneSignalAppId`, não de import direto de env do SDK | Mesma regra dos outros três campos de identidade — um único mecanismo de config para tudo que precisa variar por profile, em vez de dois (env direta para OneSignal, `app.config.js` para o resto). |
 
 > **Project-level decision** — registrada em `.specs/STATE.md` como
-> `AD-001`: single-codebase multi-profile via `app.config.js`/`eas.json`
+> `AD-002`: single-codebase multi-profile via `app.config.js`/`eas.json`
 > é o padrão adotado para `apps/mobile` cobrir Starter e (futura) Premium.
 > Ver seção Assumptions do `spec.md` para o texto completo da decisão.

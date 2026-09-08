@@ -1,5 +1,5 @@
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Min, ValidateIf } from 'class-validator';
-import { ResponsibleType } from '@prisma/client';
+import { ResponsibleType, ServiceOrderItemType } from '@prisma/client';
 
 export class CreateServiceOrderItemDto {
   @IsUUID()
@@ -11,6 +11,9 @@ export class CreateServiceOrderItemDto {
 
   @IsString()
   name!: string;
+
+  @IsEnum(ServiceOrderItemType)
+  type!: ServiceOrderItemType;
 
   @IsInt()
   @Min(0)

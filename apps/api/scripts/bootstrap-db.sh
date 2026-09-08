@@ -69,6 +69,12 @@ fi
 if [ -f prisma/migrations/003_rls_admin_write.sql ]; then
   run_sql_file prisma/migrations/003_rls_admin_write.sql
 fi
+# Depende de app_congregation_allowed(), criada em 003 — por isso songs já
+# nasce com o predicado correto (AD-001, .specs/STATE.md), sem o ciclo
+# criar-errado→corrigir que 002/003 precisaram.
+if [ -f prisma/migrations/007_rls_songs.sql ]; then
+  run_sql_file prisma/migrations/007_rls_songs.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration

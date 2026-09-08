@@ -58,6 +58,7 @@ export class ServiceOrderItemsService {
         service_order_id: dto.service_order_id,
         sequence: dto.sequence,
         name: dto.name,
+        type: dto.type,
         start_offset_minutes: dto.start_offset_minutes,
         duration_minutes: dto.duration_minutes,
         responsible_type: dto.responsible_type,
@@ -169,6 +170,7 @@ export class ServiceOrderItemsService {
       data: {
         ...(dto.sequence !== undefined && { sequence: dto.sequence }),
         ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.type !== undefined && { type: dto.type }),
         ...(dto.start_offset_minutes !== undefined && { start_offset_minutes: dto.start_offset_minutes }),
         ...(dto.duration_minutes !== undefined && { duration_minutes: dto.duration_minutes }),
         ...(dto.responsible_type !== undefined && { responsible_type: dto.responsible_type }),

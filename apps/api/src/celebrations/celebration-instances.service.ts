@@ -72,7 +72,7 @@ export class CelebrationInstancesService {
     const instance = await this.prisma.client.celebrationInstance.findFirst({
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
       include: {
-        celebration: { select: { id: true, name: true, type: true } },
+        celebration: { select: { id: true, name: true, type: true, start_time: true } },
         serviceOrder: { select: { id: true, title: true, published_at: true } },
         // Permite saber se a instância já tem escala e em que estado,
         // sem uma chamada por instância.

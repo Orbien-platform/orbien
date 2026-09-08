@@ -62,8 +62,12 @@ export default function CelebracoesPage() {
     ["admin_congregation", "pastor", "tenant_admin"].includes(r)
   );
   const canAddSongs = roles.some((r) =>
-    ["admin_congregation", "pastor", "ministry_leader"].includes(r)
+    ["admin_congregation", "pastor", "tenant_admin", "ministry_leader"].includes(r)
   );
+  // `canAddSongs` continua aqui: dentro da Ordem de Culto ainda se escolhe
+  // música do catálogo para montar o setlist de uma etapa de louvor. O que
+  // saiu foi só a gestão do catálogo em si (CRUD), que agora mora em
+  // `/repertorio` — a OC apenas consome o repertório, não o administra.
 
   const [activeTab, setActiveTab] = useState("celebrations");
   const [scheduleOpen, setScheduleOpen] = useState(false);

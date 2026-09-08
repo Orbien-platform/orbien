@@ -20,7 +20,7 @@ interface SetlistSong {
   key?: string;
   bpm?: number;
   link?: string;
-  position: number;
+  sequence: number;
 }
 
 interface Setlist {
@@ -32,25 +32,29 @@ interface ServiceOrderItem {
   id: string;
   name: string;
   type: ItemType;
-  duration_minutes?: number;
-  start_time?: string;
-  responsible?: { id: string; full_name: string } | null;
-  notes?: string;
-  position: number;
+  sequence: number;
+  duration_minutes: number;
+  start_offset_minutes: number;
+  responsible_type: "person" | "ministry" | "free_text";
+  person?: { id: string; full_name: string } | null;
+  ministry?: { id: string; name: string } | null;
+  responsible_label?: string | null;
+  notes?: string | null;
   setlist?: Setlist | null;
 }
 
 interface ServiceOrder {
   id: string;
-  status?: string;
+  title: string;
+  published_at?: string | null;
   items: ServiceOrderItem[];
 }
 
 interface CelebrationInstance {
   id: string;
-  date: string;
-  celebration: { id: string; name: string; time?: string };
-  status?: string;
+  scheduled_date: string;
+  celebration: { id: string; name: string; start_time?: string };
+  serviceOrder?: { id: string; title: string; published_at: string | null } | null;
 }
 
 interface ServiceOrderViewProps {
@@ -69,6 +73,29 @@ function fmtDate(iso: string): string {
   });
 }
 
+// `start_offset_minutes` é minutos desde o início da celebração — converte de
+// volta para "HH:mm" para exibição, quando o horário de início é conhecido.
+function fmtItemTime(startOffsetMinutes: number, celebrationStartTime?: string): string | null {
+  if (!celebrationStartTime) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(celebrationStartTime);
+  if (!match) return null;
+  const totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + startOffsetMinutes;
+  const hh = String(Math.floor(totalMinutes / 60) % 24).padStart(2, "0");
+  const mm = String(totalMinutes % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function responsibleLabel(item: {
+  responsible_type: "person" | "ministry" | "free_text";
+  person?: { full_name: string } | null;
+  ministry?: { name: string } | null;
+  responsible_label?: string | null;
+}): string | null {
+  if (item.responsible_type === "person") return item.person?.full_name ?? null;
+  if (item.responsible_type === "ministry") return item.ministry?.name ?? null;
+  return item.responsible_label ?? null;
+}
+
 function ItemIcon({ type }: { type: ItemType }) {
   const cls = "flex-shrink-0";
   switch (type) {
@@ -83,6 +110,14 @@ function ItemIcon({ type }: { type: ItemType }) {
 
 // ─── Add Song inline form ──────────────────────────────────────────────────────
 
+interface CatalogSong {
+  id: string;
+  title: string;
+  key: string | null;
+  bpm: number | null;
+  link: string | null;
+}
+
 interface AddSongFormProps {
   setlistId: string;
   nextPosition: number;
@@ -91,12 +126,35 @@ interface AddSongFormProps {
 }
 
 function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongFormProps) {
+  const [catalog, setCatalog] = useState<CatalogSong[]>([]);
+  const [songId, setSongId] = useState("");
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
   const [link, setLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [catalogError, setCatalogError] = useState(false);
+
+  useEffect(() => {
+    api
+      .get<CatalogSong[]>("/songs")
+      .then(({ data }) => setCatalog(Array.isArray(data) ? data : []))
+      .catch(() => setCatalogError(true));
+  }, []);
+
+  // Escolher uma música do catálogo preenche os campos como valores default,
+  // ainda editáveis por baixo — sem travar entrada avulsa (REPERT-02).
+  function handleSelectSong(id: string) {
+    setSongId(id);
+    const song = catalog.find((s) => s.id === id);
+    if (song) {
+      setTitle(song.title);
+      setKey(song.key ?? "");
+      setBpm(song.bpm != null ? String(song.bpm) : "");
+      setLink(song.link ?? "");
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -104,12 +162,20 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
     setError("");
     setIsSubmitting(true);
     try {
-      await api.post(`/celebrations/setlists/${setlistId}/songs`, {
+      // SPEC_DEVIATION: a chamada anterior ia para
+      // `/celebrations/setlists/${setlistId}/songs` com `position` — essa
+      // rota não existe (o controller real é `POST /celebrations/setlists/songs`,
+      // com `setlist_id` no corpo e `sequence`, não `position`). Corrigido
+      // aqui porque T12 precisa deste POST funcionando de verdade para levar
+      // `song_id`; achado pré-existente, fora do escopo de REPERT-02.
+      await api.post(`/celebrations/setlists/songs`, {
+        setlist_id: setlistId,
+        song_id: songId || undefined,
+        sequence: nextPosition,
         title: title.trim(),
         key: key.trim() || undefined,
         bpm: bpm ? parseInt(bpm, 10) : undefined,
         link: link.trim() || undefined,
-        position: nextPosition,
       });
       onAdded();
     } catch {
@@ -121,6 +187,25 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
+      {catalog.length > 0 && (
+        <select
+          aria-label="Escolher do catálogo"
+          value={songId}
+          onChange={(e) => handleSelectSong(e.target.value)}
+          disabled={isSubmitting}
+          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+        >
+          <option value="">Escolher do catálogo (opcional)…</option>
+          {catalog.map((s) => (
+            <option key={s.id} value={s.id}>{s.title}</option>
+          ))}
+        </select>
+      )}
+      {catalogError && (
+        <p className="text-xs text-stone">
+          Não foi possível carregar o catálogo — digite a música diretamente abaixo.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="col-span-2 sm:col-span-2">
           <Input
@@ -208,30 +293,30 @@ export function ServiceOrderView({
     const id = instanceId;
     // Cancelamento evita que uma resposta antiga sobrescreva o estado.
     const signal = { cancelled: false };
-    // Load instance details
+    // Load instance details — o vínculo com a OC vem embutido (`serviceOrder`),
+    // não existe rota `GET /celebrations/instances/:id/service-order`.
     api
       .get<CelebrationInstance>(`/celebrations/instances/${id}`)
       .then((instRes) => {
         if (signal.cancelled) return;
         setInstance(instRes.data);
-        // Load service order (may be 404 if none exists yet)
+        const soId = instRes.data.serviceOrder?.id;
+        if (!soId) {
+          setServiceOrder(null);
+          setItems([]);
+          setNoOC(true);
+          return;
+        }
         return api
-          .get<ServiceOrder>(`/celebrations/instances/${id}/service-order`)
+          .get<ServiceOrder>(`/celebrations/orders/${soId}`)
           .then((soRes) => {
             if (signal.cancelled) return;
             setServiceOrder(soRes.data);
-            setItems([...(soRes.data.items ?? [])].sort((a, b) => a.position - b.position));
+            setItems([...(soRes.data.items ?? [])].sort((a, b) => a.sequence - b.sequence));
             setNoOC(false);
-          })
-          .catch((soErr: unknown) => {
-            if (signal.cancelled) return;
-            const status = (soErr as { response?: { status: number } })?.response?.status;
-            setNoOC(status === 404);
           });
       })
       .catch(() => {
-        // Falha ao carregar a instância: mesmo estado final de antes, quando
-        // `noOC` era zerado no início da carga.
         if (signal.cancelled) return;
         setNoOC(false);
       })
@@ -266,10 +351,14 @@ export function ServiceOrderView({
     if (!instanceId) return;
     setIsCreatingOC(true);
     try {
-      const { data } = await api.post<ServiceOrder>("/celebrations/service-orders", {
-        instance_id: instanceId,
+      // Botão só existe depois que `noOC` vira true, o que só acontece junto
+      // com `setInstance` na mesma resolução do effect — `instance` sempre
+      // está preenchido aqui.
+      const { data } = await api.post<ServiceOrder>("/celebrations/orders", {
+        celebration_instance_id: instanceId,
+        title: `Ordem de Culto — ${instance!.celebration.name}`,
       });
-      setServiceOrder(data);
+      setServiceOrder({ ...data, items: [] });
       setItems([]);
       setNoOC(false);
     } catch {
@@ -282,7 +371,7 @@ export function ServiceOrderView({
   async function handleDeleteItem(itemId: string) {
     setDeletingItemId(itemId);
     try {
-      await api.delete(`/celebrations/service-orders/items/${itemId}`);
+      await api.delete(`/celebrations/items/${itemId}`);
       setItems((prev) => prev.filter((i) => i.id !== itemId));
     } catch {
       showToast("Erro ao remover etapa.");
@@ -296,20 +385,20 @@ export function ServiceOrderView({
     const targetIndex = direction === "up" ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= newItems.length) return;
 
-    // Swap positions in local state
-    const posA = newItems[index].position;
-    const posB = newItems[targetIndex].position;
-    newItems[index] = { ...newItems[index], position: posB };
-    newItems[targetIndex] = { ...newItems[targetIndex], position: posA };
-    newItems.sort((a, b) => a.position - b.position);
+    // Swap sequences in local state
+    const seqA = newItems[index].sequence;
+    const seqB = newItems[targetIndex].sequence;
+    newItems[index] = { ...newItems[index], sequence: seqB };
+    newItems[targetIndex] = { ...newItems[targetIndex], sequence: seqA };
+    newItems.sort((a, b) => a.sequence - b.sequence);
     setItems(newItems);
 
     // Persist both
     setReordering(true);
     try {
       await Promise.all([
-        api.patch(`/celebrations/service-orders/items/${items[index].id}`, { position: posB }),
-        api.patch(`/celebrations/service-orders/items/${items[targetIndex].id}`, { position: posA }),
+        api.patch(`/celebrations/items/${items[index].id}`, { sequence: seqB }),
+        api.patch(`/celebrations/items/${items[targetIndex].id}`, { sequence: seqA }),
       ]);
     } catch {
       // Revert on error
@@ -372,23 +461,15 @@ export function ServiceOrderView({
   }
 
   async function handleExportPDF() {
-    if (!instanceId) return;
+    if (!serviceOrder) return;
     setIsExporting(true);
     try {
-      const res = await api.post(
-        `/celebrations/instances/${instanceId}/export-pdf`,
-        {},
-        { responseType: "blob" }
+      // O endpoint gera o PDF de forma assíncrona e devolve a URL assinada
+      // (armazenamento), não o binário — não há blob para baixar aqui.
+      const { data } = await api.get<{ pdf_url: string }>(
+        `/celebrations/orders/${serviceOrder.id}/pdf`
       );
-      const blob = new Blob([res.data]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `OC-${instance?.celebration.name ?? "celebracao"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      window.open(data.pdf_url, "_blank", "noopener,noreferrer");
     } catch {
       showToast("Exportação PDF não disponível.");
     } finally {
@@ -417,8 +498,8 @@ export function ServiceOrderView({
                 </Dialog.Title>
                 {instance && (
                   <Dialog.Description className="text-xs text-stone">
-                    {fmtDate(instance.date)}
-                    {instance.celebration.time ? ` · ${instance.celebration.time}` : ""}
+                    {fmtDate(instance.scheduled_date)}
+                    {instance.celebration.start_time ? ` · ${instance.celebration.start_time}` : ""}
                   </Dialog.Description>
                 )}
               </div>
@@ -535,11 +616,14 @@ export function ServiceOrderView({
 
                           <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              {item.start_time && (
-                                <span className="flex-shrink-0 text-xs font-mono text-stone">
-                                  {item.start_time}
-                                </span>
-                              )}
+                              {(() => {
+                                const itemTime = fmtItemTime(item.start_offset_minutes, instance?.celebration.start_time);
+                                return itemTime ? (
+                                  <span className="flex-shrink-0 text-xs font-mono text-stone">
+                                    {itemTime}
+                                  </span>
+                                ) : null;
+                              })()}
                               <span className="text-sm font-medium text-ink dark:text-white truncate">
                                 {item.name}
                               </span>
@@ -549,14 +633,12 @@ export function ServiceOrderView({
                             </div>
 
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                              {item.duration_minutes != null && (
+                              <span className="text-xs text-stone">
+                                {item.duration_minutes} min
+                              </span>
+                              {responsibleLabel(item) && (
                                 <span className="text-xs text-stone">
-                                  {item.duration_minutes} min
-                                </span>
-                              )}
-                              {item.responsible && (
-                                <span className="text-xs text-stone">
-                                  {item.responsible.full_name}
+                                  {responsibleLabel(item)}
                                 </span>
                               )}
                             </div>
@@ -591,7 +673,7 @@ export function ServiceOrderView({
                             {setlist && setlist.songs.length > 0 && (
                               <div className="flex flex-col gap-1 mb-2">
                                 {[...setlist.songs]
-                                  .sort((a, b) => a.position - b.position)
+                                  .sort((a, b) => a.sequence - b.sequence)
                                   .map((song) => (
                                     <div
                                       key={song.id}
@@ -679,7 +761,8 @@ export function ServiceOrderView({
           open={addItemOpen}
           onOpenChange={setAddItemOpen}
           serviceOrderId={serviceOrder.id}
-          nextPosition={items.length + 1}
+          nextSequence={items.length + 1}
+          celebrationStartTime={instance?.celebration.start_time}
           onAdded={afterAddItem}
         />
       )}

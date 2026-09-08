@@ -45,6 +45,7 @@ let congregationBId: string;
 // Second congregation within Tenant A (for cross-congregation test)
 let congregationA2Id: string;
 let personA2Id: string;
+let songA2Id: string;
 
 // Contas com papel, na congregação A-Main — para exercitar o ramo
 // `OR app_has_role('tenant_admin')` da policy, que os helpers sem
@@ -125,6 +126,16 @@ beforeAll(async () => {
     },
   });
   personA2Id = personA2.id;
+
+  const songA2 = await prismaAdmin.song.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      title: 'Música RLS Test — A-Second',
+      key: 'D',
+    },
+  });
+  songA2Id = songA2.id;
 
   const catA = await prismaAdmin.financialCategory.create({
     data: {
@@ -1266,5 +1277,70 @@ describe('22. login_attempts — fechada para a conexão da aplicação', () => 
         }),
       ),
     ).rejects.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 23. Songs — isolamento por congregação (AD-001, feature repertorio-louvor)
+//
+// `007_rls_songs.sql` escreve a policy usando `app_congregation_allowed()`
+// diretamente nos dois lados desde a primeira versão (AD-001, .specs/STATE.md).
+// Este bloco prova o comportamento nos dois sentidos: `admin_congregation` da
+// A-Main não lê/escreve música da A-Second; `tenant_admin` sem congregação
+// fixada lê e escreve em qualquer congregação do tenant, com USING e WITH
+// CHECK simétricos (o mesmo par de exceções já exercitado no bloco 4b para
+// `persons`).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('23. Songs — isolamento por congregação (AD-001)', () => {
+  it('app context (runAsTenant): Tenant B não vê músicas do catálogo do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.song.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} música(s) do catálogo do Tenant A visível(is) para o Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main LÊ música do catálogo da A-Second (exceção da policy)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.song.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(songA2Id);
+  });
+
+  it('admin_congregation na A-Main NÃO lê música do catálogo da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.song.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} música(s) de congregação irmã. ` +
+          'A exceção da policy deveria valer só para tenant_admin.',
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main ATUALIZA música do catálogo da A-Second (USING = WITH CHECK)', async () => {
+    // Igual ao bloco 4b para persons: sem a mesma exceção nos dois lados, o
+    // tenant_admin leria a linha e falharia ao gravar com 42501 — é isso que
+    // `app_congregation_allowed()` nos dois lados (AD-001) evita desde a
+    // primeira versão do script, sem precisar do ciclo criar-errado→corrigir
+    // que 002/003 tiveram.
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.song.update({
+        where: { id: songA2Id },
+        data: { title: 'Música RLS Test — A-Second (editada pelo tenant_admin)' },
+      }),
+    );
+
+    const after = await prismaAdmin.song.findUniqueOrThrow({ where: { id: songA2Id } });
+    expect(after.title).toBe('Música RLS Test — A-Second (editada pelo tenant_admin)');
+    expect(after.congregation_id).toBe(congregationA2Id);
   });
 });

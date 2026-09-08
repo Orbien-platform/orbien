@@ -231,7 +231,7 @@ nenhuma env de tenant setada, resolve para os valores padrão Orbien
 **Where**: `apps/mobile/app.config.js` (novo), remove `apps/mobile/app.json`
 **Depends on**: T1
 **Reuses**: nenhum precedente no monorepo (primeiro `app.config.js`
-dinâmico) — só a decisão já registrada em `.specs/STATE.md` AD-001.
+dinâmico) — só a decisão já registrada em `.specs/STATE.md` AD-002.
 **Requirement**: MOB-12
 
 **Tools**:

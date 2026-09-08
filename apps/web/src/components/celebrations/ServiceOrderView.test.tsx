@@ -8,29 +8,38 @@ vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-const instance = {
+const instanceWithOC = {
   id: "i1",
-  date: "2026-09-06T10:00:00.000Z",
-  celebration: { id: "c1", name: "Culto Domingo", time: "10:00" },
+  scheduled_date: "2026-09-06T10:00:00.000Z",
+  celebration: { id: "c1", name: "Culto Domingo", start_time: "10:00" },
+  serviceOrder: { id: "so1", title: "OC Domingo", published_at: null },
+};
+
+const instanceWithoutOC = {
+  id: "i1",
+  scheduled_date: "2026-09-06T10:00:00.000Z",
+  celebration: { id: "c1", name: "Culto Domingo", start_time: "10:00" },
+  serviceOrder: null,
 };
 
 const serviceOrder = {
   id: "so1",
-  status: "draft",
+  title: "OC Domingo",
   items: [
     {
       id: "it1",
       name: "Louvor de abertura",
       type: "worship",
+      sequence: 1,
       duration_minutes: 20,
-      start_time: "10:00",
-      responsible: { id: "p1", full_name: "Ana Souza" },
+      start_offset_minutes: 0,
+      responsible_type: "person",
+      person: { id: "p1", full_name: "Ana Souza" },
       notes: "Observação",
-      position: 1,
       setlist: {
         id: "sl1",
         songs: [
-          { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", position: 1 },
+          { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", sequence: 1 },
         ],
       },
     },
@@ -38,20 +47,26 @@ const serviceOrder = {
       id: "it2",
       name: "Pregação",
       type: "sermon",
-      position: 2,
+      sequence: 2,
+      duration_minutes: 30,
+      start_offset_minutes: 30,
+      responsible_type: "free_text",
+      responsible_label: "A definir",
       setlist: null,
     },
   ],
 };
 
-function mockGet(withOC: boolean) {
+function mockGet(withOC: boolean, catalog: unknown[] = []) {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === "/celebrations/instances/i1") {
-      return Promise.resolve({ data: instance });
+      return Promise.resolve({ data: withOC ? instanceWithOC : instanceWithoutOC });
     }
-    if (url === "/celebrations/instances/i1/service-order") {
-      if (withOC) return Promise.resolve({ data: serviceOrder });
-      return Promise.reject({ response: { status: 404 } });
+    if (url === "/celebrations/orders/so1") {
+      return Promise.resolve({ data: serviceOrder });
+    }
+    if (url === "/songs") {
+      return Promise.resolve({ data: catalog });
     }
     return Promise.reject(new Error(`unexpected GET ${url}`));
   });
@@ -59,9 +74,7 @@ function mockGet(withOC: boolean) {
 
 describe("ServiceOrderView", () => {
   beforeEach(() => {
-    URL.createObjectURL = vi.fn(() => "blob:mock");
-    URL.revokeObjectURL = vi.fn();
-    HTMLAnchorElement.prototype.click = vi.fn();
+    vi.stubGlobal("open", vi.fn());
   });
 
   it("does not render content when closed", () => {
@@ -94,17 +107,96 @@ describe("ServiceOrderView", () => {
     expect(screen.getByText("Louvor de abertura")).toBeInTheDocument();
     expect(screen.getAllByText("Pregação").length).toBeGreaterThan(0);
     expect(screen.getByText("Ana Souza")).toBeInTheDocument();
+    expect(screen.getByText("A definir")).toBeInTheDocument();
     expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
   });
 
-  it("does not show a time separator when the celebration has no time", async () => {
+  it("does not show a time separator when the celebration's start_time is malformed", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/celebrations/instances/i1") {
         return Promise.resolve({
-          data: { ...instance, celebration: { ...instance.celebration, time: undefined } },
+          data: { ...instanceWithOC, celebration: { ...instanceWithOC.celebration, start_time: "meio-dia" } },
         });
       }
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: serviceOrder });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    // O cabeçalho mostra o horário de início cru da celebração (mesmo
+    // malformado); é o cálculo por etapa (`fmtItemTime`) que descarta um
+    // formato inválido e não gera um horário — sem quebrar a tela.
+    await screen.findByText("Louvor de abertura");
+    expect(screen.getByText(/meio-dia/)).toBeInTheDocument();
+    expect(screen.queryByText(/^\d{2}:\d{2}$/)).not.toBeInTheDocument();
+  });
+
+  it("mostra o nome do ministério responsável e trata rótulo/pessoa ausente", async () => {
+    const mixedResponsibleOrder = {
+      id: "so1",
+      title: "OC",
+      items: [
+        {
+          id: "it10",
+          name: "Escala do ministério",
+          type: "other",
+          sequence: 1,
+          duration_minutes: 5,
+          start_offset_minutes: 0,
+          responsible_type: "ministry",
+          ministry: { id: "m1", name: "Ministério de Louvor" },
+          setlist: null,
+        },
+        {
+          id: "it11",
+          name: "Etapa sem responsável definido",
+          type: "other",
+          sequence: 2,
+          duration_minutes: 5,
+          start_offset_minutes: 5,
+          responsible_type: "free_text",
+          responsible_label: null,
+          setlist: null,
+        },
+        {
+          id: "it12",
+          name: "Etapa com pessoa não carregada",
+          type: "other",
+          sequence: 3,
+          duration_minutes: 5,
+          start_offset_minutes: 10,
+          responsible_type: "person",
+          person: null,
+          setlist: null,
+        },
+      ],
+    };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: mixedResponsibleOrder });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    expect(await screen.findByText("Ministério de Louvor")).toBeInTheDocument();
+    expect(screen.getByText("Etapa sem responsável definido")).toBeInTheDocument();
+    expect(screen.getByText("Etapa com pessoa não carregada")).toBeInTheDocument();
+  });
+
+  it("does not show a time separator when the celebration has no start_time", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") {
+        return Promise.resolve({
+          data: { ...instanceWithOC, celebration: { ...instanceWithOC.celebration, start_time: undefined } },
+        });
+      }
+      if (url === "/celebrations/orders/so1") {
         return Promise.resolve({ data: serviceOrder });
       }
       return Promise.reject(new Error(`unexpected GET ${url}`));
@@ -119,7 +211,7 @@ describe("ServiceOrderView", () => {
 
   it("shows the empty-OC state and creates one on demand", async () => {
     mockGet(false);
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "so-new", items: [] } });
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "so-new", title: "Ordem de Culto — Culto Domingo" } });
     const user = userEvent.setup();
     render(
       <ServiceOrderView
@@ -138,15 +230,16 @@ describe("ServiceOrderView", () => {
     await user.click(screen.getByRole("button", { name: "Criar Ordem de Celebração" }));
 
     await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith("/celebrations/service-orders", {
-        instance_id: "i1",
+      expect(api.post).toHaveBeenCalledWith("/celebrations/orders", {
+        celebration_instance_id: "i1",
+        title: "Ordem de Culto — Culto Domingo",
       })
     );
 
     expect(await screen.findByText("Nenhuma etapa adicionada.")).toBeInTheDocument();
   });
 
-  it("reorders items and persists the new positions", async () => {
+  it("reorders items and persists the new sequence", async () => {
     mockGet(true);
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -166,12 +259,12 @@ describe("ServiceOrderView", () => {
     await user.click(moveDownButtons[0]);
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it1", {
-        position: 2,
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it1", {
+        sequence: 2,
       })
     );
-    expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it2", {
-      position: 1,
+    expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it2", {
+      sequence: 1,
     });
 
     const text = document.body.textContent ?? "";
@@ -197,14 +290,21 @@ describe("ServiceOrderView", () => {
     await user.click(deleteButtons[1]);
 
     await waitFor(() =>
-      expect(api.delete).toHaveBeenCalledWith("/celebrations/service-orders/items/it2")
+      expect(api.delete).toHaveBeenCalledWith("/celebrations/items/it2")
     );
     await waitFor(() => expect(screen.queryAllByText("Pregação")).toHaveLength(0));
   });
 
   it("exports the PDF", async () => {
     mockGet(true);
-    vi.mocked(api.post).mockResolvedValue({ data: new Blob(["pdf"]) });
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url === "/celebrations/orders/so1/pdf") {
+        return Promise.resolve({ data: { pdf_url: "https://storage.test/oc.pdf" } });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
     const user = userEvent.setup();
     render(
       <ServiceOrderView
@@ -219,19 +319,21 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Louvor de abertura");
     await user.click(screen.getByRole("button", { name: /PDF/ }));
 
-    await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith(
-        "/celebrations/instances/i1/export-pdf",
-        {},
-        { responseType: "blob" }
-      )
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/celebrations/orders/so1/pdf"));
+    expect(window.open).toHaveBeenCalledWith(
+      "https://storage.test/oc.pdf",
+      "_blank",
+      "noopener,noreferrer"
     );
-    expect(URL.createObjectURL).toHaveBeenCalled();
   });
 
   it("shows a toast when PDF export fails", async () => {
-    mockGet(true);
-    vi.mocked(api.post).mockRejectedValue(new Error("fail"));
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url === "/celebrations/orders/so1/pdf") return Promise.reject(new Error("fail"));
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
     const user = userEvent.setup();
     render(
       <ServiceOrderView
@@ -252,17 +354,17 @@ describe("ServiceOrderView", () => {
   it("renders the icon for every item type", async () => {
     const mixedOrder = {
       id: "so1",
-      status: "draft",
+      title: "OC",
       items: [
-        { id: "it3", name: "Oração inicial", type: "prayer", position: 1, setlist: null },
-        { id: "it4", name: "Avisos da semana", type: "announcements", position: 2, setlist: null },
-        { id: "it5", name: "Oferta e dízimo", type: "offering", position: 3, setlist: null },
-        { id: "it6", name: "Etapa livre", type: "other", position: 4, setlist: null },
+        { id: "it3", name: "Oração inicial", type: "prayer", sequence: 1, duration_minutes: 5, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: null },
+        { id: "it4", name: "Avisos da semana", type: "announcements", sequence: 2, duration_minutes: 5, start_offset_minutes: 5, responsible_type: "free_text", responsible_label: "x", setlist: null },
+        { id: "it5", name: "Oferta e dízimo", type: "offering", sequence: 3, duration_minutes: 5, start_offset_minutes: 10, responsible_type: "free_text", responsible_label: "x", setlist: null },
+        { id: "it6", name: "Etapa livre", type: "other", sequence: 4, duration_minutes: 5, start_offset_minutes: 15, responsible_type: "free_text", responsible_label: "x", setlist: null },
       ],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: mixedOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: mixedOrder });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     render(
@@ -275,7 +377,7 @@ describe("ServiceOrderView", () => {
     expect(screen.getByText("Etapa livre")).toBeInTheDocument();
   });
 
-  it("moves an item up and persists the new position", async () => {
+  it("moves an item up and persists the new sequence", async () => {
     mockGet(true);
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -290,12 +392,12 @@ describe("ServiceOrderView", () => {
     await user.click(moveUpButtons[1]);
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it2", {
-        position: 1,
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it2", {
+        sequence: 1,
       })
     );
-    expect(api.patch).toHaveBeenCalledWith("/celebrations/service-orders/items/it1", {
-      position: 2,
+    expect(api.patch).toHaveBeenCalledWith("/celebrations/items/it1", {
+      sequence: 2,
     });
   });
 
@@ -353,10 +455,10 @@ describe("ServiceOrderView", () => {
   });
 
   it("opens the add-item modal from the empty-items state", async () => {
-    const emptyOrder = { id: "so1", status: "draft", items: [] };
+    const emptyOrder = { id: "so1", title: "OC", items: [] };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: emptyOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: emptyOrder });
       if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [] } });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
@@ -371,12 +473,28 @@ describe("ServiceOrderView", () => {
   });
 
   it("adds an item through the top-bar button and reloads the service order", async () => {
-    const emptyOrder = { id: "so1", status: "draft", items: [] };
-    const reloadedOrder = { id: "so1", status: "draft", items: [{ id: "it9", name: "Nova etapa", type: "other", position: 1, setlist: null }] };
+    const emptyOrder = { id: "so1", title: "OC", items: [] };
+    const reloadedOrder = {
+      id: "so1",
+      title: "OC",
+      items: [
+        {
+          id: "it9",
+          name: "Bênção final",
+          type: "other",
+          sequence: 1,
+          duration_minutes: 5,
+          start_offset_minutes: 0,
+          responsible_type: "free_text",
+          responsible_label: "A definir",
+          setlist: null,
+        },
+      ],
+    };
     let getCalls = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
         getCalls += 1;
         return Promise.resolve({ data: getCalls === 1 ? emptyOrder : reloadedOrder });
       }
@@ -392,15 +510,17 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Nenhuma etapa adicionada.");
     await user.click(screen.getByRole("button", { name: "Etapa" }));
     await user.type(screen.getByLabelText(/Nome da etapa/), "Bênção final");
+    await user.type(screen.getByLabelText(/Duração/), "5");
+    await user.type(screen.getByLabelText(/Horário/), "10:30");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
-        "/celebrations/service-orders/so1/items",
-        expect.objectContaining({ name: "Bênção final" })
+        "/celebrations/items",
+        expect.objectContaining({ service_order_id: "so1", name: "Bênção final" })
       )
     );
-    expect(await screen.findByText("Nova etapa")).toBeInTheDocument();
+    expect(await screen.findByText("Bênção final")).toBeInTheDocument();
   });
 
   it("resets state when the dialog is closed", async () => {
@@ -446,7 +566,7 @@ describe("ServiceOrderView", () => {
       <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId={null} canEdit={true} canAddSongs={true} />
     );
 
-    resolveInstance({ data: instance });
+    resolveInstance({ data: instanceWithOC });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -459,8 +579,8 @@ describe("ServiceOrderView", () => {
     let rejectSO!: (e: unknown) => void;
     let callCount = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
         callCount += 1;
         if (callCount === 1) {
           return new Promise((resolve) => { resolveSO = resolve; });
@@ -497,29 +617,33 @@ describe("ServiceOrderView", () => {
     expect(screen.queryByText("Louvor de abertura")).not.toBeInTheDocument();
   });
 
-  it("shows multiple setlist songs sorted by position", async () => {
+  it("shows multiple setlist songs sorted by sequence", async () => {
     const twoSongsOrder = {
       id: "so1",
-      status: "draft",
+      title: "OC",
       items: [
         {
           id: "it7",
           name: "Louvor",
           type: "worship",
-          position: 1,
+          sequence: 1,
+          duration_minutes: 20,
+          start_offset_minutes: 0,
+          responsible_type: "free_text",
+          responsible_label: "x",
           setlist: {
             id: "sl2",
             songs: [
-              { id: "s2", title: "Segunda música", position: 2 },
-              { id: "s1", title: "Primeira música", position: 1 },
+              { id: "s2", title: "Segunda música", sequence: 2 },
+              { id: "s1", title: "Primeira música", sequence: 1 },
             ],
           },
         },
       ],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: twoSongsOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: twoSongsOrder });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     render(
@@ -565,26 +689,27 @@ describe("ServiceOrderView", () => {
   it("creates a setlist on demand and adds a song, reloading the service order", async () => {
     const noSetlistOrder = {
       id: "so1",
-      status: "draft",
-      items: [{ id: "it8", name: "Momento de louvor", type: "worship", position: 1, setlist: null }],
+      title: "OC",
+      items: [{ id: "it8", name: "Momento de louvor", type: "worship", sequence: 1, duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: null }],
     };
     const reloadedOrder = {
       id: "so1",
-      status: "draft",
-      items: [{ id: "it8", name: "Momento de louvor", type: "worship", position: 1, setlist: { id: "sl9", songs: [{ id: "s9", title: "Nova música", position: 1 }] } }],
+      title: "OC",
+      items: [{ id: "it8", name: "Momento de louvor", type: "worship", sequence: 1, duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: { id: "sl9", songs: [{ id: "s9", title: "Nova música", sequence: 1 }] } }],
     };
     let soCalls = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
         soCalls += 1;
         return Promise.resolve({ data: soCalls === 1 ? noSetlistOrder : reloadedOrder });
       }
+      if (url === "/songs") return Promise.resolve({ data: [] });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     vi.mocked(api.post).mockImplementation((url: string) => {
       if (url === "/celebrations/setlists") return Promise.resolve({ data: { id: "sl9", songs: [] } });
-      if (url === "/celebrations/setlists/sl9/songs") return Promise.resolve({ data: {} });
+      if (url === "/celebrations/setlists/songs") return Promise.resolve({ data: {} });
       return Promise.reject(new Error(`unexpected POST ${url}`));
     });
     const user = userEvent.setup();
@@ -603,8 +728,8 @@ describe("ServiceOrderView", () => {
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
-        "/celebrations/setlists/sl9/songs",
-        expect.objectContaining({ title: "Nova música", position: 1 })
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl9", title: "Nova música", sequence: 1 })
       )
     );
     expect(await screen.findByText("Nova música")).toBeInTheDocument();
@@ -613,12 +738,12 @@ describe("ServiceOrderView", () => {
   it("shows a toast when creating a setlist fails", async () => {
     const noSetlistOrder = {
       id: "so1",
-      status: "draft",
-      items: [{ id: "it8", name: "Momento de louvor", type: "worship", position: 1, setlist: null }],
+      title: "OC",
+      items: [{ id: "it8", name: "Momento de louvor", type: "worship", sequence: 1, duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x", setlist: null }],
     };
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instance });
-      if (url === "/celebrations/instances/i1/service-order") return Promise.resolve({ data: noSetlistOrder });
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: noSetlistOrder });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
     vi.mocked(api.post).mockRejectedValue(new Error("fail"));
@@ -687,13 +812,202 @@ describe("ServiceOrderView", () => {
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith("/celebrations/setlists/sl1/songs", {
+      expect(api.post).toHaveBeenCalledWith("/celebrations/setlists/songs", {
+        setlist_id: "sl1",
+        song_id: undefined,
+        sequence: 2,
         title: "Nova música",
         key: "D",
         bpm: 120,
         link: "http://y.test",
-        position: 2,
       })
+    );
+  });
+
+  it("loads the catalog, fills fields on selection, and sends song_id with the payload", async () => {
+    mockGet(true, [
+      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+    ]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    const catalogSelect = await screen.findByLabelText("Escolher do catálogo");
+    await user.selectOptions(catalogSelect, "cs1");
+
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("E");
+    expect(screen.getByPlaceholderText("BPM")).toHaveValue(90);
+    expect(screen.getByPlaceholderText("Link (YouTube, Cifra Club…)")).toHaveValue("http://cifra.test/x");
+
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: "cs1", title: "Digno é o Senhor" })
+      )
+    );
+  });
+
+  it("falls back to an empty catalog when the /songs response isn't an array", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url === "/songs") return Promise.resolve({ data: null });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await screen.findByPlaceholderText("Título *");
+
+    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+  });
+
+  it("reverts to blank fields when the catalog selection goes back to the placeholder", async () => {
+    mockGet(true, [
+      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    const catalogSelect = await screen.findByLabelText("Escolher do catálogo");
+    await user.selectOptions(catalogSelect, "cs1");
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+
+    await user.selectOptions(catalogSelect, "");
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Digno é o Senhor");
+  });
+
+  it("fills blank tom/bpm/link when the selected catalog song has none of them set", async () => {
+    mockGet(true, [{ id: "cs2", title: "Aleluia", key: null, bpm: null, link: null }]);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs2");
+
+    expect(screen.getByPlaceholderText("Título *")).toHaveValue("Aleluia");
+    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("");
+    expect(screen.getByPlaceholderText("BPM")).toHaveValue(null);
+    expect(screen.getByPlaceholderText("Link (YouTube, Cifra Club…)")).toHaveValue("");
+  });
+
+  it("keeps song_id set and sends the edited value after overriding a field from the catalog", async () => {
+    mockGet(true, [
+      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+    ]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    await user.selectOptions(await screen.findByLabelText("Escolher do catálogo"), "cs1");
+
+    const keyInput = screen.getByPlaceholderText("Tom (ex: G)");
+    await user.clear(keyInput);
+    await user.type(keyInput, "F");
+
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: "cs1", key: "F" })
+      )
+    );
+  });
+
+  it("still allows adding a free-text song without selecting anything from the catalog", async () => {
+    mockGet(true, [
+      { id: "cs1", title: "Digno é o Senhor", key: "E", bpm: 90, link: "http://cifra.test/x" },
+    ]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+
+    await user.type(await screen.findByPlaceholderText("Título *"), "Avulsa");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", song_id: undefined, title: "Avulsa" })
+      )
+    );
+  });
+
+  it("does not render the catalog selector when the catalog is empty", async () => {
+    mockGet(true, []);
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await screen.findByPlaceholderText("Título *");
+
+    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+  });
+
+  it("still allows adding a free-text song when loading the catalog fails", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url === "/songs") return Promise.reject(new Error("falha de rede"));
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(screen.getByRole("button", { name: "Adicionar música" }));
+    await screen.findByPlaceholderText("Título *");
+
+    expect(screen.queryByLabelText("Escolher do catálogo")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Não foi possível carregar o catálogo — digite a música diretamente abaixo.")
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Título *"), "Música avulsa");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/setlists/songs",
+        expect.objectContaining({ setlist_id: "sl1", title: "Música avulsa" })
+      )
     );
   });
 

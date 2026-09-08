@@ -6,6 +6,7 @@ const BASE = {
   service_order_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   sequence: 1,
   name: 'Abertura',
+  type: 'worship',
   start_offset_minutes: 0,
   duration_minutes: 5,
 };
@@ -47,6 +48,26 @@ describe('CreateServiceOrderItemDto', () => {
       responsible_label: 'x',
     });
     expect(errors.some((e) => e.property === 'start_offset_minutes')).toBe(true);
+  });
+
+  it('rejeita type fora do enum', async () => {
+    const errors = await errorsFor({
+      type: 'invalido',
+      responsible_type: 'free_text',
+      responsible_label: 'x',
+    });
+    expect(errors.some((e) => e.property === 'type')).toBe(true);
+  });
+
+  it('rejeita type ausente', async () => {
+    const dto = plainToInstance(CreateServiceOrderItemDto, {
+      ...BASE,
+      type: undefined,
+      responsible_type: 'free_text',
+      responsible_label: 'x',
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'type')).toBe(true);
   });
 
   it('rejeita duration_minutes menor que 1', async () => {
