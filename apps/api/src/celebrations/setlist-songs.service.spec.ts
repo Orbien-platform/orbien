@@ -166,7 +166,7 @@ describe('SetlistSongsService', () => {
       await expect(service.findAll('t1', 'g1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('lista as músicas ordenadas por sequence', async () => {
+    it('lista as músicas ordenadas por sequence, com a referência do catálogo (SETREP-04 AC1)', async () => {
       const client = clientWith();
       client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
       client.setlistSong.findMany.mockResolvedValue([{ id: 'song1' }]);
@@ -174,17 +174,63 @@ describe('SetlistSongsService', () => {
 
       const result = await service.findAll('t1', 'g1', 'sl1');
 
+      expect(client.setlistSong.findMany).toHaveBeenCalledWith({
+        where: { setlist_id: 'sl1', tenant_id: 't1' },
+        orderBy: { sequence: 'asc' },
+        include: {
+          song: {
+            select: {
+              id: true,
+              title: true,
+              key: true,
+              key_alt: true,
+              youtube_link: true,
+              spotify_link: true,
+              cifra_club_link: true,
+            },
+          },
+        },
+      });
       expect(result).toEqual([{ id: 'song1' }]);
+    });
+
+    it('devolve song: null na música sem vínculo (SETREP-04 AC2)', async () => {
+      const client = clientWith();
+      client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
+      client.setlistSong.findMany.mockResolvedValue([
+        { id: 'song1', title: 'Avulsa', key: 'G', song_id: null, song: null },
+      ]);
+      const service = serviceWith(client);
+
+      const result = await service.findAll('t1', 'g1', 'sl1');
+
+      expect(result).toEqual([{ id: 'song1', title: 'Avulsa', key: 'G', song_id: null, song: null }]);
     });
   });
 
   describe('findOne', () => {
-    it('retorna a música quando encontrada', async () => {
+    it('retorna a música quando encontrada, com a referência do catálogo (SETREP-04 AC1)', async () => {
       const client = clientWith();
       client.setlistSong.findFirst.mockResolvedValue({ id: 'song1' });
       const service = serviceWith(client);
 
       await expect(service.findOne('t1', 'g1', 'song1')).resolves.toEqual({ id: 'song1' });
+      expect(client.setlistSong.findFirst).toHaveBeenCalledWith({
+        where: { id: 'song1', tenant_id: 't1', congregation_id: 'g1' },
+        include: {
+          song: {
+            select: {
+              id: true,
+              title: true,
+              key: true,
+              key_alt: true,
+              youtube_link: true,
+              spotify_link: true,
+              cifra_club_link: true,
+            },
+          },
+        },
+      });
     });
 
     it('lança NotFoundException quando não encontrada', async () => {

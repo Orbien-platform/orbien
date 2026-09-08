@@ -5,6 +5,18 @@ import { CreateSetlistSongDto } from './dto/create-setlist-song.dto';
 import { UpdateSetlistSongDto } from './dto/update-setlist-song.dto';
 import { ReorderSongsDto } from './dto/reorder-songs.dto';
 
+// Campos da referência do catálogo devolvidos junto da SetlistSong (SETREP-04 AC1).
+// Constante compartilhada com o ServiceOrdersService para os dois não divergirem.
+export const SONG_REFERENCE_SELECT = {
+  id: true,
+  title: true,
+  key: true,
+  key_alt: true,
+  youtube_link: true,
+  spotify_link: true,
+  cifra_club_link: true,
+} as const;
+
 @Injectable()
 export class SetlistSongsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -53,12 +65,14 @@ export class SetlistSongsService {
     return this.prisma.client.setlistSong.findMany({
       where: { setlist_id: setlistId, tenant_id: tenantId },
       orderBy: { sequence: 'asc' },
+      include: { song: { select: SONG_REFERENCE_SELECT } },
     });
   }
 
   async findOne(tenantId: string, congregationId: string, id: string): Promise<SetlistSong> {
     const song = await this.prisma.client.setlistSong.findFirst({
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
+      include: { song: { select: SONG_REFERENCE_SELECT } },
     });
     if (!song) throw new NotFoundException('Música não encontrada');
     return song;
