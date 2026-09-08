@@ -561,6 +561,8 @@ tabs — telas de domínio ficam para MOB-04+).
 
 ### T15: `ThemeProvider` (fetch + cache + fallback)
 
+**Status**: ✅ Done (commit `f3aae3e`)
+
 **What**: Hook/context `useTheme()`: no boot, reaplica branding cacheado
 (`AsyncStorage`) antes de qualquer chamada de rede completar (AC 3);
 dispara `GET /settings` em paralelo; em sucesso, atualiza tema + regrava
@@ -576,13 +578,13 @@ sem erro visível (AC 2).
 - Skill: NONE
 
 **Done when**:
-- [ ] Teste: cache existente em `AsyncStorage` é aplicado antes da Promise
+- [x] Teste: cache existente em `AsyncStorage` é aplicado antes da Promise
       de `GET /settings` resolver (mock com delay controlado)
-- [ ] Teste: `GET /settings` retorna branding nulo/sem customização →
+- [x] Teste: `GET /settings` retorna branding nulo/sem customização →
       tema permanece o default Orbien, nenhum estado de erro exposto
-- [ ] Teste: `GET /settings` falha (erro de rede) → tema cacheado
+- [x] Teste: `GET /settings` falha (erro de rede) → tema cacheado
       permanece, nenhum erro visível
-- [ ] Gate check passa: `npm run test -w orbien-mobile`
+- [x] Gate check passa: `npm run test -w orbien-mobile`
 
 **Tests**: unit + component
 **Gate**: quick
