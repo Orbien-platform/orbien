@@ -3,8 +3,9 @@
 // o cliente calcula se há mais páginas comparando page*limit com total).
 // Mesmo padrão de erro/estado vazio de (tabs)/index.tsx (Escala): erro
 // de rede visível, distinto de lista vazia.
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Button, FlatList, Text, View } from "react-native";
+import { Button, FlatList, Pressable, Text, View } from "react-native";
 
 import { getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
@@ -14,6 +15,7 @@ const LOAD_ERROR_MESSAGE = "Não foi possível carregar o conteúdo. Verifique s
 const LOAD_MORE_ERROR_MESSAGE = "Não foi possível carregar mais posts. Tente novamente.";
 
 export default function ConteudoScreen() {
+  const router = useRouter();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -91,10 +93,10 @@ export default function ConteudoScreen() {
         data={posts ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View testID={`post-${item.id}`}>
+          <Pressable testID={`post-${item.id}`} onPress={() => router.push(`/post/${item.id}`)}>
             <Text>{item.title}</Text>
             {item.body ? <Text>{item.body}</Text> : null}
-          </View>
+          </Pressable>
         )}
       />
       {loadMoreError ? <Text testID="load-more-error">{loadMoreError}</Text> : null}
