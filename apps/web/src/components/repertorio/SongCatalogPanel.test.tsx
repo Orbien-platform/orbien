@@ -89,6 +89,9 @@ describe("SongCatalogPanel", () => {
   });
 
   it("creates a song with all fields", async () => {
+    // Timeout maior que o default (5s): nove campos digitados via user.type
+    // levam mais que isso na máquina mais lenta do CI (mesmo padrão usado em
+    // ServiceOrderView.test.tsx para o formulário de Adicionar Item).
     mockGet();
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -120,7 +123,7 @@ describe("SongCatalogPanel", () => {
         notes: "tocar mais lento",
       })
     );
-  });
+  }, 10000);
 
   it("opens the edit form pre-filled and updates the song", async () => {
     mockGet();
