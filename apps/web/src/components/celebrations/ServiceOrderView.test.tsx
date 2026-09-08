@@ -76,6 +76,38 @@ function catalogSong(overrides: Partial<CatalogSong> = {}): CatalogSong {
   };
 }
 
+/**
+ * Ordem de culto com uma única música na setlist da etapa de louvor — os
+ * campos congelados são sempre os mesmos; o teste sobrescreve só o vínculo
+ * (`song_id`) e a referência (`song`).
+ */
+function orderWithSetlistSong(overrides: Record<string, unknown>) {
+  return {
+    ...serviceOrder,
+    items: serviceOrder.items.map((item) =>
+      item.id !== "it1"
+        ? item
+        : {
+            ...item,
+            setlist: {
+              id: "sl1",
+              songs: [
+                {
+                  id: "s1",
+                  title: "Grande é o Senhor",
+                  key: "G",
+                  bpm: 80,
+                  link: "http://x.test",
+                  sequence: 1,
+                  ...overrides,
+                },
+              ],
+            },
+          }
+    ),
+  };
+}
+
 function mockGet(withOC: boolean, catalog: unknown[] = []) {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === "/celebrations/instances/i1") {
@@ -1309,6 +1341,148 @@ describe("ServiceOrderView", () => {
     expect(
       screen.queryByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
     ).not.toBeInTheDocument();
+  });
+
+  it("música vinculada mostra o indicador de repertório e as referências com rótulos distintos (SETREP-04 AC3)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          song: {
+            id: "cs1",
+            title: "Grande é o Senhor",
+            key: "G",
+            key_alt: null,
+            youtube_link: "http://yt.test/a",
+            spotify_link: "http://spotify.test/a",
+            cifra_club_link: "http://cifraclub.test/a",
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.getByText("Repertório")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir no YouTube: Grande é o Senhor" })
+    ).toHaveAttribute("href", "http://yt.test/a");
+    expect(
+      screen.getByRole("link", { name: "Abrir no Spotify: Grande é o Senhor" })
+    ).toHaveAttribute("href", "http://spotify.test/a");
+    expect(
+      screen.getByRole("link", { name: "Abrir a cifra no Cifra Club: Grande é o Senhor" })
+    ).toHaveAttribute("href", "http://cifraclub.test/a");
+  });
+
+  it("música sem vínculo não mostra o indicador e oferece a ação de vincular (SETREP-04 AC4)", async () => {
+    mockGet(true);
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.queryByText("Repertório")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    ).toBeInTheDocument();
+  });
+
+  it("referência nula renderiza os campos históricos da setlist sem erro (SETREP-04 AC2)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        // `Song` removido do catálogo: `song_id` virou NULL por SetNull e a
+        // referência vem nula, mas a cópia congelada continua na setlist.
+        return Promise.resolve({ data: orderWithSetlistSong({ song_id: null, song: null }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.getByText("80 BPM")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Abrir link" })).toHaveAttribute("href", "http://x.test");
+    expect(screen.queryByText("Repertório")).not.toBeInTheDocument();
+  });
+
+  it("mostra só as referências que a música do catálogo tem", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          song: {
+            id: "cs1",
+            title: "Grande é o Senhor",
+            key: "G",
+            key_alt: null,
+            youtube_link: "http://yt.test/a",
+            spotify_link: null,
+            cifra_club_link: null,
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(
+      screen.getByRole("link", { name: "Abrir no YouTube: Grande é o Senhor" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Abrir no Spotify: Grande é o Senhor" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Abrir a cifra no Cifra Club: Grande é o Senhor" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("o link congelado da setlist não é duplicado pelas referências do catálogo", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          song: {
+            id: "cs1",
+            title: "Grande é o Senhor",
+            key: "D",
+            key_alt: null,
+            youtube_link: "http://yt.test/a",
+            spotify_link: null,
+            cifra_club_link: "http://cifraclub.test/a",
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    // O link que o líder fixou na escala aparece uma vez, com o próprio
+    // rótulo; as referências do catálogo são outros três campos.
+    expect(document.querySelectorAll('a[href="http://x.test"]')).toHaveLength(1);
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+    // O tom exibido continua sendo o congelado na setlist, não o do catálogo.
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.queryByText("D")).not.toBeInTheDocument();
   });
 
   it("ignores the instance response if the component unmounts before it settles", async () => {

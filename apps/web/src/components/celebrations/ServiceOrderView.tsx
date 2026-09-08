@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
   Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown, Link2, Unlink,
+  SquarePlay, Disc3, FileMusic,
 } from "lucide-react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,20 @@ interface SetlistSong {
   link?: string;
   sequence: number;
   song_id?: string | null;
+  /**
+   * Referência do catálogo, lida pela relação e não copiada: `null` quando a
+   * música é avulsa ou quando o `Song` foi removido do catálogo (SetNull).
+   * Título, tom, BPM e link da setlist continuam sendo cópia congelada.
+   */
+  song?: {
+    id: string;
+    title: string;
+    key: string | null;
+    key_alt: string | null;
+    youtube_link: string | null;
+    spotify_link: string | null;
+    cifra_club_link: string | null;
+  } | null;
 }
 
 interface Setlist {
@@ -684,6 +699,11 @@ export function ServiceOrderView({
                                       <span className="flex-1 truncate text-ink dark:text-white">
                                         {song.title}
                                       </span>
+                                      {song.song && (
+                                        <span className="flex-shrink-0 rounded px-1 py-0.5 text-[10px] bg-teal/10 text-teal">
+                                          Repertório
+                                        </span>
+                                      )}
                                       {song.key && (
                                         <span className="flex-shrink-0 rounded px-1 py-0.5 font-mono text-[10px] bg-[var(--surface-base)] text-stone border border-[var(--border-default)]">
                                           {song.key}
@@ -701,6 +721,46 @@ export function ServiceOrderView({
                                           aria-label="Abrir link"
                                         >
                                           <ExternalLink size={11} strokeWidth={1.5} />
+                                        </a>
+                                      )}
+                                      {/*
+                                        Referências do catálogo: cada uma com
+                                        rótulo próprio, para não virarem três
+                                        ícones iguais sem nome (SETREP-04 AC3).
+                                        O link congelado da setlist, acima, é
+                                        outro campo — não há duplicata.
+                                      */}
+                                      {song.song?.youtube_link && (
+                                        <a
+                                          href={song.song.youtube_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                          aria-label={`Abrir no YouTube: ${song.title}`}
+                                        >
+                                          <SquarePlay size={11} strokeWidth={1.5} />
+                                        </a>
+                                      )}
+                                      {song.song?.spotify_link && (
+                                        <a
+                                          href={song.song.spotify_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                          aria-label={`Abrir no Spotify: ${song.title}`}
+                                        >
+                                          <Disc3 size={11} strokeWidth={1.5} />
+                                        </a>
+                                      )}
+                                      {song.song?.cifra_club_link && (
+                                        <a
+                                          href={song.song.cifra_club_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                          aria-label={`Abrir a cifra no Cifra Club: ${song.title}`}
+                                        >
+                                          <FileMusic size={11} strokeWidth={1.5} />
                                         </a>
                                       )}
                                       {canAddSongs && !isReadOnly && (
