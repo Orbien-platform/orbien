@@ -418,3 +418,164 @@ original já corta isso).
 | Onde implementar check-in | Novo endpoint em `apps/api` (`celebration_assignments.checked_in_at`), não um campo local no mobile | AC3 pede "enviar o check-in" — implica persistência no servidor (outros dispositivos/telas precisam ver o mesmo estado); sem isso a feature não é real, só um toggle visual local. |
 | Reaproveitar `volunteer_swap_requests`/`schedule_assignments` da migration descartada | Não — construir em cima de `CelebrationAssignment`, o modelo atual | O sistema de escala mudou de arquitetura depois daquela migration (schedule_assignments não existe mais); ressuscitar uma tabela órfã do sistema antigo introduziria dois modelos de escala paralelos. `CelebrationAssignment` é a única fonte de verdade viva hoje. |
 | Endpoint de check-in aceita corpo vazio | Sem DTO de request | Timestamp de check-in é sempre "agora, no servidor" — aceitar um horário do cliente abriria brecha para presença retroativa/adiantada forjada. |
+
+---
+
+# Rodada 3 — MOB-06 (Conteúdos — feed)
+
+**Spec**: `.specs/features/app-mobile/spec.md`, story "P1: Conteúdos e
+Notificações", AC2 (listar posts publicados). AC1/3/4 (registro OneSignal,
+push ponta a ponta, deep link) são MOB-07 — fora desta rodada.
+**Status**: Draft
+
+## Pesquisa no backend (Knowledge Verification Chain, Step 1)
+
+- `GET /content/posts` (`apps/api/src/content/posts.controller.ts:51-55`,
+  `ALL_ROLES` inclui `member` — qualquer autenticado da congregação pode
+  chamar, não é rota admin-only mesmo sendo a mesma rota que
+  `apps/web`(admin)/conteudo usa para gestão).
+- Query: `type?`, `is_draft?` (ignorado para `member` puro — service
+  bloqueia), `since?`, `page` (default 1), `limit` (default 20, máx 100) —
+  `apps/api/src/content/dto/list-posts-query.dto.ts`.
+- Resposta: `{ data: ContentPost[], total: number }` — paginação
+  offset/page, **sem** cursor nem `has_more` (`posts.service.ts:66-96`,
+  `findAll`). Cliente calcula `page * limit < total` para saber se há
+  mais.
+- Campos do post (`schema.prisma:895-920`): `id, type, title, body,
+  media_url, is_draft, publish_at, published_at, expires_at,
+  created_by_user_id, created_at, updated_at`.
+- **Achado importante — segmentação de audiência não filtra a listagem**:
+  `AudienceSegment`/`PostSegment` só regem *push targeting* (OneSignal
+  tags, `notifications.service.ts:34-50,156-219`) — a query de listagem
+  (`findAll`) não cruza segmento nenhum, só `published_at IS NOT NULL`
+  para `member` puro. Ou seja, hoje todo `member` autenticado vê todos os
+  posts publicados da própria congregação, independente de segmento.
+  **Confirmado com o usuário**: manter esse comportamento (replicar
+  exatamente o que `apps/web` já faz contra a mesma rota) — "segmento de
+  audiência" continua sendo só um conceito de notificação (MOB-07), não
+  de feed. Implementar filtro de segmento no feed seria mudança de
+  produto que afeta os dois fronts (web + mobile) na mesma rota, fora do
+  escopo desta spec.
+- Reuso confirmado com `apps/web`: `apps/web/src/app/(admin)/conteudo/page.tsx:153-171`
+  (`loadPosts`) chama a mesma rota com `useEffect`/promise chain — mobile
+  replica o mesmo contrato (`{data, total}`), não um contrato próprio.
+
+## Decisão de navegação: tab bar
+
+A Rodada 2 (Risks & Concerns) já registrou que introduzir tab bar era
+prematuro com um módulo de domínio só, e que a decisão ficaria "para
+quando um segundo módulo de domínio (MOB-06+) justificar o custo". MOB-06
+é esse segundo módulo — dois módulos reais (Escala, Conteúdo) sem tabs
+forçaria navegação só por link textual, que já não escala visualmente
+bem com dois itens e piora a cada módulo seguinte (MOB-08/09 vêm depois).
+
+**Decisão**: introduzir `app/(tabs)/` (Expo Router, grupo de rota) com
+`Tabs` nesta rodada. `app/index.tsx` (tela Escala, hoje rota-raiz) move
+para `app/(tabs)/index.tsx`; `app/(tabs)/conteudo.tsx` é a nova aba.
+`login.tsx` e `indisponibilidade.tsx` continuam como rotas de `Stack` no
+nível raiz (fora do grupo `(tabs)`) — login por ser pré-auth, e
+indisponibilidade por ser uma tela de detalhe empurrada a partir da aba
+Escala (`router.push`), não uma seção própria de navegação.
+
+```mermaid
+graph TD
+    Root[app/_layout.tsx — Stack] --> Login[login.tsx]
+    Root --> TabsGroup["(tabs)/_layout.tsx — Tabs"]
+    Root --> Indisp[indisponibilidade.tsx]
+    TabsGroup --> Escala["(tabs)/index.tsx — Escala"]
+    TabsGroup --> Conteudo["(tabs)/conteudo.tsx — Feed"]
+    Escala -->|router.push| Indisp
+```
+
+`_layout.test.tsx` (root) não é afetado — mocka `expo-router` inteiro e
+não renderiza rotas-filhas reais (`Stack` mockado só verifica
+`screenOptions`), então a reorganização de arquivos de rota não quebra
+esse teste. O teste de `index.tsx` (Escala) move junto para
+`app/(tabs)/index.test.tsx`, ajustando só os imports relativos (`../../lib/...`
+em vez de `../lib/...`).
+
+## Code Reuse Analysis
+
+| Contrato de origem | Localização | Como o mobile reusa |
+| --- | --- | --- |
+| `{data, total}` de `GET /content/posts` | `apps/api/src/content/posts.service.ts:66-96` | `ContentClient.getPosts` define `Post`/`PostsPage` local espelhando o shape — mesmo princípio de contrato-não-import das rodadas anteriores. |
+| `authenticatedRequest` | `apps/mobile/src/lib/auth/auth-client.ts` | `ContentClient` chama do mesmo jeito que `EscalaClient` (Rodada 2) e `ThemeProvider` (Rodada 1) — nenhum novo mecanismo de auth. |
+| Padrão `*-client.ts` (lógica) vs. tela (UI) | `escala-client.ts`/`theme-provider.tsx` | `ContentClient` segue a mesma separação. |
+| Erro de rede vs. lista vazia | `index.tsx` (`escala-error`, Rodada 2/Fix 1) | Tela de Conteúdo replica o mesmo padrão: erro visível distinto de "sem posts". |
+
+## Components
+
+### `ContentClient`
+
+- **Purpose**: wrapper tipado sobre `authenticatedRequest` para
+  `GET /content/posts`.
+- **Location**: `apps/mobile/src/lib/content/content-client.ts`
+- **Interfaces**: `getPosts(page?: number, limit?: number): Promise<PostsPage>`
+- **Dependencies**: `authenticatedRequest`.
+- **Reuses**: mesmo padrão de `escala-client.ts`.
+
+### Tela "Conteúdo" (nova aba)
+
+- **Purpose**: lista os posts publicados da congregação (AC2), com
+  paginação simples ("carregar mais" — sem cursor, a API é offset/page).
+- **Location**: `apps/mobile/src/app/(tabs)/conteudo.tsx`
+- **Dependencies**: `ContentClient`.
+- **Reuses**: mesmo padrão de carregamento/erro de `(tabs)/index.tsx`
+  (ex-`index.tsx`, Escala) — `useEffect` no mount, estado de erro visível
+  distinto de lista vazia.
+
+### `(tabs)/_layout.tsx`
+
+- **Purpose**: `Tabs` do Expo Router com 2 abas (Escala, Conteúdo).
+- **Location**: `apps/mobile/src/app/(tabs)/_layout.tsx`
+- **Dependencies**: nenhuma chamada de rede — só layout.
+- **Reuses**: nenhum precedente no monorepo (primeiro uso de `Tabs` do
+  Expo Router) — mesma biblioteca já usada para `Stack` (Rodada 1).
+
+## Data Models
+
+```typescript
+// apps/mobile/src/lib/content/types.ts
+interface Post {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  media_url: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+interface PostsPage {
+  data: Post[];
+  total: number;
+}
+```
+
+**Relationships**: `is_draft`/`expires_at`/`created_by_user_id` do
+backend não entram no tipo mobile — a tela é read-only e não precisa
+deles (mesmo princípio de reuso mínimo das rodadas anteriores: só os
+campos que a UI de fato usa).
+
+## Error Handling Strategy
+
+| Error Scenario | Handling | User Impact |
+| --- | --- | --- |
+| `GET /content/posts` falha (rede/5xx) | Estado de erro visível, distinto de lista vazia | Mesmo padrão de `escala-error` — "Não foi possível carregar" |
+| Lista vazia (`total: 0`, sem erro) | Estado vazio explícito ("Nenhum post publicado ainda") | Não confundir com erro — outcome legítimo |
+| "Carregar mais" falha | Mantém os posts já carregados, mostra erro pontual sem limpar a lista | Mesmo princípio do Fix 1 (Rodada 2): erro de ação nunca é rejection silenciosa |
+
+## Risks & Concerns
+
+| Concern | Location | Impact | Mitigation |
+| --- | --- | --- | --- |
+| `findAll`'s `isMember` check (`posts.service.ts:73`) exige `roles.length === 1 && roles[0] === 'member'` — um usuário com `member` + outro papel não tem o filtro `published_at IS NOT NULL` aplicado, potencialmente vendo rascunhos | `apps/api/src/content/posts.service.ts:73` | Fora do escopo desta feature alterar — é comportamento do backend que antecede esta rodada, não introduzido por ela. Registrado aqui para quem mexer nesse service depois. | Nenhuma ação nesta rodada — mobile só consome a rota como está. |
+| Introduzir `(tabs)/` move `index.tsx`→`(tabs)/index.tsx`, alterando o caminho de rota-raiz | `apps/mobile/src/app/index.tsx` | Qualquer referência hardcoded a `/` como rota inicial (ex.: `login.tsx` faz `router.replace("/")`) precisa continuar funcionando — Expo Router resolve `(tabs)/index.tsx` como a rota `/` normalmente (grupo entre parênteses não entra na URL), então `router.replace("/")` continua correto sem mudança. | Confirmar com um teste de fumaça que `/` ainda resolve para a aba Escala após a task de navegação. |
+
+## Tech Decisions
+
+| Decision | Choice | Rationale |
+| --- | --- | --- |
+| Paginação no mobile | "Carregar mais" (concatena página seguinte), não infinite scroll automático | API é offset/page sem cursor; concatenar por botão é mais simples de testar e evita re-fetch acidental por scroll em teste automatizado. Pode evoluir para `onEndReached` depois, sem mudar o contrato do `ContentClient`. |
+| Tab bar via Expo Router `Tabs` | Nativo do próprio Expo Router, não uma lib de navegação separada | Mesmo framework já em uso para `Stack`; Expo Router resolve `Tabs` dentro de um grupo de rota nativamente, sem dependência nova. |
+| Segmentação de audiência no feed | Não implementada — mobile replica o filtro atual (congregação inteira, publicado) | Confirmado com o usuário: mudar isso é decisão de produto que afeta a mesma rota usada pelo `apps/web`, fora do escopo de MOB-06. |

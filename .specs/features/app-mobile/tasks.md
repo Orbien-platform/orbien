@@ -1189,3 +1189,237 @@ Nenhuma task depende de uma task de fase posterior. ✅
 | T8 | Tela Indisponibilidade (componente) | component | component | ✅ OK |
 
 Nenhuma violação. ✅
+
+---
+
+# Rodada 3 — Tasks: MOB-06
+
+**Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 3 — MOB-06 (Conteúdos — feed)".
+**Status**: In Progress
+**Escopo**: AC2 da história "P1: Conteúdos e Notificações" — listar posts
+publicados. Inclui a introdução da tab bar (Expo Router `Tabs`), decisão
+de navegação registrada no design desta rodada (segundo módulo de domínio
+justifica o custo, conforme a Rodada 2 já havia previsto).
+
+## Test Coverage Matrix
+
+> Guidelines: `apps/mobile/jest.config.js` (`jest-expo` + Testing
+> Library), mesmo padrão das Rodadas 1/2 (`theme-provider.test.tsx`,
+> `escala-client.test.ts`, `index.test.tsx`).
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+|---|---|---|---|---|
+| `(tabs)/_layout.tsx` (Tabs) | component | Renderiza as 2 abas (Escala, Conteúdo); `/` continua resolvendo para a aba Escala após a migração de rota | `apps/mobile/src/app/(tabs)/_layout.test.tsx` | `npm run test -w orbien-mobile` |
+| `(tabs)/index.tsx` (Escala, movida) | component | Testes existentes de `index.test.tsx` (Rodada 2) movidos e passando sem alteração de comportamento | `apps/mobile/src/app/(tabs)/index.test.tsx` | `npm run test -w orbien-mobile` |
+| `ContentClient` (`lib/content/content-client.ts`) | unit | 1:1 com AC2: request correto (path, page/limit), propagação de erro | `apps/mobile/src/lib/content/**/*.test.ts` | `npm run test -w orbien-mobile` |
+| `(tabs)/conteudo.tsx` | component | Caminho feliz (lista renderiza), lista vazia (estado explícito, não confundir com erro), erro de rede no load inicial, "carregar mais" (concatena sem perder os já carregados, erro pontual não limpa lista) | `apps/mobile/src/app/(tabs)/conteudo.test.tsx` | `npm run test -w orbien-mobile` |
+| Tipos (`lib/content/types.ts`) | none | build gate only | `apps/mobile/src/lib/content/types.ts` | `npm run build:mobile` |
+
+## Gate Check Commands
+
+| Gate Level | When to Use | Command |
+|---|---|---|
+| Quick | Após task com só unit/component | `npm run test -w orbien-mobile` |
+| Full | Fechamento de fase | `npm run test -w orbien-mobile` && `npm run build:mobile` && `turbo run lint --filter=orbien-mobile` |
+
+---
+
+## Execution Plan
+
+```
+Phase 1 → Phase 2 → Phase 3
+```
+
+### Phase 1: Navegação — introduz tab bar (Escala + Conteúdo)
+
+```
+T1
+```
+
+### Phase 2: `ContentClient` (tipos + cliente)
+
+```
+T2 → T3
+```
+
+### Phase 3: Tela Conteúdo
+
+```
+T4
+```
+
+---
+
+## Task Breakdown
+
+### T1: `(tabs)/_layout.tsx` — introduz Tabs, move a tela Escala
+
+**What**: Cria `apps/mobile/src/app/(tabs)/_layout.tsx` (Expo Router
+`Tabs`, duas abas: Escala e Conteúdo — a de Conteúdo aponta para uma rota
+que ainda não existe até T4, então usa um placeholder mínimo nesta task
+só para o Tabs resolver as duas rotas sem erro de "rota não encontrada");
+move `apps/mobile/src/app/index.tsx` → `apps/mobile/src/app/(tabs)/index.tsx`
+e `apps/mobile/src/app/index.test.tsx` → `apps/mobile/src/app/(tabs)/index.test.tsx`
+(ajustando imports relativos de `../lib/...` para `../../lib/...`).
+**Where**: `apps/mobile/src/app/(tabs)/_layout.tsx` (novo),
+`apps/mobile/src/app/(tabs)/index.tsx` (movido),
+`apps/mobile/src/app/(tabs)/index.test.tsx` (movido),
+`apps/mobile/src/app/(tabs)/conteudo.tsx` (placeholder — texto fixo,
+substituído de verdade em T4)
+**Depends on**: None
+**Reuses**: `Stack` do Expo Router já usado em `_layout.tsx` raiz — `Tabs`
+é do mesmo framework, sem lib nova.
+**Requirement**: MOB-06 (infra de navegação)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component novo (`(tabs)/_layout.test.tsx`): renderiza as 2
+      abas
+- [ ] Testes movidos de `index.test.tsx` (Rodada 2, 6 testes) passam sem
+      alteração de asserções, só de caminho/import
+- [ ] `router.replace("/")` (usado em `login.tsx` após login) continua
+      resolvendo para a tela Escala — smoke test manual documentado no
+      Done (grupo `(tabs)` não entra na URL, comportamento nativo do Expo
+      Router, sem código extra necessário)
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: component
+**Gate**: quick
+
+---
+
+### T2: Tipos `Post`/`PostsPage`
+
+**What**: Interfaces puras espelhando o shape de `GET /content/posts`
+(`{data: Post[], total: number}`).
+**Where**: `apps/mobile/src/lib/content/types.ts`
+**Depends on**: None
+**Reuses**: mesmo princípio de contrato-não-import de `escala/types.ts`
+(Rodada 2).
+**Requirement**: MOB-06
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Tipos batem com os campos documentados no `design.md` (Data
+      Models, Rodada 3)
+- [ ] Sem erro de TypeScript
+
+**Tests**: none (tipos puros)
+**Gate**: build
+
+---
+
+### T3: `ContentClient` — `getPosts`
+
+**What**: `getPosts(page?, limit?): Promise<PostsPage>` — wrapper sobre
+`authenticatedRequest` para `GET /content/posts`.
+**Where**: `apps/mobile/src/lib/content/content-client.ts`
+**Depends on**: T2
+**Reuses**: `authenticatedRequest` (mesmo padrão de `escala-client.ts`).
+**Requirement**: MOB-06 (AC2)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste: `getPosts()` sem argumentos chama
+      `authenticatedRequest("get", "/content/posts")`
+- [ ] Teste: `getPosts(2, 10)` monta a query `?page=2&limit=10`
+- [ ] Gate check passa: `npm run test -w orbien-mobile`
+
+**Tests**: unit
+**Gate**: quick
+
+---
+
+### T4: Tela Conteúdo — lista, vazio, erro, carregar mais
+
+**What**: `(tabs)/conteudo.tsx` substitui o placeholder de T1 pela tela
+real: `useEffect` carrega a página 1 no mount; lista os posts (título,
+corpo truncado se houver); estado vazio explícito quando `total === 0`;
+erro de rede visível no load inicial (mesmo padrão de `escala-error`);
+botão "Carregar mais" quando `page * limit < total`, que concatena a
+próxima página sem descartar a atual e mostra erro pontual (sem limpar a
+lista) se a paginação falhar.
+**Where**: `apps/mobile/src/app/(tabs)/conteudo.tsx`
+**Depends on**: T1, T3
+**Reuses**: `ContentClient` (T3); padrão de erro/estado vazio de
+`(tabs)/index.tsx` (Escala).
+**Requirement**: MOB-06 (AC2)
+
+**Tools**:
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+- [ ] Teste component: lista renderiza os posts da página 1 (mock)
+- [ ] Teste component: `total: 0` mostra estado vazio explícito, não erro
+- [ ] Teste component: erro de rede no load inicial mostra estado de erro
+      visível, não lista vazia
+- [ ] Teste component: "Carregar mais" concatena a página 2 aos posts já
+      exibidos (sem substituir a lista)
+- [ ] Teste component: "Carregar mais" falha → posts já carregados
+      continuam visíveis, erro pontual aparece
+- [ ] Gate check passa (full): `npm run test -w orbien-mobile` &&
+      `npm run build:mobile` && `turbo run lint --filter=orbien-mobile`
+
+**Tests**: component
+**Gate**: full
+
+**Commit**: `feat(mobile): tela de Conteúdo com paginação (MOB-06)`
+
+---
+
+## Phase Execution Map
+
+```
+Phase 1 → Phase 2 → Phase 3
+
+Phase 1:  T1
+Phase 2:  T2 ──→ T3
+Phase 3:  T4
+```
+
+---
+
+## Task Granularity Check
+
+| Task | Scope | Status |
+|---|---|---|
+| T1: `(tabs)/_layout.tsx` + move Escala | 1 layout novo + 1 move de arquivo (mesmo componente, sem mudança de comportamento) | ✅ Granular |
+| T2: Tipos | 1 arquivo de tipo puro | ✅ Granular |
+| T3: `ContentClient` | 1 componente (cliente), 1 método | ✅ Granular |
+| T4: Tela Conteúdo | 1 tela | ✅ Granular |
+
+---
+
+## Diagram-Definition Cross-Check
+
+| Task | Depends On (task body) | Diagram Shows | Status |
+|---|---|---|---|
+| T1 | None | — | ✅ Match |
+| T2 | None | Fase 2 inicia após Fase 1 | ✅ Match |
+| T3 | T2 | T2→T3 | ✅ Match |
+| T4 | T1, T3 | Fase 3 inicia após Fase 2 (T1 da Fase 1 transitivo) | ✅ Match |
+
+Nenhuma task depende de uma task de fase posterior. ✅
+
+---
+
+## Test Co-location Validation
+
+| Task | Code Layer Created/Modified | Matrix Requires | Task Says | Status |
+|---|---|---|---|---|
+| T1 | `(tabs)/_layout.tsx` + tela Escala movida | component | component | ✅ OK |
+| T2 | Tipos puros | none | none | ✅ OK |
+| T3 | `ContentClient` (domínio) | unit | unit | ✅ OK |
+| T4 | Tela Conteúdo (componente) | component | component | ✅ OK |
+
+Nenhuma violação. ✅

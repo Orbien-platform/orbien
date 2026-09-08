@@ -323,7 +323,7 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-03 | P1: Tema por tenant | Design | ✅ Verified |
 | MOB-04 | P1: Membros e Voluntários — escala (listar, confirmar/recusar, check-in) | Design | ✅ Verified |
 | MOB-05 | P1: Membros e Voluntários — indisponibilidade | Design | ✅ Verified |
-| MOB-06 | P1: Conteúdos — feed | Design | Pending |
+| MOB-06 | P1: Conteúdos — feed | Design | In Tasks |
 | MOB-07 | P1: Conteúdos — push (registro OneSignal + deep link) | Design | Pending |
 | MOB-08 | P2: Celebrações e OC | Design | Pending |
 | MOB-09 | P2: Pequenos Grupos | Design | Pending |
