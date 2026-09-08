@@ -90,7 +90,14 @@ describe("AuthProvider", () => {
 
     await fireEvent.press(screen.getByTestId("logout-button"));
 
-    expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    // Mesmo padrão já usado no resto da suíte (login.test.tsx): aguarda a
+    // asserção via waitFor em vez de checar direto após o await de
+    // fireEvent.press — mais robusto a diferenças de timing entre
+    // ambientes (o `await` de fireEvent.press por si só não garante que o
+    // setState assíncrono dentro do handler já tenha sido refletido).
+    await waitFor(() => {
+      expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    });
     expect(authLogout).toHaveBeenCalledTimes(1);
   });
 
