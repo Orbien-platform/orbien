@@ -310,6 +310,41 @@ export class CelebrationAssignmentService {
     });
   }
 
+  // ── Check-in ───────────────────────────────────────────────────────────────
+
+  async checkInAssignment(
+    assignmentId: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<CelebrationAssignment> {
+    const personId = await this.resolvePersonId(userId);
+
+    const assignment = await this.prisma.client.celebrationAssignment.findFirst({
+      where: { id: assignmentId, tenant_id: tenantId },
+      include: {
+        volunteerProfile: { select: { person_id: true } },
+      },
+    });
+    if (!assignment) throw new NotFoundException('Atribuição não encontrada');
+
+    if (assignment.volunteerProfile.person_id !== personId) {
+      throw new ForbiddenException('Você não tem permissão para fazer check-in desta atribuição');
+    }
+
+    if (assignment.status !== AssignmentStatus.confirmed) {
+      throw new UnprocessableEntityException('Só é possível fazer check-in de uma atribuição confirmada');
+    }
+
+    if (assignment.checked_in_at) {
+      throw new ConflictException('Check-in já foi feito para esta atribuição');
+    }
+
+    return this.prisma.client.celebrationAssignment.update({
+      where: { id: assignmentId },
+      data: { checked_in_at: new Date() },
+    });
+  }
+
   // ── My Assignments ─────────────────────────────────────────────────────────
 
   // Returns celebration assignments from published schedules, each carrying the exact

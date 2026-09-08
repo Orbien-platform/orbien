@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 4,
+  "next_id": 6,
   "lessons": [
     {
       "id": "L-001",
@@ -58,6 +58,42 @@
       ],
       "created": "2026-09-08T00:47:32Z",
       "last_seen": "2026-09-08T00:47:32Z"
+    },
+    {
+      "id": "L-004",
+      "key": "spec_precision_gap::when spec md leaves an operational detail pagination empty state retry behavior undefined for an ac capture the concrete decision explicitly in design md and treat it as the acceptance criterion for that round rather than leaving it implicit in the implementation",
+      "text": "When spec.md leaves an operational detail (pagination, empty state, retry behavior) undefined for an AC, capture the concrete decision explicitly in design.md and treat it as the acceptance criterion for that round, rather than leaving it implicit in the implementation.",
+      "signal": "spec_precision_gap",
+      "scope": "mobile",
+      "status": "candidate",
+      "features": [
+        "app-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC2 (P1: Conteúdos e Notificações) — pagination/empty-state/load-more not detailed in spec.md (mobile)"
+      ],
+      "created": "2026-09-08T16:11:44Z",
+      "last_seen": "2026-09-08T16:11:44Z"
+    },
+    {
+      "id": "L-005",
+      "key": "spec_precision_gap::when an implementation intentionally diverges from an ac s literal wording based on a backend finding update spec md s ac text to match the confirmed decision not just design md a reader of spec md alone should not be misled",
+      "text": "When an implementation intentionally diverges from an AC's literal wording based on a backend finding, update spec.md's AC text to match the confirmed decision, not just design.md — a reader of spec.md alone should not be misled.",
+      "signal": "spec_precision_gap",
+      "scope": "mobile",
+      "status": "candidate",
+      "features": [
+        "app-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC2 wording ('visíveis para os segmentos de audiência') vs. design.md finding (listing endpoint does not filter by segment) (mobile)"
+      ],
+      "created": "2026-09-08T16:11:44Z",
+      "last_seen": "2026-09-08T16:11:44Z"
     }
   ]
 }
