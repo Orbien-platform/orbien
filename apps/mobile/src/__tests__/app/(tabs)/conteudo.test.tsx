@@ -1,3 +1,7 @@
+// Fora de `src/app` de propósito: arquivo `.tsx` na raiz de rotas entra no
+// bundle pelo `require.context` do expo-router e arrasta o
+// @testing-library/react-native, que não resolve no Metro. Ver README,
+// "Portão de bundle no `build`".
 // Testes derivados do Done-when de R3-T4 (tasks.md): lista renderiza
 // (AC2), estado vazio explícito, erro de rede no load inicial, "carregar
 // mais" concatena sem perder os já carregados, erro pontual de "carregar
@@ -5,11 +9,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockGetPosts = jest.fn();
-jest.mock("../../lib/content/content-client", () => ({
+jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
 }));
 
-import ConteudoScreen from "./conteudo";
+import ConteudoScreen from "../../../app/(tabs)/conteudo";
 
 const POST_1 = { id: "p1", type: "announcement", title: "Post 1", body: "Corpo 1", media_url: null, published_at: "2026-09-01T10:00:00Z", created_at: "2026-09-01T10:00:00Z" };
 const POST_2 = { id: "p2", type: "announcement", title: "Post 2", body: null, media_url: null, published_at: "2026-09-02T10:00:00Z", created_at: "2026-09-02T10:00:00Z" };
