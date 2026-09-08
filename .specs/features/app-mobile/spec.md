@@ -11,6 +11,15 @@ listava isso como decisão de produto em aberto; foi confirmada agora. O backend
 com OneSignal para push já existe do lado do servidor — o app mobile é a peça
 que falta para essa infraestrutura ter uso.
 
+O produto final terá **duas variantes de distribuição** (ADR-005): uma versão
+**genérica multi-tenant** (Starter) — um único app publicado nas lojas, tema
+aplicado em runtime por tenant — e, depois, uma versão **white-label por
+tenant** (Premium) — build próprio por igreja, publicado na loja com nome/
+ícone/bundle id próprios da igreja. Este v1 implementa só a Starter, mas a
+arquitetura (config de tema/branding, identidade do app, integração OneSignal)
+é desenhada agora para que a Premium entre depois como *mesmo código-fonte +
+profile de build diferente*, sem reescrever o que a Starter já usa.
+
 ## Goals
 
 - [ ] Membro e liderança autenticam e usam o app em iOS e Android sem passar
@@ -22,13 +31,18 @@ que falta para essa infraestrutura ter uso.
       build separado por igreja — modelo Starter do ADR-005.
 - [ ] `apps/mobile` entra no monorepo como workspace novo, com dev loop e
       pipeline de deploy (EAS) documentados, sem tocar nos outros três apps.
+- [ ] Identidade do app (nome, bundle id/package, ícone, app id do OneSignal)
+      e tema (cor, logo) não ficam hardcoded no código-fonte compartilhado —
+      vêm de config resolvida em build/runtime, para a variante white-label
+      (Premium) poder existir depois como novo profile de build, sem fork do
+      código.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---|---|
 | Módulo Financeiro no mobile | Dado sensível, fluxo de aprovação/lançamento é desktop-first; nenhum ADR pede mobile aqui. Fica só no `apps/web`. |
-| Build dedicado por tenant via EAS (plano Premium) | ADR-005 já separa os dois modelos; o Premium depende do Starter existir primeiro e tem pipeline próprio (release por tenant). Vira feature separada. |
+| Build dedicado por tenant via EAS (plano Premium) — **implementação** | ADR-005 já separa os dois modelos; o Premium depende do Starter existir primeiro e tem pipeline próprio (release por tenant, submissão de loja por igreja). Vira feature separada. A **arquitetura** do v1 (config dinâmica de identidade/tema, sem hardcode) é desenhada agora para não exigir retrabalho quando o Premium entrar — ver Assumptions. |
 | Modo offline / sincronização local | Nenhum requisito hoje pede uso sem rede; adicionar cache offline muda a arquitetura de dados inteira. Fica para quando houver dor real. |
 | OTA updates (Expo Updates) configurado para produção | Faz parte do ADR-004, mas é infraestrutura de release, não funcionalidade — entra junto do pipeline de deploy, não do v1 funcional. |
 | Autoatendimento de suporte dentro do mobile (sessão de suporte cross-app) | O modelo de sessão de suporte (`apps/admin` → `apps/web`) é web-to-web por fragmento de URL; estender para mobile é decisão própria, fora deste escopo. |
@@ -47,6 +61,10 @@ que falta para essa infraestrutura ter uso.
 | Módulo Financeiro fora do mobile | Confirmado no Out of Scope | Resposta do usuário na etapa de discovery (4 dos 5 módulos, sem Financeiro). | y |
 | Plataformas alvo | iOS + Android, Expo managed workflow | ADR-004 já decide Expo; managed workflow é o padrão Expo para não gerenciar código nativo à mão, coerente com "zero configuração de push no MVP" do próprio ADR. | n |
 | Deploy/CI do mobile | EAS Build (dev/preview/production), fora do Vercel/Render; não entra no `turbo run build` dos fronts | Nenhum ADR sugere hospedar bundle mobile nos mesmos pipelines; EAS é o serviço que ADR-004 já nomeia. | n |
+| Código-fonte para Starter e Premium | **Um único codebase** (`apps/mobile`), variantes diferem só por *build profile* do EAS (`eas.json`) + `app.config.js` dinâmico — nunca dois apps/repos separados | Fork de código para cada variante branch-a-branch, além do custo de manutenção duplicada, diverge com o tempo (fix na Starter não chega na Premium). Mesmo código também é o único jeito de o Premium herdar automaticamente tudo que o v1 entregar. | n — decisão técnica nova desta rodada |
+| Identidade do app (nome/ícone/bundle id/scheme) | Resolvida em `app.config.js` (função, não `app.json` estático) a partir de variáveis de ambiente/`eas.json` `extra` por profile; no profile único do v1 (`generic`) resolve sempre para "Orbien" | `app.json` estático não permite valores por profile; `app.config.js` dinâmico é o padrão Expo para isso e é o único jeito de o Premium (profile por tenant, cada um com seu bundle id/ícone) existir sem tocar no código do app depois. | n |
+| App id do OneSignal | Vem de config (env/`app.config.js`), não hardcoded no código; v1 usa um único app id (multi-tenant, segmentado por `external_id`/tags) | Deixar o app id fixo no código obrigaria editar arquivo-fonte para cada app id do Premium (um por igreja, plano futuro do ADR-005); como config, o profile decide, o código não muda. | n |
+| Tema/branding no runtime vs. no build | Mantido como está no v1 (fetch de `branding_configs` em runtime, ver linha "White-label v1" acima) — variantes de build (Premium) trocam identidade/ícone/nome, não o mecanismo de tema em runtime, que continua igual nas duas variantes | O tema por tenant já é dinâmico por design (não hardcoded); o que muda no Premium é a *casca* do app (nome/ícone na loja), não como a cor/logo chegam à tela — não há retrabalho aqui, só reafirmando que o mecanismo já é compatível. | n |
 
 **Open questions:** nenhuma sem resposta — os itens acima marcados `n` são
 decisões técnicas de menor risco (não têm ADR explícito para o detalhe), fica
@@ -233,6 +251,45 @@ que o backend já define — não bloqueia lançamento.
 
 ---
 
+### Infra: Identidade de app configurável (base para variante white-label)
+
+**User Story**: Como time de plataforma, quero que nome, ícone, bundle id/
+package e app id do OneSignal do app venham de configuração por build profile
+— não do código-fonte —, para que a variante white-label (Premium) possa ser
+adicionada depois como um novo profile de build, sem editar o código
+compartilhado que a Starter usa.
+
+**Why (infra, sem prioridade P):** não é uma tela nem um fluxo de usuário; é a
+condição para o Success Criteria "sem retrabalho de arquitetura" do Premium.
+Vale para o v1 mesmo com um profile só (`generic`).
+
+**Acceptance Criteria**:
+
+1. WHEN o app é buildado (dev, preview via EAS, ou produção via EAS) THEN o
+   nome exibido, o ícone, o bundle identifier (iOS) / applicationId (Android)
+   e o scheme de deep link SHALL vir de `app.config.js` (função dinâmica),
+   nunca de um `app.json` estático com valores fixos.
+2. WHEN nenhuma variável de ambiente/`eas.json` `extra` de tenant é informada
+   (caso do v1, profile único) THEN `app.config.js` SHALL resolver para a
+   identidade genérica Orbien (nome, ícone, bundle id, app id do OneSignal
+   padrão) sem exigir nenhuma configuração adicional do desenvolvedor.
+3. WHEN um novo profile de build é adicionado a `eas.json` (ex.: um profile
+   `whitelabel-<tenant>` no futuro) THEN nenhuma alteração em arquivo de
+   código-fonte compartilhado (fora de `app.config.js`/`eas.json`) SHALL ser
+   necessária para esse profile produzir um app com identidade própria —
+   este AC não implementa o profile Premium, só garante que `app.config.js`
+   já responde por ele.
+4. WHEN o código do app (telas, componentes, chamadas à API) referencia nome
+   do app, ícone ou app id do OneSignal THEN SHALL fazê-lo sempre através da
+   config resolvida em runtime (ex.: `Constants.expoConfig.extra`), nunca por
+   literal de string hardcoded.
+
+**Independent Test**: rodar `npx expo config` (ou `eas build:inspect`) com e
+sem as variáveis de ambiente de exemplo setadas e confirmar que nome/ícone/
+bundle id mudam só por config, sem tocar em código.
+
+---
+
 ## Edge Cases
 
 - WHEN o dispositivo está sem internet ao abrir o app THEN o app SHALL mostrar
@@ -272,12 +329,13 @@ que o backend já define — não bloqueia lançamento.
 | MOB-09 | P2: Pequenos Grupos | Design | Pending |
 | MOB-10 | P3: Preferências de notificação | Design | Pending |
 | MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | Pending |
+| MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | Pending |
 
 **ID format:** `MOB-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 11 total, 0 mapped to tasks (pré-Design), 0 unmapped ⚠️ (aguardando Design)
+**Coverage:** 12 total, 0 mapped to tasks (pré-Design), 0 unmapped ⚠️ (aguardando Design)
 
 ---
 
@@ -294,3 +352,6 @@ que o backend já define — não bloqueia lançamento.
 - [ ] Os 4 módulos do escopo (Membros/Voluntários, Conteúdos, Celebrações/OC,
       Pequenos Grupos) têm pelo menos a tela de leitura funcionando contra a
       API real de desenvolvimento.
+- [ ] Nenhum arquivo de código-fonte compartilhado (fora de `app.config.js`/
+      `eas.json`) precisa ser editado para produzir um build com identidade
+      diferente — validado simulando um segundo profile de build no v1.
