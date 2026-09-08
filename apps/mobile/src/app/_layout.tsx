@@ -1,6 +1,7 @@
-// Placeholder criado no scaffold (T1). Passa a ser o root layout real do
-// Expo Router a partir de T2, quando `expo-router` é adicionado e o app
-// entry point muda de `App.tsx` para este arquivo.
-export default function RootLayoutPlaceholder() {
-  return null;
+import { Stack } from "expo-router";
+
+// Root layout do Expo Router. Guarda de autenticação e ThemeProvider entram
+// aqui em fases posteriores (T12+) — por ora só monta a stack de navegação.
+export default function RootLayout() {
+  return <Stack />;
 }

@@ -2,15 +2,22 @@
   "name": "orbien-mobile",
   "version": "0.1.0",
   "private": true,
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
     "expo": "~57.0.20",
+    "expo-router": "~57.0.19",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.9.1",
+    "react-native-screens": "~4.27.0"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^14.0.1",
     "@types/react": "~19.2.2",
+    "jest": "^30.5.1",
+    "jest-expo": "~57.0.5",
+    "test-renderer": "^1.2.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -19,6 +26,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "test": "jest --passWithNoTests"
   }
 }
