@@ -1152,6 +1152,165 @@ describe("ServiceOrderView", () => {
     );
   });
 
+  it("vincula a música avulsa ao catálogo com apenas song_id no corpo (SETREP-01 AC2)", async () => {
+    const linkedOrder = {
+      ...serviceOrder,
+      items: serviceOrder.items.map((item) =>
+        item.id !== "it1"
+          ? item
+          : {
+              ...item,
+              setlist: {
+                id: "sl1",
+                songs: [
+                  { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", sequence: 1, song_id: "cs1" },
+                ],
+              },
+            }
+      ),
+    };
+    let soCalls = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        soCalls += 1;
+        return Promise.resolve({ data: soCalls === 1 ? serviceOrder : linkedOrder });
+      }
+      if (url === "/songs") {
+        return Promise.resolve({ data: [catalogSong({ id: "cs1", title: "Digno é o Senhor" })] });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", { song_id: "cs1" })
+    );
+    // A lista reflete o vínculo pela recarga da própria ordem, sem reload de
+    // página: a linha passa a oferecer desvincular (SETREP-01 AC5).
+    expect(
+      await screen.findByRole("button", { name: "Desvincular Grande é o Senhor do repertório" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
+  });
+
+  it("desvincula a música enviando song_id nulo (SETREP-01 AC3)", async () => {
+    const linkedOrder = {
+      ...serviceOrder,
+      items: serviceOrder.items.map((item) =>
+        item.id !== "it1"
+          ? item
+          : {
+              ...item,
+              setlist: {
+                id: "sl1",
+                songs: [
+                  { id: "s1", title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test", sequence: 1, song_id: "cs1" },
+                ],
+              },
+            }
+      ),
+    };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: linkedOrder });
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Desvincular Grande é o Senhor do repertório" })
+    );
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", { song_id: null })
+    );
+    // Nada mais é enviado: tom, BPM e link digitados ficam como estavam.
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.getByText("80 BPM")).toBeInTheDocument();
+  });
+
+  it("mostra erro e preserva a lista quando o PATCH de vínculo falha", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    vi.mocked(api.patch).mockRejectedValue(new Error("fail"));
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    );
+    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+
+    expect(await screen.findByText("Erro ao vincular música.")).toBeInTheDocument();
+    expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
+  });
+
+  it("cancelar o seletor de vínculo fecha sem chamar a API", async () => {
+    mockGet(true, [catalogSong({ id: "cs1", title: "Digno é o Senhor" })]);
+    // O mock de `patch` é compartilhado com os testes de reordenação e de
+    // vínculo acima; limpar aqui deixa a asserção de "não chamou" exata.
+    vi.mocked(api.patch).mockClear();
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    await user.click(
+      screen.getByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    );
+    await screen.findByRole("button", { name: /Digno é o Senhor/ });
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("button", { name: /Digno é o Senhor/ })).not.toBeInTheDocument();
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("não oferece a ação de vincular a quem não pode adicionar músicas", async () => {
+    mockGet(true);
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={false} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(
+      screen.queryByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("não oferece a ação de vincular em modo somente leitura", async () => {
+    mockGet(true);
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={false} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(
+      screen.queryByRole("button", { name: "Vincular Grande é o Senhor ao repertório" })
+    ).not.toBeInTheDocument();
+  });
+
   it("ignores the instance response if the component unmounts before it settles", async () => {
     let rejectGet!: (err: unknown) => void;
     vi.mocked(api.get).mockImplementation((url: string) => {

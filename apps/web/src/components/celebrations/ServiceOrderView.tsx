@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
-  Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown,
+  Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown, Link2, Unlink,
 } from "lucide-react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ interface SetlistSong {
   bpm?: number;
   link?: string;
   sequence: number;
+  song_id?: string | null;
 }
 
 interface Setlist {
@@ -248,6 +249,7 @@ export function ServiceOrderView({
   const [isCreatingOC, setIsCreatingOC] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [addSongForItemId, setAddSongForItemId] = useState<string | null>(null);
+  const [linkSongId, setLinkSongId] = useState<string | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -317,6 +319,7 @@ export function ServiceOrderView({
       setNoOC(false);
       setAddItemOpen(false);
       setAddSongForItemId(null);
+      setLinkSongId(null);
       setLoadedKey(null);
     }
     onOpenChange(next);
@@ -405,6 +408,24 @@ export function ServiceOrderView({
       );
     } catch {
       showToast("Erro ao remover música.");
+    }
+  }
+
+  /**
+   * Vincula (ou desvincula, com `song_id: null`) a música da setlist ao
+   * catálogo. O corpo leva **apenas** `song_id`: vincular declara a origem,
+   * não reimporta tom/BPM/link — o que a escala confirmou fica como está
+   * (SETREP-01 AC2/AC3).
+   */
+  async function handleLinkSong(setlistSongId: string, song: CatalogSong | null) {
+    try {
+      await api.patch(`/celebrations/setlists/songs/${setlistSongId}`, {
+        song_id: song ? song.id : null,
+      });
+      setLinkSongId(null);
+      afterAddSong();
+    } catch {
+      showToast("Erro ao vincular música.");
     }
   }
 
@@ -655,8 +676,8 @@ export function ServiceOrderView({
                                 {[...setlist.songs]
                                   .sort((a, b) => a.sequence - b.sequence)
                                   .map((song) => (
+                                    <div key={song.id} className="flex flex-col gap-1">
                                     <div
-                                      key={song.id}
                                       className="flex items-center gap-2 text-xs"
                                     >
                                       <Music size={11} strokeWidth={1.5} className="flex-shrink-0 text-stone" />
@@ -682,6 +703,27 @@ export function ServiceOrderView({
                                           <ExternalLink size={11} strokeWidth={1.5} />
                                         </a>
                                       )}
+                                      {canAddSongs && !isReadOnly && (
+                                        song.song_id ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleLinkSong(song.id, null)}
+                                            className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                            aria-label={`Desvincular ${song.title} do repertório`}
+                                          >
+                                            <Unlink size={11} strokeWidth={1.5} />
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setLinkSongId(song.id)}
+                                            className="flex-shrink-0 text-stone hover:text-navy transition-colors"
+                                            aria-label={`Vincular ${song.title} ao repertório`}
+                                          >
+                                            <Link2 size={11} strokeWidth={1.5} />
+                                          </button>
+                                        )
+                                      )}
                                       {canAddSongs && (
                                         <button
                                           type="button"
@@ -692,6 +734,14 @@ export function ServiceOrderView({
                                           <X size={11} strokeWidth={1.5} />
                                         </button>
                                       )}
+                                    </div>
+                                    {linkSongId === song.id && (
+                                      <SongPicker
+                                        canCreate={canAddSongs}
+                                        onSelect={(chosen) => handleLinkSong(song.id, chosen)}
+                                        onCancel={() => setLinkSongId(null)}
+                                      />
+                                    )}
                                     </div>
                                   ))}
                               </div>
