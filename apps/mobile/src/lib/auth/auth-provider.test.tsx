@@ -2,7 +2,7 @@
 // - sem sessão salva -> status resolve para unauthenticated
 // - com sessão salva válida -> status resolve para authenticated
 // - logout() chamado no contexto reflete unauthenticated imediatamente
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Text, TouchableOpacity } from "react-native";
 
 jest.mock("./auth-client", () => ({
@@ -45,7 +45,7 @@ describe("AuthProvider", () => {
   it("sem sessão salva: status resolve para unauthenticated", async () => {
     (getSession as jest.Mock).mockResolvedValue(null);
 
-    render(
+    await render(
       <AuthProvider>
         <StatusProbe />
       </AuthProvider>,
@@ -59,7 +59,7 @@ describe("AuthProvider", () => {
   it("com sessão salva válida: status resolve para authenticated", async () => {
     (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
 
-    render(
+    await render(
       <AuthProvider>
         <StatusProbe />
       </AuthProvider>,
@@ -74,7 +74,7 @@ describe("AuthProvider", () => {
     (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
     (authLogout as jest.Mock).mockResolvedValue(undefined);
 
-    render(
+    await render(
       <AuthProvider>
         <StatusAndLogoutProbe />
       </AuthProvider>,
@@ -84,9 +84,7 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("status").props.children).toBe("authenticated");
     });
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("logout-button"));
-    });
+    await fireEvent.press(screen.getByTestId("logout-button"));
 
     expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
     expect(authLogout).toHaveBeenCalledTimes(1);
