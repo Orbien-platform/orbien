@@ -3,7 +3,7 @@
 // o cliente calcula se há mais páginas comparando page*limit com total).
 // Mesmo padrão de erro/estado vazio de (tabs)/index.tsx (Escala): erro
 // de rede visível, distinto de lista vazia.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, FlatList, Text, View } from "react-native";
 
 import { getPosts } from "../../lib/content/content-client";
@@ -19,6 +19,13 @@ export default function ConteudoScreen() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  // Guarda contra duplo toque: sem isso, dois toques rápidos em "Carregar
+  // mais" disparam duas requisições da mesma página e duplicam posts na
+  // lista (achado do /code-review, PR #56). `isLoadingMoreRef` é a fonte
+  // da verdade do guard (mutação síncrona, não espera re-render);
+  // `isLoadingMore` (state) só existe para o `disabled` visual do botão.
+  const isLoadingMoreRef = useRef(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +48,9 @@ export default function ConteudoScreen() {
   }, []);
 
   async function handleLoadMore() {
+    if (isLoadingMoreRef.current) return;
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
     setLoadMoreError(null);
     try {
       const nextPage = page + 1;
@@ -50,6 +60,9 @@ export default function ConteudoScreen() {
       setPage(nextPage);
     } catch {
       setLoadMoreError(LOAD_MORE_ERROR_MESSAGE);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
     }
   }
 
@@ -86,7 +99,12 @@ export default function ConteudoScreen() {
       />
       {loadMoreError ? <Text testID="load-more-error">{loadMoreError}</Text> : null}
       {hasMore ? (
-        <Button testID="load-more-button" title="Carregar mais" onPress={handleLoadMore} />
+        <Button
+          testID="load-more-button"
+          title="Carregar mais"
+          disabled={isLoadingMore}
+          onPress={handleLoadMore}
+        />
       ) : null}
     </View>
   );

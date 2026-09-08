@@ -6,7 +6,7 @@
 // Nome do app já aparece no header (ThemedShell, _layout.tsx) — esta tela
 // não repete o literal.
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, FlatList, Text, View } from "react-native";
 
 import { HttpError } from "../../lib/api/errors";
@@ -21,6 +21,14 @@ export default function EscalaScreen() {
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Guarda contra duplo toque: um id em ação (respond ou check-in) não
+  // dispara outra chamada até a primeira resolver — evita duas requests
+  // para o mesmo assignment antes do estado atualizar e sumir com o
+  // botão (achado do /code-review, PR #56). `pendingIdsRef` é a fonte da
+  // verdade do guard (mutação síncrona, não espera re-render); `pendingIds`
+  // (state) só existe para o `disabled` visual dos botões.
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -46,17 +54,33 @@ export default function EscalaScreen() {
     );
   }
 
+  function markPending(id: string): void {
+    pendingIdsRef.current.add(id);
+    setPendingIds(new Set(pendingIdsRef.current));
+  }
+
+  function clearPending(id: string): void {
+    pendingIdsRef.current.delete(id);
+    setPendingIds(new Set(pendingIdsRef.current));
+  }
+
   async function handleRespond(id: string, status: "confirmed" | "declined") {
+    if (pendingIdsRef.current.has(id)) return;
+    markPending(id);
     setActionError(null);
     try {
       const updated = await respondToAssignment(id, status);
       updateAssignment(id, updated);
     } catch {
       setActionError(ACTION_ERROR_MESSAGE);
+    } finally {
+      clearPending(id);
     }
   }
 
   async function handleCheckIn(id: string) {
+    if (pendingIdsRef.current.has(id)) return;
+    markPending(id);
     setActionError(null);
     try {
       const updated = await checkIn(id);
@@ -64,8 +88,11 @@ export default function EscalaScreen() {
     } catch (err) {
       // Check-in duplicado (race de duplo toque): design.md trata como
       // no-op silencioso — o botão já some após o primeiro sucesso.
-      if (err instanceof HttpError && err.status === 409) return;
-      setActionError(ACTION_ERROR_MESSAGE);
+      if (!(err instanceof HttpError && err.status === 409)) {
+        setActionError(ACTION_ERROR_MESSAGE);
+      }
+    } finally {
+      clearPending(id);
     }
   }
 
@@ -98,11 +125,13 @@ export default function EscalaScreen() {
                 <Button
                   testID={`confirm-${item.id}`}
                   title="Confirmar"
+                  disabled={pendingIds.has(item.id)}
                   onPress={() => handleRespond(item.id, "confirmed")}
                 />
                 <Button
                   testID={`decline-${item.id}`}
                   title="Recusar"
+                  disabled={pendingIds.has(item.id)}
                   onPress={() => handleRespond(item.id, "declined")}
                 />
               </View>
@@ -111,6 +140,7 @@ export default function EscalaScreen() {
               <Button
                 testID={`check-in-${item.id}`}
                 title="Fazer check-in"
+                disabled={pendingIds.has(item.id)}
                 onPress={() => handleCheckIn(item.id)}
               />
             ) : null}
