@@ -9,31 +9,11 @@ import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
+import { fmtLastPlayed, type CatalogSong } from "@/lib/repertorio";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface CatalogSong {
-  id: string;
-  title: string;
-  key: string | null;
-  key_alt: string | null;
-  bpm: number | null;
-  link: string | null;
-  youtube_link: string | null;
-  spotify_link: string | null;
-  cifra_club_link: string | null;
-  notes: string | null;
-  last_played_at: string | null;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtLastPlayed(iso: string | null): string {
-  if (!iso) return "nunca tocada";
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
-}
+// O tipo mora em `@/lib/repertorio`; reexportado aqui para os consumidores
+// que já o importavam deste módulo.
+export type { CatalogSong };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
