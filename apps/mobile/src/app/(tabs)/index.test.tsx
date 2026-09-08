@@ -199,4 +199,43 @@ describe("EscalaScreen", () => {
 
     expect(mockPush).toHaveBeenCalledWith("/indisponibilidade");
   });
+
+  it("duplo toque em Confirmar antes da resposta dispara só uma chamada (guard de duplo toque)", async () => {
+    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
+    mockRespondToAssignment.mockResolvedValue({ ...PENDING_ASSIGNMENT, status: "confirmed" });
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("confirm-a1"));
+
+    // dois toques síncronos, um logo após o outro: o guard (checado antes
+    // do primeiro `await` de handleRespond) bloqueia o segundo mesmo que a
+    // resposta do primeiro já esteja resolvida — `await` sempre adia a
+    // continuação para um microtask, então o segundo toque, ainda síncrono,
+    // encontra o id já marcado como pendente.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("confirm-a1"));
+      fireEvent.press(screen.getByTestId("confirm-a1"));
+    });
+
+    expect(mockRespondToAssignment).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplo toque em Fazer check-in antes da resposta dispara só uma chamada (guard de duplo toque)", async () => {
+    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
+    mockCheckIn.mockResolvedValue({ ...CONFIRMED_ASSIGNMENT, checked_in_at: "2026-09-13T13:05:00.000Z" });
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("check-in-a2"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("check-in-a2"));
+      fireEvent.press(screen.getByTestId("check-in-a2"));
+    });
+
+    expect(mockCheckIn).toHaveBeenCalledTimes(1);
+  });
 });

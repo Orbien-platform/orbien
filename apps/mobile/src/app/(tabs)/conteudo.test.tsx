@@ -101,4 +101,26 @@ describe("ConteudoScreen", () => {
     // o post já carregado continua visível — nada foi limpo.
     expect(screen.getByTestId("post-p1")).toBeTruthy();
   });
+
+  it('duplo toque em "Carregar mais" antes da resposta dispara só uma chamada (guard de duplo toque)', async () => {
+    mockGetPosts.mockResolvedValueOnce({ data: [POST_1], total: 25 });
+    mockGetPosts.mockResolvedValueOnce({ data: [POST_2], total: 25 });
+
+    await act(async () => {
+      render(<ConteudoScreen />);
+    });
+    await waitFor(() => screen.getByTestId("load-more-button"));
+
+    // dois toques síncronos, um logo após o outro — mesmo princípio do
+    // guard em (tabs)/index.tsx: `await` sempre adia a continuação, então
+    // o segundo toque, ainda síncrono, encontra `isLoadingMoreRef` já
+    // marcado, mesmo com a resposta já resolvida.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("load-more-button"));
+      fireEvent.press(screen.getByTestId("load-more-button"));
+    });
+
+    // 1 chamada inicial (page 1) + 1 de "carregar mais" — nunca 2.
+    expect(mockGetPosts).toHaveBeenCalledTimes(2);
+  });
 });
