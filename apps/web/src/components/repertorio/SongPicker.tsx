@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Music, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import api from "@/lib/api";
@@ -48,18 +51,7 @@ export function SongPicker({ canCreate, onSelect, onCancel, debounce }: SongPick
   const visible = songs.filter((s) => matchesSong(s, term));
 
   if (creating) {
-    return (
-      <div className="flex flex-col gap-3 rounded-[12px] border border-[var(--border-default)] p-3">
-        <p className="text-sm font-medium text-ink dark:text-white">Nova música no repertório</p>
-        <button
-          type="button"
-          onClick={() => setCreating(false)}
-          className="self-start text-xs text-navy underline hover:no-underline dark:text-white"
-        >
-          Voltar para a busca
-        </button>
-      </div>
-    );
+    return <SongQuickCreate onCreated={onSelect} onCancel={() => setCreating(false)} />;
   }
 
   return (
@@ -136,6 +128,152 @@ export function SongPicker({ canCreate, onSelect, onCancel, debounce }: SongPick
             Cancelar
           </button>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cadastro de música do repertório sem sair da tela. Interno ao seletor: o
+ * CRUD do catálogo (editar, remover) continua só em `/repertorio`.
+ */
+function SongQuickCreate({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (song: CatalogSong) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [key, setKey] = useState("");
+  const [keyAlt, setKeyAlt] = useState("");
+  const [bpm, setBpm] = useState("");
+  const [link, setLink] = useState("");
+  const [youtubeLink, setYoutubeLink] = useState("");
+  const [spotifyLink, setSpotifyLink] = useState("");
+  const [cifraClubLink, setCifraClubLink] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!title.trim()) {
+      setError("Dê um título à música.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const { data } = await api.post<CatalogSong>("/songs", {
+        title: title.trim(),
+        key: key.trim() || undefined,
+        key_alt: keyAlt.trim() || undefined,
+        bpm: bpm ? Number(bpm) : undefined,
+        link: link.trim() || undefined,
+        youtube_link: youtubeLink.trim() || undefined,
+        spotify_link: spotifyLink.trim() || undefined,
+        cifra_club_link: cifraClubLink.trim() || undefined,
+      });
+      // `POST /songs` não devolve `last_played_at` — música recém-criada nunca
+      // foi tocada, então o valor correto é null, não `undefined` vazando.
+      onCreated({ ...data, last_played_at: null });
+    } catch (err) {
+      setError(apiErrorMessage(err, "Não foi possível salvar a música."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-[12px] border border-[var(--border-default)] p-3">
+      <p className="text-sm font-medium text-ink dark:text-white">Nova música no repertório</p>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="picker-song-title" className="text-xs">Título</Label>
+        <Input
+          id="picker-song-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={saving}
+          placeholder="Ex.: Grande é o Senhor"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-key" className="text-xs">Tom</Label>
+          <Input id="picker-song-key" value={key} onChange={(e) => setKey(e.target.value)} disabled={saving} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-key-alt" className="text-xs">Tom alternativo</Label>
+          <Input id="picker-song-key-alt" value={keyAlt} onChange={(e) => setKeyAlt(e.target.value)} disabled={saving} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-bpm" className="text-xs">BPM</Label>
+          <Input
+            id="picker-song-bpm"
+            type="number"
+            min={1}
+            value={bpm}
+            onChange={(e) => setBpm(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-link" className="text-xs">Link</Label>
+          <Input id="picker-song-link" value={link} onChange={(e) => setLink(e.target.value)} disabled={saving} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-youtube" className="text-xs">YouTube</Label>
+          <Input
+            id="picker-song-youtube"
+            value={youtubeLink}
+            onChange={(e) => setYoutubeLink(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-spotify" className="text-xs">Spotify</Label>
+          <Input
+            id="picker-song-spotify"
+            value={spotifyLink}
+            onChange={(e) => setSpotifyLink(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="picker-song-cifra" className="text-xs">Cifra Club</Label>
+          <Input
+            id="picker-song-cifra"
+            value={cifraClubLink}
+            onChange={(e) => setCifraClubLink(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+      </div>
+
+      {error ? <p className="text-xs text-crimson">{error}</p> : null}
+
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          onClick={submit}
+          disabled={saving}
+          className="rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90"
+        >
+          {saving ? "Salvando…" : "Criar e usar"}
+        </Button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="text-xs text-stone hover:underline"
+        >
+          Voltar para a busca
+        </button>
       </div>
     </div>
   );

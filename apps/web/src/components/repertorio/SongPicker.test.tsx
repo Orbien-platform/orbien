@@ -189,6 +189,140 @@ describe("SongPicker", () => {
     expect(screen.getByText("Grande é o Senhor")).toBeInTheDocument();
   });
 
+  describe("cadastro inline", () => {
+    async function openCreate() {
+      mockGet([]);
+      const onSelect = vi.fn();
+      render(<SongPicker canCreate onSelect={onSelect} debounce={0} />);
+      await screen.findByText("Nenhuma música no repertório desta congregação.");
+      await userEvent.click(screen.getByRole("button", { name: /Cadastrar música no repertório/ }));
+      return onSelect;
+    }
+
+    it("oferece título, tons, BPM e os quatro links (SETREP-03 AC1)", async () => {
+      await openCreate();
+
+      expect(screen.getByLabelText("Título")).toBeInTheDocument();
+      expect(screen.getByLabelText("Tom")).toBeInTheDocument();
+      expect(screen.getByLabelText("Tom alternativo")).toBeInTheDocument();
+      expect(screen.getByLabelText("BPM")).toBeInTheDocument();
+      expect(screen.getByLabelText("Link")).toBeInTheDocument();
+      expect(screen.getByLabelText("YouTube")).toBeInTheDocument();
+      expect(screen.getByLabelText("Spotify")).toBeInTheDocument();
+      expect(screen.getByLabelText("Cifra Club")).toBeInTheDocument();
+    });
+
+    it("cria a música via POST /songs com os campos informados (SETREP-03 AC1)", async () => {
+      const onSelect = await openCreate();
+      vi.mocked(api.post).mockResolvedValue({
+        data: { id: "novo", title: "Grande é o Senhor", key: "D" },
+      } as never);
+
+      await userEvent.type(screen.getByLabelText("Título"), "  Grande é o Senhor  ");
+      await userEvent.type(screen.getByLabelText("Tom"), "D");
+      await userEvent.type(screen.getByLabelText("Tom alternativo"), "E");
+      await userEvent.type(screen.getByLabelText("BPM"), "80");
+      await userEvent.type(screen.getByLabelText("Link"), "https://cifra/x");
+      await userEvent.type(screen.getByLabelText("YouTube"), "https://yt/x");
+      await userEvent.type(screen.getByLabelText("Spotify"), "https://spotify/x");
+      await userEvent.type(screen.getByLabelText("Cifra Club"), "https://cifraclub/x");
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith("/songs", {
+          title: "Grande é o Senhor",
+          key: "D",
+          key_alt: "E",
+          bpm: 80,
+          link: "https://cifra/x",
+          youtube_link: "https://yt/x",
+          spotify_link: "https://spotify/x",
+          cifra_club_link: "https://cifraclub/x",
+        }),
+      );
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    });
+
+    it("seleciona a música criada com last_played_at nulo (SETREP-03 AC2)", async () => {
+      const onSelect = await openCreate();
+      vi.mocked(api.post).mockResolvedValue({
+        data: { id: "novo", title: "Grande é o Senhor", key: "D", bpm: null },
+      } as never);
+
+      await userEvent.type(screen.getByLabelText("Título"), "Grande é o Senhor");
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      await waitFor(() =>
+        expect(onSelect).toHaveBeenCalledWith({
+          id: "novo",
+          title: "Grande é o Senhor",
+          key: "D",
+          bpm: null,
+          last_played_at: null,
+        }),
+      );
+    });
+
+    it("título só com espaço bloqueia o envio sem chamar a API (SETREP-03 AC3)", async () => {
+      await openCreate();
+
+      await userEvent.type(screen.getByLabelText("Título"), "   ");
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      expect(await screen.findByText("Dê um título à música.")).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it("erro 4xx do POST mostra a mensagem da API e preserva o digitado (SETREP-03 AC4)", async () => {
+      await openCreate();
+      vi.mocked(api.post).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 403, data: { message: "Você não tem permissão." } },
+      } as never);
+
+      await userEvent.type(screen.getByLabelText("Título"), "Digno é o Senhor");
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      expect(await screen.findByText("Você não tem permissão.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Título")).toHaveValue("Digno é o Senhor");
+    });
+
+    it("erro 5xx do POST cai na mensagem da tela (SETREP-03 AC4)", async () => {
+      await openCreate();
+      vi.mocked(api.post).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 500, data: { statusCode: 500, message: "Internal server error" } },
+      } as never);
+
+      await userEvent.type(screen.getByLabelText("Título"), "Digno é o Senhor");
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      expect(await screen.findByText("Não foi possível salvar a música.")).toBeInTheDocument();
+      expect(screen.queryByText("Internal server error")).not.toBeInTheDocument();
+    });
+
+    it("mostra 'Salvando…' enquanto o POST está em voo", async () => {
+      await openCreate();
+      let resolve: (v: unknown) => void = () => {};
+      vi.mocked(api.post).mockReturnValue(new Promise((r) => { resolve = r; }) as never);
+
+      await userEvent.type(screen.getByLabelText("Título"), "Digno é o Senhor");
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      expect(await screen.findByRole("button", { name: "Salvando…" })).toBeInTheDocument();
+      resolve({ data: { id: "novo", title: "Digno é o Senhor" } });
+    });
+
+    it("volta para a busca sem criar nada", async () => {
+      await openCreate();
+
+      await userEvent.click(screen.getByRole("button", { name: "Voltar para a busca" }));
+
+      expect(screen.getByPlaceholderText("Buscar no repertório…")).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+    });
+  });
+
   it("oferece cancelar quando o consumidor passa onCancel", async () => {
     mockGet();
     const onCancel = vi.fn();

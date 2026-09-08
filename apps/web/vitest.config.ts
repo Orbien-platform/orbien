@@ -49,6 +49,12 @@ export default defineConfig({
         "src/components/financial/**": { statements: 99, branches: 98, functions: 100, lines: 100 },
         "src/components/groups/**": { statements: 98, branches: 92, functions: 100, lines: 100 },
         "src/components/persons/**": { statements: 99, branches: 89, functions: 100, lines: 100 },
+        // `components/repertorio/**` nasceu depois da Fase 9 e ficou fora da
+        // lista — o mesmo ponto cego que `src/platform/` teve na API. Piso
+        // medido em 2026-09-08, com `SongCatalogPanel` e `SongPicker`; as
+        // frações que faltam são as guardas de `cancelled` do `useEffect`,
+        // alcançáveis só desmontando no meio da requisição.
+        "src/components/repertorio/**": { statements: 98, branches: 91, functions: 100, lines: 100 },
         "src/components/volunteers/**": { statements: 100, branches: 95, functions: 100, lines: 100 },
         // Fase 10
         "src/app/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
