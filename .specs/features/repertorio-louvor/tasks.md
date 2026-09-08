@@ -14,7 +14,7 @@ without it.**
 ---
 
 **Design**: `.specs/features/repertorio-louvor/design.md`
-**Status**: In Progress — T1-T9 (Fases 1-4, API) concluídas e commitadas (`23965f2`..`b0ee2a4`); T10-T14 (Fases 5-7, web+e2e) em execução
+**Status**: T1-T14 concluídas e commitadas (`23965f2`..`0909a0e`). Aguardando validação do Verifier (feature-level, step 10 do Execute).
 
 ---
 
@@ -365,10 +365,10 @@ consumindo `GET/POST/PATCH/DELETE /songs` via `src/lib/api.ts` (padrão
 - Skill: NONE
 
 **Done when**:
-- [ ] Lista músicas, mostra estado vazio e estado de loading
-- [ ] Com `canEdit=false`, não mostra ações de criar/editar/remover
-- [ ] Com `canEdit=true`, cria/edita/remove e atualiza a lista local sem reload
-- [ ] `npm run test -w orbien-web` passa
+- [x] Lista músicas, mostra estado vazio e estado de loading
+- [x] Com `canEdit=false`, não mostra ações de criar/editar/remover
+- [x] Com `canEdit=true`, cria/edita/remove e atualiza a lista local sem reload
+- [x] `npm run test -w orbien-web` passa
 
 **Tests**: unit (vitest)
 **Gate**: quick
@@ -390,9 +390,9 @@ gate já usada para adicionar música na setlist hoje — decisão da Specify).
 - Skill: NONE
 
 **Done when**:
-- [ ] Nova aba aparece na navegação e renderiza `SongCatalogPanel`
-- [ ] `canEdit` chega corretamente ao componente conforme o papel do usuário mockado no teste
-- [ ] `npm run test -w orbien-web` passa
+- [x] Nova aba aparece na navegação e renderiza `SongCatalogPanel`
+- [x] `canEdit` chega corretamente ao componente conforme o papel do usuário mockado no teste
+- [x] `npm run test -w orbien-web` passa
 
 **Tests**: unit (vitest)
 **Gate**: quick
@@ -420,10 +420,10 @@ selecionada.
 - Skill: NONE
 
 **Done when**:
-- [ ] Selecionar música do catálogo preenche os campos, ainda editáveis
-- [ ] Editar um campo depois de selecionar mantém `song_id` e envia o valor editado (não o do catálogo)
-- [ ] Continua possível adicionar música sem selecionar nada do catálogo (regressão)
-- [ ] `npm run test -w orbien-web` passa
+- [x] Selecionar música do catálogo preenche os campos, ainda editáveis
+- [x] Editar um campo depois de selecionar mantém `song_id` e envia o valor editado (não o do catálogo)
+- [x] Continua possível adicionar música sem selecionar nada do catálogo (regressão)
+- [x] `npm run test -w orbien-web` passa
 
 **Tests**: unit (vitest)
 **Gate**: quick
@@ -449,9 +449,9 @@ mostrar texto indicando que o repertório ainda não foi publicado.
 - Skill: NONE
 
 **Done when**:
-- [ ] Cartão com `setlist` presente mostra as músicas (título, tom, bpm, link clicável)
-- [ ] Cartão com `setlist: null` mostra o texto de "ainda não publicado", sem quebrar
-- [ ] `npm run test -w orbien-web` passa
+- [x] Cartão com `setlist` presente mostra as músicas (título, tom, bpm, link clicável)
+- [x] Cartão com `setlist: null` mostra o texto de "ainda não publicado", sem quebrar
+- [x] `npm run test -w orbien-web` passa
 
 **Tests**: unit (vitest)
 **Gate**: quick
@@ -478,9 +478,9 @@ estado "ainda não publicado" em vez de quebrar a tela.
 - Skill: NONE
 
 **Done when**:
-- [ ] Caminho feliz completo passa (cadastro → uso na setlist → aparece corretamente)
-- [ ] Caso de ausência de setlist publicada não gera erro de console nem resposta HTTP inesperada (mesmo padrão de asserção das outras specs de e2e)
-- [ ] `npm run e2e -w orbien-web` passa
+- [x] Caminho feliz completo passa (cadastro → uso na setlist → aparece corretamente)
+- [x] Caso de ausência de setlist publicada não gera erro de console nem resposta HTTP inesperada (mesmo padrão de asserção das outras specs de e2e)
+- [x] `npm run e2e -w orbien-web` passa
 
 **Tests**: e2e
 **Gate**: full
