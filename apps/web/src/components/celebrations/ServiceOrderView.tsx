@@ -9,7 +9,9 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddItemModal, ITEM_TYPE_LABELS, type ItemType } from "@/components/celebrations/AddItemModal";
+import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
+import { songKey, type CatalogSong } from "@/lib/repertorio";
 import api from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,56 +112,34 @@ function ItemIcon({ type }: { type: ItemType }) {
 
 // ─── Add Song inline form ──────────────────────────────────────────────────────
 
-interface CatalogSong {
-  id: string;
-  title: string;
-  key: string | null;
-  key_alt: string | null;
-  bpm: number | null;
-  link: string | null;
-}
-
 interface AddSongFormProps {
   setlistId: string;
   nextPosition: number;
+  canCreate: boolean;
   onAdded: () => void;
   onCancel: () => void;
 }
 
-function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongFormProps) {
-  const [catalog, setCatalog] = useState<CatalogSong[]>([]);
-  const [songId, setSongId] = useState("");
+function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: AddSongFormProps) {
+  const [selectedSong, setSelectedSong] = useState<CatalogSong | null>(null);
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
   const [link, setLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [catalogError, setCatalogError] = useState(false);
-
-  const selectedSong = catalog.find((s) => s.id === songId) ?? null;
-
-  useEffect(() => {
-    api
-      .get<CatalogSong[]>("/songs")
-      .then(({ data }) => setCatalog(Array.isArray(data) ? data : []))
-      .catch(() => setCatalogError(true));
-  }, []);
 
   // Escolher uma música do catálogo preenche os campos como valores default,
   // ainda editáveis por baixo — sem travar entrada avulsa (REPERT-02).
-  function handleSelectSong(id: string) {
-    setSongId(id);
-    const song = catalog.find((s) => s.id === id);
-    if (song) {
-      setTitle(song.title);
-      // Quando só o tom alternativo está cadastrado, ele é a única opção do
-      // seletor abaixo — o estado precisa começar nele para não divergir do
-      // que a tela mostra como selecionado.
-      setKey(song.key ?? song.key_alt ?? "");
-      setBpm(song.bpm != null ? String(song.bpm) : "");
-      setLink(song.link ?? "");
-    }
+  function handleSelectSong(song: CatalogSong) {
+    setSelectedSong(song);
+    setTitle(song.title);
+    // Quando só o tom alternativo está cadastrado, ele é a única opção do
+    // seletor abaixo — o estado precisa começar nele para não divergir do
+    // que a tela mostra como selecionado.
+    setKey(songKey(song) ?? "");
+    setBpm(song.bpm != null ? String(song.bpm) : "");
+    setLink(song.link ?? "");
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -176,7 +156,7 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
       // `song_id`; achado pré-existente, fora do escopo de REPERT-02.
       await api.post(`/celebrations/setlists/songs`, {
         setlist_id: setlistId,
-        song_id: songId || undefined,
+        song_id: selectedSong?.id ?? undefined,
         sequence: nextPosition,
         title: title.trim(),
         key: key.trim() || undefined,
@@ -193,25 +173,7 @@ function AddSongForm({ setlistId, nextPosition, onAdded, onCancel }: AddSongForm
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
-      {catalog.length > 0 && (
-        <select
-          aria-label="Escolher do catálogo"
-          value={songId}
-          onChange={(e) => handleSelectSong(e.target.value)}
-          disabled={isSubmitting}
-          className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-        >
-          <option value="">Escolher do catálogo (opcional)…</option>
-          {catalog.map((s) => (
-            <option key={s.id} value={s.id}>{s.title}</option>
-          ))}
-        </select>
-      )}
-      {catalogError && (
-        <p className="text-xs text-stone">
-          Não foi possível carregar o catálogo — digite a música diretamente abaixo.
-        </p>
-      )}
+      <SongPicker canCreate={canCreate} onSelect={handleSelectSong} />
       {selectedSong?.key_alt && (
         <select
           aria-label="Tom confirmado para a escala"
@@ -741,6 +703,7 @@ export function ServiceOrderView({
                                 <AddSongForm
                                   setlistId={setlist.id}
                                   nextPosition={(setlist.songs.length ?? 0) + 1}
+                                  canCreate={canAddSongs}
                                   onAdded={afterAddSong}
                                   onCancel={() => setAddSongForItemId(null)}
                                 />
