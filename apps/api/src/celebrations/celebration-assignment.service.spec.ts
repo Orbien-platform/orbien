@@ -954,5 +954,88 @@ describe('CelebrationAssignmentService', () => {
         }),
       );
     });
+
+    it('traz service_order_id quando a instância já tem Ordem de Culto (MOB-08-07)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        assignmentFixture({
+          celebrationMinistry: {
+            ministry_id: 'min1',
+            ministry: { id: 'min1', name: 'Louvor' },
+            schedule: {
+              celebrationInstance: {
+                id: 'inst1',
+                scheduled_date: new Date('2026-09-20'),
+                celebration: { id: 'c1', name: 'Culto Noite' },
+                serviceOrder: { id: 'ord1' },
+              },
+            },
+          },
+        }),
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].service_order_id).toBe('ord1');
+    });
+
+    it('traz service_order_id nulo quando a instância ainda não tem Ordem de Culto (MOB-08-07)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        assignmentFixture({
+          celebrationMinistry: {
+            ministry_id: 'min1',
+            ministry: { id: 'min1', name: 'Louvor' },
+            schedule: {
+              celebrationInstance: {
+                id: 'inst1',
+                scheduled_date: new Date('2026-09-20'),
+                celebration: { id: 'c1', name: 'Culto Noite' },
+                serviceOrder: null,
+              },
+            },
+          },
+        }),
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].service_order_id).toBeNull();
+    });
+
+    it('traz checked_in_at quando o check-in já foi feito (MOB-08-08)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      const checkedInAt = new Date('2026-09-20T10:00:00Z');
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        assignmentFixture({ checked_in_at: checkedInAt }),
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].checked_in_at).toEqual(checkedInAt);
+    });
+
+    it('traz checked_in_at nulo quando ainda não houve check-in (MOB-08-08)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        assignmentFixture({ checked_in_at: null }),
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0].checked_in_at).toBeNull();
+    });
   });
 });

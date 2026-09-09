@@ -377,7 +377,13 @@ export class CelebrationAssignmentService {
         celebrationMinistry: {
           include: {
             ministry: true,
-            schedule: { include: { celebrationInstance: { include: { celebration: true } } } },
+            schedule: {
+              include: {
+                celebrationInstance: {
+                  include: { celebration: true, serviceOrder: { select: { id: true } } },
+                },
+              },
+            },
           },
         },
       },
@@ -390,6 +396,7 @@ export class CelebrationAssignmentService {
       status: a.status,
       notified_at: a.notified_at,
       responded_at: a.responded_at,
+      checked_in_at: a.checked_in_at,
       celebration: {
         id: a.celebrationMinistry.schedule.celebrationInstance.celebration.id,
         name: a.celebrationMinistry.schedule.celebrationInstance.celebration.name,
@@ -399,6 +406,7 @@ export class CelebrationAssignmentService {
         name: a.celebrationMinistry.ministry.name,
       },
       scheduled_date: a.celebrationMinistry.schedule.celebrationInstance.scheduled_date,
+      service_order_id: a.celebrationMinistry.schedule.celebrationInstance.serviceOrder?.id ?? null,
       setlist: setlistByKey.get(
         `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,
       ) ?? null,
