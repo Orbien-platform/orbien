@@ -2,19 +2,39 @@
 // de (tabs)), mesmo critério de post/[id].tsx e indisponibilidade.tsx: tela
 // de detalhe empurrada por router.push, não uma seção própria de
 // navegação. Destino do toque num item da aba Celebrações.
+//
+// Visual conforme STYLE-GUIDE.md: `Screen scroll` (a OC é a tela que mais
+// cresce e antes era cortada sem rolagem), aviso de "não publicada" como
+// alerta com ícone em vez de linha vermelha solta, cada etapa com o
+// horário em `mono` (§2 reserva a mono a valor/ID) e o repertório como
+// lista com ícone, não linhas indentadas por margem.
+//
+// O destaque de "minha função" continua sendo o contorno na cor da marca —
+// agora via `highlightColor` do Card, para não haver dois lugares
+// desenhando borda.
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
+import { Alert } from "../../components/Alert";
 import { AppButton } from "../../components/AppButton";
+import { Badge } from "../../components/Badge";
 import { Card } from "../../components/Card";
 import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { getServiceOrder } from "../../lib/celebracoes/celebracoes-client";
 import type { ServiceOrder } from "../../lib/celebracoes/types";
+import {
+  CircleAlert,
+  Clock,
+  ListMusic,
+  Music,
+  RefreshCw,
+  WifiOff,
+} from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
-import { colors, spacing, typography } from "../../lib/theme/tokens";
+import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Ordem de culto não encontrada.";
 const LOAD_ERROR_MESSAGE = "Não foi possível carregar a Ordem de Culto. Verifique sua conexão.";
@@ -33,7 +53,7 @@ function formatOffset(minutes: number): string {
 }
 
 export default function CelebracaoScreen() {
-  const theme = useTheme();
+  const { primaryColor, colors } = useTheme();
   const { id, ministryId } = useLocalSearchParams<{ id: string; ministryId?: string }>();
   const [order, setOrder] = useState<ServiceOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +82,18 @@ export default function CelebracaoScreen() {
   if (error) {
     const canRetry = error === LOAD_ERROR_MESSAGE;
     return (
-      <StatusMessage testID="celebracao-error" message={error} tone="danger">
+      <StatusMessage
+        testID="celebracao-error"
+        icon={canRetry ? WifiOff : CircleAlert}
+        message={error}
+        tone="danger"
+      >
         {canRetry ? (
           <AppButton
             testID="celebracao-retry"
             title="Tentar novamente"
+            icon={RefreshCw}
+            variant="secondary"
             onPress={() => {
               setError(null);
               setRetryCount((n) => n + 1);
@@ -78,48 +105,90 @@ export default function CelebracaoScreen() {
   }
 
   if (!order) {
-    return <StatusMessage testID="celebracao-loading" message="Carregando…" />;
+    return <StatusMessage testID="celebracao-loading" icon={ListMusic} message="Carregando…" />;
   }
 
   const items = [...order.items].sort((a, b) => a.sequence - b.sequence);
 
   return (
-    <Screen testID="celebracao-detail">
-      <Text testID="celebracao-title" style={styles.title}>
+    <Screen scroll testID="celebracao-detail">
+      <Text
+        testID="celebracao-title"
+        style={[typography.h1, styles.title, { color: colors.textPrimary }]}
+      >
         {order.title}
       </Text>
       {order.published_at === null ? (
-        <Text testID="celebracao-unpublished-warning" style={styles.warning}>
-          {UNPUBLISHED_WARNING}
-        </Text>
+        <Alert messageTestID="celebracao-unpublished-warning" message={UNPUBLISHED_WARNING} />
       ) : null}
+
       {items.map((item) => {
         const isMine = ministryId !== undefined && item.ministry?.id === ministryId;
+        const responsible =
+          item.responsible_type === "person" && item.person
+            ? item.person.full_name
+            : item.responsible_type === "ministry" && item.ministry
+              ? item.ministry.name
+              : item.responsible_label;
+
         return (
           <Card
             key={item.id}
             testID={isMine ? `celebracao-item-${item.id}-mine` : `celebracao-item-${item.id}`}
-            style={isMine ? [styles.item, { borderColor: theme.primaryColor, borderWidth: 2 }] : styles.item}
+            highlightColor={isMine ? primaryColor : undefined}
           >
-            <Text style={typography.subtitle}>{item.name}</Text>
-            <Text testID={`celebracao-item-${item.id}-horario`} style={styles.horario}>
-              {`${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min`}
-            </Text>
-            <Text style={styles.responsible}>
-              {item.responsible_type === "person" && item.person
-                ? item.person.full_name
-                : item.responsible_type === "ministry" && item.ministry
-                  ? item.ministry.name
-                  : item.responsible_label}
-            </Text>
+            <View style={styles.itemHeader}>
+              <Text style={[typography.h3, styles.itemName, { color: colors.textPrimary }]}>
+                {item.name}
+              </Text>
+              {isMine ? <Badge label="Minha função" tone="info" /> : null}
+            </View>
+
+            <View style={styles.metaRow}>
+              <Clock
+                size={iconSize.inline}
+                color={colors.textTertiary}
+                strokeWidth={ICON_STROKE_WIDTH}
+              />
+              {/* Token `mono` (§2): valor, alinhado entre etapas. */}
+              <Text
+                testID={`celebracao-item-${item.id}-horario`}
+                style={[typography.mono, { color: colors.textSecondary }]}
+              >
+                {`${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min`}
+              </Text>
+            </View>
+
+            {responsible ? (
+              <Text style={[typography.bodyMedium, styles.responsible, { color: colors.textPrimary }]}>
+                {responsible}
+              </Text>
+            ) : null}
+
             {item.setlist ? (
-              item.setlist.songs.map((song) => (
-                <Text key={song.id} style={styles.song}>
-                  {song.title}
-                </Text>
-              ))
+              <View style={styles.setlist}>
+                {item.setlist.songs.map((song) => (
+                  <View key={song.id} style={styles.songRow}>
+                    <Music
+                      size={iconSize.inline}
+                      color={colors.textTertiary}
+                      strokeWidth={ICON_STROKE_WIDTH}
+                    />
+                    <Text style={[typography.body, styles.songTitle, { color: colors.textPrimary }]}>
+                      {song.title}
+                    </Text>
+                    {song.key ? (
+                      <Text style={[typography.mono, { color: colors.textTertiary }]}>
+                        {song.key}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
             ) : (
-              <Text style={styles.noSetlist}>{NO_SETLIST_MESSAGE}</Text>
+              <Text style={[typography.caption, styles.noSetlist, { color: colors.textTertiary }]}>
+                {NO_SETLIST_MESSAGE}
+              </Text>
             )}
           </Card>
         );
@@ -129,34 +198,32 @@ export default function CelebracaoScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    ...typography.title,
-    marginBottom: spacing.sm,
+  title: { marginBottom: spacing.md },
+  itemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  warning: {
-    ...typography.caption,
-    color: colors.danger,
-    marginBottom: spacing.md,
+  itemName: { flex: 1 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs + 2,
+    marginTop: spacing.sm,
   },
-  item: {
-    marginBottom: spacing.md,
+  responsible: { marginTop: spacing.sm },
+  setlist: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
-  horario: {
-    ...typography.caption,
-    marginTop: spacing.xs,
+  songRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  responsible: {
-    ...typography.body,
-    marginTop: spacing.xs,
-  },
-  song: {
-    ...typography.body,
-    marginTop: spacing.xs,
-    marginLeft: spacing.sm,
-  },
+  songTitle: { flex: 1 },
   noSetlist: {
-    ...typography.caption,
     fontStyle: "italic",
-    marginTop: spacing.xs,
+    marginTop: spacing.md,
   },
 });

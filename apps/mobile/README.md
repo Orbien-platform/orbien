@@ -3,6 +3,31 @@
 App nativo (Expo + React Native + TypeScript) do Orbien. Ver
 `.specs/features/app-mobile/` na raiz do monorepo para spec/design/tasks.
 
+A base visual é o [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) deste diretório —
+tokens de cor e tipografia (os mesmos de `apps/web`), alvo de toque, sombra
+por plataforma, tema por tenant e modo claro/escuro. A §10 dele mapeia cada
+regra ao arquivo que a implementa; o resumo operacional está em `AGENTS.md`.
+
+## Design system
+
+| Camada | Onde |
+|---|---|
+| Tokens (cor, tipografia, espaço, raio, sombra, ícone) | `src/lib/theme/tokens.ts` |
+| Papel semântico + tema do tenant + claro/escuro | `src/lib/theme/theme-provider.tsx` (`useTheme()`) |
+| Fontes da marca (DM Sans / DM Mono) | `src/lib/theme/fonts.ts` |
+| Ícones (lista fechada, lucide) | `src/lib/theme/icons.ts` |
+| Componentes (botão, card, badge, input, estado vazio…) | `src/components/` |
+
+Dois imports que parecem inofensivos e não são, os dois medidos no
+`expo export`:
+
+- `lucide-react-native` (barril) reexporta ~1600 ícones — importe sempre
+  pelo subpath, o que `src/lib/theme/icons.ts` já faz. Pelo barril, um único
+  teste de tela passou de 1,7s para 69s.
+- `@expo-google-fonts/dm-sans` (barril) faz `require` dos 18 pesos e
+  itálicos (~1MB de `.ttf`) — `src/lib/theme/fonts.ts` importa peso a peso e
+  empacota só os 6 que a escala usa (322KB).
+
 ## Rodar localmente
 
 A partir da raiz do monorepo (instale sempre com `npm install` na raiz —

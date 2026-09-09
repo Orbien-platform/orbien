@@ -1,7 +1,7 @@
 // Testes derivados do Done-when de T6 (tasks.md, MOB-09-01/02): lista os
 // grupos com nome/horário/papel, estado vazio, erro de rede, e navegação
 // pro detalhe do grupo.
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -29,8 +29,10 @@ describe("GruposScreen", () => {
       render(<GruposScreen />);
     });
 
-    expect(screen.getByTestId("grupo-sg1")).toBeTruthy();
-    expect(screen.getByText("Grupo do Bairro — Líder — 19:30")).toBeTruthy();
+    const card = screen.getByTestId("grupo-sg1");
+    expect(within(card).getByText("Grupo do Bairro")).toBeTruthy();
+    expect(within(card).getByTestId("grupo-sg1-papel")).toHaveTextContent("Líder");
+    expect(within(card).getByText("19:30")).toBeTruthy();
   });
 
   it("grupo sem meeting_time não mostra o horário", async () => {
@@ -42,7 +44,11 @@ describe("GruposScreen", () => {
       render(<GruposScreen />);
     });
 
-    expect(screen.getByText("Grupo da Vila — Membro")).toBeTruthy();
+    const card = screen.getByTestId("grupo-sg1");
+    expect(within(card).getByText("Grupo da Vila")).toBeTruthy();
+    expect(within(card).getByTestId("grupo-sg1-papel")).toHaveTextContent("Membro");
+    // sem meeting_time, a linha de horário não é renderizada
+    expect(within(card).queryByText("19:30")).toBeNull();
   });
 
   it("lista vazia mostra 'Você não participa de nenhum grupo.' (AC2)", async () => {
@@ -96,8 +102,15 @@ describe("GruposScreen", () => {
       render(<GruposScreen />);
     });
 
-    expect(screen.getByText("Célula Jovem — Líder — 19:00")).toBeTruthy();
-    expect(screen.getByText("Célula Jovem — Membro — 20:00")).toBeTruthy();
+    // Mesmo nome nos dois: o que os distingue é papel e horário, cada um
+    // dentro do seu card.
+    const first = screen.getByTestId("grupo-sg1");
+    expect(within(first).getByTestId("grupo-sg1-papel")).toHaveTextContent("Líder");
+    expect(within(first).getByText("19:00")).toBeTruthy();
+
+    const second = screen.getByTestId("grupo-sg2");
+    expect(within(second).getByTestId("grupo-sg2-papel")).toHaveTextContent("Membro");
+    expect(within(second).getByText("20:00")).toBeTruthy();
   });
 
   it("toque num grupo navega para /grupo/[id]", async () => {

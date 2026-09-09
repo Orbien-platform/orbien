@@ -30,7 +30,7 @@ jest.mock("expo-router/js-tabs", () => {
 import TabsLayout from "../../../app/(tabs)/_layout";
 
 describe("TabsLayout", () => {
-  it("renderiza as abas Escala, Celebrações, Grupos e Conteúdo", async () => {
+  it("renderiza as abas Escala, Celebrações, Grupos, Conteúdo e Perfil", async () => {
     await act(async () => {
       render(<TabsLayout />);
     });
@@ -39,5 +39,17 @@ describe("TabsLayout", () => {
     expect(screen.getByTestId("tab-celebracoes").props.children).toBe("Celebrações");
     expect(screen.getByTestId("tab-grupos").props.children).toBe("Grupos");
     expect(screen.getByTestId("tab-conteudo").props.children).toBe("Conteúdo");
+    expect(screen.getByTestId("tab-perfil").props.children).toBe("Perfil");
+  });
+
+  // §7 do STYLE-GUIDE.md: "Máximo 5 itens (regra dura — acima disso, usar
+  // 'Mais' agregando)". Com Perfil o app chegou no limite, então a próxima
+  // aba tem que ser uma decisão consciente, não um acréscimo silencioso.
+  it("não passa de 5 abas (limite duro do §7 do style guide)", async () => {
+    await act(async () => {
+      render(<TabsLayout />);
+    });
+
+    expect(screen.getAllByTestId(/^tab-/)).toHaveLength(5);
   });
 });

@@ -2,6 +2,10 @@
 // mesmo critério de indisponibilidade.tsx: tela de detalhe empurrada por
 // router.push, não uma seção própria de navegação. Destino do toque numa
 // push e de um item da lista de Conteúdo (T8).
+//
+// Visual conforme STYLE-GUIDE.md: `Screen scroll` porque o corpo do post
+// cresce além da altura da tela e antes era cortado sem rolagem; imagem
+// acima do texto, com radius de card (§5).
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text } from "react-native";
@@ -11,6 +15,8 @@ import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { getPost } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
+import { CircleAlert, Newspaper, WifiOff } from "../../lib/theme/icons";
+import { useTheme } from "../../lib/theme/theme-provider";
 import { radius, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Post não encontrado.";
@@ -18,6 +24,7 @@ const LOAD_ERROR_MESSAGE = "Não foi possível carregar o post. Verifique sua co
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { colors } = useTheme();
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,42 +52,53 @@ export default function PostScreen() {
   }, [id]);
 
   if (error) {
-    return <StatusMessage testID="post-error" message={error} tone="danger" />;
+    const isNotFound = error === NOT_FOUND_MESSAGE;
+    return (
+      <StatusMessage
+        testID="post-error"
+        icon={isNotFound ? CircleAlert : WifiOff}
+        message={error}
+        description={
+          isNotFound ? "Ele pode ter sido removido ou despublicado." : undefined
+        }
+        tone="danger"
+      />
+    );
   }
 
   if (!post) {
-    return <StatusMessage testID="post-loading" message="Carregando…" />;
+    return <StatusMessage testID="post-loading" icon={Newspaper} message="Carregando…" />;
   }
 
   return (
-    <Screen testID="post-detail">
-      <Text testID="post-title" style={styles.title}>
+    <Screen scroll testID="post-detail">
+      {post.media_url ? (
+        <Image
+          testID="post-media"
+          source={{ uri: post.media_url }}
+          style={styles.media}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+        />
+      ) : null}
+      <Text testID="post-title" style={[typography.h1, styles.title, { color: colors.textPrimary }]}>
         {post.title}
       </Text>
       {post.body ? (
-        <Text testID="post-body" style={styles.body}>
+        <Text testID="post-body" style={[typography.body, { color: colors.textSecondary }]}>
           {post.body}
         </Text>
-      ) : null}
-      {post.media_url ? (
-        <Image testID="post-media" source={{ uri: post.media_url }} style={styles.media} />
       ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    ...typography.title,
-    marginBottom: spacing.md,
-  },
-  body: {
-    ...typography.body,
-    marginBottom: spacing.md,
-  },
   media: {
     width: "100%",
     height: 200,
-    borderRadius: radius.md,
+    borderRadius: radius.card,
+    marginBottom: spacing.lg,
   },
+  title: { marginBottom: spacing.md },
 });
