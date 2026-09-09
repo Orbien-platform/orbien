@@ -73,10 +73,15 @@ function ThemedShell() {
             ),
         }}
       >
+        {/* Toda rota autenticada precisa estar listada aqui: o que o
+            `Stack.Protected` não nomeia continua sempre montado, ou seja,
+            alcançável por deep link sem sessão. Rota nova sob `src/app/`
+            entra nesta lista junto com o arquivo. */}
         <Stack.Protected guard={isAuthenticated}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="indisponibilidade" />
           <Stack.Screen name="post/[id]" />
+          <Stack.Screen name="celebracao/[id]" />
         </Stack.Protected>
         {/* Enquanto `status` é "loading" as rotas autenticadas ainda não
             existem; o splash cobre a tela até a sessão resolver, e o
