@@ -430,6 +430,63 @@ describe("ConfiguracoesPage", () => {
     expect(screen.queryByText(/clara demais/)).not.toBeInTheDocument();
   });
 
+  // Os três casos abaixo existem para exercer a conta de contraste por
+  // inteiro — ela tem ramos que o hexadecimal de 6 dígitos e claro não
+  // alcança, e `src/app/**` roda com limiar de cobertura em 100%.
+  it("aceita cor principal na forma curta #RGB, expandindo para 6 dígitos", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    // #000 é forma curta E tem os três canais abaixo do ponto de corte
+    // linear do WCAG (0.03928), que o ramo escuro da conta usa.
+    const colorInput = screen.getByPlaceholderText("#1C3D5A");
+    await user.clear(colorInput);
+    await user.type(colorInput, "#000");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [
+      string,
+      { congregation: { primary_color?: string } },
+    ];
+    expect(payload.congregation.primary_color).toBe("#000");
+  });
+
+  it("barra cor principal clara demais também na forma curta #RGB", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const colorInput = screen.getByPlaceholderText("#1C3D5A");
+    await user.clear(colorInput);
+    await user.type(colorInput, "#ff0");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(await screen.findByText(/Cor principal clara demais/)).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
+  });
+
+  it("o seletor de cor de destaque atualiza o campo de texto", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    // `<input type="color">` não aceita `user.type`; o navegador só emite
+    // change com o valor já escolhido.
+    fireEvent.change(screen.getByLabelText("Selecionar cor de destaque"), {
+      target: { value: "#f59e0b" },
+    });
+
+    expect(screen.getByPlaceholderText("#00B8A2")).toHaveValue("#f59e0b");
+  });
+
   it("barra cor de destaque com formato inválido", async () => {
     setup();
     mockedApi.get.mockResolvedValue({ data: settingsPayload() });
