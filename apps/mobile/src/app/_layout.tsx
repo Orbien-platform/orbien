@@ -82,6 +82,9 @@ function ThemedShell() {
           <Stack.Screen name="indisponibilidade" />
           <Stack.Screen name="post/[id]" />
           <Stack.Screen name="celebracao/[id]" />
+          <Stack.Screen name="grupo/[id]" />
+          <Stack.Screen name="grupo/encontro/[id]" />
+          <Stack.Screen name="grupo/encontro/[id]/presenca" />
         </Stack.Protected>
         {/* Enquanto `status` é "loading" as rotas autenticadas ainda não
             existem; o splash cobre a tela até a sessão resolver, e o

@@ -15,22 +15,25 @@ const LAYOUT = path.join(APP_DIR, "_layout.tsx");
 
 /** Nomes de rota da raiz, no formato que o expo-router usa em `Stack.Screen`. */
 function rootRouteNames(): string[] {
-  return fs
-    .readdirSync(APP_DIR, { withFileTypes: true })
-    .flatMap((entry) => {
+  // Recursivo: o nome de um screen é o caminho inteiro relativo ao layout
+  // (`grupo/encontro/[id]/presenca`), não só o primeiro nível. Um walker
+  // raso deixaria rota funda passar batido — que é justamente o furo que
+  // este teste existe para pegar.
+  function walk(dir: string, prefix: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        // Grupo de layout (`(tabs)`) é uma rota só; diretório comum vira um
-        // nome por arquivo dentro dele (`post/[id]`).
-        if (entry.name.startsWith("(")) return [entry.name];
-        return fs
-          .readdirSync(path.join(APP_DIR, entry.name))
-          .filter((file) => file !== "_layout.tsx")
-          .map((file) => `${entry.name}/${file.replace(/\.tsx?$/, "")}`);
+        // Grupo de layout (`(tabs)`) é uma rota só na raiz: o `_layout.tsx`
+        // dele responde por tudo que está dentro.
+        if (entry.name.startsWith("(")) return [`${prefix}${entry.name}`];
+        return walk(full, `${prefix}${entry.name}/`);
       }
       if (entry.name === "_layout.tsx") return [];
-      return [entry.name.replace(/\.tsx?$/, "")];
-    })
-    .sort();
+      return [`${prefix}${entry.name.replace(/\.tsx?$/, "")}`];
+    });
+  }
+
+  return walk(APP_DIR, "").sort();
 }
 
 /** Nomes citados em `<Stack.Screen name="…">` dentro de cada bloco Protected. */
