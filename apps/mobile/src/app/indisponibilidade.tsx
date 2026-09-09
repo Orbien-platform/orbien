@@ -19,6 +19,7 @@ import { Card } from "../components/Card";
 import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
 import { SectionLabel } from "../components/SectionLabel";
+import { describeLoadError } from "../lib/api/load-error";
 import { getUnavailability, saveUnavailability } from "../lib/escala/escala-client";
 import { formatMonthYear } from "../lib/format/date";
 import { ChevronRight, Check } from "../lib/theme/icons";
@@ -48,7 +49,6 @@ function leadingBlanks(year: number, month: number): number {
 
 const WEEKDAY_INITIALS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
-const LOAD_ERROR_MESSAGE = "Não foi possível carregar sua indisponibilidade. Verifique sua conexão.";
 const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";
 
 export default function IndisponibilidadeScreen() {
@@ -74,14 +74,14 @@ export default function IndisponibilidadeScreen() {
         setSaved(false);
         setLoadError(null);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (signal.cancelled) return;
         setSelectedDays(new Set());
         // Erro visível — distingue "falha ao carregar" de "sem
         // indisponibilidade cadastrada" (tela vazia interpretável como
         // sem dado, mesmo princípio do Edge Case da spec para 403/lista
         // vazia).
-        setLoadError(LOAD_ERROR_MESSAGE);
+        setLoadError(describeLoadError(err, "sua indisponibilidade").message);
       });
     return () => {
       signal.cancelled = true;

@@ -18,13 +18,13 @@ import { Card } from "../../components/Card";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
-import { ChevronRight, Clock, RefreshCw, Users, WifiOff } from "../../lib/theme/icons";
+import { ChevronRight, CircleAlert, Clock, RefreshCw, Users, WifiOff } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
-const NETWORK_ERROR_MESSAGE = "Não foi possível carregar seus grupos. Verifique sua conexão.";
 const EMPTY_MESSAGE = "Você não participa de nenhum grupo.";
 
 const ROLE_LABELS: Record<SmallGroupMine["role"], string> = {
@@ -45,7 +45,7 @@ export default function GruposScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const [groups, setGroups] = useState<SmallGroupMine[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
@@ -56,9 +56,9 @@ export default function GruposScreen() {
         if (cancelled) return;
         setGroups(result);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(NETWORK_ERROR_MESSAGE);
+        setError(describeLoadError(err, "seus grupos"));
       });
 
     return () => {
@@ -68,7 +68,13 @@ export default function GruposScreen() {
 
   if (error) {
     return (
-      <StatusMessage testID="grupos-error" icon={WifiOff} message={error} tone="danger">
+      <StatusMessage
+        testID="grupos-error"
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
+        tone="danger"
+      >
         <AppButton
           testID="grupos-retry"
           title="Tentar novamente"

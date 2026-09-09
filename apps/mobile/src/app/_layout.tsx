@@ -1,8 +1,7 @@
-import { Stack } from "expo-router";
+import { Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect } from "react";
-import { Image, Text } from "react-native";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "../lib/auth/auth-provider";
@@ -21,9 +20,15 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 SplashScreen.setOptions({ duration: 300, fade: true });
 
-// Shell autenticado (T16, MOB-03): aplica primaryColor/logoUrl do tenant no
-// header do Expo Router — cor no `headerStyle`, logo (ou nome do app, sem
-// logo customizado) no `headerTitle`.
+// Shell autenticado (T16, MOB-03): aplica primaryColor do tenant no header
+// do Expo Router.
+//
+// O header é das telas de DETALHE, não das abas (`headerShown: false` em
+// `(tabs)`): a barra repetia a marca em toda tela e cobrava 56px + safe
+// area por isso, enquanto a tab bar já diz onde o usuário está. A
+// identidade (logo do tenant ou marca da Orbien) aparece uma vez, no topo
+// do conteúdo da primeira aba (`BrandHeader`). Nas telas de detalhe o
+// header carrega o que só ele pode carregar: voltar e o nome da tela.
 //
 // A guarda de navegação (T14, MOB-01) vive DENTRO deste navigator, via
 // `Stack.Protected`, e não em volta dele. É o ponto do bug de boot no
@@ -45,8 +50,12 @@ function ThemedShell() {
   const { status } = useAuth();
   const theme = useTheme();
   const fontsReady = useAppFonts();
+  const segments = useSegments();
   const isAuthenticated = status === "authenticated";
   const isBooting = status === "loading" || !fontsReady;
+  // Só as telas de detalhe desenham o header pintado com a cor da marca; as
+  // abas e o login mostram a status bar sobre `bgBase`.
+  const onBrandHeader = isAuthenticated && segments.length > 0 && segments[0] !== "(tabs)";
 
   // A splash nativa some quando a animada já está desenhada — daí o
   // `onLayout`, e não um efeito de mount: no layout o primeiro frame do JS
@@ -65,12 +74,11 @@ function ThemedShell() {
 
   return (
     <>
-      {/* §8 do guia. Toda rota deste Stack desenha o header pintado com a
-          cor da marca (escura) sob a status bar, nos dois modos — por isso
-          `light` aqui, e não o modo do sistema. A exceção é o login, que
-          roda com `headerShown: false` e sobrescreve isso com o modo ativo
-          (src/app/login.tsx). */}
-      <StatusBar style="light" />
+      {/* §8 do guia. Sob o header pintado com a cor da marca (escura) a
+          status bar é sempre clara, nos dois modos; nas abas e no login,
+          que rodam sem header, ela fica sobre `bgBase` e segue o modo
+          ativo — no claro, `light` deixaria a hora invisível. */}
+      <StatusBar style={onBrandHeader || theme.isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: theme.primaryColor },
@@ -80,22 +88,17 @@ function ThemedShell() {
           // da marca — some com ela e deixa o contraste do fundo separar.
           headerShadowVisible: false,
           contentStyle: { backgroundColor: theme.colors.bgBase },
-          headerTitle: () =>
-            theme.logoUrl ? (
-              <Image
-                testID="header-logo"
-                source={{ uri: theme.logoUrl }}
-                style={{ width: 32, height: 32 }}
-                resizeMode="contain"
-              />
-            ) : (
-              <Text
-                testID="header-app-name"
-                style={[typography.h3, { color: theme.colors.textOnBrand }]}
-              >
-                {theme.appName}
-              </Text>
-            ),
+          // O título é o nome da TELA, não a marca (que já aparece no topo
+          // da primeira aba). Sem `headerTitle` customizado o Expo Router
+          // usa o `title` de cada `Stack.Screen` abaixo.
+          headerTitleStyle: {
+            fontFamily: typography.h3.fontFamily,
+            fontSize: typography.h3.fontSize,
+          },
+          // Sem isto o iOS escreve o nome da rota anterior ao lado da seta
+          // — e a rota anterior é o grupo de abas, então o botão de voltar
+          // do detalhe aparecia como "(tabs)".
+          headerBackButtonDisplayMode: "minimal",
         }}
       >
         {/* Toda rota autenticada precisa estar listada aqui: o que o
@@ -103,13 +106,15 @@ function ThemedShell() {
             alcançável por deep link sem sessão. Rota nova sob `src/app/`
             entra nesta lista junto com o arquivo. */}
         <Stack.Protected guard={isAuthenticated}>
-          <Stack.Screen name="(tabs)" />
+          {/* As abas não têm header: a tab bar já identifica a tela, e a
+              barra só tiraria espaço útil. */}
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="indisponibilidade" options={{ title: "Indisponibilidade" }} />
-          <Stack.Screen name="post/[id]" />
-          <Stack.Screen name="celebracao/[id]" />
-          <Stack.Screen name="grupo/[id]" />
-          <Stack.Screen name="grupo/encontro/[id]" />
-          <Stack.Screen name="grupo/encontro/[id]/presenca" />
+          <Stack.Screen name="post/[id]" options={{ title: "Publicação" }} />
+          <Stack.Screen name="celebracao/[id]" options={{ title: "Ordem de Culto" }} />
+          <Stack.Screen name="grupo/[id]" options={{ title: "Grupo" }} />
+          <Stack.Screen name="grupo/encontro/[id]" options={{ title: "Encontro" }} />
+          <Stack.Screen name="grupo/encontro/[id]/presenca" options={{ title: "Presença" }} />
         </Stack.Protected>
         {/* Enquanto `status` é "loading" as rotas autenticadas ainda não
             existem; o splash cobre a tela até a sessão resolver, e o

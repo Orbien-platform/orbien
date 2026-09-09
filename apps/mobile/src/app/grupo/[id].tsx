@@ -18,14 +18,14 @@ import { DateBlock } from "../../components/DateBlock";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { listMeetings } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { GroupMeetingSummary } from "../../lib/pequenos-grupos/types";
 import { formatDateTime } from "../../lib/format/date";
-import { CalendarDays, ChevronRight, RefreshCw, WifiOff } from "../../lib/theme/icons";
+import { CalendarDays, ChevronRight, CircleAlert, RefreshCw, WifiOff } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
-const NETWORK_ERROR_MESSAGE = "Não foi possível carregar os encontros. Verifique sua conexão.";
 const EMPTY_MESSAGE = "Nenhum encontro registrado.";
 
 export default function GrupoScreen() {
@@ -33,7 +33,7 @@ export default function GrupoScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const [meetings, setMeetings] = useState<GroupMeetingSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
@@ -47,9 +47,9 @@ export default function GrupoScreen() {
         );
         setMeetings(sorted);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(NETWORK_ERROR_MESSAGE);
+        setError(describeLoadError(err, "os encontros"));
       });
 
     return () => {
@@ -59,7 +59,13 @@ export default function GrupoScreen() {
 
   if (error) {
     return (
-      <StatusMessage testID="grupo-error" icon={WifiOff} message={error} tone="danger">
+      <StatusMessage
+        testID="grupo-error"
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
+        tone="danger"
+      >
         <AppButton
           testID="grupo-retry"
           title="Tentar novamente"

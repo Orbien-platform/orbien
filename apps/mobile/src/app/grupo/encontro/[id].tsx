@@ -27,15 +27,16 @@ import type { MeetingMaterial } from "../../../lib/pequenos-grupos/types";
 import {
   BookOpen,
   ExternalLink,
+  CircleAlert,
   FileText,
   RefreshCw,
   UserCheck,
   WifiOff,
 } from "../../../lib/theme/icons";
+import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
 import { useTheme } from "../../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../../lib/theme/tokens";
 
-const NETWORK_ERROR_MESSAGE = "Não foi possível carregar o material. Verifique sua conexão.";
 const EMPTY_MESSAGE = "Nenhum material disponível para este encontro.";
 
 const LEADER_ROLES = ["tenant_admin", "admin_congregation", "pastor", "secretary", "cell_leader"];
@@ -49,7 +50,7 @@ export default function EncontroScreen() {
   const isLeader = roles.some((r) => LEADER_ROLES.includes(r));
 
   const [materials, setMaterials] = useState<MeetingMaterial[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
@@ -60,9 +61,9 @@ export default function EncontroScreen() {
         if (cancelled) return;
         setMaterials(result);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(NETWORK_ERROR_MESSAGE);
+        setError(describeLoadError(err, "o material"));
       });
 
     return () => {
@@ -72,7 +73,13 @@ export default function EncontroScreen() {
 
   if (error) {
     return (
-      <StatusMessage testID="encontro-error" icon={WifiOff} message={error} tone="danger">
+      <StatusMessage
+        testID="encontro-error"
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
+        tone="danger"
+      >
         <AppButton
           testID="encontro-retry"
           title="Tentar novamente"

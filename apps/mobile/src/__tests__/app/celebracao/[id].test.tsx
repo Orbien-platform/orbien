@@ -13,7 +13,7 @@ jest.mock("../../../lib/celebracoes/celebracoes-client", () => ({
   getServiceOrder: (...args: unknown[]) => mockGetServiceOrder(...args),
 }));
 
-import { HttpError } from "../../../lib/api/errors";
+import { HttpError, NetworkError } from "../../../lib/api/errors";
 import CelebracaoScreen from "../../../app/celebracao/[id]";
 
 const BASE_ORDER = {
@@ -303,7 +303,7 @@ describe("CelebracaoScreen", () => {
   });
 
   it("erro de rede mostra mensagem genérica com opção de tentar novamente (AC5)", async () => {
-    mockGetServiceOrder.mockRejectedValueOnce(new Error("network"));
+    mockGetServiceOrder.mockRejectedValueOnce(new NetworkError());
     mockGetServiceOrder.mockResolvedValueOnce(BASE_ORDER);
 
     await act(async () => {

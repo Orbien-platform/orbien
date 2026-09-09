@@ -2,6 +2,7 @@
 // grupos com nome/horário/papel, estado vazio, erro de rede, e navegação
 // pro detalhe do grupo.
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
+import { NetworkError } from "../../../lib/api/errors";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -63,7 +64,7 @@ describe("GruposScreen", () => {
   });
 
   it("erro de rede mostra estado de erro explícito, não lista vazia (AC3)", async () => {
-    mockListMyGroups.mockRejectedValue(new Error("network"));
+    mockListMyGroups.mockRejectedValue(new NetworkError());
 
     await act(async () => {
       render(<GruposScreen />);
@@ -76,7 +77,7 @@ describe("GruposScreen", () => {
   });
 
   it("erro de rede oferece tentar novamente, que refaz a busca (AC3)", async () => {
-    mockListMyGroups.mockRejectedValueOnce(new Error("network"));
+    mockListMyGroups.mockRejectedValueOnce(new NetworkError());
     mockListMyGroups.mockResolvedValueOnce([
       { id: "sg1", name: "Grupo do Bairro", meeting_time: null, recurrence: null, role: "member" },
     ]);

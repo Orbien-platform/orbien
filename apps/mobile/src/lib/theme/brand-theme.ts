@@ -102,6 +102,21 @@ export function brandingLayer(branding: Branding | null | undefined): BrandTheme
   };
 }
 
+/**
+ * Só as cores de uma camada — o que continua valendo quando não há sessão.
+ *
+ * O cache de branding sobrevive ao logout de propósito (é o que faz o
+ * segundo login abrir na cor da igreja), mas identidade não é cor: com o
+ * cache inteiro aplicado, a tela de login de uma build genérica abria com
+ * o NOME e o LOGO do último tenant — dizendo "Doca Church" para quem ainda
+ * não disse em que igreja vai entrar. Cor da igreja antes do login é
+ * continuidade; nome da igreja antes do login é mentira. Sem sessão, a
+ * identidade vem da build (versão personalizada) ou da plataforma.
+ */
+export function colorsOnly(layer: BrandThemeLayer): BrandThemeLayer {
+  return { primaryColor: layer.primaryColor, accentColor: layer.accentColor };
+}
+
 /** Aplica as camadas na ordem recebida — a última que opinar sobre um
  * campo ganha. */
 export function resolveBrandTheme(...layers: BrandThemeLayer[]): BrandTheme {

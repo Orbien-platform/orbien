@@ -18,7 +18,7 @@
 // accent de contraste próprio passa a usá-lo sem tocar neste arquivo.
 import { Tabs } from "expo-router/js-tabs";
 import type { ComponentType } from "react";
-import type { ColorValue } from "react-native";
+import { StyleSheet, View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -30,7 +30,12 @@ import {
   type IconProps,
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
-import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
+import {
+  ICON_STROKE_WIDTH,
+  iconSize,
+  spacing,
+  typography,
+} from "../../lib/theme/tokens";
 
 const TAB_BAR_HEIGHT = 56;
 
@@ -41,7 +46,13 @@ const TAB_BAR_HEIGHT = 56;
  * abaixo, ambos string de tema — daí o cast, e não um `String(color)`, que
  * transformaria um handle opaco em "[object Object]" em silêncio. */
 function tabIcon(Icon: ComponentType<IconProps>) {
-  return function TabIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
+  return function TabIcon({
+    color,
+    focused,
+  }: {
+    color: ColorValue;
+    focused: boolean;
+  }) {
     return (
       <Icon
         size={focused ? iconSize.emphasis : iconSize.tabInactive}
@@ -57,38 +68,59 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: accentReadable,
-        tabBarInactiveTintColor: colors.textTertiary,
-        tabBarStyle: {
-          backgroundColor: colors.bgSurface,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          // §3: a safe area inferior vem do inset, nunca de valor fixo.
-          height: TAB_BAR_HEIGHT + insets.bottom,
-          paddingBottom: insets.bottom,
-          paddingTop: spacing.sm,
-        },
-        tabBarLabelStyle: typography.label,
-        tabBarItemStyle: { paddingVertical: 0 },
-      }}
+    // As abas rodam sem o header do Stack (src/app/_layout.tsx), então não
+    // há mais quem reserve a safe area superior: sem este padding o
+    // conteúdo da aba desenharia sob a status bar / o notch. Fica aqui, e
+    // não em cada tela, porque vale para as cinco.
+    <View
+      style={[
+        styles.flex,
+        { paddingTop: insets.top, backgroundColor: colors.bgBase },
+      ]}
     >
-      <Tabs.Screen
-        name="index"
-        options={{ title: "Escala", tabBarIcon: tabIcon(CalendarCheck) }}
-      />
-      <Tabs.Screen
-        name="celebracoes"
-        options={{ title: "Celebrações", tabBarIcon: tabIcon(Church) }}
-      />
-      <Tabs.Screen name="grupos" options={{ title: "Grupos", tabBarIcon: tabIcon(Users) }} />
-      <Tabs.Screen
-        name="conteudo"
-        options={{ title: "Conteúdo", tabBarIcon: tabIcon(Newspaper) }}
-      />
-      <Tabs.Screen name="perfil" options={{ title: "Perfil", tabBarIcon: tabIcon(CircleUser) }} />
-    </Tabs>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: accentReadable,
+          tabBarInactiveTintColor: colors.textTertiary,
+          tabBarStyle: {
+            backgroundColor: colors.bgSurface,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            // §3: a safe area inferior vem do inset, nunca de valor fixo.
+            height: TAB_BAR_HEIGHT + insets.bottom,
+            paddingBottom: insets.bottom,
+            paddingTop: spacing.sm,
+          },
+          tabBarLabelStyle: typography.label,
+          tabBarItemStyle: { paddingVertical: 0 },
+        }}
+      >
+        <Tabs.Screen
+          name="index"
+          options={{ title: "Escala", tabBarIcon: tabIcon(CalendarCheck) }}
+        />
+        <Tabs.Screen
+          name="celebracoes"
+          options={{ title: "Celebrações", tabBarIcon: tabIcon(Church) }}
+        />
+        <Tabs.Screen
+          name="grupos"
+          options={{ title: "Grupos", tabBarIcon: tabIcon(Users) }}
+        />
+        <Tabs.Screen
+          name="conteudo"
+          options={{ title: "Conteúdo", tabBarIcon: tabIcon(Newspaper) }}
+        />
+        <Tabs.Screen
+          name="perfil"
+          options={{ title: "Perfil", tabBarIcon: tabIcon(CircleUser) }}
+        />
+      </Tabs>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+});

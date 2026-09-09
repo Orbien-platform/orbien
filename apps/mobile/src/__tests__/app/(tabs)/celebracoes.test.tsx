@@ -4,6 +4,7 @@
 // OC navega para /celebracao/[id] com os params certos; estado vazio
 // distinto por papel; erro de rede.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { NetworkError } from "../../../lib/api/errors";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -188,7 +189,7 @@ describe("CelebracoesScreen", () => {
 
   it("erro de rede mostra estado de erro explícito, não lista vazia", async () => {
     mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
-    mockGetMyAssignments.mockRejectedValue(new Error("network"));
+    mockGetMyAssignments.mockRejectedValue(new NetworkError());
 
     await act(async () => {
       render(<CelebracoesScreen />);

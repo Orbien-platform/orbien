@@ -13,6 +13,7 @@ import { Image, StyleSheet, Text } from "react-native";
 import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { getPost } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
 import { CircleAlert, Newspaper, WifiOff } from "../../lib/theme/icons";
@@ -20,13 +21,12 @@ import { useTheme } from "../../lib/theme/theme-provider";
 import { radius, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Post não encontrado.";
-const LOAD_ERROR_MESSAGE = "Não foi possível carregar o post. Verifique sua conexão.";
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const [post, setPost] = useState<Post | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +42,13 @@ export default function PostScreen() {
         // despublicado entre o disparo da push e o toque do usuário —
         // findOne, MOB-07 T1, esconde rascunho de member).
         setError(
-          err instanceof HttpError && err.status === 404 ? NOT_FOUND_MESSAGE : LOAD_ERROR_MESSAGE,
+          err instanceof HttpError && err.status === 404
+            ? {
+                message: NOT_FOUND_MESSAGE,
+                description: "Ele pode ter sido removido ou despublicado.",
+                offline: false,
+              }
+            : describeLoadError(err, "o post"),
         );
       });
 
@@ -52,15 +58,12 @@ export default function PostScreen() {
   }, [id]);
 
   if (error) {
-    const isNotFound = error === NOT_FOUND_MESSAGE;
     return (
       <StatusMessage
         testID="post-error"
-        icon={isNotFound ? CircleAlert : WifiOff}
-        message={error}
-        description={
-          isNotFound ? "Ele pode ter sido removido ou despublicado." : undefined
-        }
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
         tone="danger"
       />
     );
