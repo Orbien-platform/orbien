@@ -14,7 +14,7 @@ without it.**
 ---
 
 **Design**: `.specs/features/celebracoes-oc-mobile/design.md`
-**Status**: Approved
+**Status**: Done — todas as 6 tasks implementadas e commitadas; aguardando Verifier
 
 ---
 
@@ -76,7 +76,7 @@ T6
 
 ## Task Breakdown
 
-### T1: `getMyAssignments` devolve `service_order_id` e `checked_in_at`
+### T1: ✅ Done `getMyAssignments` devolve `service_order_id` e `checked_in_at`
 
 **What**: Adiciona `serviceOrder: { select: { id: true } }` ao include de
 `celebrationInstance` e `checked_in_at`/`service_order_id` ao objeto mapeado
@@ -108,7 +108,7 @@ mais no map) — não muda `attachSetlists` nem o filtro.
 
 ---
 
-### T2: Tipos do domínio Celebrações (mobile)
+### T2: ✅ Done Tipos do domínio Celebrações (mobile)
 
 **What**: Cria `ServiceOrder`, `ServiceOrderItem`, `SetlistSongRef`,
 `CelebrationInstanceSummary` em `lib/celebracoes/types.ts`, espelhando
@@ -141,7 +141,7 @@ design.md, Component `lib/celebracoes/types.ts`)
 
 ---
 
-### T3: `celebracoes-client.ts` — `listUpcomingInstances` e `getServiceOrder`
+### T3: ✅ Done `celebracoes-client.ts` — `listUpcomingInstances` e `getServiceOrder`
 
 **What**: Cliente tipado com as duas funções novas sobre
 `authenticatedRequest`.
@@ -169,7 +169,7 @@ de `content-client.ts`/`escala-client.ts`
 
 ---
 
-### T4: Nova aba "Celebrações" na tab bar
+### T4: ✅ Done Nova aba "Celebrações" na tab bar
 
 **What**: Adiciona `Tabs.Screen name="celebracoes"` em `(tabs)/_layout.tsx`.
 **Where**: `apps/mobile/src/app/(tabs)/_layout.tsx`
@@ -194,7 +194,7 @@ arquivo da tela)
 
 ---
 
-### T5: Tela `(tabs)/celebracoes.tsx` — lista por papel
+### T5: ✅ Done Tela `(tabs)/celebracoes.tsx` — lista por papel
 
 **What**: Tela que decide a fonte de dados por `roles` do token
 (`decodeJwtPayload`) — `getMyAssignments()` para `member`/`volunteer`,
@@ -233,7 +233,7 @@ loading/error/lista), `useAuth()` para pegar `session.accessToken`
 
 ---
 
-### T6: Tela `celebracao/[id].tsx` — detalhe da OC + setlist
+### T6: ✅ Done Tela `celebracao/[id].tsx` — detalhe da OC + setlist
 
 **What**: Busca `getServiceOrder(id)` e renderiza a OC (etapas, responsável,
 horário) e a setlist de cada etapa, com destaque de "minha função" quando
