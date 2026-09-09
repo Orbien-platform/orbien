@@ -136,12 +136,13 @@ abrir "Celebrações" e ver celebrações futuras da congregação mesmo assim.
 | MOB-08-05 | P1: Estado de erro na busca da OC | Design | Pending |
 | MOB-08-06 | P2: Lista completa para `ministry_leader`+ | Design | Pending |
 | MOB-08-07 | Backend: `getMyAssignments` passa a incluir `service_order_id` | Design | Pending |
+| MOB-08-08 | Backend: `getMyAssignments` passa a incluir `checked_in_at` (fix de achado de revisão, decisão do usuário em 2026-09-09) | Design | Pending |
 
 **ID format:** `MOB-08-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 7 total, 0 mapeados a tasks ainda, 7 aguardando Design/Tasks ⚠️
+**Coverage:** 8 total, 0 mapeados a tasks ainda, 8 aguardando Design/Tasks ⚠️
 
 ---
 
