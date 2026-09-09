@@ -30,12 +30,13 @@ jest.mock("expo-router/js-tabs", () => {
 import TabsLayout from "../../../app/(tabs)/_layout";
 
 describe("TabsLayout", () => {
-  it("renderiza as abas Escala e Conteúdo", async () => {
+  it("renderiza as abas Escala, Grupos e Conteúdo", async () => {
     await act(async () => {
       render(<TabsLayout />);
     });
 
     expect(screen.getByTestId("tab-index").props.children).toBe("Escala");
+    expect(screen.getByTestId("tab-grupos").props.children).toBe("Grupos");
     expect(screen.getByTestId("tab-conteudo").props.children).toBe("Conteúdo");
   });
 });
