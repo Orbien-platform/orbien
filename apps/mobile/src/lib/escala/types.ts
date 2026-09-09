@@ -25,6 +25,8 @@ export interface Assignment {
   celebration: { id: string; name: string };
   ministry: { id: string; name: string };
   scheduled_date: string;
+  /** id da Ordem de Culto da celebração, ou `null` se ainda não existir (MOB-08-07). */
+  service_order_id: string | null;
   setlist: { songs: SetlistSong[] } | null;
 }
 
