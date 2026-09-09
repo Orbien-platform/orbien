@@ -154,16 +154,16 @@ ver os 2 (o novo e um pré-existente, se houver) marcados.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MOB-09-01 | P1: Lista "meus grupos" | Design | Implementing |
-| MOB-09-02 | P1: Estado vazio / erro da lista de grupos | Design | Implementing |
-| MOB-09-03 | P1: Lista de encontros do grupo | Design | Implementing |
-| MOB-09-04 | P1: Lista de materiais do encontro, filtrada por papel | Design | Implementing |
-| MOB-09-05 | P1: Abrir material (link ou rich text) | Design | Implementing |
-| MOB-09-06 | P1: Roster + presença já registrada na tela do líder | Design | Implementing |
-| MOB-09-07 | P1: Registrar presença (líder) | Design | Implementing |
-| MOB-09-08 | P1: Erro ao registrar presença preserva seleção | Design | Implementing |
-| MOB-09-09 | Backend: `GET /small-groups/mine` (novo) | Design | Implementing |
-| MOB-09-10 | Backend: `member` liberado em `GET /small-groups/:groupId/meetings` | Design | Implementing |
+| MOB-09-01 | P1: Lista "meus grupos" | Design | ✅ Verified |
+| MOB-09-02 | P1: Estado vazio / erro da lista de grupos | Design | ✅ Verified |
+| MOB-09-03 | P1: Lista de encontros do grupo | Design | ✅ Verified |
+| MOB-09-04 | P1: Lista de materiais do encontro, filtrada por papel | Design | ✅ Verified |
+| MOB-09-05 | P1: Abrir material (link ou rich text) | Design | ✅ Verified |
+| MOB-09-06 | P1: Roster + presença já registrada na tela do líder | Design | ✅ Verified |
+| MOB-09-07 | P1: Registrar presença (líder) | Design | ✅ Verified |
+| MOB-09-08 | P1: Erro ao registrar presença preserva seleção | Design | ✅ Verified |
+| MOB-09-09 | Backend: `GET /small-groups/mine` (novo) | Design | ✅ Verified |
+| MOB-09-10 | Backend: `member` liberado em `GET /small-groups/:groupId/meetings` | Design | ✅ Verified |
 
 **ID format:** `MOB-09-NN`
 
