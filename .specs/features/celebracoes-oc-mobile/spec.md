@@ -129,14 +129,14 @@ abrir "Celebrações" e ver celebrações futuras da congregação mesmo assim.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MOB-08-01 | P1: Lista de celebrações (member/volunteer, via assignments) | Design | Implementing |
-| MOB-08-02 | P1: Detalhe — OC + setlist em modo leitura | Design | Implementing |
-| MOB-08-03 | P1: Destaque da própria função/horário | Design | Implementing |
-| MOB-08-04 | P1: Estado sem setlist publicada | Design | Implementing |
-| MOB-08-05 | P1: Estado de erro na busca da OC | Design | Implementing |
-| MOB-08-06 | P2: Lista completa para `ministry_leader`+ | Design | Implementing |
-| MOB-08-07 | Backend: `getMyAssignments` passa a incluir `service_order_id` | Design | Implementing |
-| MOB-08-08 | Backend: `getMyAssignments` passa a incluir `checked_in_at` (fix de achado de revisão, decisão do usuário em 2026-09-09) | Design | Implementing |
+| MOB-08-01 | P1: Lista de celebrações (member/volunteer, via assignments) | Design | ✅ Verified |
+| MOB-08-02 | P1: Detalhe — OC + setlist em modo leitura | Design | ✅ Verified |
+| MOB-08-03 | P1: Destaque da própria função/horário | Design | ✅ Verified |
+| MOB-08-04 | P1: Estado sem setlist publicada | Design | ✅ Verified |
+| MOB-08-05 | P1: Estado de erro na busca da OC | Design | ✅ Verified |
+| MOB-08-06 | P2: Lista completa para `ministry_leader`+ | Design | ✅ Verified |
+| MOB-08-07 | Backend: `getMyAssignments` passa a incluir `service_order_id` | Design | ✅ Verified |
+| MOB-08-08 | Backend: `getMyAssignments` passa a incluir `checked_in_at` (fix de achado de revisão, decisão do usuário em 2026-09-09) | Design | ✅ Verified |
 
 **ID format:** `MOB-08-NN`
 

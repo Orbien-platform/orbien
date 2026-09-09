@@ -2,8 +2,24 @@
 
 **Date**: 2026-09-09
 **Spec**: `.specs/features/celebracoes-oc-mobile/spec.md`
-**Diff range**: `ea2b97a~1..HEAD` (branch `claude/proximo-feature-sugerido-3e5o1a`; `ea2b97a`=T1 … `f1c74ed`=docs de fechamento). Superfície: `apps/api/src/celebrations/celebration-assignment.service.ts(+.spec.ts)`, `apps/mobile/src/lib/celebracoes/*` (novo), `apps/mobile/src/lib/escala/types.ts`, `apps/mobile/src/app/(tabs)/_layout.tsx(+.test)`, `apps/mobile/src/app/(tabs)/celebracoes.tsx(+.test, novo)`, `apps/mobile/src/app/celebracao/[id].tsx(+.test, novo)`.
+**Diff range**: `ea2b97a~1..HEAD` (branch `claude/proximo-feature-sugerido-3e5o1a`; `ea2b97a`=T1 … `6b37230`=fix da rodada 1)
 **Verifier**: independent sub-agent (author ≠ verifier)
+**Round**: 2 of max 3 (fix→re-verify) — this report supersedes the round-1 report
+
+---
+
+## What changed since round 1
+
+Round 1 (`.specs/features/celebracoes-oc-mobile/validation.md`, previous version) ended **❌ Issues** with:
+
+1. **Major**: AC2/AC3 (P1) required the OC screen to show each step's "horário" (schedule/time) and to include it in the "minha etapa" highlight, but `apps/mobile/src/app/celebracao/[id].tsx` never read `item.start_offset_minutes`/`item.duration_minutes`.
+2. **Minor**: 3 of 4 spec edge cases had no dedicated test (generic `responsible_label`, two steps sharing `sequence`, refetch on revisit).
+
+Commit `6b37230` (`fix(mobile): mostra o horário de cada etapa da OC (MOB-08-02/03)`) addressed:
+
+- Adds `formatOffset()` (`apps/mobile/src/app/celebracao/[id].tsx:22-27`) and renders `${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min` per step (`:98-100`), with `testID={`celebracao-item-${item.id}-horario`}`. The element sits inside the same `View` used for the "-mine" highlight testID, so the schedule is part of the highlighted block for the user's own step.
+- New tests in `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx`: a dedicated AC2/AC3 test (`:82-129`) and two new edge-case tests (`:223-249`, `:251-292`).
+- The third edge case (refetch on revisit) was **not** covered — round 1 already recorded this as consistent with the app's existing precedent (`post/[id].tsx` also has no such test) and as an accepted, non-blocking decision. Re-affirmed in this round (see Edge Cases below); not re-litigated.
 
 ---
 
@@ -11,83 +27,31 @@
 
 | Task | Status  | Notes |
 | ---- | ------- | ----- |
-| T1   | ✅ Done | `getMyAssignments` inclui `service_order_id`/`checked_in_at`, testes dedicados presentes |
-| T2   | ✅ Done | Tipos `ServiceOrder`/`ServiceOrderItem`/`SetlistSongRef`/`CelebrationInstanceSummary` batem com design.md; `Assignment.service_order_id` adicionado |
-| T3   | ✅ Done | `celebracoes-client.ts` com as duas funções, testadas |
-| T4   | ✅ Done | Terceira tab "Celebrações" adicionada, teste de regressão atualizado |
-| T5   | ✅ Done | Tela de lista por papel, 8 testes cobrindo os cenários do Done-when |
-| T6   | ⚠️ Partial | Tela de detalhe implementada e testada, mas **não renderiza horário de cada etapa** (`start_offset_minutes`/`duration_minutes` nunca aparecem na UI) — AC2/AC3 da spec pedem "nome/horário" e "destacar função **e horário**"; ver gap abaixo |
+| T1–T5 | ✅ Done | Unchanged from round 1 — not re-verified in depth this round (no code changed in their surface) |
+| T6   | ✅ Done | Fix commit `6b37230` closes the round-1 gap: horário now rendered per step and inside the highlight |
 
 ---
 
-## Spec-Anchored Acceptance Criteria
-
-### P1: Ver a OC e a setlist da celebração em que estou escalado
+## Spec-Anchored Acceptance Criteria (focused re-check: P1 AC2/AC3)
 
 | Criterion (WHEN X THEN Y) | Spec-defined outcome | `file:line` + assertion | Result |
 | --- | --- | --- | --- |
-| AC1 — abre aba "Celebrações" (member/volunteer) → lista escalas futuras via `getMyAssignments`, ordenada por data crescente | Lista vem da mesma fonte/filtro de `GET /volunteers/my-celebration-assignments`, asc por `scheduled_date` | Mobile: `apps/mobile/src/__tests__/app/(tabs)/celebracoes.test.tsx:51-76` — `expect(mockGetMyAssignments).toHaveBeenCalledTimes(1)` + `expect(mockListUpcomingInstances).not.toHaveBeenCalled()`. Ordenação asc: `apps/api/src/celebrations/celebration-assignment.service.spec.ts:741-756` — `expect(result.map((r) => r.id)).toEqual(['a1', 'a2'])` (a1 tem `scheduled_date` menor) | ✅ PASS (fonte/papel provados no mobile; ordenação provada na API, que é quem ordena — mobile só renderiza na ordem recebida, sem re-sort) |
-| AC2 — abre celebração da lista → busca e mostra OC (**nome/horário** de cada etapa, responsável) e setlist, leitura | Cada etapa mostra nome, **horário**, responsável; setlist quando existir | Nome/responsável: `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:37-80` — `screen.getByText(...)` implícito via render de `item.name`/responsável; setlist: `:110-151` — `expect(screen.getByText("Grande é o Senhor")).toBeTruthy()`. **Horário: nenhuma evidência** — `apps/mobile/src/app/celebracao/[id].tsx` nunca lê/renderiza `item.start_offset_minutes` ou `item.duration_minutes` (`grep` no arquivo não retorna nenhuma ocorrência) | ❌ GAP — metade do critério (nome/responsável/setlist) coberta; a parte "horário" do AC2 não está implementada nem testada |
-| AC3 — etapa/linha da setlist corresponde à escala do usuário → destaca visualmente **função e horário** | Destaque visual da função **e do horário** da etapa do usuário | Função: `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:37-80` — `expect(screen.getByTestId("celebracao-item-item1-mine")).toBeTruthy()` (casamento por `ministry.id`, decisão de design documentada). **Horário: nenhuma evidência** — mesmo campo ausente do AC2 não existe para ser destacado | ❌ GAP — mesma causa raiz do AC2: a informação de horário nunca chega à tela, então "destacar horário" não pode ocorrer nem ser testado |
-| AC4 — celebração sem setlist publicada → mostra OC normal + "Repertório ainda não publicado", sem esconder OC | Mensagem exata "Repertório ainda não publicado" no lugar da setlist, OC continua visível | `apps/mobile/src/app/celebracao/[id].tsx:97` — `<Text>{NO_SETLIST_MESSAGE}</Text>` com `NO_SETLIST_MESSAGE = "Repertório ainda não publicado"` (linha 16). Teste: `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:82-108` — `expect(screen.getByText("Repertório ainda não publicado")).toBeTruthy()` | ✅ PASS |
-| AC5 — busca da OC falha (rede/servidor) → estado de erro com retry, nunca tela vazia | Erro genérico + botão de retry; nunca indistinguível de "sem OC" | `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:185-202` — `expect(screen.getByText("Não foi possível carregar a Ordem de Culto. Verifique sua conexão.")).toBeTruthy()`, `fireEvent.press(retryButton)` → `expect(mockGetServiceOrder).toHaveBeenCalledTimes(2)`. 404 diferenciado: `:174-183` — `expect(screen.getByText("Ordem de culto não encontrada.")).toBeTruthy()` sem botão de retry | ✅ PASS |
+| AC2 — abre celebração da lista → busca e mostra OC (nome/**horário** de cada etapa, responsável) e setlist, leitura | Cada etapa mostra nome, horário, responsável | `apps/mobile/src/app/celebracao/[id].tsx:98-100` renders `` `${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min` `` with `testID=celebracao-item-${item.id}-horario`. Test: `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:122-128` — `expect(within(mineItem).getByTestId("celebracao-item-item1-horario")).toHaveTextContent("0min · 20min")` (input: `start_offset_minutes:0, duration_minutes:20`) and `expect(screen.getByTestId("celebracao-item-item2-horario")).toHaveTextContent("1h30min · 30min")` (input: `start_offset_minutes:90, duration_minutes:30` → `formatOffset(90)` = `1h30min`, matching `formatOffset`'s own `h`/`m` branch at `:22-27`). Values asserted are exact, not a substring/wildcard, and match what the implementation actually computes for those inputs (verified by hand: 90min = 1h30min). | ✅ PASS |
+| AC3 — etapa/linha da setlist corresponde à escala do usuário → destaca visualmente **função e horário** | Destaque visual da função e do horário da etapa do usuário | Same test, `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:122-125` — the horário assertion is scoped with `within(mineItem)` where `mineItem = screen.getByTestId("celebracao-item-item1-mine")` (`:122`), proving the horário `Text` is a descendant of the highlighted ("-mine") container, not merely present somewhere on screen. This directly demonstrates the horário is part of the highlight, matching AC3's "destacar função e horário" (função already covered since round 1 via the same `-mine` testID). | ✅ PASS |
 
-### P2: Líder vê todas as próximas celebrações da congregação
+Both criteria that failed in round 1 now pass with exact-value, non-vague assertions. No other P1/P2/backend criteria were re-litigated (unchanged code; round 1 already verified them ✅ PASS with file:line evidence).
 
-| Criterion (WHEN X THEN Y) | Spec-defined outcome | `file:line` + assertion | Result |
-| --- | --- | --- | --- |
-| AC1 — `ministry_leader`+ → lista via `GET /celebrations/instances`, não só escala pessoal | Fonte de dados é `listUpcomingInstances` (`GET /celebrations/instances?date_from=hoje`), `getMyAssignments` não é chamado | `apps/mobile/src/__tests__/app/(tabs)/celebracoes.test.tsx:78-97` — `expect(mockListUpcomingInstances).toHaveBeenCalledTimes(1)` + `expect(mockGetMyAssignments).not.toHaveBeenCalled()`. URL exata: `apps/mobile/src/lib/celebracoes/celebracoes-client.test.ts:16-27` — `expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/celebrations/instances?date_from=2026-09-09")` | ✅ PASS |
-| AC2 — lista vazia (sem celebração futura) → estado vazio explícito, não erro | Texto "Nenhuma celebração agendada" (não indistinguível de erro) | `apps/mobile/src/__tests__/app/(tabs)/celebracoes.test.tsx:178-187` — `expect(screen.getByText("Nenhuma celebração agendada.")).toBeTruthy()` | ✅ PASS |
-
-### Backend (MOB-08-07/08)
-
-| Criterion | Spec-defined outcome | `file:line` + assertion | Result |
-| --- | --- | --- | --- |
-| MOB-08-07 — `getMyAssignments` inclui `service_order_id` | `service_order_id` = id da OC quando existe; `null` quando a instância não tem OC ainda | `apps/api/src/celebrations/celebration-assignment.service.spec.ts:958-983` — `expect(result[0].service_order_id).toBe('ord1')`; `:985-1010` — `expect(result[0].service_order_id).toBeNull()` | ✅ PASS |
-| MOB-08-08 — `getMyAssignments` inclui `checked_in_at` | `checked_in_at` = data do check-in quando feito; `null` quando não | `apps/api/src/celebrations/celebration-assignment.service.spec.ts:1012-1025` — `expect(result[0].checked_in_at).toEqual(checkedInAt)`; `:1027-1039` — `expect(result[0].checked_in_at).toBeNull()` | ✅ PASS |
-
-**Status**: ❌ Gaps present — 7/9 critérios em PASS; **AC2 e AC3 do P1 estão parcialmente cobertos** (o componente "horário" de cada um nunca é exposto pela UI nem testado).
+**Status**: ✅ All P1 AC2/AC3 gaps closed.
 
 ---
 
-## Discrimination Sensor
+## Edge Cases (focused re-check: the two new ones)
 
-Executado em `git worktree add /tmp/verify-wt HEAD` (descartável, removido ao final — árvore real nunca tocada).
+- [x] Etapa sem responsável definido (`responsible_label` genérico) mostrado verbatim — `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:223-249`: item with `responsible_label: "A definir"`, `responsible_type: "free_text"`, `person: null`, `ministry: null` → `expect(screen.getByText("A definir")).toBeTruthy()` (`:248`). This exercises the fallback branch at `apps/mobile/src/app/celebracao/[id].tsx:106` (`: item.responsible_label`).
+- [x] Duas etapas com o mesmo `sequence`, sem deduplicar — `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:251-292`: two items both with `sequence: 1` (`item1`, `item2`) → `expect(screen.getByTestId("celebracao-item-item1")).toBeTruthy()` and `expect(screen.getByTestId("celebracao-item-item2")).toBeTruthy()` (`:290-291`), proving both render (no dedupe by the stable `.sort()` at `:82`).
+- [ ] Refetch ao revisitar a tela — still not covered by a dedicated test. Reaffirmed as an accepted, non-blocking decision from round 1: consistent with the app's existing precedent (`post/[id].tsx` has no equivalent test either), and the prompt for this round explicitly said not to require it. Not a gap for this verdict.
 
-| # | File:line | Description | Killed? |
-| - | --- | --- | --- |
-| 1 | `apps/api/src/celebrations/celebration-assignment.service.ts:409` | `service_order_id: a...serviceOrder?.id ?? null` → sempre `null` | ✅ Killed — `celebration-assignment.service.spec.ts:982` falhou (`Expected: "ord1", Received: null`) |
-| 2 | `apps/mobile/src/app/(tabs)/celebracoes.tsx:64` | `isLeader = roles.some(...)` → `isLeader = !roles.some(...)` | ✅ Killed — 7/8 testes de `celebracoes.test.tsx` falharam (fonte de dados e mensagens de vazio invertidas) |
-| 3 | `apps/mobile/src/app/celebracao/[id].tsx:80` | `isMine = ministryId !== undefined && item.ministry?.id === ministryId` → sempre `false` | ✅ Killed — `[id].test.tsx:77` falhou (`celebracao-item-item1-mine` não encontrado) |
-
-**Sensor depth**: lightweight (3 mutações, padrão default)
-**Result**: 3/3 killed — PASS ✅
-
----
-
-## Code Quality
-
-| Principle | Status |
-| --- | --- |
-| Minimum code | ✅ |
-| Surgical changes | ✅ — `getMyAssignments` ganhou só um include e dois campos; nenhuma função adjacente tocada |
-| No scope creep | ✅ — arquivos tocados batem exatamente com o esperado no prompt |
-| Matches patterns | ✅ — `celebracoes-client.ts` segue `content-client.ts`/`escala-client.ts`; telas seguem `post/[id].tsx`/`(tabs)/index.tsx` (3 estados, `testID`, mensagens de erro) |
-| Spec-anchored outcome check (asserted values match spec) | ⚠️ Parcial — ver AC2/AC3 acima: assertions existem e batem com o que a implementação faz, mas a implementação não cobre o outcome inteiro da spec (falta horário) |
-| Per-layer Coverage Expectation met (domain 1:1 ACs; routes happy+edge+error) | ⚠️ Parcial — mesma lacuna de horário; resto 1:1 |
-| Every test maps to a spec requirement — no unclaimed tests | ✅ |
-| Documented guidelines followed: `apps/api/jest.config.js`, `apps/mobile/jest.config.js`, `docs/TESTES.md`, `tasks.md` Test Coverage Matrix | ✅ |
-
----
-
-## Edge Cases
-
-- [x] Sem escala futura e não `ministry_leader`+ → estado vazio "Você não tem celebrações próximas." — `apps/mobile/src/__tests__/app/(tabs)/celebracoes.test.tsx:167-176`
-- [ ] Etapa sem responsável definido (`responsible_label` genérico) mostrado como veio da API — **NÃO testado**: o teste em `[id].test.tsx:82-108` usa `responsible_label: "A definir"` mas só assere a ausência de setlist ("Repertório ainda não publicado"), nunca `screen.getByText("A definir")`. A lógica de fallback existe em `apps/mobile/src/app/celebracao/[id].tsx:92` (`: item.responsible_label`), mas sem asserção dedicada é evidence-or-zero → gap de cobertura (comportamento provavelmente correto, mas não comprovado)
-- [ ] Duas etapas com mesmo horário/sequência, sem deduplicar → **sem evidência**: nenhum teste usa dois itens com `sequence` repetida; `apps/mobile/src/app/celebracao/[id].tsx:71` (`[...order.items].sort(...)`) não deduplica por construção (`Array.prototype.sort` é estável e não remove itens), então o comportamento provavelmente está correto, mas não há teste que prove isso
-- [ ] Sai da tela de detalhe e volta → refaz a busca, sem cache stale → **sem evidência direta**: não há teste de remount/segunda visita. A tela usa `useEffect` com `[id, retryCount]` (mesmo padrão de `post/[id].tsx`, que também não tem tal teste) — o padrão do MOB-04 citado no design.md também não tem teste equivalente, então isto está consistente com o precedente do app, mas não comprovado por teste novo desta feature
-
-**Status**: 1/4 edge cases com evidência direta; 3/4 sem asserção dedicada (comportamento plausivelmente correto por inspeção de código, mas não coberto — evidence-or-zero).
+**Status**: 2/2 targeted edge cases now covered with direct evidence; the third remains an accepted, documented gap (not blocking, per explicit scope of this round).
 
 ---
 
@@ -95,62 +59,77 @@ Executado em `git worktree add /tmp/verify-wt HEAD` (descartável, removido ao f
 
 - **Gate command**: `npm run test -w orbien-backend`, `npm run test -w orbien-mobile`, `npm run lint`, `npm run build:api`, `cd apps/mobile && npx tsc --noEmit`
 - **Result**:
-  - Backend: 216 suites / 2019 testes — todos passando (inclui as 8 novas de `getMyAssignments` MOB-08-07/08 + as pré-existentes de setlist)
-  - Mobile: 23 suites / 121 testes — todos passando (inclui `celebracoes-client.test.ts`, `(tabs)/celebracoes.test.tsx`, `celebracao/[id].test.tsx`, `(tabs)/_layout.test.tsx` atualizado)
-  - Lint: 0 erros, 47 warnings pré-existentes (padrão `no-redeclare`/`import/first` em todos os arquivos de teste do mobile, `array-type` em `auth-client.ts` — nenhum novo introduzido por esta feature)
-  - `build:api`: sucesso (cache hit)
-  - `tsc --noEmit` (mobile): sem erros
-- **Test count before feature**: não medido isoladamente (não foi rodado checkout de `ea2b97a~1`); delta calculado por diff de `it(` blocks
-- **Test count after feature**: Backend 2019, Mobile 121
-- **Delta**: +23 blocos `it(` adicionados no diff (`ea2b97a~1..HEAD`), -1 removido — mas o "removido" é uma renomeação/fortalecimento do teste de `_layout.test.tsx` (passou a checar também a tab "Celebrações"), não uma exclusão real. Net: nenhuma perda de cobertura, nenhuma asserção enfraquecida
-- **Skipped tests**: nenhum
-- **Failures**: nenhuma
+  - Backend: 216 suites / 2019 tests — all passing
+  - Mobile: 23 suites / 124 tests — all passing (121 → 124: +3 net, matching the 3 new tests added by the fix — AC2/AC3 horário test + 2 edge-case tests)
+  - Lint: 0 errors, 47 pre-existing warnings (same set as round 1 — `no-redeclare`/`import/first` in mobile test files, `array-type` in `auth-client.ts`); no new warnings introduced
+  - `build:api`: success (cache hit)
+  - `tsc --noEmit` (mobile): no errors, no output
+- **Test count before this round's fix**: Mobile 121 (round 1 baseline)
+- **Test count after**: Mobile 124
+- **Delta**: +3 tests, 0 removed
+- **Skipped tests**: none
+- **Failures**: none
 
 ---
 
-## Fix Plans (if issues found)
+## Discrimination Sensor (focused on the fix's new code only)
 
-### Fix 1: AC2/AC3 — horário da etapa nunca é exibido na tela de detalhe
+Per this round's scope, only the new code from commit `6b37230` was mutated — the 3 mutations from round 1 (already documented as killed) were not re-run.
 
-- **Root cause**: `apps/mobile/src/app/celebracao/[id].tsx` renderiza `item.name`, o responsável e a setlist, mas nunca lê `item.start_offset_minutes`/`item.duration_minutes` (campos que já existem no tipo `ServiceOrderItem`, `apps/mobile/src/lib/celebracoes/types.ts:25-26`, e no shape devolvido pela API). A spec (AC2 e AC3 do P1) pede explicitamente "nome/horário de cada etapa" e destaque de "função e horário" — a metade "horário" nunca foi implementada nem testada.
-- **Fix task**: Renderizar o horário de cada etapa (formatado a partir de `start_offset_minutes`/`duration_minutes`, relativo ao início da celebração — critério de formatação a confirmar com o usuário) em `apps/mobile/src/app/celebracao/[id].tsx`, e adicionar asserção de horário nos testes de `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx` (inclusive no cenário de destaque "minha etapa", AC3).
-- **Priority**: Major — é parte literal de dois critérios de aceite do P1 (MVP), não um nice-to-have.
+Executed in `git worktree add /tmp/verify-wt2 HEAD` (disposable, node_modules symlinked in for jest resolution, removed at the end — real tree untouched).
 
-### Fix 2 (menor): Edge cases sem teste dedicado
+| # | File:line | Description | Killed? |
+| - | --- | --- | --- |
+| 1 | `apps/mobile/src/app/celebracao/[id].tsx:99` | `` `${formatOffset(item.start_offset_minutes)} · ...}` `` → `` `${formatOffset(0)} · ...}` `` (fixed offset instead of the real field) | ✅ Killed — `apps/mobile/src/__tests__/app/celebracao/[id].test.tsx:126` failed: `Expected: "1h30min · 30min", Received: "0min · 30min"` |
 
-- **Root cause**: 3 dos 4 edge cases da spec não têm asserção própria nos testes desta feature (rótulo de responsável genérico, duas etapas com mesma sequência, refetch ao revisitar a tela) — o comportamento parece correto por inspeção do código, mas evidence-or-zero os marca como não cobertos.
-- **Fix task**: Adicionar 2-3 testes pontuais em `celebracao/[id].test.tsx` (responsible_label renderizado verbatim; duas etapas com `sequence` igual renderizando ambas sem dedupe). O caso de refetch ao revisitar é consistente com o precedente do app (nem `post/[id].tsx` tem esse teste) — decisão do usuário se vale a pena cobrir agora ou registrar como padrão aceito do app.
-- **Priority**: Minor.
+**Sensor depth**: lightweight (1 targeted mutation on the fix's new code, proportional per prompt instruction not to re-mutate unchanged code)
+**Result**: 1/1 killed — PASS ✅
+
+---
+
+## Code Quality (focused re-check)
+
+| Principle | Status |
+| --- | --- |
+| Surgical changes | ✅ — fix touches only the rendering block and adds `formatOffset`; no unrelated lines changed |
+| No scope creep | ✅ — files touched match exactly what Fix 1/Fix 2 of round 1 prescribed |
+| Matches patterns | ✅ — inline helper function follows existing file conventions (e.g. `NO_SETLIST_MESSAGE` constants above), testID naming follows the established `celebracao-item-${id}...` scheme |
+| Spec-anchored outcome check | ✅ — see AC2/AC3 table above; exact values asserted and verified against `formatOffset`'s own logic |
+| Every test maps to a spec requirement | ✅ — all 3 new tests map to AC2/AC3 or a named spec edge case |
 
 ---
 
 ## Requirement Traceability Update
 
-| Requirement | Previous Status | New Status |
+| Requirement | Previous Status (round 1) | New Status |
 | --- | --- | --- |
-| MOB-08-01 | Implementing | ✅ Verified |
-| MOB-08-02 | Implementing | ❌ Needs Fix (falta horário) |
-| MOB-08-03 | Implementing | ❌ Needs Fix (falta horário no destaque) |
-| MOB-08-04 | Implementing | ✅ Verified |
-| MOB-08-05 | Implementing | ✅ Verified |
-| MOB-08-06 | Implementing | ✅ Verified |
-| MOB-08-07 | Implementing | ✅ Verified |
-| MOB-08-08 | Implementing | ✅ Verified |
+| MOB-08-01 | ✅ Verified | ✅ Verified (unchanged) |
+| MOB-08-02 | ❌ Needs Fix (falta horário) | ✅ Verified |
+| MOB-08-03 | ❌ Needs Fix (falta horário no destaque) | ✅ Verified |
+| MOB-08-04 | ✅ Verified | ✅ Verified (unchanged) |
+| MOB-08-05 | ✅ Verified | ✅ Verified (unchanged) |
+| MOB-08-06 | ✅ Verified | ✅ Verified (unchanged) |
+| MOB-08-07 | ✅ Verified | ✅ Verified (unchanged) |
+| MOB-08-08 | ✅ Verified | ✅ Verified (unchanged) |
 
 ---
 
 ## Summary
 
-**Overall**: ⚠️ Issues
+**Overall**: ✅ Ready
 
-**Spec-anchored check**: 7/9 critérios batendo o outcome da spec; 2 com gap (AC2/AC3 do P1 — horário da etapa nunca aparece na UI)
-**Sensor**: 3/3 mutações mortas
-**Gate**: Backend 2019 passed, Mobile 121 passed, lint 0 erros, build:api ok, tsc ok
+**Spec-anchored check**: 9/9 critérios batendo o outcome da spec (round-1 gap on P1 AC2/AC3 closed)
+**Sensor**: 1/1 new mutation killed (round-1's 3 mutations remain killed, not re-run per scope)
+**Gate**: Backend 2019 passed, Mobile 124 passed, lint 0 errors, build:api ok, tsc ok
 
-**What works**: Fluxo completo de lista por papel (member/volunteer via `getMyAssignments`, `ministry_leader`+ via `listUpcomingInstances`), navegação para o detalhe com os params certos, estados de vazio/erro/retry, setlist ausente, OC não publicada, destaque de "minha função" por `ministry.id` (granularidade documentada como Tech Decision no design.md e corretamente coberta pelo teste), backend devolvendo `service_order_id`/`checked_in_at`.
+**What works**: Everything from round 1, plus: each OC step now shows its schedule (`start_offset_minutes`/`duration_minutes` formatted as `Xh Ymin · Zmin`), and the schedule is rendered inside the same highlighted container as "minha etapa" (função + horário together, per AC3). Two of the three previously-uncovered edge cases (generic `responsible_label`, duplicate `sequence`) now have dedicated, evidence-backed tests.
 
-**Issues found**:
-1. AC2/AC3 do P1 (spec.md) pedem "horário" de cada etapa e destaque de "função e horário" — a implementação (`apps/mobile/src/app/celebracao/[id].tsx`) nunca renderiza `start_offset_minutes`/`duration_minutes`. Fix: exibir o horário na etapa e no destaque, com teste dedicado.
-2. 3 dos 4 edge cases da spec não têm teste dedicado (comportamento plausivelmente correto por inspeção, mas evidence-or-zero não confirma). Fix: 2 testes pontuais valem a pena; o terceiro (refetch ao revisitar) é consistente com o precedente do app.
+**Issues found**: None blocking. One edge case (refetch on screen revisit) remains untested, matching an app-wide precedent (`post/[id].tsx`) — explicitly scoped out of this round and not re-flagged as a lesson (no new signal beyond what round 1 already captured).
 
-**Next steps**: Decisão do orquestrador/usuário — corrigir o gap de horário (Fix 1, Major) antes de considerar o MOB-08 P1 fechado, já que é parte literal de dois ACs do MVP; Fix 2 é opcional/minor.
+**Next steps**: MOB-08 P1 can be considered closed. No further fix→re-verify iteration needed.
+
+---
+
+## Lessons
+
+No new lesson recorded this round. This is a clean PASS after the round-1 fix — no surviving mutant, no spec-precision gap, no new uncovered AC. Round 1 already distilled the relevant candidate lessons (L-007/L-008); not duplicating here per instruction.
