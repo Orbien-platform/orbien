@@ -1,8 +1,14 @@
 // decodeJwtPayload (MOB-07) — leitura do payload de um JWT, sem validar
-// assinatura. Decodificar não é validar: quem valida é a API. Uso legítimo
-// é config/exibição local, nunca decisão de negócio — mesmo princípio e
-// mesmo algoritmo de apps/web/src/lib/auth.ts, aqui usado para montar as
-// tags do OneSignal (design.md, Rodada 4).
+// assinatura. Decodificar não é validar: quem valida é a API, sempre. Uso
+// legítimo é config/exibição local e escolha de UI não-autoritativa — nunca
+// a decisão que abre ou nega dado, porque `roles` fica até 15min desatualizado
+// entre uma promoção/revogação e o próximo refresh. Mesmo princípio e mesmo
+// algoritmo de apps/web/src/lib/auth.ts. Usado para montar as tags do
+// OneSignal (design.md, Rodada 4) e, no MOB-08, para escolher qual fonte de
+// dados a aba Celebrações chama — se o papel estiver desatualizado, a API
+// que decide de verdade rejeita a chamada errada (RolesGuard), então o pior
+// caso é a tela mostrar a fonte/mensagem errada por até 15min, nunca dado
+// que a role atual não deveria ver.
 //
 // `atob` é global nativo do Hermes (motor JS do RN) desde que passou a ser
 // builtin do motor — sem polyfill/lib nova (design.md, Pesquisa da Rodada 4).

@@ -7,9 +7,8 @@
  * API (mesmo padrão de `repertorio.spec.ts` e das fixtures `upcomingInstance`/
  * `scheduleTemplate`): o que este teste verifica pela tela é o seletor de
  * repertório dentro de "Adicionar música" e a ação de vincular na linha da
- * música — não o modal de criar etapa (`AddItemModal`), que ainda envia campos
- * que a API não aceita (ver docs/PENDENCIAS.md, "A tela de Ordem de
- * Celebração chama rotas/campos que não existem na API").
+ * música — não o modal de criar etapa (`AddItemModal`), que é caminho de UI
+ * a mais para montar dado de apoio que não é o que este teste verifica.
  *
  * Uso: E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
  *
