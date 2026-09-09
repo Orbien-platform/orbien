@@ -19,6 +19,7 @@ export interface GroupMeetingSummary {
 
 export interface GroupMeetingDetail {
   id: string;
+  small_group_id: string;
   occurred_at: string;
   topic: string | null;
   attendanceRecords: Array<{ person_id: string }>;
