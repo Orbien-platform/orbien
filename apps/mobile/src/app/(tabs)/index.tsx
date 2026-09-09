@@ -7,11 +7,17 @@
 // não repete o literal.
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Button, FlatList, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 
+import { AppButton } from "../../components/AppButton";
+import { AppLink } from "../../components/AppLink";
+import { Card } from "../../components/Card";
+import { Screen } from "../../components/Screen";
+import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { checkIn, getMyAssignments, respondToAssignment } from "../../lib/escala/escala-client";
 import type { Assignment } from "../../lib/escala/types";
+import { colors, spacing, typography } from "../../lib/theme/tokens";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar sua escala. Verifique sua conexão.";
 const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
@@ -97,56 +103,87 @@ export default function EscalaScreen() {
   }
 
   if (error) {
-    return (
-      <View testID="escala-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
-      </View>
-    );
+    return <StatusMessage testID="escala-error" message={error} tone="danger" />;
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <Button
+    <Screen>
+      <AppLink
         testID="indisponibilidade-link"
-        title="Minha indisponibilidade"
         onPress={() => router.push("/indisponibilidade")}
-      />
-      {actionError ? <Text testID="escala-action-error">{actionError}</Text> : null}
+        style={styles.headerLink}
+      >
+        Minha indisponibilidade
+      </AppLink>
+      {actionError ? (
+        <Text testID="escala-action-error" style={styles.actionError}>
+          {actionError}
+        </Text>
+      ) : null}
       <FlatList
         testID="escala-list"
         data={assignments ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View testID={`assignment-${item.id}`}>
-            <Text>{item.celebration.name}</Text>
-            <Text>{item.ministry.name}</Text>
+          <Card testID={`assignment-${item.id}`}>
+            <Text style={typography.subtitle}>{item.celebration.name}</Text>
+            <Text style={styles.ministry}>{item.ministry.name}</Text>
             {item.status === "pending" ? (
-              <View>
-                <Button
+              <View style={styles.actionsRow}>
+                <AppButton
                   testID={`confirm-${item.id}`}
                   title="Confirmar"
                   disabled={pendingIds.has(item.id)}
                   onPress={() => handleRespond(item.id, "confirmed")}
+                  style={styles.actionButton}
                 />
-                <Button
+                <AppButton
                   testID={`decline-${item.id}`}
                   title="Recusar"
+                  variant="secondary"
                   disabled={pendingIds.has(item.id)}
                   onPress={() => handleRespond(item.id, "declined")}
+                  style={styles.actionButton}
                 />
               </View>
             ) : null}
             {item.status === "confirmed" && !item.checked_in_at ? (
-              <Button
+              <AppButton
                 testID={`check-in-${item.id}`}
                 title="Fazer check-in"
                 disabled={pendingIds.has(item.id)}
                 onPress={() => handleCheckIn(item.id)}
+                style={styles.checkInButton}
               />
             ) : null}
-          </View>
+          </Card>
         )}
       />
-    </View>
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  headerLink: {
+    marginBottom: spacing.md,
+  },
+  actionError: {
+    color: colors.danger,
+    marginBottom: spacing.md,
+  },
+  ministry: {
+    ...typography.caption,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  checkInButton: {
+    marginTop: spacing.sm,
+  },
+});

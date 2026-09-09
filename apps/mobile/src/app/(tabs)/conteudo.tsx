@@ -5,10 +5,15 @@
 // de rede visível, distinto de lista vazia.
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Button, FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text } from "react-native";
 
+import { AppButton } from "../../components/AppButton";
+import { Card } from "../../components/Card";
+import { Screen } from "../../components/Screen";
+import { StatusMessage } from "../../components/StatusMessage";
 import { getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
+import { colors, spacing, typography } from "../../lib/theme/tokens";
 
 const LIMIT = 20;
 const LOAD_ERROR_MESSAGE = "Não foi possível carregar o conteúdo. Verifique sua conexão.";
@@ -69,45 +74,57 @@ export default function ConteudoScreen() {
   }
 
   if (error) {
-    return (
-      <View testID="conteudo-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
-      </View>
-    );
+    return <StatusMessage testID="conteudo-error" message={error} tone="danger" />;
   }
 
   if (posts && posts.length === 0) {
-    return (
-      <View testID="conteudo-empty" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>Nenhum post publicado ainda.</Text>
-      </View>
-    );
+    return <StatusMessage testID="conteudo-empty" message="Nenhum post publicado ainda." />;
   }
 
   const hasMore = posts !== null && page * LIMIT < total;
 
   return (
-    <View style={{ flex: 1 }}>
+    <Screen>
       <FlatList
         testID="conteudo-list"
         data={posts ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <Pressable testID={`post-${item.id}`} onPress={() => router.push(`/post/${item.id}`)}>
-            <Text>{item.title}</Text>
-            {item.body ? <Text>{item.body}</Text> : null}
-          </Pressable>
+          <Card testID={`post-${item.id}`} onPress={() => router.push(`/post/${item.id}`)}>
+            <Text style={typography.subtitle}>{item.title}</Text>
+            {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
+          </Card>
         )}
       />
-      {loadMoreError ? <Text testID="load-more-error">{loadMoreError}</Text> : null}
+      {loadMoreError ? (
+        <Text testID="load-more-error" style={styles.error}>
+          {loadMoreError}
+        </Text>
+      ) : null}
       {hasMore ? (
-        <Button
+        <AppButton
           testID="load-more-button"
           title="Carregar mais"
+          variant="secondary"
           disabled={isLoadingMore}
           onPress={handleLoadMore}
+          style={styles.loadMoreButton}
         />
       ) : null}
-    </View>
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  body: {
+    ...typography.caption,
+    marginTop: spacing.xs,
+  },
+  error: {
+    color: colors.danger,
+    marginBottom: spacing.md,
+  },
+  loadMoreButton: {
+    marginTop: spacing.xs,
+  },
+});

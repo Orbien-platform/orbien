@@ -4,11 +4,17 @@
 // navegação. Destino do toque num item da aba Celebrações.
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Button, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
+import { AppButton } from "../../components/AppButton";
+import { Card } from "../../components/Card";
+import { Screen } from "../../components/Screen";
+import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { getServiceOrder } from "../../lib/celebracoes/celebracoes-client";
 import type { ServiceOrder } from "../../lib/celebracoes/types";
+import { useTheme } from "../../lib/theme/theme-provider";
+import { colors, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Ordem de culto não encontrada.";
 const LOAD_ERROR_MESSAGE = "Não foi possível carregar a Ordem de Culto. Verifique sua conexão.";
@@ -27,6 +33,7 @@ function formatOffset(minutes: number): string {
 }
 
 export default function CelebracaoScreen() {
+  const theme = useTheme();
   const { id, ministryId } = useLocalSearchParams<{ id: string; ministryId?: string }>();
   const [order, setOrder] = useState<ServiceOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,10 +62,9 @@ export default function CelebracaoScreen() {
   if (error) {
     const canRetry = error === LOAD_ERROR_MESSAGE;
     return (
-      <View testID="celebracao-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
+      <StatusMessage testID="celebracao-error" message={error} tone="danger">
         {canRetry ? (
-          <Button
+          <AppButton
             testID="celebracao-retry"
             title="Tentar novamente"
             onPress={() => {
@@ -67,38 +73,39 @@ export default function CelebracaoScreen() {
             }}
           />
         ) : null}
-      </View>
+      </StatusMessage>
     );
   }
 
   if (!order) {
-    return (
-      <View testID="celebracao-loading" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>Carregando…</Text>
-      </View>
-    );
+    return <StatusMessage testID="celebracao-loading" message="Carregando…" />;
   }
 
   const items = [...order.items].sort((a, b) => a.sequence - b.sequence);
 
   return (
-    <View testID="celebracao-detail" style={{ flex: 1 }}>
-      <Text testID="celebracao-title">{order.title}</Text>
+    <Screen testID="celebracao-detail">
+      <Text testID="celebracao-title" style={styles.title}>
+        {order.title}
+      </Text>
       {order.published_at === null ? (
-        <Text testID="celebracao-unpublished-warning">{UNPUBLISHED_WARNING}</Text>
+        <Text testID="celebracao-unpublished-warning" style={styles.warning}>
+          {UNPUBLISHED_WARNING}
+        </Text>
       ) : null}
       {items.map((item) => {
         const isMine = ministryId !== undefined && item.ministry?.id === ministryId;
         return (
-          <View
+          <Card
             key={item.id}
             testID={isMine ? `celebracao-item-${item.id}-mine` : `celebracao-item-${item.id}`}
+            style={isMine ? [styles.item, { borderColor: theme.primaryColor, borderWidth: 2 }] : styles.item}
           >
-            <Text>{item.name}</Text>
-            <Text testID={`celebracao-item-${item.id}-horario`}>
+            <Text style={typography.subtitle}>{item.name}</Text>
+            <Text testID={`celebracao-item-${item.id}-horario`} style={styles.horario}>
               {`${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min`}
             </Text>
-            <Text>
+            <Text style={styles.responsible}>
               {item.responsible_type === "person" && item.person
                 ? item.person.full_name
                 : item.responsible_type === "ministry" && item.ministry
@@ -106,13 +113,50 @@ export default function CelebracaoScreen() {
                   : item.responsible_label}
             </Text>
             {item.setlist ? (
-              item.setlist.songs.map((song) => <Text key={song.id}>{song.title}</Text>)
+              item.setlist.songs.map((song) => (
+                <Text key={song.id} style={styles.song}>
+                  {song.title}
+                </Text>
+              ))
             ) : (
-              <Text>{NO_SETLIST_MESSAGE}</Text>
+              <Text style={styles.noSetlist}>{NO_SETLIST_MESSAGE}</Text>
             )}
-          </View>
+          </Card>
         );
       })}
-    </View>
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  title: {
+    ...typography.title,
+    marginBottom: spacing.sm,
+  },
+  warning: {
+    ...typography.caption,
+    color: colors.danger,
+    marginBottom: spacing.md,
+  },
+  item: {
+    marginBottom: spacing.md,
+  },
+  horario: {
+    ...typography.caption,
+    marginTop: spacing.xs,
+  },
+  responsible: {
+    ...typography.body,
+    marginTop: spacing.xs,
+  },
+  song: {
+    ...typography.body,
+    marginTop: spacing.xs,
+    marginLeft: spacing.sm,
+  },
+  noSetlist: {
+    ...typography.caption,
+    fontStyle: "italic",
+    marginTop: spacing.xs,
+  },
+});

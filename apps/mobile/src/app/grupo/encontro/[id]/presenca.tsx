@@ -5,10 +5,16 @@
 // desmarcar.
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text } from "react-native";
 
+import { AppButton } from "../../../../components/AppButton";
+import { AppLink } from "../../../../components/AppLink";
+import { Card } from "../../../../components/Card";
+import { Screen } from "../../../../components/Screen";
+import { StatusMessage } from "../../../../components/StatusMessage";
 import { getGroupRoster, getMeeting, recordAttendance } from "../../../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { GroupRosterMember } from "../../../../lib/pequenos-grupos/types";
+import { colors, spacing, typography } from "../../../../lib/theme/tokens";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar o encontro. Verifique sua conexão.";
 const SUBMIT_ERROR_MESSAGE = "Não foi possível registrar a presença. Tente novamente.";
@@ -74,9 +80,8 @@ export default function PresencaScreen() {
 
   if (loadError) {
     return (
-      <View testID="presenca-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{loadError}</Text>
-        <Text
+      <StatusMessage testID="presenca-error" message={loadError} tone="danger">
+        <AppLink
           testID="presenca-retry"
           onPress={() => {
             setLoadError(null);
@@ -84,14 +89,18 @@ export default function PresencaScreen() {
           }}
         >
           Tentar novamente
-        </Text>
-      </View>
+        </AppLink>
+      </StatusMessage>
     );
   }
 
   return (
-    <View testID="presenca-detail" style={{ flex: 1 }}>
-      {submitError ? <Text testID="presenca-submit-error">{submitError}</Text> : null}
+    <Screen testID="presenca-detail">
+      {submitError ? (
+        <Text testID="presenca-submit-error" style={styles.submitError}>
+          {submitError}
+        </Text>
+      ) : null}
       <FlatList
         testID="presenca-roster"
         data={roster ?? []}
@@ -100,29 +109,55 @@ export default function PresencaScreen() {
           const isMarked = alreadyMarked.has(item.person_id);
           const isSelected = selected.has(item.person_id);
           return (
-            <View testID={`roster-${item.person_id}`}>
-              <Text>{item.full_name}</Text>
+            <Card testID={`roster-${item.person_id}`} style={styles.rosterCard}>
+              <Text style={typography.body}>{item.full_name}</Text>
               {isMarked ? (
-                <Text testID={`roster-${item.person_id}-marcado`}>Presente</Text>
+                <Text testID={`roster-${item.person_id}-marcado`} style={styles.markedLabel}>
+                  Presente
+                </Text>
               ) : (
-                <Text
+                <AppLink
                   testID={`roster-${item.person_id}-toggle`}
+                  style={styles.toggleLink}
                   onPress={() => toggle(item.person_id)}
                 >
                   {isSelected ? "Selecionado" : "Marcar presença"}
-                </Text>
+                </AppLink>
               )}
-            </View>
+            </Card>
           );
         }}
       />
-      <Text
+      <AppButton
         testID="presenca-confirmar"
-        onPress={selected.size === 0 || submitting ? undefined : handleConfirm}
-        accessibilityState={{ disabled: selected.size === 0 || submitting }}
-      >
-        Confirmar presença
-      </Text>
-    </View>
+        title="Confirmar presença"
+        style={styles.confirmButton}
+        disabled={selected.size === 0 || submitting}
+        onPress={handleConfirm}
+      />
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  submitError: {
+    color: colors.danger,
+    marginBottom: spacing.md,
+  },
+  rosterCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  markedLabel: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: "600",
+  },
+  toggleLink: {
+    fontSize: 14,
+  },
+  confirmButton: {
+    marginTop: spacing.md,
+  },
+});

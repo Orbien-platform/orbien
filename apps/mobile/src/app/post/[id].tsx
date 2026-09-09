@@ -4,11 +4,14 @@
 // push e de um item da lista de Conteúdo (T8).
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 
+import { Screen } from "../../components/Screen";
+import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { getPost } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
+import { radius, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Post não encontrado.";
 const LOAD_ERROR_MESSAGE = "Não foi possível carregar o post. Verifique sua conexão.";
@@ -42,28 +45,42 @@ export default function PostScreen() {
   }, [id]);
 
   if (error) {
-    return (
-      <View testID="post-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
-      </View>
-    );
+    return <StatusMessage testID="post-error" message={error} tone="danger" />;
   }
 
   if (!post) {
-    return (
-      <View testID="post-loading" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>Carregando…</Text>
-      </View>
-    );
+    return <StatusMessage testID="post-loading" message="Carregando…" />;
   }
 
   return (
-    <View testID="post-detail" style={{ flex: 1 }}>
-      <Text testID="post-title">{post.title}</Text>
-      {post.body ? <Text testID="post-body">{post.body}</Text> : null}
-      {post.media_url ? (
-        <Image testID="post-media" source={{ uri: post.media_url }} style={{ width: "100%", height: 200 }} />
+    <Screen testID="post-detail">
+      <Text testID="post-title" style={styles.title}>
+        {post.title}
+      </Text>
+      {post.body ? (
+        <Text testID="post-body" style={styles.body}>
+          {post.body}
+        </Text>
       ) : null}
-    </View>
+      {post.media_url ? (
+        <Image testID="post-media" source={{ uri: post.media_url }} style={styles.media} />
+      ) : null}
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  title: {
+    ...typography.title,
+    marginBottom: spacing.md,
+  },
+  body: {
+    ...typography.body,
+    marginBottom: spacing.md,
+  },
+  media: {
+    width: "100%",
+    height: 200,
+    borderRadius: radius.md,
+  },
+});

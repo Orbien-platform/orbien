@@ -6,9 +6,20 @@
 // ordem cronológica de entrega dos módulos de domínio.
 import { Tabs } from "expo-router/js-tabs";
 
+import { useTheme } from "../../lib/theme/theme-provider";
+import { colors } from "../../lib/theme/tokens";
+
 export default function TabsLayout() {
+  const theme = useTheme();
+
   return (
-    <Tabs>
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: theme.primaryColor,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+      }}
+    >
       <Tabs.Screen name="index" options={{ title: "Escala" }} />
       <Tabs.Screen name="celebracoes" options={{ title: "Celebrações" }} />
       <Tabs.Screen name="grupos" options={{ title: "Grupos" }} />

@@ -7,12 +7,17 @@
 // tela de detalhe, MOB-08-03).
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text } from "react-native";
 
+import { AppLink } from "../../components/AppLink";
+import { Card } from "../../components/Card";
+import { Screen } from "../../components/Screen";
+import { StatusMessage } from "../../components/StatusMessage";
 import { decodeJwtPayload } from "../../lib/auth/jwt";
 import { useAuth } from "../../lib/auth/auth-provider";
 import { getMyAssignments } from "../../lib/escala/escala-client";
 import { listUpcomingInstances } from "../../lib/celebracoes/celebracoes-client";
+import { spacing, typography } from "../../lib/theme/tokens";
 
 const LEADER_ROLES = [
   "ministry_leader",
@@ -89,45 +94,51 @@ export default function CelebracoesScreen() {
   }, [isLeader]);
 
   if (error) {
-    return (
-      <View testID="celebracoes-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
-      </View>
-    );
+    return <StatusMessage testID="celebracoes-error" message={error} tone="danger" />;
   }
 
   if (items && items.length === 0) {
     return (
-      <View testID="celebracoes-empty" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{isLeader ? EMPTY_LEADER_MESSAGE : EMPTY_VOLUNTEER_MESSAGE}</Text>
-      </View>
+      <StatusMessage
+        testID="celebracoes-empty"
+        message={isLeader ? EMPTY_LEADER_MESSAGE : EMPTY_VOLUNTEER_MESSAGE}
+      />
     );
   }
 
   return (
-    <FlatList
-      testID="celebracoes-list"
-      data={items ?? []}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <View testID={`celebracao-${item.id}`}>
-          <Text>{item.celebrationName}</Text>
-          {item.serviceOrderId ? (
-            <Text
-              testID={`celebracao-abrir-${item.id}`}
-              onPress={() =>
-                router.push(
-                  item.ministryId
-                    ? `/celebracao/${item.serviceOrderId}?ministryId=${item.ministryId}`
-                    : `/celebracao/${item.serviceOrderId}`,
-                )
-              }
-            >
-              Ver Ordem de Culto
-            </Text>
-          ) : null}
-        </View>
-      )}
-    />
+    <Screen>
+      <FlatList
+        testID="celebracoes-list"
+        data={items ?? []}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <Card testID={`celebracao-${item.id}`}>
+            <Text style={typography.subtitle}>{item.celebrationName}</Text>
+            {item.serviceOrderId ? (
+              <AppLink
+                testID={`celebracao-abrir-${item.id}`}
+                style={styles.link}
+                onPress={() =>
+                  router.push(
+                    item.ministryId
+                      ? `/celebracao/${item.serviceOrderId}?ministryId=${item.ministryId}`
+                      : `/celebracao/${item.serviceOrderId}`,
+                  )
+                }
+              >
+                Ver Ordem de Culto
+              </AppLink>
+            ) : null}
+          </Card>
+        )}
+      />
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  link: {
+    marginTop: spacing.xs,
+  },
+});

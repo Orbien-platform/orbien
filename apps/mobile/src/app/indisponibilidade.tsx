@@ -3,9 +3,13 @@
 // apps/web/src/components/volunteers/UnavailabilityPanel.tsx: ao trocar
 // de mês rápido, só a resposta do mês selecionado por último é aplicada.
 import { useEffect, useState } from "react";
-import { Button, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { AppButton } from "../components/AppButton";
+import { Screen } from "../components/Screen";
 import { getUnavailability, saveUnavailability } from "../lib/escala/escala-client";
+import { useTheme } from "../lib/theme/theme-provider";
+import { colors, radius, spacing, typography } from "../lib/theme/tokens";
 
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -19,6 +23,7 @@ const LOAD_ERROR_MESSAGE = "Não foi possível carregar sua indisponibilidade. V
 const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";
 
 export default function IndisponibilidadeScreen() {
+  const theme = useTheme();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -97,38 +102,133 @@ export default function IndisponibilidadeScreen() {
   const days = Array.from({ length: total }, (_, i) => i + 1);
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: "row" }}>
-        <Button testID="prev-month" title="< Mês anterior" onPress={goToPreviousMonth} />
-        <Text testID="current-month">{`${month}/${year}`}</Text>
-        <Button testID="next-month" title="Próximo mês >" onPress={goToNextMonth} />
+    <Screen>
+      <View style={styles.monthRow}>
+        <AppButton
+          testID="prev-month"
+          title="< Mês anterior"
+          variant="secondary"
+          onPress={goToPreviousMonth}
+          style={styles.monthButton}
+        />
+        <Text testID="current-month" style={styles.monthLabel}>
+          {`${month}/${year}`}
+        </Text>
+        <AppButton
+          testID="next-month"
+          title="Próximo mês >"
+          variant="secondary"
+          onPress={goToNextMonth}
+          style={styles.monthButton}
+        />
       </View>
-      <View testID="days-grid" style={{ flexDirection: "row", flexWrap: "wrap" }}>
+      <View testID="days-grid" style={styles.daysGrid}>
         {days.map((day) => {
           const key = dayKey(year, month, day);
+          const isSelected = selectedDays.has(key);
           return (
-            <Button
+            <Pressable
               key={key}
               testID={`day-${key}`}
-              title={selectedDays.has(key) ? `${day} ✓` : String(day)}
               onPress={() => toggleDay(day)}
-            />
+              style={[
+                styles.dayCell,
+                isSelected && { backgroundColor: theme.primaryColor, borderColor: theme.primaryColor },
+              ]}
+            >
+              <Text style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}>
+                {isSelected ? `${day} ✓` : String(day)}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
       <TextInput
         testID="notes-input"
         placeholder="Observação (opcional)"
+        placeholderTextColor={colors.textMuted}
         value={notes}
         onChangeText={(text) => {
           setNotes(text);
           setSaved(false);
         }}
+        style={styles.notesInput}
       />
-      {loadError ? <Text testID="load-error">{loadError}</Text> : null}
-      {saveError ? <Text testID="save-error">{saveError}</Text> : null}
-      {saved ? <Text testID="saved-message">Indisponibilidades salvas.</Text> : null}
-      <Button testID="save-button" title="Salvar" onPress={handleSave} />
-    </View>
+      {loadError ? (
+        <Text testID="load-error" style={styles.errorText}>
+          {loadError}
+        </Text>
+      ) : null}
+      {saveError ? (
+        <Text testID="save-error" style={styles.errorText}>
+          {saveError}
+        </Text>
+      ) : null}
+      {saved ? (
+        <Text testID="saved-message" style={styles.savedText}>
+          Indisponibilidades salvas.
+        </Text>
+      ) : null}
+      <AppButton testID="save-button" title="Salvar" onPress={handleSave} />
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  monthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.lg,
+  },
+  monthButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  monthLabel: {
+    ...typography.subtitle,
+  },
+  daysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  dayCell: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  dayLabel: {
+    ...typography.caption,
+    color: colors.text,
+  },
+  dayLabelSelected: {
+    color: colors.textInverse,
+    fontWeight: "700",
+  },
+  notesInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 4,
+    marginBottom: spacing.md,
+    fontSize: 15,
+    color: colors.text,
+    backgroundColor: colors.surface,
+  },
+  errorText: {
+    color: colors.danger,
+    marginBottom: spacing.md,
+  },
+  savedText: {
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+});

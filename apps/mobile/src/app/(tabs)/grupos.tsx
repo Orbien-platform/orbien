@@ -3,10 +3,15 @@
 // encontros (`/grupo/[id]`).
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, Text } from "react-native";
 
+import { AppLink } from "../../components/AppLink";
+import { Card } from "../../components/Card";
+import { Screen } from "../../components/Screen";
+import { StatusMessage } from "../../components/StatusMessage";
 import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
+import { typography } from "../../lib/theme/tokens";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar seus grupos. Verifique sua conexão.";
 const EMPTY_MESSAGE = "Você não participa de nenhum grupo.";
@@ -43,9 +48,8 @@ export default function GruposScreen() {
 
   if (error) {
     return (
-      <View testID="grupos-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
-        <Text
+      <StatusMessage testID="grupos-error" message={error} tone="danger">
+        <AppLink
           testID="grupos-retry"
           onPress={() => {
             setError(null);
@@ -53,32 +57,29 @@ export default function GruposScreen() {
           }}
         >
           Tentar novamente
-        </Text>
-      </View>
+        </AppLink>
+      </StatusMessage>
     );
   }
 
   if (groups && groups.length === 0) {
-    return (
-      <View testID="grupos-empty" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{EMPTY_MESSAGE}</Text>
-      </View>
-    );
+    return <StatusMessage testID="grupos-empty" message={EMPTY_MESSAGE} />;
   }
 
   return (
-    <FlatList
-      testID="grupos-list"
-      data={groups ?? []}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <Text
-          testID={`grupo-${item.id}`}
-          onPress={() => router.push(`/grupo/${item.id}`)}
-        >
-          {`${item.name} — ${ROLE_LABELS[item.role]}${item.meeting_time ? ` — ${item.meeting_time}` : ""}`}
-        </Text>
-      )}
-    />
+    <Screen>
+      <FlatList
+        testID="grupos-list"
+        data={groups ?? []}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <Card testID={`grupo-${item.id}`} onPress={() => router.push(`/grupo/${item.id}`)}>
+            <Text style={typography.body}>
+              {`${item.name} — ${ROLE_LABELS[item.role]}${item.meeting_time ? ` — ${item.meeting_time}` : ""}`}
+            </Text>
+          </Card>
+        )}
+      />
+    </Screen>
   );
 }
