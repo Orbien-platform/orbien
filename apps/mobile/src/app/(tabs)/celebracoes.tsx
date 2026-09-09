@@ -23,8 +23,9 @@ import { decodeJwtPayload } from "../../lib/auth/jwt";
 import { useAuth } from "../../lib/auth/auth-provider";
 import { getMyAssignments } from "../../lib/escala/escala-client";
 import { listUpcomingInstances } from "../../lib/celebracoes/celebracoes-client";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { formatDateTime } from "../../lib/format/date";
-import { ChevronRight, Church, ListMusic, WifiOff } from "../../lib/theme/icons";
+import { ChevronRight, Church, CircleAlert, ListMusic, WifiOff } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import {
   ICON_STROKE_WIDTH,
@@ -42,7 +43,6 @@ const LEADER_ROLES = [
   "secretary",
 ];
 
-const NETWORK_ERROR_MESSAGE = "Não foi possível carregar as celebrações. Verifique sua conexão.";
 const EMPTY_VOLUNTEER_MESSAGE = "Você não tem celebrações próximas.";
 const EMPTY_LEADER_MESSAGE = "Nenhuma celebração agendada.";
 
@@ -85,7 +85,7 @@ export default function CelebracoesScreen() {
   const isLeader = roles.some((r) => LEADER_ROLES.includes(r));
 
   const [items, setItems] = useState<CelebracaoListItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,9 +99,9 @@ export default function CelebracoesScreen() {
         if (cancelled) return;
         setItems(result);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(NETWORK_ERROR_MESSAGE);
+        setError(describeLoadError(err, "as celebrações"));
       });
 
     return () => {
@@ -113,9 +113,9 @@ export default function CelebracoesScreen() {
     return (
       <StatusMessage
         testID="celebracoes-error"
-        icon={WifiOff}
-        message={error}
-        description="Assim que a conexão voltar, abra a aba novamente."
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
         tone="danger"
       />
     );

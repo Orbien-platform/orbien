@@ -28,16 +28,17 @@ import {
 } from "../../../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { GroupRosterMember } from "../../../../lib/pequenos-grupos/types";
 import {
+  CircleAlert,
   CircleCheck,
   RefreshCw,
   Square,
   SquareCheck,
   WifiOff,
 } from "../../../../lib/theme/icons";
+import { describeLoadError, type LoadErrorState } from "../../../../lib/api/load-error";
 import { useTheme } from "../../../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../../../lib/theme/tokens";
 
-const NETWORK_ERROR_MESSAGE = "Não foi possível carregar o encontro. Verifique sua conexão.";
 const SUBMIT_ERROR_MESSAGE = "Não foi possível registrar a presença. Tente novamente.";
 
 export default function PresencaScreen() {
@@ -46,7 +47,7 @@ export default function PresencaScreen() {
   const [roster, setRoster] = useState<GroupRosterMember[] | null>(null);
   const [alreadyMarked, setAlreadyMarked] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
@@ -63,9 +64,9 @@ export default function PresencaScreen() {
           setAlreadyMarked(new Set(meeting.attendanceRecords.map((a) => a.person_id)));
         }),
       )
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setLoadError(NETWORK_ERROR_MESSAGE);
+        setLoadError(describeLoadError(err, "o encontro"));
       });
 
     return () => {
@@ -102,7 +103,13 @@ export default function PresencaScreen() {
 
   if (loadError) {
     return (
-      <StatusMessage testID="presenca-error" icon={WifiOff} message={loadError} tone="danger">
+      <StatusMessage
+        testID="presenca-error"
+        icon={loadError.offline ? WifiOff : CircleAlert}
+        message={loadError.message}
+        description={loadError.description}
+        tone="danger"
+      >
         <AppButton
           testID="presenca-retry"
           title="Tentar novamente"

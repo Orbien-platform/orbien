@@ -1,6 +1,7 @@
 // Testes derivados do Done-when de T7 (tasks.md, MOB-09-03): encontros
 // ordenados por occurred_at desc, estado vazio, erro, navegação.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { NetworkError } from "../../../lib/api/errors";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -46,7 +47,7 @@ describe("GrupoScreen", () => {
   });
 
   it("erro de rede mostra estado de erro explícito", async () => {
-    mockListMeetings.mockRejectedValue(new Error("network"));
+    mockListMeetings.mockRejectedValue(new NetworkError());
 
     await act(async () => {
       render(<GrupoScreen />);
@@ -59,7 +60,7 @@ describe("GrupoScreen", () => {
   });
 
   it("erro de rede oferece tentar novamente, que refaz a busca", async () => {
-    mockListMeetings.mockRejectedValueOnce(new Error("network"));
+    mockListMeetings.mockRejectedValueOnce(new NetworkError());
     mockListMeetings.mockResolvedValueOnce([
       { id: "m1", occurred_at: "2026-09-01T19:00:00.000Z", topic: "Encontro" },
     ]);

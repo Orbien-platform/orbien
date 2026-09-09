@@ -33,11 +33,11 @@ import {
   RefreshCw,
   WifiOff,
 } from "../../lib/theme/icons";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Ordem de culto não encontrada.";
-const LOAD_ERROR_MESSAGE = "Não foi possível carregar a Ordem de Culto. Verifique sua conexão.";
 const UNPUBLISHED_WARNING = "Ordem de culto ainda não publicada — pode mudar.";
 const NO_SETLIST_MESSAGE = "Repertório ainda não publicado";
 
@@ -56,7 +56,8 @@ export default function CelebracaoScreen() {
   const { primaryColor, colors } = useTheme();
   const { id, ministryId } = useLocalSearchParams<{ id: string; ministryId?: string }>();
   const [order, setOrder] = useState<ServiceOrder | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
@@ -69,8 +70,12 @@ export default function CelebracaoScreen() {
       })
       .catch((err) => {
         if (cancelled) return;
+        const is404 = err instanceof HttpError && err.status === 404;
+        setNotFound(is404);
         setError(
-          err instanceof HttpError && err.status === 404 ? NOT_FOUND_MESSAGE : LOAD_ERROR_MESSAGE,
+          is404
+            ? { message: NOT_FOUND_MESSAGE, description: "", offline: false }
+            : describeLoadError(err, "a Ordem de Culto"),
         );
       });
 
@@ -80,12 +85,15 @@ export default function CelebracaoScreen() {
   }, [id, retryCount]);
 
   if (error) {
-    const canRetry = error === LOAD_ERROR_MESSAGE;
+    // 404 não se resolve tentando de novo — só a falha de carregamento
+    // (sem rede ou erro do servidor) ganha o botão de retry.
+    const canRetry = !notFound;
     return (
       <StatusMessage
         testID="celebracao-error"
-        icon={canRetry ? WifiOff : CircleAlert}
-        message={error}
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description || undefined}
         tone="danger"
       >
         {canRetry ? (

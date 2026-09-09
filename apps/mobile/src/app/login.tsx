@@ -12,10 +12,11 @@
 // que a requisição estava em curso.
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../components/Alert";
 import { AppButton } from "../components/AppButton";
+import { BrandLogo } from "../components/BrandLogo";
 import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
 import { useAuth } from "../lib/auth/auth-provider";
@@ -29,9 +30,12 @@ import { radius, spacing, typography } from "../lib/theme/tokens";
 // documentado no CLAUDE.md raiz.
 const GENERIC_ERROR_MESSAGE = "Não foi possível entrar. Confira os dados e tente novamente.";
 
+/** Lado da marca no topo da tela, em dp. */
+const LOGO_SIZE = 72;
+
 export default function LoginScreen() {
   const { login } = useAuth();
-  const { appName, logoUrl, colors, shadow, isDark } = useTheme();
+  const { appName, colors, shadow, isDark, primaryColor } = useTheme();
   const [tenantSlug, setTenantSlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,14 +63,13 @@ export default function LoginScreen() {
           parchment. Sobrescreve enquanto a tela está montada (§8). */}
       <StatusBar style={isDark ? "light" : "dark"} />
       <View style={styles.brand}>
-        {logoUrl ? (
-          <Image
-            testID="login-logo"
-            source={{ uri: logoUrl }}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        ) : null}
+        {/* Antes do login não há tenant resolvido: numa build genérica esta
+            é a marca da Orbien, e numa build personalizada o logo do tenant
+            só aparece a partir do segundo login (cache). Ver `colorsOnly`
+            em src/lib/theme/brand-theme.ts. */}
+        <View style={styles.logo}>
+          <BrandLogo size={LOGO_SIZE} color={isDark ? colors.textPrimary : primaryColor} />
+        </View>
         <Text style={[typography.display, styles.appName, { color: colors.textPrimary }]}>
           {appName}
         </Text>
@@ -144,11 +147,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.xxxl,
   },
-  logo: {
-    width: 72,
-    height: 72,
-    marginBottom: spacing.lg,
-  },
+  logo: { marginBottom: spacing.lg },
   appName: { textAlign: "center" },
   tagline: {
     textAlign: "center",

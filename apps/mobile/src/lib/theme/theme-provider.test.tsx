@@ -44,6 +44,37 @@ describe("ThemeProvider", () => {
     });
   });
 
+  it("sem sessão: o cache empresta a COR do último tenant, nunca o nome nem o logo", async () => {
+    // A tela de login de uma build genérica abria como "Doca Church", com o
+    // logo da igreja, só porque o cache de branding sobrevive ao logout. A
+    // cor é continuidade legítima; nome e logo antes de o usuário dizer em
+    // que igreja entra são identidade errada.
+    mockUseAuth.mockReturnValue({ session: null });
+    mockGetItem.mockResolvedValue(
+      JSON.stringify({
+        app_name: "Doca Church",
+        primary_color: "#00ff00",
+        logo_url: "https://cache.example/logo.png",
+        splash_url: null,
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <ThemeProvider>
+          <ThemeProbe />
+        </ThemeProvider>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("primaryColor").props.children).toBe("#00ff00");
+    });
+    expect(screen.getByTestId("appName").props.children).toBe(DEFAULT_THEME.appName);
+    expect(screen.getByTestId("logoUrl").props.children).toBe("sem-logo");
+    expect(mockAuthenticatedRequest).not.toHaveBeenCalled();
+  });
+
   it("AC 3: reaplica o branding cacheado do AsyncStorage antes do GET /settings resolver", async () => {
     mockGetItem.mockResolvedValue(
       JSON.stringify({

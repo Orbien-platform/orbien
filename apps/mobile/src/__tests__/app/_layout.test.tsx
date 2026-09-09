@@ -6,9 +6,13 @@
 // - unauthenticated libera só a rota de login (via router mock)
 // - authenticated libera as rotas autenticadas
 // e de T16 (wiring do ThemeProvider, MOB-03):
-// - dois brandings diferentes produzem cor/logo diferentes no shell
+// - dois brandings diferentes produzem cor diferente no shell
+//
+// A identidade (logo/nome) saiu do header do Stack e virou conteúdo da
+// primeira aba — quem cobre é brand-logo.test.tsx.
 import { act, render, screen, waitFor } from "@testing-library/react-native";
 
+const mockSegments = jest.fn<string[], []>(() => []);
 const mockUseAuth = jest.fn();
 jest.mock("../../lib/auth/auth-provider", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -52,21 +56,34 @@ jest.mock("expo-router", () => {
   const Stack = (props: {
     screenOptions?: {
       headerStyle?: { backgroundColor?: string };
-      headerTitle?: () => React.ReactNode;
+      headerBackButtonDisplayMode?: string;
     };
     children?: React.ReactNode;
   }) => {
-    const HeaderTitle = props.screenOptions?.headerTitle;
     return (
       <>
         <Text testID="shell-placeholder">shell</Text>
         <Text testID="header-color">{props.screenOptions?.headerStyle?.backgroundColor ?? ""}</Text>
-        {HeaderTitle ? HeaderTitle() : null}
+        <Text testID="header-back-display">
+          {props.screenOptions?.headerBackButtonDisplayMode ?? ""}
+        </Text>
         {props.children}
       </>
     );
   };
-  const StackScreen = ({ name }: { name: string }) => <Text testID={`screen-${name}`}>{name}</Text>;
+  const StackScreen = ({
+    name,
+    options,
+  }: {
+    name: string;
+    options?: { title?: string; headerShown?: boolean };
+  }) => (
+    <>
+      <Text testID={`screen-${name}`}>{name}</Text>
+      <Text testID={`screen-title-${name}`}>{options?.title ?? ""}</Text>
+      <Text testID={`screen-header-shown-${name}`}>{String(options?.headerShown ?? true)}</Text>
+    </>
+  );
   StackScreen.displayName = "Stack.Screen";
   const StackProtected = ({ guard, children }: { guard: boolean; children?: React.ReactNode }) =>
     guard ? <>{children}</> : null;
@@ -74,7 +91,7 @@ jest.mock("expo-router", () => {
   Stack.Screen = StackScreen;
   Stack.Protected = StackProtected;
 
-  return { Stack };
+  return { Stack, useSegments: () => mockSegments() };
 });
 
 import RootLayout from "../../app/_layout";
@@ -131,8 +148,28 @@ describe("RootLayout — guarda de navegação", () => {
     expect(screen.queryByTestId("screen-(tabs)")).toBeNull();
   });
 
+  it("abas sem header, telas de detalhe com título próprio e sem rótulo de voltar", async () => {
+    mockUseAuth.mockReturnValue({ status: "authenticated" });
+
+    await act(async () => {
+      render(<RootLayout />);
+    });
+
+    // A barra de header saiu das abas: 56px + safe area em toda tela, com o
+    // mesmo conteúdo, custavam mais espaço útil do que entregavam.
+    expect(screen.getByTestId("screen-header-shown-(tabs)").props.children).toBe("false");
+    // Toda tela de detalhe precisa de título: sem ele o iOS escreve o nome
+    // da rota anterior ao lado da seta de voltar — que é o grupo de abas, e
+    // aparecia literalmente como "(tabs)".
+    expect(screen.getByTestId("screen-title-post/[id]").props.children).toBe("Publicação");
+    expect(screen.getByTestId("screen-title-celebracao/[id]").props.children).toBe(
+      "Ordem de Culto",
+    );
+    expect(screen.getByTestId("header-back-display").props.children).toBe("minimal");
+  });
+
   describe("T16: wiring do ThemeProvider — dois tenants, dois temas", () => {
-    it("tenant A: aplica a cor primária e o logo de A no header do shell", async () => {
+    it("tenant A: aplica a cor primária de A no header do shell", async () => {
       mockUseAuth.mockReturnValue({
         status: "authenticated",
         session: { accessToken: "token-a", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
@@ -153,10 +190,10 @@ describe("RootLayout — guarda de navegação", () => {
       await waitFor(() => {
         expect(screen.getByTestId("header-color").props.children).toBe("#111111");
       });
-      expect(screen.getByTestId("header-logo").props.source.uri).toBe("https://a.example/logo.png");
+
     });
 
-    it("tenant B: aplica cor e logo diferentes de A, no mesmo shell", async () => {
+    it("tenant B: aplica cor diferente de A, no mesmo shell", async () => {
       mockUseAuth.mockReturnValue({
         status: "authenticated",
         session: { accessToken: "token-b", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
@@ -177,12 +214,10 @@ describe("RootLayout — guarda de navegação", () => {
       await waitFor(() => {
         expect(screen.getByTestId("header-color").props.children).toBe("#222222");
       });
-      expect(screen.getByTestId("header-logo").props.source.uri).toBe("https://b.example/logo.png");
       expect(screen.getByTestId("header-color").props.children).not.toBe("#111111");
-      expect(screen.getByTestId("header-logo").props.source.uri).not.toBe("https://a.example/logo.png");
     });
 
-    it("tenant sem branding customizado: header cai no default, sem logo (AC 2)", async () => {
+    it("tenant sem branding customizado: header cai no default (AC 2)", async () => {
       mockUseAuth.mockReturnValue({
         status: "authenticated",
         session: { accessToken: "token-c", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
@@ -199,8 +234,9 @@ describe("RootLayout — guarda de navegação", () => {
         expect(mockAuthenticatedRequest).toHaveBeenCalled();
       });
 
+      // Sem branding customizado o header fica na cor da plataforma — e
+      // não desenha logo nenhum: identidade não é mais assunto do header.
       expect(screen.queryByTestId("header-logo")).toBeNull();
-      expect(screen.getByTestId("header-app-name")).toBeTruthy();
     });
   });
 });

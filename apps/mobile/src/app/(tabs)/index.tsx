@@ -3,8 +3,10 @@
 // pendente (AC 2, atualização otimista local — sem refetch, mesmo
 // princípio de apps/web/src/app/(admin)/voluntarios/page.tsx:169-232) e
 // fazer check-in de um slot confirmado (AC 3, botão some após sucesso).
-// Nome do app já aparece no header (ThemedShell, _layout.tsx) — esta tela
-// não repete o literal.
+// A identidade (logo do tenant, ou a marca da Orbien na versão genérica)
+// aparece no topo desta tela, via `BrandHeader` — é a única aba que a
+// mostra, e ela substituiu a barra de header que o Stack desenhava em todas
+// (ver src/app/_layout.tsx). O nome vem do tema, nunca de literal.
 //
 // Visual conforme STYLE-GUIDE.md: card de lista com o bloco de data à
 // esquerda (§7), status em badge com dot (§7 — a lista antes não dizia em
@@ -17,6 +19,7 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../components/Alert";
 import { AppButton } from "../../components/AppButton";
+import { BrandHeader } from "../../components/BrandHeader";
 import { Badge, type BadgeTone } from "../../components/Badge";
 import { Card } from "../../components/Card";
 import { DateBlock } from "../../components/DateBlock";
@@ -24,6 +27,7 @@ import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { checkIn, getMyAssignments, respondToAssignment } from "../../lib/escala/escala-client";
 import type { Assignment, AssignmentStatus } from "../../lib/escala/types";
 import { formatDateTime } from "../../lib/format/date";
@@ -31,6 +35,7 @@ import {
   CalendarCheck,
   CalendarOff,
   ChevronRight,
+  CircleAlert,
   CircleCheck,
   Church,
   WifiOff,
@@ -38,7 +43,6 @@ import {
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
-const NETWORK_ERROR_MESSAGE = "Não foi possível carregar sua escala. Verifique sua conexão.";
 const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
 
 const STATUS_BADGE: Record<AssignmentStatus, { label: string; tone: BadgeTone }> = {
@@ -52,7 +56,7 @@ export default function EscalaScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // Guarda contra duplo toque: um id em ação (respond ou check-in) não
   // dispara outra chamada até a primeira resolver — evita duas requests
@@ -71,9 +75,9 @@ export default function EscalaScreen() {
         if (cancelled) return;
         setAssignments(result);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(NETWORK_ERROR_MESSAGE);
+        setError(describeLoadError(err, "sua escala"));
       });
 
     return () => {
@@ -133,9 +137,9 @@ export default function EscalaScreen() {
     return (
       <StatusMessage
         testID="escala-error"
-        icon={WifiOff}
-        message={error}
-        description="Assim que a conexão voltar, abra a aba novamente."
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
         tone="danger"
       />
     );
@@ -143,6 +147,7 @@ export default function EscalaScreen() {
 
   return (
     <Screen>
+      <BrandHeader />
       <Card
         testID="indisponibilidade-link"
         onPress={() => router.push("/indisponibilidade")}

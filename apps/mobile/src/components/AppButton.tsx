@@ -97,7 +97,17 @@ export function AppButton({
         {Icon ? (
           <Icon size={iconSize.inline} color={label[variant]} strokeWidth={ICON_STROKE_WIDTH} />
         ) : null}
-        <Text style={[typography.button, { color: label[variant] }]} numberOfLines={1}>
+        {/* Sem `numberOfLines={1}`: com o rótulo travado em uma linha, uma
+            medição apertada (fonte da marca recém-carregada, escala de
+            texto grande do sistema, botão dividindo a linha com outro)
+            cortava a palavra — "Entrar" virava "Entr...". Deixar quebrar é
+            pior visualmente que caber, mas melhor que mentir sobre o que o
+            botão faz; a altura é `minHeight`, então o botão cresce em vez
+            de espremer o texto. */}
+        <Text
+          style={[typography.button, styles.label, { color: label[variant] }]}
+          textBreakStrategy="simple"
+        >
           {title}
         </Text>
       </View>
@@ -124,8 +134,13 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: spacing.sm,
+    // O conteúdo pode encolher até o padding do botão, não além dele — sem
+    // isto o texto é medido contra uma largura maior que a disponível.
+    flexShrink: 1,
   },
+  label: { flexShrink: 1, textAlign: "center" },
   // O texto sai de vista mas continua medindo: é o que impede o botão de
   // encolher quando o spinner entra.
   contentHidden: { opacity: 0 },

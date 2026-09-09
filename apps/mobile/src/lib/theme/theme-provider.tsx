@@ -30,6 +30,7 @@ import { useAuth } from "../auth/auth-provider";
 import {
   brandingLayer,
   buildTimeLayer,
+  colorsOnly,
   PLATFORM_THEME,
   resolveBrandTheme,
   type BrandTheme,
@@ -38,6 +39,10 @@ import {
 import { meetsAA, readableOn } from "./color";
 import { palettes, shadows, type ColorScheme, type Palette, type Shadows } from "./tokens";
 import type { Branding } from "./types";
+
+/** Camada vazia, estável — para o `useMemo` do tema não recalcular a cada
+ * render por causa de um `{}` novo. */
+const NO_LAYER: BrandThemeLayer = {};
 
 const BRANDING_STORAGE_KEY = "orbien.branding";
 const SCHEME_STORAGE_KEY = "orbien.colorScheme";
@@ -111,7 +116,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // cor no admin aparecer sem esperar o próximo boot, e guardar só o
   // resultado já mesclado perderia essa distinção.
   const [cachedLayer, setCachedLayer] = useState<BrandThemeLayer>({});
-  const [runtimeLayer, setRuntimeLayer] = useState<BrandThemeLayer>({});
+  // A camada de runtime anda junto com o token que a trouxe: no logout (e
+  // na troca de conta) ela deixa de valer no próprio render, sem precisar
+  // de um `setState` dentro do efeito para limpá-la.
+  const [runtime, setRuntime] = useState<{ token: string | null; layer: BrandThemeLayer }>({
+    token: null,
+    layer: {},
+  });
+  const runtimeLayer =
+    runtime.token && runtime.token === session?.accessToken ? runtime.layer : NO_LAYER;
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
 
   useEffect(() => {
@@ -129,6 +142,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Sem sessão não há `GET /settings` — e o que veio do da sessão
+    // anterior já não vale (`runtimeLayer`, acima). O cache em disco fica:
+    // as cores dele ainda valem para a tela de login.
     if (!session) return () => {
       cancelled = true;
     };
@@ -136,7 +152,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     authenticatedRequest<ResolvedSettings>("get", "/settings")
       .then((resolved) => {
         if (cancelled) return;
-        setRuntimeLayer(brandingLayer(resolved.branding));
+        setRuntime({ token: session.accessToken, layer: brandingLayer(resolved.branding) });
         AsyncStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(resolved.branding)).catch(() => {
           // falha ao gravar cache não é visível ao usuário — próxima
           // resposta bem-sucedida tenta gravar de novo.
@@ -185,7 +201,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     // `PLATFORM_THEME` é a semente do reduce; daqui para a direita, quem
     // opina depois ganha.
-    const branding = resolveBrandTheme(buildTimeLayer(), cachedLayer, runtimeLayer);
+    //
+    // Sem sessão, do cache só entram as cores (`colorsOnly`): nome e logo
+    // do último tenant na tela de login seriam identidade errada — ver o
+    // comentário da função em ./brand-theme.ts.
+    const branding = resolveBrandTheme(
+      buildTimeLayer(),
+      session ? cachedLayer : colorsOnly(cachedLayer),
+      runtimeLayer,
+    );
 
     return {
       ...branding,
@@ -207,7 +231,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       },
       shadow: shadows(isDark),
     };
-  }, [cachedLayer, runtimeLayer, preference, systemScheme, setPreference]);
+  }, [session, cachedLayer, runtimeLayer, preference, systemScheme, setPreference]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

@@ -172,7 +172,18 @@ Specs mínimas dos componentes que aparecem em quase toda tela — antes de dese
 - Altura 48px, padding horizontal 20px, radius 8px, cor primária do tenant, texto `button` token, branco
 - Estado pressed: opacity 0.85 (não usar cor de hover — mobile não tem hover)
 - Estado loading: spinner substitui texto, largura do botão não muda (evita layout shift)
+- O rótulo **não** é travado em uma linha: com `numberOfLines={1}`, uma medição apertada (fonte da marca recém-carregada, escala de texto grande do sistema, dois botões dividindo a linha) cortava a palavra — "Entrar" virava "Entr...". A altura é `minHeight`, então o botão cresce em vez de espremer o texto.
 - Estado disabled: fundo `subtle`, texto `muted`
+
+**Header de stack (só nas telas de detalhe)**
+- As cinco abas rodam **sem** header: a tab bar já identifica a tela, e uma barra de 56px + safe area repetindo a marca em toda tela custa mais espaço útil do que entrega. A safe area superior das abas fica no `View` que envolve o navigator (`src/app/(tabs)/_layout.tsx`).
+- Tela de detalhe (aberta a partir de uma aba) **tem** header: fundo na cor da marca, título `h3` centralizado, sem sombra, e o botão de voltar só com a seta (`headerBackButtonDisplayMode: "minimal"` — sem isso o iOS escreve o nome da rota anterior ao lado dela, que é o grupo de abas e aparece como "(tabs)").
+- Toda rota de detalhe declara `title` no `Stack.Screen`: é ele que nomeia a tela e o retorno.
+
+**Marca em tela**
+- A identidade aparece **uma vez**, no topo do conteúdo da primeira aba (`BrandHeader`), não em barra repetida.
+- Logo do tenant quando existe; a marca da Orbien (vetor, `BrandMark`) quando não existe **e** quando a URL do tenant não carrega — `<Image>` com URI quebrada não desenha nada e não avisa, o que aparecia como um retângulo vazio no topo da tela.
+- Nome do app vem sempre de `useTheme().appName`, nunca de literal.
 
 **Bottom tab bar**
 - Altura 56px + safe area inset bottom
@@ -227,7 +238,7 @@ Nunca referenciar cor primitiva (`ink`, `parchment`, `subtle-dark`) direto no co
 - Seguir `Appearance.getColorScheme()` do sistema por padrão, com override manual em Configurações (light / dark / sistema)
 - Resolver o token semântico já correto no `ThemeContext`, para não espalhar condicional de modo por toda a tela
 - Testar especificamente: elevation do Android em dark (§4 — sombra pura some em fundo escuro, compensar com +2 de elevation), e ícones de mapa/foto que podem precisar de variante dark
-- Status bar: `light-content` em dark mode, `dark-content` em light mode — trocar dinamicamente, não fixar
+- Status bar: `light-content` em dark mode, `dark-content` em light mode — trocar dinamicamente, não fixar. A exceção é a tela de detalhe, que desenha o header na cor (escura) da marca sob a status bar: ali é sempre `light`, nos dois modos.
 - Imagens/logo do tenant: pedir versão do logo para fundo escuro no onboarding do tenant (Premium) — logo com texto escuro sobre fundo `#13151E` é o erro mais comum de white-label em dark mode
 
 ---
@@ -236,10 +247,11 @@ Nunca referenciar cor primitiva (`ink`, `parchment`, `subtle-dark`) direto no co
 
 - [ ] `textTertiary` (dark) e `dangerDim` (dark) não têm valor fechado no brand guideline — hoje é estimativa (`#5C5A56` e `#3A1815`), confirmar com design
 - [ ] Motion/transição entre telas (Expo Router default vs custom)
+- [ ] Mensagem de erro por causa: `describeLoadError` (`src/lib/api/load-error.ts`) já separa "sem resposta do servidor" de "servidor respondeu com erro" — falta o caso de **offline detectado** (rede ausente antes mesmo de tentar), que pede `@react-native-community/netinfo`
 - [ ] Estados de erro de rede / offline (materiais de PG e devocional precisam funcionar offline — ver `orbien-guia-fases-execucao.md`)
 - [ ] Variação do ícone do app por tenant (Starter usa skin, Premium build própria via EAS)
 - [ ] Biblioteca de ilustração para estados vazios
-- [ ] Logo na camada de build: uma versão personalizada configura ícone e splash por env, mas o `logoUrl` do header só vem do runtime — um logo embutido precisaria de asset no bundle, não de URL
+- [ ] Logo na camada de build: uma versão personalizada configura ícone e splash por env, mas o `logoUrl` só vem do runtime — um logo embutido precisaria de asset no bundle, não de URL. Enquanto isso, a versão personalizada mostra a marca da Orbien até o primeiro `GET /settings` (a cor, essa sim, já vem da build)
 - [ ] Renomear `branding_configs.secondary_color` para `accent_color`: a coluna do tenant é anterior ao design system. A da congregação já nasceu `accent_color`, e a API expõe as duas como `accent_color` — o desalinhamento é só no nome da coluna do tenant, e sair dele é migration própria
 - [ ] Bottom sheet e FAB (§7) ainda não têm uso no app — os módulos que os pedem (cadastro rápido de visitante) não existem aqui
 
@@ -263,6 +275,8 @@ O guia é a regra; esta seção é o mapa. Mexer em uma coluna sem olhar a outra
 | §6 validação AA no cadastro | `apps/api/src/common/validators/brand-color.validator.ts`, `apps/web/src/app/(admin)/configuracoes/page.tsx` |
 | §7 botão | `src/components/AppButton.tsx` |
 | §7 tab bar | `src/app/(tabs)/_layout.tsx` |
+| §7 header de stack (só no detalhe) | `src/app/_layout.tsx` |
+| §7 marca em tela | `src/components/BrandHeader.tsx`, `BrandLogo.tsx`, `BrandMark.tsx` |
 | §7 card de lista | `src/components/Card.tsx` + `Avatar.tsx` / `DateBlock.tsx` |
 | §7 badge de status | `src/components/Badge.tsx` |
 | §8 papéis semânticos e modo claro/escuro | `tokens.ts` → `palettes`; resolução em `theme-provider.tsx`; override manual em `src/app/(tabs)/perfil.tsx` |

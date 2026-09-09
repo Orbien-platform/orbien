@@ -18,14 +18,14 @@ import { Card } from "../../components/Card";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
+import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
-import { ChevronRight, Inbox, WifiOff } from "../../lib/theme/icons";
+import { ChevronRight, CircleAlert, Inbox, WifiOff } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../../lib/theme/tokens";
 
 const LIMIT = 20;
-const LOAD_ERROR_MESSAGE = "Não foi possível carregar o conteúdo. Verifique sua conexão.";
 const LOAD_MORE_ERROR_MESSAGE = "Não foi possível carregar mais posts. Tente novamente.";
 
 export default function ConteudoScreen() {
@@ -34,7 +34,7 @@ export default function ConteudoScreen() {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadErrorState | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   // Guarda contra duplo toque: sem isso, dois toques rápidos em "Carregar
   // mais" disparam duas requisições da mesma página e duplicam posts na
@@ -54,9 +54,9 @@ export default function ConteudoScreen() {
         setTotal(result.total);
         setPage(1);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(LOAD_ERROR_MESSAGE);
+        setError(describeLoadError(err, "o conteúdo"));
       });
 
     return () => {
@@ -87,9 +87,9 @@ export default function ConteudoScreen() {
     return (
       <StatusMessage
         testID="conteudo-error"
-        icon={WifiOff}
-        message={error}
-        description="Assim que a conexão voltar, abra a aba novamente."
+        icon={error.offline ? WifiOff : CircleAlert}
+        message={error.message}
+        description={error.description}
         tone="danger"
       />
     );
