@@ -50,7 +50,19 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: .specs/features/setlist-repertorio-conexao/validation.md — Edge Case 'título longo trunca sem quebrar o layout'; asserção em apps/web/src/components/repertorio/SongPicker.test.tsx:165 (apps/web)
 - last seen: 2026-09-08T20:52:20Z
 
-### L-007 — Quando o AC ou design.md exigem estado de erro 'com opção de tentar novamente', implemente uma ação de retry executável (onPress que refaz o fetch) em toda tela de erro da feature, e teste-a — não só a mensagem de erro.
+### L-007 — When a spec AC lists multiple displayed fields (e.g. 'nome/horário/responsável'), verify each field is actually rendered in the component, not just the ones covered by the design.md data model — a field present in the type but never read in JSX is a silent AC gap.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `apps/mobile` · harmful: 0
+- features: celebracoes-oc-mobile
+- evidence: spec.md AC2/AC3 (P1) vs apps/mobile/src/app/celebracao/[id].tsx (apps/mobile)
+- last seen: 2026-09-09T00:33:14Z
+
+### L-008 — Every edge case listed in spec.md needs its own dedicated test assertion, even when the code path looks obviously correct by inspection — evidence-or-zero treats an unasserted edge case as uncovered regardless of code quality.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `apps/mobile` · harmful: 0
+- features: celebracoes-oc-mobile
+- evidence: spec.md Edge Cases (celebracoes-oc-mobile) vs apps/mobile/src/__tests__/app/celebracao/[id].test.tsx (apps/mobile)
+- last seen: 2026-09-09T00:33:19Z
+
+### L-009 — Quando o AC ou design.md exigem estado de erro 'com opção de tentar novamente', implemente uma ação de retry executável (onPress que refaz o fetch) em toda tela de erro da feature, e teste-a — não só a mensagem de erro.
 - signal: `ac_gap` · recurrence: 1 feature(s) · scope: `apps/mobile` · harmful: 0
 - features: pequenos-grupos-mobile
 - evidence: spec.md AC3 (P1: Ver meus grupos) / apps/mobile/src/app/(tabs)/grupos.tsx:43-49 (apps/mobile)

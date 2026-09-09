@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 8,
+  "next_id": 10,
   "lessons": [
     {
       "id": "L-001",
@@ -115,6 +115,42 @@
     },
     {
       "id": "L-007",
+      "key": "ac_gap::when a spec ac lists multiple displayed fields e g nome hor rio respons vel verify each field is actually rendered in the component not just the ones covered by the design md data model a field present in the type but never read in jsx is a silent ac gap",
+      "text": "When a spec AC lists multiple displayed fields (e.g. 'nome/horário/responsável'), verify each field is actually rendered in the component, not just the ones covered by the design.md data model — a field present in the type but never read in JSX is a silent AC gap.",
+      "signal": "ac_gap",
+      "scope": "apps/mobile",
+      "status": "candidate",
+      "features": [
+        "celebracoes-oc-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC2/AC3 (P1) vs apps/mobile/src/app/celebracao/[id].tsx (apps/mobile)"
+      ],
+      "created": "2026-09-09T00:33:14Z",
+      "last_seen": "2026-09-09T00:33:14Z"
+    },
+    {
+      "id": "L-008",
+      "key": "ac_gap::every edge case listed in spec md needs its own dedicated test assertion even when the code path looks obviously correct by inspection evidence or zero treats an unasserted edge case as uncovered regardless of code quality",
+      "text": "Every edge case listed in spec.md needs its own dedicated test assertion, even when the code path looks obviously correct by inspection — evidence-or-zero treats an unasserted edge case as uncovered regardless of code quality.",
+      "signal": "ac_gap",
+      "scope": "apps/mobile",
+      "status": "candidate",
+      "features": [
+        "celebracoes-oc-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md Edge Cases (celebracoes-oc-mobile) vs apps/mobile/src/__tests__/app/celebracao/[id].test.tsx (apps/mobile)"
+      ],
+      "created": "2026-09-09T00:33:19Z",
+      "last_seen": "2026-09-09T00:33:19Z"
+    },
+    {
+      "id": "L-009",
       "key": "ac_gap::quando o ac ou design md exigem estado de erro com op o de tentar novamente implemente uma a o de retry execut vel onpress que refaz o fetch em toda tela de erro da feature e teste a n o s a mensagem de erro",
       "text": "Quando o AC ou design.md exigem estado de erro 'com opção de tentar novamente', implemente uma ação de retry executável (onPress que refaz o fetch) em toda tela de erro da feature, e teste-a — não só a mensagem de erro.",
       "signal": "ac_gap",

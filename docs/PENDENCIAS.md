@@ -1443,44 +1443,6 @@ nem escrita de pessoas de tenants já existentes para o suporte.
 
 ---
 
-## A tela de Ordem de Celebração chama rotas/campos que não existem na API — aberta
-
-Achado pelo Verifier da feature "Repertório do Time de Louvor"
-(`.specs/features/repertorio-louvor/validation.md`), em 2026-09-08, ao ler
-`ServiceOrderView.tsx`/`AddItemModal.tsx` para confirmar um `SPEC_DEVIATION`
-pontual do `AddSongForm` (esse, sim, corrigido na mesma feature). Fora do
-escopo do repertório e anterior a ele — não foi corrigido, por decisão
-(achado de revisão vira pergunta, não correção unilateral).
-
-### O que está errado
-
-`ServiceOrderView.tsx` posta para `/celebrations/service-orders...`; a rota
-real é `/celebrations/orders` (mais `/celebrations/items` para os itens —
-ver `service-orders.controller.ts`/`service-order-items.controller.ts`).
-`AddItemModal.tsx` envia `type`/`position`/`start_time`/`responsible_person_id`;
-o DTO real (`create-service-order-item.dto.ts`) espera
-`responsible_type`/`sequence`/`start_offset_minutes`/`person_id` ou
-`ministry_id`/`responsible_label`. Toda chamada dessas duas telas devolveria
-404/400 contra a API real.
-
-### Evidência
-
-O próprio `e2e/repertorio.spec.ts`, escrito para esta feature, documenta o
-mesmo achado no cabeçalho e contorna o problema montando a Ordem de
-Celebração por chamada direta à API (mesmo padrão de fixture que
-`upcomingInstance`/`scheduleTemplate` já usavam), em vez de clicar no modal
-quebrado — porque clicar nele não teria funcionado.
-
-### Por que não foi corrigido aqui
-
-Consertar exige redesenhar a semântica de tipo de item do modal
-(`type`/`position` → `responsible_type`/`sequence`/`start_offset_minutes` e
-a escolha entre pessoa/ministério/rótulo livre), o que é maior que o
-repertório e não estava no pedido. Registrado aqui para virar feature
-própria.
-
----
-
 ## `small-groups`: rota de encontros e de materiais não conferem participação real — aberta
 
 Achado durante o Design da feature "Pequenos Grupos no Mobile"
