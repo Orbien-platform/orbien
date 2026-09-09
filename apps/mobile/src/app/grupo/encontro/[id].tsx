@@ -6,12 +6,17 @@
 // não-autoritativa (design.md), a API reforça de verdade.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Linking, StyleSheet, Text, View } from "react-native";
 
+import { AppLink } from "../../../components/AppLink";
+import { Card } from "../../../components/Card";
+import { Screen } from "../../../components/Screen";
+import { StatusMessage } from "../../../components/StatusMessage";
 import { useAuth } from "../../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../../lib/auth/jwt";
 import { listMaterials } from "../../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { MeetingMaterial } from "../../../lib/pequenos-grupos/types";
+import { spacing, typography } from "../../../lib/theme/tokens";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar o material. Verifique sua conexão.";
 const EMPTY_MESSAGE = "Nenhum material disponível para este encontro.";
@@ -49,9 +54,8 @@ export default function EncontroScreen() {
 
   if (error) {
     return (
-      <View testID="encontro-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>{error}</Text>
-        <Text
+      <StatusMessage testID="encontro-error" message={error} tone="danger">
+        <AppLink
           testID="encontro-retry"
           onPress={() => {
             setError(null);
@@ -59,48 +63,65 @@ export default function EncontroScreen() {
           }}
         >
           Tentar novamente
-        </Text>
-      </View>
+        </AppLink>
+      </StatusMessage>
     );
   }
 
   return (
-    <View testID="encontro-detail" style={{ flex: 1 }}>
+    <Screen testID="encontro-detail">
       {isLeader ? (
-        <Text
+        <AppLink
           testID="registrar-presenca-link"
+          style={styles.headerLink}
           onPress={() => router.push(`/grupo/encontro/${id}/presenca`)}
         >
           Registrar presença
-        </Text>
+        </AppLink>
       ) : null}
 
       {materials && materials.length === 0 ? (
         <View testID="encontro-materials-empty">
-          <Text>{EMPTY_MESSAGE}</Text>
+          <Text style={typography.body}>{EMPTY_MESSAGE}</Text>
         </View>
       ) : (
         (materials ?? []).map((m) => (
-          <View key={m.id} testID={`material-${m.id}`}>
-            <Text>{m.material.title}</Text>
+          <Card key={m.id} testID={`material-${m.id}`}>
+            <Text style={typography.subtitle}>{m.material.title}</Text>
             {m.material.source_type === "rich_text" ? (
-              <Text testID={`material-${m.id}-rich-content`}>{m.material.rich_content}</Text>
+              <Text testID={`material-${m.id}-rich-content`} style={styles.richContent}>
+                {m.material.rich_content}
+              </Text>
             ) : (
-              <Text
+              <AppLink
                 testID={`material-${m.id}-abrir`}
+                style={styles.materialLink}
+                disabled={!m.material.file_url}
                 onPress={
                   m.material.file_url
                     ? () => Linking.openURL(m.material.file_url as string)
                     : undefined
                 }
-                accessibilityState={{ disabled: !m.material.file_url }}
               >
                 Abrir
-              </Text>
+              </AppLink>
             )}
-          </View>
+          </Card>
         ))
       )}
-    </View>
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  headerLink: {
+    marginBottom: spacing.md,
+  },
+  richContent: {
+    ...typography.body,
+    marginTop: spacing.xs,
+  },
+  materialLink: {
+    marginTop: spacing.xs,
+  },
+});

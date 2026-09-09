@@ -34,10 +34,12 @@ export default tseslint.config(
   {
     // Configs de ferramenta (app.config.js, jest.config.js, jest.setup.js)
     // são CommonJS, fora do bundle RN — mesmo motivo do sourceType/globals
-    // que apps/api usa para o próprio código Node.
+    // que apps/api usa para o próprio código Node. jest.setup.js também
+    // chama jest.mock() (mock global do AsyncStorage), daí precisar do
+    // global `jest` além de `globals.node`.
     files: ["*.config.js", "jest.setup.js"],
     languageOptions: {
-      globals: { ...globals.node },
+      globals: { ...globals.node, ...globals.jest },
       sourceType: "commonjs",
     },
     rules: {
