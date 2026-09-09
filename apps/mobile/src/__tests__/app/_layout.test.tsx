@@ -3,8 +3,8 @@
 // @testing-library/react-native, que não resolve no Metro. Ver README,
 // "Portão de bundle no `build`".
 // Testes derivados do Done-when de T14 (tasks.md):
-// - unauthenticated renderiza a tela de login (via router mock)
-// - authenticated renderiza o shell placeholder
+// - unauthenticated libera só a rota de login (via router mock)
+// - authenticated libera as rotas autenticadas
 // e de T16 (wiring do ThemeProvider, MOB-03):
 // - dois brandings diferentes produzem cor/logo diferentes no shell
 import { act, render, screen, waitFor } from "@testing-library/react-native";
@@ -37,22 +37,38 @@ jest.mock("../../lib/notifications/notifications-provider", () => ({
 
 jest.mock("expo-router", () => {
   const { Text } = require("react-native");
-  return {
-    // Renderiza o que o shell autenticado (T16) realmente passa em
-    // screenOptions, para o teste poder inspecionar cor/logo aplicados —
-    // um mock que ignorasse as props não provaria o wiring do tema.
-    Stack: (props: { screenOptions?: { headerStyle?: { backgroundColor?: string }; headerTitle?: () => React.ReactNode } }) => {
-      const HeaderTitle = props.screenOptions?.headerTitle;
-      return (
-        <>
-          <Text testID="shell-placeholder">shell</Text>
-          <Text testID="header-color">{props.screenOptions?.headerStyle?.backgroundColor ?? ""}</Text>
-          {HeaderTitle ? HeaderTitle() : null}
-        </>
-      );
-    },
-    Redirect: ({ href }: { href: string }) => <Text testID="redirect">{href}</Text>,
+  // O mock precisa refletir a forma real do layout raiz (ver
+  // navigation-boot.test.tsx, que roda o router de verdade): um único
+  // `<Stack>` sempre montado, com as rotas ligadas/desligadas por
+  // `<Stack.Protected guard>`. Renderiza o que o shell passa em
+  // screenOptions para o teste poder inspecionar cor/logo aplicados — um
+  // mock que ignorasse as props não provaria o wiring do tema.
+  const Stack = (props: {
+    screenOptions?: {
+      headerStyle?: { backgroundColor?: string };
+      headerTitle?: () => React.ReactNode;
+    };
+    children?: React.ReactNode;
+  }) => {
+    const HeaderTitle = props.screenOptions?.headerTitle;
+    return (
+      <>
+        <Text testID="shell-placeholder">shell</Text>
+        <Text testID="header-color">{props.screenOptions?.headerStyle?.backgroundColor ?? ""}</Text>
+        {HeaderTitle ? HeaderTitle() : null}
+        {props.children}
+      </>
+    );
   };
+  const StackScreen = ({ name }: { name: string }) => <Text testID={`screen-${name}`}>{name}</Text>;
+  StackScreen.displayName = "Stack.Screen";
+  const StackProtected = ({ guard, children }: { guard: boolean; children?: React.ReactNode }) =>
+    guard ? <>{children}</> : null;
+  StackProtected.displayName = "Stack.Protected";
+  Stack.Screen = StackScreen;
+  Stack.Protected = StackProtected;
+
+  return { Stack };
 });
 
 import RootLayout from "../../app/_layout";
@@ -67,18 +83,22 @@ describe("RootLayout — guarda de navegação", () => {
     });
   });
 
-  it("status unauthenticated: renderiza redirect para /login, não o shell", async () => {
+  it("status unauthenticated: libera só a rota de login, sem as rotas autenticadas", async () => {
     mockUseAuth.mockReturnValue({ status: "unauthenticated" });
 
     await act(async () => {
       render(<RootLayout />);
     });
 
-    expect(screen.getByTestId("redirect").props.children).toBe("/login");
-    expect(screen.queryByTestId("shell-placeholder")).toBeNull();
+    // O navigator continua montado (é o que o expo-router exige do layout
+    // raiz); quem muda é o conjunto de rotas liberadas.
+    expect(screen.getByTestId("shell-placeholder")).toBeTruthy();
+    expect(screen.getByTestId("screen-login")).toBeTruthy();
+    expect(screen.queryByTestId("screen-(tabs)")).toBeNull();
+    expect(screen.queryByTestId("splash")).toBeNull();
   });
 
-  it("status authenticated: renderiza o shell placeholder, sem redirect", async () => {
+  it("status authenticated: libera as rotas autenticadas e tira o login", async () => {
     mockUseAuth.mockReturnValue({ status: "authenticated" });
 
     await act(async () => {
@@ -86,10 +106,12 @@ describe("RootLayout — guarda de navegação", () => {
     });
 
     expect(screen.getByTestId("shell-placeholder")).toBeTruthy();
-    expect(screen.queryByTestId("redirect")).toBeNull();
+    expect(screen.getByTestId("screen-(tabs)")).toBeTruthy();
+    expect(screen.queryByTestId("screen-login")).toBeNull();
+    expect(screen.queryByTestId("splash")).toBeNull();
   });
 
-  it("status loading: mostra splash, sem redirect nem shell", async () => {
+  it("status loading: splash por cima, mas com o navigator já montado", async () => {
     mockUseAuth.mockReturnValue({ status: "loading" });
 
     await act(async () => {
@@ -97,8 +119,10 @@ describe("RootLayout — guarda de navegação", () => {
     });
 
     expect(screen.getByTestId("splash")).toBeTruthy();
-    expect(screen.queryByTestId("redirect")).toBeNull();
-    expect(screen.queryByTestId("shell-placeholder")).toBeNull();
+    // O navigator tem que existir já no primeiro render — foi trocá-lo pelo
+    // splash que travou o boot no simulador.
+    expect(screen.getByTestId("shell-placeholder")).toBeTruthy();
+    expect(screen.queryByTestId("screen-(tabs)")).toBeNull();
   });
 
   describe("T16: wiring do ThemeProvider — dois tenants, dois temas", () => {
