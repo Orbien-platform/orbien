@@ -27,6 +27,7 @@ export default function EncontroScreen() {
 
   const [materials, setMaterials] = useState<MeetingMaterial[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,12 +45,21 @@ export default function EncontroScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, retryCount]);
 
   if (error) {
     return (
       <View testID="encontro-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <Text>{error}</Text>
+        <Text
+          testID="encontro-retry"
+          onPress={() => {
+            setError(null);
+            setRetryCount((n) => n + 1);
+          }}
+        >
+          Tentar novamente
+        </Text>
       </View>
     );
   }

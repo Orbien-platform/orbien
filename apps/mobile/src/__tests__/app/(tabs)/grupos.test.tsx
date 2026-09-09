@@ -69,6 +69,37 @@ describe("GruposScreen", () => {
     ).toBeTruthy();
   });
 
+  it("erro de rede oferece tentar novamente, que refaz a busca (AC3)", async () => {
+    mockListMyGroups.mockRejectedValueOnce(new Error("network"));
+    mockListMyGroups.mockResolvedValueOnce([
+      { id: "sg1", name: "Grupo do Bairro", meeting_time: null, recurrence: null, role: "member" },
+    ]);
+
+    await act(async () => {
+      render(<GruposScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("grupos-retry"));
+    });
+
+    expect(mockListMyGroups).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("grupo-sg1")).toBeTruthy();
+  });
+
+  it("dois grupos com o mesmo nome aparecem ambos, distinguíveis por papel/horário (edge case)", async () => {
+    mockListMyGroups.mockResolvedValue([
+      { id: "sg1", name: "Célula Jovem", meeting_time: "19:00", recurrence: null, role: "leader" },
+      { id: "sg2", name: "Célula Jovem", meeting_time: "20:00", recurrence: null, role: "member" },
+    ]);
+
+    await act(async () => {
+      render(<GruposScreen />);
+    });
+
+    expect(screen.getByText("Célula Jovem — Líder — 19:00")).toBeTruthy();
+    expect(screen.getByText("Célula Jovem — Membro — 20:00")).toBeTruthy();
+  });
+
   it("toque num grupo navega para /grupo/[id]", async () => {
     mockListMyGroups.mockResolvedValue([
       { id: "sg1", name: "Grupo do Bairro", meeting_time: null, recurrence: null, role: "leader" },

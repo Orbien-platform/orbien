@@ -133,4 +133,25 @@ describe("PresencaScreen", () => {
 
     expect(screen.getByTestId("presenca-error")).toBeTruthy();
   });
+
+  it("erro ao carregar oferece tentar novamente, que refaz a busca", async () => {
+    mockGetMeeting.mockRejectedValueOnce(new Error("network"));
+    mockGetMeeting.mockResolvedValueOnce({
+      id: "m1",
+      small_group_id: "sg1",
+      occurred_at: "2026-09-01T19:00:00.000Z",
+      topic: null,
+      attendanceRecords: [],
+    });
+
+    await act(async () => {
+      render(<PresencaScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("presenca-retry"));
+    });
+
+    expect(mockGetMeeting).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("presenca-roster")).toBeTruthy();
+  });
 });

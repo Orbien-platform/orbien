@@ -58,6 +58,23 @@ describe("GrupoScreen", () => {
     ).toBeTruthy();
   });
 
+  it("erro de rede oferece tentar novamente, que refaz a busca", async () => {
+    mockListMeetings.mockRejectedValueOnce(new Error("network"));
+    mockListMeetings.mockResolvedValueOnce([
+      { id: "m1", occurred_at: "2026-09-01T19:00:00.000Z", topic: "Encontro" },
+    ]);
+
+    await act(async () => {
+      render(<GrupoScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("grupo-retry"));
+    });
+
+    expect(mockListMeetings).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("encontro-m1")).toBeTruthy();
+  });
+
   it("toque num encontro navega para /grupo/encontro/[id]", async () => {
     mockListMeetings.mockResolvedValue([
       { id: "m1", occurred_at: "2026-09-01T19:00:00.000Z", topic: "Encontro" },

@@ -21,6 +21,7 @@ export default function GruposScreen() {
   const router = useRouter();
   const [groups, setGroups] = useState<SmallGroupMine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,12 +39,21 @@ export default function GruposScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retryCount]);
 
   if (error) {
     return (
       <View testID="grupos-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <Text>{error}</Text>
+        <Text
+          testID="grupos-retry"
+          onPress={() => {
+            setError(null);
+            setRetryCount((n) => n + 1);
+          }}
+        >
+          Tentar novamente
+        </Text>
       </View>
     );
   }

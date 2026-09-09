@@ -119,6 +119,21 @@ describe("EncontroScreen", () => {
     expect(screen.getByTestId("encontro-error")).toBeTruthy();
   });
 
+  it("erro de rede oferece tentar novamente, que refaz a busca", async () => {
+    mockListMaterials.mockRejectedValueOnce(new Error("network"));
+    mockListMaterials.mockResolvedValueOnce([]);
+
+    await act(async () => {
+      render(<EncontroScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("encontro-retry"));
+    });
+
+    expect(mockListMaterials).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("encontro-materials-empty")).toBeTruthy();
+  });
+
   it("papel cell_leader vê 'Registrar presença'; member não vê", async () => {
     mockListMaterials.mockResolvedValue([]);
     mockUseAuth.mockReturnValue(sessionWithRoles(["cell_leader"]));

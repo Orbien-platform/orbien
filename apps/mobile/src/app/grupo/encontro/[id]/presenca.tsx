@@ -22,6 +22,7 @@ export default function PresencaScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +43,7 @@ export default function PresencaScreen() {
     return () => {
       cancelled = true;
     };
-  }, [meetingId]);
+  }, [meetingId, retryCount]);
 
   function toggle(personId: string) {
     setSelected((current) => {
@@ -75,6 +76,15 @@ export default function PresencaScreen() {
     return (
       <View testID="presenca-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <Text>{loadError}</Text>
+        <Text
+          testID="presenca-retry"
+          onPress={() => {
+            setLoadError(null);
+            setRetryCount((n) => n + 1);
+          }}
+        >
+          Tentar novamente
+        </Text>
       </View>
     );
   }

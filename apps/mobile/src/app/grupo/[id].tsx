@@ -17,6 +17,7 @@ export default function GrupoScreen() {
   const router = useRouter();
   const [meetings, setMeetings] = useState<GroupMeetingSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,12 +38,21 @@ export default function GrupoScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, retryCount]);
 
   if (error) {
     return (
       <View testID="grupo-error" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <Text>{error}</Text>
+        <Text
+          testID="grupo-retry"
+          onPress={() => {
+            setError(null);
+            setRetryCount((n) => n + 1);
+          }}
+        >
+          Tentar novamente
+        </Text>
       </View>
     );
   }
