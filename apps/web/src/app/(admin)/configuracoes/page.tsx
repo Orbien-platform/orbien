@@ -18,6 +18,7 @@ interface Settings {
   branding: {
     app_name: string | null;
     primary_color: string | null;
+    accent_color: string | null;
     logo_url: string | null;
     splash_url: string | null;
   };
@@ -40,6 +41,7 @@ interface UpdateSettingsPayload {
     phone?: string;
     app_name?: string;
     primary_color?: string;
+    accent_color?: string;
   };
 }
 
@@ -68,6 +70,38 @@ const ALLOWED_LOGO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/svg+
 const MAX_LOGO_SIZE = 5 * 1024 * 1024; // 5MB
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HEX_COLOR_RE = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+
+// Contraste AA (4.5:1) da cor principal contra branco. A API barra de todo
+// jeito (IsAccessibleBrandColor, em apps/api/src/common/validators/), mas
+// avisar aqui evita um round-trip só para descobrir — e o texto que explica
+// o porquê caberia mal numa mensagem de erro de servidor.
+//
+// A cor principal é fundo de CTA com texto branco no app e no web, e cor de
+// texto sobre papel branco no PDF da escala (pdf-export.service.ts): a mesma
+// razão cobre os dois usos, porque contraste é simétrico.
+const AA_CONTRAST = 4.5;
+
+function relativeLuminance(hex: string): number {
+  const raw = hex.trim().slice(1);
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : raw;
+  const linear = [0, 2, 4].map((offset) => {
+    const channel = parseInt(full.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : Math.pow((channel + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastWithWhite(hex: string): number {
+  return 1.05 / (relativeLuminance(hex) + 0.05);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -113,6 +147,7 @@ export default function ConfiguracoesPage() {
   // Identidade visual
   const [appName, setAppName] = useState("");
   const [primaryColor, setPrimaryColor] = useState("");
+  const [accentColor, setAccentColor] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -141,6 +176,7 @@ export default function ConfiguracoesPage() {
 
     setAppName(data.branding.app_name ?? "");
     setPrimaryColor(data.branding.primary_color ?? "");
+    setAccentColor(data.branding.accent_color ?? "");
     setLogoUrl(data.branding.logo_url ?? null);
 
     setTenantName(data.tenant.name ?? "");
@@ -205,6 +241,19 @@ export default function ConfiguracoesPage() {
       setSaveError("Cor principal deve ser um código hexadecimal válido (ex: #1C3D5A).");
       return;
     }
+    if (
+      primaryColor.trim() &&
+      contrastWithWhite(primaryColor.trim()) < AA_CONTRAST
+    ) {
+      setSaveError(
+        "Cor principal clara demais: ela é usada como fundo de botão com texto branco e como cor de texto no PDF da escala. Escolha um tom mais escuro.",
+      );
+      return;
+    }
+    if (accentColor.trim() && !HEX_COLOR_RE.test(accentColor.trim())) {
+      setSaveError("Cor de destaque deve ser um código hexadecimal válido (ex: #00B8A2).");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -224,6 +273,7 @@ export default function ConfiguracoesPage() {
           phone: stripPhone(congPhone) || undefined,
           app_name: appName.trim() || undefined,
           primary_color: primaryColor.trim() || undefined,
+          accent_color: accentColor.trim() || undefined,
         },
       };
       if (canEditTenant) {
@@ -412,6 +462,7 @@ export default function ConfiguracoesPage() {
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
+                      aria-label="Selecionar cor principal"
                       value={HEX_COLOR_RE.test(primaryColor) ? primaryColor : "#1c3d5a"}
                       onChange={(e) => setPrimaryColor(e.target.value)}
                       disabled={!canEditCongregation || isSaving}
@@ -425,6 +476,33 @@ export default function ConfiguracoesPage() {
                       className="rounded-[8px]"
                     />
                   </div>
+                  <p className="mt-1 text-xs text-stone">
+                    Botões e destaques. Precisa ser escura o bastante para texto branco
+                    em cima.
+                  </p>
+                </Field>
+                <Field label="Cor de destaque">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      aria-label="Selecionar cor de destaque"
+                      value={HEX_COLOR_RE.test(accentColor) ? accentColor : "#00b8a2"}
+                      onChange={(e) => setAccentColor(e.target.value)}
+                      disabled={!canEditCongregation || isSaving}
+                      className="h-8 w-10 cursor-pointer rounded-[6px] border border-[var(--border-default)] bg-transparent disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    <Input
+                      value={accentColor}
+                      onChange={(e) => setAccentColor(e.target.value)}
+                      placeholder="#00B8A2"
+                      disabled={!canEditCongregation || isSaving}
+                      className="rounded-[8px]"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-stone">
+                    Ícone ativo e indicadores no app. Sem contraste suficiente, o app
+                    usa a cor principal no lugar.
+                  </p>
                 </Field>
               </div>
             </div>

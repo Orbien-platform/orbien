@@ -53,7 +53,7 @@ describe("versão genérica — paleta chega em runtime", () => {
     expect(theme.logoUrl).toBeNull();
   });
 
-  it("o branding do tenant vence a plataforma", () => {
+  it("o branding do tenant vence a plataforma, primary e accent", () => {
     const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
 
     const theme = resolveBrandTheme(
@@ -62,15 +62,51 @@ describe("versão genérica — paleta chega em runtime", () => {
       brandingLayer({
         app_name: "Igreja Central",
         primary_color: "#0F766E",
+        accent_color: "#F59E0B",
         logo_url: "https://cdn.example/logo.png",
         splash_url: null,
       }),
     );
 
     expect(theme.primaryColor).toBe("#0F766E");
+    expect(theme.accentColor).toBe("#F59E0B");
     expect(theme.appName).toBe("Igreja Central");
     expect(theme.logoUrl).toBe("https://cdn.example/logo.png");
-    // A API não expõe accent: continua o da plataforma (§9 do guia).
+  });
+
+  it("branding sem accent_color (cache antigo) não opina — o accent cai na camada de baixo", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const theme = resolveBrandTheme(
+      buildTimeLayer(),
+      {},
+      brandingLayer({
+        app_name: "Igreja Central",
+        primary_color: "#0F766E",
+        logo_url: null,
+        splash_url: null,
+      }),
+    );
+
+    expect(theme.primaryColor).toBe("#0F766E");
+    expect(theme.accentColor).toBe(brand.teal);
+  });
+
+  it("accent inválido da API é ignorado, sem quebrar a tela", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const theme = resolveBrandTheme(
+      buildTimeLayer(),
+      {},
+      brandingLayer({
+        app_name: null,
+        primary_color: null,
+        accent_color: "dourado",
+        logo_url: null,
+        splash_url: null,
+      }),
+    );
+
     expect(theme.accentColor).toBe(brand.teal);
   });
 
@@ -170,10 +206,30 @@ describe("versão personalizada — paleta embutida na build", () => {
     );
 
     expect(theme.primaryColor).toBe("#1D4ED8");
-    // accent não vem da API: o da build permanece
+    // accent nulo na API não apaga o da build
     expect(theme.accentColor).toBe("#F59E0B");
     // app_name nulo não apaga o nome da build
     expect(theme.appName).toBe("Igreja Videira");
+  });
+
+  it("o accent do tenant vence o da build quando a API o manda", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const theme = resolveBrandTheme(
+      buildTimeLayer(),
+      {},
+      brandingLayer({
+        app_name: null,
+        primary_color: null,
+        accent_color: "#0891B2",
+        logo_url: null,
+        splash_url: null,
+      }),
+    );
+
+    expect(theme.accentColor).toBe("#0891B2");
+    // sem primary na resposta, o da build permanece
+    expect(theme.primaryColor).toBe("#7C2D12");
   });
 });
 

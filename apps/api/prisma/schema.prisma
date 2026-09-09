@@ -88,6 +88,10 @@ model Congregation {
   phone         String?
   logo_url      String?
   primary_color String?
+  /// Cor de destaque (accent) da congregação — o par de `primary_color`,
+  /// com a mesma semântica de override: se nula, cai na do tenant, que é
+  /// `BrandingConfig.secondary_color`. Ver §6 de apps/mobile/STYLE-GUIDE.md.
+  accent_color  String?
   app_name      String?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
@@ -141,6 +145,10 @@ model BrandingConfig {
   id              String   @id @default(uuid())
   tenant_id       String   @unique
   primary_color   String?
+  /// Cor de destaque (accent) do tenant. O nome da coluna é anterior ao
+  /// design system, que chama este papel de `accent` — a API expõe o campo
+  /// como `accent_color` em `GET /settings` e é assim que o front o
+  /// conhece. Renomear a coluna é migration própria; não misturar.
   secondary_color String?
   logo_url        String?
   app_name        String?

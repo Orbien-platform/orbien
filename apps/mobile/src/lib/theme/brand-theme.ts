@@ -76,10 +76,16 @@ export function buildTimeLayer(): BrandThemeLayer {
  * Camadas 3 e 4: o `branding` de `GET /settings` (ou a cópia dele em
  * cache), traduzido para camada.
  *
- * A API ainda não expõe `accent_color` — `Branding` (./types.ts) só tem
- * `primary_color`. Enquanto não expuser, o accent do tenant só é
- * configurável pela camada de build; quando expuser, é uma linha aqui e
- * mais nada muda. Ver §9 do STYLE-GUIDE.md.
+ * `accent_color` é o campo que a API resolve por congregação e depois por
+ * tenant (`ResolvedSettings.branding` em
+ * `apps/api/src/settings/settings.service.ts`). Um cache gravado antes de o
+ * campo existir simplesmente não opina, e o accent segue vindo da camada de
+ * build ou da plataforma.
+ *
+ * Cor inválida é ignorada em vez de aplicada: é o que garante que uma cor
+ * mal cadastrada degrade para a camada de baixo em vez de virar uma tela
+ * com CTA ilegível. A validação de verdade é no cadastro, na API
+ * (`IsAccessibleBrandColor`).
  */
 export function brandingLayer(branding: Branding | null | undefined): BrandThemeLayer {
   if (!branding) return {};
@@ -87,6 +93,9 @@ export function brandingLayer(branding: Branding | null | undefined): BrandTheme
   return {
     primaryColor: isValidHexColor(branding.primary_color)
       ? branding.primary_color.trim()
+      : undefined,
+    accentColor: isValidHexColor(branding.accent_color)
+      ? branding.accent_color.trim()
       : undefined,
     logoUrl: branding.logo_url ?? undefined,
     appName: branding.app_name ?? undefined,

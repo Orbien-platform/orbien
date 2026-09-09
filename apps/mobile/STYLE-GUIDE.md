@@ -153,9 +153,13 @@ Da menor para a maior precedência. Cada camada é **parcial**: campo ausente, n
 Regras:
 - **Nunca** usar a primitiva `navy` diretamente em componente de produto — sempre o `primaryColor`/`accentColor` resolvidos pelo `ThemeContext`.
 - Cores **funcionais** (`crimson`, `burgundy`, `teal` de sucesso) **nunca** são sobrescritas pelo tenant — erro é sempre crimson, independente da marca da igreja. Só `primary` (CTA) e opcionalmente `accent` são customizáveis.
+- A API resolve as duas em `GET /settings` → `branding.primary_color` / `branding.accent_color`, cada uma por congregação e depois por tenant. No banco: `congregations.primary_color`/`congregations.accent_color` e, no nível do tenant, `branding_configs.primary_color`/`branding_configs.secondary_color` (nome anterior ao design system — ver §9).
 - **Texto sobre a cor da marca é medido, não fixo.** `colors.textOnBrand` é derivado da cor resolvida pela razão de contraste (`readableOn`, `src/lib/theme/color.ts`), não fixado em branco: um tenant de amarelo pastel receberia branco sobre claro. Isto é o que permite a paleta mudar de verdade sem cada tela saber disso.
 - **Destaque sobre superfície usa `accentReadable`**, não `accentColor` cru: é o accent quando ele passa AA sobre `bgSurface`, e o `primaryColor` quando não passa. É o que resolve o conflito entre o §5 (tab bar ativa usa accent) e o AA do §8.
-- Contraste mínimo: o front escolhe o par legível e degrada em vez de quebrar, mas isso **não substitui** validar AA no cadastro da cor, no backend — bloquear salvar uma cor que falha é o único lugar onde o problema se resolve de fato, em vez de ser mitigado.
+- Contraste mínimo, dividido entre os dois lados, porque cada um resolve o que o outro não pode:
+  - **`primary` é barrada no cadastro** quando falha AA (4.5:1) contra branco — `IsAccessibleBrandColor`, em `apps/api/src/common/validators/brand-color.validator.ts`, mais o aviso equivalente na tela de Configurações do web. Tem de ser no cadastro porque há consumidor da mesma cor que não pode escolher par legível: `pdf-export.service.ts` a usa como **cor de texto sobre papel branco**, e uma cor clara sai ilegível no PDF da escala sem ninguém descobrir.
+  - **`accent` só tem o formato validado.** Ele é ícone/label sobre superfície, e as superfícies são duas: exigir AA nas duas rejeitaria o próprio teal da plataforma (~2.4:1 sobre branco, ~9:1 sobre o fundo escuro). Quem resolve em runtime é o `accentReadable`.
+  - O front **degrada** cor inválida (ignora a camada e cai na de baixo) em vez de aplicá-la. Degradar não é validar: é a rede de segurança para o que já está gravado.
 - **Starter:** rodapé "Powered by Orbien" fixo, `stone`, no fundo de telas-chave. **Premium:** removido, conforme `orbien-brand-guidelines.md` §5.2. O plano vem do `plan` no JWT.
 
 ---
@@ -235,9 +239,8 @@ Nunca referenciar cor primitiva (`ink`, `parchment`, `subtle-dark`) direto no co
 - [ ] Estados de erro de rede / offline (materiais de PG e devocional precisam funcionar offline — ver `orbien-guia-fases-execucao.md`)
 - [ ] Variação do ícone do app por tenant (Starter usa skin, Premium build própria via EAS)
 - [ ] Biblioteca de ilustração para estados vazios
-- [ ] `accent` por tenant **em runtime**: a API não expõe o campo em `GET /settings` (`Branding` só tem `primary_color`), então na versão genérica o accent é sempre o da plataforma. Na personalizada já é configurável, pela camada de build. Quando a API expuser `accent_color`, é uma linha em `brandingLayer()` (`src/lib/theme/brand-theme.ts`) e nada mais muda
-- [ ] Validação AA no cadastro da cor (backend): o app escolhe o par legível, mas quem deve barrar uma cor que falha AA é o admin, ao salvar
 - [ ] Logo na camada de build: uma versão personalizada configura ícone e splash por env, mas o `logoUrl` do header só vem do runtime — um logo embutido precisaria de asset no bundle, não de URL
+- [ ] Renomear `branding_configs.secondary_color` para `accent_color`: a coluna do tenant é anterior ao design system. A da congregação já nasceu `accent_color`, e a API expõe as duas como `accent_color` — o desalinhamento é só no nome da coluna do tenant, e sair dele é migration própria
 - [ ] Bottom sheet e FAB (§7) ainda não têm uso no app — os módulos que os pedem (cadastro rápido de visitante) não existem aqui
 
 ---
@@ -257,6 +260,7 @@ O guia é a regra; esta seção é o mapa. Mexer em uma coluna sem olhar a outra
 | §6 cadeia de resolução da paleta | `src/lib/theme/brand-theme.ts` (camadas), `app.config.js` (camada de build) |
 | §6 tema por tenant | `src/lib/theme/theme-provider.tsx` (`primaryColor`, `accentColor`, `accentReadable`, `logoUrl`, `appName`) |
 | §6/§8 contraste medido (`textOnBrand`, `accentReadable`) | `src/lib/theme/color.ts` |
+| §6 validação AA no cadastro | `apps/api/src/common/validators/brand-color.validator.ts`, `apps/web/src/app/(admin)/configuracoes/page.tsx` |
 | §7 botão | `src/components/AppButton.tsx` |
 | §7 tab bar | `src/app/(tabs)/_layout.tsx` |
 | §7 card de lista | `src/components/Card.tsx` + `Avatar.tsx` / `DateBlock.tsx` |

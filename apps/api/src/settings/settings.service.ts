@@ -15,6 +15,17 @@ export interface ResolvedSettings {
   branding: {
     app_name: string | null;
     primary_color: string | null;
+    /**
+     * Cor de destaque (accent) — o par de `primary_color`, com a mesma
+     * regra de override: congregação primeiro, tenant depois.
+     *
+     * O nome do campo é `accent_color` porque é assim que o design system
+     * chama este papel (§6 de `apps/mobile/STYLE-GUIDE.md`) e é o que o
+     * front consome. No banco, a coluna do tenant ainda se chama
+     * `secondary_color`, de antes do design system; a da congregação já
+     * nasceu `accent_color`. Renomear a do tenant é migration própria.
+     */
+    accent_color: string | null;
     logo_url: string | null;
     splash_url: string | null;
   };
@@ -49,6 +60,7 @@ export class SettingsService {
       branding: {
         app_name: congregation.app_name ?? branding?.app_name ?? null,
         primary_color: congregation.primary_color ?? branding?.primary_color ?? null,
+        accent_color: congregation.accent_color ?? branding?.secondary_color ?? null,
         logo_url: congregation.logo_url ?? branding?.logo_url ?? null,
         splash_url: branding?.splash_url ?? null,
       },
