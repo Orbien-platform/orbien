@@ -50,6 +50,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: .specs/features/setlist-repertorio-conexao/validation.md — Edge Case 'título longo trunca sem quebrar o layout'; asserção em apps/web/src/components/repertorio/SongPicker.test.tsx:165 (apps/web)
 - last seen: 2026-09-08T20:52:20Z
 
+### L-007 — Quando o AC ou design.md exigem estado de erro 'com opção de tentar novamente', implemente uma ação de retry executável (onPress que refaz o fetch) em toda tela de erro da feature, e teste-a — não só a mensagem de erro.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `apps/mobile` · harmful: 0
+- features: pequenos-grupos-mobile
+- evidence: spec.md AC3 (P1: Ver meus grupos) / apps/mobile/src/app/(tabs)/grupos.tsx:43-49 (apps/mobile)
+- last seen: 2026-09-09T02:02:45Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

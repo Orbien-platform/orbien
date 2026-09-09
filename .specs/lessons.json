@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 7,
+  "next_id": 8,
   "lessons": [
     {
       "id": "L-001",
@@ -112,6 +112,24 @@
       ],
       "created": "2026-09-08T20:52:20Z",
       "last_seen": "2026-09-08T20:52:20Z"
+    },
+    {
+      "id": "L-007",
+      "key": "ac_gap::quando o ac ou design md exigem estado de erro com op o de tentar novamente implemente uma a o de retry execut vel onpress que refaz o fetch em toda tela de erro da feature e teste a n o s a mensagem de erro",
+      "text": "Quando o AC ou design.md exigem estado de erro 'com opção de tentar novamente', implemente uma ação de retry executável (onPress que refaz o fetch) em toda tela de erro da feature, e teste-a — não só a mensagem de erro.",
+      "signal": "ac_gap",
+      "scope": "apps/mobile",
+      "status": "candidate",
+      "features": [
+        "pequenos-grupos-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC3 (P1: Ver meus grupos) / apps/mobile/src/app/(tabs)/grupos.tsx:43-49 (apps/mobile)"
+      ],
+      "created": "2026-09-09T02:02:45Z",
+      "last_seen": "2026-09-09T02:02:45Z"
     }
   ]
 }
