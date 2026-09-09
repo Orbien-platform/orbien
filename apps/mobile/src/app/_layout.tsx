@@ -1,9 +1,21 @@
 import { Stack } from "expo-router";
-import { Image, StyleSheet, Text, View } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import { useCallback, useEffect } from "react";
+import { Image, Text } from "react-native";
 
 import { AuthProvider, useAuth } from "../lib/auth/auth-provider";
 import { NotificationsProvider } from "../lib/notifications/notifications-provider";
+import { AnimatedSplash } from "../lib/splash/animated-splash";
 import { ThemeProvider, useTheme } from "../lib/theme/theme-provider";
+
+// Escopo de módulo, sem await: a doc do expo-splash-screen é explícita de
+// que dentro de componente/hook isso roda tarde demais — a splash nativa já
+// teria sumido, e o app piscaria branco antes da splash animada aparecer.
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Só acontece se a splash já tiver sido escondida; não é motivo para
+  // derrubar o boot.
+});
+SplashScreen.setOptions({ duration: 300, fade: true });
 
 // Shell autenticado (T16, MOB-03): aplica primaryColor/logoUrl do tenant no
 // header do Expo Router — cor no `headerStyle`, logo (ou nome do app, sem
@@ -20,10 +32,28 @@ import { ThemeProvider, useTheme } from "../lib/theme/theme-provider";
 // re-renderizando sem parar. A regra do expo-router é que o layout raiz
 // renderize um navigator já no primeiro render, sempre; ver
 // `src/__tests__/app/navigation-boot.test.tsx`.
+//
+// Enquanto `status` é "loading", a `AnimatedSplash` cobre o navigator —
+// continuando a splash nativa, que só é escondida quando ela já desenhou.
 function ThemedShell() {
   const { status } = useAuth();
   const theme = useTheme();
   const isAuthenticated = status === "authenticated";
+
+  // A splash nativa some quando a animada já está desenhada — daí o
+  // `onLayout`, e não um efeito de mount: no layout o primeiro frame do JS
+  // já existe, então a troca é entre duas telas iguais.
+  const hideNativeSplash = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {
+      // Já escondida (ex.: segundo layout) — nada a fazer.
+    });
+  }, []);
+
+  // Rede de segurança: se a sessão resolver antes da splash animada montar,
+  // ninguém teria chamado `hideAsync` e a nativa ficaria para sempre.
+  useEffect(() => {
+    if (status !== "loading") hideNativeSplash();
+  }, [status, hideNativeSplash]);
 
   return (
     <>
@@ -55,27 +85,10 @@ function ThemedShell() {
           <Stack.Screen name="login" />
         </Stack.Protected>
       </Stack>
-      {status === "loading" ? (
-        <View testID="splash" style={styles.splash}>
-          <Text>Carregando…</Text>
-        </View>
-      ) : null}
+      {status === "loading" ? <AnimatedSplash onReady={hideNativeSplash} /> : null}
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  splash: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
-});
 
 export default function RootLayout() {
   return (

@@ -14,6 +14,12 @@ jest.mock("expo-constants", () => ({
   },
 }));
 
+jest.mock("expo-splash-screen", () => ({
+  preventAutoHideAsync: jest.fn(async () => true),
+  setOptions: jest.fn(),
+  hideAsync: jest.fn(async () => undefined),
+}));
+
 const mockGetItemAsync = jest.fn();
 jest.mock("expo-secure-store", () => ({
   getItemAsync: (...a: unknown[]) => mockGetItemAsync(...a),

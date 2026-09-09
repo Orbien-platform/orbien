@@ -15,6 +15,12 @@ jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+jest.mock("expo-splash-screen", () => ({
+  preventAutoHideAsync: jest.fn(async () => true),
+  setOptions: jest.fn(),
+  hideAsync: jest.fn(async () => undefined),
+}));
+
 const mockGetItem = jest.fn();
 const mockSetItem = jest.fn();
 jest.mock("@react-native-async-storage/async-storage", () => ({
