@@ -27,6 +27,18 @@ const READ_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary',
 const WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary'];
 const MANAGE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const ALERT_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'cell_leader'];
+// Autoescopado pelo person_id do token — não existe role que amplie o que
+// devolve, só quem pode perguntar. Lista explícita mesmo assim (convenção do
+// projeto), mesmo princípio de VOLUNTEER_ROLES no MOB-08.
+const MINE_ROLES = [
+  'member',
+  'cell_leader',
+  'treasurer',
+  'secretary',
+  'pastor',
+  'admin_congregation',
+  'tenant_admin',
+];
 
 @Controller('small-groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -44,6 +56,14 @@ export class SmallGroupsController {
   @Roles(...READ_ROLES)
   findAll(@Query() query: ListSmallGroupsQueryDto) {
     return this.smallGroupsService.findAll(query);
+  }
+
+  // Antes de ':id/hierarchy' e ':id' de propósito — "mine" é literal, não
+  // parâmetro, e o Nest casa rotas GET na ordem de registro.
+  @Get('mine')
+  @Roles(...MINE_ROLES)
+  findMine(@CurrentUser() user: JwtPayload) {
+    return this.smallGroupsService.findMine(user.sub, user.tenant_id, user.congregation_id);
   }
 
   @Get(':id/hierarchy')
