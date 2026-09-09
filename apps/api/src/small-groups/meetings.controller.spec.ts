@@ -14,6 +14,7 @@ const USER: JwtPayload = {
 
 const MEETING_WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'cell_leader'];
 const MEETING_READ_ROLES = [...MEETING_WRITE_ROLES, 'treasurer'];
+const MEETING_LIST_READ_ROLES = [...MEETING_READ_ROLES, 'member'];
 const MEETING_ADMIN_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const MATERIAL_WRITE_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
 const MATERIAL_READ_ROLES = ['member', ...MATERIAL_WRITE_ROLES];
@@ -49,9 +50,13 @@ describe('MeetingsController', () => {
     expect(rolesFor('recordAttendance')).toEqual(MEETING_WRITE_ROLES);
   });
 
-  it('findOne e findByGroup aceitam treasurer além dos papéis de escrita', () => {
+  it('findOne aceita treasurer além dos papéis de escrita, SEM member (MOB-09-10)', () => {
     expect(rolesFor('findOne')).toEqual(MEETING_READ_ROLES);
-    expect(rolesFor('findByGroup')).toEqual(MEETING_READ_ROLES);
+    expect(rolesFor('findOne')).not.toContain('member');
+  });
+
+  it('findByGroup aceita member além dos papéis de leitura (MOB-09-10)', () => {
+    expect(rolesFor('findByGroup')).toEqual(MEETING_LIST_READ_ROLES);
   });
 
   it('removeAttendance restringe a papéis administrativos', () => {
