@@ -19,7 +19,12 @@ import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from "react-nat
 /** Largura da marca, em dp — a mesma que o plugin usa na splash nativa. */
 const ICON_WIDTH = Number(Constants.expoConfig?.extra?.splashIconWidth) || 200;
 const BACKGROUND = Constants.expoConfig?.extra?.splashBackground ?? "#1E3A7B";
-const SATELLITE_COLOR = "#00B8A2";
+// O satélite é o accent da build (§6 do STYLE-GUIDE.md, camada de build da
+// paleta — ver src/lib/theme/brand-theme.ts). Numa build genérica isto é o
+// teal da plataforma; numa personalizada, o accent da igreja. Não pode vir
+// do ThemeContext: a splash desenha antes de haver sessão, e é justamente
+// por isso que a paleta tem uma camada de build.
+const SATELLITE_COLOR = Constants.expoConfig?.extra?.brandTheme?.accentColor ?? "#00B8A2";
 
 // Geometria da marca, nas mesmas unidades do BrandMark do site (viewBox
 // 22x22): órbita com rx 9 / ry 4 em (11,11), satélite de raio 2. O gerador

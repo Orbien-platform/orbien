@@ -23,6 +23,9 @@ describe("app.config.js", () => {
     delete process.env.ORBIEN_BUNDLE_ID;
     delete process.env.ORBIEN_ONESIGNAL_APP_ID;
     delete process.env.EAS_BUILD_PROFILE;
+    delete process.env.ORBIEN_PRIMARY_COLOR;
+    delete process.env.ORBIEN_ACCENT_COLOR;
+    delete process.env.ORBIEN_SPLASH_BACKGROUND;
   });
 
   afterAll(() => {
@@ -60,6 +63,52 @@ describe("app.config.js", () => {
     expect(resolved.extra.oneSignalAppId).toBe(
       "11111111-1111-1111-1111-111111111111",
     );
+  });
+
+  // Camada de build da paleta (§6 do STYLE-GUIDE.md): é o que permite uma
+  // versão personalizada já abrir na cor da igreja antes do login, quando
+  // ainda não há token para chamar GET /settings.
+  describe("paleta de build (brandTheme)", () => {
+    function splashBackgroundOf(resolved) {
+      const splashPlugin = resolved.plugins.find(
+        (plugin) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen",
+      );
+      return splashPlugin[1].backgroundColor;
+    }
+
+    it("versão genérica: cai na paleta da plataforma, e a splash segue a primária", () => {
+      const resolved = loadConfig()({ config: {} });
+
+      expect(resolved.extra.brandTheme).toEqual({
+        primaryColor: "#1E3A7B",
+        accentColor: "#00B8A2",
+      });
+      expect(splashBackgroundOf(resolved)).toBe("#1E3A7B");
+    });
+
+    it("versão personalizada: lê a paleta de env e a splash acompanha a primária", () => {
+      process.env.ORBIEN_PRIMARY_COLOR = "#7C2D12";
+      process.env.ORBIEN_ACCENT_COLOR = "#F59E0B";
+
+      const resolved = loadConfig()({ config: {} });
+
+      expect(resolved.extra.brandTheme).toEqual({
+        primaryColor: "#7C2D12",
+        accentColor: "#F59E0B",
+      });
+      // Setar a paleta já acerta a splash: sem env extra dizendo o mesmo.
+      expect(splashBackgroundOf(resolved)).toBe("#7C2D12");
+    });
+
+    it("ORBIEN_SPLASH_BACKGROUND ainda vence, para a splash divergir do CTA de propósito", () => {
+      process.env.ORBIEN_PRIMARY_COLOR = "#7C2D12";
+      process.env.ORBIEN_SPLASH_BACKGROUND = "#000000";
+
+      const resolved = loadConfig()({ config: {} });
+
+      expect(resolved.extra.brandTheme.primaryColor).toBe("#7C2D12");
+      expect(splashBackgroundOf(resolved)).toBe("#000000");
+    });
   });
 
   it("resolve o plugin do OneSignal em modo development por padrão (fora de EAS)", () => {

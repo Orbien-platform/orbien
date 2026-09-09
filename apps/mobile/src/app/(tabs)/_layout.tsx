@@ -10,12 +10,12 @@
 // ícone lucide de 22px inativo / 28px ativo (§5), label no token `label`
 // de 11px.
 //
-// SPEC_DEVIATION do §5 ("tab bar ativa usa a cor accent do tenant"): a
-// aba ativa usa `primaryColor`, não `accentColor`. O accent default é o
-// teal #00B8A2, que sobre a superfície branca dá ~2.4:1 — abaixo do AA de
-// 4.5:1 que o §8 exige, e o label da tab bar tem 11px. O navy da marca dá
-// ~8.6:1. Entre as duas regras do guia, a de contraste é a que não se pode
-// quebrar; reavaliar quando o guia fechar um accent com contraste próprio.
+// A aba ativa usa `accentReadable` (theme-provider.tsx), não `accentColor`
+// cru: o §5 pede o accent do tenant, mas o §8 exige AA, e o teal default
+// dá ~2.4:1 sobre superfície branca — com label de 11px. `accentReadable`
+// é o accent quando ele passa AA e o primary quando não passa, então a
+// paleta da plataforma resolve para navy e uma versão personalizada com
+// accent de contraste próprio passa a usá-lo sem tocar neste arquivo.
 import { Tabs } from "expo-router/js-tabs";
 import type { ComponentType } from "react";
 import type { ColorValue } from "react-native";
@@ -53,14 +53,14 @@ function tabIcon(Icon: ComponentType<IconProps>) {
 }
 
 export default function TabsLayout() {
-  const { primaryColor, colors } = useTheme();
+  const { accentReadable, colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: primaryColor,
+        tabBarActiveTintColor: accentReadable,
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
           backgroundColor: colors.bgSurface,

@@ -130,11 +130,33 @@ type TenantTheme = {
 };
 ```
 
+### As duas formas do app
+
+O app roda de duas formas, e as duas usam **o mesmo caminho de código**. A diferença é só quais camadas da cadeia abaixo estão preenchidas.
+
+| | Versão genérica (Starter) | Versão personalizada (Premium) |
+|---|---|---|
+| Build | uma, para todos os tenants | própria por tenant, via EAS profile |
+| De onde vem a paleta | runtime (`GET /settings`), no login | embutida na build, e o runtime ainda pode sobrescrever |
+| Antes do login (splash, tela de login) | paleta da plataforma no 1º acesso; do cache do último login em diante | já na cor da igreja, desde o primeiro frame |
+| Como se configura | admin do tenant grava `primary_color` | `ORBIEN_PRIMARY_COLOR` / `ORBIEN_ACCENT_COLOR` no profile do EAS |
+
+### Cadeia de resolução
+
+Da menor para a maior precedência. Cada camada é **parcial**: campo ausente, nulo ou inválido cai para a de baixo, nunca para vazio.
+
+1. **plataforma** — navy/teal. Sempre completa; é o piso que garante que nunca existe UI sem tema.
+2. **build** — `ORBIEN_PRIMARY_COLOR`/`ORBIEN_ACCENT_COLOR`, via `app.config.js` → `extra.brandTheme`. É a **única camada disponível antes do login**, e por isso a que pinta splash e login numa versão personalizada. O fundo da splash nativa e o satélite da splash animada derivam dela.
+3. **cache** — último `GET /settings` bem-sucedido, em AsyncStorage. Numa versão genérica é o que faz o segundo login em diante já abrir na cor da igreja.
+4. **runtime** — `GET /settings` desta sessão. Manda, porque é o único que reflete uma troca de cor feita agora no admin.
+
 Regras:
-- **Nunca** usar a primitiva `navy` diretamente em componente de produto — sempre o `primaryColor`/`accentColor` resolvidos pelo `ThemeContext`, carregado no login via `tenant_id`.
+- **Nunca** usar a primitiva `navy` diretamente em componente de produto — sempre o `primaryColor`/`accentColor` resolvidos pelo `ThemeContext`.
 - Cores **funcionais** (`crimson`, `burgundy`, `teal` de sucesso) **nunca** são sobrescritas pelo tenant — erro é sempre crimson, independente da marca da igreja. Só `primary` (CTA) e opcionalmente `accent` são customizáveis.
-- Contraste mínimo: se o tenant define uma cor clara demais para `primary`, validar contraste AA contra branco no cadastro da cor (bloquear salvar se falhar) — não deixar pra descobrir em produção.
-- **Starter:** rodapé "Powered by Orbien" fixo, `stone`, no fundo de telas-chave. **Premium:** removido, conforme `orbien-brand-guidelines.md` §5.2.
+- **Texto sobre a cor da marca é medido, não fixo.** `colors.textOnBrand` é derivado da cor resolvida pela razão de contraste (`readableOn`, `src/lib/theme/color.ts`), não fixado em branco: um tenant de amarelo pastel receberia branco sobre claro. Isto é o que permite a paleta mudar de verdade sem cada tela saber disso.
+- **Destaque sobre superfície usa `accentReadable`**, não `accentColor` cru: é o accent quando ele passa AA sobre `bgSurface`, e o `primaryColor` quando não passa. É o que resolve o conflito entre o §5 (tab bar ativa usa accent) e o AA do §8.
+- Contraste mínimo: o front escolhe o par legível e degrada em vez de quebrar, mas isso **não substitui** validar AA no cadastro da cor, no backend — bloquear salvar uma cor que falha é o único lugar onde o problema se resolve de fato, em vez de ser mitigado.
+- **Starter:** rodapé "Powered by Orbien" fixo, `stone`, no fundo de telas-chave. **Premium:** removido, conforme `orbien-brand-guidelines.md` §5.2. O plano vem do `plan` no JWT.
 
 ---
 
@@ -213,7 +235,9 @@ Nunca referenciar cor primitiva (`ink`, `parchment`, `subtle-dark`) direto no co
 - [ ] Estados de erro de rede / offline (materiais de PG e devocional precisam funcionar offline — ver `orbien-guia-fases-execucao.md`)
 - [ ] Variação do ícone do app por tenant (Starter usa skin, Premium build própria via EAS)
 - [ ] Biblioteca de ilustração para estados vazios
-- [ ] `accent` por tenant: a API não expõe o campo em `GET /settings` (`Branding` só tem `primary_color`), então hoje o accent é sempre o teal da plataforma
+- [ ] `accent` por tenant **em runtime**: a API não expõe o campo em `GET /settings` (`Branding` só tem `primary_color`), então na versão genérica o accent é sempre o da plataforma. Na personalizada já é configurável, pela camada de build. Quando a API expuser `accent_color`, é uma linha em `brandingLayer()` (`src/lib/theme/brand-theme.ts`) e nada mais muda
+- [ ] Validação AA no cadastro da cor (backend): o app escolhe o par legível, mas quem deve barrar uma cor que falha AA é o admin, ao salvar
+- [ ] Logo na camada de build: uma versão personalizada configura ícone e splash por env, mas o `logoUrl` do header só vem do runtime — um logo embutido precisaria de asset no bundle, não de URL
 - [ ] Bottom sheet e FAB (§7) ainda não têm uso no app — os módulos que os pedem (cadastro rápido de visitante) não existem aqui
 
 ---
@@ -230,7 +254,9 @@ O guia é a regra; esta seção é o mapa. Mexer em uma coluna sem olhar a outra
 | §3 espaçamento, alvo de toque, padding de tela | `tokens.ts` → `spacing`, `touchTarget`, `screenPadding`; `src/components/Screen.tsx` |
 | §4 sombra por plataforma e por modo | `tokens.ts` → `shadows(isDark)`, exposto como `useTheme().shadow` |
 | §5 iconografia | `src/lib/theme/icons.ts` (lista fechada), `tokens.ts` → `iconSize`, `ICON_STROKE_WIDTH` |
-| §6 tema por tenant | `src/lib/theme/theme-provider.tsx` (`primaryColor`, `accentColor`, `logoUrl`, `appName`) |
+| §6 cadeia de resolução da paleta | `src/lib/theme/brand-theme.ts` (camadas), `app.config.js` (camada de build) |
+| §6 tema por tenant | `src/lib/theme/theme-provider.tsx` (`primaryColor`, `accentColor`, `accentReadable`, `logoUrl`, `appName`) |
+| §6/§8 contraste medido (`textOnBrand`, `accentReadable`) | `src/lib/theme/color.ts` |
 | §7 botão | `src/components/AppButton.tsx` |
 | §7 tab bar | `src/app/(tabs)/_layout.tsx` |
 | §7 card de lista | `src/components/Card.tsx` + `Avatar.tsx` / `DateBlock.tsx` |
@@ -249,7 +275,7 @@ Adotar NativeWind depois continua possível e não invalida nada aqui: os tokens
 
 ### Desvios conscientes
 
-- **Tab bar ativa (§5)** usa `primaryColor` (navy, ~8.6:1 sobre branco), não o `accent`. O teal default sobre superfície branca dá ~2.4:1 e o label da tab bar tem 11px — abaixo do AA que o §8 exige. Entre as duas regras, a de contraste prevalece. Revisitar quando o guia fechar um accent com contraste próprio.
+- **Tab bar ativa (§5)** usa `accentReadable`, não o `accentColor` cru. Com a paleta da plataforma isso resolve para o navy (~8.6:1 sobre branco), porque o teal dá ~2.4:1 e o label tem 11px — abaixo do AA que o §8 exige. Uma versão personalizada com accent de contraste próprio passa a usá-lo sem tocar em tela nenhuma. Não é mais um desvio codificado à mão: é a regra dos dois parágrafos do guia aplicada junto.
 - **"Powered by Orbien" (§6)** usa o token `caption` (11px), não 10px: o §2 fixa 11px como mínimo absoluto de acessibilidade. Aparece na tela de Perfil, condicionado a `plan !== "premium"` (o plano vem do JWT). Não aparece no login, onde ainda não há token para saber o plano.
 - **Fonte (§1)** não bloqueia para sempre: se o carregamento falhar, `useAppFonts` libera o render com a fonte do sistema. Travar o app no splash por um asset que nunca vai resolver é pior que a fonte errada.
 
