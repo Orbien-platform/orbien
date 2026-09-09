@@ -326,7 +326,7 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-06 | P1: Conteúdos — feed | Design | ✅ Verified |
 | MOB-07 | P1: Conteúdos — push (registro OneSignal + deep link) | Design | ✅ Verified |
 | MOB-08 | P2: Celebrações e OC | Design | ✅ Verified — `.specs/features/celebracoes-oc-mobile/` |
-| MOB-09 | P2: Pequenos Grupos | Design | Pending |
+| MOB-09 | P2: Pequenos Grupos | Design | ✅ Verified — `.specs/features/pequenos-grupos-mobile/` |
 | MOB-10 | P3: Preferências de notificação | Design | Pending |
 | MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | ✅ Verified |
 | MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | ✅ Verified |

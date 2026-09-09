@@ -16,6 +16,15 @@ const READ_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary',
 const WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary'];
 const MANAGE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const ALERT_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'cell_leader'];
+const MINE_ROLES = [
+  'member',
+  'cell_leader',
+  'treasurer',
+  'secretary',
+  'pastor',
+  'admin_congregation',
+  'tenant_admin',
+];
 
 function rolesFor(methodName: keyof SmallGroupsController): string[] | undefined {
   const reflector = new Reflector();
@@ -37,6 +46,7 @@ describe('SmallGroupsController', () => {
       remove: jest.fn(),
       addMember: jest.fn(),
       removeMember: jest.fn(),
+      findMine: jest.fn(),
     } as unknown as jest.Mocked<SmallGroupsService>;
 
     controller = new SmallGroupsController(service);
@@ -64,6 +74,19 @@ describe('SmallGroupsController', () => {
 
   it('checkAbsenceAlerts aceita cell_leader além dos papéis de gestão', () => {
     expect(rolesFor('checkAbsenceAlerts')).toEqual(ALERT_ROLES);
+  });
+
+  it('findMine aceita member (MOB-09-09) — autoescopado pelo próprio usuário', () => {
+    expect(rolesFor('findMine')).toEqual(MINE_ROLES);
+  });
+
+  it('findMine delega ao service com sub/tenant_id/congregation_id do usuário', async () => {
+    service.findMine.mockResolvedValue([]);
+
+    const result = await controller.findMine(USER);
+
+    expect(service.findMine).toHaveBeenCalledWith('u1', 't1', 'g1');
+    expect(result).toEqual([]);
   });
 
   it('create delega ao service', async () => {

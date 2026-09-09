@@ -2,7 +2,8 @@
 // domínio (Conteúdo) justifica o custo, conforme já previsto no design.md
 // da Rodada 2. `expo-router/js-tabs`, não `expo-router` (export
 // deprecated) — ver AGENTS.md do mobile, Expo mudou entre versões.
-// Terceira aba "Celebrações" (MOB-08).
+// Terceira e quarta abas "Celebrações" (MOB-08) e "Grupos" (MOB-09), na
+// ordem cronológica de entrega dos módulos de domínio.
 import { Tabs } from "expo-router/js-tabs";
 
 export default function TabsLayout() {
@@ -10,6 +11,7 @@ export default function TabsLayout() {
     <Tabs>
       <Tabs.Screen name="index" options={{ title: "Escala" }} />
       <Tabs.Screen name="celebracoes" options={{ title: "Celebrações" }} />
+      <Tabs.Screen name="grupos" options={{ title: "Grupos" }} />
       <Tabs.Screen name="conteudo" options={{ title: "Conteúdo" }} />
     </Tabs>
   );

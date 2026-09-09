@@ -42,6 +42,14 @@ type PaginatedSmallGroups = {
   limit: number;
 };
 
+export type SmallGroupMine = {
+  id: string;
+  name: string;
+  meeting_time: string | null;
+  recurrence: string | null;
+  role: GroupMemberRole;
+};
+
 type HierarchyRow = {
   id: string;
   name: string;
@@ -160,6 +168,32 @@ export class SmallGroupsService {
 
     if (!group) throw new NotFoundException('Grupo não encontrado');
     return group as SmallGroupDetail;
+  }
+
+  // `GroupMembership` é a única fonte comum entre líder e membro (create()
+  // já grava uma pro líder, `:103-110`) — "meus grupos" é a mesma consulta
+  // pros dois papéis. Mesmo padrão de resolução de pessoa que
+  // `CelebrationAssignmentService.resolvePersonId` já usa (módulos não
+  // compartilham service base, então replicado aqui). MOB-09-09.
+  async findMine(userId: string, tenantId: string, congregationId: string): Promise<SmallGroupMine[]> {
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: userId },
+      select: { person_id: true },
+    });
+    if (!account?.person_id) throw new NotFoundException('Usuário sem vínculo de pessoa');
+
+    const memberships = await this.prisma.client.groupMembership.findMany({
+      where: { person_id: account.person_id, tenant_id: tenantId, congregation_id: congregationId },
+      include: { smallGroup: { select: { id: true, name: true, meeting_time: true, recurrence: true } } },
+    });
+
+    return memberships.map((m) => ({
+      id: m.smallGroup.id,
+      name: m.smallGroup.name,
+      meeting_time: m.smallGroup.meeting_time,
+      recurrence: m.smallGroup.recurrence,
+      role: m.role,
+    }));
   }
 
   async update(

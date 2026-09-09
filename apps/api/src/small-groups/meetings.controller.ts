@@ -24,6 +24,12 @@ import { CreateMeetingMaterialDto } from './dto/create-meeting-material.dto';
 
 const MEETING_WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'cell_leader'];
 const MEETING_READ_ROLES = [...MEETING_WRITE_ROLES, 'treasurer'];
+// Só pra listar os encontros do grupo (MOB-09-10) — não pro detalhe de um
+// encontro (`findOne`, que devolve attendanceRecords sem o filtro de
+// visibility que listMaterials já aplica). `member` continua sem acesso a
+// findOne de propósito. Ver docs/PENDENCIAS.md sobre a lacuna de checagem
+// de participação real, aceita nesta rodada.
+const MEETING_LIST_READ_ROLES = [...MEETING_READ_ROLES, 'member'];
 const MEETING_ADMIN_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const MATERIAL_WRITE_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
 const MATERIAL_READ_ROLES = ['member', ...MATERIAL_WRITE_ROLES];
@@ -56,7 +62,7 @@ export class MeetingsController {
   }
 
   @Get(':groupId/meetings')
-  @Roles(...MEETING_READ_ROLES)
+  @Roles(...MEETING_LIST_READ_ROLES)
   findByGroup(@Param('groupId', ParseUUIDPipe) groupId: string) {
     return this.meetingsService.findByGroup(groupId);
   }

@@ -13,6 +13,7 @@ const USER: JwtPayload = {
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
+    userAccount: { findUnique: jest.fn() },
     smallGroup: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -424,6 +425,55 @@ describe('SmallGroupsService', () => {
       const result = await service.checkAbsenceAlerts('sg1');
 
       expect(result).toEqual([{ id: 'p2', full_name: 'Bia' }]);
+    });
+  });
+
+  describe('findMine', () => {
+    it('lança NotFoundException quando o usuário não tem vínculo de pessoa (MOB-09-09)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+      const service = serviceWith(client);
+
+      await expect(service.findMine('u1', 't1', 'g1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('devolve lista vazia quando a pessoa não tem GroupMembership (MOB-09-09)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      const result = await service.findMine('u1', 't1', 'g1');
+
+      expect(result).toEqual([]);
+    });
+
+    it('mapeia um item por GroupMembership, com o role da pessoa naquele grupo (MOB-09-09)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findMany.mockResolvedValue([
+        {
+          role: 'leader',
+          smallGroup: { id: 'sg1', name: 'Grupo do Bairro', meeting_time: '19:30', recurrence: 'weekly' },
+        },
+        {
+          role: 'member',
+          smallGroup: { id: 'sg2', name: 'Grupo da Vila', meeting_time: null, recurrence: null },
+        },
+      ]);
+      const service = serviceWith(client);
+
+      const result = await service.findMine('u1', 't1', 'g1');
+
+      expect(result).toEqual([
+        { id: 'sg1', name: 'Grupo do Bairro', meeting_time: '19:30', recurrence: 'weekly', role: 'leader' },
+        { id: 'sg2', name: 'Grupo da Vila', meeting_time: null, recurrence: null, role: 'member' },
+      ]);
+      expect(client.groupMembership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { person_id: 'p1', tenant_id: 't1', congregation_id: 'g1' },
+        }),
+      );
     });
   });
 });
