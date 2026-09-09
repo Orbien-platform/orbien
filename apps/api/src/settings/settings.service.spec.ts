@@ -34,6 +34,7 @@ const CONGREGATION = {
   phone: '222',
   app_name: null,
   primary_color: null,
+  accent_color: null,
   logo_url: null,
 };
 
@@ -46,11 +47,13 @@ describe('SettingsService', () => {
         ...CONGREGATION,
         app_name: 'App da Congregação',
         primary_color: '#111',
+        accent_color: '#333',
         logo_url: 'https://cdn/logo-congregacao.png',
       });
       client.brandingConfig.findUnique.mockResolvedValue({
         app_name: 'App do Tenant',
         primary_color: '#222',
+        secondary_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
         splash_url: 'https://cdn/splash.png',
       });
@@ -61,6 +64,7 @@ describe('SettingsService', () => {
       expect(result.branding).toEqual({
         app_name: 'App da Congregação',
         primary_color: '#111',
+        accent_color: '#333',
         logo_url: 'https://cdn/logo-congregacao.png',
         splash_url: 'https://cdn/splash.png',
       });
@@ -73,6 +77,9 @@ describe('SettingsService', () => {
       client.brandingConfig.findUnique.mockResolvedValue({
         app_name: 'App do Tenant',
         primary_color: '#222',
+        // a coluna do tenant se chama `secondary_color`; o campo exposto é
+        // `accent_color` (ver ResolvedSettings em settings.service.ts)
+        secondary_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
         splash_url: null,
       });
@@ -83,6 +90,7 @@ describe('SettingsService', () => {
       expect(result.branding).toEqual({
         app_name: 'App do Tenant',
         primary_color: '#222',
+        accent_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
         splash_url: null,
       });
@@ -100,6 +108,7 @@ describe('SettingsService', () => {
       expect(result.branding).toEqual({
         app_name: null,
         primary_color: null,
+        accent_color: null,
         logo_url: null,
         splash_url: null,
       });

@@ -4,19 +4,36 @@
 // própria tela. Mostra "Registrar presença" só pra papel de liderança
 // (mesmos papéis que `POST .../attendance` já exige no backend) — decisão
 // não-autoritativa (design.md), a API reforça de verdade.
+//
+// Visual conforme STYLE-GUIDE.md: `Screen scroll` (material rich_text é
+// texto longo e a tela não rolava), "Registrar presença" como botão de
+// verdade em vez de um link de ~20px de alvo, e cada material com o ícone
+// do seu tipo (§5) — antes um pdf e um estudo em texto eram visualmente
+// idênticos.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 
+import { AppButton } from "../../../components/AppButton";
 import { AppLink } from "../../../components/AppLink";
 import { Card } from "../../../components/Card";
 import { Screen } from "../../../components/Screen";
+import { SectionLabel } from "../../../components/SectionLabel";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { useAuth } from "../../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../../lib/auth/jwt";
 import { listMaterials } from "../../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { MeetingMaterial } from "../../../lib/pequenos-grupos/types";
-import { spacing, typography } from "../../../lib/theme/tokens";
+import {
+  BookOpen,
+  ExternalLink,
+  FileText,
+  RefreshCw,
+  UserCheck,
+  WifiOff,
+} from "../../../lib/theme/icons";
+import { useTheme } from "../../../lib/theme/theme-provider";
+import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../../lib/theme/tokens";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar o material. Verifique sua conexão.";
 const EMPTY_MESSAGE = "Nenhum material disponível para este encontro.";
@@ -27,6 +44,7 @@ export default function EncontroScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuth();
+  const { colors } = useTheme();
   const roles = session ? decodeJwtPayload(session.accessToken)?.roles ?? [] : [];
   const isLeader = roles.some((r) => LEADER_ROLES.includes(r));
 
@@ -54,74 +72,112 @@ export default function EncontroScreen() {
 
   if (error) {
     return (
-      <StatusMessage testID="encontro-error" message={error} tone="danger">
-        <AppLink
+      <StatusMessage testID="encontro-error" icon={WifiOff} message={error} tone="danger">
+        <AppButton
           testID="encontro-retry"
+          title="Tentar novamente"
+          icon={RefreshCw}
+          variant="secondary"
           onPress={() => {
             setError(null);
             setRetryCount((n) => n + 1);
           }}
-        >
-          Tentar novamente
-        </AppLink>
+        />
       </StatusMessage>
     );
   }
 
   return (
-    <Screen testID="encontro-detail">
+    <Screen scroll testID="encontro-detail">
       {isLeader ? (
-        <AppLink
+        <AppButton
           testID="registrar-presenca-link"
-          style={styles.headerLink}
+          title="Registrar presença"
+          icon={UserCheck}
           onPress={() => router.push(`/grupo/encontro/${id}/presenca`)}
-        >
-          Registrar presença
-        </AppLink>
+          style={styles.presencaButton}
+        />
       ) : null}
 
       {materials && materials.length === 0 ? (
-        <View testID="encontro-materials-empty">
-          <Text style={typography.body}>{EMPTY_MESSAGE}</Text>
+        <View testID="encontro-materials-empty" style={styles.empty}>
+          <BookOpen
+            size={iconSize.emphasis}
+            color={colors.textTertiary}
+            strokeWidth={ICON_STROKE_WIDTH}
+          />
+          <Text style={[typography.body, styles.emptyText, { color: colors.textSecondary }]}>
+            {EMPTY_MESSAGE}
+          </Text>
         </View>
       ) : (
-        (materials ?? []).map((m) => (
-          <Card key={m.id} testID={`material-${m.id}`}>
-            <Text style={typography.subtitle}>{m.material.title}</Text>
-            {m.material.source_type === "rich_text" ? (
-              <Text testID={`material-${m.id}-rich-content`} style={styles.richContent}>
-                {m.material.rich_content}
-              </Text>
-            ) : (
-              <AppLink
-                testID={`material-${m.id}-abrir`}
-                style={styles.materialLink}
-                disabled={!m.material.file_url}
-                onPress={
-                  m.material.file_url
-                    ? () => Linking.openURL(m.material.file_url as string)
-                    : undefined
-                }
-              >
-                Abrir
-              </AppLink>
-            )}
-          </Card>
-        ))
+        <>
+          {materials && materials.length > 0 ? (
+            <SectionLabel trailing={String(materials.length)}>Material</SectionLabel>
+          ) : null}
+          {(materials ?? []).map((m) => {
+            const isRichText = m.material.source_type === "rich_text";
+            const Icon = isRichText ? BookOpen : FileText;
+
+            return (
+              <Card key={m.id} testID={`material-${m.id}`}>
+                <View style={styles.materialHeader}>
+                  <Icon
+                    size={iconSize.action}
+                    color={colors.textSecondary}
+                    strokeWidth={ICON_STROKE_WIDTH}
+                  />
+                  <Text style={[typography.h3, styles.materialTitle, { color: colors.textPrimary }]}>
+                    {m.material.title}
+                  </Text>
+                </View>
+
+                {isRichText ? (
+                  <Text
+                    testID={`material-${m.id}-rich-content`}
+                    style={[typography.body, styles.richContent, { color: colors.textSecondary }]}
+                  >
+                    {m.material.rich_content}
+                  </Text>
+                ) : (
+                  <AppLink
+                    testID={`material-${m.id}-abrir`}
+                    icon={ExternalLink}
+                    disabled={!m.material.file_url}
+                    onPress={
+                      m.material.file_url
+                        ? () => Linking.openURL(m.material.file_url as string)
+                        : undefined
+                    }
+                  >
+                    Abrir
+                  </AppLink>
+                )}
+              </Card>
+            );
+          })}
+        </>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  headerLink: {
-    marginBottom: spacing.md,
+  presencaButton: { marginBottom: spacing.lg },
+  materialHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
-  richContent: {
-    ...typography.body,
-    marginTop: spacing.xs,
+  materialTitle: { flex: 1 },
+  richContent: { marginTop: spacing.md },
+  empty: {
+    alignItems: "center",
+    paddingVertical: spacing.xxxl,
   },
-  materialLink: {
-    marginTop: spacing.xs,
+  emptyText: {
+    marginTop: spacing.lg,
+    textAlign: "center",
+    maxWidth: 280,
   },
 });

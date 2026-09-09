@@ -5,25 +5,52 @@
 // fazer check-in de um slot confirmado (AC 3, botão some após sucesso).
 // Nome do app já aparece no header (ThemedShell, _layout.tsx) — esta tela
 // não repete o literal.
+//
+// Visual conforme STYLE-GUIDE.md: card de lista com o bloco de data à
+// esquerda (§7), status em badge com dot (§7 — a lista antes não dizia em
+// que estado cada escala estava), e `scheduled_date` finalmente em tela:
+// o campo já vinha da API e não era mostrado em lugar nenhum, então a
+// escala não dizia *quando*.
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
+import { Alert } from "../../components/Alert";
 import { AppButton } from "../../components/AppButton";
-import { AppLink } from "../../components/AppLink";
+import { Badge, type BadgeTone } from "../../components/Badge";
 import { Card } from "../../components/Card";
+import { DateBlock } from "../../components/DateBlock";
 import { Screen } from "../../components/Screen";
+import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { checkIn, getMyAssignments, respondToAssignment } from "../../lib/escala/escala-client";
-import type { Assignment } from "../../lib/escala/types";
-import { colors, spacing, typography } from "../../lib/theme/tokens";
+import type { Assignment, AssignmentStatus } from "../../lib/escala/types";
+import { formatDateTime } from "../../lib/format/date";
+import {
+  CalendarCheck,
+  CalendarOff,
+  ChevronRight,
+  CircleCheck,
+  Church,
+  WifiOff,
+} from "../../lib/theme/icons";
+import { useTheme } from "../../lib/theme/theme-provider";
+import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
 const NETWORK_ERROR_MESSAGE = "Não foi possível carregar sua escala. Verifique sua conexão.";
 const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
 
+const STATUS_BADGE: Record<AssignmentStatus, { label: string; tone: BadgeTone }> = {
+  pending: { label: "Pendente", tone: "info" },
+  confirmed: { label: "Confirmado", tone: "success" },
+  declined: { label: "Recusado", tone: "danger" },
+  swapped: { label: "Trocado", tone: "neutral" },
+};
+
 export default function EscalaScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -103,87 +130,191 @@ export default function EscalaScreen() {
   }
 
   if (error) {
-    return <StatusMessage testID="escala-error" message={error} tone="danger" />;
+    return (
+      <StatusMessage
+        testID="escala-error"
+        icon={WifiOff}
+        message={error}
+        description="Assim que a conexão voltar, abra a aba novamente."
+        tone="danger"
+      />
+    );
   }
 
   return (
     <Screen>
-      <AppLink
+      <Card
         testID="indisponibilidade-link"
         onPress={() => router.push("/indisponibilidade")}
-        style={styles.headerLink}
+        accessibilityLabel="Minha indisponibilidade"
+        style={styles.shortcut}
       >
-        Minha indisponibilidade
-      </AppLink>
+        <View style={styles.shortcutRow}>
+          <CalendarOff
+            size={iconSize.action}
+            color={colors.textSecondary}
+            strokeWidth={ICON_STROKE_WIDTH}
+          />
+          <Text style={[typography.h3, styles.shortcutLabel, { color: colors.textPrimary }]}>
+            Minha indisponibilidade
+          </Text>
+          <ChevronRight
+            size={iconSize.inline}
+            color={colors.textTertiary}
+            strokeWidth={ICON_STROKE_WIDTH}
+          />
+        </View>
+      </Card>
+
       {actionError ? (
-        <Text testID="escala-action-error" style={styles.actionError}>
-          {actionError}
-        </Text>
+        <Alert messageTestID="escala-action-error" message={actionError} />
       ) : null}
+
       <FlatList
         testID="escala-list"
         data={assignments ?? []}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <Card testID={`assignment-${item.id}`}>
-            <Text style={typography.subtitle}>{item.celebration.name}</Text>
-            <Text style={styles.ministry}>{item.ministry.name}</Text>
-            {item.status === "pending" ? (
-              <View style={styles.actionsRow}>
-                <AppButton
-                  testID={`confirm-${item.id}`}
-                  title="Confirmar"
-                  disabled={pendingIds.has(item.id)}
-                  onPress={() => handleRespond(item.id, "confirmed")}
-                  style={styles.actionButton}
-                />
-                <AppButton
-                  testID={`decline-${item.id}`}
-                  title="Recusar"
-                  variant="secondary"
-                  disabled={pendingIds.has(item.id)}
-                  onPress={() => handleRespond(item.id, "declined")}
-                  style={styles.actionButton}
-                />
-              </View>
-            ) : null}
-            {item.status === "confirmed" && !item.checked_in_at ? (
-              <AppButton
-                testID={`check-in-${item.id}`}
-                title="Fazer check-in"
-                disabled={pendingIds.has(item.id)}
-                onPress={() => handleCheckIn(item.id)}
-                style={styles.checkInButton}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          assignments && assignments.length > 0 ? (
+            <SectionLabel trailing={String(assignments.length)}>Próximas escalas</SectionLabel>
+          ) : null
+        }
+        ListEmptyComponent={
+          // `assignments === null` é "ainda carregando": vazio só vale
+          // depois da resposta, senão a tela pisca "nenhuma escala" antes
+          // de a lista chegar.
+          assignments !== null ? (
+            <View testID="escala-empty" style={styles.empty}>
+              <CalendarCheck
+                size={iconSize.emphasis}
+                color={colors.textTertiary}
+                strokeWidth={ICON_STROKE_WIDTH}
               />
-            ) : null}
-          </Card>
-        )}
+              <Text style={[typography.h3, styles.emptyTitle, { color: colors.textPrimary }]}>
+                Nenhuma escala próxima
+              </Text>
+              <Text style={[typography.body, styles.emptyText, { color: colors.textSecondary }]}>
+                Quando você for escalado, a escala aparece aqui.
+              </Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => {
+          const isPending = pendingIds.has(item.id);
+          const badge = STATUS_BADGE[item.status];
+          const when = formatDateTime(item.scheduled_date);
+
+          return (
+            <Card testID={`assignment-${item.id}`}>
+              <View style={styles.cardRow}>
+                <DateBlock iso={item.scheduled_date} />
+                <View style={styles.cardBody}>
+                  <Text style={[typography.h3, { color: colors.textPrimary }]}>
+                    {item.celebration.name}
+                  </Text>
+                  <View style={styles.metaRow}>
+                    <Church
+                      size={iconSize.inline}
+                      color={colors.textTertiary}
+                      strokeWidth={ICON_STROKE_WIDTH}
+                    />
+                    <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+                      {item.ministry.name}
+                    </Text>
+                  </View>
+                  {when ? (
+                    <Text style={[typography.caption, styles.when, { color: colors.textTertiary }]}>
+                      {when}
+                    </Text>
+                  ) : null}
+                </View>
+                {item.checked_in_at ? (
+                  <Badge
+                    testID={`assignment-${item.id}-checked-in`}
+                    label="Check-in"
+                    tone="success"
+                  />
+                ) : (
+                  <Badge testID={`assignment-${item.id}-status`} {...badge} />
+                )}
+              </View>
+
+              {item.status === "pending" ? (
+                <View style={styles.actionsRow}>
+                  <AppButton
+                    testID={`confirm-${item.id}`}
+                    title="Confirmar"
+                    loading={isPending}
+                    onPress={() => handleRespond(item.id, "confirmed")}
+                    style={styles.actionButton}
+                  />
+                  <AppButton
+                    testID={`decline-${item.id}`}
+                    title="Recusar"
+                    variant="secondary"
+                    disabled={isPending}
+                    onPress={() => handleRespond(item.id, "declined")}
+                    style={styles.actionButton}
+                  />
+                </View>
+              ) : null}
+
+              {item.status === "confirmed" && !item.checked_in_at ? (
+                <AppButton
+                  testID={`check-in-${item.id}`}
+                  title="Fazer check-in"
+                  icon={CircleCheck}
+                  loading={isPending}
+                  onPress={() => handleCheckIn(item.id)}
+                  style={styles.checkInButton}
+                />
+              ) : null}
+            </Card>
+          );
+        }}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  headerLink: {
-    marginBottom: spacing.md,
+  shortcut: { marginBottom: spacing.lg },
+  shortcutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
-  actionError: {
-    color: colors.danger,
-    marginBottom: spacing.md,
+  shortcutLabel: { flex: 1 },
+  cardRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
   },
-  ministry: {
-    ...typography.caption,
+  cardBody: { flex: 1 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs + 2,
     marginTop: spacing.xs,
-    marginBottom: spacing.sm,
   },
+  when: { marginTop: spacing.xs },
   actionsRow: {
     flexDirection: "row",
+    // 8px entre alvos de toque adjacentes (§3).
     gap: spacing.sm,
+    marginTop: spacing.lg,
   },
-  actionButton: {
-    flex: 1,
+  actionButton: { flex: 1 },
+  checkInButton: { marginTop: spacing.lg },
+  empty: {
+    alignItems: "center",
+    paddingVertical: spacing.xxxl,
   },
-  checkInButton: {
+  emptyTitle: { marginTop: spacing.lg },
+  emptyText: {
     marginTop: spacing.sm,
+    textAlign: "center",
+    maxWidth: 280,
   },
 });

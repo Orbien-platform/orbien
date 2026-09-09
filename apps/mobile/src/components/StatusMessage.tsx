@@ -1,36 +1,47 @@
-// Estado centralizado (erro/vazio/carregando) — o mesmo bloco
-// `<View style={{flex:1, alignItems:"center", justifyContent:"center"}}>`
-// se repetia, idêntico, em toda tela de lista/detalhe. `children` carrega
-// a ação opcional (ex.: AppLink/AppButton de "Tentar novamente").
-import type { ReactNode } from "react";
-import { StyleSheet, Text } from "react-native";
+// Estado de erro/vazio/carregando — fachada sobre `EmptyState` mantida
+// porque as telas (e os testes de cada uma) referenciam este contrato:
+// `testID` + `message` + ação opcional em `children`.
+//
+// O que mudou com o STYLE-GUIDE.md é só o visual: o texto era um
+// parágrafo solto no centro da tela; agora vem com o ícone de 28px do §5 e
+// a hierarquia de título/descrição do `EmptyState`.
+import type { ComponentType, ReactNode } from "react";
 
-import { colors, spacing, typography } from "../lib/theme/tokens";
-import { Screen } from "./Screen";
+import { EmptyState } from "./EmptyState";
+
+interface IconProps {
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}
 
 interface StatusMessageProps {
   testID: string;
   message: string;
+  /** Linha de apoio abaixo da mensagem (ex.: o que fazer a seguir). */
+  description?: string;
+  icon?: ComponentType<IconProps>;
   tone?: "default" | "danger";
   children?: ReactNode;
 }
 
-export function StatusMessage({ testID, message, tone = "default", children }: StatusMessageProps) {
+export function StatusMessage({
+  testID,
+  message,
+  description,
+  icon,
+  tone = "default",
+  children,
+}: StatusMessageProps) {
   return (
-    <Screen testID={testID} center>
-      <Text style={[styles.message, tone === "danger" && styles.danger]}>{message}</Text>
+    <EmptyState
+      testID={testID}
+      icon={icon}
+      title={message}
+      description={description}
+      tone={tone}
+    >
       {children}
-    </Screen>
+    </EmptyState>
   );
 }
-
-const styles = StyleSheet.create({
-  message: {
-    ...typography.body,
-    textAlign: "center",
-    marginBottom: spacing.md,
-  },
-  danger: {
-    color: colors.danger,
-  },
-});

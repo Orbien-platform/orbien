@@ -4,14 +4,24 @@
 // "authenticated" (src/app/_layout.tsx). Um `router.replace("/")` aqui
 // disputaria com o guard — a rota autenticada ainda nem existe no momento
 // em que ele rodaria.
+//
+// Visual conforme STYLE-GUIDE.md: marca do tenant no topo (logo quando há,
+// senão o nome no token `display`), campos de 48px com ícone e label (§3,
+// §7), erro como alerta com ícone em vez de linha de texto solta, e botão
+// primário em estado `loading` — antes o botão só ficava apagado, sem dizer
+// que a requisição estava em curso.
+import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
+import { Alert } from "../components/Alert";
 import { AppButton } from "../components/AppButton";
+import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
 import { useAuth } from "../lib/auth/auth-provider";
+import { Building2, Eye, EyeOff, Lock, Mail } from "../lib/theme/icons";
 import { useTheme } from "../lib/theme/theme-provider";
-import { colors, radius, spacing, typography } from "../lib/theme/tokens";
+import { radius, spacing, typography } from "../lib/theme/tokens";
 
 // Mensagem de erro genérica (AC 2, MOB-01): a API já responde de forma
 // indistinguível para credencial errada / tenant não encontrado — a tela
@@ -21,10 +31,11 @@ const GENERIC_ERROR_MESSAGE = "Não foi possível entrar. Confira os dados e ten
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const theme = useTheme();
+  const { appName, logoUrl, colors, shadow, isDark } = useTheme();
   const [tenantSlug, setTenantSlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,47 +52,86 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen center>
-      <View style={styles.card}>
-        <Text style={[styles.appName, { color: theme.primaryColor }]}>{theme.appName}</Text>
-        <TextInput
+    <Screen scroll center>
+      {/* Esta é a única tela sem header (`headerShown: false` no layout
+          raiz), então a status bar fica sobre `bgBase`, não sobre a cor da
+          marca: o `style="light"` do shell deixaria a hora invisível no
+          parchment. Sobrescreve enquanto a tela está montada (§8). */}
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <View style={styles.brand}>
+        {logoUrl ? (
+          <Image
+            testID="login-logo"
+            source={{ uri: logoUrl }}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        ) : null}
+        <Text style={[typography.display, styles.appName, { color: colors.textPrimary }]}>
+          {appName}
+        </Text>
+        <Text style={[typography.body, styles.tagline, { color: colors.textSecondary }]}>
+          Entre com os dados da sua igreja
+        </Text>
+      </View>
+
+      <View
+        style={[
+          styles.card,
+          shadow.md,
+          { backgroundColor: colors.bgSurface, borderColor: colors.border },
+        ]}
+      >
+        <Input
           testID="tenant-slug-input"
-          placeholder="Igreja"
-          placeholderTextColor={colors.textMuted}
+          label="Igreja"
+          icon={Building2}
+          placeholder="minha-igreja"
           value={tenantSlug}
           onChangeText={setTenantSlug}
           autoCapitalize="none"
-          style={styles.input}
+          autoCorrect={false}
+          autoComplete="organization"
+          returnKeyType="next"
         />
-        <TextInput
+        <Input
           testID="email-input"
-          placeholder="E-mail"
-          placeholderTextColor={colors.textMuted}
+          label="E-mail"
+          icon={Mail}
+          placeholder="voce@exemplo.com"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
           keyboardType="email-address"
-          style={styles.input}
+          returnKeyType="next"
         />
-        <TextInput
+        <Input
           testID="password-input"
-          placeholder="Senha"
-          placeholderTextColor={colors.textMuted}
+          label="Senha"
+          icon={Lock}
+          placeholder="Sua senha"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
+          secureTextEntry={!passwordVisible}
+          autoComplete="password"
+          returnKeyType="go"
+          onSubmitEditing={handleSubmit}
+          trailingIcon={passwordVisible ? EyeOff : Eye}
+          onTrailingPress={() => setPasswordVisible((visible) => !visible)}
+          trailingAccessibilityLabel={passwordVisible ? "Ocultar senha" : "Mostrar senha"}
         />
-        {error ? (
-          <Text testID="login-error" style={styles.error}>
-            {error}
-          </Text>
-        ) : null}
+
+        {/* O testID vai no <Text> de dentro: o teste desta tela compara
+            `props.children` com a mensagem exata. */}
+        {error ? <Alert messageTestID="login-error" message={error} /> : null}
+
         <AppButton
           testID="login-submit"
           title="Entrar"
           onPress={handleSubmit}
-          disabled={submitting}
+          loading={submitting}
           style={styles.submit}
         />
       </View>
@@ -90,37 +140,27 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    width: "100%",
-    maxWidth: 360,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
+  brand: {
+    alignItems: "center",
+    marginBottom: spacing.xxxl,
   },
-  appName: {
-    ...typography.title,
+  logo: {
+    width: 72,
+    height: 72,
+    marginBottom: spacing.lg,
+  },
+  appName: { textAlign: "center" },
+  tagline: {
     textAlign: "center",
-    marginBottom: spacing.xl,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 4,
-    marginBottom: spacing.md,
-    fontSize: 15,
-    color: colors.text,
-    backgroundColor: colors.background,
-  },
-  error: {
-    color: colors.danger,
-    marginBottom: spacing.md,
-    textAlign: "center",
-  },
-  submit: {
     marginTop: spacing.xs,
   },
+  card: {
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+    borderRadius: radius.card,
+    borderWidth: 1,
+    padding: spacing.xxl,
+  },
+  submit: { marginTop: spacing.xs },
 });

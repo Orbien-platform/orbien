@@ -18,6 +18,13 @@ export interface MobileJwtPayload {
   tenant_id: string;
   congregation_id: string;
   roles: string[];
+  /** Plano do tenant — `JwtPayload` da API
+   * (`apps/api/src/auth/interfaces/jwt-payload.interface.ts`) já o emite em
+   * todo token. É o que decide o rodapé "Powered by Orbien" do §6 do
+   * STYLE-GUIDE.md: fixo no Starter, removido no Premium. Opcional aqui
+   * porque um token emitido antes deste campo existir continua decodificando
+   * — e, sem o campo, o rodapé aparece (o default seguro é atribuir). */
+  plan?: "starter" | "premium";
   exp: number;
 }
 

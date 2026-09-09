@@ -27,7 +27,20 @@ const DEFAULT_ADAPTIVE_ICON_MONOCHROME = "./assets/android-icon-monochrome.png";
 // animada em JS (src/lib/splash/animated-splash.tsx), que continua de onde
 // a splash nativa parou — por isso o PNG nativo não pode trazê-lo.
 const DEFAULT_SPLASH_ICON = "./assets/splash-icon.png";
-const DEFAULT_SPLASH_BACKGROUND = "#1E3A7B";
+
+// Paleta de build (§6 do STYLE-GUIDE.md, camada 2 da cadeia descrita em
+// src/lib/theme/brand-theme.ts).
+//
+// Na versão genérica (perfil `generic`, uma build para todos os tenants) a
+// paleta chega em runtime, pelo `GET /settings` — estas envs ficam vazias e
+// o app usa o navy/teal da plataforma. Numa versão personalizada (build
+// própria por tenant, via EAS) a paleta vem daqui: é o único jeito de a
+// splash nativa e a tela de login — que acontecem ANTES de existir token —
+// já saírem na cor da igreja.
+//
+// Mesmos defaults de `brand.navy`/`brand.teal` em src/lib/theme/tokens.ts.
+const DEFAULT_PRIMARY_COLOR = "#1E3A7B";
+const DEFAULT_ACCENT_COLOR = "#00B8A2";
 // Largura da marca na splash, em dp. O overlay animado usa o mesmo número
 // (SPLASH_ICON_WIDTH em src/lib/splash/animated-splash.tsx) para a troca do
 // nativo para o JS não mudar o tamanho do logo na tela.
@@ -50,8 +63,13 @@ module.exports = ({ config }) => {
   const apiUrl = process.env.ORBIEN_API_URL || DEFAULT_API_URL;
   const icon = process.env.ORBIEN_APP_ICON || DEFAULT_ICON;
   const splashIcon = process.env.ORBIEN_SPLASH_ICON || DEFAULT_SPLASH_ICON;
-  const splashBackground =
-    process.env.ORBIEN_SPLASH_BACKGROUND || DEFAULT_SPLASH_BACKGROUND;
+  const primaryColor = process.env.ORBIEN_PRIMARY_COLOR || DEFAULT_PRIMARY_COLOR;
+  const accentColor = process.env.ORBIEN_ACCENT_COLOR || DEFAULT_ACCENT_COLOR;
+  // O fundo da splash é a cor primária por default: numa build
+  // personalizada, setar a paleta já acerta a splash sem uma segunda env
+  // para dizer a mesma coisa. `ORBIEN_SPLASH_BACKGROUND` continua existindo
+  // para o caso de a splash precisar divergir do CTA de propósito.
+  const splashBackground = process.env.ORBIEN_SPLASH_BACKGROUND || primaryColor;
 
   // Modo do plugin (ambiente de APNs, iOS) — não é campo de identidade
   // (MOB-12): EAS injeta EAS_BUILD_PROFILE automaticamente em todo build,
@@ -103,6 +121,13 @@ module.exports = ({ config }) => {
       ...config.extra,
       oneSignalAppId,
       apiUrl,
+      // Lido por src/lib/theme/brand-theme.ts como a camada de build da
+      // paleta. Sempre presente (com os defaults da plataforma quando não
+      // há env), para o app nunca precisar tratar "extra sem tema".
+      brandTheme: {
+        primaryColor,
+        accentColor,
+      },
       // Lido por src/lib/splash/animated-splash.tsx para casar com a splash
       // nativa configurada acima.
       splashBackground,

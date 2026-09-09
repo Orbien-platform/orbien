@@ -3,6 +3,51 @@
 App nativo (Expo + React Native + TypeScript) do Orbien. Ver
 `.specs/features/app-mobile/` na raiz do monorepo para spec/design/tasks.
 
+A base visual é o [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) deste diretório —
+tokens de cor e tipografia (os mesmos de `apps/web`), alvo de toque, sombra
+por plataforma, tema por tenant e modo claro/escuro. A §10 dele mapeia cada
+regra ao arquivo que a implementa; o resumo operacional está em `AGENTS.md`.
+
+## Design system
+
+| Camada | Onde |
+|---|---|
+| Tokens (cor, tipografia, espaço, raio, sombra, ícone) | `src/lib/theme/tokens.ts` |
+| Cadeia da paleta do tenant (plataforma → build → cache → runtime) | `src/lib/theme/brand-theme.ts` |
+| Contraste medido (texto sobre a marca, accent legível) | `src/lib/theme/color.ts` |
+| Papel semântico + tema do tenant + claro/escuro | `src/lib/theme/theme-provider.tsx` (`useTheme()`) |
+| Fontes da marca (DM Sans / DM Mono) | `src/lib/theme/fonts.ts` |
+| Ícones (lista fechada, lucide) | `src/lib/theme/icons.ts` |
+| Componentes (botão, card, badge, input, estado vazio…) | `src/components/` |
+
+Dois imports que parecem inofensivos e não são, os dois medidos no
+`expo export`:
+
+- `lucide-react-native` (barril) reexporta ~1600 ícones — importe sempre
+  pelo subpath, o que `src/lib/theme/icons.ts` já faz. Pelo barril, um único
+  teste de tela passou de 1,7s para 69s.
+- `@expo-google-fonts/dm-sans` (barril) faz `require` dos 18 pesos e
+  itálicos (~1MB de `.ttf`) — `src/lib/theme/fonts.ts` importa peso a peso e
+  empacota só os 6 que a escala usa (322KB).
+
+### Versão genérica e versões personalizadas
+
+A mesma base serve às duas: a paleta é resolvida por uma cadeia de camadas
+(§6 do style guide, implementada em `src/lib/theme/brand-theme.ts`), e o que
+muda é só quais camadas estão preenchidas.
+
+- **Genérica** (uma build para todos os tenants): nenhuma env de paleta; a
+  cor chega no login, por `GET /settings`, e fica em cache para os próximos.
+- **Personalizada** (build por tenant, via EAS profile): `ORBIEN_PRIMARY_COLOR`
+  e `ORBIEN_ACCENT_COLOR` no profile. É a única camada que existe **antes**
+  do login, então é ela que faz splash e tela de login já saírem na cor da
+  igreja — e o runtime ainda pode sobrescrever depois.
+
+Nenhuma tela sabe de qual camada a cor veio. Quem quer a cor do tenant lê
+`useTheme().primaryColor`; quem desenha texto sobre ela lê
+`useTheme().colors.textOnBrand`, que é **derivado por contraste** e não
+branco fixo — é isso que permite a paleta mudar de verdade.
+
 ## Rodar localmente
 
 A partir da raiz do monorepo (instale sempre com `npm install` na raiz —

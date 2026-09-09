@@ -316,6 +316,7 @@ describe("ConfiguracoesPage", () => {
         phone: undefined,
         app_name: undefined,
         primary_color: "#123456",
+        accent_color: undefined,
       },
       tenant: {
         name: "Doca Church Org",
@@ -351,6 +352,159 @@ describe("ConfiguracoesPage", () => {
     await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
     const [, payload] = mockedApi.patch.mock.calls[0] as [string, { congregation: { primary_color?: string } }];
     expect(payload.congregation.primary_color).toBeUndefined();
+  });
+
+  it("carrega a cor de destaque vinda de branding.accent_color", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: settingsPayload({
+        branding: {
+          app_name: "X",
+          primary_color: "#1C3D5A",
+          accent_color: "#00B8A2",
+          logo_url: null,
+          splash_url: null,
+        },
+      }),
+    });
+    render(<ConfiguracoesPage />);
+
+    expect(await screen.findByDisplayValue("#00B8A2")).toBeInTheDocument();
+  });
+
+  it("envia accent_color no payload da congregação", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const accentInput = screen.getByPlaceholderText("#00B8A2");
+    await user.clear(accentInput);
+    await user.type(accentInput, "#F59E0B");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [
+      string,
+      { congregation: { accent_color?: string } },
+    ];
+    expect(payload.congregation.accent_color).toBe("#F59E0B");
+  });
+
+  it("barra cor principal clara demais, explicando onde ela é usada (AA)", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    // Amarelo pastel: hexadecimal válido, contraste ~1.3:1 contra branco.
+    const colorInput = screen.getByPlaceholderText("#1C3D5A");
+    await user.clear(colorInput);
+    await user.type(colorInput, "#FDE68A");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(await screen.findByText(/Cor principal clara demais/)).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
+  });
+
+  it("aceita cor de destaque que não passaria AA — o app degrada em runtime", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    // O teal da plataforma dá ~2.4:1 contra branco. Exigir AA aqui
+    // rejeitaria o accent da própria Orbien; quem resolve é o
+    // `accentReadable` do app.
+    const accentInput = screen.getByPlaceholderText("#00B8A2");
+    await user.clear(accentInput);
+    await user.type(accentInput, "#00B8A2");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    expect(screen.queryByText(/clara demais/)).not.toBeInTheDocument();
+  });
+
+  // Os três casos abaixo existem para exercer a conta de contraste por
+  // inteiro — ela tem ramos que o hexadecimal de 6 dígitos e claro não
+  // alcança, e `src/app/**` roda com limiar de cobertura em 100%.
+  it("aceita cor principal na forma curta #RGB, expandindo para 6 dígitos", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    // #000 é forma curta E tem os três canais abaixo do ponto de corte
+    // linear do WCAG (0.03928), que o ramo escuro da conta usa.
+    const colorInput = screen.getByPlaceholderText("#1C3D5A");
+    await user.clear(colorInput);
+    await user.type(colorInput, "#000");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [
+      string,
+      { congregation: { primary_color?: string } },
+    ];
+    expect(payload.congregation.primary_color).toBe("#000");
+  });
+
+  it("barra cor principal clara demais também na forma curta #RGB", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const colorInput = screen.getByPlaceholderText("#1C3D5A");
+    await user.clear(colorInput);
+    await user.type(colorInput, "#ff0");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(await screen.findByText(/Cor principal clara demais/)).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
+  });
+
+  it("o seletor de cor de destaque atualiza o campo de texto", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    // `<input type="color">` não aceita `user.type`; o navegador só emite
+    // change com o valor já escolhido.
+    fireEvent.change(screen.getByLabelText("Selecionar cor de destaque"), {
+      target: { value: "#f59e0b" },
+    });
+
+    expect(screen.getByPlaceholderText("#00B8A2")).toHaveValue("#f59e0b");
+  });
+
+  it("barra cor de destaque com formato inválido", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const accentInput = screen.getByPlaceholderText("#00B8A2");
+    await user.clear(accentInput);
+    await user.type(accentInput, "dourado");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(
+      await screen.findByText(
+        "Cor de destaque deve ser um código hexadecimal válido (ex: #00B8A2)."
+      )
+    ).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
   });
 
   it("mostra o logotipo existente (logo_url) quando nenhum arquivo novo foi escolhido", async () => {

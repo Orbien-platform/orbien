@@ -37,7 +37,9 @@ describe("IndisponibilidadeScreen", () => {
     await waitFor(() => {
       expect(mockGetUnavailability).toHaveBeenCalledWith(9, 2026);
     });
-    expect(screen.getByText("10 ✓")).toBeTruthy();
+    expect(screen.getByTestId("day-2026-09-10").props.accessibilityState.selected).toBe(
+      true,
+    );
   });
 
   it("salvar chama saveUnavailability com mês/ano/datas selecionadas", async () => {
@@ -93,8 +95,10 @@ describe("IndisponibilidadeScreen", () => {
       resolveSeptember({ dates: [{ date: "2026-09-10" }] });
     });
 
-    expect(screen.getByTestId("current-month").props.children).toBe("10/2026");
-    expect(screen.getByText("5 ✓")).toBeTruthy();
+    expect(screen.getByTestId("current-month").props.children).toBe("Outubro 2026");
+    expect(screen.getByTestId("day-2026-10-05").props.accessibilityState.selected).toBe(true);
+    // a resposta obsoleta de setembro não marcou nada no mês exibido
+    expect(screen.getByTestId("day-2026-10-10").props.accessibilityState.selected).toBe(false);
   });
 
   it("erro de rede ao carregar mostra mensagem de erro visível (Fix 1)", async () => {

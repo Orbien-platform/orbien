@@ -3,17 +3,26 @@
 // o cliente calcula se há mais páginas comparando page*limit com total).
 // Mesmo padrão de erro/estado vazio de (tabs)/index.tsx (Escala): erro
 // de rede visível, distinto de lista vazia.
+//
+// Visual conforme STYLE-GUIDE.md: o corpo do post era renderizado inteiro
+// no token de caption (11px), o que virava um bloco ilegível quando o post
+// era longo. Agora vem em `body` com `numberOfLines`, e o card inteiro
+// abre o detalhe (§7).
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { FlatList, StyleSheet, Text } from "react-native";
+import { FlatList, Image, StyleSheet, Text, View } from "react-native";
 
+import { Alert } from "../../components/Alert";
 import { AppButton } from "../../components/AppButton";
 import { Card } from "../../components/Card";
 import { Screen } from "../../components/Screen";
+import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
-import { colors, spacing, typography } from "../../lib/theme/tokens";
+import { ChevronRight, Inbox, WifiOff } from "../../lib/theme/icons";
+import { useTheme } from "../../lib/theme/theme-provider";
+import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../../lib/theme/tokens";
 
 const LIMIT = 20;
 const LOAD_ERROR_MESSAGE = "Não foi possível carregar o conteúdo. Verifique sua conexão.";
@@ -21,6 +30,7 @@ const LOAD_MORE_ERROR_MESSAGE = "Não foi possível carregar mais posts. Tente n
 
 export default function ConteudoScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -74,11 +84,26 @@ export default function ConteudoScreen() {
   }
 
   if (error) {
-    return <StatusMessage testID="conteudo-error" message={error} tone="danger" />;
+    return (
+      <StatusMessage
+        testID="conteudo-error"
+        icon={WifiOff}
+        message={error}
+        description="Assim que a conexão voltar, abra a aba novamente."
+        tone="danger"
+      />
+    );
   }
 
   if (posts && posts.length === 0) {
-    return <StatusMessage testID="conteudo-empty" message="Nenhum post publicado ainda." />;
+    return (
+      <StatusMessage
+        testID="conteudo-empty"
+        icon={Inbox}
+        message="Nenhum post publicado ainda."
+        description="Avisos e devocionais da sua igreja aparecem aqui."
+      />
+    );
   }
 
   const hasMore = posts !== null && page * LIMIT < total;
@@ -89,24 +114,54 @@ export default function ConteudoScreen() {
         testID="conteudo-list"
         data={posts ?? []}
         keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          posts && posts.length > 0 ? <SectionLabel>Publicações</SectionLabel> : null
+        }
         renderItem={({ item }) => (
-          <Card testID={`post-${item.id}`} onPress={() => router.push(`/post/${item.id}`)}>
-            <Text style={typography.subtitle}>{item.title}</Text>
-            {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
+          <Card
+            testID={`post-${item.id}`}
+            onPress={() => router.push(`/post/${item.id}`)}
+            accessibilityLabel={item.title}
+          >
+            {item.media_url ? (
+              <Image
+                source={{ uri: item.media_url }}
+                style={styles.thumb}
+                resizeMode="cover"
+                accessibilityIgnoresInvertColors
+              />
+            ) : null}
+            <View style={styles.cardRow}>
+              <View style={styles.cardBody}>
+                <Text style={[typography.h3, { color: colors.textPrimary }]}>{item.title}</Text>
+                {item.body ? (
+                  <Text
+                    style={[typography.body, styles.body, { color: colors.textSecondary }]}
+                    numberOfLines={2}
+                  >
+                    {item.body}
+                  </Text>
+                ) : null}
+              </View>
+              <ChevronRight
+                size={iconSize.inline}
+                color={colors.textTertiary}
+                strokeWidth={ICON_STROKE_WIDTH}
+              />
+            </View>
           </Card>
         )}
       />
       {loadMoreError ? (
-        <Text testID="load-more-error" style={styles.error}>
-          {loadMoreError}
-        </Text>
+        <Alert messageTestID="load-more-error" message={loadMoreError} />
       ) : null}
       {hasMore ? (
         <AppButton
           testID="load-more-button"
           title="Carregar mais"
           variant="secondary"
-          disabled={isLoadingMore}
+          loading={isLoadingMore}
           onPress={handleLoadMore}
           style={styles.loadMoreButton}
         />
@@ -116,15 +171,18 @@ export default function ConteudoScreen() {
 }
 
 const styles = StyleSheet.create({
-  body: {
-    ...typography.caption,
-    marginTop: spacing.xs,
-  },
-  error: {
-    color: colors.danger,
+  thumb: {
+    width: "100%",
+    height: 140,
+    borderRadius: radius.btn,
     marginBottom: spacing.md,
   },
-  loadMoreButton: {
-    marginTop: spacing.xs,
+  cardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
+  cardBody: { flex: 1 },
+  body: { marginTop: spacing.xs },
+  loadMoreButton: { marginTop: spacing.xs },
 });
