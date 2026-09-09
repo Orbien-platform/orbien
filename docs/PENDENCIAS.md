@@ -1481,6 +1481,46 @@ própria.
 
 ---
 
+## `small-groups`: rota de encontros e de materiais não conferem participação real — aberta
+
+Achado durante o Design da feature "Pequenos Grupos no Mobile"
+(`.specs/features/pequenos-grupos-mobile/design.md`), 2026-09-09, ao
+liberar `member` em `GET /small-groups/:groupId/meetings` pra o mobile
+conseguir achar o material do próprio grupo. Decisão do usuário: seguir
+liberando `member` e registrar aqui, em vez de fechar a lacuna agora.
+
+### O que está errado
+
+`MeetingsController.findByGroup` (`GET /small-groups/:groupId/meetings`) e
+`MeetingsService.listMaterials` (`GET /small-groups/meetings/:meetingId/materials`)
+checam só a `role` do JWT — nenhum dos dois confere se a pessoa autenticada
+tem `GroupMembership` no grupo/encontro pedido. `listMaterials` já liberava
+`member` de propósito (`MATERIAL_READ_ROLES = ['member', ...]`) antes desta
+feature; o MOB-09 estendeu a mesma política pra `findByGroup`. Na prática,
+qualquer conta com role `member` (de qualquer grupo, ou de nenhum) pode
+listar os encontros e os materiais `visibility: all` de **qualquer outro**
+grupo do tenant — não só o seu.
+
+### Evidência
+
+`apps/api/src/small-groups/meetings.controller.ts:58-62` (`findByGroup`) e
+`:93-100` (`listMaterials`) não recebem `person_id` nem verificam
+`GroupMembership` antes de responder; o `where` das duas consultas em
+`meetings.service.ts` filtra só por `groupId`/`meetingId`, sem cláusula de
+participação.
+
+### Por que não foi corrigido aqui
+
+Fechar exige decidir e implementar a checagem de participação (via
+`GroupMembership` do `person_id` resolvido do usuário) nos dois endpoints,
+sem quebrar os papéis de liderança que hoje enxergam grupos que não lideram
+(ex.: `pastor`/`secretary` via `MEETING_READ_ROLES`) — logo não é "só
+adicionar um `where`", é decidir quem continua vendo tudo e quem passa a
+ver só o próprio. Maior que o MOB-09 e não estava no pedido. Registrado
+aqui para virar feature própria.
+
+---
+
 ## Registro
 
 Ao resolver uma pendência, remova a seção e registre no commit o que foi
