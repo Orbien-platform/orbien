@@ -15,6 +15,17 @@ const LOAD_ERROR_MESSAGE = "Não foi possível carregar a Ordem de Culto. Verifi
 const UNPUBLISHED_WARNING = "Ordem de culto ainda não publicada — pode mudar.";
 const NO_SETLIST_MESSAGE = "Repertório ainda não publicado";
 
+// Sem o horário de início da celebração no shape de ServiceOrder (design.md
+// não o inclui), o horário de cada etapa é exibido como deslocamento a
+// partir do início — mesma unidade que a API já guarda (AddItemModal.tsx
+// converte na direção oposta, de "HH:mm" pra este mesmo campo).
+function formatOffset(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return m > 0 ? `${h}h${m}min` : `${h}h`;
+  return `${m}min`;
+}
+
 export default function CelebracaoScreen() {
   const { id, ministryId } = useLocalSearchParams<{ id: string; ministryId?: string }>();
   const [order, setOrder] = useState<ServiceOrder | null>(null);
@@ -84,6 +95,9 @@ export default function CelebracaoScreen() {
             testID={isMine ? `celebracao-item-${item.id}-mine` : `celebracao-item-${item.id}`}
           >
             <Text>{item.name}</Text>
+            <Text testID={`celebracao-item-${item.id}-horario`}>
+              {`${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min`}
+            </Text>
             <Text>
               {item.responsible_type === "person" && item.person
                 ? item.person.full_name

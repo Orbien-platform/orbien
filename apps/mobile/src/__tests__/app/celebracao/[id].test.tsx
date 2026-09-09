@@ -1,7 +1,7 @@
 // Testes derivados do Done-when de T6 (tasks.md, MOB-08-02/03/04/05):
 // destaque de "minha função", setlist ausente, OC não publicada, 404 e
 // erro de rede com retry.
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 
 let mockSearchParams: { id: string; ministryId?: string } = { id: "ord1" };
 jest.mock("expo-router", () => ({
@@ -77,6 +77,55 @@ describe("CelebracaoScreen", () => {
     expect(screen.getByTestId("celebracao-item-item1-mine")).toBeTruthy();
     expect(screen.getByTestId("celebracao-item-item2")).toBeTruthy();
     expect(screen.queryByTestId("celebracao-item-item2-mine")).toBeNull();
+  });
+
+  it("mostra o horário de cada etapa (deslocamento e duração) e o inclui no destaque (AC2/AC3)", async () => {
+    mockSearchParams = { id: "ord1", ministryId: "min1" };
+    mockGetServiceOrder.mockResolvedValue({
+      ...BASE_ORDER,
+      items: [
+        {
+          id: "item1",
+          sequence: 1,
+          name: "Louvor de abertura",
+          type: "worship",
+          start_offset_minutes: 0,
+          duration_minutes: 20,
+          responsible_type: "ministry",
+          person: null,
+          ministry: { id: "min1", name: "Louvor" },
+          responsible_label: null,
+          notes: null,
+          setlist: null,
+        },
+        {
+          id: "item2",
+          sequence: 2,
+          name: "Pregação",
+          type: "sermon",
+          start_offset_minutes: 90,
+          duration_minutes: 30,
+          responsible_type: "person",
+          person: { id: "p1", full_name: "Pastor João" },
+          ministry: null,
+          responsible_label: null,
+          notes: null,
+          setlist: null,
+        },
+      ],
+    });
+
+    await act(async () => {
+      render(<CelebracaoScreen />);
+    });
+
+    const mineItem = screen.getByTestId("celebracao-item-item1-mine");
+    expect(within(mineItem).getByTestId("celebracao-item-item1-horario")).toHaveTextContent(
+      "0min · 20min",
+    );
+    expect(screen.getByTestId("celebracao-item-item2-horario")).toHaveTextContent(
+      "1h30min · 30min",
+    );
   });
 
   it("etapa sem setlist mostra 'Repertório ainda não publicado' (AC4)", async () => {
@@ -169,6 +218,77 @@ describe("CelebracaoScreen", () => {
     });
 
     expect(screen.queryByTestId("celebracao-unpublished-warning")).toBeNull();
+  });
+
+  it("etapa com responsible_label genérico mostra o rótulo como veio da API (Edge Case)", async () => {
+    mockGetServiceOrder.mockResolvedValue({
+      ...BASE_ORDER,
+      items: [
+        {
+          id: "item1",
+          sequence: 1,
+          name: "Oferta",
+          type: "offering",
+          start_offset_minutes: 40,
+          duration_minutes: 5,
+          responsible_type: "free_text",
+          person: null,
+          ministry: null,
+          responsible_label: "A definir",
+          notes: null,
+          setlist: null,
+        },
+      ],
+    });
+
+    await act(async () => {
+      render(<CelebracaoScreen />);
+    });
+
+    expect(screen.getByText("A definir")).toBeTruthy();
+  });
+
+  it("duas etapas com a mesma sequence renderizam ambas, sem deduplicar (Edge Case)", async () => {
+    mockGetServiceOrder.mockResolvedValue({
+      ...BASE_ORDER,
+      items: [
+        {
+          id: "item1",
+          sequence: 1,
+          name: "Primeira etapa",
+          type: "worship",
+          start_offset_minutes: 0,
+          duration_minutes: 10,
+          responsible_type: "free_text",
+          person: null,
+          ministry: null,
+          responsible_label: "A definir",
+          notes: null,
+          setlist: null,
+        },
+        {
+          id: "item2",
+          sequence: 1,
+          name: "Segunda etapa",
+          type: "prayer",
+          start_offset_minutes: 10,
+          duration_minutes: 10,
+          responsible_type: "free_text",
+          person: null,
+          ministry: null,
+          responsible_label: "A definir",
+          notes: null,
+          setlist: null,
+        },
+      ],
+    });
+
+    await act(async () => {
+      render(<CelebracaoScreen />);
+    });
+
+    expect(screen.getByTestId("celebracao-item-item1")).toBeTruthy();
+    expect(screen.getByTestId("celebracao-item-item2")).toBeTruthy();
   });
 
   it("404 mostra 'Ordem de culto não encontrada.' sem botão de retry (AC5)", async () => {
