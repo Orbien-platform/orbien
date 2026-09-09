@@ -6,11 +6,6 @@
 // (spec.md): mesma mensagem de erro genérica, independente do motivo.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-const mockReplace = jest.fn();
-jest.mock("expo-router", () => ({
-  useRouter: () => ({ replace: mockReplace }),
-}));
-
 const mockLogin = jest.fn();
 jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => ({ login: mockLogin }),
@@ -23,7 +18,10 @@ describe("LoginScreen", () => {
     jest.clearAllMocks();
   });
 
-  it("submit com credenciais válidas (mock) navega para a rota inicial", async () => {
+  // A tela não navega: quem troca de rota é o `Stack.Protected` do layout
+  // raiz, quando `status` vira "authenticated" (ver navigation-boot.test.tsx,
+  // que cobre a transição com o router real).
+  it("submit com credenciais válidas (mock) chama login com o que foi digitado", async () => {
     mockLogin.mockResolvedValue(undefined);
 
     await render(<LoginScreen />);
@@ -33,9 +31,9 @@ describe("LoginScreen", () => {
     await fireEvent.press(screen.getByTestId("login-submit"));
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith("/");
+      expect(mockLogin).toHaveBeenCalledWith("igreja-teste", "a@b.com", "senha123");
     });
-    expect(mockLogin).toHaveBeenCalledWith("igreja-teste", "a@b.com", "senha123");
+    expect(screen.queryByTestId("login-error")).toBeNull();
   });
 
   it.each([
@@ -55,7 +53,6 @@ describe("LoginScreen", () => {
           "Não foi possível entrar. Confira os dados e tente novamente.",
         );
       });
-      expect(mockReplace).not.toHaveBeenCalled();
     },
   );
 });

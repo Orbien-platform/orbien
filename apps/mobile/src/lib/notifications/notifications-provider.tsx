@@ -27,13 +27,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init + listener uma vez só, mesmo princípio de onSessionExpired (auth-provider.tsx)
   }, []);
 
-  // Cleanup (não o ramo "else") é o que garante o de-registro: o AuthGate
-  // (_layout.tsx) desmonta este provider assim que `status` vira
-  // "unauthenticated" (troca `children` por `<Redirect>`) — nesse ponto o
-  // `session` já é `null` no momento em que o componente some, então um
-  // efeito que só rodasse de novo com `session === null` nunca chegaria a
-  // rodar. A cleanup function roda tanto nesse desmonte quanto numa futura
-  // troca de sessão com o provider ainda montado (login→login direto).
+  // Cleanup (não o ramo "else") é o que garante o de-registro: quando a
+  // sessão cai (logout ou refresh revogado), `session` vira `null` e o
+  // efeito re-roda — a cleanup da execução anterior desfaz o registro antes
+  // do corpo novo sair pelo `if (!session) return`. Vale igual numa troca de
+  // sessão direta (login→login) e no desmonte do provider.
   useEffect(() => {
     if (!session) return;
     registerDevice(session.accessToken);

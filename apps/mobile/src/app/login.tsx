@@ -1,6 +1,9 @@
 // Tela de Login (MOB-01) — tenant_slug + email + senha, chama
-// useAuth().login e navega para a rota inicial em caso de sucesso.
-import { useRouter } from "expo-router";
+// useAuth().login. Não navega: quem tira esta rota do ar e leva ao shell é
+// o `Stack.Protected` do layout raiz, assim que `status` vira
+// "authenticated" (src/app/_layout.tsx). Um `router.replace("/")` aqui
+// disputaria com o guard — a rota autenticada ainda nem existe no momento
+// em que ele rodaria.
 import { useState } from "react";
 import { Button, Text, TextInput, View } from "react-native";
 
@@ -13,7 +16,6 @@ import { useAuth } from "../lib/auth/auth-provider";
 const GENERIC_ERROR_MESSAGE = "Não foi possível entrar. Confira os dados e tente novamente.";
 
 export default function LoginScreen() {
-  const router = useRouter();
   const { login } = useAuth();
   const [tenantSlug, setTenantSlug] = useState("");
   const [email, setEmail] = useState("");
@@ -26,7 +28,6 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await login(tenantSlug, email, password);
-      router.replace("/");
     } catch {
       setError(GENERIC_ERROR_MESSAGE);
     } finally {

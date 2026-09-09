@@ -31,7 +31,10 @@ multi-tenant, ver `.specs/STATE.md` AD-001). Nenhum deles é
 white-label: o nome/ícone/bundle id que cada build recebe vêm de
 `app.config.js`, que lê as envs do próprio `eas.json` (`ORBIEN_APP_NAME`,
 `ORBIEN_APP_SLUG`, `ORBIEN_APP_SCHEME`, `ORBIEN_BUNDLE_ID`) ou cai no
-default Orbien se nenhuma estiver setada.
+default Orbien se nenhuma estiver setada. O mesmo vale para os assets:
+`ORBIEN_APP_ICON`, `ORBIEN_ADAPTIVE_ICON_FOREGROUND`,
+`ORBIEN_ADAPTIVE_ICON_BACKGROUND`, `ORBIEN_ADAPTIVE_ICON_MONOCHROME`,
+`ORBIEN_SPLASH_ICON` e `ORBIEN_SPLASH_BACKGROUND`.
 
 ```sh
 npx eas build --profile development --platform ios
@@ -44,6 +47,30 @@ O CI (`.github/workflows/ci.yml`, job `mobile-eas-build`) dispara os builds
 push na `main` que altere `apps/mobile/**`, depois que lint/build/test
 passarem. `ORBIEN_API_URL` nesses dois profiles aponta para a API publicada
 no Render (`https://orbien-api.onrender.com/api`), não para `localhost`.
+
+### Ícone e splash
+
+Os PNGs de `assets/` são a marca Orbien — a mesma órbita/núcleo/satélite do
+`BrandMark` de `apps/site/src/components/layout/Header.tsx`, nas cores navy
+`#1E3A7B` e teal `#00B8A2`. Eles não são desenhados à mão: saem de SVG
+rasterizado, e a geometria está documentada em
+`src/lib/splash/animated-splash.tsx` (as constantes em unidades do viewBox
+22×22 do site).
+
+A splash tem duas camadas que precisam combinar:
+
+- a **nativa**, montada pelo plugin `expo-splash-screen` em `app.config.js`
+  a partir de `assets/splash-icon.png` — só o anel e o núcleo, com
+  `imageWidth: 200`;
+- a **animada** (`src/lib/splash/animated-splash.tsx`), que desenha o mesmo
+  PNG no mesmo tamanho e acrescenta o satélite percorrendo a órbita.
+
+O layout raiz segura a nativa com `preventAutoHideAsync()` em escopo de
+módulo e só chama `hideAsync()` no `onLayout` da animada — quando o primeiro
+frame do JS já existe. Se mexer no `imageWidth`, na cobertura da marca
+dentro do PNG ou no `backgroundColor`, os dois lados têm que mudar juntos,
+senão a troca "pula". `splashIconWidth`/`splashBackground` em
+`extra` existem exatamente para a camada JS ler o que a nativa recebeu.
 
 ### Portão de bundle no `build`
 
