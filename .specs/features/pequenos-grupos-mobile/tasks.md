@@ -14,7 +14,7 @@ without it.**
 ---
 
 **Design**: `.specs/features/pequenos-grupos-mobile/design.md`
-**Status**: Approved
+**Status**: Done — todas as 9 tasks implementadas e commitadas; aguardando Verifier
 
 ---
 
@@ -86,7 +86,7 @@ T9
 
 ## Task Breakdown
 
-### T1: `GET /small-groups/mine` — service + controller
+### T1: ✅ Done `GET /small-groups/mine` — service + controller
 
 **What**: `SmallGroupsService.findMine(userId, tenantId, congregationId)`
 resolve `person_id` (mesmo padrão de `resolvePersonId` do
@@ -123,7 +123,7 @@ tabela nova
 
 ---
 
-### T2: `member` liberado em `findByGroup`, sem afetar `findOne`
+### T2: ✅ Done `member` liberado em `findByGroup`, sem afetar `findOne`
 
 **What**: Introduz `MEETING_LIST_READ_ROLES = [...MEETING_READ_ROLES,
 'member']` em `meetings.controller.ts` e aplica só ao `@Roles` de
@@ -154,7 +154,7 @@ mudança de lógica — só a role
 
 ---
 
-### T3: Tipos do domínio Pequenos Grupos (mobile)
+### T3: ✅ Done Tipos do domínio Pequenos Grupos (mobile)
 
 **What**: Cria `SmallGroupMine`, `GroupMeetingSummary`, `GroupMeetingDetail`,
 `MeetingMaterial`, `GroupRosterMember` em `lib/pequenos-grupos/types.ts`,
@@ -180,7 +180,7 @@ espelhar)
 
 ---
 
-### T4: `pequenos-grupos-client.ts`
+### T4: ✅ Done `pequenos-grupos-client.ts`
 
 **What**: Cliente tipado com as 6 funções sobre `authenticatedRequest`:
 `listMyGroups`, `listMeetings`, `getMeeting`, `listMaterials`,
@@ -213,7 +213,7 @@ espelhar)
 
 ---
 
-### T5: Nova aba "Grupos" na tab bar
+### T5: ✅ Done Nova aba "Grupos" na tab bar
 
 **What**: Adiciona `Tabs.Screen name="grupos"` em `(tabs)/_layout.tsx`,
 entre "celebracoes" e "conteudo" (ver design.md, Tech Decisions — ordem
@@ -239,7 +239,7 @@ cronológica de entrega).
 
 ---
 
-### T6: Tela `(tabs)/grupos.tsx` — lista "meus grupos"
+### T6: ✅ Done Tela `(tabs)/grupos.tsx` — lista "meus grupos"
 
 **What**: Busca `listMyGroups()`, lista nome/horário/papel; toque num grupo
 navega pra `/grupo/[id]`.
@@ -267,7 +267,7 @@ navega pra `/grupo/[id]`.
 
 ---
 
-### T7: Tela `grupo/[id].tsx` — encontros do grupo
+### T7: ✅ Done Tela `grupo/[id].tsx` — encontros do grupo
 
 **What**: Busca `listMeetings(groupId)`, lista por `occurred_at` desc (mais
 recente primeiro); toque num encontro navega pra `/grupo/encontro/[id]`.
@@ -295,7 +295,7 @@ recente primeiro); toque num encontro navega pra `/grupo/encontro/[id]`.
 
 ---
 
-### T8: Tela `grupo/encontro/[id].tsx` — material + ação de presença
+### T8: ✅ Done Tela `grupo/encontro/[id].tsx` — material + ação de presença
 
 **What**: Busca `listMaterials(meetingId)`; mostra cada material, com ação
 de abrir (`Linking.openURL(file_url)` para `pdf`/`doc`, texto de
@@ -330,7 +330,7 @@ navega pra `/grupo/encontro/${id}/presenca`.
 
 ---
 
-### T9: Tela `grupo/encontro/[id]/presenca.tsx` — roster e registrar presença
+### T9: ✅ Done Tela `grupo/encontro/[id]/presenca.tsx` — roster e registrar presença
 
 **What**: Busca roster (`getGroupRoster`) e presença atual (`getMeeting`),
 cruza pra saber quem já está marcado; permite selecionar membros não
