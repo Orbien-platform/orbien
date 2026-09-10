@@ -836,3 +836,325 @@ divergência e deixou duas.
 travou piso medido). Enquanto isso, considerar `:1129-1130` e `:95` na mesma
 passada, e decidir sobre `scripts/pre-push.sh:120` e `:53`. Nada disso toca o
 portão de cobertura: MAP-07/08/09 seguem fechados e verdes.
+
+---
+
+# Rodada 3 — última iteração (escalação)
+
+**Date**: 2026-09-10
+**Diff desta rodada**: `3871cd1..HEAD` (commit `f2c6412`)
+**Range completo**: `7b5607b~1..HEAD`
+**Verifier**: sub-agente independente (autor ≠ verificador), read-only sobre a
+árvore real. Nenhum arquivo do repositório foi alterado por esta verificação
+além deste relatório.
+
+**Veredito: ❌ FAIL — MAP-10.** Terceira e última iteração. O que sobra **não
+será corrigido em silêncio**: vai como pendência declarada ao usuário.
+
+## Escopo do diff — confirmado
+
+`git diff --stat 3871cd1..HEAD` → **um único arquivo**, `docs/TESTES.md`
+(+25 / −13). Nenhum outro arquivo tocado nesta rodada. ✅ conforme alegado.
+
+---
+
+## MAP-10 — os quatro ACs de P2, literalmente
+
+| AC (P2) | Evidência medida | Resultado |
+|---|---|---|
+| AC1 — linha do mobile no quadro "Estado" | `docs/TESTES.md:39` — `\| 15 \| mobile — portão de cobertura \| src/** … \| 39 suítes \| ☑ \|` | ✅ PASS |
+| AC2 — linha do mobile na tabela de cobertura medida, com números e data | `docs/TESTES.md:70-74` — "medido em 2026-09-10", `94,51 / 84,69 / 93,81 / 97,94`, `39 (239 testes)`. Medido agora: **idêntico nas quatro métricas e nas duas contagens** | ✅ PASS |
+| AC3 — Fase 13 diz que o web fecha por piso por caminho, e registra `global: 100` no web como aberto | `docs/TESTES.md:941-955`, `:964`, `:988-1012`, `:1164-1175` — corretos e mutuamente coerentes | ⚠️ **PASS na seção, GAP no documento** — ver Gap 9 e Gap 10 |
+| AC4 — exclusões do mobile registradas na seção "Exclusões" com justificativa | `docs/TESTES.md:117` (linha na tabela) + `:119-122` (justificativa) | ⚠️ **PASS na entrada, GAP no texto** — ver Gap 11 |
+
+**Estado de MAP-10: ❌ Needs Fix.** Os quatro ACs têm evidência `file:line`,
+mas o Success Criterion que os enquadra — *"`docs/TESTES.md` não promete nada
+que um arquivo de config não trave"*, lido como "o documento diz uma coisa só
+sobre cada fato" — **não passa**: a reescrita da Fase 13 deixou duas cópias da
+afirmação antiga vivas, e o fix do AC4 quebrou uma contagem. É o **mesmo
+padrão das rodadas 1 e 2**, pela terceira vez: corrigir a ocorrência citada em
+vez de varrer o arquivo.
+
+---
+
+## Varredura completa de `docs/TESTES.md` (1268 linhas, lido do começo ao fim)
+
+Toda afirmação factual do arquivo sobre (a) número de apps, (b) qual app tem
+fase, (c) threshold travado e em quanto, (d) o que falta para a Fase 13, (e)
+número de cobertura ou contagem de suíte/teste — conferida contra o
+repositório **medido agora**.
+
+### (a) Quantos apps existem
+
+| Linha | Afirmação | Medido agora | Resultado |
+|---|---|---|---|
+| `:3-5` | "meta … nos **quatro** apps de então … Hoje são **cinco** apps" | 5 apps (`api`, `site`, `web`, `admin`, `mobile`) | ✅ verdadeira |
+| `:1177` | "Os outros **quatro** saíram desta lista" (api, site, admin, mobile) | 4 | ✅ verdadeira |
+| `:1139-1140` | `turbo run build` / `test` → "**5** successful, 5 total" | ambos rodados: `Tasks: 5 successful, 5 total`, exit **0** | ✅ verdadeira |
+| `:322-323` | Fase 0 "3 successful, 3 total" | histórico (fecho da Fase 0, quando havia 3 apps) | ✅ aceitável — datado por contexto de fase |
+
+Nenhuma afirmação de "quatro apps" em tempo presente. `grep -nE "quatro apps\|três apps\|4 apps"` só devolve `:3` (explicitamente histórico) e `:1177` (correto).
+
+### (b) Qual app tem fase de teste e qual não tem
+
+| Linha | Afirmação | Medido agora | Resultado |
+|---|---|---|---|
+| `:24-39` | quadro de fases 0–15, Fase 14 = admin, Fase 15 = mobile | corresponde às seções `:849` e `:893` | ✅ verdadeira |
+| `:41-44` | "A Fase 14 não estava no plano original" | ✅ | ✅ verdadeira |
+| `:46-51` | "A Fase 15 é o mesmo caso … 39 suítes sem `coverageThreshold`, sem `test:cov`, sem passo no `ci.yml`" | `jest.config.js` hoje tem threshold; `package.json` tem `test:cov`; `ci.yml:130-131` tem o passo — a frase descreve o **antes**, e o parágrafo diz isso | ✅ verdadeira |
+| `:76` | "Dois números aí **não estão no quadro de fases**" | **falsa em tempo presente**: o admin passou a estar (linha `:38`, Fase 14). O bullet logo abaixo (`:78`) já diz o contrário do lead-in | ❌ **stale** (pré-existente agravado — baixa) |
+| `:78-84` | "`apps/admin` **não tinha fase quando esta medição foi feita** … **Resolvido depois:** a Fase 14 … os 1,5% da tabela acima são de 2026-09-05 e não descrevem mais o admin" | tabela em `:61` diz "**Medido em 2026-09-05**" ✅; admin hoje mede 99,76/98,38/100/100 ✅; Fase 14 existe em `:849` ✅ | ✅ **verdadeira — Gap 8 fechado** |
+| `:57-59` | "A Fase 13 rodou o que não depende da Fase 10 …; **o que depende dela segue aberto**" | **falsa**: `:34` marca a Fase 10 `☑`, `:944` diz "A Fase 10 fechou", `:964` diz "o bloqueio caiu", `:989` diz "o motivo original caiu" | ❌ **Gap 9 — contradição viva** |
+| `:1200-1204` | "O que impede a Fase 13 de declarar fechamento hoje não é o RLS, **é a Fase 10**; ver 'Estado da Fase 13'" | **falsa**, e aponta o leitor para a seção que diz o oposto | ❌ **Gap 10 — contradição viva** |
+
+### (c) Qual app tem threshold travado e em quanto
+
+| Linha | Afirmação | Medido agora | Resultado |
+|---|---|---|---|
+| `:5-8` | "api e site fecham em `global: 100`; admin e mobile travam piso medido; o web segue em aberto. … todo app tem `test:cov` no `ci.yml`" | `apps/api/jest.config.js:107` global 100/100/100/100 ✅; `apps/site/vitest.config.ts:29` 100 ✅; `apps/admin/vitest.config.ts:39-44` 99/98/100/100 ✅; `apps/mobile/jest.config.js` 94/84/93/97 ✅; `apps/web/vitest.config.ts` global 0 ✅; `ci.yml` tem 5 passos `Cobertura da/do …` ✅ | ✅ verdadeira |
+| `:907` | mobile: `global: { statements: 94, branches: 84, functions: 93, lines: 97 }` | idêntico no `jest.config.js` | ✅ verdadeira |
+| `:963`, `:981`, `:1144`, `:1182` | admin: piso **99/98/100/100** | `apps/admin/vitest.config.ts:40-43` — 99/98/100/100 | ✅ verdadeira |
+| `:965`, `:1145`, `:1184` | mobile: piso **94/84/93/97**, 2026-09-10 | idem | ✅ verdadeira |
+| `:988-993` | web: `global` em 0; pisos por caminho `celebrations` 99/95, `content` 99/97, `financial` 99/98, `groups` 98/92, `persons` 99/89, `repertorio` 98/91, `volunteers` 100/95 | `apps/web/vitest.config.ts:47-58` — **os sete conferem par a par**, e `:60` tem `src/app/**` em 100 | ✅ verdadeira |
+| `:961-965` | quadro "Estado da Fase 13", itens 1 | consistente com os configs acima | ✅ verdadeira |
+| `:1142-1145` | `test:cov` de backend/site/admin/mobile como travados | admin exit **0**, mobile exit **0** (rodados); api e site conferidos no config | ✅ verdadeira |
+| `:37` | quadro, escopo da Fase 13 = "threshold **global em 100**, e2e …" | rótulo envelhecido: o próprio doc decide que admin e mobile **não** vão a `global: 100` | ⚠️ cosmético (baixa) |
+
+### (d) O que falta para a Fase 13 fechar
+
+| Linha | Afirmação | Resultado |
+|---|---|---|
+| `:941-946` | "Cumprido: todas — 1 a 12, mais a 14 e a 15 … **A Fase 10 fechou** … o que sobrou não é mais falta de fase nenhuma" | ✅ verdadeira e coerente com `:34`, `:38`, `:39`, `:964` |
+| `:952-955` | "**O que sobra hoje é só o web** … faltam os ramos defensivos … Ver '1. Thresholds'" | ✅ verdadeira e coerente com `:988-995` |
+| `:964` | "☐ **em aberto** — a Fase 10 fechou, o bloqueio caiu" | ✅ verdadeira |
+| `:988-1012` | "No web o `global` continua em 0 — e aqui é pendência, não decisão" + os dois caminhos + a decisão do usuário de 2026-09-10 | ✅ verdadeira — **AC3 atendido aqui** |
+| `:1164-1175` | "O que falta … `npm run test:cov -w orbien-web` — único em aberto" | ✅ verdadeira |
+| `:57-59` | remanescente atribuído à Fase 10 | ❌ **Gap 9** |
+| `:1202-1204` | remanescente atribuído à Fase 10 | ❌ **Gap 10** |
+
+**Pares que se contradizem, explicitamente:** `:57-59` × `:944`/`:964`/`:989`;
+`:1202-1204` × `:944`/`:1169-1175`. As duas cópias sobreviventes estão **fora**
+da seção da Fase 13 — uma 880 linhas acima dela, outra 250 abaixo — que é
+exatamente por que a varredura por seção não as pegou.
+
+### (e) Números de cobertura e contagens de suíte/teste
+
+| Linha | Afirmação | Medido agora | Resultado |
+|---|---|---|---|
+| `:70-74` | mobile 94,51 / 84,69 / 93,81 / 97,94 — 39 suítes, 239 testes, 2026-09-10 | `npm run test:cov -w orbien-mobile`: **94.51% (913/966) · 84.69% (559/660) · 93.81% (273/291) · 97.94% (856/874)**, `39 passed, 39 total`, `239 passed, 239 total` | ✅ **exata nos seis valores** |
+| `:898-899` | "39 suítes e 239 testes em três dias" | idem | ✅ verdadeira |
+| `:914` | "são ~53 statements e ~101 branches" para chegar a 100 | 966−913 = **53**; 660−559 = **101** | ✅ **exata** |
+| `:925-928` | "com `statements: 94` sai 0 com 239/239; com `statements: 95` o mesmo comando sai **1**" | exit **0** com 94; exit **1** com 95 (flag `--coverageThreshold` na CLI, árvore intocada) | ✅ **verdadeira nas duas direções** |
+| `:932` | "os 94,51/84,69/93,81/97,94 são o que as suítes existentes já alcançavam" | idem | ✅ verdadeira |
+| `:53-55` | ponto de partida 2026-09-02: "1 suíte na API (**39** testes de RLS)" | histórico e datado | ✅ aceitável |
+| `:61-68` | tabela "**Medido em 2026-09-05**" (api 100, web 68,5, site 100, admin 1,5) | datada, e `:78-84` já ressalva o admin | ✅ aceitável |
+| `:879-882` | Fase 14, "**Executado em 2026-09-05**: 143 testes em 20 specs; 99,74% / 98,52% / 100% / 100%" | hoje: **166 testes em 20 specs**, 99,76 / 98,38 / 100 / 100 | ✅ aceitável — datado, e a regra do spec é "cite a data junto" |
+| `:234` | RLS: "**ele tem 39 testes** e deve falhar alto se eles sumirem" (tempo presente) | `npm run test:rls -w orbien-backend`: **2 suítes, 61 testes**, exit 0 | ❌ **stale** (pré-existente) |
+| `:331` | "no CI ele continua verde com os **39** testes" | 61 | ❌ **stale** (pré-existente) |
+| `:1146` | `npm run test:rls -w orbien-backend` → "**54** testes verdes" | 61 | ❌ **stale** (pré-existente) |
+| `:1201-1202` | "fecha em **54** testes verdes (o plano falava em 39 — a suíte cresceu desde então)" | 61 — a frase que explica o envelhecimento envelheceu junto | ❌ **stale** (pré-existente) |
+| `:1016-1017` | e2e do web: "Hoje são **13, em 8 arquivos**" | **16 testes em 10 arquivos** (`apps/web/e2e/*.spec.ts`: conteudo 1, financeiro 1, grupos 1, login 3, pessoas 1, repertorio 1, schedule 1, setlist-repertorio 3, suporte 3, templates 1) | ❌ **stale** (pré-existente) |
+| `:1150` | `npm run e2e -w orbien-web` → "**12** testes em 8 arquivos" | 16 em 10 — e **contradiz `:1016`** (13 × 12) | ❌ **stale + contradição** (pré-existente) |
+| `:1157` | "o do web … com o banco semeado (**12/12**)" | 16 | ❌ **stale** (pré-existente) |
+| `:969`, `:1064`, `:1153` | smoke do site: "**18** testes" / "18 verdes" | `apps/site/e2e/smoke.spec.ts`: 12 (`PAGINAS`) + 1 (âncora) + 1 (404) + 4 (`GERADOS`) = **18** | ✅ verdadeira |
+| `:133` | "Com essas **três** exclusões, 100% é alcançável sem ginástica" | a tabela `:112-117` tem **quatro** linhas desde que o AC4 acrescentou a do mobile | ❌ **Gap 11 — quebrado pelo fix desta feature** |
+| `:1233` | "manter a lista de exclusões mínima e justificada (**três linhas**)" | quatro | ❌ **Gap 11** (segunda cópia) |
+| `:802` | site: "280 testes em 75 specs, 279 statements, 119 branches, 183 functions, 276 lines" | datado "Executado em 2026-09-04" | ✅ aceitável |
+| `:450` | "Hoje **37 dos 40** controllers têm `@Roles`" | fora das cinco categorias pedidas — não medido | ⚪ não avaliado |
+
+---
+
+## Gaps ranqueados
+
+### Gap 9 — `docs/TESTES.md:57-59`: o "Estado" ainda culpa a Fase 10 · **Blocker para MAP-10**
+
+O quadro de Estado abre com *"Este quadro é a fonte da verdade entre sessões"*
+(`:20`) e, 37 linhas depois, diz:
+
+> `◐` = parcial. A Fase 13 rodou o que não depende da Fase 10 …; **o que
+> depende dela segue aberto.** Ver "Estado da Fase 13" abaixo.
+
+A seção para a qual ele manda o leitor diz o contrário em quatro lugares
+(`:944`, `:952`, `:964`, `:989`). É a **terceira** ocorrência do mesmo defeito
+que a rodada 1 chamou de Gap 2 e a rodada 2 reprovou: a frase existia em mais
+de um lugar e só a citada foi corrigida.
+
+**Fix**: reescrever `:57-59` para dizer o que a Fase 13 já diz — a Fase 10
+fechou; o que resta é o `global: 100` do web, travado pelos pisos fracionários
+da Fase 9, e a escolha entre cobrir os ramos ou assumir o piso ainda não foi
+feita.
+
+### Gap 10 — `docs/TESTES.md:1202-1204`: "Pendências abertas" ainda culpa a Fase 10 · **Blocker para MAP-10**
+
+> O que impede a Fase 13 de declarar fechamento hoje não é o RLS, **é a Fase
+> 10**; ver "Estado da Fase 13".
+
+Mesma contradição, e a mesma remissão para a seção que a desmente. Está na
+seção "Pendências abertas", que é onde alguém procura o que falta.
+
+**Fix**: trocar "é a Fase 10" por "é o `global: 100` do web". Uma linha.
+
+### Gap 11 — `docs/TESTES.md:133` e `:1233`: "três exclusões" com quatro linhas na tabela · **Major**
+
+O fix do AC4 acrescentou a quarta linha (`:117`, mobile) e não atualizou as
+duas frases que contam a tabela. É o mesmo mecanismo do Gap 8 da rodada 2 —
+**o fix criou a contradição** — e no mesmo arquivo, uma rodada depois.
+
+**Fix**: "três" → "quatro" em `:133` e "(três linhas)" → "(quatro linhas)" em
+`:1233`. Vale conferir com `grep -nE "três (exclusões|linhas)" docs/TESTES.md`.
+
+---
+
+## Achados pré-existentes — reportados, **não** reprovados
+
+Nenhum destes foi introduzido por esta feature e nenhum entra no veredito de
+MAP-10. Vão como pergunta ao usuário, conforme a regra da casa.
+
+### A — `scripts/pre-push.sh:53,55`: a regra do monorepo tem um lado sem portão · **é achado de substância**
+
+```bash
+grep -rnE "from ['\"].*apps/(api|web|site|admin)/" apps/*/src
+```
+
+Medido:
+
+- O **glob** `apps/*/src` **inclui** `apps/mobile/src` (confirmado:
+  `ls -d apps/*/src` lista os cinco). Logo, um import **do mobile para**
+  `apps/api` **é** pego.
+- A **alternação do alvo** não tem `mobile`. Confirmado por sonda: uma linha
+  `from "apps/mobile/src/lib/y"` **não casa** com o padrão.
+
+Consequência: **nenhum app é vigiado contra importar de `apps/mobile`**. O
+`CLAUDE.md` da raiz declara a fronteira nas duas direções — *"Nada que rode na
+Vercel deve importar código de `apps/api`, e **a API não deve depender de nada
+dos fronts**"* —, e a metade "API (ou web/site/admin) → mobile" ficou fora do
+portão quando o quinto app entrou. Hoje não há violação (`grep` com os cinco
+nomes volta vazio), então é um **buraco de portão, não um bug ativo**: exatamente
+a categoria que o próprio `docs/TESTES.md` documenta como cara em `src/platform/`
+— "nasceu depois, não entrou em nenhuma entrada da lista, e ficou sem reprovar
+nada". A probabilidade de alguém importar do mobile é baixa; o custo do fix é
+uma palavra.
+
+**Fix sugerido (não aplicado)**: `(api|web|site|admin|mobile)` nas duas linhas.
+Detalhe menor de brinde: o filtro de auto-referência
+(`grep -v "^apps/\([a-z]*\)/src.*apps/\1/"`) está só no `if` da linha 53; o
+`grep` de evidência da linha 55 imprime sem ele.
+
+### B — `scripts/pre-push.sh:120`: "39 testes de RLS" · **Minor**
+
+Medido agora: **61** testes em 2 suítes, exit 0. O rótulo do `passa` mente por
+22 testes. Já reportado na rodada 1; segue aberto por decisão de escopo.
+
+### C — Contagens envelhecidas em `docs/TESTES.md` · **Minor, mas é a mesma doença**
+
+RLS: `:234` e `:331` dizem 39 (tempo presente), `:1146` e `:1201` dizem 54 —
+**medido: 61**. E2E do web: `:1016` diz 13/8, `:1150` e `:1157` dizem 12 —
+**medido: 16 testes em 10 arquivos**, e as duas afirmações do documento já se
+contradizem entre si. Fora dos ACs de MAP-10 (que só cobram mobile, Fase 13 e
+exclusões), mas dentro do espírito do Success Criterion.
+
+### D — `docs/TESTES.md:1216-1226`: "`npx turbo run build --filter=orbien-web` continua vermelho" · **Minor**
+
+Medido agora com o cache furado: `npx turbo run build --filter=orbien-web
+--force` → `1 successful, 1 total`, exit **0**. O build do web **passa** neste
+ambiente. A pendência descrita (bug do Next 16.2.x pré-renderizando
+`/_global-error`) ou foi resolvida por atualização, ou não reproduz mais aqui.
+Pergunta para o dono: fechar a pendência ou anotar que ela é intermitente?
+
+### E — `.specs/features/mapa-monorepo-e-portoes/spec.md:226-235` · **Minor**
+
+Os dez MAP-NN seguem em "Implementing / Aguardando Verifier" depois de três
+rodadas em que nove foram verificados. É a mesma classe de defeito que a
+feature veio corrigir (duas fontes, duas respostas). **Não alterado por esta
+verificação**, porque o veredito é FAIL e a instrução condicionava a atualização
+a PASS. Sugestão: marcar MAP-01…MAP-09 como ✅ Verified e MAP-10 como ❌ Needs
+Fix, se o usuário concordar.
+
+---
+
+## Gate Check — rodada 3
+
+| Gate | Comando | Resultado | Exit |
+|---|---|---|---|
+| Cobertura do mobile | `npm run test:cov -w orbien-mobile` | 39/39 suítes, 239/239 testes, 94.51 / 84.69 / 93.81 / 97.94 | **0** |
+| Piso prova nos dois lados | `npx jest --coverage --coverageThreshold='{"global":{"statements":95,…}}'` (CLI, árvore intocada) | reprova como o documento promete | **1** ✅ esperado |
+| Cobertura do admin | `npm run test:cov -w orbien-admin` | 20/20 specs, 166/166 testes, 99.76 / 98.38 / 100 / 100 | **0** |
+| YAML do `ci.yml` | `python3 -c "yaml.safe_load(...)"` + contagem de passos | parse OK; job `Unidade e cobertura` com **5** passos de cobertura (API, web, site, admin, mobile) | **0** |
+| Lint | `npx turbo run lint` | `5 successful, 5 total`, 0 errors (76 warnings no mobile, pré-existentes) | **0** |
+| Sintaxe do pre-push | `bash -n scripts/pre-push.sh` | sem erro | **0** |
+| Testes não tocados | `git diff 7b5607b~1..HEAD -- '*.test.*' '*.spec.*'` | **vazio** — nenhum teste alterado, removido ou enfraquecido em todo o range | **0** |
+| Suíte do monorepo | `npx turbo run test` | `Tasks: 5 successful, 5 total` | **0** |
+| Build do monorepo | `npx turbo run build` | `Tasks: 5 successful, 5 total` | **0** |
+| RLS | `npm run test:rls -w orbien-backend` | 2 suítes, **61** testes verdes | **0** |
+
+**Todos os portões verdes.** Nenhum gap desta rodada é de comportamento — os
+três são de texto, no mesmo arquivo.
+
+## Sensor
+
+**Não repetido, e não é omissão.** `git diff 79684c5..HEAD --
+apps/mobile/jest.config.js` → **0 linhas**: o config do portão está inalterado
+desde a rodada 1. Valem os 2/2 mutantes mortos registrados lá. O que esta
+rodada acrescenta é a prova bidirecional refeita ao vivo: piso em 94 → exit 0,
+piso em 95 → exit 1.
+
+## Requirement Traceability — rodada 3
+
+| Requirement | Status | Evidência |
+|---|---|---|
+| MAP-01 … MAP-04 | ✅ Verified (rodada 2) | inalterados nesta rodada |
+| MAP-05, MAP-06 | ✅ Verified (rodada 2) | inalterados |
+| MAP-07 | ✅ Verified | `apps/mobile/jest.config.js` — `collectCoverageFrom` + threshold 94/84/93/97, comentário com data e "o piso nunca desce" |
+| MAP-08 | ✅ Verified | `apps/mobile/package.json` — `"test:cov": "jest --coverage --passWithNoTests"`, exit 0 |
+| MAP-09 | ✅ Verified | `.github/workflows/ci.yml` — passo "Cobertura do mobile", 5 passos no job, "Build dos 5 apps" |
+| **MAP-10** | ❌ **Needs Fix** | AC1/AC2 ✅ exatos; AC3 ✅ na seção mas contradito em `:57-59` e `:1202-1204`; AC4 ✅ na tabela mas a contagem quebrou em `:133` e `:1233` |
+
+**spec.md não foi alterado** — a atualização estava condicionada a PASS.
+
+## Summary — rodada 3
+
+**Overall**: ❌ Not Ready (1 de 10 requisitos) — **escalado ao usuário**.
+
+**Spec-anchored**: 9/10 requisitos verificados. MAP-10 com 4/4 ACs
+literalmente atendidos e 3 gaps de coerência no mesmo arquivo.
+**Gate**: 10/10 comandos exit 0.
+**Sensor**: não repetido (config inalterado desde `79684c5`); piso reprovado a
+95 e aprovado a 94, ao vivo.
+
+**O que os fixes desta rodada acertaram** — e é preciso dizer, porque é a
+primeira rodada em que nada foi superficial:
+
+- **Gap 8 fechado.** `:78-84` está coerente com o cabeçalho `:3-9` e com a
+  Fase 14, e a ressalva sobre a tabela de 2026-09-05 é **verdadeira** — o
+  header da tabela diz a data (`:61`), e o admin hoje mede 99,76/98,38/100/100.
+- **A abertura da Fase 13 (`:941-955`) é coerente** com o quadro "Estado da
+  Fase 13" (`:959-969`) e com "1. Thresholds" (`:971-1012`). Nenhum dos três
+  se contradiz.
+- **As duas afirmações novas são verdadeiras, e conferidas com o comando
+  rodando**: `turbo run test` e `turbo run build` dão os dois `5 successful, 5
+  total`; `test:cov -w orbien-admin` e `-w orbien-mobile` saem 0 com os pisos
+  exatos que o bloco cita.
+- **A linha dos runners (`:98`) bate com a realidade**: `orbien-backend` e
+  `orbien-mobile` rodam `jest`; `orbien-web`, `orbien-site` e `orbien-admin`
+  rodam `vitest run` — conferido nos cinco `package.json`.
+
+**O que reprova**: a mesma coisa da rodada 2, um nível acima. O Gap 2 foi
+corrigido **na Fase 13** — e a afirmação antiga vivia também no quadro de
+Estado (`:57-59`, 880 linhas acima) e em "Pendências abertas" (`:1202-1204`,
+250 abaixo). E o fix do AC4 repetiu o Gap 8: acrescentou a quarta exclusão sem
+mexer nas duas frases que contam três. Três rodadas, três vezes o mesmo
+mecanismo — **corrigir a linha citada em vez de varrer o arquivo**.
+
+**Next steps** — três edições em `docs/TESTES.md`, nenhuma com mais de duas
+linhas, e desta vez **por `grep`, não por seção**:
+
+```bash
+grep -nE "Fase 10" docs/TESTES.md          # → :57, :1203 são os que sobraram
+grep -nE "três (exclusões|linhas)" docs/TESTES.md   # → :133, :1233
+```
+
+Como esta é a **terceira e última iteração**, os Gaps 9, 10 e 11 e os achados
+A–E **não são corrigidos aqui**: ficam declarados para o usuário decidir se
+entram agora ou viram trabalho próprio. O portão de cobertura do mobile
+(MAP-07/08/09) está fechado, verde e provado nos dois sentidos — nada do que
+sobra toca comportamento de CI.
