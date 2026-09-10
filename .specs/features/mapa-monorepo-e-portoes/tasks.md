@@ -15,7 +15,7 @@ seguindo o padrão que os outros quatro apps já estabeleceram
 decisão técnica — o valor do piso de cobertura e o denominador que o produz —
 está registrada em `spec.md`, seção Assumptions.
 **Spec**: `.specs/features/mapa-monorepo-e-portoes/spec.md`
-**Status**: Draft
+**Status**: Done — T1-T10 concluídas e commitadas (`42f1801`..`fdcf14e`); aguardando Verifier
 
 ---
 
