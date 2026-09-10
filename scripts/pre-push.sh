@@ -50,9 +50,9 @@ echo
 echo "▶ Regras do monorepo"
 
 # Import cruzando app quebra a independência dos deploys — inequívoco.
-if grep -rnE "from ['\"].*apps/(api|web|site|admin)/" apps/*/src 2>/dev/null | grep -v "^apps/\([a-z]*\)/src.*apps/\1/" | head -3 | grep -q .; then
+if grep -rnE "from ['\"].*apps/(api|web|site|admin|mobile)/" apps/*/src 2>/dev/null | grep -v "^apps/\([a-z]*\)/src.*apps/\1/" | head -3 | grep -q .; then
   bloqueia "import cruzando app — os deploys precisam ser independentes"
-  grep -rnE "from ['\"].*apps/(api|web|site|admin)/" apps/*/src 2>/dev/null | head -3 | sed 's/^/      /'
+  grep -rnE "from ['\"].*apps/(api|web|site|admin|mobile)/" apps/*/src 2>/dev/null | head -3 | sed 's/^/      /'
 else
   passa "nenhum import cruzando app"
 fi

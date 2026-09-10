@@ -54,9 +54,12 @@ Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
 `test/rls/isolation.spec.ts`), **2 testes e2e no web** (escalas e templates),
 **nada no site**. Nenhuma instrumentação de cobertura em lugar nenhum.
 
-`◐` = parcial. A Fase 13 rodou o que não depende da Fase 10 (e2e dos fluxos
-faltantes, smoke do site, `global: 100` travado na API e no site); o que
-depende dela segue aberto. Ver "Estado da Fase 13" abaixo.
+`◐` = parcial. Quando a Fase 13 rodou, o que dependia da Fase 10 ficou de
+fora — o que não dependia (e2e dos fluxos faltantes, smoke do site,
+`global: 100` travado na API e no site) foi entregue. **A Fase 10 fechou
+desde então**, e o que mantém a Fase 13 em ◐ hoje é outra coisa: os pisos
+fracionários do web, e a escolha entre cobrir aqueles ramos ou assumi-los
+como definitivos. Ver "Estado da Fase 13" abaixo.
 
 **Medido em 2026-09-05**, já com as Fases 11 e 12 mescladas da `main`:
 
@@ -130,7 +133,7 @@ O que **não** está excluído, e é uma escolha deliberada:
   importação. Além disso, testar validação de DTO é barato e pega bug real
   (campo opcional que deveria ser obrigatório).
 
-Com essas três exclusões, 100% é alcançável sem ginástica.
+Com essas quatro exclusões, 100% é alcançável sem ginástica.
 
 ---
 
@@ -1200,7 +1203,8 @@ dados que o seed não cria. Estão mapeadas com evidência em
 A primeira tocava este plano enquanto o job `Testes de RLS` estava vermelho.
 **Não está mais**: `npm run test:rls -w orbien-backend` fecha em 54 testes
 verdes (o plano falava em 39 — a suíte cresceu desde então). O que impede a
-Fase 13 de declarar fechamento hoje não é o RLS, é a Fase 10; ver
+Fase 13 de declarar fechamento hoje não é o RLS nem a Fase 10, que fechou:
+é a decisão pendente sobre os pisos fracionários do web; ver
 "Estado da Fase 13".
 
 **`npm run test:cov -w orbien-web` e o `tsc` do build de `orbien-web` estavam
@@ -1230,7 +1234,7 @@ desenvolvimento remoto, não do produto.
 **A meta de 100% foi definida pelo dono do projeto.** A objeção usual — que
 meta global de percentual induz teste de getter — é conhecida e foi aceita.
 A mitigação escolhida foi manter a lista de exclusões mínima e justificada
-(três linhas), em vez de excluir categorias inteiras para inflar o número:
+(quatro linhas), em vez de excluir categorias inteiras para inflar o número:
 `*.module.ts` e `dto/**` ficam **dentro** do denominador de propósito.
 
 **O que ficou fora do denominador e por quê:** cobertura via Playwright.
