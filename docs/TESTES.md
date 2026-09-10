@@ -75,11 +75,13 @@ E o mobile, **medido em 2026-09-10** (não existia na medição acima):
 
 Dois números aí não estão no quadro de fases, e é isso que eles dizem:
 
-- **`apps/admin` nunca teve fase.** O console nasceu depois que o plano foi
-  escrito. O quadro vai de 0 a 13 sem mencioná-lo, mas o "Pronto quando" da
-  Fase 13 cobrava `test:cov -w orbien-admin` em 100% — cobrança sem fase que a
-  produzisse. A checklist foi corrigida; a fase não foi criada (decisão do dev
-  nesta sessão). Enquanto não existir, `apps/admin` fica fora da meta.
+- **`apps/admin` não tinha fase quando esta medição foi feita.** O console
+  nasceu depois que o plano foi escrito: o quadro ia de 0 a 13 sem mencioná-lo,
+  mas o "Pronto quando" da Fase 13 já cobrava `test:cov -w orbien-admin` em
+  100% — cobrança sem fase que a produzisse. **Resolvido depois:** a Fase 14
+  foi criada e cobriu o console inteiro, saindo de 1,5% para o piso travado de
+  99/98/100/100. O parágrafo fica como registro de por que a Fase 14 existe —
+  os 1,5% da tabela acima são de 2026-09-05 e não descrevem mais o admin.
 - **`src/platform/` na API** é o mesmo caso, e mostra o custo do threshold por
   caminho: nasceu depois das fases 1-6, não entrou em nenhuma entrada da lista
   de caminhos, e ficou com dois DTOs abaixo de 100% **sem reprovar nada**. Os
@@ -93,7 +95,8 @@ Dois números aí não estão no quadro de fases, e é isso que eles dizem:
 Decisão que precisa estar clara antes da Fase 0, porque define se o número
 fecha ou não:
 
-- **Cobertura é medida por Jest (api) e Vitest (web, site).** Os testes
+- **Cobertura é medida por Jest (api e mobile) e Vitest (web, site, admin).**
+  Os testes
   Playwright **não contam** para o percentual. Eles continuam existindo e
   continuam sendo portão de CI — mas instrumentar cobertura através de um
   browser real custa mais do que entrega, e faz o número oscilar por motivo
@@ -935,14 +938,21 @@ o mesmo comando sai 1.
 
 ## Fase 13 — Fechamento
 
-**Pré-requisito declarado:** fases 1–12. **Cumprido:** 1–9 e 11–12. Falta só a
-**Fase 10** (rotas do web), e é ela que divide esta fase em duas metades — a
-que não depende dela rodou, a que depende não.
+**Pré-requisito declarado:** fases 1–12. **Cumprido:** todas — 1 a 12, mais a
+14 (admin) e a 15 (mobile), criadas depois. Quando esta fase começou faltava a
+Fase 10 (rotas do web), e era ela que dividia a fase em duas metades: a que não
+dependia dela rodou, a que dependia ficou. **A Fase 10 fechou** — `src/app/**`
+está em 100 no `vitest.config.ts` — e com isso o que sobrou não é mais falta de
+fase nenhuma.
 
 As Fases 11 e 12 entraram na `main` enquanto esta fase era executada (PRs #26 e
 #27). Isso destravou metade do item 1: o site foi de 0% a 100% e ganhou o
-`global` travado junto com a API. Sobra o web, que a Fase 10 fecha, e o admin,
-que não tem fase.
+`global` travado junto com a API.
+
+**O que sobra hoje é só o web**, e por um motivo diferente do original: não
+falta fase, faltam os ramos defensivos que mantêm os pisos por caminho da Fase
+9 abaixo de 100. O admin saiu desta conta pela Fase 14 e o mobile pela Fase 15,
+os dois com piso medido travado. Ver "1. Thresholds", abaixo.
 
 ### Estado da Fase 13
 
@@ -1126,11 +1136,13 @@ achado vira pergunta:
 O que esta fase entrega, e é o que roda verde hoje:
 
 ```bash
-npx turbo run build                  # 4 successful, 4 total
-npx turbo run test                   # 4 successful, 4 total
+npx turbo run build                  # 5 successful, 5 total
+npx turbo run test                   # 5 successful, 5 total
 npx turbo run lint                   # 0 errors
 npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-site      # 100% nas 4 métricas, com global travado
+npm run test:cov -w orbien-admin     # piso 99/98/100/100 travado (Fase 14)
+npm run test:cov -w orbien-mobile    # piso 94/84/93/97 travado (Fase 15)
 npm run test:rls -w orbien-backend   # 54 testes verdes
 node scripts/check-skills.mjs
 
