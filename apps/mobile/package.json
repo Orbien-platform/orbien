@@ -44,6 +44,7 @@
     "web": "expo start --web",
     "build": "tsc --noEmit && expo export --platform android --output-dir dist",
     "lint": "eslint .",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "test:cov": "jest --coverage --passWithNoTests"
   }
 }
