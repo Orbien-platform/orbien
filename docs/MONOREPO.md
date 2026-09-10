@@ -1,11 +1,26 @@
 # Monorepo — estrutura e deploy
 
+## Os cinco apps
+
+| Caminho | Package (workspace) | Stack | Deploy |
+|---|---|---|---|
+| `apps/api` | `orbien-backend` | NestJS 10, Prisma 6, Postgres | Render, runtime Node |
+| `apps/site` | `orbien-site` | Next.js 16 (App Router), Tailwind 4 | Vercel |
+| `apps/web` | `orbien-web` | Next.js 16 (App Router), Tailwind 4 | Vercel |
+| `apps/admin` | `orbien-admin` | Next.js 16 (App Router), Tailwind 4 | Vercel, subdomínio `admin.` |
+| `apps/mobile` | `orbien-mobile` | Expo (SDK 57) + React Native, Expo Router | EAS Build (iOS/Android) |
+
+O nome do **package** é o que vai em `npm install -w`, `turbo --filter` e
+`npm run test:cov -w` — não o nome da pasta. O da API é `orbien-backend`, e é
+a única em que os dois não coincidem.
+
 ## Por que assim
 
-Três dos cinco apps de hoje viviam em repositórios separados (`orbien-api`,
-`orbien-site`, `orbien-web`). Foram unificados em um único repositório
-**preservando todo o histórico de commits** (via `git subtree`), mas **sem
-unificar os deploys**:
+Três dos cinco apps de hoje viviam em **repositórios** separados — repos
+`orbien-api`, `orbien-site` e `orbien-web`, que não são os packages da tabela
+acima (o repo `orbien-api` virou o package `orbien-backend`). Foram unificados
+em um único repositório **preservando todo o histórico de commits** (via
+`git subtree`), mas **sem unificar os deploys**:
 
 - `apps/api` roda no **Render**, em runtime Node.
 - `apps/site` e `apps/web` continuam em **projetos Vercel separados**.
@@ -101,6 +116,7 @@ O passo a passo de configuração do Render e da Vercel está em
 - **Variáveis de ambiente:** não mudaram para API, site, web e admin. O mobile
   não usa `.env`: as suas chegam por `env` do profile no `eas.json`.
 
-Os repositórios antigos (`orbien-api`, `orbien-site`, `orbien-web`) devem ser
-arquivados só depois que os três deploys novos estiverem verdes — eles são o
-plano de rollback. O histórico deles está inteiro aqui, sob `apps/*`.
+Os repositórios antigos — de novo, os **repos** `orbien-api`, `orbien-site` e
+`orbien-web`, não os packages — devem ser arquivados só depois que os três
+deploys novos estiverem verdes: eles são o plano de rollback. O histórico
+deles está inteiro aqui, sob `apps/*`.

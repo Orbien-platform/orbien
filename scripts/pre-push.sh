@@ -104,7 +104,7 @@ fi
 # ── Portões determinísticos ───────────────────────────────────────────────
 echo
 echo "▶ Build, tipos e lint"
-npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 4 apps" \
+npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 5 apps" \
   || { bloqueia "build falhou — veja /tmp/prepush-build.log"; tail -15 /tmp/prepush-build.log | sed 's/^/      /'; }
 npx tsc --noEmit -p apps/api/tsconfig.json >/tmp/prepush-tsc.log 2>&1 && passa "tipos da API, incluindo test/" \
   || { bloqueia "tsc falhou — veja /tmp/prepush-tsc.log"; head -10 /tmp/prepush-tsc.log | sed 's/^/      /'; }

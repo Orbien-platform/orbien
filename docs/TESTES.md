@@ -1,7 +1,12 @@
 # Testes — plano para 100% de cobertura
 
-Meta declarada: **100% de cobertura nos quatro apps** (`statements`, `branches`,
-`functions`, `lines`), travada no CI.
+Meta declarada quando este plano foi escrito: **100% de cobertura nos quatro
+apps de então** (`statements`, `branches`, `functions`, `lines`), travada no
+CI. Hoje são cinco apps e a meta não é mais uniforme — api e site fecham em
+`global: 100`; admin e mobile travam **piso medido**, com justificativa por
+métrica (Fases 14 e 15); o web segue em aberto. O que é uniforme é o portão:
+todo app tem `test:cov` no `ci.yml`, e nenhum piso desce. Ver "Estado", logo
+abaixo, e a Fase 13.
 
 O plano é dividido em fases que podem ser executadas **uma por sessão de
 chat**, de forma independente. Cada fase abaixo é autocontida: diz o que ler,
@@ -945,7 +950,7 @@ que não tem fase.
 |---|---|
 | 1. `global: 100` na API | ☑ travado, e verde |
 | 1. `global: 100` no site | ☑ travado — destravado pelas Fases 11 e 12 |
-| 1. `global: 100` no admin | ☑ **não será** — a Fase 14 travou piso medido (99/98/100/100), e é o suficiente |
+| 1. `global: 100` no admin | ☑ **não será** — a Fase 14 travou piso medido (99/98/100/100, medido na própria Fase 14), e é o suficiente |
 | 1. `global: 100` no web | ☐ **em aberto** — a Fase 10 fechou, o bloqueio caiu; o que falta agora são os ramos defensivos, ver abaixo |
 | 1. Piso travado no mobile | ☑ Fase 15 (94/84/93/97), 2026-09-10 |
 | 2. e2e de financeiro (transação → DRE) | ☑ `apps/web/e2e/financeiro.spec.ts` |
@@ -1144,17 +1149,31 @@ O smoke virou portão: job `smoke-site` no `ci.yml`, separado do job de e2e
 porque o site não precisa de banco nem de API para ser verificado. Ver
 "Fase 3b" em [CI.md](CI.md).
 
-O que **falta** para a meta de 100% nos quatro apps, que era a redação
-original desta checklist:
+O que **falta**, hoje, para a checklist fechar — atualizado em 2026-09-10,
+porque a redação anterior deste bloco envelheceu e passou a contradizer a
+própria Fase 13, acima:
 
 ```bash
-npm run test:cov -w orbien-web       # hoje 68,5% — falta a Fase 10
-npm run test:cov -w orbien-admin     # hoje 1,5%  — não há fase que o cubra
+npm run test:cov -w orbien-web       # único em aberto — ver "1. Thresholds"
 ```
 
-A linha do admin foi mantida aqui como registro, não como cobrança: sem uma
-fase que produza esses testes, exigir 100% dele nesta checklist era pedir o
-resultado sem o trabalho.
+O web é o que sobrou. As Fases 7 a 10 fecharam e `src/app/**` está em 100; o
+que impede travar `global: 100` são os pisos fracionários da Fase 9, e a
+escolha entre cobrir aqueles ramos ou assumir o piso por caminho como
+definitivo ainda não foi feita.
+
+Os outros quatro saíram desta lista, cada um por um motivo diferente, e
+nenhum deles é "ainda não chegamos lá":
+
+- **api e site** fecham em `global: 100`, travado.
+- **admin**: a Fase 14 cobriu o console e travou piso medido
+  (99/98/100/100). A redação anterior dizia "1,5% — não há fase que o cubra",
+  o que deixou de ser verdade quando a Fase 14 foi feita.
+- **mobile**: a Fase 15 travou piso medido (94/84/93/97) em 2026-09-10.
+
+Piso medido com justificativa por métrica conta como fechado nesta checklist.
+Foi decisão consciente nos dois casos, não dívida — o critério é o portão
+existir e não descer, não o número ser 100.
 
 ---
 

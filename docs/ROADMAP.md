@@ -56,8 +56,8 @@ plano funciona hoje.
   como decisão de produto em aberto se a Fase 7 voltaria ao roadmap ou se o
   `apps/web` assumiria esse uso. **Resolvido:** a decisão foi tomada em favor
   da Fase 7 e a variante Starter está entregue, com `apps/mobile` como quinto
-  app do monorepo. O que sobrou dela está em "O que falta no mobile", acima —
-  execução, não decisão.
+  app do monorepo. O que sobrou dela está em "O que falta no mobile", logo
+  abaixo — execução, não decisão.
 - **Contratos e documentos legais** (`church-platform-documentos-legais.md`,
   `contrato-church-platform-v4.md`) seguem como rascunhos com marcações
   `[REVISÃO JURÍDICA OBRIGATÓRIA]` não resolvidas — nenhum indício no
