@@ -412,3 +412,427 @@ entre duas fontes que a feature existe para eliminar.
 numa edição só. Gaps 3, 4 e 5 são de uma linha cada. Gaps 6 e 7 são opcionais.
 Nenhum toca o portão de cobertura — MAP-07/08/09 podem ser dados por fechados
 como estão.
+
+---
+
+# Rodada 2 — re-verificação dos 6 gaps
+
+**Date**: 2026-09-10
+**Commit dos fixes**: `dd32966` (`git diff 79684c5..dd32966` — 6 arquivos, +60/-25)
+**Range da feature**: `7b5607b~1..HEAD`
+**Verifier**: sub-agente independente, read-only sobre a árvore real. Nenhuma
+mutação foi necessária nesta rodada (ver "Sensor"), nenhum `git stash`, nenhum
+arquivo do repositório alterado além deste relatório.
+
+**Veredito: ❌ FAIL** — 4 dos 6 gaps fechados e o spec-precision gap (EC4)
+fechado; **o Gap 2 continua aberto** e o fix o **agravou**: as duas afirmações
+que a rodada 1 nomeou como falsas ("falta a Fase 10", "não há fase que cubra o
+admin") continuam no arquivo, em outros parágrafos da **mesma** seção, e o
+cabeçalho novo acrescentou uma terceira contradição contra `:78-82`. O portão
+de cobertura segue intacto e verde.
+
+---
+
+## Estado dos 6 gaps
+
+| # | Sev. rodada 1 | Estado | Evidência |
+|---|---|---|---|
+| 1 | MAJOR | ⚠️ **Fechado com ressalva** — os 2 hits que a rodada 1 nomeou sumiram; o **Independent Test literal continua falhando**, com 2 hits diferentes | ver abaixo |
+| 2 | MAJOR | ❌ **Ainda aberto** — e agravado | `docs/TESTES.md:937-938`, `:944-945`, `:78-82` |
+| 3 | MINOR | ✅ **Fechado** | `scripts/pre-push.sh:107` × `docs/CI.md:431` |
+| 4 | MINOR | ✅ **Fechado** | `apps/mobile/README.md:134` |
+| 5 | MINOR | ✅ **Fechado** | `docs/MONOREPO.md:5-15` |
+| 6 | COSMETIC | ✅ **Fechado** | `docs/ROADMAP.md:59` × `:74` |
+| 7 (EC4) | spec-precision | ✅ **Fechado** | `.github/workflows/ci.yml:114-115`, `docs/TESTES.md:953` |
+
+---
+
+### Gap 1 — ⚠️ Fechado no substantivo; Independent Test literal ainda falha
+
+Independent Test da spec (`spec.md:101-103`), rodado por mim, **saída literal**:
+
+```
+$ grep -ri "quatro apps\|três\b.*apps\|os 4 apps" README.md CLAUDE.md docs/
+docs/MONOREPO.md:19:Três dos cinco apps de hoje viviam em **repositórios** separados — repos
+docs/PENDENCIAS.md:583:Três apps, portão verde. Restam os 2 avisos dos fronts, os dois deixados de
+EXIT=0  (2 linhas — o teste exige saída vazia)
+```
+
+Os dois hits da rodada 1 (`docs/TESTES.md:3` e `:1147`) **sumiram** ✅. Os dois
+que restam já existiam antes de `dd32966` — **e a rodada 1 não os reportou**.
+Rodei o mesmo grep contra a árvore de `79684c5` para conferir:
+
+```
+$ git archive 79684c5 README.md CLAUDE.md docs | tar -x -C /tmp/old && grep -rni ... 
+docs/MONOREPO.md:5:Três dos cinco apps de hoje viviam em repositórios separados (`orbien-api`,
+docs/PENDENCIAS.md:583:Três apps, portão verde. ...
+docs/TESTES.md:3:Meta declarada: **100% de cobertura nos quatro apps** ...
+docs/TESTES.md:1147:O que **falta** para a meta de 100% nos quatro apps ...
+```
+
+**Eram 4 hits, não 2.** O bloco de saída da rodada 1 (`validation.md:73-76`)
+está incompleto — erro meu, registrado aqui. O implementador fechou exatamente
+o que o relatório mostrou.
+
+Substância dos 2 remanescentes:
+
+- `docs/MONOREPO.md:19` — "Três dos cinco apps de hoje viviam em **repositórios**
+  separados". Não afirma três apps; afirma que 3 dos 5 vinham de repos
+  separados. É **falso positivo do regex** (`três\b.*apps`), não afirmação falsa.
+- `docs/PENDENCIAS.md:583` — "Três apps, portão verde": registro histórico de
+  pendência fechada, já classificado como informativo na rodada 1 (`:333-335`).
+  `docs/PENDENCIAS.md:19` ("lint nos 3 apps") é o mesmo caso e não casa o regex.
+
+**Conclusão**: nenhuma afirmação **falsa** sobre o número de apps sobrevive em
+`README.md`, `CLAUDE.md` ou `docs/` — o Success Criterion nº 1 (`spec.md:248`)
+está satisfeito na substância. Mas o Independent Test **como a spec o escreveu**
+não passa. Fica como ⚠️, não ✅: o teste é da spec, não meu.
+
+**Texto novo do cabeçalho não passou a afirmar nada falso** — verificado item a
+item contra o repositório:
+
+| Afirmação em `docs/TESTES.md:3-8` | Verificação | OK? |
+|---|---|---|
+| "Hoje são cinco apps" | `apps/{api,site,web,admin,mobile}` | ✅ |
+| "api e site fecham em `global: 100`" | `docs/TESTES.md:952,953`; `:963-966` | ✅ |
+| "admin e mobile travam piso medido (Fases 14 e 15)" | `apps/admin/vitest.config.ts:39-44` (99/98/100/100); `apps/mobile/jest.config.js:53-55` (94/84/93/97) | ✅ |
+| "o web segue em aberto" | `docs/TESTES.md:954`, `:974-999` | ✅ |
+| "todo app tem `test:cov` no `ci.yml`" | `ci.yml:119,122,125,128,131` — 5 passos | ✅ |
+| `Ver "Estado", logo abaixo` | `## Estado` em `docs/TESTES.md:18` (abaixo de `:8`) | ✅ |
+
+**Ressalva menor (não é gap)**: "os quatro apps **de então**" (`:2-3`) datou a
+meta original em quatro apps, mas `:41` ("o `apps/admin` nasceu depois dele") e
+`:78` ("O console nasceu depois que o plano foi escrito") dizem que, quando o
+plano foi escrito, eram **três**. A tensão é pré-existente ao fix — a redação
+nova a torna visível sem resolvê-la.
+
+---
+
+### Gap 2 — ❌ Ainda aberto (fix fechou o grep, não o problema)
+
+O implementador reescreveu `:1152-1178` — e o bloco novo é, isoladamente,
+**correto e coerente** com "1. Thresholds" (`:961-999`) e com o quadro "Estado
+da Fase 13" (`:947-959`). Confirmado linha a linha:
+
+| Afirmação no bloco novo | Bate com | OK? |
+|---|---|---|
+| `:1157` "web — único em aberto — ver \"1. Thresholds\"" | `:954` (web ☐ em aberto); `### 1. Thresholds` existe em `:961` | ✅ |
+| `:1163` "As Fases 7 a 10 fecharam e `src/app/**` está em 100" | `:30-32` (☑); `:964-965` | ✅ |
+| `:1169-1171` "a Fase 14 cobriu o console e travou piso medido (99/98/100/100)" | `:38`, `:953`, `apps/admin/vitest.config.ts:39-44` | ✅ |
+| `:1172` "a Fase 15 travou piso medido (94/84/93/97) em 2026-09-10" | `:39`, `:955`, `apps/mobile/jest.config.js:41,53-55` | ✅ |
+
+**Mas as duas afirmações falsas que a rodada 1 nomeou continuam no arquivo.**
+Elas existiam em dois lugares cada; o fix apagou uma cópia e deixou a outra —
+ambas dentro da **mesma seção da Fase 13**, 200 linhas acima do bloco corrigido:
+
+```
+docs/TESTES.md:937  **Pré-requisito declarado:** fases 1–12. **Cumprido:** 1–9 e 11–12. Falta só a
+docs/TESTES.md:938  **Fase 10** (rotas do web), e é ela que divide esta fase em duas metades — a
+docs/TESTES.md:939  que não depende dela rodou, a que depende não.
+...
+docs/TESTES.md:944  `global` travado junto com a API. Sobra o web, que a Fase 10 fecha, e o admin,
+docs/TESTES.md:945  que não tem fase.
+```
+
+Contra o que o mesmo documento diz:
+
+- `:32` — `| 10 | web — rotas | app/ | 19 | ☑ |` e `:964-965` — "a Fase 10
+  **fechou**, `src/app/**` está em 100". ⇒ `:937-938` "**Falta só a Fase 10**"
+  é **falso**. É literalmente o mesmo defeito que a rodada 1 citou como
+  `:1150` ("falta a Fase 10") — mudou de linha, não de arquivo.
+- `:38` (Fase 14 ☑), `:846` (`## Fase 14 — admin: o console da plataforma`),
+  `:953`. ⇒ `:944-945` "o admin, **que não tem fase**" é **falso** — mesma
+  afirmação que a rodada 1 citou como `:1151` ("não há fase que o cubra").
+
+**E o fix acrescentou uma terceira**, por deixar `:78-82` intocado enquanto
+reescrevia o cabeçalho `:5-8`:
+
+```
+docs/TESTES.md:78  - **`apps/admin` nunca teve fase.** O console nasceu depois que o plano foi
+docs/TESTES.md:81    produzisse. A checklist foi corrigida; a fase não foi criada (decisão do dev
+docs/TESTES.md:82    nesta sessão). Enquanto não existir, `apps/admin` fica fora da meta.
+```
+
+contra `:6` — "admin e mobile travam **piso medido**, com justificativa por
+métrica (**Fases 14 e 15**)" e `:38`/`:846`/`:953`. Três afirmações falsas:
+"nunca teve fase", "a fase não foi criada", "fica fora da meta". Antes de
+`dd32966` o cabeçalho dizia só "quatro apps" e não contradizia `:78-82`
+diretamente; agora contradiz. **Contradição nova introduzida pelo fix.**
+
+Menor, no mesmo bloco: `:95` — "**Cobertura é medida por Jest (api) e Vitest
+(web, site).**" omite admin (Vitest) e mobile (Jest), num documento cujo
+cabeçalho agora abre dizendo cinco.
+
+**Varredura do arquivo inteiro** (1249 linhas), à procura de afirmação que
+contradiga outra — os achados acima são os únicos. Verificado além deles:
+
+- Todas as referências cruzadas por nome de seção **resolvem**: `"Estado"`→`:18`,
+  `"Estado da Fase 13"`→`:947`, `"1. Thresholds"`→`:961`, `"Pendências abertas"`
+  →`:1180`, `"Fase 15 — mobile: o portão que faltava"`→`:890`.
+- Todo número de cobertura tem data ou fase de origem (`:60`, `:69`, `:876`,
+  `:953`, `:955`, `:1169-1172`).
+- Não achei outra ocorrência de `não tem fase` / `não há fase` / `sem uma fase`
+  fora de `:945` e da menção histórica em `:1170`.
+
+**Resíduo separado, mesma seção** (não estava na rodada 1, não foi introduzido
+pelo fix): `docs/TESTES.md:1129-1130` — `npx turbo run build # 4 successful,
+4 total` e `npx turbo run test # 4 successful, 4 total`, sob o título "O que
+esta fase entrega, e é o que roda **verde hoje**". Medido por mim agora:
+`npx turbo run lint` → **`Tasks: 5 successful, 5 total`**. Contagem desatualizada
+num bloco apresentado como estado de hoje.
+
+---
+
+### Gap 3 — ✅ Fechado
+
+```
+scripts/pre-push.sh:107   npx turbo run build ... && passa "build dos 5 apps" \
+docs/CI.md:431            Ele roda o que o CI rodaria — build dos 5 apps, tipos da API ...
+```
+
+Batem. O implementador corrigiu o **script** em vez do doc — escolha correta:
+`turbo run build` roda de fato os 5 workspaces (confirmado: `Tasks: 5
+successful, 5 total`), então o rótulo é que estava errado.
+
+- `bash -n scripts/pre-push.sh` → **exit 0** ✅
+- Varri as demais mensagens do script (`passa`/`bloqueia`, `:53-171`): **uma
+  outra contagem está errada** — `scripts/pre-push.sh:120` imprime
+  `passa "39 testes de RLS"`, enquanto `docs/TESTES.md:1134,1189` e
+  `docs/PENDENCIAS.md:950` dizem **54 testes** ("o plano falava em 39 — a
+  suíte cresceu desde então"). **Pré-existente**, fora do range da feature e
+  não introduzido por `dd32966`; registro para decisão, não como reprovação.
+- Também pré-existente e informativo: a checagem de import cruzando app
+  (`scripts/pre-push.sh:53,55`) casa `apps/(api|web|site|admin)/` — **sem
+  `mobile`**. Import de `apps/mobile` para outro app, ou de outro app para
+  `apps/mobile`, não é barrado pelo portão local. Fora do escopo dos 6 gaps.
+
+---
+
+### Gap 4 — ✅ Fechado
+
+```
+apps/mobile/README.md:134  Roda em todo PR pelo step "Build dos 5 apps" (`turbo run build`), custa ~10s
+.github/workflows/ci.yml:44      - name: Build dos 5 apps
+```
+
+**Varredura do repositório inteiro** por nome de step renomeado
+(`Build dos 4 apps`, `Suítes de unidade dos 4 apps`), excluindo `node_modules`
+e `.specs/features/mapa-monorepo-e-portoes/`: **zero ocorrências**. As únicas
+que restam estão em `tasks.md:364` e neste `validation.md` — onde citar a
+string antiga é correto.
+
+Varri também **todo nome de job/step citado por nome** nos docs, contra
+`ci.yml` resolvido por `yaml.safe_load`. Todos existem:
+
+| Citação | Alvo | OK? |
+|---|---|---|
+| `docs/CI.md:358` job "Unidade e cobertura" | job `unit`, name "Unidade e cobertura" | ✅ |
+| `docs/PENDENCIAS.md:43` `Unidade e cobertura` / `:313` `Build, tipos e lint` | jobs `unit` / `build` | ✅ |
+| `docs/TESTES.md:229,301` job `rls` · `:299` job `unit` · `:1137` job `E2E` · `:1140,1148` job `smoke-site` · `:1188` job `Testes de RLS` | todos existem | ✅ |
+| `docs/TESTES.md:906` passo "Cobertura do mobile" | `ci.yml:130` | ✅ |
+| `docs/MONOREPO.md:115`, `apps/mobile/README.md:90` job `mobile-eas-build` | `ci.yml` job `mobile-eas-build` | ✅ |
+
+---
+
+### Gap 5 — ✅ Fechado
+
+AC1 exige, nos **três** documentos, os cinco apps com **package name, stack e
+destino de deploy**. Verificado:
+
+| Documento | `file:line` | 5 apps | Package | Stack | Deploy |
+|---|---|---|---|---|---|
+| `README.md` | `:9-13` | ✅ | ✅ | ✅ | ✅ |
+| `CLAUDE.md` | `:7-13` | ✅ | ✅ | ✅ | ✅ |
+| `docs/MONOREPO.md` | `:3-15` (tabela "Os cinco apps", **nova**) | ✅ | ✅ | ✅ | ✅ |
+
+Package names conferidos **contra os `apps/*/package.json` reais**, um a um:
+
+| `apps/*` | `package.json` `.name` | Nos três docs | OK? |
+|---|---|---|---|
+| `api` | `orbien-backend` | `orbien-backend` | ✅ |
+| `site` | `orbien-site` | `orbien-site` | ✅ |
+| `web` | `orbien-web` | `orbien-web` | ✅ |
+| `admin` | `orbien-admin` | `orbien-admin` | ✅ |
+| `mobile` | `orbien-mobile` | `orbien-mobile` | ✅ |
+
+A armadilha que a rodada 1 apontou — `orbien-api`/`orbien-site`/`orbien-web` em
+`docs/MONOREPO.md` serem **repos antigos**, não packages — foi resolvida de
+forma explícita, não por remoção: `:19-21` ("repos ... que **não são** os
+packages da tabela acima (o repo `orbien-api` virou o package
+`orbien-backend`)") e `:118-119` ("de novo, os **repos** ..., não os packages").
+`:13-15` acrescenta a regra prática (o package é o que vai em `-w`/`--filter`).
+Fix **não superficial** — fecha a leitura enganosa, não só a ausência.
+
+---
+
+### Gap 6 — ✅ Fechado
+
+`docs/ROADMAP.md:59` — "O que sobrou dela está em \"O que falta no mobile\",
+**logo abaixo**". A seção `## O que falta no mobile` está em `:74`. 59 < 74 ⇒
+direção correta ✅.
+
+Demais referências cruzadas por nome nos arquivos tocados pela feature —
+todas resolvem:
+
+| Citação | Alvo | OK? |
+|---|---|---|
+| `docs/ROADMAP.md:148` "O que falta no mobile" | `:74` | ✅ |
+| `docs/ROADMAP.md:159` "O que já foi entregue" | `:21` | ✅ |
+| `docs/ROADMAP.md:160` "Ciclos de entrega" | `:97` | ✅ |
+| `docs/TESTES.md:8` "Estado" · `:59` "Estado da Fase 13" · `:675` "Pendências abertas" · `:1157` "1. Thresholds" · `:44` "Fase 15 — mobile: o…" | `:18` · `:947` · `:1180` · `:961` · `:890` | ✅ |
+| `.github/workflows/ci.yml:116` "a Fase 13 em docs/TESTES.md" | `docs/TESTES.md:936` | ✅ |
+
+**Nenhuma seção citada por nome deixou de existir ou mudou de nome.**
+
+---
+
+### Gap 7 / EC4 (spec-precision) — ✅ Fechado
+
+Os dois pontos que a rodada 1 marcou como número sem data foram datados:
+
+```
+.github/workflows/ci.yml:114-115  Admin (99/98/100/100, medido na Fase 14) e mobile
+                                  (94/84/93/97, medido em 2026-09-10) travam o piso medido
+docs/TESTES.md:953                a Fase 14 travou piso medido (99/98/100/100, medido na própria Fase 14)
+```
+
+Varredura por **todo número de cobertura** nos documentos tocados pela feature
+(`README.md`, `CLAUDE.md`, `docs/{CI,MONOREPO,ROADMAP,TESTES}.md`,
+`apps/mobile/README.md`, `apps/mobile/jest.config.js`, `ci.yml`,
+`scripts/pre-push.sh`): **nenhum número de cobertura sem data ou fase de
+origem**. Os que existem: `docs/TESTES.md:60` (tabela, "Medido em 2026-09-05"),
+`:69` ("medido em 2026-09-10"), `:876` ("Executado em 2026-09-05"), `:953`,
+`:955`, `:1169-1172`, `apps/mobile/jest.config.js:41`, `ci.yml:114-115`. O único
+caso citado sem data — `docs/TESTES.md:1170` "(99/98/100/100)" — vem ancorado em
+"a Fase 14 cobriu o console", a mesma convenção aceita em `ci.yml:114`.
+
+---
+
+## Gate Check — rodada 2
+
+| Gate | Comando | Exit | Resultado |
+|---|---|---|---|
+| Cobertura (mobile) | `npm run test:cov -w orbien-mobile` | **0** | **39 suítes / 239 testes**, 0 falhas · **94.51% (913/966) statements · 84.69% (559/660) branches · 93.81% (273/291) functions · 97.94% (856/874) lines** — bate dígito a dígito com o piso 94/84/93/97 e com `docs/TESTES.md:74`, `apps/mobile/jest.config.js:41-42`, `docs/ROADMAP.md:37` |
+| YAML do CI | `python3 -c "import yaml;yaml.safe_load(open('.github/workflows/ci.yml'))"` | **0** | Válido. 6 jobs: `build`, `unit`, `rls`, `smoke-site`, `e2e`, `mobile-eas-build`. Passos de cobertura em `:119,122,125,128,131` = **5** (backend, web, site, admin, **mobile**) |
+| Lint | `npx turbo run lint` | **0** | `Tasks: 5 successful, 5 total` · **0 errors** (76 warnings pré-existentes em `orbien-mobile`, nenhum novo) |
+| Sintaxe do pre-push | `bash -n scripts/pre-push.sh` | **0** | Sem erro de sintaxe |
+| Integridade de testes | `git diff 7b5607b~1..HEAD -- '*.test.ts' '*.test.tsx' '*.spec.ts' '*.spec.tsx'` | — | **0 linhas** — nenhum teste alterado, removido ou enfraquecido no range inteiro da feature |
+
+---
+
+## Sensor
+
+`git diff 79684c5..HEAD -- apps/mobile/jest.config.js` → **0 linhas**.
+O `jest.config.js` **não mudou** desde a rodada 1, e nem `apps/mobile/package.json`
+entrou em `dd32966` (o fix tocou 6 arquivos: `ci.yml`, `apps/mobile/README.md`,
+`docs/MONOREPO.md`, `docs/ROADMAP.md`, `docs/TESTES.md`, `scripts/pre-push.sh`).
+**As duas mutações de threshold da rodada 1 não foram repetidas** — o artefato
+sob teste é bit-a-bit o mesmo que foi provado morto lá (`validation.md:210-217`),
+e repetir o sensor não acrescentaria informação. **Registro explícito, não
+omissão.** Valem os resultados da rodada 1: 2/2 mutações mortas, denominador
+56/56 fontes de `src/`.
+
+---
+
+## Regressão dos fixes (os 6 arquivos tocados)
+
+Nenhum AC aprovado na rodada 1 regrediu. Verificado por AC, não por confiança:
+
+| AC da rodada 1 | Arquivo reeditado | Re-verificação | Result |
+|---|---|---|---|
+| **MAP-01** AC1 (5 apps + 3 atributos) | `docs/MONOREPO.md` | `:3-15` tabela nova; `README.md:9-13` e `CLAUDE.md:7-13` **não foram tocados** por `dd32966` — intactos. Os 3 docs passam agora, com os package names batendo os `package.json` | ✅ **melhorou** |
+| **MAP-01** AC4 (Render runtime Node) | `docs/MONOREPO.md` | `:7` (tabela), `:25`, `:40-41` (ressalva do Dockerfile) intactos; `README.md:9,83,89-90` intactos | ✅ |
+| **MAP-03** AC2/AC3 (ROADMAP) | `docs/ROADMAP.md` | diff = **2 linhas**, só a troca "acima"→"logo abaixo" em `:59`. A tabela de entrega (`:37`) e "Ciclos seguintes" (`:130-149`) intactas | ✅ |
+| **MAP-04** AC5 (`docs/CI.md` fiel ao `ci.yml`) | `scripts/pre-push.sh` | `docs/CI.md` **não foi tocado**; o script passou a bater com ele em `:107` | ✅ |
+| **MAP-09** AC4/AC5 (5 passos, "5 apps") | `.github/workflows/ci.yml` | diff = só o comentário `:114-115`. `- name: Build dos 5 apps` (`:44`), `Suítes de unidade dos 5 apps` (`:100`) e os 5 passos de cobertura (`:119-131`) intactos; YAML válido | ✅ |
+| **MAP-10** P2 AC1 (linha do mobile no quadro) | `docs/TESTES.md` | `:39` `\| 15 \| mobile — portão de cobertura \| src/** ... \| 39 suítes \| ☑ \|` intacta (fora do diff) | ✅ |
+| **MAP-10** P2 AC2 (números + data) | `docs/TESTES.md` | `:69-74` intactas (fora do diff), números batem com a medição de agora | ✅ |
+| **MAP-10** P2 AC4 (Exclusões) | `docs/TESTES.md` | `:104-114` intactas (fora do diff) | ✅ |
+| **MAP-10** P2 AC3 (Fase 13 honesta) | `docs/TESTES.md` | `:961-999` intacta e correta; `:1152-1178` reescrita e correta — **mas** `:937-938`, `:944-945` e `:78-82` a contradizem | ❌ **segue aberto** |
+
+`apps/mobile/README.md` — mudança de 1 linha (`:134`), nada mais no arquivo.
+
+---
+
+## Gaps novos introduzidos pelos fixes
+
+### Gap 8 — MAJOR · o cabeçalho novo criou contradição com `docs/TESTES.md:78-82`
+
+`dd32966` reescreveu `:2-8` para afirmar que "admin e mobile travam **piso
+medido**, com justificativa por métrica (Fases 14 e 15)". Setenta linhas abaixo,
+`:78-82` — **não tocado** — segue afirmando "**`apps/admin` nunca teve fase**",
+"**a fase não foi criada**" e "`apps/admin` **fica fora da meta**". Antes do fix
+o cabeçalho dizia só "quatro apps" e não fazia essa afirmação; agora faz, e o
+par contradiz. É o mesmo defeito do Gap 2, **criado** pela correção dele.
+
+**Fix**: reescrever `:78-82` para apontar a Fase 14 como o que fechou o caso,
+mantendo o registro histórico em passado explícito.
+
+### Achados pré-existentes (não introduzidos pelo fix, sem reprovação)
+
+- `docs/TESTES.md:1129-1130` — "4 successful, 4 total" num bloco rotulado "o que
+  roda verde hoje"; hoje são 5 (medido: `Tasks: 5 successful, 5 total`).
+- `docs/TESTES.md:95` — "Cobertura é medida por Jest (api) e Vitest (web, site)"
+  omite admin e mobile.
+- `scripts/pre-push.sh:120` — `passa "39 testes de RLS"` × 54 em
+  `docs/TESTES.md:1134,1189` e `docs/PENDENCIAS.md:950`.
+- `scripts/pre-push.sh:53,55` — a checagem de import cruzando app não inclui
+  `mobile` no regex.
+- `DEPLOY.md:3` — "deploy dos **quatro** apps" (declarado como escopo em
+  `README.md:91-93`; já era informativo na rodada 1).
+
+---
+
+## Requirement Traceability Update — rodada 2
+
+| Requirement | Rodada 1 | Rodada 2 |
+|---|---|---|
+| MAP-01 | ⚠️ Needs Fix | ✅ **Verified** — Gap 5 fechado, package names conferidos contra os `package.json` |
+| MAP-02 | ✅ Verified | ✅ Verified (arquivo não tocado por `dd32966`) |
+| MAP-03 | ✅ Verified (Gap 6 cosmético) | ✅ **Verified** — Gap 6 fechado |
+| MAP-04 | ⚠️ Needs Fix | ✅ **Verified** — Gap 3 fechado |
+| MAP-05 | ✅ Verified | ✅ Verified (não tocado) |
+| MAP-06 | ✅ Verified | ✅ Verified (não tocado) |
+| MAP-07 | ✅ Verified | ✅ Verified — config bit-a-bit idêntica, gate exit 0 |
+| MAP-08 | ✅ Verified | ✅ Verified (não tocado) |
+| MAP-09 | ✅ Verified | ✅ Verified — YAML válido, 5 passos, comentário agora datado |
+| MAP-10 | ❌ Needs Fix | ❌ **Needs Fix** — Gap 2 aberto (`:937-938`, `:944-945`) + Gap 8 novo (`:78-82`) |
+
+Fora da tabela: `apps/mobile/README.md:134` (Gap 4) ✅ fechado.
+
+---
+
+## Summary — rodada 2
+
+**Overall**: ❌ **Not Ready** — 1 gap MAJOR reaberto no mesmo arquivo, 1 gap
+MAJOR novo criado pela correção.
+
+**Gaps**: 4/6 fechados (3, 4, 5, 6) · 1 fechado com ressalva (1 — substância ✅,
+Independent Test literal ainda com 2 hits, ambos falsos positivos ou histórico) ·
+**1 ainda aberto (2)** · EC4 fechado · **1 novo (8)**.
+**Gates**: cobertura exit **0** (239/239, 94.51/84.69/93.81/97.94) · YAML exit
+**0** (5 passos) · lint exit **0** (5/5, 0 errors) · `bash -n` exit **0** ·
+diff de testes **vazio**.
+**Sensor**: não repetido — `jest.config.js` inalterado desde `79684c5` (diff 0
+linhas); valem os 2/2 mortos da rodada 1.
+
+**O que os fixes acertaram**: o Gap 5 foi resolvido **de verdade**, não pelo
+mínimo — `docs/MONOREPO.md` ganhou a tabela canônica, a regra prática do
+package name, e desfez em dois lugares a confusão repo-antigo × package que era
+o núcleo do achado. O Gap 3 foi corrigido no lado certo (o script, não o doc).
+O Gap 4 fechou e a varredura por nome de step não achou mais nada.
+
+**O que reprova**: o Gap 2 foi tratado como um problema de `grep`. As duas
+frases que a rodada 1 citou — "falta a Fase 10" e "não há fase que o cubra" —
+existiam em dois lugares cada; o fix apagou o par que o relatório mostrou
+(`:1150-1151`) e deixou o outro (`:937-938`, `:944-945`), na **mesma seção da
+Fase 13**, contradizendo o parágrafo novo que ficou 200 linhas abaixo. E o
+cabeçalho reescrito criou uma terceira contradição, contra `:78-82`. Uma feature
+cuja tese é "duas fontes não podem dar duas respostas" fechou uma cópia da
+divergência e deixou duas.
+
+**Next steps**: uma edição em `docs/TESTES.md` fecha os dois — `:937-945`
+(abrir a Fase 13 dizendo que 10 e 14 fecharam) e `:78-82` (a Fase 14 existe e
+travou piso medido). Enquanto isso, considerar `:1129-1130` e `:95` na mesma
+passada, e decidir sobre `scripts/pre-push.sh:120` e `:53`. Nada disso toca o
+portão de cobertura: MAP-07/08/09 seguem fechados e verdes.
