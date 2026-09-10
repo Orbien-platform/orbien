@@ -140,3 +140,55 @@ describe("app.config.js", () => {
     expect(resolved.version).toBe("1.0.0");
   });
 });
+
+// O nome que a tela de login desenha (src/app/login.tsx) é
+// `useTheme().appName` — sem sessão, `Constants.expoConfig.name`
+// (PLATFORM_THEME em src/lib/theme/brand-theme.ts), que app.config.js
+// resolve de ORBIEN_APP_NAME. Numa build de verdade quem seta essa env é o
+// `env` do profile em eas.json, não o default deste arquivo: um erro de
+// digitação lá não quebra teste nem lint — sai impresso na primeira tela do
+// app. Estes testes fecham essa brecha, amarrando a identidade dos profiles
+// à mesma que app.config.js resolve sem env nenhuma.
+describe("eas.json", () => {
+  const IDENTITY_ENVS = [
+    "ORBIEN_APP_NAME",
+    "ORBIEN_APP_SLUG",
+    "ORBIEN_APP_SCHEME",
+    "ORBIEN_BUNDLE_ID",
+  ];
+
+  function easJson() {
+    return require("./eas.json");
+  }
+
+  it("o profile generic declara a mesma identidade Orbien que app.config.js resolve sem env", () => {
+    const defaults = loadConfig()({ config: {} });
+    const genericEnv = easJson().build.generic.env;
+
+    expect(genericEnv.ORBIEN_APP_NAME).toBe(defaults.name);
+    expect(genericEnv.ORBIEN_APP_SLUG).toBe(defaults.slug);
+    expect(genericEnv.ORBIEN_APP_SCHEME).toBe(defaults.scheme);
+    expect(genericEnv.ORBIEN_BUNDLE_ID).toBe(defaults.ios.bundleIdentifier);
+    expect(genericEnv.ORBIEN_BUNDLE_ID).toBe(defaults.android.package);
+  });
+
+  // `generic` é a única identidade de app do v1 (AD-001): todo profile de
+  // distribuição herda dele e nenhum redefine nome, slug, scheme ou bundle
+  // id por conta própria — quem quiser uma identidade nova cria um profile
+  // de tenant, não sobrescreve a genérica.
+  //
+  // A lista sai do próprio eas.json em vez de ser escrita aqui: um profile
+  // novo entra coberto no dia em que é criado, que é justamente quando a
+  // identidade tem chance de divergir sem ninguém notar.
+  it.each(Object.keys(require("./eas.json").build).filter((name) => name !== "generic"))(
+    "o profile %s herda a identidade do generic sem redefini-la",
+    (profileName) => {
+      const profile = easJson().build[profileName];
+
+      expect(profile.extends).toBe("generic");
+      for (const identityEnv of IDENTITY_ENVS) {
+        expect(profile.env ?? {}).not.toHaveProperty(identityEnv);
+      }
+    },
+  );
+});
