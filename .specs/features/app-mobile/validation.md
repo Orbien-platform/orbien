@@ -1,4 +1,4 @@
-# App Mobile Validation (MOB-01, MOB-02, MOB-03, MOB-11, MOB-12)
+# App Mobile Validation — Rodada 1 (MOB-01, MOB-02, MOB-03, MOB-11, MOB-12)
 
 **Date**: 2026-09-08
 **Spec**: `.specs/features/app-mobile/spec.md`
@@ -204,7 +204,7 @@ foundation.
 ---
 ---
 
-# App Mobile Validation — Round 3 (MOB-04, MOB-05)
+# App Mobile Validation — Rodada 2 (MOB-04, MOB-05)
 
 **Date**: 2026-09-08
 **Spec**: `.specs/features/app-mobile/spec.md`, story "P1: Membros e Voluntários" (AC 1-4)

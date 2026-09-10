@@ -802,7 +802,11 @@ todos passando) && `npm run build:mobile` && `turbo run lint --filter=orbien-mob
 
 **Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 2 —
 MOB-04 (Membros e Voluntários — escala)".
-**Status**: In Progress
+**Status**: ✅ Done — Verifier independente com veredito **✅ Ready** (4/4 ACs
+com evidência, sensor 3/3 mortos, gate 2061/2061). O único achado, Fix 1
+(ausência de tratamento de erro em `respondToAssignment`/`checkIn`/
+`saveUnavailability`), foi corrigido no commit `4cec930`, com 5 testes novos.
+Ver `validation.md`, seção "Rodada 2 (MOB-04, MOB-05)".
 **Escopo**: as 4 ACs da story "P1: Membros e Voluntários" — listar escala
 (MOB-04, AC1), confirmar/recusar (MOB-04, AC2), check-in (MOB-04, AC3,
 inclui o endpoint novo em `apps/api` que a rodada de Design encontrou
@@ -1195,7 +1199,11 @@ Nenhuma violação. ✅
 # Rodada 3 — Tasks: MOB-06
 
 **Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 3 — MOB-06 (Conteúdos — feed)".
-**Status**: In Progress
+**Status**: ✅ Done — Verifier independente com veredito **✅ Ready** (6/6
+outcomes com evidência, sensor 3/3 mortos, gate 75/75). Sem fix task. Os 3
+spec-precision gaps apontados são decisões de paginação/estado vazio tomadas
+no `design.md` desta rodada, não lacunas de implementação. Ver
+`validation.md`, seção "Rodada 3 (MOB-06)".
 **Escopo**: AC2 da história "P1: Conteúdos e Notificações" — listar posts
 publicados. Inclui a introdução da tab bar (Expo Router `Tabs`), decisão
 de navegação registrada no design desta rodada (segundo módulo de domínio
@@ -1430,7 +1438,13 @@ Nenhuma violação. ✅
 
 **Design**: `.specs/features/app-mobile/design.md`, seção "Rodada 4 —
 MOB-07 (Conteúdos — push: registro OneSignal + deep link)".
-**Status**: In Progress
+**Status**: ✅ Done — Verifier independente com veredito **✅ Ready** após o
+Fix 1 (5/6 outcomes com evidência + 1 spec-precision gap em AC3, que depende
+de device/simulador fora do ambiente; sensor 3/3 mortos). O Fix 1 —
+`posts.controller.spec.ts:97` desatualizado pela assinatura nova de
+`findOne` — foi corrigido no commit `0568697`, com backend 216 suítes/2006
+testes e mobile 20 suítes/101 testes verdes. Ver `validation.md`, seção
+"Rodada 4 (MOB-07)".
 **Escopo**: AC1 (registrar dispositivo no OneSignal com `external_id` +
 tags de segmentação), AC4 (toque na push abre o post, não a lista) da
 história "P1: Conteúdos e Notificações". AC3 (push chega ponta a ponta)
