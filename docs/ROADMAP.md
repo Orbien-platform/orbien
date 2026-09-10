@@ -20,9 +20,10 @@ sustentam isso estão em `docs/produto/adrs-architecture-decisions.md`.
 
 ## O que já foi entregue
 
-A base dos quatro apps do monorepo corresponde à Fase 6 do
-`orbien-guia-fases-execucao.md` (sistema web — backend + frontend), mais um
-quarto app que não estava no plano original:
+A base de `api`, `site` e `web` corresponde à Fase 6 do
+`orbien-guia-fases-execucao.md` (sistema web — backend + frontend). A ela se
+somaram dois apps a mais: o `admin`, que não estava no plano original, e o
+`mobile`, que estava (Fase 7) e foi retomado — cinco no total:
 
 | Área | Estado |
 |---|---|
@@ -33,7 +34,8 @@ quarto app que não estava no plano original:
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria de acesso de plataforma |
-| Infra | Entregue com a atualização do ADR-008: Render (backend) + Vercel (site/web/admin) + Supabase + Cloudflare R2 |
+| App mobile (Fase 7, ADR-004/ADR-005) | **Entregue na variante Starter** — `apps/mobile` (Expo + React Native). Verificados: MOB-01/02 (sessão e fila de refresh serializada), MOB-03 (tema por tenant em runtime), MOB-04/05 (escala, check-in, indisponibilidade), MOB-06/07 (feed de conteúdo, push OneSignal com deep link), MOB-08 (Celebrações e OC), MOB-09 (Pequenos Grupos), MOB-11/12 (workspace e config dinâmica de identidade). Falta MOB-10 (preferências de notificação, P3). Ver `.specs/features/app-mobile/` |
+| Infra | Entregue com a atualização do ADR-008: Render, runtime Node (backend) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
 Isso cobre a Fase 1 e a Fase 2 do roadmap de MVP original (seção 4 de
 `produto-gestao-igrejas-mvp.md`) por inteiro, e a maior parte da Fase 3 —
@@ -49,13 +51,13 @@ plano funciona hoje.
 
 ## Onde o plano original ficou para trás
 
-- **App mobile (Fase 7, ADR-004/ADR-005):** não existe `apps/mobile` no
-  monorepo. Os quatro apps atuais são `api`, `site`, `web` e `admin` — todos
-  Next.js ou NestJS. O app do membro/liderança planejado em React Native +
-  Expo (com white-label via tema dinâmico ou build por tenant) segue como
-  módulo não iniciado. Decidir se ele volta ao roadmap, ou se o `apps/web`
-  passa a cobrir esse uso definitivamente, é uma decisão de produto em
-  aberto — este documento não a antecipa.
+- **App mobile (Fase 7, ADR-004/ADR-005):** era o item mais antigo desta lista
+  — até 2026-09-08 este documento registrava a ausência do app nativo e tratava
+  como decisão de produto em aberto se a Fase 7 voltaria ao roadmap ou se o
+  `apps/web` assumiria esse uso. **Resolvido:** a decisão foi tomada em favor
+  da Fase 7 e a variante Starter está entregue, com `apps/mobile` como quinto
+  app do monorepo. O que sobrou dela está em "O que falta no mobile", acima —
+  execução, não decisão.
 - **Contratos e documentos legais** (`church-platform-documentos-legais.md`,
   `contrato-church-platform-v4.md`) seguem como rascunhos com marcações
   `[REVISÃO JURÍDICA OBRIGATÓRIA]` não resolvidas — nenhum indício no
@@ -68,6 +70,29 @@ plano funciona hoje.
   `docs/PENDENCIAS.md` — que documenta achados mais recentes (o mais
   recente registrado ali é de 2026-09-03, sobre RLS do plano de
   plataforma).
+
+## O que falta no mobile
+
+A variante Starter está entregue e verificada, mas isso não é o mesmo que
+publicável. O que separa uma coisa da outra, hoje:
+
+- **`ORBIEN_API_URL` não está no profile `production` do `eas.json`.** Os
+  profiles `preview` apontam para a API do Render; o `production` não define a
+  variável, e o default de `app.config.js` é `http://localhost:3000`. Uma
+  build de loja hoje sairia apontando para localhost.
+- **O app id do OneSignal é placeholder** (`REPLACE_WITH_ONESIGNAL_APP_ID` em
+  `app.config.js`). MOB-07 está verificado do lado do app — o registro de
+  dispositivo, as tags e o deep link do clique —, mas o app id real nunca foi
+  configurado como secret do EAS.
+- **`DEPLOY.md` não tem parte de mobile.** Cobre API, site, web e admin; não
+  há procedimento escrito de build de produção, submissão às lojas nem OTA
+  (Expo Updates, que o ADR-004 prevê e o v1 explicitamente adiou).
+- **MOB-10 — preferências de notificação por usuário** (P3). Único requisito
+  funcional do `app-mobile/spec.md` ainda pendente.
+
+Os três primeiros são operacionais, não de produto: nenhum exige decisão, só
+execução. Estão aqui, e não em `docs/PENDENCIAS.md`, porque são o que falta
+para um módulo do roadmap chegar ao usuário — não achados de revisão.
 
 ## Ciclos de entrega
 
@@ -108,16 +133,26 @@ Estes dependem de uma decisão explícita antes de virar trabalho de
 implementação — não são compromissos, são o que o material de produto deixa
 em aberto:
 
-1. **Mobile:** retomar a Fase 7 (React Native + Expo) como planejado, ou
-   assumir formalmente o `apps/web` como a superfície mobile do produto.
+1. ~~**Mobile:** retomar a Fase 7 ou assumir o `apps/web` como superfície
+   mobile.~~ **Decidido e executado** — Fase 7, variante Starter, entregue em
+   2026-09. O que resta dela não é decisão, é execução: ver "O que falta no
+   mobile" acima.
 2. **Diferenciais de IA** listados na tabela comparativa de
    `produto-gestao-igrejas-mvp.md` (seção 5) — cuidado pastoral preditivo,
    classificação de doações, projeção financeira — nenhum tem desenho
    técnico ainda.
-3. **White-label premium (build por tenant via EAS)** — depende da decisão
-   de mobile acima.
-4. **Primeiro cliente Premium fora do cliente zero** — condicionado ao
-   fechamento do ciclo de conformidade.
+3. **White-label premium (build por tenant via EAS)** — a arquitetura já está
+   pronta e é decisão registrada (AD-002 em `.specs/STATE.md`: um só codebase,
+   variantes por profile do EAS + `app.config.js` dinâmico). O que falta é o
+   pipeline de release por tenant e a submissão de loja por igreja — e o
+   Starter chegar às lojas antes, o que depende de "O que falta no mobile".
+4. **Gating por plano.** `TenantPlan` existe no schema e é gravado no
+   provisionamento, mas nenhum ponto do código lê o plano: nem a matriz de
+   funcionalidade Starter × Premium de `pricing-church-platform.md`, nem o
+   teto de 300 membros ativos do Starter. Hoje os dois planos são o mesmo
+   produto, e o item 5 depende disto.
+5. **Primeiro cliente Premium fora do cliente zero** — condicionado ao
+   fechamento do ciclo de conformidade e ao item 4.
 
 ## Como manter este documento
 
