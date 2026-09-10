@@ -1,7 +1,8 @@
 # Plano de CI
 
-Racional das decisões de CI. **As fases 1, 2 e 3 estão implementadas** em
-`.github/workflows/ci.yml`; as fases 4 e 5 seguem como plano.
+Racional das decisões de CI. **As fases 1, 2, 3 e 6 estão implementadas** em
+`.github/workflows/ci.yml`; a fase 4 segue como plano e a 5 já existe como
+script (`scripts/check-skills.mjs`), rodando como step da fase 1.
 
 O contexto que motiva: com mais de uma pessoa no projeto, os deploys deixam de
 ser suficientes como rede de proteção. Render e Vercel só constroem o app que
@@ -335,6 +336,34 @@ Já implementado: `node scripts/check-skills.mjs`. Basta acrescentar como step d
 fase 1. Vale porque o modo de falha de uma skill é não ser acionada — não gera
 erro em lugar nenhum, ninguém percebe.
 
+### Fase 6 — Build de preview do mobile na EAS
+
+`apps/mobile` é o quinto app e o único que não tem deploy contínuo: não há URL
+para publicar, há binário para submeter. O CI cobre isso com um job próprio,
+`mobile-eas-build`, que é o mais caro do workflow e por isso o mais restrito:
+
+- **Só em push para `main`**, nunca em PR — build de EAS consome cota da conta,
+  e um PR ativo geraria uma build por push.
+- **Só quando o diff toca `apps/mobile`** (`git diff --quiet ... -- apps/mobile`
+  decide). Commit que não mexe no app não gasta build.
+- **Depende dos jobs determinísticos** (`needs`): lint, build e testes de
+  unidade precisam estar verdes antes. `turbo run test` já cobre o Jest do
+  `orbien-mobile`, então o job de EAS nunca sobe código que o gate reprovou.
+- Precisa de `EXPO_TOKEN` nos secrets — é o único job do workflow que depende
+  de segredo para rodar. Sem o token, ele falha; os outros cinco continuam
+  sendo o portão real.
+
+### A cobertura dos cinco apps
+
+O job "Unidade e cobertura" roda `turbo run test` (todos os apps) e depois um
+passo de cobertura por workspace: `npm run test:cov -w orbien-backend`,
+`-w orbien-web`, `-w orbien-site`, `-w orbien-admin` e `-w orbien-mobile`.
+Cada um reprova sozinho quando cai abaixo do piso do seu próprio arquivo de
+config — os pisos e o porquê de cada um estão em [`TESTES.md`](TESTES.md), não
+aqui. O que importa deste lado: **são cinco passos, um por app**, e um app sem
+passo é um app sem portão de cobertura, o que aconteceu com o mobile entre
+2026-09-08 e 2026-09-10.
+
 ## O bloqueio do lint — resolvido
 
 Isto foi impedimento real e é mantido aqui como registro. O estado que travava
@@ -399,7 +428,7 @@ bash scripts/pre-push.sh --e2e        # inclui a suíte de tela
 bash scripts/pre-push.sh --review     # inclui revisão por IA, com veredito
 ```
 
-Ele roda o que o CI rodaria — build dos 4 apps, tipos da API incluindo `test/`,
+Ele roda o que o CI rodaria — build dos 5 apps, tipos da API incluindo `test/`,
 lint, sanidade das skills — e dispara os testes de RLS sozinho quando o diff
 toca `apps/api`. Sai com código 1 quando bloqueia, então serve de hook.
 
