@@ -283,7 +283,11 @@ export class AuthService {
       throw new UnauthorizedException('Sessão expirada');
     }
 
-    // Conta desativada não renova — e a família inteira cai junto.
+    // Conta desativada não renova — e a família inteira cai junto. Tenant
+    // inativado é o mesmo caso: `JwtStrategy.validate` já barra o acesso em
+    // toda requisição autenticada, mas sem este check a cadeia de refresh de
+    // um usuário do tenant seguia girando, emitindo access tokens novos para
+    // um tenant que não deveria mais autenticar ninguém.
     //
     // Sem isto, `refresh` só olhava hash, `revoked_at` e `expires_at`: desativar
     // uma conta não impedia a ROTAÇÃO, e a cadeia seguia girando indefinidamente,
@@ -296,7 +300,7 @@ export class AuthService {
     // Derruba a família toda, e não só este token, pela mesma razão da detecção
     // de reuso logo acima: o que se quer é encerrar a sessão, não invalidar um
     // elo e deixar os outros de pé.
-    if (!stored.userAccount.is_active) {
+    if (!stored.userAccount.is_active || !stored.userAccount.tenant.is_active) {
       await this.prisma.refreshToken.updateMany({
         where: { user_account_id: stored.user_account_id, revoked_at: null },
         data: { revoked_at: new Date() },

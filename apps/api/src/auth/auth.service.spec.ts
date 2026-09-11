@@ -392,7 +392,7 @@ describe('AuthService.refresh', () => {
         congregation_id: 'c1',
         is_active: true,
         roleAssignments: [{ role_code: 'tenant_admin', congregation_id: 'c1' }],
-        tenant: { tenantPlan: { plan: 'premium' } },
+        tenant: { tenantPlan: { plan: 'premium' }, is_active: true },
       },
     });
     (prisma.refreshToken.create as jest.Mock).mockResolvedValue({ id: 'rtk-2' });
@@ -419,7 +419,7 @@ describe('AuthService.refresh', () => {
         congregation_id: 'c1',
         is_active: true,
         roleAssignments: [],
-        tenant: { tenantPlan: null },
+        tenant: { tenantPlan: null, is_active: true },
       },
     });
     (prisma.refreshToken.create as jest.Mock).mockResolvedValue({ id: 'rtk-2' });
@@ -428,6 +428,33 @@ describe('AuthService.refresh', () => {
 
     const [payload] = (jwtService.sign as jest.Mock).mock.calls[0];
     expect(payload.plan).toBe('starter');
+  });
+
+  it('tenant inativado não rotaciona, e a família inteira é revogada', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rtk-1',
+      user_account_id: 'u1',
+      revoked_at: null,
+      expires_at: new Date('2999-01-01'),
+      userAccount: {
+        id: 'u1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        is_active: true,
+        roleAssignments: [{ role_code: 'tenant_admin', congregation_id: 'c1' }],
+        tenant: { tenantPlan: { plan: 'premium' }, is_active: false },
+      },
+    });
+
+    await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { user_account_id: 'u1', revoked_at: null },
+      data: { revoked_at: expect.any(Date) },
+    });
   });
 });
 
