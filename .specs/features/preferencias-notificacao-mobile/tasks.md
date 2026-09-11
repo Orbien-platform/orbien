@@ -16,6 +16,11 @@ without it.**
 **Design**: `.specs/features/preferencias-notificacao-mobile/design.md`
 **Status**: Draft
 
+**Progresso de Execute**: Fases 1-2 (T1-T8) concluídas em 2026-09-11 pelo
+worker de batch desta fillsd (branch `feat/preferencias-notificacao-mobile`).
+Fases 3-5 (T9-T14) seguem pendentes, outro worker. Ver commits
+`9a11083`..`df79f91` e o SPEC_DEVIATION registrado em T3 abaixo.
+
 ---
 
 ## Test Coverage Matrix
@@ -100,7 +105,7 @@ T13 → T14
 
 ## Task Breakdown
 
-### T1: Modelo `NotificationPreference` no schema Prisma + migration
+### T1: Modelo `NotificationPreference` no schema Prisma + migration ✅ Done (commit `9a11083`)
 
 **What**: adicionar o model `NotificationPreference` a `schema.prisma`
 (campos `id`, `tenant_id`, `congregation_id`, `user_account_id` único,
@@ -120,9 +125,9 @@ tenant+congregação nova
 - Skill: NONE
 
 **Done when**:
-- [ ] Model e relações inversas adicionados, `npx prisma generate` sem erro
-- [ ] Migration criada e aplicável (`npx prisma migrate deploy` local sem erro)
-- [ ] `npm run build:api` passa
+- [x] Model e relações inversas adicionados, `npx prisma generate` sem erro
+- [x] Migration criada e aplicável (`npx prisma migrate deploy` local sem erro)
+- [x] `npm run build:api` passa
 
 **Tests**: none (schema/migration — build gate only)
 **Gate**: build
@@ -131,7 +136,7 @@ tenant+congregação nova
 
 ---
 
-### T2: Script de RLS `008_rls_notification_preferences.sql` + `bootstrap-db.sh`
+### T2: Script de RLS `008_rls_notification_preferences.sql` + `bootstrap-db.sh` ✅ Done (commit `ac1fde4`)
 
 **What**: criar o script de RLS (AD-001: `app_congregation_allowed()` em
 `USING` e `WITH CHECK`, `ENABLE`+`FORCE ROW LEVEL SECURITY`), adicioná-lo ao
@@ -149,9 +154,9 @@ literal — troca só o nome da tabela)
 - Skill: NONE
 
 **Done when**:
-- [ ] `bash apps/api/scripts/bootstrap-db.sh` roda do zero sem erro, com a
+- [x] `bash apps/api/scripts/bootstrap-db.sh` roda do zero sem erro, com a
       nova policy relatada na verificação
-- [ ] Asserção nova falha propositalmente ao quebrar a simetria `USING`/
+- [x] Asserção nova falha propositalmente ao quebrar a simetria `USING`/
       `WITH CHECK` (testado nos dois sentidos, mesmo princípio das
       asserções de `003`/`006`)
 
@@ -163,7 +168,7 @@ rodar limpo)
 
 ---
 
-### T3: Teste de isolamento RLS de `notification_preferences`
+### T3: Teste de isolamento RLS de `notification_preferences` ✅ Done (commit `828587f`) — SPEC_DEVIATION, ver nota abaixo
 
 **What**: novo describe numerado em `isolation.spec.ts` (seguindo o padrão
 do bloco "23. Songs — isolamento por congregação"): Tenant B não lê
@@ -181,8 +186,8 @@ conta, no próprio tenant/congregação, lê e escreve.
 - Skill: NONE
 
 **Done when**:
-- [ ] `npm run test:rls -w orbien-backend` passa com os casos novos
-- [ ] Removendo a policy do `008`, os testes novos falham (verificado nos
+- [x] `npm run test:rls -w orbien-backend` passa com os casos novos
+- [x] Removendo a policy do `008`, os testes novos falham (verificado nos
       dois sentidos, mesmo princípio já exigido no resto do arquivo)
 
 **Tests**: RLS
@@ -190,9 +195,24 @@ conta, no próprio tenant/congregação, lê e escreve.
 
 **Commit**: `test(api): isolamento RLS de notification_preferences`
 
+> **SPEC_DEVIATION (registrada na Execute, 2026-09-11)**: o texto acima diz
+> "congregação irmã não lê nem escreve, nem com `tenant_admin`, que aqui não
+> tem exceção". Isso é incompatível com AD-001: `app_congregation_allowed()`
+> (`003_rls_admin_write.sql`) é uma função única, compartilhada por toda
+> tabela nova de congregação, com `OR app_has_role('tenant_admin')`
+> incondicional — não há parâmetro por tabela para desligar essa exceção sem
+> reintroduzir o padrão pré-003 que AD-001 proíbe explicitamente. T2 (Reuses
+> desta própria task manda usar o template de `007_rls_songs.sql` ao pé da
+> letra) já implementa a policy com essa exceção, como toda tabela do
+> projeto. O teste implementado cobre o comportamento real e correto por
+> AD-001 — idêntico ao bloco 23 (Songs) — em vez da frase acima; ver o
+> comentário de cabeçalho do bloco 24 em `isolation.spec.ts` para o
+> raciocínio completo. `admin_congregation` continua sem qualquer exceção,
+> como a task pedia.
+
 ---
 
-### T4: `notification-categories.ts` — mapeamento compartilhado
+### T4: `notification-categories.ts` — mapeamento compartilhado ✅ Done (commit `1704fa8`)
 
 **What**: criar `NOTIFICATION_CATEGORIES`, `NotificationCategory` e
 `CATEGORY_BY_POST_TYPE` (os 8 valores de `ContentPostType` → 4 categorias,
@@ -209,10 +229,10 @@ em algum grupo)
 - Skill: NONE
 
 **Done when**:
-- [ ] Os 8 valores de `ContentPostType` cobertos, teste falha se um valor
+- [x] Os 8 valores de `ContentPostType` cobertos, teste falha se um valor
       novo do enum não estiver mapeado (adicionar um valor fake ao mock e
       confirmar falha, depois reverter)
-- [ ] **Risco de config a confirmar antes deste task rodar**: o `jest` da
+- [x] **Risco de config a confirmar antes deste task rodar**: o `jest` da
       API usa `testMatch: ['<rootDir>/test/**/*.spec.ts']` (nota já
       registrada em `app-mobile`/outras specs) — um `.spec.ts` dentro de
       `src/content/` pode não ser coletado. Confirmar `jest.config` do
@@ -228,7 +248,7 @@ em algum grupo)
 
 ---
 
-### T5: `NotificationPreferencesService`
+### T5: `NotificationPreferencesService` ✅ Done (commit `ea41a91`)
 
 **What**: `get(userId)` (default 4×`true` sem linha) e
 `update(userId, tenantId, congregationId, patch)` (`upsert`).
@@ -244,8 +264,8 @@ esqueleto (`this.prisma.client`, sem `resolveProfile` — aqui a FK já é
 - Skill: NONE
 
 **Done when**:
-- [ ] `get` sem linha existente devolve os 4 `true` sem criar registro
-- [ ] `update` cria na primeira chamada e atualiza nas seguintes
+- [x] `get` sem linha existente devolve os 4 `true` sem criar registro
+- [x] `update` cria na primeira chamada e atualiza nas seguintes
       (`upsert`), preservando os campos não incluídos no patch
 
 **Tests**: unit
@@ -255,7 +275,7 @@ esqueleto (`this.prisma.client`, sem `resolveProfile` — aqui a FK já é
 
 ---
 
-### T6: `NotificationPreferencesController` + DTO
+### T6: `NotificationPreferencesController` + DTO ✅ Done (commit `6e810a4`)
 
 **What**: `GET /me/notification-preferences` e
 `PATCH /me/notification-preferences` (DTO `UpdateNotificationPreferencesDto`
@@ -273,9 +293,9 @@ de dado da própria conta).
 - Skill: NONE
 
 **Done when**:
-- [ ] GET chama `service.get(user.sub)`
-- [ ] PATCH chama `service.update(user.sub, user.tenant_id, user.congregation_id, dto)`
-- [ ] DTO rejeita campo não-boolean com 400 (`class-validator` já aplicado
+- [x] GET chama `service.get(user.sub)`
+- [x] PATCH chama `service.update(user.sub, user.tenant_id, user.congregation_id, dto)`
+- [x] DTO rejeita campo não-boolean com 400 (`class-validator` já aplicado
       globalmente no projeto — confirmar `ValidationPipe` global antes de
       assumir)
 
@@ -286,7 +306,7 @@ de dado da própria conta).
 
 ---
 
-### T7: Wiring no `ContentModule`
+### T7: Wiring no `ContentModule` ✅ Done (commit `67accb2`)
 
 **What**: registrar `NotificationPreferencesController`/`Service` em
 `content.module.ts`.
@@ -301,8 +321,8 @@ template de teste de DI
 - Skill: NONE
 
 **Done when**:
-- [ ] `moduleRef.get(NotificationPreferencesService)` resolve no teste
-- [ ] `npm run build:api` passa
+- [x] `moduleRef.get(NotificationPreferencesService)` resolve no teste
+- [x] `npm run build:api` passa
 
 **Tests**: unit
 **Gate**: quick
@@ -311,7 +331,7 @@ template de teste de DI
 
 ---
 
-### T8: Teste de integração HTTP
+### T8: Teste de integração HTTP ✅ Done (commit `df79f91`)
 
 **What**: `GET`/`PATCH /me/notification-preferences` ponta a ponta (sobe
 `AppModule`, fala HTTP) — default 4×`true`, PATCH persiste, GET seguinte
@@ -328,8 +348,8 @@ setup (app, tokens, cleanup)
 - Skill: NONE
 
 **Done when**:
-- [ ] `npm run test:integration -w orbien-backend` passa com os casos novos
-- [ ] Cobre AC1 (default ligado), AC2 (persistência), AC4 (mesma conta,
+- [x] `npm run test:integration -w orbien-backend` passa com os casos novos
+- [x] Cobre AC1 (default ligado), AC2 (persistência), AC4 (mesma conta,
       lido de novo) da história "Escolher categorias de notificação"
 
 **Tests**: integration
