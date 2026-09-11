@@ -53,6 +53,27 @@ export function unregisterDevice(): void {
   OneSignal.logout();
 }
 
+/**
+ * Espelha a preferência salva no servidor (`NotificationPreferenceValues`)
+ * como tags do device (MOB-10b, AD-003) — `pref_<categoria>`, sempre
+ * string `"true"`/`"false"` (tags OneSignal não são boolean, mesma
+ * conversão que `role` já faz em `registerDevice`). Chamado pela tela de
+ * preferências (ao salvar) e por `NotificationsProvider` (a cada login).
+ */
+export function syncNotificationPreferenceTags(prefs: {
+  avisos: boolean;
+  oracao: boolean;
+  eventos: boolean;
+  devocional: boolean;
+}): void {
+  OneSignal.User.addTags({
+    pref_avisos: String(prefs.avisos),
+    pref_oracao: String(prefs.oracao),
+    pref_eventos: String(prefs.eventos),
+    pref_devocional: String(prefs.devocional),
+  });
+}
+
 interface NotificationClickAdditionalData {
   post_id?: string;
 }

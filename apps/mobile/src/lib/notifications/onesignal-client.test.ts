@@ -37,6 +37,7 @@ import {
   initializeOneSignal,
   onNotificationClick,
   registerDevice,
+  syncNotificationPreferenceTags,
   unregisterDevice,
 } from "./onesignal-client";
 
@@ -85,6 +86,24 @@ describe("onesignal-client", () => {
 
       expect(mockLogin).not.toHaveBeenCalled();
       expect(mockAddTags).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("syncNotificationPreferenceTags", () => {
+    it("chama addTags com as 4 chaves pref_* como string, nunca boolean", () => {
+      syncNotificationPreferenceTags({
+        avisos: true,
+        oracao: false,
+        eventos: true,
+        devocional: false,
+      });
+
+      expect(mockAddTags).toHaveBeenCalledWith({
+        pref_avisos: "true",
+        pref_oracao: "false",
+        pref_eventos: "true",
+        pref_devocional: "false",
+      });
     });
   });
 
