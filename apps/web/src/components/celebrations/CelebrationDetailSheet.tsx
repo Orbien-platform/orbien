@@ -18,6 +18,7 @@ import {
 } from "@/components/celebrations/CreateCelebrationModal";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ interface CelebrationDetailSheetProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatInstant(iso, {
     weekday: "short", day: "2-digit", month: "2-digit", year: "numeric",
   });
 }

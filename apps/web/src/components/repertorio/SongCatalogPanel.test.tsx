@@ -43,7 +43,9 @@ describe("SongCatalogPanel", () => {
     expect(await screen.findByText("Grande é o Senhor")).toBeInTheDocument();
     expect(screen.getByText("Tom D")).toBeInTheDocument();
     expect(screen.getByText("80 BPM")).toBeInTheDocument();
-    expect(screen.getByText(/Última vez tocada: 01\/08\/2026/)).toBeInTheDocument();
+    // 2026-08-01T00:00:00Z é 31/07 às 21h em Brasília — e 01/08 em Tóquio,
+    // onde este teste roda. O valor exibido é o de Brasília, sempre.
+    expect(screen.getByText(/Última vez tocada: 31\/07\/2026/)).toBeInTheDocument();
     expect(screen.getByText("1 música no repertório")).toBeInTheDocument();
   });
 

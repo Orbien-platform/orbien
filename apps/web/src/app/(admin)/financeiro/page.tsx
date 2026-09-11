@@ -24,6 +24,7 @@ import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ function fmt(n: number): string {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatInstant(iso, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

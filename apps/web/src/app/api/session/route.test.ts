@@ -52,7 +52,7 @@ describe("GET /api/session", () => {
     expect(res.cookies.get(IDENTITY_COOKIE)?.value).toBe("");
   });
 
-  it("devolve o usuário da sessão quando identidade e access são válidos", async () => {
+  it("devolve o usuário da sessão, com as áreas que a API respondeu", async () => {
     const token = makeToken({
       sub: "u1",
       tenant_id: "t1",
@@ -60,13 +60,53 @@ describe("GET /api/session", () => {
       roles: ["tenant_admin"],
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ areas: ["persons", "financial"] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     const identity = encodeURIComponent(JSON.stringify({ email: "ana@igreja.com" }));
     const res = await GET(
       req({ cookie: `${ACCESS_COOKIE}=${token}; ${IDENTITY_COOKIE}=${identity}` })
     );
+
     expect(res.status).toBe(200);
     const { user } = await res.json();
-    expect(user).toMatchObject({ id: "u1", email: "ana@igreja.com", roles: ["tenant_admin"] });
+    expect(user).toMatchObject({
+      id: "u1",
+      email: "ana@igreja.com",
+      roles: ["tenant_admin"],
+      areas: ["persons", "financial"],
+    });
+    // O token vai no Authorization, e não sai daqui: quem chama é o servidor.
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/me/permissions"),
+      expect.objectContaining({ headers: { Authorization: `Bearer ${token}` } })
+    );
+  });
+
+  it("a sessão sobe mesmo se a API não responder as áreas", async () => {
+    // `areas: null` é "não sei", e a barra lateral desenha tudo. Derrubar a
+    // montagem da sessão porque a API está fora seria pior: o token ainda é
+    // legível e quem nega acesso de verdade é a própria API.
+    const token = makeToken({
+      sub: "u1",
+      tenant_id: "t1",
+      congregation_id: "c1",
+      roles: ["tenant_admin"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+    const identity = encodeURIComponent(JSON.stringify({ email: "ana@igreja.com" }));
+    const res = await GET(
+      req({ cookie: `${ACCESS_COOKIE}=${token}; ${IDENTITY_COOKIE}=${identity}` })
+    );
+
+    expect(res.status).toBe(200);
+    const { user } = await res.json();
+    expect(user.areas).toBeNull();
   });
 });
 
@@ -136,10 +176,13 @@ describe("POST /api/session (login)", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ access_token: token, refresh_token: "r1" }),
-      })
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ areas: ["content"] }) })
     );
     const res = await POST(
       req({ method: "POST", body: { email: "ana@igreja.com", password: "x", tenant_slug: "doca" } })
@@ -150,6 +193,9 @@ describe("POST /api/session (login)", () => {
     expect(res.cookies.get(IDENTITY_COOKIE)).toBeDefined();
     const { user } = await res.json();
     expect(user.email).toBe("ana@igreja.com");
+    // O login já traz as áreas: a barra lateral não precisa de uma segunda
+    // volta ao servidor para saber o que desenhar.
+    expect(user.areas).toEqual(["content"]);
   });
 });
 

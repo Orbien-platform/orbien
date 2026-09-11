@@ -16,6 +16,7 @@ import { MediaUploadField, iconForFile } from "@/components/content/MediaUploadF
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { formatInstant } from "@/lib/datetime";
 
 // A post's uploaded media URL always contains the post's own id as a path
 // segment (see posts.service.ts uploadMedia: `content/{tenant}/{cong}/{id}/...`).
@@ -67,7 +68,7 @@ const STATUS_CLS: Record<PostStatus, string> = {
 };
 
 function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR", {
+  return formatInstant(iso, {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });

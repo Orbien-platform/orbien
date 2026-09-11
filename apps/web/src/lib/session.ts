@@ -108,6 +108,13 @@ export interface SessionUser {
   support_session: boolean;
   support_tenant_name: string | null;
   /**
+   * As áreas do produto que esta sessão lê, segundo a API
+   * (`GET /me/permissions`). `null` quando não deu para perguntar — a barra
+   * lateral trata isso como "desenha tudo", e a tela responde "sem acesso" se
+   * for o caso. Ver `lib/permissions.ts`.
+   */
+  areas: string[] | null;
+  /**
    * `exp` do token, em segundos. A faixa de suporte conta o tempo que resta
    * com isto: a sessão de suporte dura 5 minutos e não se renova, então
    * chegar ao fim sem aviso é perder o que estava sendo feito.
@@ -123,7 +130,8 @@ export interface SessionUser {
  */
 export function buildSessionUser(
   payload: JwtPayload,
-  identity: Identity
+  identity: Identity,
+  areas: string[] | null = null
 ): SessionUser {
   return {
     id: payload.sub,
@@ -134,8 +142,37 @@ export function buildSessionUser(
     congregation_id: payload.congregation_id,
     support_session: payload.support_session === true,
     support_tenant_name: identity.tenantName ?? null,
+    areas,
     expires_at: payload.exp,
   };
+}
+
+/**
+ * Pergunta à API o que esta sessão enxerga.
+ *
+ * Roda no servidor do Next, com o access token que nunca cruza para o
+ * browser. A alternativa seria o front repetir as listas de `@Roles` da API —
+ * era o que `lib/permissions.ts` fazia, e é a cópia que esta chamada existe
+ * para apagar.
+ *
+ * **Nunca lança.** Token vencido (401), API fora, rede caída: tudo vira
+ * `null`, que a barra lateral lê como "não sei" e trata desenhando todos os
+ * links. Falhar aqui não pode derrubar a montagem da sessão — o token ainda é
+ * legível, a tela ainda sobe, e quem nega o acesso de verdade é a API.
+ */
+export async function fetchAreas(accessToken: string): Promise<string[] | null> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/me/permissions`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+
+    const body = (await res.json()) as { areas?: unknown };
+    return Array.isArray(body.areas) ? (body.areas as string[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface TokenPair {

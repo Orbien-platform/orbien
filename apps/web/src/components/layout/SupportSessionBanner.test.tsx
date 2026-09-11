@@ -20,6 +20,7 @@ const BASE_USER: SessionUser = {
   congregation_id: "c1",
   support_session: false,
   support_tenant_name: null,
+  areas: null,
   expires_at: Math.floor(Date.now() / 1000) + 300,
 };
 

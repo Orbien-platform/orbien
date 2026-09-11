@@ -26,8 +26,12 @@ import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
-const ALL_ROLES = ['admin_congregation', 'pastor', 'secretary', 'tenant_admin', 'member'] as const;
+// Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
+// mesma fonte de `GET /me/permissions`. Ver o cabeçalho de lá. O nome
+// `ALL_ROLES` ficou: aqui a leitura é mesmo de todo mundo que tem papel.
+const ALL_ROLES = PRODUCT_AREA_READ_ROLES.content;
 const WRITE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'] as const;
 
 /** Segundos. Tempo de pegar o ticket e começar a subir, não de subir. */

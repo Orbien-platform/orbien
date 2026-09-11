@@ -67,6 +67,7 @@ function setup(roles: string[] = ["tenant_admin"]) {
       congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
+      areas: null,
       expires_at: Math.floor(Date.now() / 1000) + 300,
     },
     isLoading: false,
@@ -100,7 +101,12 @@ describe("PessoasPage", () => {
     expect(await screen.findByText("Ana Silva")).toBeInTheDocument();
     expect(screen.getByText("(11) 98765-4321")).toBeInTheDocument();
     expect(screen.getByText("Membro")).toBeInTheDocument();
-    expect(screen.getByText("05/01/2026")).toBeInTheDocument();
+    // `created_at` é 2026-01-05T00:00:00Z, que em Brasília ainda é dia 04
+    // (21h). A tela exibe sempre em America/Sao_Paulo, então 04/01 é o
+    // valor correto — e o teste roda em Tóquio, onde o mesmo instante já é
+    // dia 05: se este assert voltar a ser "05/01", é porque a formatação
+    // deixou de fixar o fuso. Ver src/lib/datetime.ts.
+    expect(screen.getByText("04/01/2026")).toBeInTheDocument();
     expect(mockedApi.get).toHaveBeenCalledWith(expect.stringContaining("/persons?page=1&limit=20"));
   });
 
@@ -300,6 +306,7 @@ describe("PessoasPage", () => {
         congregation_id: "c1",
         support_session: false,
         support_tenant_name: null,
+        areas: null,
         expires_at: Math.floor(Date.now() / 1000) + 300,
       },
       isLoading: false,
