@@ -121,6 +121,41 @@ describe("NotificacoesScreen", () => {
     });
   });
 
+  it("uma segunda escrita da mesma categoria continua salvando depois de a primeira falhar (regressão)", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    mockUpdateNotificationPreferences.mockRejectedValueOnce(new Error("falha de rede"));
+    const updated = { ...ALL_ON, oracao: false };
+    mockUpdateNotificationPreferences.mockResolvedValueOnce(updated);
+
+    await act(async () => {
+      render(<NotificacoesScreen />);
+    });
+    await waitFor(() => screen.getByTestId("switch-oracao"));
+
+    // Primeiro toggle falha e reverte.
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", false);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
+    });
+
+    // Segundo toggle da MESMA categoria precisa disparar um PATCH novo —
+    // sem o fix, a cadeia armazenada ficava permanentemente rejeitada e
+    // updateNotificationPreferences nunca era chamado de novo.
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", false);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateNotificationPreferences).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("switch-oracao").props.value).toBe(false);
+    });
+    expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(updated);
+  });
+
   it("erro ao carregar preferências mostra mensagem visível", async () => {
     mockGetNotificationPreferences.mockRejectedValue(new Error("falha de rede"));
 

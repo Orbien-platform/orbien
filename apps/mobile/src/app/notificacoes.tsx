@@ -56,8 +56,17 @@ export default function NotificacoesScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // Uma cadeia de promises por categoria — chave da serialização "por
-  // categoria, não global" do Edge Case da spec.
+  // categoria, não global" do Edge Case da spec. A cadeia armazenada nunca
+  // rejeita (ver handleToggle): se rejeitasse, o próximo toggle da mesma
+  // categoria herdaria a rejeição e o `.then` seguinte nunca chamaria
+  // `updateNotificationPreferences` de novo — a categoria pararia de
+  // salvar pra sempre depois da primeira falha.
   const pendingRef = useRef<Partial<Record<Category, Promise<unknown>>>>({});
+  // Marca qual é a tentativa mais recente de cada categoria — substitui a
+  // antiga comparação por identidade de promise, que não funciona mais
+  // agora que a cadeia armazenada é sempre uma promise derivada (nunca a
+  // mesma referência da tentativa).
+  const latestRef = useRef<Partial<Record<Category, number>>>({});
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -81,21 +90,27 @@ export default function NotificacoesScreen() {
     setSaveError(null);
     setPrefs((prev) => ({ ...prev, [category]: value }));
 
-    const chain = (pendingRef.current[category] ?? Promise.resolve()).then(() =>
+    const token = (latestRef.current[category] ?? 0) + 1;
+    latestRef.current[category] = token;
+
+    const previous = pendingRef.current[category] ?? Promise.resolve();
+    const attempt = previous.catch(() => undefined).then(() =>
       updateNotificationPreferences({ [category]: value }),
     );
-    pendingRef.current[category] = chain;
+    // Guardado sempre "resolvido" (nunca a `attempt` crua) — é o que evita
+    // a próxima chamada desta categoria herdar uma rejeição permanente.
+    pendingRef.current[category] = attempt.catch(() => undefined);
 
-    chain
+    attempt
       .then((result) => {
         // Só aplica se ainda for a escrita mais recente desta categoria —
         // uma escrita anterior atrasada não pode sobrescrever a última.
-        if (pendingRef.current[category] !== chain) return;
+        if (latestRef.current[category] !== token) return;
         setPrefs(result as NotificationPreferenceValues);
         syncNotificationPreferenceTags(result as NotificationPreferenceValues);
       })
       .catch(() => {
-        if (pendingRef.current[category] !== chain) return;
+        if (latestRef.current[category] !== token) return;
         setPrefs((prev) => ({ ...prev, [category]: previousValue }));
         setSaveError(SAVE_ERROR_MESSAGE);
       });
