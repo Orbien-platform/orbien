@@ -8,12 +8,14 @@ import { VisitsService } from './visits.service';
 import { DemographicsService } from './demographics.service';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { StorageModule } from '../storage/storage.module';
+import { ContentModule } from '../content/content.module';
 import { PersonsImportController } from './import/persons-import.controller';
 import { PersonsImportService } from './import/persons-import.service';
 import { PersonsRetentionScheduler } from './persons-retention.scheduler';
+import { PersonsRetentionNotifier } from './persons-retention-notifier.service';
 
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, ContentModule],
   controllers: [DemographicsController, PersonsController, PersonsImportController, VisitsController],
   providers: [
     PersonsService,
@@ -23,6 +25,7 @@ import { PersonsRetentionScheduler } from './persons-retention.scheduler';
     TenantContextInterceptor,
     PersonsImportService,
     PersonsRetentionScheduler,
+    PersonsRetentionNotifier,
   ],
   exports: [ClassificationService, VisitsService],
 })
