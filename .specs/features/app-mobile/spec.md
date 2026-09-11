@@ -342,7 +342,7 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-07 | P1: Conteúdos — push (registro OneSignal + deep link) | Design | ✅ Verified |
 | MOB-08 | P2: Celebrações e OC | Design | ✅ Verified — `.specs/features/celebracoes-oc-mobile/` |
 | MOB-09 | P2: Pequenos Grupos | Design | ✅ Verified — `.specs/features/pequenos-grupos-mobile/` |
-| MOB-10 | P3: Preferências de notificação | Execute | Implementing — `.specs/features/preferencias-notificacao-mobile/` |
+| MOB-10 | P3: Preferências de notificação | Execute | ✅ Verified — `.specs/features/preferencias-notificacao-mobile/` |
 | MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | ✅ Verified |
 | MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | ✅ Verified |
 
@@ -350,11 +350,10 @@ bundle id mudam só por config, sem tocar em código.
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, **11 verificadas** (MOB-01 a MOB-09, MOB-11,
-MOB-12), 1 em Execute/Implementing (MOB-10, P3 — feature própria
-`.specs/features/preferencias-notificacao-mobile/`; T1-T14 completas em
-2026-09-11, ainda sem passagem do Verifier — não marcar "Verified" aqui
-antes disso).
+**Coverage:** 12 total, **12 verificadas** (MOB-01 a MOB-12). MOB-10 (P3)
+verificado em 2026-09-11 — feature própria
+`.specs/features/preferencias-notificacao-mobile/`, veredito PASS em
+`validation.md` (T1-T14, spec-anchored check + discrimination sensor).
 
 **Nota (Fases 1-5 do Execute) — cumprida.** As duas notas que viviam aqui
 instruíam a não marcar "Verified" enquanto o Verifier não tivesse rodado no

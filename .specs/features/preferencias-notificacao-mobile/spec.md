@@ -144,8 +144,8 @@ para a mesma conta e confirmar que recebeu normalmente.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MOB-10a | P1: Escolher categorias de notificação | Execute | Implementing |
-| MOB-10b | P1: O disparo respeita a categoria desligada | Execute | Implementing |
+| MOB-10a | P1: Escolher categorias de notificação | Execute | ✅ Verified |
+| MOB-10b | P1: O disparo respeita a categoria desligada | Execute | ✅ Verified |
 
 **ID format:** `MOB-10<letra>` — sub-requisitos de MOB-10 (`app-mobile/spec.md`).
 

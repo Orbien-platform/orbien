@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 10,
+  "next_id": 12,
   "lessons": [
     {
       "id": "L-001",
@@ -166,6 +166,42 @@
       ],
       "created": "2026-09-09T02:02:45Z",
       "last_seen": "2026-09-09T02:02:45Z"
+    },
+    {
+      "id": "L-010",
+      "key": "spec_deviation::when a task description contradicts an already registered architecture decision ad nnn implement and test the ad compliant behavior and record a spec deviation instead of forcing the task s literal wording",
+      "text": "When a task description contradicts an already-registered architecture decision (AD-NNN), implement and test the AD-compliant behavior and record a SPEC_DEVIATION instead of forcing the task's literal wording.",
+      "signal": "spec_deviation",
+      "scope": "rls",
+      "status": "candidate",
+      "features": [
+        "preferencias-notificacao-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "tasks.md T3 / apps/api/test/rls/isolation.spec.ts:1384 (rls)"
+      ],
+      "created": "2026-09-11T18:12:52Z",
+      "last_seen": "2026-09-11T18:12:52Z"
+    },
+    {
+      "id": "L-011",
+      "key": "spec_precision_gap::when an ac s outcome depends on an external provider s documented but unverifiable locally semantics e g a filter operator s behavior on absent values cite the provider doc in design md and flag the ac as a spec precision gap instead of writing a unit test that only re asserts the code s own logic",
+      "text": "When an AC's outcome depends on an external provider's documented-but-unverifiable-locally semantics (e.g. a filter operator's behavior on absent values), cite the provider doc in design.md and flag the AC as a spec-precision gap instead of writing a unit test that only re-asserts the code's own logic.",
+      "signal": "spec_precision_gap",
+      "scope": "content",
+      "status": "candidate",
+      "features": [
+        "preferencias-notificacao-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md MOB-10b AC4 / apps/api/src/content/notifications.service.ts:43 (content)"
+      ],
+      "created": "2026-09-11T18:12:57Z",
+      "last_seen": "2026-09-11T18:12:57Z"
     }
   ]
 }
