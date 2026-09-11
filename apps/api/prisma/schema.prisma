@@ -170,6 +170,11 @@ model TenantPlan {
   status                 PlanStatus
   trial_ends_at          DateTime?
   current_period_ends_at DateTime?
+  // Marca o fim do contrato: setado quando status vira `cancelled`, limpo se
+  // reativado. É o marco que os jobs de retenção da seção 5 do mapeamento
+  // LGPD usam (dado financeiro em 5 anos, dado de menor em 30 dias) — não
+  // usar updated_at, que muda por outros motivos sem reiniciar essa janela.
+  cancelled_at           DateTime?
   created_at             DateTime   @default(now())
   updated_at             DateTime   @updatedAt
 
