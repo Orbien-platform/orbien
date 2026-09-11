@@ -68,13 +68,25 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md AC3 (P1: Ver meus grupos) / apps/mobile/src/app/(tabs)/grupos.tsx:43-49 (apps/mobile)
 - last seen: 2026-09-09T02:02:45Z
 
-### L-010 — When a task description contradicts an already-registered architecture decision (AD-NNN), implement and test the AD-compliant behavior and record a SPEC_DEVIATION instead of forcing the task's literal wording.
+### L-010 — Quando a tabela de Assumptions já registra que nenhum write path existe para um campo, remova ou mova pra Out of Scope qualquer AC/Edge Case que declare SHALL sobre a escrita desse campo — não deixe as duas seções se contradizerem.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `specs/reten-dados` · harmful: 0
+- features: reten-dados-fim-contrato
+- evidence: spec.md P1 AC1 / Edge Cases (reativação) (specs/reten-dados)
+- last seen: 2026-09-11T17:29:24Z
+
+### L-011 — Teste unitário que mocka $queryRaw inteiro não pega cláusula WHERE errada (ex.: exclusão de doador removida) — para SQL de retenção/exclusão sensível, adicione ao menos um teste de integração contra o SQL real ou asserte o texto da query.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `apps/api/src/persons` · harmful: 0
+- features: reten-dados-fim-contrato
+- evidence: apps/api/src/persons/persons.service.ts:321-323 (purgeMinorsAfterContractEnd) (apps/api/src/persons)
+- last seen: 2026-09-11T17:29:24Z
+
+### L-012 — When a task description contradicts an already-registered architecture decision (AD-NNN), implement and test the AD-compliant behavior and record a SPEC_DEVIATION instead of forcing the task's literal wording.
 - signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `rls` · harmful: 0
 - features: preferencias-notificacao-mobile
 - evidence: tasks.md T3 / apps/api/test/rls/isolation.spec.ts:1384 (rls)
 - last seen: 2026-09-11T18:12:52Z
 
-### L-011 — When an AC's outcome depends on an external provider's documented-but-unverifiable-locally semantics (e.g. a filter operator's behavior on absent values), cite the provider doc in design.md and flag the AC as a spec-precision gap instead of writing a unit test that only re-asserts the code's own logic.
+### L-013 — When an AC's outcome depends on an external provider's documented-but-unverifiable-locally semantics (e.g. a filter operator's behavior on absent values), cite the provider doc in design.md and flag the AC as a spec-precision gap instead of writing a unit test that only re-asserts the code's own logic.
 - signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `content` · harmful: 0
 - features: preferencias-notificacao-mobile
 - evidence: spec.md MOB-10b AC4 / apps/api/src/content/notifications.service.ts:43 (content)

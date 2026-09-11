@@ -28,7 +28,11 @@
     },
     "production": {
       "extends": "generic",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "ORBIEN_API_URL": "https://orbien-api.onrender.com/api",
+        "ORBIEN_ONESIGNAL_APP_ID": "wvnuq62y5uqgnqhyapm5synjd"
+      }
     },
     "generic": {
       "env": {
