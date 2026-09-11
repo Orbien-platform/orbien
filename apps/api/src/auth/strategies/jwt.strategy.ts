@@ -24,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       select: { is_active: true, tenant: { select: { is_active: true } } },
     });
 
-    if (!user?.is_active || !user.tenant.is_active) throw new UnauthorizedException();
+    if (!user?.is_active || !user.tenant?.is_active) throw new UnauthorizedException();
 
     return payload;
   }

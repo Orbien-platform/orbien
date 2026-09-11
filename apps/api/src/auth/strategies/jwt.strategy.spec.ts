@@ -75,5 +75,18 @@ describe('JwtStrategy', () => {
 
       await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
     });
+
+    // Teórico dado o FK obrigatório de `user_accounts.tenant_id` — mas
+    // `tenant.is_active` não pode assumir a relação presente sem checar.
+    it('rejeita, sem estourar, quando a relação de tenant vem nula', async () => {
+      const prisma = {
+        userAccount: {
+          findUnique: jest.fn().mockResolvedValue({ is_active: true, tenant: null }),
+        },
+      } as unknown as PrismaService;
+      const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
+
+      await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
   });
 });
