@@ -170,7 +170,20 @@ push real depende de app instalado.
 1. WHEN o app inicializa após login THEN o app SHALL registrar o dispositivo
    no OneSignal SDK com `external_id` = id da pessoa autenticada.
 2. WHEN o usuário abre a aba "Conteúdo" THEN o app SHALL listar os posts
-   publicados visíveis para os segmentos de audiência do usuário.
+   publicados da congregação do usuário — **sem** filtrar por segmento de
+   audiência, replicando exatamente o que `apps/web` já faz contra a mesma
+   rota.
+
+   > A redação original desta AC dizia "visíveis para os segmentos de
+   > audiência do usuário", o que a implementação nunca fez — e nem devia.
+   > `AudienceSegment`/`PostSegment` regem só *push targeting* (MOB-07); a
+   > query de listagem não cruza segmento nenhum. A decisão de manter assim
+   > foi tomada e confirmada com o usuário na rodada de Design de MOB-06
+   > (`design.md`, "Achado importante — segmentação de audiência não filtra a
+   > listagem"): filtrar o feed por segmento seria mudança de produto na
+   > mesma rota que o web consome, fora do escopo desta spec. Texto corrigido
+   > aqui para quem lê o `spec.md` sozinho não presumir um filtro que não
+   > existe.
 3. WHEN um post novo é publicado e o dispositivo está registrado no segmento
    correspondente THEN o usuário SHALL receber uma push notification (fluxo
    ponta a ponta: backend já dispara via OneSignal, o app só precisa estar
@@ -335,21 +348,21 @@ bundle id mudam só por config, sem tocar em código.
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, 5 verificadas nesta rodada (MOB-01, MOB-02, MOB-03,
-MOB-11, MOB-12), 7 aguardando rodada de Design própria (MOB-04 a MOB-10)
+**Coverage:** 12 total, **11 verificadas** (MOB-01 a MOB-09, MOB-11,
+MOB-12), 1 pendente (MOB-10, P3 — nunca entrou em rodada de Design).
 
-**Nota (Fase 1/2 do Execute):** MOB-11 e MOB-12 ficam em "Implementing" —
-T1-T7 (`tasks.md`) entregam scaffold do workspace e `app.config.js`
-dinâmico, mas a Fase Verificação (Verifier, fillsd) só roda no fechamento
-da feature inteira (após Fases 3-5, MOB-01/02/03). Não marcar "Verified"
-aqui.
+**Nota (Fases 1-5 do Execute) — cumprida.** As duas notas que viviam aqui
+instruíam a não marcar "Verified" enquanto o Verifier não tivesse rodado no
+fechamento da feature: MOB-11/MOB-12 depois das Fases 1/2, MOB-01/MOB-02
+depois das 3/4. O Verifier rodou, e os vereditos estão em `validation.md`
+(Rodada 1). A condição das notas não vale mais e a tabela acima reflete o
+resultado — por isso elas saíram, em vez de seguirem como instrução vencida.
 
-**Nota (Fase 3/4 do Execute):** MOB-01 e MOB-02 ficam em "Implementing" —
-T8-T14 (`tasks.md`) entregam ApiClient, AuthClient (login/logout/fila de
-refresh), AuthProvider, tela de Login e guarda de navegação, mas a Fase 5
-(T15-T16, tema por tenant — MOB-03) ainda está pendente em outro batch, e
-o Verifier só roda no fechamento da feature inteira. Não marcar "Verified"
-aqui.
+**Rodadas posteriores:** MOB-04 e MOB-05 (Rodada 2), MOB-06 (Rodada 3) e
+MOB-07 (Rodada 4) foram verificados em rodadas próprias, cada uma com seu
+veredito em `validation.md` e o bloco correspondente fechado em `tasks.md`.
+MOB-08 e MOB-09 têm feature própria
+(`.specs/features/celebracoes-oc-mobile/`, `.specs/features/pequenos-grupos-mobile/`).
 
 ---
 

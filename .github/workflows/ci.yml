@@ -41,7 +41,7 @@ jobs:
       - name: Sanidade das skills
         run: node scripts/check-skills.mjs
 
-      - name: Build dos 4 apps
+      - name: Build dos 5 apps
         run: npx turbo run build
 
       # nest build não checa a pasta test/, e é lá que estão os testes de RLS.
@@ -97,7 +97,7 @@ jobs:
 
       # `turbo run test` depende de ^build por causa do Prisma Client: sem
       # `prisma generate`, os imports de @prisma/client não resolvem.
-      - name: Suítes de unidade dos 4 apps
+      - name: Suítes de unidade dos 5 apps
         run: npx turbo run test
 
       # Sem --seed: a suíte de integração monta as próprias fixtures e as
@@ -106,8 +106,15 @@ jobs:
         run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh
         working-directory: apps/api
 
-      # O portão da meta de 100%. Os thresholds sobem por caminho a cada fase
-      # concluída; enquanto estiverem em 0, este passo mede sem bloquear.
+      # Um passo por app — app sem passo é app sem portão, que foi o estado
+      # do mobile entre 2026-09-08 e 2026-09-10. Cada um reprova sozinho
+      # quando cai abaixo do piso do seu próprio arquivo de config; os pisos
+      # e o porquê de cada um estão em docs/TESTES.md.
+      #
+      # API e site fecham em `global: 100`. Admin (99/98/100/100, medido na
+      # Fase 14) e mobile (94/84/93/97, medido em 2026-09-10) travam o piso
+      # medido, e o piso nunca desce. Só o web segue com `global: 0` + pisos
+      # por caminho — ver a Fase 13 em docs/TESTES.md para o que falta ali.
       - name: Cobertura da API
         run: npm run test:cov -w orbien-backend
 
@@ -119,6 +126,9 @@ jobs:
 
       - name: Cobertura do admin
         run: npm run test:cov -w orbien-admin
+
+      - name: Cobertura do mobile
+        run: npm run test:cov -w orbien-mobile
 
   # ── Fase 2 — isolamento multi-tenant contra Postgres efêmero ─────────────
   rls:

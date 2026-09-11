@@ -10,6 +10,7 @@ npm workspaces + Turborepo. Node 22.
 | `apps/site` | `orbien-site` | Next.js 16 (App Router), Tailwind 4 | Vercel |
 | `apps/web` | `orbien-web` | Next.js 16 (App Router), Tailwind 4 | Vercel |
 | `apps/admin` | `orbien-admin` | Next.js 16 (App Router), Tailwind 4 | Vercel (subdomínio `admin.`) |
+| `apps/mobile` | `orbien-mobile` | Expo (SDK 57) + React Native, Expo Router | EAS Build (iOS/Android) |
 
 Cada app tem seu próprio `CLAUDE.md`/`AGENTS.md` com as regras específicas —
 leia o do app antes de mexer nele.
@@ -60,7 +61,7 @@ leia o do app antes de mexer nele.
   uma escolha legítima do dev — mas tem que ser escolha declarada, não
   silêncio. Não corrija por conta própria o que não foi pedido, e não bloqueie
   o trabalho esperando por certeza.
-- Os três apps têm `lint` e `turbo run lint` cobre os três. A base da API é
+- Os cinco apps têm `lint` e `turbo run lint` cobre os cinco. A base da API é
   `typescript-eslint` recommended **sem** checagem de tipos, e a única regra
   ajustada é `no-unused-vars` com `argsIgnorePattern: "^_"` — o código marca
   "não usado de propósito" com underscore (`_tx`, `_depth`).

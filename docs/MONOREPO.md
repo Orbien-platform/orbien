@@ -1,18 +1,47 @@
 # Monorepo — estrutura e deploy
 
+## Os cinco apps
+
+| Caminho | Package (workspace) | Stack | Deploy |
+|---|---|---|---|
+| `apps/api` | `orbien-backend` | NestJS 10, Prisma 6, Postgres | Render, runtime Node |
+| `apps/site` | `orbien-site` | Next.js 16 (App Router), Tailwind 4 | Vercel |
+| `apps/web` | `orbien-web` | Next.js 16 (App Router), Tailwind 4 | Vercel |
+| `apps/admin` | `orbien-admin` | Next.js 16 (App Router), Tailwind 4 | Vercel, subdomínio `admin.` |
+| `apps/mobile` | `orbien-mobile` | Expo (SDK 57) + React Native, Expo Router | EAS Build (iOS/Android) |
+
+O nome do **package** é o que vai em `npm install -w`, `turbo --filter` e
+`npm run test:cov -w` — não o nome da pasta. O da API é `orbien-backend`, e é
+a única em que os dois não coincidem.
+
 ## Por que assim
 
-Os três projetos viviam em repositórios separados (`orbien-api`, `orbien-site`,
-`orbien-web`). Foram unificados em um único repositório **preservando todo o
-histórico de commits** (via `git subtree`), mas **sem unificar os deploys**:
+Três dos cinco apps de hoje viviam em **repositórios** separados — repos
+`orbien-api`, `orbien-site` e `orbien-web`, que não são os packages da tabela
+acima (o repo `orbien-api` virou o package `orbien-backend`). Foram unificados
+em um único repositório **preservando todo o histórico de commits** (via
+`git subtree`), mas **sem unificar os deploys**:
 
-- `apps/api` continua sendo uma imagem Docker publicada no **Render**.
+- `apps/api` roda no **Render**, em runtime Node.
 - `apps/site` e `apps/web` continuam em **projetos Vercel separados**.
 
 `apps/admin` é o quarto app e nasceu aqui, na Fase 3 do plano de plataforma —
 não veio de repositório nenhum. É o console da plataforma, roda no subdomínio
 `admin.` e tem projeto Vercel próprio, pela mesma forma dos outros dois: deploy
 independente, e nada que rode na Vercel importa código de `apps/api`.
+
+`apps/mobile` é o quinto e também nasceu aqui, em 2026-09-08 — app nativo do
+membro e da liderança, Expo + React Native. É o único que não vai para Vercel
+nem para Render: sai por **EAS Build**, o serviço da própria Expo, e sua
+distribuição são as lojas, não uma URL. Fala direto com a API por
+`Authorization: Bearer`, sem o `/api-proxy` que o `web` usa — app nativo não
+tem origem de navegador para exigir cookie `HttpOnly`.
+
+> **Runtime Node, não Docker.** O `apps/api/Dockerfile` existe e funciona para
+> build local, mas o serviço do Render não o executa: build
+> `npm ci --include=dev && npm run build:api`, start
+> `node apps/api/dist/src/main.js`, ambos a partir da raiz. Ver `render.yaml`
+> na raiz e `/DEPLOY.md`.
 
 O que passou a ser compartilhado é apenas o gerenciamento de dependências
 (um `package-lock.json` na raiz) e a orquestração de tarefas (Turborepo).
@@ -45,10 +74,19 @@ build de forma não óbvia.
 | `apps/web` | 3001 |
 | `apps/site` | 3002 |
 | `apps/admin` | 3003 |
+| `apps/mobile` | — (Metro na 8081, escolhida pelo Expo) |
 
-`npm run dev` sobe os quatro em paralelo sem colisão. As portas dos fronts
+`npm run dev` sobe os cinco em paralelo sem colisão. As portas dos fronts
 estão fixadas nos próprios scripts `dev` de cada app, e não no `next dev`
-padrão, justamente para não brigarem com a API na 3000.
+padrão, justamente para não brigarem com a API na 3000. O mobile não entra
+nessa lista porque não serve HTTP para o navegador: quem escolhe a porta do
+Metro é o `expo start`, e o cliente dele é o dispositivo ou o emulador.
+
+Para o app do dispositivo alcançar a API local não basta subir as duas: o
+`localhost` do celular é o próprio celular. A URL da API sai de
+`Constants.expoConfig.extra.apiUrl` (`apps/mobile/app.config.js`), e em
+desenvolvimento em dispositivo físico ela precisa apontar para o IP da máquina
+na rede, não para `http://localhost:3000`.
 
 Para exercitar a sessão de suporte de ponta a ponta são necessários três: a API
 na 3000, o `admin` na 3003 (de onde a sessão é aberta) e o `web` na 3001 (para
@@ -60,16 +98,25 @@ onde ela é entregue). O destino sai de `NEXT_PUBLIC_WEB_URL`, no
 O passo a passo de configuração do Render e da Vercel está em
 [`/DEPLOY.md`](../DEPLOY.md). Resumo do que o monorepo mudou:
 
-- **API (Render):** o build context do Docker passou a ser a **raiz** do repo,
-  porque o `package-lock.json` mora lá. Ver `dockerContext` / `dockerfilePath` /
-  `buildFilter` em `apps/api/render.yaml`.
+- **API (Render):** build e start passaram a rodar a partir da **raiz**, porque
+  o `package-lock.json` mora lá — `npm ci --include=dev && npm run build:api`,
+  depois `node apps/api/dist/src/main.js`. Ver `render.yaml` na raiz.
 - **site, web e admin (Vercel):** três projetos separados, cada um com Root
   Directory em `apps/site` / `apps/web` / `apps/admin` e *"Include files
   outside of the Root Directory"* habilitado. Cada um tem `ignoreCommand` com
   `turbo-ignore` no seu `vercel.json`, para não deployar quando o commit não
   afetou aquele app.
-- **Variáveis de ambiente:** não mudaram, em nenhuma das três plataformas.
+- **mobile (EAS Build):** fora das duas plataformas. Os profiles vivem em
+  `apps/mobile/eas.json` e a identidade do app (nome, bundle id, ícone, app id
+  do OneSignal) é resolvida por `apps/mobile/app.config.js` a partir do profile
+  — nunca hardcoded em código-fonte compartilhado, que é o que permite a
+  variante white-label por tenant existir depois sem fork (AD-002 em
+  `.specs/STATE.md`). O CI dispara um build de preview quando o diff toca
+  `apps/mobile` (job `mobile-eas-build`, ver [`CI.md`](CI.md)).
+- **Variáveis de ambiente:** não mudaram para API, site, web e admin. O mobile
+  não usa `.env`: as suas chegam por `env` do profile no `eas.json`.
 
-Os repositórios antigos (`orbien-api`, `orbien-site`, `orbien-web`) devem ser
-arquivados só depois que os três deploys novos estiverem verdes — eles são o
-plano de rollback. O histórico deles está inteiro aqui, sob `apps/*`.
+Os repositórios antigos — de novo, os **repos** `orbien-api`, `orbien-site` e
+`orbien-web`, não os packages — devem ser arquivados só depois que os três
+deploys novos estiverem verdes: eles são o plano de rollback. O histórico
+deles está inteiro aqui, sob `apps/*`.

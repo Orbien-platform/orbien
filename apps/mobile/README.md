@@ -131,7 +131,7 @@ JS dos builds de preview de 2026-09-08, com jest, tsc e eslint todos verdes —
 nenhum dos três monta esse grafo. É por isso que os testes de rota vivem em
 `src/__tests__/app/`, não ao lado das rotas.
 
-Roda em todo PR pelo step "Build dos 4 apps" (`turbo run build`), custa ~10s
+Roda em todo PR pelo step "Build dos 5 apps" (`turbo run build`), custa ~10s
 e derruba a mudança antes de gastar minuto de fila da EAS. `dist/` já está no
 `.gitignore` e já é output declarado da task `build` no `turbo.json`, então
 entra no cache do Turbo.

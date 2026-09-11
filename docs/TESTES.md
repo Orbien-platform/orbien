@@ -1,7 +1,12 @@
 # Testes — plano para 100% de cobertura
 
-Meta declarada: **100% de cobertura nos quatro apps** (`statements`, `branches`,
-`functions`, `lines`), travada no CI.
+Meta declarada quando este plano foi escrito: **100% de cobertura nos quatro
+apps de então** (`statements`, `branches`, `functions`, `lines`), travada no
+CI. Hoje são cinco apps e a meta não é mais uniforme — api e site fecham em
+`global: 100`; admin e mobile travam **piso medido**, com justificativa por
+métrica (Fases 14 e 15); o web segue em aberto. O que é uniforme é o portão:
+todo app tem `test:cov` no `ci.yml`, e nenhum piso desce. Ver "Estado", logo
+abaixo, e a Fase 13.
 
 O plano é dividido em fases que podem ser executadas **uma por sessão de
 chat**, de forma independente. Cada fase abaixo é autocontida: diz o que ler,
@@ -31,19 +36,30 @@ Marque ao concluir. Este quadro é a fonte da verdade entre sessões.
 | 12 | site — rotas | `app/` | 18 | ☑ |
 | 13 | Fechamento | threshold global em 100, e2e dos fluxos faltantes | — | ◐ |
 | 14 | admin — console da plataforma | `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `proxy.ts` | 25 | ☑ |
+| 15 | mobile — portão de cobertura | `src/**` (telas, lib, componentes) | 39 suítes | ☑ |
 
 A Fase 14 não estava no plano original: o `apps/admin` nasceu depois dele, e
 a Fase 13 já cobrava `npm run test:cov -w orbien-admin` em 100% sem que
 existisse fase para chegar lá. Ela fecha esse buraco e é independente das
 demais — foi feita em paralelo com 10 a 13.
 
+A Fase 15 é o mesmo caso, uma volta depois: `apps/mobile` nasceu em
+2026-09-08, dois dias antes desta linha ser escrita, e chegou a 39 suítes
+sem `coverageThreshold`, sem script `test:cov` e sem passo no `ci.yml`. Ela
+não escreveu teste novo — travou o piso do que já existia e ligou o portão,
+que é o que impedia o app de crescer sem rede. Ver "Fase 15 — mobile: o
+portão que faltava".
+
 Ponto de partida medido em 2026-09-02: **1 suíte na API** (39 testes de RLS,
 `test/rls/isolation.spec.ts`), **2 testes e2e no web** (escalas e templates),
 **nada no site**. Nenhuma instrumentação de cobertura em lugar nenhum.
 
-`◐` = parcial. A Fase 13 rodou o que não depende da Fase 10 (e2e dos fluxos
-faltantes, smoke do site, `global: 100` travado na API e no site); o que
-depende dela segue aberto. Ver "Estado da Fase 13" abaixo.
+`◐` = parcial. Quando a Fase 13 rodou, o que dependia da Fase 10 ficou de
+fora — o que não dependia (e2e dos fluxos faltantes, smoke do site,
+`global: 100` travado na API e no site) foi entregue. **A Fase 10 fechou
+desde então**, e o que mantém a Fase 13 em ◐ hoje é outra coisa: os pisos
+fracionários do web, e a escolha entre cobrir aqueles ramos ou assumi-los
+como definitivos. Ver "Estado da Fase 13" abaixo.
 
 **Medido em 2026-09-05**, já com as Fases 11 e 12 mescladas da `main`:
 
@@ -54,13 +70,21 @@ depende dela segue aberto. Ver "Estado da Fase 13" abaixo.
 | site | 100% | 100% | 100% | 100% | 75 (280 testes) |
 | admin | 1,5% | 1,0% | 0,8% | 1,6% | 1 (4 testes) |
 
+E o mobile, **medido em 2026-09-10** (não existia na medição acima):
+
+| App | Statements | Branches | Functions | Lines | Suítes |
+|---|---|---|---|---|---|
+| mobile | 94,51% | 84,69% | 93,81% | 97,94% | 39 (239 testes) |
+
 Dois números aí não estão no quadro de fases, e é isso que eles dizem:
 
-- **`apps/admin` nunca teve fase.** O console nasceu depois que o plano foi
-  escrito. O quadro vai de 0 a 13 sem mencioná-lo, mas o "Pronto quando" da
-  Fase 13 cobrava `test:cov -w orbien-admin` em 100% — cobrança sem fase que a
-  produzisse. A checklist foi corrigida; a fase não foi criada (decisão do dev
-  nesta sessão). Enquanto não existir, `apps/admin` fica fora da meta.
+- **`apps/admin` não tinha fase quando esta medição foi feita.** O console
+  nasceu depois que o plano foi escrito: o quadro ia de 0 a 13 sem mencioná-lo,
+  mas o "Pronto quando" da Fase 13 já cobrava `test:cov -w orbien-admin` em
+  100% — cobrança sem fase que a produzisse. **Resolvido depois:** a Fase 14
+  foi criada e cobriu o console inteiro, saindo de 1,5% para o piso travado de
+  99/98/100/100. O parágrafo fica como registro de por que a Fase 14 existe —
+  os 1,5% da tabela acima são de 2026-09-05 e não descrevem mais o admin.
 - **`src/platform/` na API** é o mesmo caso, e mostra o custo do threshold por
   caminho: nasceu depois das fases 1-6, não entrou em nenhuma entrada da lista
   de caminhos, e ficou com dois DTOs abaixo de 100% **sem reprovar nada**. Os
@@ -74,7 +98,8 @@ Dois números aí não estão no quadro de fases, e é isso que eles dizem:
 Decisão que precisa estar clara antes da Fase 0, porque define se o número
 fecha ou não:
 
-- **Cobertura é medida por Jest (api) e Vitest (web, site).** Os testes
+- **Cobertura é medida por Jest (api e mobile) e Vitest (web, site, admin).**
+  Os testes
   Playwright **não contam** para o percentual. Eles continuam existindo e
   continuam sendo portão de CI — mas instrumentar cobertura através de um
   browser real custa mais do que entrega, e faz o número oscilar por motivo
@@ -92,6 +117,12 @@ adicione mais nenhuma sem registrar o porquê aqui.
 | `apps/api/src/main.ts` | bootstrap com `listen()`. Cobrir exigiria subir a aplicação a cada run de unidade |
 | `**/*.d.ts` | declaração de tipo, não gera código |
 | `apps/api/src/prisma/**` (client gerado) | código gerado pelo Prisma, não é nosso |
+| `apps/mobile/src/**/*.test.{ts,tsx}` | o teste é o instrumento, não o medido — mesma regra que já vale para `test/` e `e2e/` nos outros apps |
+
+O mobile não tem análogo de `main.ts`: o entrypoint é o Expo Router, e as
+telas são cobertas por teste de componente. `app.config.js` fica fora porque
+a meta é sobre `src/` — e ele tem teste próprio, `app.config.test.js`, que
+segue rodando no `npm run test`. Nada além disso foi excluído.
 
 O que **não** está excluído, e é uma escolha deliberada:
 
@@ -102,7 +133,7 @@ O que **não** está excluído, e é uma escolha deliberada:
   importação. Além disso, testar validação de DTO é barato e pega bug real
   (campo opcional que deveria ser obrigatório).
 
-Com essas três exclusões, 100% é alcançável sem ginástica.
+Com essas quatro exclusões, 100% é alcançável sem ginástica.
 
 ---
 
@@ -862,16 +893,69 @@ sai verde com o threshold do app (linhas e funções em 100%).
 
 ---
 
+## Fase 15 — mobile: o portão que faltava
+
+**Pré-requisito:** nenhum. **Escopo:** `apps/mobile/src/**`.
+
+Ao contrário das fases 1-14, esta não escreveu teste nenhum. `apps/mobile`
+nasceu em 2026-09-08 já com o hábito de teste junto do código — 39 suítes e
+239 testes em três dias, cada rodada do `app-mobile` com Verifier
+independente. O que faltava não era cobertura, era **portão**: nada no
+repositório reprovava uma queda.
+
+Três buracos, todos fechados em 2026-09-10:
+
+| O que faltava | O que entrou |
+|---|---|
+| `coverageThreshold` no `jest.config.js` | `global: { statements: 94, branches: 84, functions: 93, lines: 97 }` |
+| Denominador da medição | `collectCoverageFrom: src/**/*.{ts,tsx}`, menos testes e `.d.ts` |
+| Script e passo de CI | `test:cov` no `package.json` + passo "Cobertura do mobile" no `ci.yml` |
+
+**Por que piso medido e não `global: 100`.** Decisão do usuário, com as três
+leituras postas na mesa (100 como api/site; piso medido como admin; 100 com
+exceções documentadas). Piso medido fecha o buraco do portão sem escrever
+teste novo; levar o mobile a 100 — são ~53 statements e ~101 branches — é
+trabalho próprio, e boa parte deles são os mesmos guards de `cancelled` de
+`useEffect` que o web já documentou como alcançáveis só desmontando no meio
+da requisição.
+
+**Por que `collectCoverageFrom` importa mais que o número.** Sem ele o Jest
+mede só o que algum teste importou. Um arquivo novo que ninguém testa não
+entra no denominador, a porcentagem não se move, e o portão não o vê — o
+mesmo ponto cego que a lista por caminho teve com `src/platform/` na API.
+Com ele, arquivo sem teste puxa o número para baixo e reprova.
+
+**O piso foi provado nas duas direções**, porque "passa hoje" sozinho não
+prova portão nenhum (um threshold em 0 também passaria): com `statements: 94`
+o `npm run test:cov -w orbien-mobile` sai 0 com 239/239; com `statements: 95`
+o mesmo comando sai 1.
+
+### O que esta fase não fez
+
+- Não subiu cobertura: os 94,51/84,69/93,81/97,94 são o que as suítes
+  existentes já alcançavam.
+- Não mexeu em teste nenhum — nenhum alterado, removido ou enfraquecido.
+- Não criou fase para o `app.config.js` (fora de `src/`, com teste próprio)
+  nem para os `types.ts`/`icons.ts`, que aparecem com 0% por não terem
+  statement executável e não afetam o total.
+
 ## Fase 13 — Fechamento
 
-**Pré-requisito declarado:** fases 1–12. **Cumprido:** 1–9 e 11–12. Falta só a
-**Fase 10** (rotas do web), e é ela que divide esta fase em duas metades — a
-que não depende dela rodou, a que depende não.
+**Pré-requisito declarado:** fases 1–12. **Cumprido:** todas — 1 a 12, mais a
+14 (admin) e a 15 (mobile), criadas depois. Quando esta fase começou faltava a
+Fase 10 (rotas do web), e era ela que dividia a fase em duas metades: a que não
+dependia dela rodou, a que dependia ficou. **A Fase 10 fechou** — `src/app/**`
+está em 100 no `vitest.config.ts` — e com isso o que sobrou não é mais falta de
+fase nenhuma.
 
 As Fases 11 e 12 entraram na `main` enquanto esta fase era executada (PRs #26 e
 #27). Isso destravou metade do item 1: o site foi de 0% a 100% e ganhou o
-`global` travado junto com a API. Sobra o web, que a Fase 10 fecha, e o admin,
-que não tem fase.
+`global` travado junto com a API.
+
+**O que sobra hoje é só o web**, e por um motivo diferente do original: não
+falta fase, faltam os ramos defensivos que mantêm os pisos por caminho da Fase
+9 abaixo de 100. O admin saiu desta conta pela Fase 14 e o mobile pela Fase 15,
+os dois com piso medido travado. Ver "1. Thresholds", abaixo.
 
 ### Estado da Fase 13
 
@@ -879,7 +963,9 @@ que não tem fase.
 |---|---|
 | 1. `global: 100` na API | ☑ travado, e verde |
 | 1. `global: 100` no site | ☑ travado — destravado pelas Fases 11 e 12 |
-| 1. `global: 100` no web e no admin | ☐ falta a Fase 10; o admin não tem fase |
+| 1. `global: 100` no admin | ☑ **não será** — a Fase 14 travou piso medido (99/98/100/100, medido na própria Fase 14), e é o suficiente |
+| 1. `global: 100` no web | ☐ **em aberto** — a Fase 10 fechou, o bloqueio caiu; o que falta agora são os ramos defensivos, ver abaixo |
+| 1. Piso travado no mobile | ☑ Fase 15 (94/84/93/97), 2026-09-10 |
 | 2. e2e de financeiro (transação → DRE) | ☑ `apps/web/e2e/financeiro.spec.ts` |
 | 2. e2e de pessoas (cadastro e importação) | ◐ cadastro já existia; importação **bloqueada por R2 no CI** |
 | 2. e2e de login / redefinir senha | ☑ `apps/web/e2e/login.spec.ts` |
@@ -892,15 +978,41 @@ métricas — 18 entradas a menos no `jest.config.js`, 11 a menos no
 `vitest.config.ts` do site. Os dois fecham em 100% e, a partir daqui, código
 novo sem teste nesses dois apps quebra o CI, que é o ponto da meta.
 
-**No web e no admin o `global` continua em 0, de propósito.** Travá-lo hoje não
-seria "a meta cumprida", seria `test:cov` vermelho por trabalho que ainda não
-foi feito: web em 68,5% (falta a Fase 10 — as rotas de `src/app/`) e admin em
-1,5% (nunca teve fase). Os thresholds por caminho do web seguem valendo como
-piso — o piso nunca desce.
+**O admin não vai para `global: 100`, e isso é decisão, não pendência.** Este
+documento chegou a cobrar isso antes de existir fase que produzisse o número.
+A Fase 14 cobriu o console inteiro e travou o piso medido —
+`statements 99 / branches 98 / functions 100 / lines 100` no
+`apps/admin/vitest.config.ts`. Os ramos que faltam para 100 são inalcançáveis
+pela UI e cada um tem o `it()` vizinho explicando por quê (o `next === true`
+de dois `onOpenChange`, o `payload` nulo já barrado por `hasPlatformRole`, o
+`typeof window === "undefined"` de um ramo do axios). Piso medido com
+justificativa por métrica vale mais que um 100 obtido por ginástica.
 
-Quem fechar a Fase 10 fecha o web do mesmo jeito: troca a lista de caminho de
-`apps/web/vitest.config.ts` por `thresholds: { statements: 100, branches: 100,
-functions: 100, lines: 100 }`. O comentário no arquivo aponta para cá.
+**No web o `global` continua em 0 — e aqui é pendência, não decisão.** O
+motivo original caiu: a Fase 10 fechou, `src/app/**` está em 100 no
+`vitest.config.ts`. O que impede travar `global: 100` hoje são os pisos
+fracionários por caminho que sobraram da Fase 9 — `celebrations` 99/95,
+`content` 99/97, `financial` 99/98, `groups` 98/92, `persons` 99/89,
+`repertorio` 98/91, `volunteers` 100/95. São guards defensivos do tipo
+`if (!x) return`, alcançáveis só chamando a função interna diretamente, cada
+um documentado no `it()` correspondente.
+
+Então o web tem dois caminhos, e nenhum foi escolhido ainda:
+
+1. Cobrir esses ramos (ou refatorá-los) e travar `global: 100`, como api e
+   site.
+2. Assumir o piso por caminho como o fim da linha do web, como o admin fez —
+   e então a Fase 13 fecha com o web em ◐ por decisão, não por dívida.
+
+Enquanto não houver escolha, **os pisos por caminho seguem valendo e nunca
+descem**. O que este documento não faz mais é prometer `global: 100` no web
+como se fosse só questão de alguém executar: desde 2026-09-10 a decisão está
+registrada aqui como aberta.
+
+> Decisão do usuário em 2026-09-10, quando isto foi levantado: corrigir o
+> documento agora e deixar o web para trabalho próprio — subir o web a
+> `global: 100` na mesma rodada em que o mobile ganhou portão misturaria duas
+> frentes num PR só.
 
 ### 2. e2e dos fluxos faltantes
 
@@ -1027,11 +1139,13 @@ achado vira pergunta:
 O que esta fase entrega, e é o que roda verde hoje:
 
 ```bash
-npx turbo run build                  # 4 successful, 4 total
-npx turbo run test                   # 4 successful, 4 total
+npx turbo run build                  # 5 successful, 5 total
+npx turbo run test                   # 5 successful, 5 total
 npx turbo run lint                   # 0 errors
 npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-site      # 100% nas 4 métricas, com global travado
+npm run test:cov -w orbien-admin     # piso 99/98/100/100 travado (Fase 14)
+npm run test:cov -w orbien-mobile    # piso 94/84/93/97 travado (Fase 15)
 npm run test:rls -w orbien-backend   # 54 testes verdes
 node scripts/check-skills.mjs
 
@@ -1050,17 +1164,31 @@ O smoke virou portão: job `smoke-site` no `ci.yml`, separado do job de e2e
 porque o site não precisa de banco nem de API para ser verificado. Ver
 "Fase 3b" em [CI.md](CI.md).
 
-O que **falta** para a meta de 100% nos quatro apps, que era a redação
-original desta checklist:
+O que **falta**, hoje, para a checklist fechar — atualizado em 2026-09-10,
+porque a redação anterior deste bloco envelheceu e passou a contradizer a
+própria Fase 13, acima:
 
 ```bash
-npm run test:cov -w orbien-web       # hoje 68,5% — falta a Fase 10
-npm run test:cov -w orbien-admin     # hoje 1,5%  — não há fase que o cubra
+npm run test:cov -w orbien-web       # único em aberto — ver "1. Thresholds"
 ```
 
-A linha do admin foi mantida aqui como registro, não como cobrança: sem uma
-fase que produza esses testes, exigir 100% dele nesta checklist era pedir o
-resultado sem o trabalho.
+O web é o que sobrou. As Fases 7 a 10 fecharam e `src/app/**` está em 100; o
+que impede travar `global: 100` são os pisos fracionários da Fase 9, e a
+escolha entre cobrir aqueles ramos ou assumir o piso por caminho como
+definitivo ainda não foi feita.
+
+Os outros quatro saíram desta lista, cada um por um motivo diferente, e
+nenhum deles é "ainda não chegamos lá":
+
+- **api e site** fecham em `global: 100`, travado.
+- **admin**: a Fase 14 cobriu o console e travou piso medido
+  (99/98/100/100). A redação anterior dizia "1,5% — não há fase que o cubra",
+  o que deixou de ser verdade quando a Fase 14 foi feita.
+- **mobile**: a Fase 15 travou piso medido (94/84/93/97) em 2026-09-10.
+
+Piso medido com justificativa por métrica conta como fechado nesta checklist.
+Foi decisão consciente nos dois casos, não dívida — o critério é o portão
+existir e não descer, não o número ser 100.
 
 ---
 
@@ -1075,7 +1203,8 @@ dados que o seed não cria. Estão mapeadas com evidência em
 A primeira tocava este plano enquanto o job `Testes de RLS` estava vermelho.
 **Não está mais**: `npm run test:rls -w orbien-backend` fecha em 54 testes
 verdes (o plano falava em 39 — a suíte cresceu desde então). O que impede a
-Fase 13 de declarar fechamento hoje não é o RLS, é a Fase 10; ver
+Fase 13 de declarar fechamento hoje não é o RLS nem a Fase 10, que fechou:
+é a decisão pendente sobre os pisos fracionários do web; ver
 "Estado da Fase 13".
 
 **`npm run test:cov -w orbien-web` e o `tsc` do build de `orbien-web` estavam
@@ -1105,7 +1234,7 @@ desenvolvimento remoto, não do produto.
 **A meta de 100% foi definida pelo dono do projeto.** A objeção usual — que
 meta global de percentual induz teste de getter — é conhecida e foi aceita.
 A mitigação escolhida foi manter a lista de exclusões mínima e justificada
-(três linhas), em vez de excluir categorias inteiras para inflar o número:
+(quatro linhas), em vez de excluir categorias inteiras para inflar o número:
 `*.module.ts` e `dto/**` ficam **dentro** do denominador de propósito.
 
 **O que ficou fora do denominador e por quê:** cobertura via Playwright.
@@ -1127,9 +1256,10 @@ fechamento: arquivo que nasce **fora** de todos os caminhos listados não é
 cobrado por ninguém. Foi o que houve com `src/platform/` — dois DTOs abaixo de
 100% sem reprovar nada, em módulo que trata do plano de plataforma. Na API a
 lista saiu e o `global` entrou. No site a troca veio junto, assim que as Fases
-11 e 12 fecharam. No web e no admin ela fica para quem fechar a Fase 10 e para
-quem der ao admin uma fase, porque lá o `global` hoje só produziria CI
-vermelho.
+11 e 12 fecharam. No admin e no mobile a resposta acabou sendo outra — piso
+medido travado, com justificativa por métrica (Fases 14 e 15) —, que resolve
+o mesmo ponto cego sem exigir 100. No web a troca segue em aberto; ver "1.
+Thresholds", acima.
 
 **O `playwright` órfão do site virou o smoke da Fase 13**, e não saiu. O que
 decidiu foi haver uma afirmação que só browser faz e que importa em site
