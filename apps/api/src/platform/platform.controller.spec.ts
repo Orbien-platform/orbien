@@ -2,6 +2,8 @@ import { PlatformController } from './platform.controller';
 import { ProvisionTenantService } from './provision-tenant.service';
 import { ListTenantsService } from './list-tenants.service';
 import { ListAuditLogsService } from './list-audit-logs.service';
+import { UpdateTenantService } from './update-tenant.service';
+import { SetTenantActiveService } from './set-tenant-active.service';
 
 function servicesMock() {
   const provisionTenant = {
@@ -13,14 +15,30 @@ function servicesMock() {
   const listAuditLogs = {
     list: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 }),
   } as unknown as ListAuditLogsService;
+  const updateTenant = {
+    update: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1' }),
+  } as unknown as UpdateTenantService;
+  const setTenantActive = {
+    setActive: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', is_active: false }),
+  } as unknown as SetTenantActiveService;
 
-  return { provisionTenant, listTenants, listAuditLogs };
+  return { provisionTenant, listTenants, listAuditLogs, updateTenant, setTenantActive };
+}
+
+function controllerWith(services: ReturnType<typeof servicesMock>) {
+  return new PlatformController(
+    services.provisionTenant,
+    services.listTenants,
+    services.listAuditLogs,
+    services.updateTenant,
+    services.setTenantActive,
+  );
 }
 
 describe('PlatformController', () => {
   it('list delega ao ListTenantsService com a query', async () => {
-    const { provisionTenant, listTenants, listAuditLogs } = servicesMock();
-    const controller = new PlatformController(provisionTenant, listTenants, listAuditLogs);
+    const services = servicesMock();
+    const controller = controllerWith(services);
     const query = { page: 1, limit: 20 };
 
     await expect(controller.list(query)).resolves.toEqual({
@@ -29,21 +47,21 @@ describe('PlatformController', () => {
       page: 1,
       limit: 20,
     });
-    expect(listTenants.list).toHaveBeenCalledWith(query);
+    expect(services.listTenants.list).toHaveBeenCalledWith(query);
   });
 
   it('provision delega ao ProvisionTenantService com o DTO', async () => {
-    const { provisionTenant, listTenants, listAuditLogs } = servicesMock();
-    const controller = new PlatformController(provisionTenant, listTenants, listAuditLogs);
+    const services = servicesMock();
+    const controller = controllerWith(services);
     const dto = { tenant_name: 'Igreja X', slug: 'igreja-x' } as never;
 
     await expect(controller.provision(dto)).resolves.toEqual({ id: 'tenant-1' });
-    expect(provisionTenant.provision).toHaveBeenCalledWith(dto);
+    expect(services.provisionTenant.provision).toHaveBeenCalledWith(dto);
   });
 
   it('listSupportAccess delega ao ListAuditLogsService com a query', async () => {
-    const { provisionTenant, listTenants, listAuditLogs } = servicesMock();
-    const controller = new PlatformController(provisionTenant, listTenants, listAuditLogs);
+    const services = servicesMock();
+    const controller = controllerWith(services);
     const query = { page: 1, limit: 20 } as never;
 
     await expect(controller.listSupportAccess(query)).resolves.toEqual({
@@ -52,6 +70,34 @@ describe('PlatformController', () => {
       page: 1,
       limit: 20,
     });
-    expect(listAuditLogs.list).toHaveBeenCalledWith(query);
+    expect(services.listAuditLogs.list).toHaveBeenCalledWith(query);
+  });
+
+  it('update delega ao UpdateTenantService com o id e o DTO', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+    const dto = { name: 'Novo Nome' };
+
+    await expect(controller.update('tenant-1', dto)).resolves.toEqual({ tenant_id: 'tenant-1' });
+    expect(services.updateTenant.update).toHaveBeenCalledWith('tenant-1', dto);
+  });
+
+  it('deactivate delega ao SetTenantActiveService com is_active=false', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+
+    await expect(controller.deactivate('tenant-1')).resolves.toEqual({
+      tenant_id: 'tenant-1',
+      is_active: false,
+    });
+    expect(services.setTenantActive.setActive).toHaveBeenCalledWith('tenant-1', false);
+  });
+
+  it('activate delega ao SetTenantActiveService com is_active=true', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+
+    await controller.activate('tenant-1');
+    expect(services.setTenantActive.setActive).toHaveBeenCalledWith('tenant-1', true);
   });
 });

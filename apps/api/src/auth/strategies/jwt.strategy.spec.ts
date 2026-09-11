@@ -31,15 +31,17 @@ describe('JwtStrategy', () => {
   });
 
   describe('validate', () => {
-    it('devolve o payload quando o usuário existe e está ativo', async () => {
-      const findUnique = jest.fn().mockResolvedValue({ is_active: true });
+    it('devolve o payload quando o usuário e o tenant existem e estão ativos', async () => {
+      const findUnique = jest
+        .fn()
+        .mockResolvedValue({ is_active: true, tenant: { is_active: true } });
       const prisma = { userAccount: { findUnique } } as unknown as PrismaService;
       const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
 
       await expect(strategy.validate(payload)).resolves.toBe(payload);
       expect(findUnique).toHaveBeenCalledWith({
         where: { id: payload.sub },
-        select: { is_active: true },
+        select: { is_active: true, tenant: { select: { is_active: true } } },
       });
     });
 
@@ -54,7 +56,20 @@ describe('JwtStrategy', () => {
 
     it('rejeita quando o usuário existe mas está inativo', async () => {
       const prisma = {
-        userAccount: { findUnique: jest.fn().mockResolvedValue({ is_active: false }) },
+        userAccount: {
+          findUnique: jest.fn().mockResolvedValue({ is_active: false, tenant: { is_active: true } }),
+        },
+      } as unknown as PrismaService;
+      const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
+
+      await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('rejeita quando o usuário está ativo mas o tenant está inativo', async () => {
+      const prisma = {
+        userAccount: {
+          findUnique: jest.fn().mockResolvedValue({ is_active: true, tenant: { is_active: false } }),
+        },
       } as unknown as PrismaService;
       const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
 

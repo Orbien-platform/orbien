@@ -107,7 +107,12 @@ export class AuthService {
       where: { slug: dto.tenant_slug },
       include: { tenantPlan: { select: { plan: true } } },
     });
-    if (!tenant)
+    // Tenant inativo dá o mesmo erro de tenant inexistente: quem inativou a
+    // igreja não quer que o login continue distinguindo os dois casos. Quem
+    // barra de fato, em toda requisição — não só aqui — é o
+    // `JwtStrategy.validate`; este é o caminho que evita emitir um token que
+    // já nasceria inútil.
+    if (!tenant || !tenant.is_active)
       throw new UnauthorizedException({ message: 'Tenant not found', code: 'TENANT_NOT_FOUND' });
 
     const user = await this.prisma.userAccount.findUnique({

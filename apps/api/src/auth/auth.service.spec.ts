@@ -123,9 +123,22 @@ describe('AuthService.login', () => {
     ).rejects.toMatchObject({ response: { code: 'TENANT_NOT_FOUND' } });
   });
 
+  it('rejeita tenant inativo com o mesmo erro de tenant inexistente', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1',
+      tenantPlan: null,
+      is_active: false,
+    });
+
+    await expect(
+      service.login({ email: 'a@b.com', password: 'x', tenant_slug: 'doca' }),
+    ).rejects.toMatchObject({ response: { code: 'TENANT_NOT_FOUND' } });
+  });
+
   it('rejeita quando o usuário não existe', async () => {
     const { service, prisma } = serviceWith({});
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null });
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null, is_active: true });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
     await expect(
@@ -135,7 +148,7 @@ describe('AuthService.login', () => {
 
   it('rejeita usuário inativo', async () => {
     const { service, prisma } = serviceWith({});
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null });
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null, is_active: true });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue({ is_active: false });
 
     await expect(
@@ -146,7 +159,7 @@ describe('AuthService.login', () => {
   it('rejeita senha incorreta', async () => {
     const { service, prisma } = serviceWith({});
     const hash = await argon2.hash('senha-certa');
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null });
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null, is_active: true });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue({
       id: 'u1',
       is_active: true,
@@ -166,6 +179,7 @@ describe('AuthService.login', () => {
     (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
       id: 't1',
       tenantPlan: { plan: 'premium' },
+      is_active: true,
     });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue({
       id: 'u1',
@@ -190,7 +204,7 @@ describe('AuthService.login', () => {
   it('usa "starter" quando o tenant não tem plano', async () => {
     const { service, prisma } = serviceWith({});
     const hash = await argon2.hash('senha-certa');
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null });
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null, is_active: true });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue({
       id: 'u1',
       is_active: true,
@@ -211,7 +225,7 @@ describe('AuthService — limite de tentativas nas rotas de credencial', () => {
   // A pendência dizia: "A porta do console é a que mais interessa fechar: ela
   // dá acesso a POST /auth/impersonate, e daí a qualquer tenant."
   function accountThatNeverMatches(prisma: PrismaService) {
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null });
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null, is_active: true });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue(null);
     (prisma.userAccount.findMany as jest.Mock).mockResolvedValue([]);
   }
@@ -250,7 +264,7 @@ describe('AuthService — limite de tentativas nas rotas de credencial', () => {
 
   it('login: acerto de senha zera a janela', async () => {
     const { service, prisma, rateLimit } = serviceWith({});
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null });
+    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1', tenantPlan: null, is_active: true });
     (prisma.userAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
     for (let i = 0; i < 3; i++) {

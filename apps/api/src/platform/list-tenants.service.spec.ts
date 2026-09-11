@@ -42,6 +42,7 @@ const row = {
   slug: 'doca-church',
   name: 'Doca Church',
   email: 'contato@doca.test',
+  is_active: true,
   created_at: new Date('2026-01-10T00:00:00Z'),
   tenantPlan: {
     plan: PlanType.premium,
@@ -67,6 +68,7 @@ describe('ListTenantsService', () => {
           plan: PlanType.premium,
           plan_status: PlanStatus.trial,
           trial_ends_at: new Date('2026-02-09T00:00:00Z'),
+          is_active: true,
           congregations_count: 3,
           created_at: new Date('2026-01-10T00:00:00Z'),
         },

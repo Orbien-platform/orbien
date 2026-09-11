@@ -6,7 +6,7 @@ import TenantsPage from "./page";
 import api from "@/lib/api";
 import { openSupportSession } from "@/lib/support-session";
 
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn() } }));
+vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), patch: vi.fn() } }));
 vi.mock("@/lib/support-session", () => ({ openSupportSession: vi.fn() }));
 
 // O `SearchInput` real tem debounce de 300ms e dispara `onSearch("")` na
@@ -42,7 +42,27 @@ vi.mock("@/components/tenants/CreateTenantModal", () => ({
   ),
 }));
 
+vi.mock("@/components/tenants/EditTenantModal", () => ({
+  EditTenantModal: ({
+    open,
+    onUpdated,
+    tenant,
+  }: {
+    open: boolean;
+    onUpdated: () => void;
+    tenant: { name: string } | null;
+  }) => (
+    <div>
+      <span>
+        editar-tenant:{open ? "aberto" : "fechado"}:{tenant?.name ?? ""}
+      </span>
+      <button onClick={onUpdated}>avisar tenant editado</button>
+    </div>
+  ),
+}));
+
 const getMock = vi.mocked(api.get);
+const patchMock = vi.mocked(api.patch);
 const abrirSessao = vi.mocked(openSupportSession);
 
 function tenant(overrides: Record<string, unknown> = {}) {
@@ -54,6 +74,7 @@ function tenant(overrides: Record<string, unknown> = {}) {
     plan: "premium",
     plan_status: "active",
     trial_ends_at: null,
+    is_active: true,
     congregations_count: 2,
     created_at: "2026-05-10T12:00:00.000Z",
     ...overrides,
@@ -84,6 +105,7 @@ beforeEach(() => {
   getMock.mockReset();
   respondeCom([tenant()]);
   abrirSessao.mockReset().mockResolvedValue(undefined);
+  patchMock.mockReset().mockResolvedValue({ data: {} } as never);
 });
 
 describe("TenantsPage", () => {
@@ -95,6 +117,7 @@ describe("TenantsPage", () => {
     expect(screen.getByText("doca-church")).toBeInTheDocument();
     expect(screen.getByText("Premium")).toBeInTheDocument();
     expect(screen.getByText("Ativo")).toBeInTheDocument();
+    expect(screen.getByText("Habilitado")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("10/05/2026")).toBeInTheDocument();
     expect(
@@ -331,7 +354,107 @@ describe("TenantsPage — sessão de suporte", () => {
 
     expect(within(cabecalho).getByText("Igreja")).toBeInTheDocument();
     expect(within(cabecalho).getByText("Plano")).toBeInTheDocument();
+    expect(within(cabecalho).getByText("Acesso")).toBeInTheDocument();
     expect(within(cabecalho).getByText("Congregações")).toBeInTheDocument();
     expect(within(cabecalho).getByText("Criado em")).toBeInTheDocument();
+  });
+});
+
+describe("TenantsPage — editar e inativar", () => {
+  it("mostra Bloqueado para tenant inativo", async () => {
+    respondeCom([tenant({ is_active: false })]);
+
+    render(<TenantsPage />);
+
+    expect(await screen.findByText("Bloqueado")).toBeInTheDocument();
+    expect(screen.queryByText("Habilitado")).not.toBeInTheDocument();
+  });
+
+  it("abre o modal de edição com o tenant clicado e recarrega ao editar", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: /Editar/ }));
+    expect(
+      screen.getByText("editar-tenant:aberto:Doca Church")
+    ).toBeInTheDocument();
+
+    const antes = getMock.mock.calls.length;
+    await user.click(
+      screen.getByRole("button", { name: "avisar tenant editado" })
+    );
+
+    await waitFor(() => expect(getMock.mock.calls.length).toBe(antes + 1));
+  });
+
+  it("inativa o tenant após confirmação", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Inativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Inativar tenant?" });
+    expect(dialog).toHaveTextContent("Doca Church");
+    await user.click(within(dialog).getByRole("button", { name: "Inativar" }));
+
+    await waitFor(() =>
+      expect(patchMock).toHaveBeenCalledWith("/platform/tenants/t-1/deactivate")
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Inativar tenant?" })
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it("reativa o tenant inativo após confirmação", async () => {
+    const user = userEvent.setup();
+    respondeCom([tenant({ is_active: false })]);
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Reativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reativar tenant?" });
+    await user.click(within(dialog).getByRole("button", { name: "Reativar" }));
+
+    await waitFor(() =>
+      expect(patchMock).toHaveBeenCalledWith("/platform/tenants/t-1/activate")
+    );
+  });
+
+  it("cancelar a confirmação não chama a API", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Inativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Inativar tenant?" });
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Inativar tenant?" })
+      ).not.toBeInTheDocument()
+    );
+    expect(patchMock).not.toHaveBeenCalled();
+  });
+
+  it("erro ao inativar fecha o modal e mostra a mensagem no banner", async () => {
+    const user = userEvent.setup();
+    patchMock.mockRejectedValue(new Error("500"));
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Inativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Inativar tenant?" });
+    await user.click(within(dialog).getByRole("button", { name: "Inativar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Não foi possível inativar Doca Church."
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Inativar tenant?" })
+    ).not.toBeInTheDocument();
   });
 });
