@@ -383,6 +383,64 @@ describe('PersonsService', () => {
     });
   });
 
+  describe('purgeFinancialDonorsAfterContractEnd', () => {
+    it('anonimiza doador cujo tenant teve o contrato encerrado há 5+ anos', async () => {
+      const { service, system } = serviceWith();
+      system.$queryRaw.mockResolvedValue([{ id: 'd1' }]);
+      system.person.update.mockResolvedValue({});
+
+      const result = await service.purgeFinancialDonorsAfterContractEnd();
+
+      expect(system.person.update).toHaveBeenCalledWith({
+        where: { id: 'd1' },
+        data: expect.objectContaining({
+          full_name: 'ANONIMIZADO',
+          anonymization_reason: expect.stringContaining('5 anos'),
+        }),
+      });
+      expect(result).toEqual({ purged: 1 });
+    });
+
+    it('não chama update quando ninguém é elegível', async () => {
+      const { service, system } = serviceWith();
+      system.$queryRaw.mockResolvedValue([]);
+
+      const result = await service.purgeFinancialDonorsAfterContractEnd();
+
+      expect(system.person.update).not.toHaveBeenCalled();
+      expect(result).toEqual({ purged: 0 });
+    });
+  });
+
+  describe('purgeMinorsAfterContractEnd', () => {
+    it('anonimiza menor de 18 anos cujo tenant teve o contrato encerrado há 30+ dias', async () => {
+      const { service, system } = serviceWith();
+      system.$queryRaw.mockResolvedValue([{ id: 'm1' }]);
+      system.person.update.mockResolvedValue({});
+
+      const result = await service.purgeMinorsAfterContractEnd();
+
+      expect(system.person.update).toHaveBeenCalledWith({
+        where: { id: 'm1' },
+        data: expect.objectContaining({
+          full_name: 'ANONIMIZADO',
+          anonymization_reason: expect.stringContaining('30 dias'),
+        }),
+      });
+      expect(result).toEqual({ purged: 1 });
+    });
+
+    it('não chama update quando ninguém é elegível', async () => {
+      const { service, system } = serviceWith();
+      system.$queryRaw.mockResolvedValue([]);
+
+      const result = await service.purgeMinorsAfterContractEnd();
+
+      expect(system.person.update).not.toHaveBeenCalled();
+      expect(result).toEqual({ purged: 0 });
+    });
+  });
+
   describe('createHousehold', () => {
     it('cria a família com tenant e congregação do usuário', async () => {
       const { service, client } = serviceWith();

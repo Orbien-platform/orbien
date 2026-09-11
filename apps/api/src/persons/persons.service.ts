@@ -273,6 +273,66 @@ export class PersonsService {
     return { purged: expired.length };
   }
 
+  // Job cron diário (ver PersonsRetentionScheduler): categoria "dados
+  // financeiros e transacionais" da seção 5 — 5 anos após o fim do
+  // contrato do tenant (`tenant_plans.cancelled_at`), não da inatividade da
+  // pessoa. Anonimiza só a Person doadora; financial_transactions permanece
+  // intacta, porque a obrigação fiscal (Res. CFC 1.330/2011) é sobre o
+  // lançamento, não sobre o cadastro de quem doou.
+  async purgeFinancialDonorsAfterContractEnd(): Promise<{ purged: number }> {
+    const expired = await this.prisma.system.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT DISTINCT p.id
+      FROM persons p
+      JOIN tenant_plans tp ON tp.tenant_id = p.tenant_id
+      WHERE p.anonymized_at IS NULL
+        AND tp.cancelled_at IS NOT NULL
+        AND tp.cancelled_at < now() - INTERVAL '5 years'
+        AND EXISTS (
+          SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
+        )
+    `);
+
+    for (const { id } of expired) {
+      await this.prisma.system.person.update({
+        where: { id },
+        data: this.anonymizedFields('Eliminação automática — 5 anos após o fim do contrato (dado financeiro)'),
+      });
+    }
+
+    return { purged: expired.length };
+  }
+
+  // Job cron diário (ver PersonsRetentionScheduler): categoria "dados de
+  // menor de 18 anos" da seção 5 — 30 dias após o fim do contrato do
+  // tenant, sem base legal residual para reter depois disso. Doador fica de
+  // fora (mesma exclusão de purgeInactivePersons): prevalece a retenção
+  // fiscal de 5 anos sobre a regra de 30 dias. Sem birth_date não há como
+  // provar menoridade, então a Person não é elegível a esta categoria.
+  async purgeMinorsAfterContractEnd(): Promise<{ purged: number }> {
+    const expired = await this.prisma.system.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT DISTINCT p.id
+      FROM persons p
+      JOIN tenant_plans tp ON tp.tenant_id = p.tenant_id
+      WHERE p.anonymized_at IS NULL
+        AND p.birth_date IS NOT NULL
+        AND p.birth_date > now() - INTERVAL '18 years'
+        AND tp.cancelled_at IS NOT NULL
+        AND tp.cancelled_at < now() - INTERVAL '30 days'
+        AND NOT EXISTS (
+          SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
+        )
+    `);
+
+    for (const { id } of expired) {
+      await this.prisma.system.person.update({
+        where: { id },
+        data: this.anonymizedFields('Eliminação automática — 30 dias após o fim do contrato (dado de menor)'),
+      });
+    }
+
+    return { purged: expired.length };
+  }
+
   async createHousehold(dto: CreateHouseholdDto, user: JwtPayload): Promise<Household> {
     return this.prisma.client.household.create({
       data: {
