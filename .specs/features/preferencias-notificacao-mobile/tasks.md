@@ -18,8 +18,23 @@ without it.**
 
 **Progresso de Execute**: Fases 1-2 (T1-T8) concluídas em 2026-09-11 pelo
 worker de batch desta fillsd (branch `feat/preferencias-notificacao-mobile`).
-Fases 3-5 (T9-T14) seguem pendentes, outro worker. Ver commits
-`9a11083`..`df79f91` e o SPEC_DEVIATION registrado em T3 abaixo.
+Ver commits `9a11083`..`df79f91` e o SPEC_DEVIATION registrado em T3 abaixo.
+
+Fases 3-5 (T9-T14) concluídas em 2026-09-11 por um segundo worker de batch,
+na mesma branch. Ver commits `cd89f54`..`12fca2f`. **Bloqueio a decidir**:
+o gate de fechamento (`npm run test -w orbien-mobile`, suite completa)
+reporta 3 suítes falhando fora do escopo desta feature —
+`src/lib/splash/animated-splash.test.tsx`, `src/__tests__/app/_layout.test.tsx`
+e `src/__tests__/app/navigation-boot.test.tsx` — com o erro "Unable to
+locate attached view in the native tree" dentro de `Animated.timing` do
+React Native, nenhum deles em arquivo tocado por T9-T14 (confirmado por
+`git diff 3982ff7..HEAD --stat`). O Verifier decide se isso bloqueia PASS;
+sinalizado aqui em vez de "corrigido" ou "ignorado" (regra do `CLAUDE.md`
+raiz: achado de gate vira pergunta, não decisão unilateral). Um quarto
+teste do mesmo gate (`protected-routes.test.ts`, "toda rota de `src/app`
+está declarada em algum `Stack.Protected`") pegou uma omissão real de T14
+— `notificacoes.tsx` não estava listado em `_layout.tsx` — corrigida no
+commit `12fca2f`; esse já era do escopo do lote, não uma pendência aberta.
 
 ---
 
@@ -359,7 +374,7 @@ setup (app, tokens, cleanup)
 
 ---
 
-### T9: `NotificationsService.notifyPost` respeita a categoria
+### T9: `NotificationsService.notifyPost` respeita a categoria ✅ Done (commit `cd89f54`)
 
 **What**: estender `OneSignalFilter` (`relation: '=' | '!='`), e em
 `notifyPost` empilhar
@@ -376,12 +391,12 @@ ao array que `buildFilters` devolve, antes do `dispatch`.
 - Skill: NONE
 
 **Done when**:
-- [ ] `notifyPost` de um post `type: 'event'` inclui
+- [x] `notifyPost` de um post `type: 'event'` inclui
       `{field:'tag',key:'pref_eventos',relation:'!=',value:'false'}` no
       payload enviado ao fetch mockado
-- [ ] `sendManualNotification` não ganha filtro de categoria (teste que
+- [x] `sendManualNotification` não ganha filtro de categoria (teste que
       afirma ausência)
-- [ ] Testes existentes de `buildFilters` continuam passando sem alteração
+- [x] Testes existentes de `buildFilters` continuam passando sem alteração
       (a mudança é aditiva, não toca `buildFilters`)
 
 **Tests**: unit
@@ -391,7 +406,7 @@ ao array que `buildFilters` devolve, antes do `dispatch`.
 
 ---
 
-### T10: `notification-preferences-client.ts` (mobile)
+### T10: `notification-preferences-client.ts` (mobile) ✅ Done (commit `bffac82`)
 
 **What**: `getNotificationPreferences()` e
 `updateNotificationPreferences(patch)` sobre `authenticatedRequest`.
@@ -406,8 +421,8 @@ ao array que `buildFilters` devolve, antes do `dispatch`.
 - Skill: NONE
 
 **Done when**:
-- [ ] `getNotificationPreferences` chama `authenticatedRequest("get", "/me/notification-preferences")`
-- [ ] `updateNotificationPreferences(patch)` chama
+- [x] `getNotificationPreferences` chama `authenticatedRequest("get", "/me/notification-preferences")`
+- [x] `updateNotificationPreferences(patch)` chama
       `authenticatedRequest("patch", "/me/notification-preferences", { body: patch })`
 
 **Tests**: unit
@@ -417,7 +432,7 @@ ao array que `buildFilters` devolve, antes do `dispatch`.
 
 ---
 
-### T11: `onesignal-client.syncNotificationPreferenceTags`
+### T11: `onesignal-client.syncNotificationPreferenceTags` ✅ Done (commit `6aaca18`)
 
 **What**: nova função que chama `OneSignal.User.addTags` com as 4 chaves
 `pref_avisos`/`pref_oracao`/`pref_eventos`/`pref_devocional`, valores
@@ -432,7 +447,7 @@ convertidos para string `"true"`/`"false"`.
 - Skill: NONE
 
 **Done when**:
-- [ ] `addTags` chamado com as 4 chaves como string, nunca boolean (tags
+- [x] `addTags` chamado com as 4 chaves como string, nunca boolean (tags
       OneSignal são sempre string — mesma checagem que `role` já faz hoje)
 
 **Tests**: unit
@@ -442,7 +457,7 @@ convertidos para string `"true"`/`"false"`.
 
 ---
 
-### T12: `NotificationsProvider` sincroniza no login
+### T12: `NotificationsProvider` sincroniza no login ✅ Done (commit `baeeb9f`)
 
 **What**: no `useEffect([session])`, depois de `registerDevice`, buscar
 `getNotificationPreferences()` e chamar `syncNotificationPreferenceTags`;
@@ -457,9 +472,9 @@ falha (rede/erro) é engolida, sem propagar.
 - Skill: NONE
 
 **Done when**:
-- [ ] Sessão válida → `registerDevice` e, na sequência,
+- [x] Sessão válida → `registerDevice` e, na sequência,
       `syncNotificationPreferenceTags` chamados com o resultado do GET
-- [ ] GET falhando (rede) não lança erro não tratado nem impede a
+- [x] GET falhando (rede) não lança erro não tratado nem impede a
       navegação (mesmo padrão de `registerDevice` com token indecodificável)
 
 **Tests**: unit
@@ -469,7 +484,7 @@ falha (rede/erro) é engolida, sem propagar.
 
 ---
 
-### T13: Tela `notificacoes.tsx`
+### T13: Tela `notificacoes.tsx` ✅ Done (commit `97ee5a8`)
 
 **What**: tela com os 4 toggles (Avisos, Pedidos de oração, Eventos,
 Conteúdo devocional); GET no mount; toggle dispara PATCH otimista da
@@ -487,11 +502,11 @@ solta), `Card`/`SectionLabel`/tokens de `perfil.tsx`
 - Skill: NONE
 
 **Done when**:
-- [ ] Mount sem preferência salva mostra as 4 ligadas (AC1)
-- [ ] Toggle bem-sucedido persiste e chama sync de tag (AC2, AC1 da
+- [x] Mount sem preferência salva mostra as 4 ligadas (AC1)
+- [x] Toggle bem-sucedido persiste e chama sync de tag (AC2, AC1 da
       segunda história)
-- [ ] Toggle com falha reverte visualmente e mostra erro (AC3)
-- [ ] Duas categorias tocadas em sequência rápida não se atropelam
+- [x] Toggle com falha reverte visualmente e mostra erro (AC3)
+- [x] Duas categorias tocadas em sequência rápida não se atropelam
       (Edge Case)
 
 **Tests**: unit (component)
@@ -501,7 +516,7 @@ solta), `Card`/`SectionLabel`/tokens de `perfil.tsx`
 
 ---
 
-### T14: Entrada de navegação em `perfil.tsx`
+### T14: Entrada de navegação em `perfil.tsx` ✅ Done (commits `7c48065`, `12fca2f`)
 
 **What**: nova linha "Notificações" na seção "Conta" de `perfil.tsx`,
 navegando para `/notificacoes`.
@@ -515,9 +530,18 @@ navegando para `/notificacoes`.
 - Skill: NONE
 
 **Done when**:
-- [ ] Tocar "Notificações" chama `router.push("/notificacoes")`
-- [ ] Teste existente de `perfil.tsx` (se houver) continua passando +
+- [x] Tocar "Notificações" chama `router.push("/notificacoes")`
+- [x] Teste existente de `perfil.tsx` (se houver) continua passando +
       caso novo cobrindo a navegação
+
+> **Nota (Execute)**: além da linha em `perfil.tsx`, a rota nova exigiu
+> registro em `apps/mobile/src/app/_layout.tsx` (`Stack.Protected`) —
+> sem isso `notificacoes` ficaria sempre montada, alcançável por deep
+> link sem sessão. Pego pelo gate de fechamento de fase
+> (`protected-routes.test.ts`, já existente), corrigido no commit
+> `12fca2f`. Não estava explícito no "Where"/"Done when" desta task, mas
+> é parte inseparável de "dar acesso de navegação" a uma rota autenticada
+> neste app — não scope creep.
 
 **Tests**: unit (component)
 **Gate**: quick

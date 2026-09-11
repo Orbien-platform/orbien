@@ -145,21 +145,24 @@ para a mesma conta e confirmar que recebeu normalmente.
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
 | MOB-10a | P1: Escolher categorias de notificação | Execute | Implementing |
-| MOB-10b | P1: O disparo respeita a categoria desligada | Tasks | In Tasks |
+| MOB-10b | P1: O disparo respeita a categoria desligada | Execute | Implementing |
 
 **ID format:** `MOB-10<letra>` — sub-requisitos de MOB-10 (`app-mobile/spec.md`).
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 2 total, 0 verificados. MOB-10a: backend completo (T1-T8,
-2026-09-11) — schema/RLS/service/controller/rota HTTP, com os 4 AC da
-história "Escolher categorias de notificação" cobertos por teste
-(unit + integration); falta só a UI mobile (T13-T14, Fase 5, ainda não
-executada) para a história ficar de ponta a ponta, por isso "Implementing"
-em vez de "Verified" (o Verifier roda só depois de T1-T14 completas).
-MOB-10b: fundação pronta (T1-T4, categorias mapeadas + tabela/RLS), mas o
-filtro de disparo em si (T9, Fase 3) e a sincronização de tag no mobile
-(T10-T12, Fase 4) ainda não foram implementados — segue "In Tasks".
+**Coverage:** 2 total, 0 verificados. T1-T14 completas em 2026-09-11
+(commits `9a11083`..`12fca2f`) — as duas histórias estão de ponta a ponta:
+MOB-10a (backend T1-T8 + tela `notificacoes.tsx`/navegação T13-T14, os 4 AC
+de "Escolher categorias de notificação" cobertos por teste unit +
+integration + component) e MOB-10b (mapeamento de categoria T4, filtro
+`!=` no disparo T9, cliente/tag/sincronização no mobile T10-T12, os 4 AC
+de "O disparo respeita a categoria desligada" cobertos por teste unit).
+Seguem "Implementing", não "Verified" — o Verifier roda como um passo
+separado, depois deste lote, e é quem decide o veredito final (inclusive
+sobre o bloqueio de gate sinalizado em `tasks.md`, "Progresso de Execute":
+3 suítes de teste do mobile fora do escopo desta feature falhando no gate
+de fechamento de fase, causa pré-existente confirmada por diff).
 
 ---
 
