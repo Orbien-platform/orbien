@@ -3,6 +3,7 @@ import { AudienceSegment, ContentPost, NotificationChannel, NotificationDispatch
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendNotificationDto } from './dto/send-notification.dto';
+import { CATEGORY_BY_POST_TYPE } from './notification-categories';
 
 interface SegmentCriteria {
   congregation_ids?: string[];
@@ -12,7 +13,7 @@ interface SegmentCriteria {
 }
 
 export type OneSignalFilter =
-  | { field: 'tag'; key: string; relation: '='; value: string }
+  | { field: 'tag'; key: string; relation: '=' | '!='; value: string }
   | { operator: 'OR' };
 
 export interface SendPushOpts {
@@ -36,6 +37,12 @@ export class NotificationsService {
     segments: AudienceSegment[],
   ): Promise<void> {
     const filters = this.buildFilters(segments, post.tenant_id);
+    filters.push({
+      field: 'tag',
+      key: `pref_${CATEGORY_BY_POST_TYPE[post.type]}`,
+      relation: '!=',
+      value: 'false',
+    });
     const body = post.body ? post.body.slice(0, 200) : post.title;
 
     await this.dispatch({
