@@ -32,7 +32,7 @@ tem o enum `cancelled`, mas nada no `apps/api` o define.
 
 | Feature | Reason |
 |---|---|
-| Fluxo de cancelamento de tenant (UI, billing, downgrade) | Não existe hoje e não foi pedido; esta entrega só consome `TenantPlan.cancelled_at`, não cria a jornada que o preenche. |
+| UI/billing/downgrade de cancelamento de tenant | Fora desta entrega: `POST /platform/tenants/:id/cancel` e `/reactivate` (adicionados após achado do Verifier) são o mínimo pra `cancelled_at` ter um escritor — não uma jornada de billing completa. |
 | Retenção de "logs de acesso e auditoria" (2 anos) e "registros de consentimento" (5 anos pós-revogação) | Fora do pedido do usuário para esta entrega; ficam para uma próxima iteração da seção 5. |
 | Correção do texto de `docs/ROADMAP.md`/débitos técnicos | O usuário optou por não incluir nesta entrega (perguntado e recusado). |
 | Cadastro de ministério infantil | MVP não trata isso (`orbien-lgpd-mapping.md` 2.4); a regra de menor aqui vale para qualquer `Person` com `birth_date` indicando <18 anos, cadastrada por qualquer fluxo existente. |
@@ -44,8 +44,9 @@ tem o enum `cancelled`, mas nada no `apps/api` o define.
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 |---|---|---|---|
 | Marco do "fim do contrato" | Novo campo `TenantPlan.cancelled_at: DateTime?`, setado quando `status` vira `cancelled` | Discutido com o usuário — evita que qualquer outro update em `TenantPlan` de um tenant já cancelado reinicie a janela (risco do `updated_at`) | y |
+| Quem escreve `cancelled_at` | `POST /platform/tenants/:id/cancel` e `POST /platform/tenants/:id/reactivate` (`CancelTenantPlanService`, rota de plataforma) — fluxo mínimo, sem billing/UI atrás. Achado pelo Verifier: a AC1 original pedia esse comportamento como SHALL atual sem nenhum código que o implementasse; o usuário optou por implementar em vez de mover para Out of Scope. | Resolvido — ver commit que adiciona `cancel-tenant-plan.service.ts` | y |
 | Ação sobre dado financeiro após 5 anos | Anonimizar a `Person` doadora (`anonymizedFields()`), sem tocar `financial_transaction` | Discutido com o usuário — mesmo padrão de DT-05/DT-07; a transação em si é a obrigação fiscal, não o cadastro da pessoa | y |
-| Quem preenche `cancelled_at` | Nenhum fluxo de cancelamento existe ainda; o campo fica pronto para quando existir. Sem tenant com `cancelled_at` setado, os dois jobs novos não têm o que processar — comportamento correto (nenhum falso positivo), não um bug. | Não inventar um fluxo de cancelamento fora do pedido (Out of Scope) | Assumido |
+| Quem preenche `cancelled_at` (histórico) | ~~Nenhum fluxo de cancelamento existe ainda~~ — superado pela linha acima após o achado do Verifier. Mantido aqui só para registrar a mudança de decisão. | — | Superseded |
 | "Menor de 18 anos" — como calcular | `birth_date` não nulo e idade < 18 no momento em que o job roda (não na data do fim do contrato) | Não há campo de "idade no fim do contrato"; recalcular a cada execução é o comportamento natural de um cron diário e nunca teria um falso-negativo tardio | Assumido |
 | `Person` sem `birth_date` | Não é elegível à categoria "menor" (não dá para provar idade) | Mesma cautela que outras categorias já aplicam (ex.: sem sinal de atividade vira `created_at`) — mas aqui não há fallback seguro, então exclui | Assumido |
 | Doador menor de idade | Exclui da eliminação de menor (mesma exclusão de `purgeInactivePersons`) | Preserva a retenção fiscal de 5 anos sobre quem tem `donor_person_id`; evita que a regra dos 30 dias apague um doador antes do prazo fiscal | Assumido |

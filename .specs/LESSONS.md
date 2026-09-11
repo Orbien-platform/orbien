@@ -68,6 +68,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md AC3 (P1: Ver meus grupos) / apps/mobile/src/app/(tabs)/grupos.tsx:43-49 (apps/mobile)
 - last seen: 2026-09-09T02:02:45Z
 
+### L-010 — Quando a tabela de Assumptions já registra que nenhum write path existe para um campo, remova ou mova pra Out of Scope qualquer AC/Edge Case que declare SHALL sobre a escrita desse campo — não deixe as duas seções se contradizerem.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `specs/reten-dados` · harmful: 0
+- features: reten-dados-fim-contrato
+- evidence: spec.md P1 AC1 / Edge Cases (reativação) (specs/reten-dados)
+- last seen: 2026-09-11T17:29:24Z
+
+### L-011 — Teste unitário que mocka $queryRaw inteiro não pega cláusula WHERE errada (ex.: exclusão de doador removida) — para SQL de retenção/exclusão sensível, adicione ao menos um teste de integração contra o SQL real ou asserte o texto da query.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `apps/api/src/persons` · harmful: 0
+- features: reten-dados-fim-contrato
+- evidence: apps/api/src/persons/persons.service.ts:321-323 (purgeMinorsAfterContractEnd) (apps/api/src/persons)
+- last seen: 2026-09-11T17:29:24Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
