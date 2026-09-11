@@ -82,6 +82,11 @@ fi
 if [ -f prisma/migrations/007_rls_songs.sql ]; then
   run_sql_file prisma/migrations/007_rls_songs.sql
 fi
+# Mesmo motivo de 007 (AD-001): notification_preferences já nasce com
+# app_congregation_allowed() nos dois lados.
+if [ -f prisma/migrations/008_rls_notification_preferences.sql ]; then
+  run_sql_file prisma/migrations/008_rls_notification_preferences.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -292,6 +297,19 @@ BEGIN
   RAISE NOTICE 'persons/financial_categories com o ramo de plataforma: %', n;
   IF n <> 2 THEN
     RAISE EXCEPTION 'esperava 2 policies (persons, financial_categories) com app_platform_access simétrico, encontrei % — 006_rls_platform_provisioning.sql rodou?', n;
+  END IF;
+
+  -- 008: notification_preferences (MOB-10) precisa nascer com
+  -- app_congregation_allowed() nos dois lados (AD-001), como songs (007).
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'notification_preferences'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'notification_preferences com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em notification_preferences, encontrei % — 008_rls_notification_preferences.sql rodou?', n;
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no
