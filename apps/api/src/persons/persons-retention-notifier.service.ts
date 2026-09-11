@@ -82,26 +82,37 @@ export class PersonsRetentionNotifier {
         UNION ALL
 
         -- financeiro: 5 anos após o fim do contrato do tenant, doador
+        -- (financial_transactions OU pix_payments — um pix pendente nunca
+        -- vira transação, mas ainda é vínculo financeiro)
         SELECT p.tenant_id, p.congregation_id, p.id
         FROM persons p
         JOIN tenant_plans tp ON tp.tenant_id = p.tenant_id
         WHERE p.anonymized_at IS NULL
           AND tp.cancelled_at IS NOT NULL
           AND tp.cancelled_at + INTERVAL '5 years' BETWEEN now() AND now() + INTERVAL '7 days'
-          AND EXISTS (SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id)
+          AND (
+            EXISTS (SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id)
+            OR EXISTS (SELECT 1 FROM pix_payments pp WHERE pp.donor_person_id = p.id)
+          )
 
         UNION ALL
 
-        -- menor de idade: 30 dias após o fim do contrato do tenant, sem doação
+        -- menor de idade: 30 dias após o fim do contrato do tenant, sem
+        -- exclusão explícita em andamento e sem doação
         SELECT p.tenant_id, p.congregation_id, p.id
         FROM persons p
         JOIN tenant_plans tp ON tp.tenant_id = p.tenant_id
-        WHERE p.anonymized_at IS NULL
+        WHERE p.deleted_at IS NULL
+          AND p.anonymized_at IS NULL
           AND p.birth_date IS NOT NULL
           AND p.birth_date > now() - INTERVAL '18 years'
           AND tp.cancelled_at IS NOT NULL
           AND tp.cancelled_at + INTERVAL '30 days' BETWEEN now() AND now() + INTERVAL '7 days'
-          AND NOT EXISTS (SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id)
+          AND NOT EXISTS (
+            SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
+            UNION ALL
+            SELECT 1 FROM pix_payments pp WHERE pp.donor_person_id = p.id
+          )
       ) upcoming_persons
       GROUP BY tenant_id, congregation_id
     `);

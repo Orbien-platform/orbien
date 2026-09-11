@@ -287,8 +287,9 @@ export class PersonsService {
       WHERE p.anonymized_at IS NULL
         AND tp.cancelled_at IS NOT NULL
         AND tp.cancelled_at < now() - INTERVAL '5 years'
-        AND EXISTS (
-          SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
+        AND (
+          EXISTS (SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id)
+          OR EXISTS (SELECT 1 FROM pix_payments pp WHERE pp.donor_person_id = p.id)
         )
     `);
 
@@ -308,18 +309,23 @@ export class PersonsService {
   // fora (mesma exclusão de purgeInactivePersons): prevalece a retenção
   // fiscal de 5 anos sobre a regra de 30 dias. Sem birth_date não há como
   // provar menoridade, então a Person não é elegível a esta categoria.
+  // deleted_at IS NULL: quem já pediu exclusão explícita segue o prazo de
+  // carência de purgeExpiredSoftDeletes (30 dias do pedido), não este.
   async purgeMinorsAfterContractEnd(): Promise<{ purged: number }> {
     const expired = await this.prisma.system.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT DISTINCT p.id
       FROM persons p
       JOIN tenant_plans tp ON tp.tenant_id = p.tenant_id
-      WHERE p.anonymized_at IS NULL
+      WHERE p.deleted_at IS NULL
+        AND p.anonymized_at IS NULL
         AND p.birth_date IS NOT NULL
         AND p.birth_date > now() - INTERVAL '18 years'
         AND tp.cancelled_at IS NOT NULL
         AND tp.cancelled_at < now() - INTERVAL '30 days'
         AND NOT EXISTS (
           SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
+          UNION ALL
+          SELECT 1 FROM pix_payments pp WHERE pp.donor_person_id = p.id
         )
     `);
 
