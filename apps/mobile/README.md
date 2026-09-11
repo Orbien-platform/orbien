@@ -152,12 +152,13 @@ dispositivo(s) de teste registrado(s) (`eas device:create`) e, para builds
 não-interativos como o do CI, uma App Store Connect API Key cadastrada via
 `eas credentials`. Nenhum desses dados fica no repositório.
 
-`ORBIEN_ONESIGNAL_APP_ID` não está setado em nenhum profile hoje — sem
-ele, `app.config.js` resolve para um placeholder
-(`REPLACE_WITH_ONESIGNAL_APP_ID`). Antes de um build ir para uso real
-(TestFlight/Play Console além de dev interno), configure o app id real
-do OneSignal como secret do EAS (`eas secret:create`) e referencie-o via
-`env` no profile correspondente.
+`ORBIEN_ONESIGNAL_APP_ID` está setado no profile `production` (mesmo app id
+do `ONESIGNAL_APP_ID` de `apps/api`, já que é o mesmo app no dashboard da
+OneSignal — um lado manda push, o outro registra o device). Nos profiles
+`preview`/`preview-ios-simulator`/`generic` ele continua ausente, e
+`app.config.js` resolve para o placeholder (`REPLACE_WITH_ONESIGNAL_APP_ID`)
+de propósito: são builds internos, não fazem sentido gastar cota de push do
+app real da OneSignal.
 
 ### Onde entraria um profile de tenant (Premium, futuro)
 
