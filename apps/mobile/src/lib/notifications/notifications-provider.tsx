@@ -8,10 +8,12 @@ import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 
 import { useAuth } from "../auth/auth-provider";
+import { getNotificationPreferences } from "./notification-preferences-client";
 import {
   initializeOneSignal,
   onNotificationClick,
   registerDevice,
+  syncNotificationPreferenceTags,
   unregisterDevice,
 } from "./onesignal-client";
 
@@ -35,6 +37,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!session) return;
     registerDevice(session.accessToken);
+    // Fire-and-forget (MOB-10b, AC2): cobre reinstalar o app/trocar de
+    // aparelho, sincronizando as 4 tags a partir do que está salvo no
+    // servidor. Falha de rede aqui é no-op, mesma filosofia de
+    // registerDevice com token indecodificável — efeito colateral de push
+    // não pode derrubar o app nem atrasar a navegação.
+    getNotificationPreferences()
+      .then(syncNotificationPreferenceTags)
+      .catch(() => {});
     return () => unregisterDevice();
   }, [session]);
 
