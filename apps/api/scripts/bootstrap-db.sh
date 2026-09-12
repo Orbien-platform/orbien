@@ -82,6 +82,12 @@ fi
 if [ -f prisma/migrations/007_rls_songs.sql ]; then
   run_sql_file prisma/migrations/007_rls_songs.sql
 fi
+# Mesma dependência de 003. `prayer_requests` é antiga e nasceu em 001 só com
+# isolamento de tenant; o script troca pela policy de congregação agora que a
+# tabela tem rota. O passo 4 abaixo derruba a `tenant_isolation` que sobra.
+if [ -f prisma/migrations/008_rls_prayer_requests.sql ]; then
+  run_sql_file prisma/migrations/008_rls_prayer_requests.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration

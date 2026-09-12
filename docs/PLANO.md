@@ -44,7 +44,7 @@ foi retomado — cinco no total.
 | Auth + multi-tenant + papéis | Entregue — JWT próprio, RLS por `tenant_id`/`congregation_id`, papéis granulares |
 | Módulo 1 — Membros e Voluntários | Entregue, incluindo escalas, trocas e check-in |
 | Módulo 2 — Financeiro | Entregue — plano de contas, lançamentos, PIX cenários 1–3 com webhook Asaas, DRE, fluxo de caixa, forecast, exportação contábil |
-| Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura |
+| Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, pedidos de oração da célula |
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica, métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
@@ -176,9 +176,13 @@ O caso mais caro, porque parece entregue em qualquer leitura do
 
 | ID | Tabela | Funcionalidade | Plano |
 |---|---|---|---|
-| `PROD-01` | `prayer_requests` | Pedidos de oração da célula | Starter |
 | `PROD-02` | `cost_centers` | Centros de custo (e o balancete que depende deles) | Starter (balancete: Premium) |
 | `PROD-03` | `donation_receipts` | Recibo automático por e-mail/PDF | Premium |
+
+> `PROD-01` (`prayer_requests`) **fechou em 2026-09-12** — era a terceira
+> tabela desta lista. Três rotas em `small-groups`, RLS por congregação
+> (`008_rls_prayer_requests.sql`) e painel no `apps/web`. A decisão de acesso
+> está registrada em `PEND-01`, porque contrasta com o resto do módulo.
 
 Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
@@ -234,6 +238,15 @@ liberava `member` antes, e fechar exige decidir quem continua vendo tudo — os
 papéis de liderança que hoje enxergam grupos que não lideram
 (`pastor`/`secretary` via `MEETING_READ_ROLES`) — e quem passa a ver só o
 próprio. Não é "só adicionar um `where`".
+
+**Existe implementação de referência desde 2026-09-12.** Os pedidos de oração
+(`PrayerRequestsService.requireMembership`) resolvem a pessoa do token e
+exigem `GroupMembership` no grupo, sem exceção de papel: `pastor` e
+`tenant_admin` sem participação levam 403. Foi feito assim ali porque o dado é
+mais sensível e a rota era nova — não havia comportamento em produção para
+quebrar. Fechar a PEND-01 é aplicar o mesmo padrão a `findByGroup` e
+`listMaterials`, e a pergunta que continua aberta é só uma: quais papéis de
+liderança mantêm a visão de grupo que não lideram.
 
 ### PEND-02 · Vocabulário de status do `apps/admin` ≠ `PlanStatus` da API · defeito
 
