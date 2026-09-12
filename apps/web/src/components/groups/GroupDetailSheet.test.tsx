@@ -470,6 +470,107 @@ describe("GroupDetailSheet", () => {
     ).toBe(materialsCallCount);
   });
 
+  it("expands a material's version history, caches it, and collapses it again", async () => {
+    const materials = [
+      {
+        id: "mm1",
+        material_id: "sm1",
+        visibility: "all",
+        material: { id: "sm1", title: "Guia de Romanos", source_type: "rich_text", rich_content: "https://exemplo.com/guia" },
+      },
+    ];
+    const versions = [
+      {
+        id: "v2",
+        version: 2,
+        title: "Guia de Romanos (rascunho)",
+        changed_at: "2026-09-10T12:00:00.000Z",
+        changedBy: { id: "u1", email: "lider@igreja.com" },
+      },
+    ];
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/meetings/mtg1/materials")
+        return Promise.resolve({ data: { data: materials } });
+      if (url === "/study-materials/sm1/versions")
+        return Promise.resolve({ data: versions });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Reuniões" }));
+    await user.click(screen.getByText("Estudo"));
+    expect(await screen.findByText("Guia de Romanos")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ver histórico de versões" }));
+
+    expect(await screen.findByText(/v2/)).toBeInTheDocument();
+    expect(screen.getByText(/lider@igreja.com/)).toBeInTheDocument();
+
+    // Collapsing hides it; expanding again reuses the cached versions.
+    await user.click(screen.getByRole("button", { name: "Ver histórico de versões" }));
+    expect(screen.queryByText(/v2/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ver histórico de versões" }));
+    expect(await screen.findByText(/v2/)).toBeInTheDocument();
+    expect(
+      vi.mocked(api.get).mock.calls.filter((c) => c[0] === "/study-materials/sm1/versions").length
+    ).toBe(1);
+  });
+
+  it("shows a message when a material has no prior versions", async () => {
+    const materials = [
+      {
+        id: "mm1",
+        material_id: "sm1",
+        visibility: "all",
+        material: { id: "sm1", title: "Guia de Romanos" },
+      },
+    ];
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/meetings/mtg1/materials")
+        return Promise.resolve({ data: { data: materials } });
+      if (url === "/study-materials/sm1/versions") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Reuniões" }));
+    await user.click(screen.getByText("Estudo"));
+    expect(await screen.findByText("Guia de Romanos")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ver histórico de versões" }));
+
+    expect(await screen.findByText("Sem alterações anteriores registradas.")).toBeInTheDocument();
+  });
+
   it("shows an empty materials state when a meeting has none, and hides the remove button when canEdit is false", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/small-groups/g1") return Promise.resolve({ data: group });
