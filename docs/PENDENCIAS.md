@@ -1402,6 +1402,61 @@ tocar a consulta de encontros/materiais.
 
 ---
 
+## DEC-01 · Gating por plano — decidido e executado em 2026-09-12
+
+`TenantPlan` existia no schema e era gravado no provisionamento desde a
+Fase 2, mas nenhum ponto do código lia o plano — Starter e Premium eram o
+mesmo produto. Decisão do usuário: implementar tudo que a matriz Starter ×
+Premium de `pricing-church-platform.md` §5 já tem código correspondente
+para gatear, sem inventar gate para funcionalidade que ainda não existe.
+
+### Correção
+
+- `PlanGuard` + `@RequiresPlan('premium')` novo, no mesmo formato de
+  `@Roles`/`RolesGuard` — lê `user.plan` do token e nega com 403.
+- Módulo Celebrações/OC inteiro (9 controllers) vira Premium. A área
+  `celebrations` sai de `GET /me/permissions` (`readableAreas()`,
+  `product-areas.ts`) para tenant Starter — a sidebar do `apps/web` já para
+  de mostrar o link sem nenhuma mudança no front, porque reaproveita
+  `isForbidden`/`NoAccessState`, que já tratam 403 genérico.
+- Financeiro: `DreController`, `ExportController`, `getForecast` e
+  `POST /financial/pix/dynamic` (cenário 2) viram Premium; `getWeekly` e os
+  cenários 1/3 de PIX continuam nos dois planos.
+- Teto de 300 membros ativos do Starter: `MemberCapService`, chamado nos
+  três pontos onde uma `Person` pode virar `member`
+  (`PersonsService.create`, `PersonsService.update`,
+  `ClassificationService.manualReclassify`) — consulta o plano no banco via
+  `TenantPlan`, não na claim do token, porque é limite de negócio, não de
+  sessão: uma claim desatualizada (token vive até 15 minutos) não pode
+  abrir nem fechar a exceção antes da hora.
+
+### O que ficou de fora, de propósito
+
+O resto da matriz da seção 5 não tem funcionalidade implementada ainda
+(sugestão automática de escala, segmentação avançada, recibo automático,
+evento com inscrição paga, dashboard pastoral/saúde da célula/árvore
+genealógica/metas de rede) — não é gate pendente, é feature pendente; ver
+os `PROD-` correspondentes em `PLANO.md`. `POST /internal/celebrations/*`
+(scheduler, `platform_support`) ficou fora do gate porque roda entre
+tenants, não é acesso de cliente.
+
+### Risco conhecido, não verificado
+
+O gate assume que o cliente zero (Doca Church) está em Premium, como
+`prisma/seed.ts` registra. A sessão que implementou isto não teve acesso ao
+banco de produção para confirmar que o `TenantPlan` real bate com isso —
+vale checar antes do tenant real perder acesso a um módulo que já usa.
+
+### Evidência
+
+Suíte completa do backend (2279 testes, 3 projetos), build e lint, sem
+regressão. Casos novos em `plan.guard.spec.ts`, `product-areas.spec.ts`,
+`me.controller.spec.ts` e `member-cap.service.spec.ts` cobrindo os dois
+sentidos (Starter barrado, Premium liberado) e o caso de sessão de suporte
+impersonando um tenant Starter.
+
+---
+
 ## Registro
 
 Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.

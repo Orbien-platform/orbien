@@ -313,17 +313,39 @@ das três contradições de `docs/TESTES.md`.
 Estes dependem de uma decisão explícita antes de virar trabalho. Não são
 compromissos: são o que o material de produto deixa em aberto.
 
-### DEC-01 · Gating por plano
+### ~~DEC-01 · Gating por plano~~ · decidido e executado
 
-`TenantPlan` existe no schema, é gravado no provisionamento e desde
-2026-09-11 tem ciclo de vida — `status` e `cancelled_at` mudam por
-`POST /platform/tenants/:id/cancel` e `/reactivate`. Mas **nenhum ponto do
-código lê o plano**: nem a matriz Starter × Premium, nem o teto de 300 membros
-ativos do Starter. Hoje os dois planos são o mesmo produto, e cancelar não
-corta acesso — só marca a data que a retenção usa.
+Decidido em 2026-09-12: implementar tudo que a matriz Starter × Premium já
+tem código para gatear, sem inventar gate para `PROD-`/`DEC-` que ainda não
+tem funcionalidade nenhuma por trás.
 
-`DEC-03` depende disto, e boa parte dos `PROD-` marcados Premium só faz sentido
-depois dele.
+- `PlanGuard` + `@RequiresPlan('premium')` (mesmo formato de
+  `@Roles`/`RolesGuard`), lendo `user.plan` do token.
+- Módulo Celebrações/OC inteiro vira Premium — 9 controllers. A área
+  `celebrations` sai de `GET /me/permissions` para tenant Starter, e a
+  sidebar do `apps/web` já para de mostrar o link sem mudança nenhuma no
+  front (reaproveita `isForbidden`/`NoAccessState`, que já tratam 403
+  genérico).
+- Financeiro: DRE, exportação contábil (CSV/OFX/PDF/ZIP/SPED), forecast e
+  PIX cenário 2 (dinâmico) viram Premium; dashboard semanal e PIX cenário
+  1/3 continuam nos dois planos.
+- Teto de 300 membros ativos do Starter (`MemberCapService`), conferido nos
+  três pontos onde uma `Person` pode virar `member` — consulta o plano no
+  banco, não na claim do token, por ser limite de negócio, não de sessão.
+
+**O que ficou de fora, e por quê:** o resto da matriz não tem código para
+gatear — não é gate pendente, é feature pendente (ver os `PROD-` marcados
+Premium na seção 6). `POST /internal/celebrations/*` (scheduler,
+`platform_support`) ficou fora de propósito: roda entre tenants, não é
+acesso de cliente.
+
+**Risco conhecido, não verificado:** o gate assume que o cliente zero (Doca
+Church) está em Premium, como o `prisma/seed.ts` registra — não há acesso ao
+banco de produção nesta sessão para confirmar que o `TenantPlan` real bate
+com isso. Se divergir, o tenant real perde acesso ao módulo de Celebrações
+que já usa.
+
+`DEC-03` continua condicionado a este item ter fechado.
 
 ### DEC-02 · White-label premium (build por tenant via EAS)
 

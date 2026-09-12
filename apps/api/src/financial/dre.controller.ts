@@ -2,7 +2,9 @@ import { Body, Controller, Get, Post, Query, Res, StreamableFile, UseGuards, Use
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -12,9 +14,11 @@ import { DreQueryDto } from './dto/dre-query.dto';
 
 const DRE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_admin'] as const;
 
+// DRE inteiro é Premium — `pricing-church-platform.md` §5.2.
 @Controller('financial/dre')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class DreController {
   constructor(
     private readonly dreService: DreService,

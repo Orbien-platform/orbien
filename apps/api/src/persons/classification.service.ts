@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ClassificationHistory, PrismaClient, PersonClassification } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MemberCapService } from './member-cap.service';
 
 // Interactive transaction client — excludes lifecycle/meta methods
 type PrismaTx = Omit<
@@ -10,7 +11,10 @@ type PrismaTx = Omit<
 
 @Injectable()
 export class ClassificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly memberCapService: MemberCapService,
+  ) {}
 
   /**
    * Runs inside the caller's transaction (tx).
@@ -101,13 +105,18 @@ export class ClassificationService {
     if (toClassification === PersonClassification.member) {
       const person = await this.prisma.client.person.findUnique({
         where: { id: personId },
-        select: { membership_date: true },
+        select: { tenant_id: true, classification: true, membership_date: true },
       });
       if (!person) throw new NotFoundException('Pessoa não encontrada');
       if (!person.membership_date) {
         throw new BadRequestException(
           'Preencha a data de membresia na ficha antes de promover para membro',
         );
+      }
+      // Idem `PersonsService.update`: só conta pro teto quem está entrando
+      // em member agora, não quem já é membro (reclassificação idempotente).
+      if (person.classification !== PersonClassification.member) {
+        await this.memberCapService.assertCanPromoteToMember(person.tenant_id);
       }
     }
 

@@ -50,22 +50,44 @@ export type ProductArea = keyof typeof PRODUCT_AREA_READ_ROLES;
 export const PRODUCT_AREAS = Object.keys(PRODUCT_AREA_READ_ROLES) as ProductArea[];
 
 /**
+ * Áreas inteiras que só existem no plano Premium, além do recorte por papel
+ * — `pricing-church-platform.md` §5.5: Celebrações/OC não tem nenhuma linha
+ * Starter. `financial` fica de fora deste conjunto de propósito: a maior
+ * parte do módulo (lançamentos, PIX cenário 1/3, dashboard semanal) é dos
+ * dois planos, só peças específicas (DRE, exportação, forecast, PIX
+ * cenário 2) são Premium — e essas são gate de rota (`PlanGuard` +
+ * `@RequiresPlan`), não de área inteira.
+ */
+const PREMIUM_ONLY_AREAS = new Set<ProductArea>(['celebrations']);
+
+/**
  * As áreas que esta sessão lê.
  *
- * `support_session` recebe todas pelo mesmo motivo que passa no `RolesGuard`:
- * a sessão de suporte satisfaz qualquer `@Roles` em GET, e responder menos
- * aqui faria a barra lateral mentir sobre o que ela alcança. Cada uma dessas
- * leituras vira uma linha `support_access` em `audit_logs` — o rastro existe.
+ * `support_session` recebe todas as áreas por papel, pelo mesmo motivo que
+ * passa no `RolesGuard`: a sessão de suporte satisfaz qualquer `@Roles` em
+ * GET, e responder menos aqui faria a barra lateral mentir sobre o que ela
+ * alcança. Cada uma dessas leituras vira uma linha `support_access` em
+ * `audit_logs` — o rastro existe.
+ *
+ * O recorte por **plano**, diferente do de papel, vale também em sessão de
+ * suporte: `AuthService.impersonate` escreve no token o plano do tenant
+ * **alvo**, não o do suporte, e o ponto da sessão é ver o que o cliente vê —
+ * não mais que isso. Ver o mesmo raciocínio em `PlanGuard`.
  */
 export function readableAreas(user: {
   roles: string[];
   support_session?: boolean;
+  plan?: 'starter' | 'premium';
 }): ProductArea[] {
-  if (user.support_session === true) return [...PRODUCT_AREAS];
+  const byRole =
+    user.support_session === true
+      ? [...PRODUCT_AREAS]
+      : PRODUCT_AREAS.filter((area) =>
+          (PRODUCT_AREA_READ_ROLES[area] as readonly string[]).some((role) =>
+            user.roles.includes(role),
+          ),
+        );
 
-  return PRODUCT_AREAS.filter((area) =>
-    (PRODUCT_AREA_READ_ROLES[area] as readonly string[]).some((role) =>
-      user.roles.includes(role),
-    ),
-  );
+  if (user.plan === 'premium') return byRole;
+  return byRole.filter((area) => !PREMIUM_ONLY_AREAS.has(area));
 }

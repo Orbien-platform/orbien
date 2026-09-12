@@ -30,12 +30,20 @@ describe('MeController', () => {
     expect(controller.permissions(payload({ roles: [] }))).toEqual({ areas: [] });
   });
 
-  it('sessão de suporte recebe todas as áreas', () => {
+  it('sessão de suporte recebe todas as áreas quando o tenant impersonado é Premium', () => {
     const result = controller.permissions(
-      payload({ roles: ['platform_support'], support_session: true }),
+      payload({ roles: ['platform_support'], support_session: true, plan: 'premium' }),
     );
 
     expect(result.areas).toEqual(PRODUCT_AREAS);
+  });
+
+  it('mesmo em sessão de suporte, tenant Starter não abre `celebrations`', () => {
+    const result = controller.permissions(
+      payload({ roles: ['platform_support'], support_session: true, plan: 'starter' }),
+    );
+
+    expect(result.areas).toEqual(PRODUCT_AREAS.filter((area) => area !== 'celebrations'));
   });
 
   it('`platform_support` sem sessão de suporte não enxerga área nenhuma', () => {

@@ -2,6 +2,11 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PersonClassification } from '@prisma/client';
 import { ClassificationService } from './classification.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MemberCapService } from './member-cap.service';
+
+function memberCap(): jest.Mocked<MemberCapService> {
+  return { assertCanPromoteToMember: jest.fn() } as unknown as jest.Mocked<MemberCapService>;
+}
 
 // `reclassify` e `checkAutoReclassification` rodam dentro da transação do
 // chamador — recebem `tx`, não `this.prisma`. O mock aqui é do formato do
@@ -26,7 +31,7 @@ describe('ClassificationService', () => {
   describe('reclassify (dentro da tx do chamador)', () => {
     it('lança NotFoundException quando a pessoa não existe', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue(null);
 
@@ -37,7 +42,7 @@ describe('ClassificationService', () => {
 
     it('é no-op quando a classificação já é a de destino', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue({
         id: 'p1',
@@ -56,7 +61,7 @@ describe('ClassificationService', () => {
 
     it('atualiza a classificação e grava o histórico quando muda', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue({
         id: 'p1',
@@ -90,7 +95,7 @@ describe('ClassificationService', () => {
   describe('checkAutoReclassification', () => {
     it('retorna false quando a pessoa não existe', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue(null);
 
@@ -99,7 +104,7 @@ describe('ClassificationService', () => {
 
     it('retorna false quando a pessoa não é visitante', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue({
         classification: PersonClassification.member,
@@ -111,7 +116,7 @@ describe('ClassificationService', () => {
 
     it('retorna false quando o visitante tem menos de 3 visitas em 60 dias', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue({
         classification: PersonClassification.visitor,
@@ -124,7 +129,7 @@ describe('ClassificationService', () => {
 
     it('reclassifica para attendee e retorna true com 3 visitas em 60 dias', async () => {
       const prisma = { client: {} } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique
         .mockResolvedValueOnce({ classification: PersonClassification.visitor })
@@ -150,7 +155,7 @@ describe('ClassificationService', () => {
     it('lança BadRequestException ao promover para membro sem data de membresia', async () => {
       const client = { person: { findUnique: jest.fn().mockResolvedValue({ membership_date: null }) } };
       const prisma = { client, runInTx: jest.fn() } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
 
       await expect(
         service.manualReclassify('p1', PersonClassification.member, 'motivo', 'u1'),
@@ -161,16 +166,22 @@ describe('ClassificationService', () => {
     it('lança NotFoundException ao promover pessoa inexistente para membro', async () => {
       const client = { person: { findUnique: jest.fn().mockResolvedValue(null) } };
       const prisma = { client, runInTx: jest.fn() } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
 
       await expect(
         service.manualReclassify('nope', PersonClassification.member, 'motivo', 'u1'),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('promove para membro quando já existe data de membresia', async () => {
+    it('promove para membro quando já existe data de membresia, e confere o teto do tenant', async () => {
       const client = {
-        person: { findUnique: jest.fn().mockResolvedValue({ membership_date: new Date('2020-01-01') }) },
+        person: {
+          findUnique: jest.fn().mockResolvedValue({
+            tenant_id: 't1',
+            classification: PersonClassification.attendee,
+            membership_date: new Date('2020-01-01'),
+          }),
+        },
       };
       const tx = txWith();
       (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue({
@@ -181,15 +192,66 @@ describe('ClassificationService', () => {
       });
       const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx));
       const prisma = { client, runInTx } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const cap = memberCap();
+      const service = new ClassificationService(prisma, cap);
 
       await service.manualReclassify('p1', PersonClassification.member, 'motivo', 'u1');
 
+      expect(cap.assertCanPromoteToMember).toHaveBeenCalledWith('t1');
       expect(runInTx).toHaveBeenCalledWith(expect.any(Function), { timeout: 30_000, maxWait: 10_000 });
       expect((tx as { person: { update: jest.Mock } }).person.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
         data: { classification: PersonClassification.member },
       });
+    });
+
+    it('não confere o teto de membros para quem já é member', async () => {
+      const client = {
+        person: {
+          findUnique: jest.fn().mockResolvedValue({
+            tenant_id: 't1',
+            classification: PersonClassification.member,
+            membership_date: new Date('2020-01-01'),
+          }),
+        },
+      };
+      const tx = txWith();
+      (tx as { person: { findUnique: jest.Mock } }).person.findUnique.mockResolvedValue({
+        id: 'p1',
+        classification: PersonClassification.member,
+        tenant_id: 't1',
+        congregation_id: 'c1',
+      });
+      const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx));
+      const prisma = { client, runInTx } as unknown as PrismaService;
+      const cap = memberCap();
+      const service = new ClassificationService(prisma, cap);
+
+      await service.manualReclassify('p1', PersonClassification.member, 'motivo', 'u1');
+
+      expect(cap.assertCanPromoteToMember).not.toHaveBeenCalled();
+    });
+
+    it('propaga o BadRequestException do teto de membros sem abrir transação', async () => {
+      const client = {
+        person: {
+          findUnique: jest.fn().mockResolvedValue({
+            tenant_id: 't1',
+            classification: PersonClassification.attendee,
+            membership_date: new Date('2020-01-01'),
+          }),
+        },
+      };
+      const runInTx = jest.fn();
+      const prisma = { client, runInTx } as unknown as PrismaService;
+      const cap = memberCap();
+      cap.assertCanPromoteToMember.mockRejectedValue(new BadRequestException('cheio'));
+      const service = new ClassificationService(prisma, cap);
+
+      await expect(
+        service.manualReclassify('p1', PersonClassification.member, 'motivo', 'u1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(runInTx).not.toHaveBeenCalled();
     });
 
     it('não valida data de membresia para classificações que não são member', async () => {
@@ -203,7 +265,7 @@ describe('ClassificationService', () => {
       });
       const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx));
       const prisma = { client, runInTx } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
 
       await service.manualReclassify('p1', PersonClassification.attendee, undefined, 'u1');
 
@@ -220,7 +282,7 @@ describe('ClassificationService', () => {
     it('busca o histórico da pessoa ordenado do mais recente', async () => {
       const client = { classificationHistory: { findMany: jest.fn().mockResolvedValue([{ id: 'h1' }]) } };
       const prisma = { client } as unknown as PrismaService;
-      const service = new ClassificationService(prisma);
+      const service = new ClassificationService(prisma, memberCap());
 
       const result = await service.findHistory('p1');
 

@@ -11,7 +11,9 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -32,12 +34,13 @@ export class PixController {
     return this.pixService.createManual(dto);
   }
 
-  // ── Cenário 2: PIX dinâmico com QR — AUTENTICADO ──────────────────────────
+  // ── Cenário 2: PIX dinâmico com QR — AUTENTICADO, Premium (§5.2) ──────────
 
   @Post('dynamic')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
   @UseInterceptors(TenantContextInterceptor)
   @Roles('admin_congregation', 'treasurer', 'tenant_admin')
+  @RequiresPlan('premium')
   createDynamic(@Body() dto: CreateDynamicPixDto, @CurrentUser() user: JwtPayload) {
     return this.pixService.createDynamic(dto, user);
   }
