@@ -1,4 +1,14 @@
-# Pendências
+# Pendências — arquivo histórico
+
+> **Este documento não é mais a lista do que falta.** O que está aberto vive
+> em [`PLANO.md`](PLANO.md), com ID, evidência e estado — inclusive as
+> pendências que estavam aqui como "aberta por decisão" (`PEND-01` a
+> `PEND-04`).
+>
+> O que fica aqui é a história: o achado, a evidência que o produziu, o
+> diagnóstico e a decisão que o fechou. É o que responde "por que isso é
+> assim?" — o `CLAUDE.md` e o `DEPLOY.md` citam pendências numeradas daqui, e
+> vários `.specs/features/*/design.md` também.
 
 Achados mapeados, com a evidência que os produziu e o que foi decidido sobre
 cada um. Nenhum foi corrigido por decisão unilateral — a regra do `CLAUDE.md` é
@@ -1345,47 +1355,65 @@ nem escrita de pessoas de tenants já existentes para o suporte.
 
 ---
 
-## `small-groups`: rota de encontros e de materiais não conferem participação real — aberta
+## DEC-01 · Gating por plano — decidido e executado em 2026-09-12
 
-Achado durante o Design da feature "Pequenos Grupos no Mobile"
-(`.specs/features/pequenos-grupos-mobile/design.md`), 2026-09-09, ao
-liberar `member` em `GET /small-groups/:groupId/meetings` pra o mobile
-conseguir achar o material do próprio grupo. Decisão do usuário: seguir
-liberando `member` e registrar aqui, em vez de fechar a lacuna agora.
+`TenantPlan` existia no schema e era gravado no provisionamento desde a
+Fase 2, mas nenhum ponto do código lia o plano — Starter e Premium eram o
+mesmo produto. Decisão do usuário: implementar tudo que a matriz Starter ×
+Premium de `pricing-church-platform.md` §5 já tem código correspondente
+para gatear, sem inventar gate para funcionalidade que ainda não existe.
 
-### O que está errado
+### Correção
 
-`MeetingsController.findByGroup` (`GET /small-groups/:groupId/meetings`) e
-`MeetingsService.listMaterials` (`GET /small-groups/meetings/:meetingId/materials`)
-checam só a `role` do JWT — nenhum dos dois confere se a pessoa autenticada
-tem `GroupMembership` no grupo/encontro pedido. `listMaterials` já liberava
-`member` de propósito (`MATERIAL_READ_ROLES = ['member', ...]`) antes desta
-feature; o MOB-09 estendeu a mesma política pra `findByGroup`. Na prática,
-qualquer conta com role `member` (de qualquer grupo, ou de nenhum) pode
-listar os encontros e os materiais `visibility: all` de **qualquer outro**
-grupo do tenant — não só o seu.
+- `PlanGuard` + `@RequiresPlan('premium')` novo, no mesmo formato de
+  `@Roles`/`RolesGuard` — lê `user.plan` do token e nega com 403.
+- Módulo Celebrações/OC inteiro (9 controllers) vira Premium. A área
+  `celebrations` sai de `GET /me/permissions` (`readableAreas()`,
+  `product-areas.ts`) para tenant Starter — a sidebar do `apps/web` já para
+  de mostrar o link sem nenhuma mudança no front, porque reaproveita
+  `isForbidden`/`NoAccessState`, que já tratam 403 genérico.
+- Financeiro: `DreController`, `ExportController`, `getForecast` e
+  `POST /financial/pix/dynamic` (cenário 2) viram Premium; `getWeekly` e os
+  cenários 1/3 de PIX continuam nos dois planos.
+- Teto de 300 membros ativos do Starter: `MemberCapService`, chamado nos
+  três pontos onde uma `Person` pode virar `member`
+  (`PersonsService.create`, `PersonsService.update`,
+  `ClassificationService.manualReclassify`) — consulta o plano no banco via
+  `TenantPlan`, não na claim do token, porque é limite de negócio, não de
+  sessão: uma claim desatualizada (token vive até 15 minutos) não pode
+  abrir nem fechar a exceção antes da hora.
+
+### O que ficou de fora, de propósito
+
+O resto da matriz da seção 5 não tem funcionalidade implementada ainda
+(sugestão automática de escala, segmentação avançada, recibo automático,
+evento com inscrição paga, dashboard pastoral/saúde da célula/árvore
+genealógica/metas de rede) — não é gate pendente, é feature pendente; ver
+os `PROD-` correspondentes em `PLANO.md`. `POST /internal/celebrations/*`
+(scheduler, `platform_support`) ficou fora do gate porque roda entre
+tenants, não é acesso de cliente.
+
+### Risco conhecido, não verificado
+
+O gate assume que o cliente zero (Doca Church) está em Premium, como
+`prisma/seed.ts` registra. A sessão que implementou isto não teve acesso ao
+banco de produção para confirmar que o `TenantPlan` real bate com isso —
+vale checar antes do tenant real perder acesso a um módulo que já usa.
 
 ### Evidência
 
-`apps/api/src/small-groups/meetings.controller.ts:58-62` (`findByGroup`) e
-`:93-100` (`listMaterials`) não recebem `person_id` nem verificam
-`GroupMembership` antes de responder; o `where` das duas consultas em
-`meetings.service.ts` filtra só por `groupId`/`meetingId`, sem cláusula de
-participação.
-
-### Por que não foi corrigido aqui
-
-Fechar exige decidir e implementar a checagem de participação (via
-`GroupMembership` do `person_id` resolvido do usuário) nos dois endpoints,
-sem quebrar os papéis de liderança que hoje enxergam grupos que não lideram
-(ex.: `pastor`/`secretary` via `MEETING_READ_ROLES`) — logo não é "só
-adicionar um `where`", é decidir quem continua vendo tudo e quem passa a
-ver só o próprio. Maior que o MOB-09 e não estava no pedido. Registrado
-aqui para virar feature própria.
+Suíte completa do backend (2279 testes, 3 projetos), build e lint, sem
+regressão. Casos novos em `plan.guard.spec.ts`, `product-areas.spec.ts`,
+`me.controller.spec.ts` e `member-cap.service.spec.ts` cobrindo os dois
+sentidos (Starter barrado, Premium liberado) e o caso de sessão de suporte
+impersonando um tenant Starter.
 
 ---
 
 ## Registro
 
-Ao resolver uma pendência, remova a seção e registre no commit o que foi
-decidido — inclusive quando a decisão for aceitar o comportamento atual.
+Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.
+Este arquivo só recebe seção quando um item fecha e a história dele vale
+guardar — evidência, diagnóstico, incidente no caminho. Registre no commit o
+que foi decidido, inclusive quando a decisão for aceitar o comportamento
+atual.

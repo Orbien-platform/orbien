@@ -96,8 +96,11 @@ Estrutura interna do monorepo: [`docs/MONOREPO.md`](docs/MONOREPO.md).
 
 ## Documentação de produto e roadmap
 
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — o que já foi entregue, onde o plano
-  original ficou para trás e a visão de próximos ciclos de entrega.
+- [`docs/PLANO.md`](docs/PLANO.md) — **fonte única**: o que já foi entregue, o
+  que o material de produto prevê e não existe, as pendências abertas, os
+  ajustes e as decisões de produto em aberto. Cada item aberto tem ID.
+- [`docs/PENDENCIAS.md`](docs/PENDENCIAS.md) — arquivo histórico dos achados
+  já fechados, com a evidência e a decisão de cada um.
 - [`docs/produto/`](docs/produto/README.md) — ADRs, especificação de
   produto, pricing, mapeamento LGPD, minutas de contrato e briefings de
   sprint que guiaram o desenvolvimento.
