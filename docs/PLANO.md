@@ -208,12 +208,30 @@ O caso mais caro, porque parece entregue em qualquer leitura do
 | ID | Tabela | Funcionalidade | Plano |
 |---|---|---|---|
 | `PROD-02` | `cost_centers` | Centros de custo (e o balancete que depende deles) | Starter (balancete: Premium) |
-| `PROD-03` | `donation_receipts` | Recibo automático por e-mail/PDF | Premium |
 
 > `PROD-01` (`prayer_requests`) **fechou em 2026-09-12** — era a terceira
 > tabela desta lista. Três rotas em `small-groups`, RLS por congregação
 > (`008_rls_prayer_requests.sql`) e painel no `apps/web`. A decisão de acesso
 > está registrada em `PEND-01`, porque contrasta com o resto do módulo.
+>
+> `PROD-03` (`donation_receipts`) **fechou em 2026-09-12**. Recibo é gerado a
+> partir de `PixService.handleWebhook` — quando a Asaas confirma um PIX com
+> doador identificado (`donor_person_id`, não anônimo), e o tenant é Premium
+> (consultado no `TenantPlan` do banco, mesmo princípio do `MemberCapService`
+> em `PEND`/`CONF` — nunca na claim do token). `DonationReceiptService` monta
+> o PDF (`pdfmake`, mesmo padrão do `DrePdfService`), sobe para o R2 e envia
+> por e-mail via `MailService` (Resend). Sem doador identificado, doação
+> anônima, ou doador sem e-mail cadastrado, não gera nada — não é erro, é
+> escopo (não há como emitir recibo sem destinatário). `GET
+> /financial/donation-receipts` e `.../:id/download` expõem a lista e o link
+> assinado para o tesoureiro, com o mesmo trio de guardas do resto do
+> Premium em `financial` (`JwtAuthGuard, RolesGuard, PlanGuard` +
+> `@RequiresPlan('premium')`). RLS segue sem mudança: `donation_receipts` já
+> tinha `tenant_isolation` de `001_rls_setup.sql`, mesmo desenho do resto do
+> financeiro (nenhuma tabela do módulo tem RLS por congregação ainda — não é
+> regressão introduzida aqui). O recibo não é documento fiscal — o schema não
+> modela CNPJ/razão social da igreja, então o PDF traz doador, valor, data e
+> igreja pelo nome, sem se apresentar como nota fiscal.
 
 Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
