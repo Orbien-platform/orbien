@@ -20,9 +20,12 @@ import { PRODUCT_AREAS, PRODUCT_AREA_READ_ROLES } from './product-areas';
 const SRC_ROOT = join(__dirname, '..');
 
 /**
- * Controllers legitimamente públicos — sem `@Roles` em nenhum handler.
- * Adicionar um caminho aqui é uma decisão de produto, não um jeito de calar
- * o teste; cada linha precisa continuar correta.
+ * Controllers legitimamente sem `@Roles` em nenhum handler. Adicionar um
+ * caminho aqui é uma decisão de produto, não um jeito de calar o teste; cada
+ * linha precisa continuar correta. Duas razões distintas cabem aqui:
+ *   - público de verdade, sem `JwtAuthGuard` (as três primeiras linhas);
+ *   - autenticado, mas sobre a própria conta — sem operação administrativa
+ *     nem papel "certo" para restringir (MOB-10, `notification-preferences`).
  */
 const ALLOWLIST = new Set([
   'app.controller.ts',
@@ -33,6 +36,7 @@ const ALLOWLIST = new Set([
   // qualquer um deixaria de fora justamente quem não tem nenhum, que também
   // precisa saber que não enxerga nada. O `JwtAuthGuard` continua valendo.
   'auth/me.controller.ts',
+  'content/notification-preferences.controller.ts',
 ]);
 
 function findControllerFiles(dir: string): string[] {

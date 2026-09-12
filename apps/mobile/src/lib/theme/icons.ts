@@ -12,6 +12,7 @@
 //
 // Este módulo é a lista fechada do que o app usa. Ícone novo entra aqui,
 // não na tela, para o custo continuar visível num só lugar.
+export { default as Bell } from "lucide-react-native/icons/bell";
 export { default as BookOpen } from "lucide-react-native/icons/book-open";
 export { default as Building2 } from "lucide-react-native/icons/building-2";
 export { default as CalendarCheck } from "lucide-react-native/icons/calendar-check";

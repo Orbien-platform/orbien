@@ -6,6 +6,11 @@
 // Premium.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 const mockLogout = jest.fn();
 const mockUseAuth = jest.fn();
 jest.mock("../../../lib/auth/auth-provider", () => ({
@@ -105,6 +110,18 @@ describe("PerfilScreen", () => {
     });
 
     expect(mockSetPreference).toHaveBeenCalledWith("dark");
+  });
+
+  it("tocar 'Notificações' navega para /notificacoes", async () => {
+    await act(async () => {
+      render(<PerfilScreen />);
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("notificacoes-button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/notificacoes");
   });
 
   it("sair da conta chama logout", async () => {

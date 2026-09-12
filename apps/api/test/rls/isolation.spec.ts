@@ -46,6 +46,9 @@ let congregationBId: string;
 let congregationA2Id: string;
 let personA2Id: string;
 let songA2Id: string;
+let userAccountA2Id: string;
+let notifPrefAId: string;
+let notifPrefA2Id: string;
 
 // Contas com papel, na congregação A-Main — para exercitar o ramo
 // `OR app_has_role('tenant_admin')` da policy, que os helpers sem
@@ -136,6 +139,38 @@ beforeAll(async () => {
     },
   });
   songA2Id = songA2.id;
+
+  // Feature preferencias-notificacao-mobile (MOB-10) — fixtures para o bloco
+  // 24 (isolamento de notification_preferences). userAccountAId já existe
+  // (A-Main); precisa de uma segunda conta na A-Second para exercitar
+  // congregação irmã.
+  const userA2 = await prismaAdmin.userAccount.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      email: `user-a2-${ts}@rls-test.local`,
+      password_hash: 'x',
+    },
+  });
+  userAccountA2Id = userA2.id;
+
+  const notifPrefA = await prismaAdmin.notificationPreference.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      user_account_id: userAccountAId,
+    },
+  });
+  notifPrefAId = notifPrefA.id;
+
+  const notifPrefA2 = await prismaAdmin.notificationPreference.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      user_account_id: userAccountA2Id,
+    },
+  });
+  notifPrefA2Id = notifPrefA2.id;
 
   const catA = await prismaAdmin.financialCategory.create({
     data: {
@@ -1341,6 +1376,118 @@ describe('23. Songs — isolamento por congregação (AD-001)', () => {
 
     const after = await prismaAdmin.song.findUniqueOrThrow({ where: { id: songA2Id } });
     expect(after.title).toBe('Música RLS Test — A-Second (editada pelo tenant_admin)');
+    expect(after.congregation_id).toBe(congregationA2Id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 24. NotificationPreference — isolamento por congregação (AD-001, MOB-10)
+//
+// `008_rls_notification_preferences.sql` escreve a policy usando
+// `app_congregation_allowed()` diretamente nos dois lados (AD-001,
+// .specs/STATE.md) — o mesmo template de `007_rls_songs.sql` (bloco 23).
+//
+// SPEC_DEVIATION: `tasks.md` (T3) descreve "congregação irmã não lê nem
+// escreve, nem com tenant_admin, que aqui não tem exceção". Isso não é
+// possível mantendo AD-001: `app_congregation_allowed()` é uma função única,
+// compartilhada por toda tabela nova de congregação, e seu corpo
+// (`003_rls_admin_write.sql`) inclui `OR app_has_role('tenant_admin')`
+// incondicionalmente — não há parâmetro por tabela para desligar essa
+// exceção sem reintroduzir o padrão pré-003 que AD-001 proíbe explicitamente
+// ("nunca o padrão antigo"). T2 (já commitada) usa o template de `007` ao
+// pé da letra, como a própria task manda em "Reuses". Este bloco testa o
+// comportamento real e correto por AD-001 — idêntico ao bloco 23 — em vez da
+// frase da task, que está em contradição com a decisão registrada em
+// STATE.md. `admin_congregation` (sem o papel `tenant_admin`) continua sem
+// nenhuma exceção, exatamente como em Songs.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('24. NotificationPreference — isolamento por congregação (AD-001)', () => {
+  it('app context (runAsTenant): Tenant B não vê notification_preferences do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.notificationPreference.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} notification_preference(s) do Tenant A visível(is) para o Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('a própria conta, no próprio tenant/congregação, lê a própria preferência', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, userAccountAId, (tx) =>
+      tx.notificationPreference.findMany({ where: { user_account_id: userAccountAId } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(notifPrefAId);
+  });
+
+  it('a própria conta, no próprio tenant/congregação, escreve a própria preferência', async () => {
+    await runAsUser(tenantAId, congregationAId, userAccountAId, (tx) =>
+      tx.notificationPreference.update({
+        where: { id: notifPrefAId },
+        data: { oracao: false },
+      }),
+    );
+
+    const after = await prismaAdmin.notificationPreference.findUniqueOrThrow({
+      where: { id: notifPrefAId },
+    });
+    expect(after.oracao).toBe(false);
+  });
+
+  it('tenant_admin na A-Main LÊ notification_preference da A-Second (exceção da policy, AD-001)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.notificationPreference.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(notifPrefA2Id);
+  });
+
+  it('admin_congregation na A-Main NÃO lê notification_preference da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.notificationPreference.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} notification_preference(s) de congregação irmã. ` +
+          'A exceção da policy deveria valer só para tenant_admin.',
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('admin_congregation na A-Main NÃO escreve notification_preference da A-Second', async () => {
+    await expect(
+      runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+        tx.notificationPreference.update({
+          where: { id: notifPrefA2Id },
+          data: { eventos: false },
+        }),
+      ),
+    ).rejects.toThrow();
+
+    const after = await prismaAdmin.notificationPreference.findUniqueOrThrow({
+      where: { id: notifPrefA2Id },
+    });
+    expect(after.eventos).toBe(true);
+  });
+
+  it('tenant_admin na A-Main ATUALIZA notification_preference da A-Second (USING = WITH CHECK)', async () => {
+    // Igual ao bloco 23 para Songs: sem a mesma exceção nos dois lados, o
+    // tenant_admin leria a linha e falharia ao gravar com 42501 — é isso que
+    // `app_congregation_allowed()` nos dois lados (AD-001) evita.
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.notificationPreference.update({
+        where: { id: notifPrefA2Id },
+        data: { avisos: false },
+      }),
+    );
+
+    const after = await prismaAdmin.notificationPreference.findUniqueOrThrow({
+      where: { id: notifPrefA2Id },
+    });
+    expect(after.avisos).toBe(false);
     expect(after.congregation_id).toBe(congregationA2Id);
   });
 });
