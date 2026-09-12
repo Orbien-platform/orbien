@@ -33,7 +33,8 @@ somaram dois apps a mais: o `admin`, que não estava no plano original, e o
 | Módulo 3 — Pequenos Grupos | Entregue — cadastro, reuniões, presença, biblioteca de materiais agendados |
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, integração com escalas do Módulo 1 |
-| Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria de acesso de plataforma |
+| Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria de acesso de plataforma, cancelamento/reativação de `TenantPlan` (sem tela) |
+| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + aviso semanal ao admin; faltam auditoria (2 anos) e consentimento (5 anos pós-revogação) — ver "Ciclo atual" |
 | App mobile (Fase 7, ADR-004/ADR-005) | **Entregue na variante Starter** — `apps/mobile` (Expo + React Native). Verificados: MOB-01/02 (sessão e fila de refresh serializada), MOB-03 (tema por tenant em runtime), MOB-04/05 (escala, check-in, indisponibilidade), MOB-06/07 (feed de conteúdo, push OneSignal com deep link), MOB-08 (Celebrações e OC), MOB-09 (Pequenos Grupos), MOB-11/12 (workspace e config dinâmica de identidade). Falta MOB-10 (preferências de notificação, P3). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render, runtime Node (backend) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
@@ -76,23 +77,28 @@ plano funciona hoje.
 A variante Starter está entregue e verificada, mas isso não é o mesmo que
 publicável. O que separa uma coisa da outra, hoje:
 
-- **`ORBIEN_API_URL` não está no profile `production` do `eas.json`.** Os
-  profiles `preview` apontam para a API do Render; o `production` não define a
-  variável, e o default de `app.config.js` é `http://localhost:3000`. Uma
-  build de loja hoje sairia apontando para localhost.
-- **O app id do OneSignal é placeholder** (`REPLACE_WITH_ONESIGNAL_APP_ID` em
-  `app.config.js`). MOB-07 está verificado do lado do app — o registro de
-  dispositivo, as tags e o deep link do clique —, mas o app id real nunca foi
-  configurado como secret do EAS.
+- ~~**`ORBIEN_API_URL` não está no profile `production` do `eas.json`.**~~
+  Fechado em 2026-09-11 (PR #72). O `production` define
+  `ORBIEN_API_URL=https://orbien-api.onrender.com/api`, como os dois profiles
+  `preview` — uma build de loja não sai mais apontando para o default de
+  `localhost:3000` do `app.config.js`.
+- ~~**O app id do OneSignal é placeholder.**~~ Fechado no mesmo PR:
+  `ORBIEN_ONESIGNAL_APP_ID` está no profile `production`, com o mesmo app id
+  do `ONESIGNAL_APP_ID` da API — é o mesmo app no dashboard da OneSignal, um
+  lado manda push e o outro registra o device. Os profiles `preview` e
+  `generic` seguem no placeholder de propósito: são builds internos e não
+  faz sentido gastar cota do app real.
 - **`DEPLOY.md` não tem parte de mobile.** Cobre API, site, web e admin; não
   há procedimento escrito de build de produção, submissão às lojas nem OTA
-  (Expo Updates, que o ADR-004 prevê e o v1 explicitamente adiou).
+  (Expo Updates, que o ADR-004 prevê e o v1 explicitamente adiou). O
+  `apps/mobile/README.md` cobre credenciais e profiles, mas não é o
+  documento de deploy do monorepo.
 - **MOB-10 — preferências de notificação por usuário** (P3). Único requisito
   funcional do `app-mobile/spec.md` ainda pendente.
 
-Os três primeiros são operacionais, não de produto: nenhum exige decisão, só
-execução. Estão aqui, e não em `docs/PENDENCIAS.md`, porque são o que falta
-para um módulo do roadmap chegar ao usuário — não achados de revisão.
+O primeiro é operacional, não de produto: não exige decisão, só execução.
+Estão aqui, e não em `docs/PENDENCIAS.md`, porque são o que falta para um
+módulo do roadmap chegar ao usuário — não achados de revisão.
 
 ## Ciclos de entrega
 
@@ -123,9 +129,41 @@ não bloqueiam o ciclo:
 - Revisão jurídica formal dos documentos legais e do contrato v4
 - Resolução dos itens marcados `[REVISÃO JURÍDICA OBRIGATÓRIA]`
 - Checklist de pré-go-live da seção 9 de `orbien-lgpd-mapping.md`
-- Job de retenção de dados (anonimização/eliminação automática) — hoje
-  descrito no mapeamento LGPD como plano, sem confirmação de que existe
-  como cron no `apps/api`
+- ~~Job de retenção de dados (anonimização/eliminação automática) — hoje
+  descrito no mapeamento LGPD como plano, sem confirmação de que existe como
+  cron no `apps/api`~~ **Entregue.** A afirmação já estava obsoleta quando foi
+  escrita: o `PersonsRetentionScheduler` (DT-05/DT-07) rodava desde antes,
+  para 2 das 4 categorias da seção 5 do mapeamento. As outras duas fecharam
+  em 2026-09-11 — ver abaixo.
+
+**O que a retenção cobre hoje** (`apps/api/src/persons/`,
+feature `.specs/features/reten-dados-fim-contrato/`):
+
+| O que | Prazo | Onde |
+|---|---|---|
+| Visitante sem evolução (seção 5) | 1 ano | `purgeInactivePersons` (cron 4h) |
+| Membro sem vínculo financeiro (seção 5) | 2 anos | `purgeInactivePersons` (cron 4h) |
+| Dado financeiro — doador (seção 5) | 5 anos após o fim do contrato | `purgeFinancialDonorsAfterContractEnd` (cron 5h) |
+| Dado de menor de 18 anos (seção 5) | 30 dias após o fim do contrato | `purgeMinorsAfterContractEnd` (cron 6h) |
+| Exclusão a pedido do titular (Art. 18, DT-05) | 30 dias após o soft delete | `purgeExpiredSoftDeletes` (cron 3h) |
+| Aviso ao admin de prazo vencendo em 7 dias (seção 5.1) | semanal | `PersonsRetentionNotifierService` (segunda, 8h) |
+
+Todas anonimizam (`anonymizedFields()`), nunca fazem `DELETE` físico: a
+`financial_transaction` fica intacta, que é a obrigação fiscal — o que sai é o
+cadastro da pessoa. O marco de "fim do contrato" é
+`TenantPlan.cancelled_at`, campo novo, escrito por
+`POST /platform/tenants/:id/cancel` e limpo por `.../reactivate`
+(`CancelTenantPlanService`, rota de plataforma). É o fluxo mínimo para o campo
+ter um escritor — **não** é uma jornada de billing, e não tem tela no
+`apps/admin`: hoje só se cancela um tenant chamando a rota.
+
+**O que falta da seção 5.** A tabela de retenção do mapeamento tem oito
+linhas; as que falam de cadastro de pessoa estão cobertas pelos crons acima.
+Sobram as duas que não são cadastro, declaradas fora do escopo daquela
+entrega:
+
+- retenção de **logs de acesso e auditoria** (2 anos, Marco Civil Art. 15);
+- retenção de **registros de consentimento** (5 anos após a revogação).
 
 ### Ciclos seguintes — decisão de produto, não apenas execução
 
@@ -146,11 +184,14 @@ em aberto:
    variantes por profile do EAS + `app.config.js` dinâmico). O que falta é o
    pipeline de release por tenant e a submissão de loja por igreja — e o
    Starter chegar às lojas antes, o que depende de "O que falta no mobile".
-4. **Gating por plano.** `TenantPlan` existe no schema e é gravado no
-   provisionamento, mas nenhum ponto do código lê o plano: nem a matriz de
+4. **Gating por plano.** `TenantPlan` existe no schema, é gravado no
+   provisionamento e desde 2026-09-11 tem ciclo de vida — `status` e
+   `cancelled_at` mudam por `POST /platform/tenants/:id/cancel` e
+   `/reactivate`. Mas nenhum ponto do código lê o **plano**: nem a matriz de
    funcionalidade Starter × Premium de `pricing-church-platform.md`, nem o
    teto de 300 membros ativos do Starter. Hoje os dois planos são o mesmo
-   produto, e o item 5 depende disto.
+   produto, e o item 5 depende disto. Cancelar também não corta acesso: só
+   marca a data que os jobs de retenção usam.
 5. **Primeiro cliente Premium fora do cliente zero** — condicionado ao
    fechamento do ciclo de conformidade e ao item 4.
 

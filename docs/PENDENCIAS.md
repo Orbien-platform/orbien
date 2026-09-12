@@ -1483,6 +1483,90 @@ aqui para virar feature própria.
 
 ---
 
+## O vocabulário de status do `apps/admin` não é o `PlanStatus` da API — aberta
+
+Achado em 2026-09-12, ao atualizar este documento contra a `main`. Metade dele
+não existia antes de `c7d7d88`: até ele, nenhum código do `apps/api` colocava
+um `TenantPlan` em `cancelled`, então esse caso nunca chegava à tela.
+
+### O que está errado
+
+`PlanStatus` no `schema.prisma` (`apps/api/prisma/schema.prisma:1400-1405`)
+tem quatro valores: `active`, `trial`, `suspended`, `cancelled` — e é o valor
+cru que `ListTenantsService` devolve em `plan_status`
+(`apps/api/src/platform/list-tenants.service.ts:88`). A lista de tenants do
+console declara outros quatro, nos três lugares em que trata o status — o
+tipo (`apps/admin/src/app/(platform)/tenants/page.tsx:20`), `STATUS_LABELS`
+(`:35`) e `STATUS_CLS` (`:42`): `trial`, `active`, `past_due` e `canceled`.
+
+São duas divergências, não uma:
+
+- **`canceled` × `cancelled`** — um `l` a menos no console;
+- **`past_due` × `suspended`** — nome que não existe no enum, e o valor que
+  existe não tem entrada.
+
+Consequência nos dois casos: o selo renderiza vazio
+(`STATUS_LABELS[valor]` é `undefined`) e sem classe de cor
+(`STATUS_CLS[valor]` também), porque o `if` da linha `:159` testa só se
+`plan_status` é truthy. Não some a linha nem quebra a tela — some a
+informação, que é o modo de falha silenciosa de sempre. O tipo do `page.tsx`
+não protege: é escrito à mão no front, não derivado do Prisma, e o
+`apps/admin` não pode importar de `apps/api`.
+
+### Por que só agora
+
+`POST /platform/tenants/:id/cancel` nasceu em 2026-09-11 para dar um escritor
+a `TenantPlan.cancelled_at`, que os jobs de retenção da seção 5 do mapeamento
+LGPD usam como marco de fim de contrato. Antes disso o enum tinha o valor e
+ninguém o produzia. O typo estava lá desde que a tela existe; a rota nova é
+que o tornou alcançável.
+
+### Decisão pendente
+
+Corrigir é trocar seis literais no `page.tsx` (`canceled` → `cancelled`,
+`past_due` → `suspended`, nos três lugares). Não foi feito aqui porque este
+documento não conserta por conta própria o que não foi pedido — e porque vale
+decidir junto duas coisas maiores: se o console ganha o botão de
+cancelar/reativar, hoje sem tela nenhuma (a rota só responde a chamada
+direta), e se vale um teste que trave o mapa contra os valores do enum, como
+`permissions.test.ts` já faz no web com os papéis do `seed.ts`.
+
+---
+
+## Resíduos declarados da verificação do mapa do monorepo — abertos
+
+A rodada 3 do Verifier de `.specs/features/mapa-monorepo-e-portoes/` terminou
+em FAIL e, sendo a última iteração, declarou o que sobrava em vez de corrigir
+(`validation.md`, "Achados pré-existentes"). O commit `08e0640` fechou as três
+contradições de `docs/TESTES.md` (gaps 9, 10 e 11) e o buraco do portão —
+`scripts/pre-push.sh:53,55` já traz `mobile` na alternação, então a fronteira
+do monorepo é vigiada nas duas direções. O que continua aberto, conferido
+contra a `main` em 2026-09-12:
+
+- **`scripts/pre-push.sh:120` anuncia "39 testes de RLS".** A suíte mede 61
+  em 2 arquivos. O rótulo do `passa` mente por 22 testes — não muda o
+  veredito do portão, mas é o número que alguém lê quando decide se confia
+  nele.
+- **Contagens envelhecidas em `docs/TESTES.md`.** RLS aparece como 39 em
+  `:53`, `:236` e `:334` e como 54 em `:1149` e `:1204` — medido: 61. E2E do
+  web aparece como 12 em 8 arquivos (`:1153`) — medido: 16 em 10. As duas
+  afirmações do documento já se contradizem entre si, que é o defeito que a
+  própria feature veio corrigir.
+- **`turbo run build --filter=orbien-web` "continua vermelho"**
+  (`docs/TESTES.md`, seção "Pendências abertas"). O Verifier mediu exit 0 com
+  `--force` em 2026-09-10. Ou a pendência fecha, ou vira "intermitente, só
+  neste sandbox" — as duas exigem decisão de quem é dono do texto.
+- **Os dez `MAP-NN` seguem "Implementing / Aguardando Verifier"** em
+  `.specs/features/mapa-monorepo-e-portoes/spec.md:226-235`, depois de três
+  rodadas em que nove foram verificados. Sugestão do próprio relatório:
+  MAP-01…MAP-09 ✅ Verified, MAP-10 ❌ Needs Fix.
+
+Nenhum é bug de comportamento: os quatro são documento ou rótulo divergindo
+do que a árvore mede. Estão aqui, e não esquecidos, porque foi exatamente
+isso que a feature do mapa nasceu para caçar.
+
+---
+
 ## Registro
 
 Ao resolver uma pendência, remova a seção e registre no commit o que foi
