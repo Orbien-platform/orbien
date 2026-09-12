@@ -50,6 +50,7 @@ let userAccountA2Id: string;
 let notifPrefAId: string;
 let notifPrefA2Id: string;
 let prayerRequestA2Id: string;
+let costCenterA2Id: string;
 
 // Contas com papel, na congregação A-Main — para exercitar o ramo
 // `OR app_has_role('tenant_admin')` da policy, que os helpers sem
@@ -204,6 +205,19 @@ beforeAll(async () => {
     },
   });
   prayerRequestA2Id = prayerA2.id;
+
+  // PROD-02: centro de custo na A-Second, mesmo caso de prayer_requests —
+  // `cost_centers` nasceu em 001 só com isolamento de tenant, e
+  // `010_rls_cost_centers.sql` troca pela policy de congregação agora que a
+  // tabela tem rota.
+  const costCenterA2 = await prismaAdmin.costCenter.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      name: 'Centro de Custo RLS Test — A-Second',
+    },
+  });
+  costCenterA2Id = costCenterA2.id;
 
   const catA = await prismaAdmin.financialCategory.create({
     data: {
@@ -1581,6 +1595,62 @@ describe('25. PrayerRequest — isolamento por congregação (AD-001)', () => {
       where: { id: prayerRequestA2Id },
     });
     expect(after.content).toBe('Pedido RLS Test — A-Second (editado pelo tenant_admin)');
+    expect(after.congregation_id).toBe(congregationA2Id);
+  });
+});
+
+// Mesmo caso do bloco 25: `cost_centers` é tabela antiga, que nasceu em `001`
+// só com `tenant_isolation` porque nenhuma rota a usava (PROD-02).
+// `010_rls_cost_centers.sql` troca pela policy de congregação, com
+// `app_congregation_allowed()` nos dois lados. O `tenant_admin` mantém a
+// exceção da função, como em PrayerRequest e Songs.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('26. CostCenter — isolamento por congregação (AD-001)', () => {
+  it('app context (runAsTenant): Tenant B não vê centro de custo do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.costCenter.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} centro(s) de custo do Tenant A visível(is) para o Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('admin_congregation na A-Main NÃO lê centro de custo da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.costCenter.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} centro(s) de custo de congregação irmã.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main LÊ centro de custo da A-Second (exceção da policy)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.costCenter.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(costCenterA2Id);
+  });
+
+  it('tenant_admin na A-Main ATUALIZA centro de custo da A-Second (USING = WITH CHECK)', async () => {
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.costCenter.update({
+        where: { id: costCenterA2Id },
+        data: { name: 'Centro de Custo RLS Test — A-Second (editado pelo tenant_admin)' },
+      }),
+    );
+
+    const after = await prismaAdmin.costCenter.findUniqueOrThrow({
+      where: { id: costCenterA2Id },
+    });
+    expect(after.name).toBe('Centro de Custo RLS Test — A-Second (editado pelo tenant_admin)');
     expect(after.congregation_id).toBe(congregationA2Id);
   });
 });

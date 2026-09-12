@@ -5,6 +5,10 @@ import { StorageModule } from '../storage/storage.module';
 import { MailModule } from '../mail/mail.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
+import { CostCentersController } from './cost-centers.controller';
+import { CostCentersService } from './cost-centers.service';
+import { BalanceteController } from './balancete.controller';
+import { BalanceteService } from './balancete.service';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { PixController } from './pix.controller';
@@ -29,6 +33,8 @@ import { DonationReceiptService } from './donation-receipts.service';
   imports: [PrismaModule, HttpModule, StorageModule, MailModule, RecurringRuleModule],
   controllers: [
     CategoriesController,
+    CostCentersController,
+    BalanceteController,
     TransactionsController,
     PixController,
     DashboardController,
@@ -38,6 +44,8 @@ import { DonationReceiptService } from './donation-receipts.service';
   ],
   providers: [
     CategoriesService,
+    CostCentersService,
+    BalanceteService,
     TransactionsService,
     PixService,
     ForecastService,

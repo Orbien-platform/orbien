@@ -16,6 +16,11 @@ interface Category {
   children: Category[];
 }
 
+interface CostCenter {
+  id: string;
+  name: string;
+}
+
 interface EditableTransaction {
   id: string;
   type: "income" | "expense";
@@ -23,6 +28,7 @@ interface EditableTransaction {
   occurred_at: string;
   description: string;
   category_id: string | null;
+  cost_center_id?: string | null;
   recurring_rule_id?: string | null;
   status?: "pending" | "paid" | "confirmed";
 }
@@ -53,12 +59,14 @@ export function NewTransactionModal({
   const fieldsDisabled = viewOnly;
   const [type, setType] = useState<"income" | "expense">("income");
   const [categoryId, setCategoryId] = useState("");
+  const [costCenterId, setCostCenterId] = useState("");
   const [amount, setAmount] = useState(0);
   const [occurredAt, setOccurredAt] = useState(
     () => new Date().toISOString().split("T")[0]
   );
   const [description, setDescription] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -75,12 +83,17 @@ export function NewTransactionModal({
       .get<Category[]>("/financial/categories")
       .then((r) => setCategories(r.data ?? []))
       .catch(() => {});
+    api
+      .get<CostCenter[]>("/financial/cost-centers")
+      .then((r) => setCostCenters(r.data ?? []))
+      .catch(() => {});
   }, [open]);
 
   if (open && editTransaction && editTransaction.id !== loadedEditId) {
     setLoadedEditId(editTransaction.id);
     setType(editTransaction.type);
     setCategoryId(editTransaction.category_id ?? "");
+    setCostCenterId(editTransaction.cost_center_id ?? "");
     setAmount(Number(editTransaction.amount));
     setOccurredAt(editTransaction.occurred_at.slice(0, 10));
     setDescription(editTransaction.description);
@@ -92,6 +105,7 @@ export function NewTransactionModal({
   function reset() {
     setType("income");
     setCategoryId("");
+    setCostCenterId("");
     setAmount(0);
     setOccurredAt(new Date().toISOString().split("T")[0]);
     setDescription("");
@@ -125,6 +139,7 @@ export function NewTransactionModal({
         await api.patch(`/financial/transactions/${editTransaction!.id}${qs}`, {
           type,
           category_id: categoryId,
+          cost_center_id: costCenterId || null,
           amount,
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           description: description.trim(),
@@ -138,6 +153,7 @@ export function NewTransactionModal({
         await api.post("/financial/transactions", {
           type,
           category_id: categoryId,
+          cost_center_id: costCenterId || undefined,
           amount,
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           description: description.trim(),
@@ -251,6 +267,29 @@ export function NewTransactionModal({
               ))}
             </select>
           </div>
+
+          {/* Cost center */}
+          {costCenters.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="nt-cost-center" className="text-sm font-medium text-ink dark:text-white">
+                Centro de custo (opcional)
+              </Label>
+              <select
+                id="nt-cost-center"
+                value={costCenterId}
+                onChange={(e) => setCostCenterId(e.target.value)}
+                disabled={isSubmitting || fieldsDisabled}
+                className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+              >
+                <option value="">— Nenhum —</option>
+                {costCenters.map((cc) => (
+                  <option key={cc.id} value={cc.id}>
+                    {cc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Amount */}
           <div className="flex flex-col gap-1.5">

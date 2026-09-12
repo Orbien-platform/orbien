@@ -53,7 +53,13 @@ export default defineConfig({
         // pela UI real. Documentado por arquivo em cada `it()` correspondente.
         "src/components/celebrations/**": { statements: 99, branches: 95, functions: 100, lines: 100 },
         "src/components/content/**": { statements: 99, branches: 97, functions: 100, lines: 100 },
-        "src/components/financial/**": { statements: 99, branches: 98, functions: 100, lines: 100 },
+        // Piso de branches recalibrado para 97 na PROD-02: `CostCentersModal`
+        // entrou com os dois mesmos guards defensivos que `CategoriesModal`
+        // já tinha (`if (!confirmDeleteId) return` no `handleDelete`, e o
+        // ramo `v` verdadeiro do `onOpenChange` do diálogo de exclusão) —
+        // inalcançáveis pela UI real pelo mesmo motivo do comentário acima,
+        // agora em dois arquivos em vez de um.
+        "src/components/financial/**": { statements: 99, branches: 97, functions: 100, lines: 100 },
         "src/components/groups/**": { statements: 98, branches: 92, functions: 100, lines: 100 },
         "src/components/persons/**": { statements: 99, branches: 89, functions: 100, lines: 100 },
         // `components/repertorio/**` nasceu depois da Fase 9 e ficou fora da

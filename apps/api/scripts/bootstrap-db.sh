@@ -94,6 +94,12 @@ fi
 if [ -f prisma/migrations/009_rls_prayer_requests.sql ]; then
   run_sql_file prisma/migrations/009_rls_prayer_requests.sql
 fi
+# Mesmo motivo de 009 (PROD-01), mesma tabela antiga sem rota: `cost_centers`
+# nasceu em 001 só com isolamento de tenant. O passo 4 abaixo derruba a
+# `tenant_isolation` que sobra.
+if [ -f prisma/migrations/010_rls_cost_centers.sql ]; then
+  run_sql_file prisma/migrations/010_rls_cost_centers.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -340,6 +346,26 @@ BEGIN
    WHERE policyname = 'tenant_isolation' AND tablename = 'prayer_requests';
   IF n <> 0 THEN
     RAISE EXCEPTION 'prayer_requests ainda tem a policy tenant_isolation de 001 — o passo 4 não rodou depois de 009, e a policy fraca anula a forte por OR';
+  END IF;
+
+  -- 010: cost_centers (PROD-02) é o mesmo caso de 009 — tabela antiga sem
+  -- rota até agora, precisa da policy de congregação como as outras.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'cost_centers'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'cost_centers com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em cost_centers, encontrei % — 010_rls_cost_centers.sql rodou?', n;
+  END IF;
+
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_isolation' AND tablename = 'cost_centers';
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'cost_centers ainda tem a policy tenant_isolation de 001 — o passo 4 não rodou depois de 010, e a policy fraca anula a forte por OR';
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no
