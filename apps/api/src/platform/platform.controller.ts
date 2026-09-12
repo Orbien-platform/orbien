@@ -12,6 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { TenantPlan } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -22,6 +23,7 @@ import { ListTenantsService, TenantListPage } from './list-tenants.service';
 import { ListAuditLogsService, AuditLogPage } from './list-audit-logs.service';
 import { UpdateTenantService, UpdatedTenant } from './update-tenant.service';
 import { SetTenantActiveService, TenantActiveState } from './set-tenant-active.service';
+import { CancelTenantPlanService } from './cancel-tenant-plan.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
@@ -49,6 +51,7 @@ export class PlatformController {
     private readonly listAuditLogs: ListAuditLogsService,
     private readonly updateTenant: UpdateTenantService,
     private readonly setTenantActive: SetTenantActiveService,
+    private readonly cancelTenantPlan: CancelTenantPlanService,
   ) {}
 
   @Get('tenants')
@@ -84,5 +87,18 @@ export class PlatformController {
   @Get('audit-logs/support-access')
   listSupportAccess(@Query() query: ListAuditLogsQueryDto): Promise<AuditLogPage> {
     return this.listAuditLogs.list(query);
+  }
+
+  // Marca o fim do contrato (`tenant_plans.cancelled_at`) — é o que os jobs
+  // de retenção da seção 5 (LGPD) usam pra calcular as janelas de 5 anos
+  // (financeiro) e 30 dias (menor). Ver CancelTenantPlanService.
+  @Post('tenants/:id/cancel')
+  cancel(@Param('id', ParseUUIDPipe) id: string): Promise<TenantPlan> {
+    return this.cancelTenantPlan.cancel(id);
+  }
+
+  @Post('tenants/:id/reactivate')
+  reactivate(@Param('id', ParseUUIDPipe) id: string): Promise<TenantPlan> {
+    return this.cancelTenantPlan.reactivate(id);
   }
 }

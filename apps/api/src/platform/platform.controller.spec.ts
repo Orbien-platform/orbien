@@ -4,6 +4,7 @@ import { ListTenantsService } from './list-tenants.service';
 import { ListAuditLogsService } from './list-audit-logs.service';
 import { UpdateTenantService } from './update-tenant.service';
 import { SetTenantActiveService } from './set-tenant-active.service';
+import { CancelTenantPlanService } from './cancel-tenant-plan.service';
 
 function servicesMock() {
   const provisionTenant = {
@@ -21,8 +22,19 @@ function servicesMock() {
   const setTenantActive = {
     setActive: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', is_active: false }),
   } as unknown as SetTenantActiveService;
+  const cancelTenantPlan = {
+    cancel: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', status: 'cancelled' }),
+    reactivate: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', status: 'active' }),
+  } as unknown as CancelTenantPlanService;
 
-  return { provisionTenant, listTenants, listAuditLogs, updateTenant, setTenantActive };
+  return {
+    provisionTenant,
+    listTenants,
+    listAuditLogs,
+    updateTenant,
+    setTenantActive,
+    cancelTenantPlan,
+  };
 }
 
 function controllerWith(services: ReturnType<typeof servicesMock>) {
@@ -32,6 +44,7 @@ function controllerWith(services: ReturnType<typeof servicesMock>) {
     services.listAuditLogs,
     services.updateTenant,
     services.setTenantActive,
+    services.cancelTenantPlan,
   );
 }
 
@@ -99,5 +112,27 @@ describe('PlatformController', () => {
 
     await controller.activate('tenant-1');
     expect(services.setTenantActive.setActive).toHaveBeenCalledWith('tenant-1', true);
+  });
+
+  it('cancel delega ao CancelTenantPlanService com o id', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+
+    await expect(controller.cancel('tenant-1')).resolves.toEqual({
+      tenant_id: 'tenant-1',
+      status: 'cancelled',
+    });
+    expect(services.cancelTenantPlan.cancel).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('reactivate delega ao CancelTenantPlanService com o id', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+
+    await expect(controller.reactivate('tenant-1')).resolves.toEqual({
+      tenant_id: 'tenant-1',
+      status: 'active',
+    });
+    expect(services.cancelTenantPlan.reactivate).toHaveBeenCalledWith('tenant-1');
   });
 });

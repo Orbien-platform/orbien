@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 10,
+  "next_id": 12,
   "lessons": [
     {
       "id": "L-001",
@@ -166,6 +166,42 @@
       ],
       "created": "2026-09-09T02:02:45Z",
       "last_seen": "2026-09-09T02:02:45Z"
+    },
+    {
+      "id": "L-010",
+      "key": "ac_gap::quando a tabela de assumptions j registra que nenhum write path existe para um campo remova ou mova pra out of scope qualquer ac edge case que declare shall sobre a escrita desse campo n o deixe as duas se es se contradizerem",
+      "text": "Quando a tabela de Assumptions já registra que nenhum write path existe para um campo, remova ou mova pra Out of Scope qualquer AC/Edge Case que declare SHALL sobre a escrita desse campo — não deixe as duas seções se contradizerem.",
+      "signal": "ac_gap",
+      "scope": "specs/reten-dados",
+      "status": "candidate",
+      "features": [
+        "reten-dados-fim-contrato"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md P1 AC1 / Edge Cases (reativação) (specs/reten-dados)"
+      ],
+      "created": "2026-09-11T17:29:24Z",
+      "last_seen": "2026-09-11T17:29:24Z"
+    },
+    {
+      "id": "L-011",
+      "key": "surviving_mutant::teste unit rio que mocka queryraw inteiro n o pega cl usula where errada ex exclus o de doador removida para sql de reten o exclus o sens vel adicione ao menos um teste de integra o contra o sql real ou asserte o texto da query",
+      "text": "Teste unitário que mocka $queryRaw inteiro não pega cláusula WHERE errada (ex.: exclusão de doador removida) — para SQL de retenção/exclusão sensível, adicione ao menos um teste de integração contra o SQL real ou asserte o texto da query.",
+      "signal": "surviving_mutant",
+      "scope": "apps/api/src/persons",
+      "status": "candidate",
+      "features": [
+        "reten-dados-fim-contrato"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/persons/persons.service.ts:321-323 (purgeMinorsAfterContractEnd) (apps/api/src/persons)"
+      ],
+      "created": "2026-09-11T17:29:24Z",
+      "last_seen": "2026-09-11T17:29:24Z"
     }
   ]
 }
