@@ -35,6 +35,7 @@ import { of, throwError } from 'rxjs';
 import { Prisma } from '@prisma/client';
 import { PixService } from './pix.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DonationReceiptService } from './donation-receipts.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 
@@ -63,6 +64,8 @@ type Opts = {
    * leitura e a escrita. O `updateMany` condicional então não pega.
    */
   perdeCorrida?: boolean;
+  /** Simula falha na geração do recibo (email fora do ar, etc). */
+  receiptRejects?: boolean;
 };
 
 function harness(opts: Opts = {}) {
@@ -74,6 +77,7 @@ function harness(opts: Opts = {}) {
     categoryQueries: [] as Record<string, unknown>[],
     posts: [] as { url: string; body: unknown }[],
     gets: [] as string[],
+    receiptCalls: [] as string[],
   };
 
   let catCall = 0;
@@ -206,7 +210,18 @@ function harness(opts: Opts = {}) {
     },
   } as unknown as HttpService;
 
-  return { service: new PixService(prisma, http), cap };
+  const donationReceiptService = {
+    generateForTransaction: jest.fn((id: string) => {
+      cap.receiptCalls.push(id);
+      return opts.receiptRejects ? Promise.reject(new Error('recibo falhou')) : Promise.resolve(undefined);
+    }),
+  };
+
+  return {
+    service: new PixService(prisma, http, donationReceiptService as unknown as DonationReceiptService),
+    cap,
+    donationReceiptService,
+  };
 }
 
 const manualDto: CreatePixDto = { tenant_slug: 'igreja-central', amount: 50 };
@@ -821,6 +836,44 @@ describe('PixService', () => {
         actor_user_id: 'admin-1',
         after: { asaas_payment_id: 'pay_123', event: 'PAYMENT_CONFIRMED' },
       });
+    });
+
+    it('aciona a geração do recibo com o id do lançamento recém-criado', async () => {
+      const { service, cap } = harness();
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      // fire-and-forget: dá uma volta no microtask queue antes de checar.
+      await Promise.resolve();
+
+      expect(cap.receiptCalls).toEqual(['tx-1']);
+    });
+
+    it('não aciona o recibo quando a confirmação perde a corrida', async () => {
+      const { service, cap } = harness({ perdeCorrida: true });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      await Promise.resolve();
+
+      expect(cap.receiptCalls).toEqual([]);
+    });
+
+    it('falha na geração do recibo não derruba o webhook', async () => {
+      const { service, cap } = harness({ receiptRejects: true });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      await Promise.resolve();
+
+      expect(result).toEqual({ received: true });
+      expect(cap.receiptCalls).toEqual(['tx-1']);
     });
 
     it('tenant sem admin faz o webhook falhar antes de gravar', async () => {

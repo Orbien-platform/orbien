@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
+import { MailModule } from '../mail/mail.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
 import { CostCentersController } from './cost-centers.controller';
@@ -25,9 +26,11 @@ import { ZipExportService } from './export/zip-export.service';
 import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
 import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
+import { DonationReceiptsController } from './donation-receipts.controller';
+import { DonationReceiptService } from './donation-receipts.service';
 
 @Module({
-  imports: [PrismaModule, HttpModule, StorageModule, RecurringRuleModule],
+  imports: [PrismaModule, HttpModule, StorageModule, MailModule, RecurringRuleModule],
   controllers: [
     CategoriesController,
     CostCentersController,
@@ -37,6 +40,7 @@ import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
     DashboardController,
     DreController,
     ExportController,
+    DonationReceiptsController,
   ],
   providers: [
     CategoriesService,
@@ -53,6 +57,7 @@ import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
     ZipExportService,
     SpedExportService,
     JobsService,
+    DonationReceiptService,
   ],
 })
 export class FinancialModule {}

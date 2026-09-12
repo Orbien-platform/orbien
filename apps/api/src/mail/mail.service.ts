@@ -94,4 +94,44 @@ export class MailService {
 
     this.logger.log(`Invite email sent to ${to}`);
   }
+
+  async sendDonationReceipt(to: string, donorName: string, amount: number, receiptUrl: string): Promise<void> {
+    const formattedAmount = `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    if (!this.resend) {
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new InternalServerErrorException('Email service not configured (missing RESEND_API_KEY)');
+      }
+      this.logger.log(`[DEV] Donation receipt for ${to}: ${receiptUrl}`);
+      return;
+    }
+
+    const { error } = await this.resend.emails.send({
+      from: process.env['MAIL_FROM'] ?? 'Orbien <naoresponda@useorbien.com>',
+      to,
+      subject: 'Recibo de doação — Orbien',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2 style="color: #1E3A7B;">Recibo de doação</h2>
+          <p>Olá, ${donorName},</p>
+          <p>Recebemos sua doação de ${formattedAmount}. Obrigado por contribuir.</p>
+          <a href="${receiptUrl}"
+             style="display: inline-block; background: #1E3A7B; color: white;
+                    padding: 12px 24px; border-radius: 6px; text-decoration: none;
+                    margin: 16px 0;">
+            Ver recibo em PDF
+          </a>
+          <hr style="border: none; border-top: 1px solid #E0DDD9; margin: 24px 0;" />
+          <p style="color: #9B9893; font-size: 12px;">Orbien — Gestão inteligente para igrejas</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      this.logger.error(`Resend error sending to ${to}: ${JSON.stringify(error)}`);
+      throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
+    }
+
+    this.logger.log(`Donation receipt email sent to ${to}`);
+  }
 }

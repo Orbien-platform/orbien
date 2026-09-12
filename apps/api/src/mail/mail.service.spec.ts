@@ -189,4 +189,71 @@ describe('MailService', () => {
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
+
+  describe('sendDonationReceipt', () => {
+    it('em dev sem Resend configurado, apenas loga a URL e não lança', async () => {
+      delete process.env['RESEND_API_KEY'];
+      process.env['NODE_ENV'] = 'development';
+      const service = new MailService();
+
+      await expect(
+        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf'),
+      ).resolves.toBeUndefined();
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('em produção sem Resend configurado, lança InternalServerErrorException', async () => {
+      delete process.env['RESEND_API_KEY'];
+      process.env['NODE_ENV'] = 'production';
+      const service = new MailService();
+
+      await expect(
+        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf'),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+
+    it('envia o email com o valor formatado e o link do recibo quando o Resend está configurado', async () => {
+      process.env['RESEND_API_KEY'] = 'key-123';
+      process.env['MAIL_FROM'] = 'Orbien <naoresponda@useorbien.com>';
+      sendMock.mockResolvedValue({ error: null });
+      const service = new MailService();
+
+      await service.sendDonationReceipt('user@x.com', 'Ana', 1234.5, 'https://cdn/recibo.pdf');
+
+      expect(sendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: 'Orbien <naoresponda@useorbien.com>',
+          to: 'user@x.com',
+          subject: 'Recibo de doação — Orbien',
+          html: expect.stringContaining('Olá, Ana'),
+        }),
+      );
+      const html = sendMock.mock.calls[0][0].html as string;
+      expect(html).toContain('R$ 1.234,50');
+      expect(html).toContain('https://cdn/recibo.pdf');
+    });
+
+    it('usa o remetente padrão quando MAIL_FROM não está configurado', async () => {
+      process.env['RESEND_API_KEY'] = 'key-123';
+      delete process.env['MAIL_FROM'];
+      sendMock.mockResolvedValue({ error: null });
+      const service = new MailService();
+
+      await service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf');
+
+      expect(sendMock).toHaveBeenCalledWith(
+        expect.objectContaining({ from: 'Orbien <naoresponda@useorbien.com>' }),
+      );
+    });
+
+    it('lança InternalServerErrorException quando o Resend retorna erro', async () => {
+      process.env['RESEND_API_KEY'] = 'key-123';
+      sendMock.mockResolvedValue({ error: { message: 'limite excedido' } });
+      const service = new MailService();
+
+      await expect(
+        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf'),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+  });
 });

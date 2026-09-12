@@ -14,6 +14,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { FinancialModule } from './financial.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
+import { MailModule } from '../mail/mail.module';
 import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
@@ -37,6 +38,8 @@ import { PdfExportService } from './export/pdf-export.service';
 import { ZipExportService } from './export/zip-export.service';
 import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
+import { DonationReceiptsController } from './donation-receipts.controller';
+import { DonationReceiptService } from './donation-receipts.service';
 
 describe('FinancialModule', () => {
   it('compila e registra todos os controllers e providers', async () => {
@@ -48,6 +51,7 @@ describe('FinancialModule', () => {
         PrismaModule,
         HttpModule,
         StorageModule,
+        MailModule,
         RecurringRuleModule,
         FinancialModule,
       ],
@@ -75,6 +79,8 @@ describe('FinancialModule', () => {
     expect(moduleRef.get(ZipExportService)).toBeInstanceOf(ZipExportService);
     expect(moduleRef.get(SpedExportService)).toBeInstanceOf(SpedExportService);
     expect(moduleRef.get(JobsService)).toBeInstanceOf(JobsService);
+    expect(moduleRef.get(DonationReceiptsController)).toBeInstanceOf(DonationReceiptsController);
+    expect(moduleRef.get(DonationReceiptService)).toBeInstanceOf(DonationReceiptService);
 
     await moduleRef.close();
   });

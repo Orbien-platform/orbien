@@ -12,6 +12,7 @@ import { Prisma, PixScenario, PixStatus, TransactionSource, TransactionType } fr
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
+import { DonationReceiptService } from './donation-receipts.service';
 
 type TenantContext = {
   tenantId: string;
@@ -31,6 +32,7 @@ export class PixService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly http: HttpService,
+    private readonly donationReceiptService: DonationReceiptService,
   ) {}
 
   // ── Internal helpers ──────────────────────────────────────────────────────
@@ -389,15 +391,15 @@ export class PixService {
     //
     // `count === 0` significa que outra entrega ganhou a corrida e já criou o
     // lançamento. Nada a fazer, e a resposta continua 200.
-    const confirmado = await this.prisma.runInTx(async (tx) => {
+    const transactionId = await this.prisma.runInTx(async (tx) => {
       const { count } = await tx.pixPayment.updateMany({
         where: { id: pixPayment.id, status: PixStatus.pending },
         data: { status: PixStatus.confirmed, paid_at: new Date() },
       });
 
-      if (count === 0) return false;
+      if (count === 0) return null;
 
-      await tx.financialTransaction.create({
+      const transaction = await tx.financialTransaction.create({
         data: {
           tenant_id: pixPayment.tenant_id,
           congregation_id: pixPayment.congregation_id,
@@ -410,12 +412,13 @@ export class PixService {
           created_by_user_id: adminUserId,
           donor_person_id: pixPayment.donor_person_id,
         },
+        select: { id: true },
       });
 
-      return true;
+      return transaction.id;
     });
 
-    if (!confirmado) {
+    if (!transactionId) {
       this.logger.log(
         `Entrega simultânea para asaas_id=${asaasPaymentId} (${event}); outra já confirmou`,
       );
@@ -434,6 +437,13 @@ export class PixService {
         },
       })
       .catch(() => void 0);
+
+    // Recibo automático (Premium, PROD-03) — não pode desfazer um pagamento
+    // já confirmado pela Asaas nem fazer o webhook responder com erro (isso
+    // faria ela reenviar um evento já tratado). Ver DonationReceiptService.
+    this.donationReceiptService.generateForTransaction(transactionId).catch((err) => {
+      this.logger.warn(`Falha ao gerar recibo de doação (transaction=${transactionId}): ${String(err)}`);
+    });
 
     return { received: true };
   }
