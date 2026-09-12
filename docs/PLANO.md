@@ -250,7 +250,6 @@ leitura errar de novo.
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-04` | 2 | Página pública de doação (Cenário 3) | Starter | **A API está pronta** — `POST /financial/pix/public-donation`, público e com throttle. Não há tela em `apps/web` nem em `apps/site` que a chame |
 | `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
 | `PROD-06` | 1 | Fila CRM de trials não convertidos e inadimplentes | Premium | — |
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
@@ -265,6 +264,20 @@ leitura errar de novo.
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-18` | Plataforma | OTA via Expo Updates | Starter e Premium | `expo-updates` não está no `apps/mobile`; o ADR-004 prevê e o v1 adiou |
 | `PROD-19` | Plataforma | Domínio próprio por tenant, termos de uso próprios por tenant | Premium | — |
+
+> `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
+> API já existia (`POST /financial/pix/public-donation`, pública, com
+> throttle e honeypot) e faltava só a tela. Ficou em `apps/web`, não em
+> `apps/site`, porque a página depende de `tenant_slug` — é doação de uma
+> igreja específica, não conteúdo institucional da Orbien — em
+> `/doar/[tenant_slug]`, sem grupo de rota autenticada (mesmo padrão de
+> `esqueci-senha`/`redefinir-senha`). Chama `POST
+> /financial/pix/public-donation` pelo cliente compartilhado (`src/lib/api.ts`),
+> que já resolve para `/api-proxy` em produção. É só o Cenário 3 Starter —
+> chave PIX para cópia manual, com nome do doador e da igreja; o QR dinâmico
+> do Cenário 3 Premium (ADR-007) segue sem tela, porque exige o fluxo
+> autenticado de `POST /financial/pix/dynamic`, que essa página pública não
+> usa.
 
 **Conferido e entregue**, apesar de soar parecido com os de cima — para não
 virar trabalho repetido: detecção de duplicados no cadastro e na importação,
