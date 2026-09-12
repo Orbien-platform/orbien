@@ -336,10 +336,58 @@ caçar, e o que sobrou declarado da rodada 3 do Verifier.
 | `AJU-01` | Rótulo "39 testes de RLS" no portão de pre-push | `scripts/pre-push.sh:120` | 61 testes em 2 suítes |
 | `AJU-02` | Contagem de RLS envelhecida | `docs/TESTES.md:53`, `:236`, `:334` dizem 39; `:1149`, `:1204` dizem 54 | 61 |
 | `AJU-03` | Contagem de e2e do web envelhecida | `docs/TESTES.md:1153` diz 12 em 8 arquivos | 16 em 10 |
-| `AJU-04` | "`turbo run build --filter=orbien-web` continua vermelho" | `docs/TESTES.md`, "Pendências abertas" | exit **0** com `--force` (2026-09-10). Fechar ou marcar como intermitente deste sandbox |
+| `AJU-04` | "`turbo run build --filter=orbien-web` continua vermelho" | `docs/TESTES.md`, "Pendências abertas" | **Vermelho de novo em 2026-09-12, agora nos 3 apps Next** — ver nota abaixo |
 | `AJU-06` | Os dez `MAP-NN` parados em "Implementing / Aguardando Verifier" | `.specs/features/mapa-monorepo-e-portoes/spec.md:226-235` | 9 verificados em 3 rodadas. Sugestão do relatório: MAP-01…09 ✅ Verified, MAP-10 ❌ Needs Fix |
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
+
+> **`AJU-04`, retomado em 2026-09-12** (tentando corrigir o build do
+> `orbien-admin` para o portão de PROD-10): o mesmo crash —
+> `TypeError: Cannot read properties of null (reading 'useContext')`
+> pré-renderizando `/_global-error` — reproduz isolado em `orbien-web`,
+> `orbien-site` e `orbien-admin`, com e sem `--force`, contradizendo o "exit
+> 0" medido em 2026-09-10. Achados novos desta rodada:
+> - **Confirmado como bug aberto do próprio Next 16.2.x/16.3.x, não deste
+>   repositório** — é a issue [vercel/next.js#95741](https://github.com/vercel/next.js/issues/95741)
+>   (mesmas versões, 16.2.6/16.2.10, mesmo erro), com a mesma causa já
+>   isolada na Fase 10 de `docs/TESTES.md`: race condition do Turbopack ao
+>   agrupar rotas não relacionadas num mesmo passo de render. A issue segue
+>   sem fix — fechada por "sem link de reprodução válido" apesar de ter um,
+>   e outras do mesmo sintoma (#86178, #84994, #85668) fecharam do mesmo
+>   jeito.
+> - **Bump para `16.3.5`** (a última estável, testado via `npm install
+>   next@16.3.5 --no-save` e revertido com `npm ci` depois) **reproduz
+>   igual** — a Fase 10 já tinha testado até `16.3.4`; a família 16.x inteira
+>   segue afetada.
+> - `--debug-prerender` (flag nova, não testada na Fase 10) faz o build
+>   passar, mas troca `NODE_ENV` para `development` e desliga minificação —
+>   não serve para build de produção real, só confirma que o problema é de
+>   agendamento do prerender.
+> - Isolar só `experimental.prerenderEarlyExit: false` (a causa que o
+>   `--debug-prerender` aponta) **piora**: em vez de só `/_global-error`,
+>   todas as rotas do `orbien-admin` passam a falhar com o mesmo erro. Testado
+>   e revertido — não é workaround viável.
+> - `orbien-admin` e `orbien-site` não tinham `app/global-error.tsx`
+>   (`orbien-web` já tinha, da própria Fase 10). Adicionado aos dois agora,
+>   com teste — é a prática recomendada pelo Next e os três apps deveriam ter
+>   de qualquer forma, mas **não corrige o build**, como a Fase 10 já tinha
+>   provado para o `web`.
+>
+> Não há workaround de código para o crash em si. O board do Vercel/Next não
+> aponta correção.
+>
+> **Resolvido em 2026-09-12, no próprio PR #84:** o build real da Vercel
+> passou — `orbien-web` saiu como `Ready` (deploy de preview concluído) no
+> commit que inclui exatamente o código que trava `next build` local neste
+> sandbox. Confirma que o crash é específico deste ambiente de
+> desenvolvimento/CI (a mesma classe de corrida de scheduling do Turbopack
+> que a issue upstream descreve, sensível a como o build é agendado —
+> `--debug-prerender` já apontava nessa direção). **`scripts/pre-push.sh`
+> não deveria mais bloquear o push por isso** — o build real de produção não
+> quebra. Ação que falta: trocar o `bloqueia` de `npx turbo run build` por
+> `alerta` especificamente para o padrão desse crash (prerender de
+> `/_global-error`/`/_not-found`), mantendo bloqueio para qualquer outra
+> falha de build.
 
 O buraco do portão que a mesma rodada apontou — `scripts/pre-push.sh` sem
 `mobile` na alternação da regra de fronteira — **fechou** em `08e0640`, junto

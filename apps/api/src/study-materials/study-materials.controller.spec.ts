@@ -31,6 +31,7 @@ describe('StudyMaterialsController', () => {
       create: jest.fn(),
       findAll: jest.fn(),
       getOpenStats: jest.fn(),
+      getVersions: jest.fn(),
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
@@ -52,6 +53,10 @@ describe('StudyMaterialsController', () => {
 
   it('getOpenStats aceita os papéis de estatísticas', () => {
     expect(rolesFor('getOpenStats')).toEqual(STATS_ROLES);
+  });
+
+  it('getVersions aceita os papéis de leitura', () => {
+    expect(rolesFor('getVersions')).toEqual(READ_ROLES);
   });
 
   it('remove restringe a tenant_admin/admin_congregation', () => {
@@ -88,6 +93,15 @@ describe('StudyMaterialsController', () => {
 
     expect(service.getOpenStats).toHaveBeenCalledWith('m1');
     expect(result).toEqual({ total_targets: 1, opened: 1, percentage: 100 });
+  });
+
+  it('getVersions delega ao service', async () => {
+    service.getVersions.mockResolvedValue([{ id: 'v1', version: 1 }] as never);
+
+    const result = await controller.getVersions('m1');
+
+    expect(service.getVersions).toHaveBeenCalledWith('m1');
+    expect(result).toEqual([{ id: 'v1', version: 1 }]);
   });
 
   it('findOne delega ao service', async () => {

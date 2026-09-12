@@ -50,6 +50,8 @@ let userAccountA2Id: string;
 let notifPrefAId: string;
 let notifPrefA2Id: string;
 let prayerRequestA2Id: string;
+let studyMaterialAId: string;
+let studyMaterialVersionAId: string;
 let costCenterA2Id: string;
 
 // Contas com papel, na congregação A-Main — para exercitar o ramo
@@ -205,6 +207,34 @@ beforeAll(async () => {
     },
   });
   prayerRequestA2Id = prayerA2.id;
+
+  const studyMaterialA = await prismaAdmin.studyMaterial.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      title: 'Material RLS Test — A',
+      source_type: 'rich_text',
+      rich_content: 'conteúdo original',
+      publish_at: new Date(),
+    },
+  });
+  studyMaterialAId = studyMaterialA.id;
+
+  const studyMaterialVersionA = await prismaAdmin.studyMaterialVersion.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationAId,
+      study_material_id: studyMaterialAId,
+      version: 1,
+      title: 'Material RLS Test — A (versão anterior)',
+      source_type: 'rich_text',
+      rich_content: 'conteúdo antes da edição',
+      publish_at: new Date(),
+      tags: [],
+      changed_by_user_id: userAccountAId,
+    },
+  });
+  studyMaterialVersionAId = studyMaterialVersionA.id;
 
   // PROD-02: centro de custo na A-Second, mesmo caso de prayer_requests —
   // `cost_centers` nasceu em 001 só com isolamento de tenant, e
@@ -1599,6 +1629,9 @@ describe('25. PrayerRequest — isolamento por congregação (AD-001)', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 26. CostCenter — isolamento por congregação (AD-001)
+//
 // Mesmo caso do bloco 25: `cost_centers` é tabela antiga, que nasceu em `001`
 // só com `tenant_isolation` porque nenhuma rota a usava (PROD-02).
 // `010_rls_cost_centers.sql` troca pela policy de congregação, com
@@ -1652,5 +1685,32 @@ describe('26. CostCenter — isolamento por congregação (AD-001)', () => {
     });
     expect(after.name).toBe('Centro de Custo RLS Test — A-Second (editado pelo tenant_admin)');
     expect(after.congregation_id).toBe(congregationA2Id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 27. Cross-tenant read — StudyMaterialVersion (PROD-10)
+//
+// Padrão B simples (tenant_isolation, sem exceção de congregação), copiado da
+// policy de group_meeting_materials — guarda snapshot de conteúdo do material
+// de estudo, então mora aqui pela mesma razão que o material original.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('27. Cross-tenant read — StudyMaterialVersion (PROD-10)', () => {
+  it('app context (runAsTenant): Tenant B não vê versões de material do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.studyMaterialVersion.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = await countVisibleFromB(rows);
+    if (leaked > 0) {
+      console.error(`SECURITY GAP: ${leaked} study_material_version(s) vazaram para o Tenant B.`);
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B não consegue buscar versão do Tenant A por ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.studyMaterialVersion.findUnique({ where: { id: studyMaterialVersionAId } }),
+    );
+    expect(row).toBeNull();
   });
 });

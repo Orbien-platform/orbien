@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { StudyMaterialsService } from './study-materials.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -12,6 +12,22 @@ const USER: JwtPayload = {
   plan: 'premium',
 };
 
+const EXISTING_MATERIAL = {
+  id: 'm1',
+  tenant_id: 't1',
+  congregation_id: 'g1',
+  title: 'Título antigo',
+  description: null,
+  author: null,
+  source_type: 'rich_text',
+  file_url: null,
+  rich_content: 'conteúdo antigo',
+  publish_at: new Date('2026-09-01T00:00:00.000Z'),
+  expires_at: null,
+  tags: ['fé'],
+  version: 1,
+};
+
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     smallGroup: { findMany: jest.fn() },
@@ -20,13 +36,16 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn(),
       count: jest.fn(),
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     materialTarget: { findMany: jest.fn(), createMany: jest.fn() },
     groupMembership: { findMany: jest.fn() },
     userAccount: { findUnique: jest.fn() },
     materialOpenRecord: { findFirst: jest.fn(), create: jest.fn(), count: jest.fn() },
+    studyMaterialVersion: { create: jest.fn(), findMany: jest.fn() },
     ...overrides,
   };
 }
@@ -276,23 +295,67 @@ describe('StudyMaterialsService', () => {
 
     it('atualiza sem trocar arquivo quando nenhum é enviado', async () => {
       const client = clientWith();
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'm1', file_url: 'https://cdn/old.pdf' });
-      client.studyMaterial.update.mockResolvedValue({ id: 'm1' });
+      client.studyMaterial.findUnique.mockResolvedValue(EXISTING_MATERIAL);
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+      client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
       const { service, storageService } = serviceWith(client);
 
       await service.update('m1', { title: 'Novo' } as never, undefined, USER);
 
       expect(storageService.deleteByUrl).not.toHaveBeenCalled();
-      expect(client.studyMaterial.update).toHaveBeenCalledWith({
-        where: { id: 'm1' },
+      expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
+        where: { id: 'm1', version: 1 },
         data: { title: 'Novo', version: { increment: 1 } },
+      });
+      expect(client.studyMaterial.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'm1' } });
+    });
+
+    it('lança ConflictException quando o material foi alterado por outra pessoa nesse meio tempo', async () => {
+      const client = clientWith();
+      client.studyMaterial.findUnique.mockResolvedValue(EXISTING_MATERIAL);
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 0 });
+      const { service } = serviceWith(client);
+
+      await expect(service.update('m1', { title: 'Novo' } as never, undefined, USER)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(client.studyMaterialVersion.create).not.toHaveBeenCalled();
+    });
+
+    it('grava um snapshot da versão anterior depois de aplicar o update', async () => {
+      const client = clientWith();
+      client.studyMaterial.findUnique.mockResolvedValue(EXISTING_MATERIAL);
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+      client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
+      const { service } = serviceWith(client);
+
+      await service.update('m1', { title: 'Novo' } as never, undefined, USER);
+
+      expect(client.studyMaterialVersion.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          study_material_id: 'm1',
+          version: 1,
+          title: 'Título antigo',
+          description: null,
+          author: null,
+          source_type: 'rich_text',
+          file_url: null,
+          rich_content: 'conteúdo antigo',
+          publish_at: EXISTING_MATERIAL.publish_at,
+          expires_at: null,
+          tags: ['fé'],
+          changed_by_user_id: 'u1',
+        },
       });
     });
 
     it('substitui o arquivo, removendo o antigo e enviando o novo', async () => {
       const client = clientWith();
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'm1', file_url: 'https://cdn/old.pdf' });
-      client.studyMaterial.update.mockResolvedValue({ id: 'm1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ ...EXISTING_MATERIAL, file_url: 'https://cdn/old.pdf' });
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+      client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
       const { service, storageService } = serviceWith(client);
       const file = { originalname: 'novo.PDF', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
 
@@ -300,16 +363,17 @@ describe('StudyMaterialsService', () => {
 
       expect(storageService.deleteByUrl).toHaveBeenCalledWith('https://cdn/old.pdf');
       expect(storageService.upload).toHaveBeenCalledWith(file.buffer, expect.stringContaining('.pdf'), 'application/pdf');
-      expect(client.studyMaterial.update).toHaveBeenCalledWith({
-        where: { id: 'm1' },
+      expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
+        where: { id: 'm1', version: 1 },
         data: { file_url: 'https://cdn/materiais/a.pdf', version: { increment: 1 } },
       });
     });
 
     it('usa ".bin" como extensão quando o novo arquivo não tem uma', async () => {
       const client = clientWith();
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'm1', file_url: null });
-      client.studyMaterial.update.mockResolvedValue({ id: 'm1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ ...EXISTING_MATERIAL, file_url: null });
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+      client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
       const { service, storageService } = serviceWith(client);
       const file = { originalname: 'semext', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
 
@@ -320,8 +384,9 @@ describe('StudyMaterialsService', () => {
 
     it('converte publish_at e expires_at quando informados', async () => {
       const client = clientWith();
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'm1', file_url: null });
-      client.studyMaterial.update.mockResolvedValue({ id: 'm1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ ...EXISTING_MATERIAL, file_url: null });
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+      client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
       const { service } = serviceWith(client);
 
       await service.update(
@@ -331,14 +396,43 @@ describe('StudyMaterialsService', () => {
         USER,
       );
 
-      expect(client.studyMaterial.update).toHaveBeenCalledWith({
-        where: { id: 'm1' },
+      expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
+        where: { id: 'm1', version: 1 },
         data: expect.objectContaining({
           publish_at: new Date('2026-09-10T00:00:00.000Z'),
           expires_at: new Date('2026-12-01T00:00:00.000Z'),
           version: { increment: 1 },
         }),
       });
+    });
+  });
+
+  describe('getVersions', () => {
+    it('lança NotFoundException quando o material não existe', async () => {
+      const client = clientWith();
+      client.studyMaterial.findUnique.mockResolvedValue(null);
+      const { service } = serviceWith(client);
+
+      await expect(service.getVersions('m1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('lista as versões do material, mais recente primeiro, com quem alterou', async () => {
+      const client = clientWith();
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'm1' });
+      client.studyMaterialVersion.findMany.mockResolvedValue([
+        { id: 'v2', version: 2, changedBy: { id: 'u1', email: 'a@a.com' } },
+        { id: 'v1', version: 1, changedBy: { id: 'u1', email: 'a@a.com' } },
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getVersions('m1');
+
+      expect(client.studyMaterialVersion.findMany).toHaveBeenCalledWith({
+        where: { study_material_id: 'm1' },
+        orderBy: { version: 'desc' },
+        include: { changedBy: { select: { id: true, email: true } } },
+      });
+      expect(result.map((v) => v.version)).toEqual([2, 1]);
     });
   });
 

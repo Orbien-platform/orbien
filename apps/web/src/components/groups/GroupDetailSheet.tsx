@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2, History } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Dialog } from "@base-ui/react/dialog";
 import {
@@ -43,6 +43,14 @@ interface MeetingMaterial {
   material_id: string;
   visibility: MaterialVisibility;
   material: { id: string; title: string; author?: string; source_type?: string; rich_content?: string };
+}
+
+interface MaterialVersion {
+  id: string;
+  version: number;
+  title: string;
+  changed_at: string;
+  changedBy: { id: string; email: string };
 }
 
 function isUrl(value?: string): boolean {
@@ -274,6 +282,10 @@ export function GroupDetailSheet({
   const [meetingMaterials, setMeetingMaterials] = useState<Record<string, MeetingMaterial[]>>({});
   const [loadingMaterialsId, setLoadingMaterialsId] = useState<string | null>(null);
   const [removingMaterial, setRemovingMaterial] = useState<{ meetingId: string; item: MeetingMaterial } | null>(null);
+  const [expandedVersionsId, setExpandedVersionsId] = useState<string | null>(null);
+  const [materialVersions, setMaterialVersions] = useState<Record<string, MaterialVersion[]>>({});
+  const [loadingVersionsId, setLoadingVersionsId] = useState<string | null>(null);
+  const [versionsErrorId, setVersionsErrorId] = useState<string | null>(null);
   const [isRemovingMaterial, setIsRemovingMaterial] = useState(false);
   // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
   // cada recarga disparada por um evento (registrar encontro). Evita setState
@@ -351,6 +363,28 @@ export function GroupDetailSheet({
       setMeetingMaterials((prev) => ({ ...prev, [meetingId]: [] }));
     } finally {
       setLoadingMaterialsId(null);
+    }
+  }
+
+  async function toggleVersionsExpand(materialId: string) {
+    if (expandedVersionsId === materialId) {
+      setExpandedVersionsId(null);
+      return;
+    }
+    setExpandedVersionsId(materialId);
+    if (materialVersions[materialId]) return;
+
+    setLoadingVersionsId(materialId);
+    setVersionsErrorId(null);
+    try {
+      const { data } = await api.get<MaterialVersion[]>(`/study-materials/${materialId}/versions`);
+      setMaterialVersions((prev) => ({ ...prev, [materialId]: data }));
+    } catch {
+      // Não cacheia: falha de rede não é o mesmo que "sem versões
+      // anteriores", e precisa poder tentar de novo ao reabrir.
+      setVersionsErrorId(materialId);
+    } finally {
+      setLoadingVersionsId(null);
     }
   }
 
@@ -585,54 +619,105 @@ export function GroupDetailSheet({
                                   <p className="py-2 text-xs text-stone">Nenhum material vinculado.</p>
                                 ) : (
                                   <div className="flex flex-col gap-1">
-                                    {materials.map((mm) => (
+                                    {materials.map((mm) => {
+                                      const versionsExpanded = expandedVersionsId === mm.material_id;
+                                      const versions = materialVersions[mm.material_id] ?? [];
+                                      return (
                                       <div
                                         key={mm.id}
-                                        className="flex items-center justify-between gap-2 rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2"
+                                        className="rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2"
                                       >
-                                        <div className="flex min-w-0 items-center gap-2">
-                                          <span className="flex-shrink-0 text-stone">
-                                            {materialIcon(mm.material.source_type)}
-                                          </span>
-                                          {isUrl(mm.material.rich_content) ? (
-                                            <a
-                                              href={mm.material.rich_content}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="truncate text-sm text-navy underline-offset-2 hover:underline dark:text-white"
-                                            >
-                                              {mm.material.title}
-                                            </a>
-                                          ) : (
-                                            <span className="truncate text-sm text-ink dark:text-white">
-                                              {mm.material.title}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex min-w-0 items-center gap-2">
+                                            <span className="flex-shrink-0 text-stone">
+                                              {materialIcon(mm.material.source_type)}
                                             </span>
-                                          )}
-                                        </div>
-                                        <div className="flex flex-shrink-0 items-center gap-2">
-                                          <span
-                                            className={cn(
-                                              "rounded-[100px] px-2 py-0.5 text-xs font-medium",
-                                              mm.visibility === "all"
-                                                ? "bg-teal-dim text-teal"
-                                                : "bg-amber-100 text-amber-700"
+                                            {isUrl(mm.material.rich_content) ? (
+                                              <a
+                                                href={mm.material.rich_content}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="truncate text-sm text-navy underline-offset-2 hover:underline dark:text-white"
+                                              >
+                                                {mm.material.title}
+                                              </a>
+                                            ) : (
+                                              <span className="truncate text-sm text-ink dark:text-white">
+                                                {mm.material.title}
+                                              </span>
                                             )}
-                                          >
-                                            {mm.visibility === "all" ? "Todos" : "Somente líderes"}
-                                          </span>
-                                          {canEdit && (
+                                          </div>
+                                          <div className="flex flex-shrink-0 items-center gap-2">
+                                            <span
+                                              className={cn(
+                                                "rounded-[100px] px-2 py-0.5 text-xs font-medium",
+                                                mm.visibility === "all"
+                                                  ? "bg-teal-dim text-teal"
+                                                  : "bg-amber-100 text-amber-700"
+                                              )}
+                                            >
+                                              {mm.visibility === "all" ? "Todos" : "Somente líderes"}
+                                            </span>
                                             <button
                                               type="button"
-                                              onClick={() => setRemovingMaterial({ meetingId: mtg.id, item: mm })}
-                                              className="text-stone hover:text-crimson"
-                                              aria-label="Remover material"
+                                              onClick={() => toggleVersionsExpand(mm.material_id)}
+                                              className="text-stone hover:text-ink dark:hover:text-white"
+                                              aria-label="Ver histórico de versões"
                                             >
-                                              <Trash2 size={14} strokeWidth={1.5} />
+                                              <History size={14} strokeWidth={1.5} />
                                             </button>
-                                          )}
+                                            {canEdit && (
+                                              <button
+                                                type="button"
+                                                onClick={() => setRemovingMaterial({ meetingId: mtg.id, item: mm })}
+                                                className="text-stone hover:text-crimson"
+                                                aria-label="Remover material"
+                                              >
+                                                <Trash2 size={14} strokeWidth={1.5} />
+                                              </button>
+                                            )}
+                                          </div>
                                         </div>
+
+                                        {versionsExpanded && (
+                                          <div className="mt-2 border-t border-[var(--border-default)] pt-2">
+                                            {loadingVersionsId === mm.material_id ? (
+                                              <div className="flex items-center justify-center py-2">
+                                                <Loader2 size={14} className="animate-spin text-stone" />
+                                              </div>
+                                            ) : versionsErrorId === mm.material_id ? (
+                                              <p className="text-xs text-crimson">
+                                                Não deu para carregar o histórico. Tente de novo.
+                                              </p>
+                                            ) : versions.length === 0 ? (
+                                              <p className="text-xs text-stone">
+                                                Sem alterações anteriores registradas.
+                                              </p>
+                                            ) : (
+                                              <ul className="flex flex-col gap-1.5">
+                                                {versions.map((v) => (
+                                                  <li key={v.id} className="text-xs text-stone">
+                                                    <span className="font-medium text-ink dark:text-white">
+                                                      v{v.version}
+                                                    </span>{" "}
+                                                    · {v.title} ·{" "}
+                                                    {formatInstant(v.changed_at, {
+                                                      day: "2-digit",
+                                                      month: "2-digit",
+                                                      year: "numeric",
+                                                      hour: "2-digit",
+                                                      minute: "2-digit",
+                                                    })}{" "}
+                                                    · {v.changedBy.email}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>

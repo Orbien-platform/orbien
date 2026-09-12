@@ -48,6 +48,7 @@ model Tenant {
   attendanceRecords       AttendanceRecord[]
   prayerRequests          PrayerRequest[]
   studyMaterials          StudyMaterial[]
+  studyMaterialVersions   StudyMaterialVersion[]
   materialOpenRecords     MaterialOpenRecord[]
   groupMeetingMaterials   GroupMeetingMaterial[]
   financialCategories     FinancialCategory[]
@@ -135,6 +136,7 @@ model Congregation {
   songs                   Song[]
   materialOpenRecords     MaterialOpenRecord[]
   groupMeetingMaterials   GroupMeetingMaterial[]
+  studyMaterialVersions   StudyMaterialVersion[]
   qrTokens                QrToken[]
   exportJobs              ExportJob[]
   importJobs              ImportJob[]
@@ -215,6 +217,7 @@ model UserAccount {
   createdPosts            ContentPost[]
   actorAuditLogs          AuditLog[]              @relation("AuditActorUser")
   notificationPreference  NotificationPreference?
+  studyMaterialVersions   StudyMaterialVersion[]
 
   @@unique([tenant_id, email])
   @@index([tenant_id, id])
@@ -668,6 +671,7 @@ model StudyMaterial {
   materialTargets  MaterialTarget[]
   openRecords      MaterialOpenRecord[]
   meetingMaterials GroupMeetingMaterial[]
+  versions         StudyMaterialVersion[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -686,6 +690,38 @@ model MaterialTarget {
   @@id([study_material_id, small_group_id])
   @@index([small_group_id])
   @@map("material_targets")
+}
+
+/// Snapshot do StudyMaterial capturado antes de cada PATCH — histórico de
+/// versões (PROD-10). Cada linha é o estado que a `version` indicada tinha
+/// até ser substituída; a versão corrente vive só em StudyMaterial.
+model StudyMaterialVersion {
+  id                 String              @id @default(uuid())
+  tenant_id          String
+  congregation_id    String
+  study_material_id  String
+  version            Int
+  title              String
+  description        String?
+  author             String?
+  source_type        StudyMaterialSource
+  file_url           String?
+  rich_content       String?
+  publish_at         DateTime
+  expires_at         DateTime?
+  tags               String[]
+  changed_by_user_id String
+  changed_at         DateTime            @default(now())
+
+  tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation  Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  studyMaterial StudyMaterial @relation(fields: [study_material_id], references: [id], onDelete: Cascade)
+  changedBy     UserAccount   @relation(fields: [changed_by_user_id], references: [id], onDelete: Restrict)
+
+  @@unique([study_material_id, version])
+  @@index([tenant_id, congregation_id])
+  @@index([study_material_id])
+  @@map("study_material_versions")
 }
 
 model MaterialOpenRecord {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -178,7 +179,6 @@ export class StudyMaterialsService {
   ) {
     const existing = await this.prisma.client.studyMaterial.findUnique({
       where: { id },
-      select: { id: true, file_url: true },
     });
     if (!existing) throw new NotFoundException('Material não encontrado');
 
@@ -194,14 +194,62 @@ export class StudyMaterialsService {
       );
     }
 
-    return this.prisma.client.studyMaterial.update({
-      where: { id },
-      data: {
-        ...dto,
-        ...(dto.publish_at && { publish_at: new Date(dto.publish_at) }),
-        ...(dto.expires_at && { expires_at: new Date(dto.expires_at) }),
-        ...(file_url && { file_url }),
-        version: { increment: 1 },
+    return this.prisma.runInTx(async (tx) => {
+      // Concorrência otimista: só aplica se a versão ainda é a que foi lida
+      // acima — evita duas edições simultâneas colidirem no índice único de
+      // StudyMaterialVersion (study_material_id, version).
+      const { count } = await tx.studyMaterial.updateMany({
+        where: { id, version: existing.version },
+        data: {
+          ...dto,
+          ...(dto.publish_at && { publish_at: new Date(dto.publish_at) }),
+          ...(dto.expires_at && { expires_at: new Date(dto.expires_at) }),
+          ...(file_url && { file_url }),
+          version: { increment: 1 },
+        },
+      });
+      if (count === 0) {
+        throw new ConflictException(
+          'Material foi alterado por outra pessoa nesse meio tempo — recarregue e tente de novo',
+        );
+      }
+
+      // Snapshot da versão que acabou de ser substituída (PROD-10)
+      await tx.studyMaterialVersion.create({
+        data: {
+          tenant_id: existing.tenant_id,
+          congregation_id: existing.congregation_id,
+          study_material_id: existing.id,
+          version: existing.version,
+          title: existing.title,
+          description: existing.description,
+          author: existing.author,
+          source_type: existing.source_type,
+          file_url: existing.file_url,
+          rich_content: existing.rich_content,
+          publish_at: existing.publish_at,
+          expires_at: existing.expires_at,
+          tags: existing.tags,
+          changed_by_user_id: user.sub,
+        },
+      });
+
+      return tx.studyMaterial.findUniqueOrThrow({ where: { id } });
+    });
+  }
+
+  async getVersions(materialId: string) {
+    const material = await this.prisma.client.studyMaterial.findUnique({
+      where: { id: materialId },
+      select: { id: true },
+    });
+    if (!material) throw new NotFoundException('Material não encontrado');
+
+    return this.prisma.client.studyMaterialVersion.findMany({
+      where: { study_material_id: materialId },
+      orderBy: { version: 'desc' },
+      include: {
+        changedBy: { select: { id: true, email: true } },
       },
     });
   }

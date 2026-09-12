@@ -59,6 +59,12 @@ export class StudyMaterialsController {
     return this.studyMaterialsService.getOpenStats(id);
   }
 
+  @Get(':id/versions')
+  @Roles(...READ_ROLES)
+  getVersions(@Param('id', ParseUUIDPipe) id: string) {
+    return this.studyMaterialsService.getVersions(id);
+  }
+
   @Get(':id')
   @Roles(...READ_ROLES)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
