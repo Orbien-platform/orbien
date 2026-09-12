@@ -244,11 +244,22 @@ describe('DonationReceiptService.list', () => {
 });
 
 describe('DonationReceiptService.getDownloadUrl', () => {
+  // O fake reproduz o `WHERE id = ... AND tenant_id = ...` do Prisma de
+  // verdade: só devolve a linha quando os DOIS casam. Um fake que ignorasse
+  // `tenant_id` deixaria passar o cenário do vazamento entre tenants sem
+  // nenhum teste reprovar — que é exatamente o gap que este describe cobre.
+  function findFirstFake(rows: { id: string; tenant_id: string; receipt_url: string }[]) {
+    return jest.fn((args: { where: { id: string; tenant_id: string } }) => {
+      const row = rows.find((r) => r.id === args.where.id && r.tenant_id === args.where.tenant_id);
+      return Promise.resolve(row ? { receipt_url: row.receipt_url } : null);
+    });
+  }
+
   it('devolve URL assinada a partir da key do storage', async () => {
     const { service, client } = harness();
-    (client.donationReceipt as unknown as { findFirst: jest.Mock }).findFirst = jest
-      .fn()
-      .mockResolvedValue({ receipt_url: 'https://cdn.test/donation-receipts/t1/tx-1.pdf' });
+    (client.donationReceipt as unknown as { findFirst: jest.Mock }).findFirst = findFirstFake([
+      { id: 'receipt-1', tenant_id: 't1', receipt_url: 'https://cdn.test/donation-receipts/t1/tx-1.pdf' },
+    ]);
 
     const result = await service.getDownloadUrl('t1', 'receipt-1');
 
@@ -257,8 +268,17 @@ describe('DonationReceiptService.getDownloadUrl', () => {
 
   it('recibo inexistente vira 404', async () => {
     const { service, client } = harness();
-    (client.donationReceipt as unknown as { findFirst: jest.Mock }).findFirst = jest.fn().mockResolvedValue(null);
+    (client.donationReceipt as unknown as { findFirst: jest.Mock }).findFirst = findFirstFake([]);
 
     await expect(service.getDownloadUrl('t1', 'nao-existe')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('recibo que existe mas pertence a OUTRO tenant também vira 404 — a query filtra por tenant_id, não só por id', async () => {
+    const { service, client } = harness();
+    (client.donationReceipt as unknown as { findFirst: jest.Mock }).findFirst = findFirstFake([
+      { id: 'receipt-1', tenant_id: 't2', receipt_url: 'https://cdn.test/donation-receipts/t2/tx-9.pdf' },
+    ]);
+
+    await expect(service.getDownloadUrl('t1', 'receipt-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
