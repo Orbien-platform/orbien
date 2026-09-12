@@ -18,6 +18,15 @@ const categories = [
   { id: "c2", name: "Aluguel", type: "expense" as const, children: [] },
 ];
 
+function mockApiGet(overrides: { costCenters?: unknown[] } = {}) {
+  vi.mocked(api.get).mockImplementation((url: string) => {
+    if (url === "/financial/cost-centers") {
+      return Promise.resolve({ data: overrides.costCenters ?? [] });
+    }
+    return Promise.resolve({ data: categories });
+  });
+}
+
 async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(screen.getAllByRole("combobox")[0], "c1");
   await user.type(screen.getByLabelText(/Valor/), "1000");
@@ -27,7 +36,7 @@ async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
 describe("NewTransactionModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.get).mockResolvedValue({ data: categories });
+    mockApiGet();
   });
 
   it("does not render form fields when closed", () => {
@@ -106,6 +115,35 @@ describe("NewTransactionModal", () => {
     expect(onCreated).toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     vi.useRealTimers();
+  });
+
+  it("sends the selected cost center when creating a single transaction", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockApiGet({ costCenters: [{ id: "cc1", name: "Missões" }] });
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/cost-centers"));
+
+    await fillRequiredFields(user);
+    await user.selectOptions(screen.getByLabelText(/Centro de custo/), "cc1");
+    await user.click(screen.getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/financial/transactions",
+        expect.objectContaining({ cost_center_id: "cc1" })
+      )
+    );
+    vi.useRealTimers();
+  });
+
+  it("does not render the cost center field when none is registered", async () => {
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/cost-centers"));
+
+    expect(screen.queryByLabelText(/Centro de custo/)).not.toBeInTheDocument();
   });
 
   it("switches to expense type and filters categories accordingly", async () => {

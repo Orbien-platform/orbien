@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye, Settings2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye, Settings2, Layers } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +21,7 @@ import { NewTransactionModal } from "@/components/financial/NewTransactionModal"
 import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financial/RecurrenceScopeDialog";
 import { ExportButton } from "@/components/financial/ExportButton";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
+import { CostCentersModal } from "@/components/financial/CostCentersModal";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ interface Transaction {
   description: string;
   category_id: string | null;
   category?: { id: string; name: string; type: string } | null;
+  cost_center_id?: string | null;
   recurring_rule_id?: string | null;
   status: "pending" | "paid" | "confirmed";
 }
@@ -78,6 +80,23 @@ interface DRE {
   };
 }
 
+interface BalanceteLine {
+  cost_center_id: string | null;
+  cost_center_name: string;
+  revenue_total: number;
+  expenses_total: number;
+  net_result: number;
+  count: number;
+}
+
+interface Balancete {
+  period: { start: string; end: string };
+  lines: BalanceteLine[];
+  revenue_total: number;
+  expenses_total: number;
+  net_result: number;
+}
+
 function frequencyLabel(freq: "weekly" | "monthly" | "yearly"): string {
   return freq === "weekly" ? "Semanal" : freq === "monthly" ? "Mensal" : "Anual";
 }
@@ -92,7 +111,7 @@ function statusBadgeClass(status: Transaction["status"]): string {
   return "bg-blue-100 text-blue-700";
 }
 
-type TabValue = "overview" | "transactions" | "recurring" | "dre";
+type TabValue = "overview" | "transactions" | "recurring" | "dre" | "balancete";
 const TX_PAGE_SIZE = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -203,6 +222,7 @@ export default function FinanceiroPage() {
 
   const [activeTab, setActiveTab] = useState<TabValue>("overview");
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [costCentersOpen, setCostCentersOpen] = useState(false);
 
   // Transactions + categories (shared across tabs)
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -217,6 +237,13 @@ export default function FinanceiroPage() {
   const [dreEnd, setDreEnd] = useState(todayIso);
   const [dre, setDre] = useState<DRE | null>(null);
   const [loadingDre, setLoadingDre] = useState(false);
+
+  // Balancete state
+  const [balanceteStart, setBalanceteStart] = useState(firstOfMonthIso);
+  const [balanceteEnd, setBalanceteEnd] = useState(todayIso);
+  const [balancete, setBalancete] = useState<Balancete | null>(null);
+  const [loadingBalancete, setLoadingBalancete] = useState(false);
+  const prevBalanceteKey = useRef("");
   const prevDreKey = useRef("");
 
   // Lançamentos filters (client-side)
@@ -394,6 +421,20 @@ export default function FinanceiroPage() {
       .catch(() => {})
       .finally(() => setLoadingDre(false));
   }, [activeTab, dreStart, dreEnd]);
+
+  // ── Fetch Balancete ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "balancete") return;
+    const key = `${balanceteStart}|${balanceteEnd}`;
+    if (prevBalanceteKey.current === key) return;
+    prevBalanceteKey.current = key;
+    setLoadingBalancete(true);
+    api
+      .get<Balancete>(`/financial/balancete?period_start=${balanceteStart}&period_end=${balanceteEnd}`)
+      .then((r) => setBalancete(r.data))
+      .catch(() => {})
+      .finally(() => setLoadingBalancete(false));
+  }, [activeTab, balanceteStart, balanceteEnd]);
 
   // ── Computed ─────────────────────────────────────────────────────────────────
   const kpiIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
@@ -577,16 +618,28 @@ export default function FinanceiroPage() {
           <p className="mt-0.5 text-sm text-stone">Visão geral e tesouraria</p>
         </div>
         {canManageCategories && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="rounded-[8px]"
-            aria-label="Categorias"
-            title="Categorias"
-            onClick={() => setCategoriesOpen(true)}
-          >
-            <Settings2 size={15} strokeWidth={1.5} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="rounded-[8px]"
+              aria-label="Centros de custo"
+              title="Centros de custo"
+              onClick={() => setCostCentersOpen(true)}
+            >
+              <Layers size={15} strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="rounded-[8px]"
+              aria-label="Categorias"
+              title="Categorias"
+              onClick={() => setCategoriesOpen(true)}
+            >
+              <Settings2 size={15} strokeWidth={1.5} />
+            </Button>
+          </div>
         )}
       </div>
 
@@ -610,6 +663,9 @@ export default function FinanceiroPage() {
           )}
           <Tabs.Tab value="dre" className={tabBtn(activeTab === "dre")}>
             DRE
+          </Tabs.Tab>
+          <Tabs.Tab value="balancete" className={tabBtn(activeTab === "balancete")}>
+            Balancete
           </Tabs.Tab>
         </Tabs.List>
 
@@ -1032,6 +1088,102 @@ export default function FinanceiroPage() {
             )}
           </div>
         </Tabs.Panel>
+
+        {/* ── Balancete ──────────────────────────────────────────────────────── */}
+        <Tabs.Panel value="balancete" className="pt-5">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={balanceteStart}
+                onChange={(e) => { setBalanceteStart(e.target.value); prevBalanceteKey.current = ""; }}
+                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+              />
+              <span className="text-xs text-stone">até</span>
+              <input
+                type="date"
+                value={balanceteEnd}
+                onChange={(e) => { setBalanceteEnd(e.target.value); prevBalanceteKey.current = ""; }}
+                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+              />
+            </div>
+
+            {loadingBalancete ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : !balancete ? (
+              <p className="py-10 text-center text-sm text-stone">
+                Selecione um período para ver o balancete.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-[12px] border border-[var(--border-default)]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">
+                        Centro de custo
+                      </th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                        Receitas
+                      </th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                        Despesas
+                      </th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                        Resultado
+                      </th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                        Qtd
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {balancete.lines.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 pl-4 text-xs text-stone">Sem lançamentos no período</td>
+                      </tr>
+                    ) : (
+                      balancete.lines.map((line) => (
+                        <tr
+                          key={line.cost_center_id ?? "__none__"}
+                          className="border-t border-[var(--border-default)] hover:bg-[var(--surface-subtle)] transition-colors"
+                        >
+                          <td className="py-2.5 pl-4 text-sm text-ink dark:text-white">{line.cost_center_name}</td>
+                          <td className="py-2.5 pr-4 text-right text-sm tabular-nums text-ink dark:text-white">
+                            {fmt(line.revenue_total)}
+                          </td>
+                          <td className="py-2.5 pr-4 text-right text-sm tabular-nums text-ink dark:text-white">
+                            {fmt(line.expenses_total)}
+                          </td>
+                          <td className={cn("py-2.5 pr-4 text-right text-sm tabular-nums font-medium", line.net_result >= 0 ? "text-teal" : "text-crimson")}>
+                            {fmt(line.net_result)}
+                          </td>
+                          <td className="py-2.5 pr-4 text-right text-xs text-stone">{line.count}</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
+                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">TOTAL</td>
+                      <td className="py-3 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
+                        {fmt(balancete.revenue_total)}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
+                        {fmt(balancete.expenses_total)}
+                      </td>
+                      <td className={cn("py-3 pr-4 text-right text-sm font-semibold tabular-nums", balancete.net_result >= 0 ? "text-teal" : "text-crimson")}>
+                        {fmt(balancete.net_result)}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-xs text-stone">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Tabs.Panel>
       </Tabs.Root>
 
       <NewTransactionModal
@@ -1060,6 +1212,14 @@ export default function FinanceiroPage() {
         <CategoriesModal
           open={categoriesOpen}
           onOpenChange={setCategoriesOpen}
+          onChanged={refreshTx}
+        />
+      )}
+
+      {canManageCategories && (
+        <CostCentersModal
+          open={costCentersOpen}
+          onOpenChange={setCostCentersOpen}
           onChanged={refreshTx}
         />
       )}

@@ -207,13 +207,24 @@ O caso mais caro, porque parece entregue em qualquer leitura do
 
 | ID | Tabela | Funcionalidade | Plano |
 |---|---|---|---|
-| `PROD-02` | `cost_centers` | Centros de custo (e o balancete que depende deles) | Starter (balancete: Premium) |
 | `PROD-03` | `donation_receipts` | Recibo automático por e-mail/PDF | Premium |
 
 > `PROD-01` (`prayer_requests`) **fechou em 2026-09-12** — era a terceira
 > tabela desta lista. Três rotas em `small-groups`, RLS por congregação
 > (`008_rls_prayer_requests.sql`) e painel no `apps/web`. A decisão de acesso
 > está registrada em `PEND-01`, porque contrasta com o resto do módulo.
+>
+> `PROD-02` (`cost_centers`) **fechou em 2026-09-12** — mesmo caso de
+> tabela antiga sem rota. CRUD em `financial/cost-centers` (Starter,
+> `pricing-church-platform.md` §5.2) e o balancete em `financial/balancete`
+> que agrupa `FinancialTransaction` por centro de custo (Premium inteiro,
+> `@RequiresPlan('premium')` no controller, mesmo padrão do DRE). RLS trocada
+> de `tenant_isolation` para `tenant_congregation_isolation` em
+> `010_rls_cost_centers.sql`, mesmo motivo de `009_rls_prayer_requests.sql`
+> (AD-001). O seletor de centro de custo entrou em `NewTransactionModal`
+> (lançamento avulso e edição); lançamentos parcelados/fixos não o suportam
+> ainda porque `create-recurring-rule.dto.ts` não tem o campo — decisão de
+> escopo, não esquecimento.
 
 Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
