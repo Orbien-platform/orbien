@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -13,6 +13,22 @@ type CreateMeetingResult = {
 };
 
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
+
+// Espelha `MEETING_READ_ROLES` do controller — papéis de liderança que já
+// enxergam grupos que não lideram (ex.: `pastor`/`secretary` cobrindo a rede
+// toda) e por isso não passam pela checagem de participação de
+// `assertParticipant`. Só `member` (o resto de `MEETING_LIST_READ_ROLES`)
+// precisa provar `GroupMembership` real. Duplicado em vez de importado do
+// controller pelo mesmo motivo que `MATERIAL_LEADER_ROLES` já é: o service é
+// testado sem instanciar o controller.
+const MEETING_PRIVILEGED_ROLES = [
+  'tenant_admin',
+  'admin_congregation',
+  'pastor',
+  'secretary',
+  'cell_leader',
+  'treasurer',
+];
 
 @Injectable()
 export class MeetingsService {
@@ -63,7 +79,12 @@ export class MeetingsService {
     );
   }
 
-  async findByGroup(groupId: string) {
+  async findByGroup(groupId: string, user: JwtPayload) {
+    const isPrivileged = user.roles.some((role) => MEETING_PRIVILEGED_ROLES.includes(role));
+    if (!isPrivileged) {
+      await this.assertParticipant(groupId, user.sub);
+    }
+
     return this.prisma.client.groupMeeting.findMany({
       where: { small_group_id: groupId },
       orderBy: { occurred_at: 'desc' },
@@ -71,6 +92,37 @@ export class MeetingsService {
         _count: { select: { attendanceRecords: true } },
       },
     });
+  }
+
+  /**
+   * `member` só participa de um grupo por vez, mas nada nas rotas de
+   * encontro/material recebia `person_id` para conferir isso — o `@Roles`
+   * liberava qualquer `member`, de qualquer grupo ou de nenhum. Resolve a
+   * pessoa pela conta autenticada (mesmo caminho de
+   * `CelebrationAssignmentService.resolvePersonId`) e exige `GroupMembership`
+   * real no grupo pedido.
+   */
+  private async assertParticipant(groupId: string, userId: string): Promise<void> {
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: userId },
+      select: { person_id: true },
+    });
+
+    const membership = account?.person_id
+      ? await this.prisma.client.groupMembership.findUnique({
+          where: {
+            small_group_id_person_id: {
+              small_group_id: groupId,
+              person_id: account.person_id,
+            },
+          },
+          select: { id: true },
+        })
+      : null;
+
+    if (!membership) {
+      throw new ForbiddenException('Você não participa deste grupo');
+    }
   }
 
   async findOne(meetingId: string) {
@@ -186,11 +238,14 @@ export class MeetingsService {
   async listMaterials(meetingId: string, user: JwtPayload) {
     const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
-      select: { id: true },
+      select: { id: true, small_group_id: true },
     });
     if (!meeting) throw new NotFoundException('Reunião não encontrada');
 
     const isLeader = user.roles.some((role) => MATERIAL_LEADER_ROLES.includes(role));
+    if (!isLeader) {
+      await this.assertParticipant(meeting.small_group_id, user.sub);
+    }
 
     return this.prisma.client.groupMeetingMaterial.findMany({
       where: {

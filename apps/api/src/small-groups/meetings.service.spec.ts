@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -23,6 +23,8 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn(),
       delete: jest.fn(),
     },
+    userAccount: { findUnique: jest.fn() },
+    groupMembership: { findUnique: jest.fn() },
     ...overrides,
   };
 }
@@ -105,12 +107,53 @@ describe('MeetingsService', () => {
   });
 
   describe('findByGroup', () => {
-    it('lista as reuniões do grupo', async () => {
+    it('papel de liderança lista sem checar participação', async () => {
       const client = clientWith();
       client.groupMeeting.findMany.mockResolvedValue([{ id: 'meet1' }]);
       const service = serviceWith(client);
 
-      expect(await service.findByGroup('sg1')).toEqual([{ id: 'meet1' }]);
+      expect(await service.findByGroup('sg1', USER)).toEqual([{ id: 'meet1' }]);
+      expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('member participante do grupo lista normalmente', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue({ id: 'mem1' });
+      client.groupMeeting.findMany.mockResolvedValue([{ id: 'meet1' }]);
+      const service = serviceWith(client);
+
+      const result = await service.findByGroup('sg1', { ...USER, roles: ['member'] });
+
+      expect(result).toEqual([{ id: 'meet1' }]);
+      expect(client.groupMembership.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { small_group_id_person_id: { small_group_id: 'sg1', person_id: 'p1' } },
+        }),
+      );
+    });
+
+    it('member sem GroupMembership no grupo leva ForbiddenException', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.findByGroup('sg-de-outro-grupo', { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.groupMeeting.findMany).not.toHaveBeenCalled();
+    });
+
+    it('member sem pessoa vinculada à conta leva ForbiddenException sem consultar GroupMembership', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+      const service = serviceWith(client);
+
+      await expect(
+        service.findByGroup('sg1', { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.groupMembership.findUnique).not.toHaveBeenCalled();
     });
   });
 
@@ -307,9 +350,9 @@ describe('MeetingsService', () => {
       await expect(service.listMaterials('meet1', USER)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('líder vê todos os materiais, sem filtro de visibilidade', async () => {
+    it('líder vê todos os materiais, sem filtro de visibilidade nem checagem de participação', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1', small_group_id: 'sg1' });
       client.groupMeetingMaterial.findMany.mockResolvedValue([{ id: 'link1' }]);
       const service = serviceWith(client);
 
@@ -318,19 +361,40 @@ describe('MeetingsService', () => {
       expect(client.groupMeetingMaterial.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { meeting_id: 'meet1' } }),
       );
+      expect(client.userAccount.findUnique).not.toHaveBeenCalled();
     });
 
-    it('membro comum vê apenas materiais com visibility "all"', async () => {
+    it('member participante do grupo vê apenas materiais com visibility "all"', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1', small_group_id: 'sg1' });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue({ id: 'mem1' });
       client.groupMeetingMaterial.findMany.mockResolvedValue([]);
       const service = serviceWith(client);
 
       await service.listMaterials('meet1', { ...USER, roles: ['member'] });
 
+      expect(client.groupMembership.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { small_group_id_person_id: { small_group_id: 'sg1', person_id: 'p1' } },
+        }),
+      );
       expect(client.groupMeetingMaterial.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { meeting_id: 'meet1', visibility: 'all' } }),
       );
+    });
+
+    it('member de outro grupo leva ForbiddenException, sem vazar a lista de materiais', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1', small_group_id: 'sg1' });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.listMaterials('meet1', { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.groupMeetingMaterial.findMany).not.toHaveBeenCalled();
     });
   });
 

@@ -1355,6 +1355,53 @@ nem escrita de pessoas de tenants já existentes para o suporte.
 
 ---
 
+## PEND-01 · `small-groups` não confere participação real — fechada em 2026-09-12
+
+Aberta em 2026-09-09, durante o MOB-09: `MeetingsController.findByGroup`
+(`GET /small-groups/:groupId/meetings`) e `MeetingsService.listMaterials`
+(`GET /small-groups/meetings/:meetingId/materials`) checavam só a `role` do
+JWT — nenhum dos dois conferia se a pessoa autenticada tinha
+`GroupMembership` no grupo pedido. Qualquer conta com role `member`, de
+qualquer grupo do tenant ou de nenhum, listava os encontros e os materiais
+`visibility: all` de **qualquer outro** grupo.
+
+### Por que não fechou na hora
+
+`listMaterials` já liberava `member` de propósito antes do MOB-09; o MOB-09
+estendeu a mesma política para `findByGroup`. Fechar exigia decidir quem
+continuava vendo tudo — os papéis de liderança que já enxergavam grupos que
+não lideram (`pastor`/`secretary` via `MEETING_READ_ROLES`) — e quem passava
+a ver só o próprio, o que era maior que o pedido da feature.
+
+### Correção
+
+`MeetingsService` ganhou `assertParticipant(groupId, userId)`: resolve
+`person_id` a partir da `UserAccount` autenticada (mesmo caminho de
+`CelebrationAssignmentService.resolvePersonId`) e exige `GroupMembership`
+real via `groupMembership.findUnique`. A decisão sobre quem mantém visão
+ampla foi resolvida preservando o comportamento já em produção — diferente
+da referência de `PrayerRequestsService.requireMembership` (PROD-01), que
+não tinha comportamento anterior a proteger e por isso não abre exceção de
+papel nenhuma:
+
+- `tenant_admin`, `admin_congregation`, `pastor`, `secretary`, `cell_leader`
+  e `treasurer` continuam vendo grupos que não lideram (`MEETING_READ_ROLES`
+  do controller, espelhado em `MEETING_PRIVILEGED_ROLES` no service);
+- só `member` precisa de `GroupMembership` real no grupo requisitado, em
+  `findByGroup` e em `listMaterials`.
+
+### Evidência
+
+`meetings.service.spec.ts` e `meetings.controller.spec.ts` ganharam casos
+para os dois lados: papel de liderança lista sem checar participação;
+`member` participante lista normalmente; `member` sem `GroupMembership` no
+grupo, ou sem `Person` vinculada à conta, leva `ForbiddenException` sem
+tocar a consulta de encontros/materiais.
+
+### Nada em aberto nesta pendência
+
+---
+
 ## DEC-01 · Gating por plano — decidido e executado em 2026-09-12
 
 `TenantPlan` existia no schema e era gravado no provisionamento desde a
