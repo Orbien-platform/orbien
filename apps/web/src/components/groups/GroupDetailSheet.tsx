@@ -285,6 +285,7 @@ export function GroupDetailSheet({
   const [expandedVersionsId, setExpandedVersionsId] = useState<string | null>(null);
   const [materialVersions, setMaterialVersions] = useState<Record<string, MaterialVersion[]>>({});
   const [loadingVersionsId, setLoadingVersionsId] = useState<string | null>(null);
+  const [versionsErrorId, setVersionsErrorId] = useState<string | null>(null);
   const [isRemovingMaterial, setIsRemovingMaterial] = useState(false);
   // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
   // cada recarga disparada por um evento (registrar encontro). Evita setState
@@ -374,11 +375,14 @@ export function GroupDetailSheet({
     if (materialVersions[materialId]) return;
 
     setLoadingVersionsId(materialId);
+    setVersionsErrorId(null);
     try {
       const { data } = await api.get<MaterialVersion[]>(`/study-materials/${materialId}/versions`);
       setMaterialVersions((prev) => ({ ...prev, [materialId]: data }));
     } catch {
-      setMaterialVersions((prev) => ({ ...prev, [materialId]: [] }));
+      // Não cacheia: falha de rede não é o mesmo que "sem versões
+      // anteriores", e precisa poder tentar de novo ao reabrir.
+      setVersionsErrorId(materialId);
     } finally {
       setLoadingVersionsId(null);
     }
@@ -681,6 +685,10 @@ export function GroupDetailSheet({
                                               <div className="flex items-center justify-center py-2">
                                                 <Loader2 size={14} className="animate-spin text-stone" />
                                               </div>
+                                            ) : versionsErrorId === mm.material_id ? (
+                                              <p className="text-xs text-crimson">
+                                                Não deu para carregar o histórico. Tente de novo.
+                                              </p>
                                             ) : versions.length === 0 ? (
                                               <p className="text-xs text-stone">
                                                 Sem alterações anteriores registradas.

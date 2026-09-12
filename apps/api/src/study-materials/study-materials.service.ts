@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -194,7 +195,26 @@ export class StudyMaterialsService {
     }
 
     return this.prisma.runInTx(async (tx) => {
-      // Snapshot da versão que está sendo substituída (PROD-10)
+      // Concorrência otimista: só aplica se a versão ainda é a que foi lida
+      // acima — evita duas edições simultâneas colidirem no índice único de
+      // StudyMaterialVersion (study_material_id, version).
+      const { count } = await tx.studyMaterial.updateMany({
+        where: { id, version: existing.version },
+        data: {
+          ...dto,
+          ...(dto.publish_at && { publish_at: new Date(dto.publish_at) }),
+          ...(dto.expires_at && { expires_at: new Date(dto.expires_at) }),
+          ...(file_url && { file_url }),
+          version: { increment: 1 },
+        },
+      });
+      if (count === 0) {
+        throw new ConflictException(
+          'Material foi alterado por outra pessoa nesse meio tempo — recarregue e tente de novo',
+        );
+      }
+
+      // Snapshot da versão que acabou de ser substituída (PROD-10)
       await tx.studyMaterialVersion.create({
         data: {
           tenant_id: existing.tenant_id,
@@ -214,16 +234,7 @@ export class StudyMaterialsService {
         },
       });
 
-      return tx.studyMaterial.update({
-        where: { id },
-        data: {
-          ...dto,
-          ...(dto.publish_at && { publish_at: new Date(dto.publish_at) }),
-          ...(dto.expires_at && { expires_at: new Date(dto.expires_at) }),
-          ...(file_url && { file_url }),
-          version: { increment: 1 },
-        },
-      });
+      return tx.studyMaterial.findUniqueOrThrow({ where: { id } });
     });
   }
 
