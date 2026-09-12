@@ -4,6 +4,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
+import { CostCentersController } from './cost-centers.controller';
+import { CostCentersService } from './cost-centers.service';
+import { BalanceteController } from './balancete.controller';
+import { BalanceteService } from './balancete.service';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { PixController } from './pix.controller';
@@ -26,6 +30,8 @@ import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
   imports: [PrismaModule, HttpModule, StorageModule, RecurringRuleModule],
   controllers: [
     CategoriesController,
+    CostCentersController,
+    BalanceteController,
     TransactionsController,
     PixController,
     DashboardController,
@@ -34,6 +40,8 @@ import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
   ],
   providers: [
     CategoriesService,
+    CostCentersService,
+    BalanceteService,
     TransactionsService,
     PixService,
     ForecastService,

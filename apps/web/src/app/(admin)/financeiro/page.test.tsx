@@ -97,6 +97,14 @@ vi.mock("@/components/financial/CategoriesModal", () => ({
       </div>
     ) : null,
 }));
+vi.mock("@/components/financial/CostCentersModal", () => ({
+  CostCentersModal: ({ open, onChanged }: { open: boolean; onChanged: () => void }) =>
+    open ? (
+      <div data-testid="cost-centers-modal">
+        <button onClick={onChanged}>simular mudança de centros de custo</button>
+      </div>
+    ) : null,
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -156,11 +164,13 @@ function mockApi(opts: {
   categories?: unknown[];
   recurring?: unknown[];
   dre?: unknown;
+  balancete?: unknown;
   txError?: boolean;
   /** 403 do servidor: sem permissão, que é diferente de sem dado. */
   txForbidden?: boolean;
   recurringError?: boolean;
   dreError?: boolean;
+  balanceteError?: boolean;
 } = {}) {
   mockedApi.get.mockImplementation((url: string) => {
     if (url.startsWith("/financial/transactions")) {
@@ -180,6 +190,11 @@ function mockApi(opts: {
     if (url.startsWith("/financial/dre")) {
       return opts.dreError ? Promise.reject(new Error("boom")) : Promise.resolve({ data: opts.dre ?? dre() });
     }
+    if (url.startsWith("/financial/balancete")) {
+      return opts.balanceteError
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve({ data: opts.balancete ?? balancete() });
+    }
     return Promise.reject(new Error(`unexpected ${url}`));
   });
 }
@@ -196,6 +211,41 @@ function dre(overrides: Partial<{
     expenses: { categories: [], total: 0 },
     net_result: 0,
     previous_period: { period: { start: "", end: "" }, revenue_total: 0, expenses_total: 0, net_result: 0 },
+    ...overrides,
+  };
+}
+
+function balancete(overrides: Partial<{
+  lines: unknown[];
+  revenue_total: number;
+  expenses_total: number;
+  net_result: number;
+}> = {}) {
+  return {
+    period: { start: "2026-02-01", end: "2026-02-28" },
+    lines: [],
+    revenue_total: 0,
+    expenses_total: 0,
+    net_result: 0,
+    ...overrides,
+  };
+}
+
+function balanceteLine(overrides: Partial<{
+  cost_center_id: string | null;
+  cost_center_name: string;
+  revenue_total: number;
+  expenses_total: number;
+  net_result: number;
+  count: number;
+}> = {}) {
+  return {
+    cost_center_id: "cc1",
+    cost_center_name: "Missões",
+    revenue_total: 0,
+    expenses_total: 0,
+    net_result: 0,
+    count: 0,
     ...overrides,
   };
 }
@@ -298,6 +348,26 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByTestId("categories-modal")).toBeInTheDocument();
     const callsBefore = mockedApi.get.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "simular mudança de categorias" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("não mostra o botão de centros de custo para quem não pode gerenciar", async () => {
+    setup(["secretary"]);
+    mockApi({});
+    render(<FinanceiroPage />);
+    await screen.findByText("Visão Geral");
+    expect(screen.queryByRole("button", { name: "Centros de custo" })).not.toBeInTheDocument();
+  });
+
+  it("mostra e usa o botão de centros de custo para treasurer", async () => {
+    setup(["treasurer"]);
+    mockApi({});
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("button", { name: "Centros de custo" }));
+    expect(screen.getByTestId("cost-centers-modal")).toBeInTheDocument();
+    const callsBefore = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular mudança de centros de custo" }));
     await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
@@ -890,6 +960,124 @@ describe("FinanceiroPage — aba DRE", () => {
     await user.click(screen.getByRole("tab", { name: "DRE" }));
     expect(await screen.findByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
     expect(screen.getByText("-R$ 50,00")).toBeInTheDocument();
+  });
+});
+
+describe("FinanceiroPage — aba Balancete", () => {
+  it("mostra o placeholder quando ainda não há balancete carregado", async () => {
+    setup();
+    mockApi({ balanceteError: true });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    expect(await screen.findByText("Selecione um período para ver o balancete.")).toBeInTheDocument();
+  });
+
+  it("mostra o skeleton de carregamento antes da resposta chegar", async () => {
+    setup();
+    let resolveBalancete!: (v: unknown) => void;
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/financial/balancete")) {
+        return new Promise((resolve) => { resolveBalancete = resolve; }) as never;
+      }
+      if (url.startsWith("/financial/transactions")) return Promise.resolve({ data: { data: [], total: 0 } });
+      if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/recurring-rules")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/financial/dre")) return Promise.resolve({ data: dre() });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    expect(document.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+    resolveBalancete({ data: balancete() });
+    await screen.findByText("Sem lançamentos no período");
+  });
+
+  it("muda o período e refaz a busca, sem duplicar quando o período não muda", async () => {
+    setup();
+    mockApi({ balancete: balancete() });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    await screen.findByText("Sem lançamentos no período");
+    const callsBefore = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/balancete")).length;
+
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.clear(dateInputs[0] as HTMLInputElement);
+    await user.type(dateInputs[0] as HTMLInputElement, "2026-01-01");
+    await waitFor(() =>
+      expect(
+        mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/balancete")).length
+      ).toBeGreaterThan(callsBefore)
+    );
+
+    const callsAfterStart = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/balancete")).length;
+    await user.clear(dateInputs[1] as HTMLInputElement);
+    await user.type(dateInputs[1] as HTMLInputElement, "2026-02-15");
+    await waitFor(() =>
+      expect(
+        mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/balancete")).length
+      ).toBeGreaterThan(callsAfterStart)
+    );
+
+    // Trocar de aba e voltar sem mudar o período não deve refazer a busca.
+    await user.click(screen.getByRole("tab", { name: "Visão Geral" }));
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    const callsAfterReturn = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/balancete")).length;
+    await new Promise((r) => setTimeout(r, 10));
+    expect(
+      mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/balancete")).length
+    ).toBe(callsAfterReturn);
+  });
+
+  it("mostra as linhas por centro de custo, incluindo lançamentos sem centro de custo, e o total", async () => {
+    setup();
+    mockApi({
+      balancete: balancete({
+        lines: [
+          balanceteLine({ cost_center_id: "cc1", cost_center_name: "Missões", revenue_total: 1000, expenses_total: 200, net_result: 800, count: 3 }),
+          balanceteLine({ cost_center_id: null, cost_center_name: "Sem centro de custo", revenue_total: 0, expenses_total: 150, net_result: -150, count: 1 }),
+        ],
+        revenue_total: 1000,
+        expenses_total: 350,
+        net_result: 650,
+      }),
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    expect(await screen.findByText("Missões")).toBeInTheDocument();
+    expect(screen.getByText("Sem centro de custo")).toBeInTheDocument();
+    expect(screen.getByText("TOTAL")).toBeInTheDocument();
+    expect(screen.getByText("-R$ 150,00")).toBeInTheDocument();
+    expect(screen.getByText("R$ 650,00")).toBeInTheDocument();
+  });
+
+  it("mostra o total em vermelho quando o resultado líquido é negativo", async () => {
+    setup();
+    mockApi({
+      balancete: balancete({
+        lines: [balanceteLine({ revenue_total: 100, expenses_total: 300, net_result: -200, count: 2 })],
+        revenue_total: 100,
+        expenses_total: 300,
+        net_result: -200,
+      }),
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    const totalCell = (await screen.findByText("TOTAL")).closest("tr")!;
+    expect(totalCell).toHaveTextContent("-R$ 200,00");
+  });
+
+  it("mostra 'sem lançamentos no período' quando não há linhas", async () => {
+    setup();
+    mockApi({ balancete: balancete() });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Balancete" }));
+    expect(await screen.findByText("Sem lançamentos no período")).toBeInTheDocument();
   });
 });
 
