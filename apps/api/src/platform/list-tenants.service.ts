@@ -11,6 +11,7 @@ export interface TenantListItem {
   plan: PlanType | null;
   plan_status: PlanStatus | null;
   trial_ends_at: Date | null;
+  is_active: boolean;
   congregations_count: number;
   created_at: Date;
 }
@@ -67,6 +68,7 @@ export class ListTenantsService {
           slug: true,
           name: true,
           email: true,
+          is_active: true,
           created_at: true,
           tenantPlan: {
             select: { plan: true, status: true, trial_ends_at: true },
@@ -87,6 +89,7 @@ export class ListTenantsService {
       plan: t.tenantPlan?.plan ?? null,
       plan_status: t.tenantPlan?.status ?? null,
       trial_ends_at: t.tenantPlan?.trial_ends_at ?? null,
+      is_active: t.is_active,
       congregations_count: t._count.congregations,
       created_at: t.created_at,
     }));

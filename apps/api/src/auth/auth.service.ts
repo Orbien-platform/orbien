@@ -107,7 +107,12 @@ export class AuthService {
       where: { slug: dto.tenant_slug },
       include: { tenantPlan: { select: { plan: true } } },
     });
-    if (!tenant)
+    // Tenant inativo dá o mesmo erro de tenant inexistente: quem inativou a
+    // igreja não quer que o login continue distinguindo os dois casos. Quem
+    // barra de fato, em toda requisição — não só aqui — é o
+    // `JwtStrategy.validate`; este é o caminho que evita emitir um token que
+    // já nasceria inútil.
+    if (!tenant || !tenant.is_active)
       throw new UnauthorizedException({ message: 'Tenant not found', code: 'TENANT_NOT_FOUND' });
 
     const user = await this.prisma.userAccount.findUnique({
@@ -278,7 +283,11 @@ export class AuthService {
       throw new UnauthorizedException('Sessão expirada');
     }
 
-    // Conta desativada não renova — e a família inteira cai junto.
+    // Conta desativada não renova — e a família inteira cai junto. Tenant
+    // inativado é o mesmo caso: `JwtStrategy.validate` já barra o acesso em
+    // toda requisição autenticada, mas sem este check a cadeia de refresh de
+    // um usuário do tenant seguia girando, emitindo access tokens novos para
+    // um tenant que não deveria mais autenticar ninguém.
     //
     // Sem isto, `refresh` só olhava hash, `revoked_at` e `expires_at`: desativar
     // uma conta não impedia a ROTAÇÃO, e a cadeia seguia girando indefinidamente,
@@ -291,7 +300,7 @@ export class AuthService {
     // Derruba a família toda, e não só este token, pela mesma razão da detecção
     // de reuso logo acima: o que se quer é encerrar a sessão, não invalidar um
     // elo e deixar os outros de pé.
-    if (!stored.userAccount.is_active) {
+    if (!stored.userAccount.is_active || !stored.userAccount.tenant.is_active) {
       await this.prisma.refreshToken.updateMany({
         where: { user_account_id: stored.user_account_id, revoked_at: null },
         data: { revoked_at: new Date() },
