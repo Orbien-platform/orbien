@@ -1,6 +1,15 @@
 import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DonationReceiptService } from './donation-receipts.service';
+// Importado só para o describe whitebox abaixo forçar o pdfmake a de fato
+// invocar as duas closures que `donation-receipts.service.ts` registra na
+// importação (setLocalAccessPolicy/setUrlAccessPolicy) — sem isso elas nunca
+// são chamadas neste sandbox de módulos, e ficam fora da cobertura. Mesmo
+// padrão de `dre-pdf.service.spec.ts`.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfmakeLib = require('pdfmake') as {
+  createPdf: (def: object, opts: object) => { getBuffer: () => Promise<Buffer> };
+};
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { MailService } from '../mail/mail.service';
@@ -201,6 +210,14 @@ describe('DonationReceiptService.generateForTransaction', () => {
     expect(cap.mails).toEqual([]);
   });
 
+  it('sem tenant encontrado, o PDF cai para o nome padrão "Igreja"', async () => {
+    const { service, cap } = harness({ tenant: null });
+
+    await service.generateForTransaction('tx-1');
+
+    expect(cap.created).toHaveLength(1);
+  });
+
   it('o valor do email/recibo vem do Decimal convertido para number', async () => {
     const { service, cap } = harness({
       transaction: {
@@ -280,5 +297,37 @@ describe('DonationReceiptService.getDownloadUrl', () => {
     ]);
 
     await expect(service.getDownloadUrl('t1', 'receipt-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('quando a URL gravada não pertence ao domínio público do storage, devolve ela direto (sem assinar)', async () => {
+    const { service, client } = harness();
+    (client.donationReceipt as unknown as { findFirst: jest.Mock }).findFirst = findFirstFake([
+      { id: 'receipt-1', tenant_id: 't1', receipt_url: 'https://outro-dominio.test/x.pdf' },
+    ]);
+    const storage = (service as unknown as { storage: { keyFromUrl: jest.Mock } }).storage;
+    storage.keyFromUrl.mockReturnValueOnce(null);
+
+    const result = await service.getDownloadUrl('t1', 'receipt-1');
+
+    expect(result).toEqual({ download_url: 'https://outro-dominio.test/x.pdf', expires_in: 0 });
+  });
+});
+
+describe('políticas de acesso do pdfmake (module init, whitebox)', () => {
+  // Mesmo bloqueio deliberado de `dre-pdf.service.ts`: acesso a arquivo
+  // local/URL externa em qualquer PDF gerado por este serviço.
+  it('bloqueia imagem apontando para caminho local/não-data (setLocalAccessPolicy)', async () => {
+    const doc = pdfmakeLib.createPdf({ content: [{ image: './local/nao-existe.png' }] }, {});
+
+    await expect(doc.getBuffer()).rejects.toThrow(/Access to local file denied/);
+  });
+
+  it('bloqueia imagem apontando para URL externa (setUrlAccessPolicy)', async () => {
+    const doc = pdfmakeLib.createPdf(
+      { content: [{ image: 'logo' }], images: { logo: 'https://example.com/logo.png' } },
+      {},
+    );
+
+    await expect(doc.getBuffer()).rejects.toThrow(/Access to URL denied/);
   });
 });
