@@ -36,6 +36,25 @@ describe('UpdateTenantService', () => {
     expect(captured.data).toEqual({ name: 'Novo Nome' });
   });
 
+  it('grava e-mail e telefone quando enviados, sem exigir o nome', async () => {
+    const { service, captured } = serviceWith();
+
+    await service.update('tenant-1', {
+      email: 'novo@doca.test',
+      phone: '11999999999',
+    });
+
+    expect(captured.data).toEqual({ email: 'novo@doca.test', phone: '11999999999' });
+  });
+
+  it('DTO vazio não grava nenhum campo', async () => {
+    const { service, captured } = serviceWith();
+
+    await service.update('tenant-1', {});
+
+    expect(captured.data).toEqual({});
+  });
+
   it('devolve o tenant atualizado, incluindo is_active', async () => {
     const { service } = serviceWith();
 

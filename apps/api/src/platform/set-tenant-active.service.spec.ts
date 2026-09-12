@@ -56,4 +56,15 @@ describe('SetTenantActiveService', () => {
       NotFoundException,
     );
   });
+
+  it('propaga qualquer outro erro', async () => {
+    const boom = new Error('boom');
+    const { service } = serviceWith({
+      update: () => {
+        throw boom;
+      },
+    });
+
+    await expect(service.setActive('tenant-1', false)).rejects.toBe(boom);
+  });
 });
