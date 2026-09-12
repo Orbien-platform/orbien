@@ -222,34 +222,20 @@ membro.
 
 ## 7. Pendências de código
 
-### PEND-01 · `small-groups` não confere participação real · segurança
+### ~~PEND-01 · `small-groups` não confere participação real~~ · fechado
 
-`MeetingsController.findByGroup` (`GET /small-groups/:groupId/meetings`) e
-`MeetingsService.listMaterials`
-(`GET /small-groups/meetings/:meetingId/materials`) checam só a `role` do JWT
-— nenhum dos dois confere se a pessoa tem `GroupMembership` no grupo pedido.
-Qualquer conta com role `member`, de qualquer grupo ou de nenhum, lista os
-encontros e os materiais `visibility: all` de **qualquer outro** grupo do
-tenant.
-
-Evidência: `apps/api/src/small-groups/meetings.controller.ts:58-62` e
-`:93-100`; o `where` das duas consultas em `meetings.service.ts` filtra só por
-`groupId`/`meetingId`.
-
-Aberta por decisão em 2026-09-09 (durante o MOB-09): `listMaterials` já
-liberava `member` antes, e fechar exige decidir quem continua vendo tudo — os
-papéis de liderança que hoje enxergam grupos que não lideram
-(`pastor`/`secretary` via `MEETING_READ_ROLES`) — e quem passa a ver só o
-próprio. Não é "só adicionar um `where`".
-
-**Existe implementação de referência desde 2026-09-12.** Os pedidos de oração
-(`PrayerRequestsService.requireMembership`) resolvem a pessoa do token e
-exigem `GroupMembership` no grupo, sem exceção de papel: `pastor` e
-`tenant_admin` sem participação levam 403. Foi feito assim ali porque o dado é
-mais sensível e a rota era nova — não havia comportamento em produção para
-quebrar. Fechar a PEND-01 é aplicar o mesmo padrão a `findByGroup` e
-`listMaterials`, e a pergunta que continua aberta é só uma: quais papéis de
-liderança mantêm a visão de grupo que não lideram.
+Fechado em 2026-09-12: `MeetingsController.findByGroup` e
+`MeetingsService.listMaterials` agora exigem `GroupMembership` real via
+`MeetingsService.assertParticipant` (resolve o `person_id` da conta
+autenticada, mesmo padrão do `PrayerRequestsService.requireMembership` da
+`PROD-01`), mas **com** exceção de papel — diferente da referência dos
+pedidos de oração. A pergunta que ficava em aberto ("quais papéis de
+liderança mantêm a visão de grupo que não lideram") foi respondida mantendo
+o comportamento já registrado em produção: `tenant_admin`,
+`admin_congregation`, `pastor`, `secretary`, `cell_leader` e `treasurer`
+continuam vendo grupos que não lideram; só quem só tem `member` precisa da
+participação real. Diferente dos pedidos de oração, que não tinham
+comportamento anterior para quebrar.
 
 ### PEND-02 · Vocabulário de status do `apps/admin` ≠ `PlanStatus` da API · defeito
 
