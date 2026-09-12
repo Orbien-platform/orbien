@@ -7,11 +7,13 @@
     "development": {
       "extends": "generic",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "extends": "generic",
       "distribution": "internal",
+      "channel": "preview",
       "env": {
         "ORBIEN_API_URL": "https://orbien-api.onrender.com/api"
       }
@@ -19,6 +21,7 @@
     "preview-ios-simulator": {
       "extends": "generic",
       "distribution": "internal",
+      "channel": "preview",
       "env": {
         "ORBIEN_API_URL": "https://orbien-api.onrender.com/api"
       },
@@ -29,6 +32,7 @@
     "production": {
       "extends": "generic",
       "autoIncrement": true,
+      "channel": "production",
       "env": {
         "ORBIEN_API_URL": "https://orbien-api.onrender.com/api",
         "ORBIEN_ONESIGNAL_APP_ID": "wvnuq62y5uqgnqhyapm5synjd"

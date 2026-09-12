@@ -88,6 +88,17 @@ module.exports = ({ config }) => {
       ...config.ios,
       bundleIdentifier: bundleId,
     },
+    // OTA (expo-updates): runtime version segue o appVersion (remote, ver
+    // eas.json `appVersionSource`) — qualquer build com módulo nativo novo
+    // já pede bump de versão, e é esse bump que barra update incompatível
+    // de chegar num binário antigo. Channel por build profile é setado em
+    // eas.json (`build.<profile>.channel`), não aqui.
+    runtimeVersion: {
+      policy: "appVersion",
+    },
+    updates: {
+      url: "https://u.expo.dev/01382e40-702e-4eb0-b46f-c05723f32575",
+    },
     android: {
       ...config.android,
       package: bundleId,
