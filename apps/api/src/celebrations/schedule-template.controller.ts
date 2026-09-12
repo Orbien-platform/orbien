@@ -11,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -23,8 +25,9 @@ import { UpdateScheduleTemplateDto } from './dto/update-schedule-template.dto';
 const MANAGE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'ministry_leader'];
 
 @Controller('celebrations/schedule-templates')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class ScheduleTemplateController {
   constructor(private readonly templateService: ScheduleTemplateService) {}
 

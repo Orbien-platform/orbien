@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { MemberCapService } from './member-cap.service';
 import { CreatePersonDto } from './dto/create-person.dto';
 import { UpdatePersonDto } from './dto/update-person.dto';
 import { ListPersonsQueryDto } from './dto/list-persons-query.dto';
@@ -39,9 +40,16 @@ type HouseholdWithMembers = Household & {
 
 @Injectable()
 export class PersonsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly memberCapService: MemberCapService,
+  ) {}
 
   async create(dto: CreatePersonDto, user: JwtPayload): Promise<CreatePersonResult> {
+    if (dto.classification === PersonClassification.member) {
+      await this.memberCapService.assertCanPromoteToMember(user.tenant_id);
+    }
+
     const person = await this.prisma.client.person.create({
       data: {
         ...dto,
@@ -103,7 +111,7 @@ export class PersonsService {
   async update(id: string, dto: UpdatePersonDto): Promise<Person> {
     const existing = await this.prisma.client.person.findUnique({
       where: { id },
-      select: { id: true, membership_date: true },
+      select: { id: true, tenant_id: true, classification: true, membership_date: true },
     });
 
     if (!existing) throw new NotFoundException('Pessoa não encontrada');
@@ -114,6 +122,16 @@ export class PersonsService {
       !existing.membership_date
     ) {
       throw new BadRequestException('Data de membresia é obrigatória para membros');
+    }
+
+    // Só conta pro teto quando a classificação está **entrando** em member —
+    // reenviar `classification: 'member'` de quem já é membro (ex.: PATCH que
+    // não mexe nesse campo mas o DTO ecoa o valor atual) não deve recontar.
+    if (
+      dto.classification === PersonClassification.member &&
+      existing.classification !== PersonClassification.member
+    ) {
+      await this.memberCapService.assertCanPromoteToMember(existing.tenant_id);
     }
 
     return this.prisma.client.person.update({ where: { id }, data: dto });

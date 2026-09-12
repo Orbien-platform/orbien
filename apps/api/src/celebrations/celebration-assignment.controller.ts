@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Param, Patch, Post, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -13,8 +15,9 @@ const ASSIGNMENT_ROLES = ['ministry_leader', 'admin_congregation', 'tenant_admin
 const PUBLISH_ROLES = ['admin_congregation', 'tenant_admin', 'pastor'];
 
 @Controller('celebrations/instances')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class CelebrationAssignmentController {
   constructor(private readonly assignmentService: CelebrationAssignmentService) {}
 

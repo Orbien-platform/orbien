@@ -4,6 +4,7 @@ import { VisitsController } from './visits.controller';
 import { DemographicsController } from './demographics.controller';
 import { PersonsService } from './persons.service';
 import { ClassificationService } from './classification.service';
+import { MemberCapService } from './member-cap.service';
 import { VisitsService } from './visits.service';
 import { DemographicsService } from './demographics.service';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
@@ -20,6 +21,7 @@ import { PersonsRetentionNotifier } from './persons-retention-notifier.service';
   providers: [
     PersonsService,
     ClassificationService,
+    MemberCapService,
     VisitsService,
     DemographicsService,
     TenantContextInterceptor,

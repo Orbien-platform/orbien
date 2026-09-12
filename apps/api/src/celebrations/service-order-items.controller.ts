@@ -12,7 +12,9 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -24,8 +26,9 @@ import { ReorderItemsDto } from './dto/reorder-items.dto';
 const MANAGER_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'] as const;
 
 @Controller('celebrations/items')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class ServiceOrderItemsController {
   constructor(private readonly serviceOrderItemsService: ServiceOrderItemsService) {}
 

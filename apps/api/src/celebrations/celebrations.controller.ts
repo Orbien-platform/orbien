@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -30,8 +32,9 @@ const MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'mini
 const SCHEDULE_MATERIALIZE_ROLES = ['admin_congregation', 'tenant_admin', 'pastor', 'ministry_leader'];
 
 @Controller('celebrations')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class CelebrationsController {
   constructor(
     private readonly celebrationsService: CelebrationsService,

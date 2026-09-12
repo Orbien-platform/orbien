@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -19,8 +21,9 @@ const VOLUNTEER_ROLES = [
 ];
 
 @Controller('assignments')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class CelebrationRespondController {
   constructor(private readonly assignmentService: CelebrationAssignmentService) {}
 
@@ -42,8 +45,9 @@ export class CelebrationRespondController {
 }
 
 @Controller('volunteers')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
+@RequiresPlan('premium')
 export class CelebrationMyAssignmentsController {
   constructor(private readonly assignmentService: CelebrationAssignmentService) {}
 

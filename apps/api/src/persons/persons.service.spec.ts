@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Prisma } from '@prisma/client';
 import { PersonsService } from './persons.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MemberCapService } from './member-cap.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 const user: JwtPayload = {
@@ -50,7 +51,15 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
 
   const mergedClient = { ...client, ...overrides };
   const prisma = { client: mergedClient, system } as unknown as PrismaService;
-  return { service: new PersonsService(prisma), client: mergedClient, system };
+  const memberCapService = {
+    assertCanPromoteToMember: jest.fn(),
+  } as unknown as jest.Mocked<MemberCapService>;
+  return {
+    service: new PersonsService(prisma, memberCapService),
+    client: mergedClient,
+    system,
+    memberCapService,
+  };
 }
 
 describe('PersonsService', () => {
@@ -83,6 +92,37 @@ describe('PersonsService', () => {
         select: { id: true, full_name: true, phone: true, classification: true },
       });
       expect(result.possible_duplicates).toEqual([{ id: 'p2', full_name: 'Ana Duplicada' }]);
+    });
+
+    it('não confere o teto de membros para visitante/frequentador', async () => {
+      const { service, client, memberCapService } = serviceWith();
+      client.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana' });
+
+      await service.create({ full_name: 'Ana', classification: 'visitor' } as never, user);
+
+      expect(memberCapService.assertCanPromoteToMember).not.toHaveBeenCalled();
+    });
+
+    it('confere o teto de membros do tenant quando cria já como member', async () => {
+      const { service, client, memberCapService } = serviceWith();
+      client.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana', classification: 'member' });
+
+      await service.create(
+        { full_name: 'Ana', classification: 'member', membership_date: '2026-01-01' } as never,
+        user,
+      );
+
+      expect(memberCapService.assertCanPromoteToMember).toHaveBeenCalledWith('tenant-1');
+    });
+
+    it('propaga o BadRequestException do teto de membros sem criar a pessoa', async () => {
+      const { service, client, memberCapService } = serviceWith();
+      memberCapService.assertCanPromoteToMember.mockRejectedValue(new BadRequestException('cheio'));
+
+      await expect(
+        service.create({ full_name: 'Ana', classification: 'member' } as never, user),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.person.create).not.toHaveBeenCalled();
     });
   });
 
@@ -200,6 +240,55 @@ describe('PersonsService', () => {
         where: { id: 'p1' },
         data: { phone: '+5511900000000' },
       });
+    });
+
+    it('confere o teto de membros do tenant ao promover de attendee para member', async () => {
+      const { service, client, memberCapService } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        tenant_id: 'tenant-9',
+        classification: 'attendee',
+        membership_date: null,
+      });
+      client.person.update.mockResolvedValue({ id: 'p1', classification: 'member' });
+
+      await service.update('p1', {
+        classification: 'member',
+        membership_date: '2026-01-01',
+      } as never);
+
+      expect(memberCapService.assertCanPromoteToMember).toHaveBeenCalledWith('tenant-9');
+    });
+
+    it('não confere o teto de membros para quem já era member (idempotente)', async () => {
+      const { service, client, memberCapService } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        tenant_id: 'tenant-9',
+        classification: 'member',
+        membership_date: new Date('2020-01-01'),
+      });
+      client.person.update.mockResolvedValue({ id: 'p1', classification: 'member' });
+
+      await service.update('p1', { classification: 'member' } as never);
+
+      expect(memberCapService.assertCanPromoteToMember).not.toHaveBeenCalled();
+    });
+
+    it('propaga o BadRequestException do teto de membros sem gravar a atualização', async () => {
+      const { service, client, memberCapService } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        tenant_id: 'tenant-9',
+        classification: 'attendee',
+        membership_date: new Date('2020-01-01'),
+      });
+      memberCapService.assertCanPromoteToMember.mockRejectedValue(new BadRequestException('cheio'));
+
+      await expect(
+        service.update('p1', { classification: 'member' } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.person.update).not.toHaveBeenCalled();
     });
   });
 

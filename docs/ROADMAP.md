@@ -146,11 +146,35 @@ em aberto:
    variantes por profile do EAS + `app.config.js` dinâmico). O que falta é o
    pipeline de release por tenant e a submissão de loja por igreja — e o
    Starter chegar às lojas antes, o que depende de "O que falta no mobile".
-4. **Gating por plano.** `TenantPlan` existe no schema e é gravado no
-   provisionamento, mas nenhum ponto do código lê o plano: nem a matriz de
-   funcionalidade Starter × Premium de `pricing-church-platform.md`, nem o
-   teto de 300 membros ativos do Starter. Hoje os dois planos são o mesmo
-   produto, e o item 5 depende disto.
+4. ~~**Gating por plano.**~~ **Decidido e executado** — implementado o que a
+   matriz de `pricing-church-platform.md` §5 tem código correspondente para
+   gatear:
+   - Módulo Celebrações/OC (§5.5) inteiro é Premium — `PlanGuard` +
+     `@RequiresPlan('premium')` nos 9 controllers do módulo, e a área
+     `celebrations` sai de `GET /me/permissions` para tenant Starter (sidebar
+     do `apps/web` já para de desenhar o link, sem mudança nenhuma no front —
+     reaproveita `isForbidden`/`NoAccessState`, que já tratam qualquer 403
+     genericamente).
+   - Financeiro (§5.2): DRE, exportação contábil (CSV/OFX/PDF/ZIP/SPED),
+     forecast e PIX cenário 2 (dinâmico) viram Premium; dashboard semanal,
+     lançamentos, PIX cenário 1/3 continuam nos dois planos, como a tabela
+     pede.
+   - Teto de 300 membros ativos do Starter: `MemberCapService`, chamado nos
+     três pontos onde uma `Person` pode virar `member` (criação, `PATCH`
+     geral e a rota dedicada de reclassificação) — consulta o plano no banco,
+     não na claim do token, porque é limite de negócio, não de sessão.
+
+   **O que a matriz pede e não tem código para gatear** — ficou de fora
+   porque a funcionalidade em si não existe ainda, então não há rota/módulo
+   para travar: sugestão automática de escala e segmentação avançada
+   (§5.1/5.4), recibo automático (§5.2 — schema `DonationReceipt` existe,
+   nada o usa), evento com inscrição paga (§5.4), dashboard pastoral/saúde da
+   célula/árvore genealógica/metas de rede (§5.3). Nenhum desses é gate
+   pendente — é feature pendente; quando forem implementadas, entram já
+   Premium-only.
+   `pricing-church-platform.md` §5.6/5.7 (build por tenant, domínio próprio,
+   suporte via WhatsApp) são infra/operacional, não runtime de API — ver
+   item 3 (white-label premium) e "O que falta no mobile".
 5. **Primeiro cliente Premium fora do cliente zero** — condicionado ao
    fechamento do ciclo de conformidade e ao item 4.
 
