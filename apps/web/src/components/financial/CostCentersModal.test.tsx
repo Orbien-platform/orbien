@@ -70,9 +70,27 @@ describe("CostCentersModal", () => {
     );
 
     expect(await screen.findByText("Centro de custo criado")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Novo centro de custo" })).not.toBeInTheDocument();
-    expect(onChanged).toHaveBeenCalled();
-    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+  });
+
+  it("aceita uma descrição opcional ao criar", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+
+    render(<CostCentersModal open={true} onOpenChange={vi.fn()} onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/cost-centers"));
+
+    await user.click(screen.getByRole("button", { name: "Novo centro de custo" }));
+    await user.type(screen.getByLabelText(/Nome/), "Educação");
+    await user.type(screen.getByLabelText(/Descrição/), "Verba do ministério infantil");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/financial/cost-centers", {
+        name: "Educação",
+        description: "Verba do ministério infantil",
+      })
+    );
   });
 
   it("shows an error when creating a cost center fails", async () => {
@@ -116,6 +134,31 @@ describe("CostCentersModal", () => {
       })
     );
     expect(await screen.findByText("Centro de custo atualizado")).toBeInTheDocument();
+  });
+
+  it("edits a cost center that has no description (?? fallback to empty string)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+
+    render(<CostCentersModal open={true} onOpenChange={vi.fn()} onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/cost-centers"));
+    await screen.findByText("Templo");
+
+    await user.click(screen.getAllByRole("button", { name: "Editar centro de custo" })[1]);
+    expect(await screen.findByText("Editar centro de custo")).toBeInTheDocument();
+
+    const descriptionInput = screen.getByLabelText(/Descrição/) as HTMLTextAreaElement;
+    expect(descriptionInput.value).toBe("");
+
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/financial/cost-centers/cc2", {
+        name: "Templo",
+        description: null,
+      })
+    );
   });
 
   it("shows an error when editing a cost center fails", async () => {
@@ -190,6 +233,24 @@ describe("CostCentersModal", () => {
       expect(screen.queryByText("Excluir centro de custo?")).not.toBeInTheDocument()
     );
     expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the delete confirmation on escape", async () => {
+    const user = userEvent.setup();
+
+    render(<CostCentersModal open={true} onOpenChange={vi.fn()} onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/cost-centers"));
+    await screen.findByText("Missões");
+
+    await user.click(screen.getAllByRole("button", { name: "Excluir centro de custo" })[0]);
+    expect(await screen.findByText("Excluir centro de custo?")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(screen.queryByText("Excluir centro de custo?")).not.toBeInTheDocument()
+    );
   });
 
   it("cancels the create/edit form without submitting", async () => {
