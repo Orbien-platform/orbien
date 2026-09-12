@@ -45,10 +45,12 @@ vi.mock("@/components/tenants/CreateTenantModal", () => ({
 vi.mock("@/components/tenants/EditTenantModal", () => ({
   EditTenantModal: ({
     open,
+    onOpenChange,
     onUpdated,
     tenant,
   }: {
     open: boolean;
+    onOpenChange: (open: boolean) => void;
     onUpdated: () => void;
     tenant: { name: string } | null;
   }) => (
@@ -57,6 +59,7 @@ vi.mock("@/components/tenants/EditTenantModal", () => ({
         editar-tenant:{open ? "aberto" : "fechado"}:{tenant?.name ?? ""}
       </span>
       <button onClick={onUpdated}>avisar tenant editado</button>
+      <button onClick={() => onOpenChange(false)}>fechar via X do modal</button>
     </div>
   ),
 }));
@@ -388,6 +391,68 @@ describe("TenantsPage — editar e inativar", () => {
     await waitFor(() => expect(getMock.mock.calls.length).toBe(antes + 1));
   });
 
+  it("fechar o modal de edição pelo X limpa o tenant em edição", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: /Editar/ }));
+    expect(
+      screen.getByText("editar-tenant:aberto:Doca Church")
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "fechar via X do modal" })
+    );
+
+    expect(
+      screen.getByText("editar-tenant:fechado:")
+    ).toBeInTheDocument();
+  });
+
+  it("fechar a confirmação pelo X do modal não chama a API", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Inativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Inativar tenant?" });
+    await user.click(within(dialog).getByRole("button", { name: "Fechar" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Inativar tenant?" })
+      ).not.toBeInTheDocument()
+    );
+    expect(patchMock).not.toHaveBeenCalled();
+  });
+
+  it("fechar pelo X enquanto o envio está em voo não descarta o modal", async () => {
+    const user = userEvent.setup();
+    let liberar!: (v: unknown) => void;
+    patchMock.mockImplementation(
+      () => new Promise((resolve) => (liberar = resolve))
+    );
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Inativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Inativar tenant?" });
+    await user.click(within(dialog).getByRole("button", { name: "Inativar" }));
+    await user.click(within(dialog).getByRole("button", { name: "Fechar" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Inativar tenant?" })
+    ).toBeInTheDocument();
+
+    liberar({ data: {} });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Inativar tenant?" })
+      ).not.toBeInTheDocument()
+    );
+  });
+
   it("inativa o tenant após confirmação", async () => {
     const user = userEvent.setup();
     render(<TenantsPage />);
@@ -420,6 +485,22 @@ describe("TenantsPage — editar e inativar", () => {
 
     await waitFor(() =>
       expect(patchMock).toHaveBeenCalledWith("/platform/tenants/t-1/activate")
+    );
+  });
+
+  it("erro ao reativar mostra a mensagem certa no banner", async () => {
+    const user = userEvent.setup();
+    respondeCom([tenant({ is_active: false })]);
+    patchMock.mockRejectedValue(new Error("500"));
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: "Reativar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reativar tenant?" });
+    await user.click(within(dialog).getByRole("button", { name: "Reativar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Não foi possível reativar Doca Church."
     );
   });
 

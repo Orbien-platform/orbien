@@ -152,6 +152,16 @@ describe("EditTenantModal", () => {
     expect(patchMock).not.toHaveBeenCalled();
   });
 
+  it("fechar pelo X passa pelo mesmo caminho de limpeza", async () => {
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(screen.getByRole("button", { name: "Fechar" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(patchMock).not.toHaveBeenCalled();
+  });
+
   it("sem tenant, não tenta enviar", async () => {
     const user = userEvent.setup();
     render(

@@ -150,6 +150,9 @@ export default function TenantsPage() {
   }
 
   async function handleToggleActive() {
+    // Só o TypeScript passa por aqui como `false`: o botão que chama esta
+    // função vive dentro do `Modal` que só renderiza quando `toggleTarget`
+    // não é nulo.
     if (!toggleTarget) return;
     setActionError("");
     setIsToggling(true);
@@ -347,17 +350,19 @@ export default function TenantsPage() {
       <EditTenantModal
         key={editingTenant?.id}
         open={editingTenant !== null}
-        onOpenChange={(next) => {
-          if (!next) setEditingTenant(null);
-        }}
+        // O próprio EditTenantModal só chama isto com `false` — ver o
+        // comentário lá dentro.
+        onOpenChange={() => setEditingTenant(null)}
         onUpdated={reload}
         tenant={editingTenant}
       />
 
       <Modal
         open={toggleTarget !== null}
-        onOpenChange={(next) => {
-          if (!next && !isToggling) setToggleTarget(null);
+        // O `Modal` só emite `false`; o que resta decidir aqui é se um
+        // envio em voo pode ser interrompido por fechar no X.
+        onOpenChange={() => {
+          if (!isToggling) setToggleTarget(null);
         }}
         title={toggleTarget?.is_active ? "Inativar tenant?" : "Reativar tenant?"}
         description={

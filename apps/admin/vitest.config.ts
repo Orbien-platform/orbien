@@ -36,6 +36,9 @@ export default defineConfig({
       // - `api.ts`, o `typeof window === "undefined"` do ramo de refresh
       //   recusado: exercitá-lo exigiria o axios sem `window`, que ele
       //   próprio precisa para rodar.
+      // - `tenants/page.tsx`, o `!toggleTarget` de `handleToggleActive`: só o
+      //   TypeScript passa por aqui como `false` — o botão que chama a função
+      //   vive dentro do `Modal` que só renderiza com `toggleTarget` setado.
       thresholds: {
         statements: 99,
         branches: 98,

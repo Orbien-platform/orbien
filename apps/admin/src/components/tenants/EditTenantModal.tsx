@@ -90,7 +90,10 @@ export function EditTenantModal({
   return (
     <Modal
       open={open}
-      onOpenChange={(next) => (next ? onOpenChange(true) : close())}
+      // O `Modal` só emite `false` (fechar) — nunca `true`; quem abre é a
+      // tela, via a prop `open`. Chamar `close()` incondicionalmente evita um
+      // ramo que o Base UI nunca exercita.
+      onOpenChange={() => close()}
       title="Editar tenant"
       description="Nome e e-mail de contato da igreja. Slug e plano não mudam por aqui."
       className="max-w-lg"
