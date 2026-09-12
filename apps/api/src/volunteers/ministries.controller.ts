@@ -18,8 +18,11 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { MinistriesService } from './ministries.service';
 import { CreateMinistryDto } from './dto/create-ministry.dto';
 import { UpdateMinistryDto } from './dto/update-ministry.dto';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
-const READ_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'secretary', 'ministry_leader'];
+// Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
+// mesma fonte de `GET /me/permissions`. Ver o cabeçalho de lá.
+const READ_ROLES = PRODUCT_AREA_READ_ROLES.volunteers;
 const WRITE_ROLES = ['admin_congregation', 'tenant_admin'];
 
 @Controller('volunteers/ministries')

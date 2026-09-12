@@ -28,6 +28,7 @@ import { NoAccessState } from "@/components/ui/NoAccessState";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import api, { isForbidden } from "@/lib/api";
+import { civilDayKey, formatCivilDate, saoPauloCivilDay, saoPauloDateKey } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,36 +86,38 @@ function formatBRL(value: number): string {
   });
 }
 
+// A semana da igreja é a semana de Brasília, não a do navegador: o cálculo
+// roda todo sobre o dia civil de São Paulo (`saoPauloCivilDay` + métodos
+// `setUTC*`) e as fronteiras saem como chaves "YYYY-MM-DD". Comparar chave
+// com chave é o que mantém o corte igual para quem abre de qualquer fuso —
+// antes, `new Date()` + `getDay()` deslocavam a semana inteira.
 function weekBounds(weeksAgo = 0) {
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sun
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7) - weeksAgo * 7);
-  monday.setHours(0, 0, 0, 0);
+  const today = saoPauloCivilDay(new Date());
+  const dayOfWeek = today.getUTCDay(); // 0 = Sun
+  const monday = new Date(today);
+  monday.setUTCDate(today.getUTCDate() - ((dayOfWeek + 6) % 7) - weeksAgo * 7);
   const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-  return { start: monday, end: sunday };
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { startKey: civilDayKey(monday), endKey: civilDayKey(sunday) };
 }
 
 function weekLabel(weeksAgo: number): string {
-  const { start } = weekBounds(weeksAgo);
-  return start.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const { startKey } = weekBounds(weeksAgo);
+  return formatCivilDate(startKey, { day: "2-digit", month: "2-digit" });
 }
 
 function nextOccurrence(cel: Celebration): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const daysUntil = (cel.day_of_week - today.getDay() + 7) % 7;
+  const today = saoPauloCivilDay(new Date());
+  const daysUntil = (cel.day_of_week - today.getUTCDay() + 7) % 7;
   const next = new Date(today);
-  next.setDate(today.getDate() + (daysUntil === 0 ? 7 : daysUntil));
+  next.setUTCDate(today.getUTCDate() + (daysUntil === 0 ? 7 : daysUntil));
   const [h, m] = cel.start_time.split(":").map(Number);
-  next.setHours(h, m, 0, 0);
+  next.setUTCHours(h, m, 0, 0);
   return next;
 }
 
 function formatWeekday(date: Date): string {
-  return date.toLocaleDateString("pt-BR", {
+  return formatCivilDate(date, {
     weekday: "long",
     day: "2-digit",
     month: "2-digit",
@@ -195,15 +198,15 @@ export default function DashboardPage() {
     {}
   );
 
-  const { start: weekStart, end: weekEnd } = weekBounds(0);
-  const { start: prevWeekStart, end: prevWeekEnd } = weekBounds(1);
+  const { startKey: weekStart, endKey: weekEnd } = weekBounds(0);
+  const { startKey: prevWeekStart, endKey: prevWeekEnd } = weekBounds(1);
 
   const weekTx = transactions.filter((t) => {
-    const d = new Date(t.occurred_at);
+    const d = saoPauloDateKey(t.occurred_at);
     return d >= weekStart && d <= weekEnd;
   });
   const prevWeekTx = transactions.filter((t) => {
-    const d = new Date(t.occurred_at);
+    const d = saoPauloDateKey(t.occurred_at);
     return d >= prevWeekStart && d <= prevWeekEnd;
   });
 
@@ -251,10 +254,10 @@ export default function DashboardPage() {
 
   // Last 4 weeks bar chart
   const barData = [3, 2, 1, 0].map((weeksAgo) => {
-    const { start, end } = weekBounds(weeksAgo);
+    const { startKey, endKey } = weekBounds(weeksAgo);
     const wTx = transactions.filter((t) => {
-      const d = new Date(t.occurred_at);
-      return d >= start && d <= end;
+      const d = saoPauloDateKey(t.occurred_at);
+      return d >= startKey && d <= endKey;
     });
     const income = wTx
       .filter((t) => t.type === "income")
@@ -282,7 +285,7 @@ export default function DashboardPage() {
   const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
   const upcomingInstances = instances.filter((i) => {
     const d = new Date(i.scheduled_date);
-    return d >= weekStart && d <= horizon;
+    return saoPauloDateKey(d) >= weekStart && d <= horizon;
   });
 
   // A API passou a devolver `schedule` junto das instâncias só no refactor de

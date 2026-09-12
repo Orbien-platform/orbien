@@ -18,6 +18,7 @@ import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ function tabBtn(active: boolean) {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatInstant(iso, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

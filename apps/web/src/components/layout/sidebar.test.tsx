@@ -22,6 +22,7 @@ const BASE_USER: SessionUser = {
   congregation_id: "c1",
   support_session: false,
   support_tenant_name: null,
+  areas: null,
   expires_at: Math.floor(Date.now() / 1000) + 300,
 };
 
@@ -93,13 +94,14 @@ describe("Sidebar", () => {
     );
   });
 
-  // O link só desenha o que o papel alcança. Não é controle de acesso — quem
-  // digitar a URL chega à tela e recebe de lá o "sem acesso" —, é não oferecer
-  // um caminho que termina em 403.
-  describe("filtro por papel", () => {
+  // O link só desenha o que a sessão alcança, e quem diz o que ela alcança é a
+  // API, em `GET /me/permissions` — o front não repete mais as listas de
+  // `@Roles`. Não é controle de acesso: quem digitar a URL chega à tela e
+  // recebe de lá o "sem acesso". É não oferecer um caminho que termina em 403.
+  describe("filtro por área", () => {
     it("esconde de um voluntário tudo que ele não lê", () => {
       mockedUsePathname.mockReturnValue("/dashboard");
-      signedInAs({ roles: ["volunteer"] });
+      signedInAs({ roles: ["volunteer"], areas: [] });
       render(<Sidebar />);
 
       expect(screen.queryByText("Pessoas")).not.toBeInTheDocument();
@@ -112,7 +114,10 @@ describe("Sidebar", () => {
 
     it("mostra ao tesoureiro o financeiro, e não o que é de outra área", () => {
       mockedUsePathname.mockReturnValue("/dashboard");
-      signedInAs({ roles: ["treasurer"] });
+      signedInAs({
+        roles: ["treasurer"],
+        areas: ["persons", "small_groups", "financial"],
+      });
       render(<Sidebar />);
 
       expect(screen.getByText("Financeiro")).toBeInTheDocument();
@@ -123,7 +128,7 @@ describe("Sidebar", () => {
 
     it("mostra ao líder de ministério celebrações e voluntários, não o financeiro", () => {
       mockedUsePathname.mockReturnValue("/dashboard");
-      signedInAs({ roles: ["ministry_leader"] });
+      signedInAs({ roles: ["ministry_leader"], areas: ["volunteers", "celebrations"] });
       render(<Sidebar />);
 
       expect(screen.getByText("Celebrações")).toBeInTheDocument();
@@ -131,9 +136,13 @@ describe("Sidebar", () => {
       expect(screen.queryByText("Financeiro")).not.toBeInTheDocument();
     });
 
-    it("a sessão de suporte vê tudo, como o RolesGuard já a deixa ler", () => {
+    it("a sessão de suporte vê tudo — a API responde todas as áreas para ela", () => {
       mockedUsePathname.mockReturnValue("/dashboard");
-      signedInAs({ roles: [], support_session: true });
+      signedInAs({
+        roles: [],
+        support_session: true,
+        areas: ["persons", "small_groups", "financial", "content", "volunteers", "celebrations"],
+      });
       render(<Sidebar />);
 
       expect(screen.getByText("Pessoas")).toBeInTheDocument();

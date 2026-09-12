@@ -3,6 +3,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { LoginRateLimitService } from './login-rate-limit.service';
 import { AuthController } from './auth.controller';
+import { MeController } from './me.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
@@ -14,6 +15,6 @@ import { MailModule } from '../mail/mail.module';
     MailModule,
   ],
   providers: [AuthService, JwtStrategy, LoginRateLimitService],
-  controllers: [AuthController],
+  controllers: [AuthController, MeController],
 })
 export class AuthModule {}

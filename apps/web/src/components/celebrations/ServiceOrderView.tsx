@@ -14,6 +14,7 @@ import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
 import { songKey, type CatalogSong } from "@/lib/repertorio";
 import api from "@/lib/api";
+import { formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ interface ServiceOrderViewProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatCivilDate(iso, {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
   });
 }

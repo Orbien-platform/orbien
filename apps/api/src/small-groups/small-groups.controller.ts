@@ -22,8 +22,11 @@ import { CreateSmallGroupDto } from './dto/create-small-group.dto';
 import { UpdateSmallGroupDto } from './dto/update-small-group.dto';
 import { ListSmallGroupsQueryDto } from './dto/list-small-groups-query.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
-const READ_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'treasurer', 'cell_leader'];
+// Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
+// mesma fonte de `GET /me/permissions`. Ver o cabeçalho de lá.
+const READ_ROLES = PRODUCT_AREA_READ_ROLES.small_groups;
 const WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary'];
 const MANAGE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const ALERT_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'cell_leader'];

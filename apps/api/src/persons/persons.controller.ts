@@ -25,8 +25,11 @@ import { ListPersonsQueryDto } from './dto/list-persons-query.dto';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { AddHouseholdMemberDto } from './dto/add-household-member.dto';
 import { ReclassifyPersonDto } from './dto/reclassify-person.dto';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
-const READ_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'treasurer'];
+// Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
+// mesma fonte de `GET /me/permissions`. Ver o cabeçalho de lá.
+const READ_ROLES = PRODUCT_AREA_READ_ROLES.persons;
 const WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary'];
 
 @Controller('persons')

@@ -13,6 +13,7 @@ import { SendNotificationModal } from "@/components/content/SendNotificationModa
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import api, { isForbidden } from "@/lib/api";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ const STATUS_CLS: Record<PostStatus, string> = {
 };
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatInstant(iso, {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
 }

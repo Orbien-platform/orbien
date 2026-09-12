@@ -12,6 +12,13 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // Fuso fixo, e de propósito **nem** o de Brasília **nem** UTC: o produto
+    // exibe tudo em America/Sao_Paulo (src/lib/datetime.ts), e rodar o teste
+    // já nesse fuso faria passar também o código que só herda o fuso da
+    // máquina. Tóquio (+09, sem horário de verão) quebra esse código na
+    // hora. Antes disso o CI rodava em UTC e o dev em -03, e os dois viam
+    // resultados diferentes do mesmo teste.
+    env: { TZ: "Asia/Tokyo" },
     setupFiles: ["./vitest.setup.ts"],
     // Sem excluir `e2e/`, o Vitest tenta rodar os specs do Playwright e
     // quebra no import de @playwright/test.

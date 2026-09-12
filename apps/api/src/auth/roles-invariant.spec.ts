@@ -15,6 +15,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
+import { PRODUCT_AREAS, PRODUCT_AREA_READ_ROLES } from './product-areas';
 
 const SRC_ROOT = join(__dirname, '..');
 
@@ -30,6 +31,11 @@ const ALLOWLIST = new Set([
   'app.controller.ts',
   'waitlist/waitlist.public.controller.ts',
   'visitor/visitor.public.controller.ts',
+  // `GET /me/permissions` responde sobre o próprio token de quem pergunta: a
+  // resposta é derivada de `user.roles`, então não há papel a exigir — exigir
+  // qualquer um deixaria de fora justamente quem não tem nenhum, que também
+  // precisa saber que não enxerga nada. O `JwtAuthGuard` continua valendo.
+  'auth/me.controller.ts',
   'content/notification-preferences.controller.ts',
 ]);
 
@@ -107,6 +113,7 @@ const ROLE_CODES = new Set([
  * Exceção que sobrevive ao próprio motivo é como um invariante apodrece.
  */
 
+
 describe('Invariante: papel citado em controller existe na tabela `roles`', () => {
   const controllerFiles = findControllerFiles(SRC_ROOT);
 
@@ -141,4 +148,40 @@ describe('Invariante: papel citado em controller existe na tabela `roles`', () =
       }
     },
   );
+});
+
+/**
+ * A lista canônica de áreas também cita papel — e a varredura de texto acima
+ * não a alcança.
+ *
+ * `auth/product-areas.ts` guarda os papéis num objeto, não num
+ * `const X_ROLES = [...]`, então o regex do invariante anterior passaria por
+ * ela sem ler nada — e passaria em silêncio, que é o modo de falha que este
+ * arquivo inteiro existe para evitar. Aqui a checagem é pelo módulo
+ * importado, não pelo texto: não há regex para envelhecer.
+ */
+describe('Invariante: a lista canônica de áreas só cita papéis que existem', () => {
+  it('toda área tem ao menos um papel, e todo papel existe na tabela `roles`', () => {
+    expect(PRODUCT_AREAS.length).toBeGreaterThan(0);
+
+    for (const area of PRODUCT_AREAS) {
+      const roles = PRODUCT_AREA_READ_ROLES[area] as readonly string[];
+      expect(roles.length).toBeGreaterThan(0);
+
+      for (const role of roles) {
+        expect(ROLE_CODES.has(role)).toBe(true);
+      }
+    }
+  });
+
+  it('nenhuma área abre leitura para `platform_support`', () => {
+    // O suporte da plataforma não tem leitura permanente de dado de igreja: o
+    // acesso dele é pontual, por `POST /auth/impersonate`, e aparece aqui como
+    // `support_session`, não como papel. Ver o RolesGuard.
+    for (const area of PRODUCT_AREAS) {
+      expect(PRODUCT_AREA_READ_ROLES[area] as readonly string[]).not.toContain(
+        'platform_support',
+      );
+    }
+  });
 });
