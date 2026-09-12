@@ -2,6 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import DashboardPage from "./page";
+import { saoPauloCivilDay } from "@/lib/datetime";
+
+// O dashboard calcula a semana e a próxima celebração sobre o dia civil de
+// Brasília, não o da máquina. O teste roda em Tóquio (vitest.config.ts), que
+// passa da meia-noite doze horas antes — usar `getDay()` aqui faria o teste
+// passar ou falhar conforme a hora em que rodasse.
 
 vi.mock("@/lib/api", () => ({
   // Espelha o `isForbidden` real: 403 e só 403.
@@ -116,7 +122,7 @@ describe("DashboardPage", () => {
 
   it("mostra resultado negativo sem o sinal de '+' quando a semana anterior também teve dado", async () => {
     const now = new Date();
-    const dayOfWeek = now.getDay();
+    const dayOfWeek = saoPauloCivilDay(now).getUTCDay();
     const monday = new Date(now);
     monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
     const thisWeek = new Date(monday.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -147,7 +153,7 @@ describe("DashboardPage", () => {
 
   it("ordena por data quando há mais de uma celebração ativa e usa cor default para classificação desconhecida no gráfico", async () => {
     const today = new Date();
-    const dow = today.getDay();
+    const dow = saoPauloCivilDay(today).getUTCDay();
     mockedApi.get.mockImplementation((url: string) => {
       if (url.startsWith("/persons")) {
         return Promise.resolve({ data: { data: [person({ classification: "leader" })], total: 1 } });
@@ -174,7 +180,7 @@ describe("DashboardPage", () => {
 
   it("mostra plural quando há mais de uma escala publicada e mais de uma celebração sem escala", async () => {
     const today = new Date();
-    const dow = today.getDay();
+    const dow = saoPauloCivilDay(today).getUTCDay();
     const soon1 = new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000);
     const soon2 = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
     mockedApi.get.mockImplementation((url: string) => {
@@ -302,7 +308,7 @@ describe("DashboardPage", () => {
 
   it("calcula receita, delta semanal e resultado líquido a partir das transações", async () => {
     const now = new Date();
-    const dayOfWeek = now.getDay();
+    const dayOfWeek = saoPauloCivilDay(now).getUTCDay();
     const monday = new Date(now);
     monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
     const thisWeek = new Date(monday.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -349,7 +355,7 @@ describe("DashboardPage", () => {
 
   it("mostra delta negativo quando a receita cai em relação à semana anterior", async () => {
     const now = new Date();
-    const dayOfWeek = now.getDay();
+    const dayOfWeek = saoPauloCivilDay(now).getUTCDay();
     const monday = new Date(now);
     monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
     const thisWeek = new Date(monday.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -380,7 +386,7 @@ describe("DashboardPage", () => {
 
   it("mostra resultado negativo com sinal e prefixo '−R$'", async () => {
     const now = new Date();
-    const dayOfWeek = now.getDay();
+    const dayOfWeek = saoPauloCivilDay(now).getUTCDay();
     const monday = new Date(now);
     monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
     const thisWeek = new Date(monday.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -414,7 +420,7 @@ describe("DashboardPage", () => {
 
   it("mostra a próxima celebração ativa mais próxima com escalas publicadas", async () => {
     const today = new Date();
-    const dayOfWeek = today.getDay();
+    const dayOfWeek = saoPauloCivilDay(today).getUTCDay();
     const scheduledDate = new Date(today);
     scheduledDate.setDate(today.getDate() + ((dayOfWeek + 1) % 7 || 7));
 
@@ -514,7 +520,7 @@ describe("DashboardPage", () => {
 
   it("trata instâncias sem campo `schedule` como dado neutro (API antiga)", async () => {
     const today = new Date();
-    const dayOfWeek = today.getDay();
+    const dayOfWeek = saoPauloCivilDay(today).getUTCDay();
     const soon = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
     mockedApi.get.mockImplementation((url: string) => {
       if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [], total: 0 } });

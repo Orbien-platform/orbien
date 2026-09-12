@@ -82,11 +82,17 @@ fi
 if [ -f prisma/migrations/007_rls_songs.sql ]; then
   run_sql_file prisma/migrations/007_rls_songs.sql
 fi
-# Mesma dependência de 003. `prayer_requests` é antiga e nasceu em 001 só com
-# isolamento de tenant; o script troca pela policy de congregação agora que a
-# tabela tem rota. O passo 4 abaixo derruba a `tenant_isolation` que sobra.
-if [ -f prisma/migrations/008_rls_prayer_requests.sql ]; then
-  run_sql_file prisma/migrations/008_rls_prayer_requests.sql
+# Mesmo motivo de 007 (AD-001): notification_preferences já nasce com
+# app_congregation_allowed() nos dois lados.
+if [ -f prisma/migrations/008_rls_notification_preferences.sql ]; then
+  run_sql_file prisma/migrations/008_rls_notification_preferences.sql
+fi
+# Mesma dependência de 003, motivo diferente dos dois acima: `prayer_requests`
+# é antiga e nasceu em 001 só com isolamento de tenant, porque nada escrevia
+# nela. O script troca pela policy de congregação agora que a tabela tem rota.
+# O passo 4 abaixo derruba a `tenant_isolation` que sobra.
+if [ -f prisma/migrations/009_rls_prayer_requests.sql ]; then
+  run_sql_file prisma/migrations/009_rls_prayer_requests.sql
 fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
@@ -298,6 +304,42 @@ BEGIN
   RAISE NOTICE 'persons/financial_categories com o ramo de plataforma: %', n;
   IF n <> 2 THEN
     RAISE EXCEPTION 'esperava 2 policies (persons, financial_categories) com app_platform_access simétrico, encontrei % — 006_rls_platform_provisioning.sql rodou?', n;
+  END IF;
+
+  -- 008: notification_preferences (MOB-10) precisa nascer com
+  -- app_congregation_allowed() nos dois lados (AD-001), como songs (007).
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'notification_preferences'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'notification_preferences com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em notification_preferences, encontrei % — 008_rls_notification_preferences.sql rodou?', n;
+  END IF;
+
+  -- 009: prayer_requests (PROD-01) é o caso oposto ao de 007/008 — tabela
+  -- antiga, que nasceu em 001 só com isolamento de tenant porque nada
+  -- escrevia nela. Com rota, precisa da policy de congregação como as outras,
+  -- e a `tenant_isolation` fraca tem que ter saído no passo 4: se as duas
+  -- coexistirem, PERMISSIVE combina com OR e a fraca ganha.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'prayer_requests'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'prayer_requests com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em prayer_requests, encontrei % — 009_rls_prayer_requests.sql rodou?', n;
+  END IF;
+
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_isolation' AND tablename = 'prayer_requests';
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'prayer_requests ainda tem a policy tenant_isolation de 001 — o passo 4 não rodou depois de 009, e a policy fraca anula a forte por OR';
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no

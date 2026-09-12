@@ -110,6 +110,7 @@ function ThemedShell() {
               barra só tiraria espaço útil. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="indisponibilidade" options={{ title: "Indisponibilidade" }} />
+          <Stack.Screen name="notificacoes" options={{ title: "Notificações" }} />
           <Stack.Screen name="post/[id]" options={{ title: "Publicação" }} />
           <Stack.Screen name="celebracao/[id]" options={{ title: "Ordem de Culto" }} />
           <Stack.Screen name="grupo/[id]" options={{ title: "Grupo" }} />

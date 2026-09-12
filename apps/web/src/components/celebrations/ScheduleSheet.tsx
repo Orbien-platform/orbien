@@ -33,6 +33,7 @@ import type { ScheduleTemplate } from "@/components/celebrations/TemplatesPanel"
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -408,7 +409,7 @@ export function ScheduleSheet({
               <SheetTitle className="truncate text-base">{celebrationName}</SheetTitle>
               <SheetDescription className="text-xs">
                 Escala ·{" "}
-                {new Date(scheduledDate).toLocaleDateString("pt-BR", {
+                {formatInstant(scheduledDate, {
                   day: "2-digit",
                   month: "2-digit",
                   year: "numeric",

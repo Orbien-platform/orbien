@@ -8,11 +8,24 @@ import { PostsService } from './posts.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { SchedulerService } from './scheduler.service';
+import { NotificationPreferencesController } from './notification-preferences.controller';
+import { NotificationPreferencesService } from './notification-preferences.service';
 
 @Module({
   imports: [PrismaModule, StorageModule],
-  controllers: [SegmentsController, PostsController, NotificationsController],
-  providers: [SegmentsService, PostsService, NotificationsService, SchedulerService],
+  controllers: [
+    SegmentsController,
+    PostsController,
+    NotificationsController,
+    NotificationPreferencesController,
+  ],
+  providers: [
+    SegmentsService,
+    PostsService,
+    NotificationsService,
+    SchedulerService,
+    NotificationPreferencesService,
+  ],
   exports: [SegmentsService, NotificationsService],
 })
 export class ContentModule {}

@@ -26,6 +26,7 @@ model Tenant {
   name       String
   email      String?
   phone      String?
+  is_active  Boolean  @default(true)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -73,6 +74,7 @@ model Tenant {
   qrTokens                QrToken[]
   exportJobs              ExportJob[]
   importJobs              ImportJob[]
+  notificationPreferences NotificationPreference[]
 
   @@index([id])
   @@map("tenants")
@@ -136,6 +138,7 @@ model Congregation {
   qrTokens                QrToken[]
   exportJobs              ExportJob[]
   importJobs              ImportJob[]
+  notificationPreferences NotificationPreference[]
 
   @@index([tenant_id, id])
   @@map("congregations")
@@ -211,6 +214,7 @@ model UserAccount {
   uploadedAttachments     TransactionAttachment[]
   createdPosts            ContentPost[]
   actorAuditLogs          AuditLog[]              @relation("AuditActorUser")
+  notificationPreference  NotificationPreference?
 
   @@unique([tenant_id, email])
   @@index([tenant_id, id])
@@ -1232,6 +1236,26 @@ model Song {
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, id])
   @@map("songs")
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  user_account_id String   @unique
+  avisos          Boolean  @default(true)
+  oracao          Boolean  @default(true)
+  eventos         Boolean  @default(true)
+  devocional      Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  userAccount  UserAccount  @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, congregation_id])
+  @@map("notification_preferences")
 }
 
 model CelebrationSchedule {

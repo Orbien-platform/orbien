@@ -15,6 +15,7 @@
 //
 // O rodapé "Powered by Orbien" segue o §6 do guia: fixo no Starter,
 // removido no Premium. O plano vem de `plan` no token.
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -25,7 +26,7 @@ import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { useAuth } from "../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../lib/auth/jwt";
-import { CircleUser, LogOut, Moon, Smartphone, Sun } from "../../lib/theme/icons";
+import { Bell, CircleUser, LogOut, Moon, Smartphone, Sun } from "../../lib/theme/icons";
 import { useTheme, type ThemePreference } from "../../lib/theme/theme-provider";
 import { radius, spacing, touchTarget, typography } from "../../lib/theme/tokens";
 
@@ -50,6 +51,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }
 export default function PerfilScreen() {
   const { session, logout } = useAuth();
   const { appName, primaryColor, colors, preference, setPreference } = useTheme();
+  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
 
   const payload = session ? decodeJwtPayload(session.accessToken) : null;
@@ -125,6 +127,14 @@ export default function PerfilScreen() {
         <SectionLabel>Conta</SectionLabel>
         <Card>
           <AppButton
+            testID="notificacoes-button"
+            title="Notificações"
+            icon={Bell}
+            variant="ghost"
+            onPress={() => router.push("/notificacoes")}
+            style={styles.navRow}
+          />
+          <AppButton
             testID="logout-button"
             title="Sair da conta"
             icon={LogOut}
@@ -165,6 +175,13 @@ const styles = StyleSheet.create({
   themeButton: {
     flex: 1,
     paddingHorizontal: spacing.sm,
+  },
+  navRow: {
+    minHeight: touchTarget,
+    borderRadius: radius.btn,
+    alignSelf: "flex-start",
+    paddingHorizontal: 0,
+    marginBottom: spacing.sm,
   },
   logout: {
     minHeight: touchTarget,

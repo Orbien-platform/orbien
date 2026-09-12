@@ -4,6 +4,8 @@
  * culto, para os dois não divergirem.
  */
 
+import { formatInstant } from "@/lib/datetime";
+
 export interface CatalogSong {
   id: string;
   title: string;
@@ -20,7 +22,7 @@ export interface CatalogSong {
 
 export function fmtLastPlayed(iso: string | null): string {
   if (!iso) return "nunca tocada";
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatInstant(iso, {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
 }

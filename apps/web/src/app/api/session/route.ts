@@ -18,6 +18,7 @@ import {
   REFRESH_MAX_AGE,
   buildSessionUser,
   clearSessionCookies,
+  fetchAreas,
   readIdentity,
   setAccessCookie,
   setIdentityCookie,
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
   const access = request.cookies.get(ACCESS_COOKIE)?.value;
   const payload = access ? decodeJwtPayload(access) : null;
 
-  if (!identity || !payload) {
+  if (!identity || !access || !payload) {
     const response = NextResponse.json({ user: null }, { status: 401 });
     // Cookie pela metade é sessão que não vai a lugar nenhum: some agora, em
     // vez de deixar o middleware liberar a navegação por presença.
@@ -51,7 +52,12 @@ export async function GET(request: NextRequest) {
     return response;
   }
 
-  return NextResponse.json({ user: buildSessionUser(payload, identity) });
+  // As áreas vêm da API, não daqui: é a chamada que apagou a cópia das listas
+  // de `@Roles` que o front mantinha. Ela nunca lança — token vencido ou API
+  // fora devolvem `null`, e a barra lateral desenha tudo. Ver `fetchAreas`.
+  const areas = await fetchAreas(access);
+
+  return NextResponse.json({ user: buildSessionUser(payload, identity, areas) });
 }
 
 /** Login. O corpo é repassado à API tal como veio da tela. */
@@ -80,7 +86,10 @@ export async function POST(request: NextRequest) {
   }
 
   const identity = { email: body.email };
-  const response = NextResponse.json({ user: buildSessionUser(payload, identity) });
+  const areas = await fetchAreas(pair.access_token);
+  const response = NextResponse.json({
+    user: buildSessionUser(payload, identity, areas),
+  });
   setAccessCookie(response.cookies, pair.access_token, REFRESH_MAX_AGE);
   setRefreshCookie(response.cookies, pair.refresh_token);
   setIdentityCookie(response.cookies, identity);

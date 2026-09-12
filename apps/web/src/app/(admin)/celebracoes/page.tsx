@@ -15,6 +15,7 @@ import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import api, { isForbidden } from "@/lib/api";
+import { formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ interface CelebrationInstance {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatCivilDate(iso, {
     weekday: "short", day: "2-digit", month: "2-digit", year: "numeric",
   });
 }

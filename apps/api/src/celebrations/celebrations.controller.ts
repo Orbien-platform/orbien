@@ -12,9 +12,14 @@ import { CreateCelebrationDto } from './dto/create-celebration.dto';
 import { UpdateCelebrationDto } from './dto/update-celebration.dto';
 import { ListCelebrationsQueryDto } from './dto/list-celebrations-query.dto';
 import { MaterializeInstancesDto } from './dto/materialize-instances.dto';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
 const MANAGE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
-const READ_ROLES = [...MANAGE_ROLES, 'secretary', 'ministry_leader'];
+// Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
+// mesma fonte de `GET /me/permissions`. Ver o cabeçalho de lá. Era
+// `[...MANAGE_ROLES, 'secretary', 'ministry_leader']` — a relação com
+// MANAGE_ROLES deixa de ser sintática, e passa a ser verificada por teste.
+const READ_ROLES = PRODUCT_AREA_READ_ROLES.celebrations;
 // `ministry_leader`, e não `'leader'`, que era o que estava aqui: `'leader'` não
 // é código de papel nenhum — é o valor de `role` numa membership de grupo ou de
 // ministério, outro namespace. O `RolesGuard` compara com `user.roles`, que vem

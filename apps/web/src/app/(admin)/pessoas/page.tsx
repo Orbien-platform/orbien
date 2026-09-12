@@ -13,6 +13,7 @@ import { ImportCsvModal } from "@/components/persons/ImportCsvModal";
 import { ImportHelpModal } from "@/components/persons/ImportHelpModal";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function formatPhone(phone?: string): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatInstant(iso, {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
 }

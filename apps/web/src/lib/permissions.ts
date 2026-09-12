@@ -1,23 +1,19 @@
 /**
- * Quais papéis enxergam cada tela do `(admin)`.
+ * Quais telas do `(admin)` esta sessão enxerga.
  *
  * **A autoridade é o servidor, não este arquivo.** Quem decide é o `@Roles` de
  * cada controller da API, avaliado pelo `RolesGuard`, e por baixo dele o RLS.
- * O que existe aqui é a mesma informação repetida para uma finalidade só:
- * não desenhar na barra lateral um link que só levaria a um 403. Se este mapa
- * divergir do servidor, o efeito é cosmético nos dois sentidos — link a menos
- * (a tela segue alcançável pela URL) ou link a mais (a tela responde "sem
- * acesso", que é o outro lado desta mesma mudança). Em nenhum caso ele abre
- * dado.
+ * O que existe aqui é só o suficiente para não desenhar na barra lateral um
+ * link que levaria a um 403.
  *
- * Os papéis abaixo espelham o READ de cada área, na API:
- *
- *   /pessoas       persons.controller.ts        READ_ROLES
- *   /grupos        small-groups.controller.ts   READ_ROLES
- *   /financeiro    transactions.controller.ts   READ_ROLES
- *   /conteudo      posts.controller.ts          ALL_ROLES
- *   /voluntarios   ministries.controller.ts     READ_ROLES
- *   /celebracoes   celebrations.controller.ts   READ_ROLES
+ * Antes o arquivo repetia, papel por papel, as listas de leitura de seis
+ * controllers da API — cópia que ninguém sincroniza, mantida porque a regra do
+ * monorepo impede importar `apps/api` e um pacote compartilhado acoplaria os
+ * deploys por versão. Hoje quem responde é a própria API, em
+ * `GET /me/permissions`, a partir da lista canônica em
+ * `apps/api/src/auth/product-areas.ts`. O que sobrou aqui é o mapa de **rota
+ * do front → área do produto**, que é informação do front: a API não conhece
+ * as URLs destas telas.
  *
  * Três telas ficam de fora do mapa, e é de propósito:
  *
@@ -27,65 +23,49 @@
  *   /configuracoes  o `GET /settings` não tem `@Roles` — é aberto a qualquer
  *                   sessão autenticada. Quem não pode gravar recebe 403 no
  *                   PATCH, que é outra conversa.
- *   /repertorio     o `GET /songs` (songs.controller.ts) também não tem
- *                   `@Roles` — o catálogo de músicas é próprio, sem depender
- *                   do módulo de celebrações/OC, e sua leitura é aberta a
- *                   qualquer sessão autenticada. Escrever (criar/editar/
- *                   excluir música) continua exigindo papel de edição, mas
- *                   isso é decidido dentro da própria tela, não aqui.
+ *   /repertorio     o `GET /songs` também não tem `@Roles`: o catálogo de
+ *                   músicas é próprio, e a escrita é decidida dentro da tela.
  */
 
-/** Papéis com leitura, por rota. Rota ausente = visível para todo autenticado. */
-export const NAV_READ_ROLES: Record<string, readonly string[]> = {
-  "/pessoas": ["tenant_admin", "admin_congregation", "pastor", "secretary", "treasurer"],
-  "/grupos": [
-    "tenant_admin",
-    "admin_congregation",
-    "pastor",
-    "secretary",
-    "treasurer",
-    "cell_leader",
-  ],
-  "/financeiro": ["tenant_admin", "admin_congregation", "treasurer"],
-  "/conteudo": ["tenant_admin", "admin_congregation", "pastor", "secretary", "member"],
-  "/voluntarios": [
-    "tenant_admin",
-    "admin_congregation",
-    "pastor",
-    "secretary",
-    "ministry_leader",
-  ],
-  "/celebracoes": [
-    "tenant_admin",
-    "admin_congregation",
-    "pastor",
-    "secretary",
-    "ministry_leader",
-  ],
+/** Rota do front → área do produto, como a API as nomeia. */
+export const ROUTE_AREAS: Record<string, string> = {
+  "/pessoas": "persons",
+  "/grupos": "small_groups",
+  "/financeiro": "financial",
+  "/conteudo": "content",
+  "/voluntarios": "volunteers",
+  "/celebracoes": "celebrations",
 };
 
 interface AccessSubject {
-  roles: string[];
-  support_session: boolean;
+  /**
+   * As áreas que a API disse que esta sessão lê, ou `null` quando não deu para
+   * perguntar (API fora, token vencido antes da primeira renovação).
+   */
+  areas: string[] | null;
 }
 
 /**
  * A sessão pode chegar à tela?
  *
- * `support_session` passa em tudo pelo mesmo motivo que passa no `RolesGuard`:
- * a sessão de suporte satisfaz qualquer `@Roles` em GET, e esconder links dela
- * seria mentir sobre o que ela alcança — cada uma dessas leituras vira uma
- * linha `support_access` em `audit_logs`, então o rastro existe.
+ * `areas: null` libera tudo, e é a degradação certa: sem resposta da API, a
+ * escolha é entre desenhar link a mais ou esconder a navegação inteira de
+ * quem tem acesso legítimo. Link a mais leva a uma tela que responde "sem
+ * acesso"; esconder tudo trava quem podia trabalhar. Em nenhum dos dois casos
+ * há dado exposto — quem nega continua sendo o `RolesGuard`, e o RLS.
+ *
+ * A sessão de suporte não precisa de ramo próprio: a API já responde todas as
+ * áreas para ela, pelo mesmo motivo que o `RolesGuard` a deixa passar em GET.
  */
 export function canAccessRoute(
   subject: AccessSubject | null | undefined,
   href: string
 ): boolean {
   if (!subject) return false;
-  if (subject.support_session) return true;
+  if (subject.areas === null) return true;
 
-  const allowed = NAV_READ_ROLES[href];
-  if (!allowed) return true;
+  const area = ROUTE_AREAS[href];
+  if (!area) return true;
 
-  return subject.roles.some((role) => allowed.includes(role));
+  return subject.areas.includes(area);
 }

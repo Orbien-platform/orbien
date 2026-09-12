@@ -23,8 +23,11 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { UpdateTransactionStatusDto } from './dto/update-transaction-status.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { RecurringRuleService, RecurringScope } from './recurring-rules/recurring-rule.service';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
-const READ_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
+// Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
+// mesma fonte de `GET /me/permissions`. Ver o cabeçalho de lá.
+const READ_ROLES = PRODUCT_AREA_READ_ROLES.financial;
 const WRITE_ROLES = ['admin_congregation', 'treasurer', 'secretary', 'tenant_admin'];
 const STATUS_ROLES = ['treasurer', 'admin_congregation', 'tenant_admin'];
 

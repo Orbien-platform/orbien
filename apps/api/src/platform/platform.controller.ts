@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -20,10 +21,13 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 import { ProvisionTenantService, ProvisionedTenant } from './provision-tenant.service';
 import { ListTenantsService, TenantListPage } from './list-tenants.service';
 import { ListAuditLogsService, AuditLogPage } from './list-audit-logs.service';
+import { UpdateTenantService, UpdatedTenant } from './update-tenant.service';
+import { SetTenantActiveService, TenantActiveState } from './set-tenant-active.service';
 import { CancelTenantPlanService } from './cancel-tenant-plan.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 /**
  * Plano de plataforma: opera acima dos tenants, não dentro de um.
@@ -45,6 +49,8 @@ export class PlatformController {
     private readonly provisionTenant: ProvisionTenantService,
     private readonly listTenants: ListTenantsService,
     private readonly listAuditLogs: ListAuditLogsService,
+    private readonly updateTenant: UpdateTenantService,
+    private readonly setTenantActive: SetTenantActiveService,
     private readonly cancelTenantPlan: CancelTenantPlanService,
   ) {}
 
@@ -57,6 +63,24 @@ export class PlatformController {
   @HttpCode(HttpStatus.CREATED)
   provision(@Body() dto: ProvisionTenantDto): Promise<ProvisionedTenant> {
     return this.provisionTenant.provision(dto);
+  }
+
+  @Patch('tenants/:id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTenantDto,
+  ): Promise<UpdatedTenant> {
+    return this.updateTenant.update(id, dto);
+  }
+
+  @Patch('tenants/:id/deactivate')
+  deactivate(@Param('id', ParseUUIDPipe) id: string): Promise<TenantActiveState> {
+    return this.setTenantActive.setActive(id, false);
+  }
+
+  @Patch('tenants/:id/activate')
+  activate(@Param('id', ParseUUIDPipe) id: string): Promise<TenantActiveState> {
+    return this.setTenantActive.setActive(id, true);
   }
 
   // Fixa em `support_access` — ver o cabeçalho de `ListAuditLogsService`.

@@ -17,6 +17,7 @@ import api from "@/lib/api";
 import axios from "axios";
 import { applyPhoneMask, initPhone, stripPhone } from "@/lib/phoneMask";
 import { useAuth } from "@/hooks/useAuth";
+import { formatCivilDate, formatInstant } from "@/lib/datetime";
 
 // Papéis atribuíveis por quem cria o login pelo web — mesma lista do backend
 // (apps/api/src/users/dto/create-user.dto.ts), sem `platform_support`: esse é
@@ -72,9 +73,23 @@ interface PersonSheetProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(iso?: string): string {
+// `created_at`/`updated_at` são instantes; `birth_date`/`membership_date`
+// são datas civis gravadas como meia-noite UTC. Converter a segunda classe
+// para São Paulo devolve o dia anterior — ver src/lib/datetime.ts.
+// Sem guard de ausência de propósito: os dois call sites são `created_at` e
+// `updated_at`, que o tipo declara obrigatórios. Quem pode vir vazio é
+// `birth_date`/`membership_date`, e esses vão para `formatDateOnly`.
+function formatDate(iso: string): string {
+  return formatInstant(iso, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatDateOnly(iso?: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR", {
+  return formatCivilDate(iso, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -413,11 +428,11 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                       {person.email ?? "—"}
                     </InfoRow>
                     <InfoRow icon={<Calendar size={14} strokeWidth={1.5} />} label="Nascimento">
-                      {formatDate(person.birth_date)}
+                      {formatDateOnly(person.birth_date)}
                     </InfoRow>
                     {person.classification === "member" && (
                       <InfoRow icon={<Calendar size={14} strokeWidth={1.5} />} label="Membresía">
-                        {formatDate(person.membership_date)}
+                        {formatDateOnly(person.membership_date)}
                       </InfoRow>
                     )}
                     <InfoRow icon={<User size={14} strokeWidth={1.5} />} label="Sexo">

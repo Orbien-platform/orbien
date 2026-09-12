@@ -15,7 +15,8 @@ pendência:
   funcional, pricing, LGPD, contratos. Descreve **por que** o produto é como
   é, não o que falta.
 
-Última varredura completa contra a `main`: **2026-09-12**.
+Última varredura completa contra a `main`: **2026-09-12** (revista depois dos
+PRs #74, #75 e #76, que entraram no mesmo dia).
 
 ---
 
@@ -49,7 +50,7 @@ foi retomado — cinco no total.
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
 | Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
-| App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-09, MOB-11/12 verificados; falta MOB-10 (**PROD-14**). Ver `.specs/features/app-mobile/` |
+| App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
 Isso cobre as Fases 1 e 2 do roadmap de MVP original (seção 4 de
@@ -120,10 +121,11 @@ do escopo daquela entrega:
 
 ### CONF-03 · Direitos do titular (Art. 18) — nenhum endpoint existe · dívida
 
-**Não há controller `me` no `apps/api`.** O mapeamento LGPD (seção 4)
-especifica quatro rotas de autosserviço, e a matriz de pricing vende isso nos
-**dois** planos ("LGPD — consentimento, histórico, exportação de dados
-pessoais"):
+O `me.controller.ts` existe desde o PR #75, mas responde **uma** rota só —
+`GET /me/permissions`, que é de autorização, não de LGPD. O mapeamento (seção
+4) especifica quatro rotas de autosserviço do titular, e nenhuma delas existe;
+a matriz de pricing vende isso nos **dois** planos ("LGPD — consentimento,
+histórico, exportação de dados pessoais"):
 
 - `GET /me/personal-data` — confirmação e acesso (Art. 18, I e II);
 - `GET /me/export` — portabilidade em ZIP, com `person.json`, `consents.json`,
@@ -144,11 +146,12 @@ pré-go-live do CONF-01 cobra exatamente a exportação que não existe.
 
 A variante Starter está entregue e verificada; publicável é outra coisa.
 
-### PROD-14 · MOB-10 — preferências de notificação por usuário · dívida
+### ~~PROD-14 · MOB-10 — preferências de notificação por usuário~~ · fechado
 
-Único requisito funcional do `.specs/features/app-mobile/spec.md` ainda
-pendente (P3, nunca entrou em rodada de Design). Na matriz de pricing é
-**Starter**: "preferências de notificação por categoria no app do membro".
+Entregue no PR #76, em 2026-09-11: tela de preferências no mobile, tags da
+OneSignal sincronizadas na autenticação, e `notification_preferences` com RLS
+por congregação (`008_rls_notification_preferences.sql`). Era o último
+requisito funcional do `.specs/features/app-mobile/spec.md`.
 
 ### AJU-05 · `DEPLOY.md` não tem parte de mobile · dívida
 
@@ -271,27 +274,15 @@ botão de cancelar/reativar (hoje a rota só responde a chamada direta) e se um
 teste trava o mapa contra o enum, como `permissions.test.ts` já faz no web com
 os papéis do `seed.ts`.
 
-### PEND-03 · O front duplica as listas de papéis da API · dívida, aberta por decisão
+### ~~PEND-03 · O front duplica as listas de papéis da API~~ · fechado
 
-`apps/web/src/lib/permissions.ts` repete em `NAV_READ_ROLES` os papéis de
-leitura de seis áreas — a mesma informação que vive no `@Roles` de cada
-controller. O sidebar usa para não desenhar link que só levaria a 403.
+Fechado no PR #75, em 2026-09-11, exatamente pela "forma certa" que este
+documento descrevia: `apps/api/src/auth/product-areas.ts` passa a ser o dono
+de "quem lê cada área", `GET /me/permissions` responde a partir dele, e o
+`apps/web` parou de manter a sétima cópia em `src/lib/permissions.ts`.
 
-Repetir foi escolha: nada que roda na Vercel importa de `apps/api`, e um
-pacote compartilhado acoplaria os deploys por versão, que é o que a
-independência existe para evitar. Divergir é cosmético nos dois sentidos (link
-a menos, ou link a mais que responde "sem acesso") — a autoridade é o `@Roles`
-e, por baixo, o RLS. O modo de falha silenciosa já tem portão:
-`permissions.test.ts` trava que o mapa só cite papéis existentes no
-`seed.ts`.
-
-**A forma certa, quando for feita:** a API expõe o que a sessão lê
-(`GET /me/permissions`, ou um campo no que `/api/session` já devolve) e o front
-para de adivinhar. Tem decisão embutida: onde mora a lista canônica de "área do
-produto", que hoje não existe em lugar nenhum.
-
-**O sinal de que chegou a hora:** a primeira vez que alguém mexer no `@Roles` da
-API e esquecer do `permissions.ts`.
+O sinal que este item esperava — "a primeira vez que alguém mexer no `@Roles`
+e esquecer do `permissions.ts`" — não precisou chegar.
 
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 

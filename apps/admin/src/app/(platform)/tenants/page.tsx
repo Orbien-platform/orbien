@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Plus } from "lucide-react";
+import { ExternalLink, Loader2, Pencil, Plus } from "lucide-react";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { Modal } from "@/components/ui/Modal";
 import { CreateTenantModal } from "@/components/tenants/CreateTenantModal";
+import { EditTenantModal } from "@/components/tenants/EditTenantModal";
 import { openSupportSession } from "@/lib/support-session";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,7 @@ interface Tenant {
   plan: "starter" | "premium" | null;
   plan_status: "trial" | "active" | "past_due" | "canceled" | null;
   trial_ends_at: string | null;
+  is_active: boolean;
   congregations_count: number;
   created_at: string;
 }
@@ -75,6 +78,16 @@ export default function TenantsPage() {
   // Qual linha está abrindo sessão de suporte — o spinner é por tenant, não da
   // tela: a lista continua utilizável enquanto o `impersonate` responde.
   const [openingFor, setOpeningFor] = useState<string | null>(null);
+
+  // Tenant sendo editado no momento — `null` fecha o modal. Guardado inteiro
+  // (não só o id) para o `EditTenantModal` ter o que prefiller sem outro round-trip.
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+
+  // Tenant no meio da confirmação de ativar/inativar — separado de
+  // `editingTenant` porque os dois modais podem existir ao mesmo tempo que a
+  // tabela, mas nunca um por cima do outro.
+  const [toggleTarget, setToggleTarget] = useState<Tenant | null>(null);
+  const [isToggling, setIsToggling] = useState(false);
 
   // O cancelamento evita que uma resposta antiga sobreescreva a lista: digitar
   // "doca" e apagar rápido deixa duas requisições em voo, e sem isto a
@@ -136,6 +149,33 @@ export default function TenantsPage() {
     }
   }
 
+  async function handleToggleActive() {
+    // Só o TypeScript passa por aqui como `false`: o botão que chama esta
+    // função vive dentro do `Modal` que só renderiza quando `toggleTarget`
+    // não é nulo.
+    if (!toggleTarget) return;
+    setActionError("");
+    setIsToggling(true);
+    try {
+      const action = toggleTarget.is_active ? "deactivate" : "activate";
+      await api.patch(`/platform/tenants/${toggleTarget.id}/${action}`);
+      setToggleTarget(null);
+      reload();
+    } catch {
+      // Fecha o modal antes de mostrar o erro: o banner vive no corpo da
+      // página, e o modal aberto o deixaria atrás de um `aria-hidden` — como
+      // se o erro nunca tivesse aparecido.
+      setToggleTarget(null);
+      setActionError(
+        toggleTarget.is_active
+          ? `Não foi possível inativar ${toggleTarget.name}.`
+          : `Não foi possível reativar ${toggleTarget.name}.`
+      );
+    } finally {
+      setIsToggling(false);
+    }
+  }
+
   const columns: Column<Tenant>[] = [
     {
       key: "name",
@@ -170,6 +210,25 @@ export default function TenantsPage() {
       ),
     },
     {
+      // Rótulo "Habilitado/Bloqueado" de propósito, não "Ativo/Inativo" — a
+      // coluna de plano já usa "Ativo" para `plan_status`, e as duas colunas
+      // lado a lado com o mesmo texto para coisas diferentes confundiria tanto
+      // quem lê a tela quanto um `getByText` no teste.
+      key: "is_active",
+      header: "Acesso",
+      width: "110px",
+      render: (t) => (
+        <span
+          className={cn(
+            "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
+            t.is_active ? "bg-teal-dim text-teal" : "bg-crimson-dim text-crimson"
+          )}
+        >
+          {t.is_active ? "Habilitado" : "Bloqueado"}
+        </span>
+      ),
+    },
+    {
       key: "congregations",
       header: "Congregações",
       width: "130px",
@@ -188,22 +247,46 @@ export default function TenantsPage() {
     {
       key: "actions",
       header: "",
-      width: "230px",
+      width: "330px",
       render: (t) => (
-        <button
-          type="button"
-          onClick={() => handleSupportSession(t)}
-          disabled={openingFor !== null}
-          title="Abre o app do tenant numa aba nova, com as permissões deste tenant. Cada requisição fica registrada em audit_logs."
-          className="inline-flex items-center gap-2 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10 disabled:opacity-50"
-        >
-          {openingFor === t.id ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <ExternalLink size={14} strokeWidth={1.5} />
-          )}
-          Entrar no web como suporte
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleSupportSession(t)}
+            disabled={openingFor !== null}
+            title="Abre o app do tenant numa aba nova, com as permissões deste tenant. Cada requisição fica registrada em audit_logs."
+            className="inline-flex items-center gap-2 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10 disabled:opacity-50"
+          >
+            {openingFor === t.id ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ExternalLink size={14} strokeWidth={1.5} />
+            )}
+            Entrar no web como suporte
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditingTenant(t)}
+            title="Editar nome e contato do tenant"
+            className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
+          >
+            <Pencil size={14} strokeWidth={1.5} />
+            Editar
+          </button>
+          <button
+            type="button"
+            onClick={() => setToggleTarget(t)}
+            title={t.is_active ? "Inativar este tenant" : "Reativar este tenant"}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1.5 text-xs font-medium transition-colors",
+              t.is_active
+                ? "border-[var(--border-default)] text-crimson hover:bg-crimson-dim"
+                : "border-[var(--border-default)] text-teal hover:bg-teal-dim"
+            )}
+          >
+            {t.is_active ? "Inativar" : "Reativar"}
+          </button>
+        </div>
       ),
     },
   ];
@@ -263,6 +346,61 @@ export default function TenantsPage() {
         onOpenChange={setCreateOpen}
         onCreated={reload}
       />
+
+      <EditTenantModal
+        key={editingTenant?.id}
+        open={editingTenant !== null}
+        // O próprio EditTenantModal só chama isto com `false` — ver o
+        // comentário lá dentro.
+        onOpenChange={() => setEditingTenant(null)}
+        onUpdated={reload}
+        tenant={editingTenant}
+      />
+
+      <Modal
+        open={toggleTarget !== null}
+        // O `Modal` só emite `false`; o que resta decidir aqui é se um
+        // envio em voo pode ser interrompido por fechar no X.
+        onOpenChange={() => {
+          if (!isToggling) setToggleTarget(null);
+        }}
+        title={toggleTarget?.is_active ? "Inativar tenant?" : "Reativar tenant?"}
+        description={
+          toggleTarget?.is_active
+            ? `Ninguém em ${toggleTarget?.name} vai conseguir entrar até reativar. Sessões já abertas caem na próxima requisição.`
+            : `Contas de ${toggleTarget?.name} voltam a conseguir entrar normalmente.`
+        }
+        className="max-w-sm"
+      >
+        <div className="mt-1 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setToggleTarget(null)}
+            disabled={isToggling}
+            className="rounded-[8px] px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <Button
+            onClick={handleToggleActive}
+            disabled={isToggling}
+            className={cn(
+              "h-9 rounded-[8px] px-4 text-sm font-medium text-white disabled:opacity-60",
+              toggleTarget?.is_active
+                ? "bg-crimson hover:opacity-90"
+                : "bg-navy hover:bg-[var(--color-navy-dark)]"
+            )}
+          >
+            {isToggling ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : toggleTarget?.is_active ? (
+              "Inativar"
+            ) : (
+              "Reativar"
+            )}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

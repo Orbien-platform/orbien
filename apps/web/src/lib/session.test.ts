@@ -3,6 +3,7 @@ import {
   ACCESS_COOKIE,
   buildSessionUser,
   clearSessionCookies,
+  fetchAreas,
   IDENTITY_COOKIE,
   readIdentity,
   REFRESH_COOKIE,
@@ -121,8 +122,14 @@ describe("buildSessionUser", () => {
       congregation_id: "c1",
       support_session: true,
       support_tenant_name: "Igreja X",
+      areas: null,
       expires_at: 9999999999,
     });
+  });
+
+  it("carrega as áreas que a API respondeu", () => {
+    const user = buildSessionUser(payload, { email: "ana@example.com" }, ["financial"]);
+    expect(user.areas).toEqual(["financial"]);
   });
 
   it("support_session fica false sem o marcador no payload, e support_tenant_name null sem tenantName", () => {
@@ -160,5 +167,50 @@ describe("rotate", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch;
 
     await expect(rotate("refresh-token")).resolves.toBeNull();
+  });
+});
+
+describe("fetchAreas", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("devolve as áreas que a API respondeu, com o token no Authorization", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ areas: ["persons", "financial"] }),
+    }) as unknown as typeof fetch;
+
+    await expect(fetchAreas("token-abc")).resolves.toEqual(["persons", "financial"]);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/me/permissions"),
+      expect.objectContaining({
+        headers: { Authorization: "Bearer token-abc" },
+        cache: "no-store",
+      })
+    );
+  });
+
+  it("devolve null quando a API recusa (401 de token vencido, por exemplo)", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch;
+
+    await expect(fetchAreas("token-vencido")).resolves.toBeNull();
+  });
+
+  it("devolve null quando a resposta não tem a forma esperada", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ areas: "tudo" }),
+    }) as unknown as typeof fetch;
+
+    await expect(fetchAreas("token")).resolves.toBeNull();
+  });
+
+  it("não propaga falha de rede — a sessão sobe sem as áreas", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
+
+    await expect(fetchAreas("token")).resolves.toBeNull();
   });
 });

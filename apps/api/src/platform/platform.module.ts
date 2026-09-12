@@ -3,6 +3,8 @@ import { PlatformController } from './platform.controller';
 import { ProvisionTenantService } from './provision-tenant.service';
 import { ListTenantsService } from './list-tenants.service';
 import { ListAuditLogsService } from './list-audit-logs.service';
+import { UpdateTenantService } from './update-tenant.service';
+import { SetTenantActiveService } from './set-tenant-active.service';
 import { CancelTenantPlanService } from './cancel-tenant-plan.service';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 
@@ -12,6 +14,8 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
     ProvisionTenantService,
     ListTenantsService,
     ListAuditLogsService,
+    UpdateTenantService,
+    SetTenantActiveService,
     CancelTenantPlanService,
     TenantContextInterceptor,
   ],
