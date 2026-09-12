@@ -19,14 +19,18 @@ import { join, relative } from 'path';
 const SRC_ROOT = join(__dirname, '..');
 
 /**
- * Controllers legitimamente públicos — sem `@Roles` em nenhum handler.
- * Adicionar um caminho aqui é uma decisão de produto, não um jeito de calar
- * o teste; cada linha precisa continuar correta.
+ * Controllers legitimamente sem `@Roles` em nenhum handler. Adicionar um
+ * caminho aqui é uma decisão de produto, não um jeito de calar o teste; cada
+ * linha precisa continuar correta. Duas razões distintas cabem aqui:
+ *   - público de verdade, sem `JwtAuthGuard` (as três primeiras linhas);
+ *   - autenticado, mas sobre a própria conta — sem operação administrativa
+ *     nem papel "certo" para restringir (MOB-10, `notification-preferences`).
  */
 const ALLOWLIST = new Set([
   'app.controller.ts',
   'waitlist/waitlist.public.controller.ts',
   'visitor/visitor.public.controller.ts',
+  'content/notification-preferences.controller.ts',
 ]);
 
 function findControllerFiles(dir: string): string[] {

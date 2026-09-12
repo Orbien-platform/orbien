@@ -247,20 +247,22 @@ de um encontro, abrir um material.
 
 ### P3: Preferências de notificação por usuário
 
-**User Story**: Como usuário, quero escolher quais tipos de push eu recebo
-(conteúdo, escala, PG), para não ser inundado de notificações que não me
-interessam.
+**User Story**: Como usuário, quero escolher quais tipos de push eu recebo,
+para não ser inundado de notificações que não me interessam.
 
 **Why P3**: Melhora experiência, mas o v1 pode funcionar só com os segmentos
 que o backend já define — não bloqueia lançamento.
 
-**Acceptance Criteria**:
+**Acceptance Criteria**: ver `.specs/features/preferencias-notificacao-mobile/spec.md`.
 
-1. WHEN o usuário abre "Configurações de notificação" THEN o app SHALL mostrar
-   toggles por categoria de push.
-2. WHEN o usuário desliga uma categoria THEN o app SHALL deixar de mostrar
-   aquele tipo de push (via tag OneSignal local), sem precisar de mudança no
-   backend.
+> A redação original desta história dizia "conteúdo, escala, PG" e "via tag
+> OneSignal local, sem precisar de mudança no backend". Nenhum dos dois é
+> verdade hoje: só `ContentPost` dispara push (não há push de escala nem de
+> PG), e a rodada de Design de MOB-10 decidiu persistir a preferência no
+> servidor (sincroniza entre aparelhos), não só no device. Texto corrigido
+> aqui para quem lê esta spec sozinho não presumir um escopo ou mecanismo que
+> a feature dedicada não implementa — mesmo princípio da nota já registrada
+> em "P1: Conteúdos e Notificações" acima.
 
 ---
 
@@ -340,7 +342,7 @@ bundle id mudam só por config, sem tocar em código.
 | MOB-07 | P1: Conteúdos — push (registro OneSignal + deep link) | Design | ✅ Verified |
 | MOB-08 | P2: Celebrações e OC | Design | ✅ Verified — `.specs/features/celebracoes-oc-mobile/` |
 | MOB-09 | P2: Pequenos Grupos | Design | ✅ Verified — `.specs/features/pequenos-grupos-mobile/` |
-| MOB-10 | P3: Preferências de notificação | Design | Pending |
+| MOB-10 | P3: Preferências de notificação | Execute | ✅ Verified — `.specs/features/preferencias-notificacao-mobile/` |
 | MOB-11 | Infra: workspace `apps/mobile` + dev loop + EAS deploy | Design | ✅ Verified |
 | MOB-12 | Infra: `app.config.js` dinâmico + `eas.json` multi-profile (base p/ Premium futuro) | Design | ✅ Verified |
 
@@ -348,8 +350,10 @@ bundle id mudam só por config, sem tocar em código.
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, **11 verificadas** (MOB-01 a MOB-09, MOB-11,
-MOB-12), 1 pendente (MOB-10, P3 — nunca entrou em rodada de Design).
+**Coverage:** 12 total, **12 verificadas** (MOB-01 a MOB-12). MOB-10 (P3)
+verificado em 2026-09-11 — feature própria
+`.specs/features/preferencias-notificacao-mobile/`, veredito PASS em
+`validation.md` (T1-T14, spec-anchored check + discrimination sensor).
 
 **Nota (Fases 1-5 do Execute) — cumprida.** As duas notas que viviam aqui
 instruíam a não marcar "Verified" enquanto o Verifier não tivesse rodado no

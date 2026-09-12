@@ -80,6 +80,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: apps/api/src/persons/persons.service.ts:321-323 (purgeMinorsAfterContractEnd) (apps/api/src/persons)
 - last seen: 2026-09-11T17:29:24Z
 
+### L-012 — When a task description contradicts an already-registered architecture decision (AD-NNN), implement and test the AD-compliant behavior and record a SPEC_DEVIATION instead of forcing the task's literal wording.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `rls` · harmful: 0
+- features: preferencias-notificacao-mobile
+- evidence: tasks.md T3 / apps/api/test/rls/isolation.spec.ts:1384 (rls)
+- last seen: 2026-09-11T18:12:52Z
+
+### L-013 — When an AC's outcome depends on an external provider's documented-but-unverifiable-locally semantics (e.g. a filter operator's behavior on absent values), cite the provider doc in design.md and flag the AC as a spec-precision gap instead of writing a unit test that only re-asserts the code's own logic.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `content` · harmful: 0
+- features: preferencias-notificacao-mobile
+- evidence: spec.md MOB-10b AC4 / apps/api/src/content/notifications.service.ts:43 (content)
+- last seen: 2026-09-11T18:12:57Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

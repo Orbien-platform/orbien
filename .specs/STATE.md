@@ -54,3 +54,27 @@ mesmo guard `if [ -f ... ]`), rodando depois de `003`.
   identificadores de push.
 - **Date**: 2026-09-08
 - **Status**: active
+
+### AD-003 — Preferência de push por categoria vive em tag OneSignal, checada com `!=`
+
+**Status**: active
+**Origem**: feature `preferencias-notificacao-mobile` (MOB-10), fase Design, 2026-09-11
+
+Toda preferência de opt-out por categoria de push usa uma tag OneSignal por
+categoria (`pref_<categoria>`, valores `"true"`/`"false"`), sincronizada pelo
+cliente (login e a cada mudança de preferência) — nunca uma consulta ao
+Postgres no momento do disparo. O disparo filtra com
+`{field:'tag', key:'pref_<categoria>', relation:'!=', value:'false'}`,
+**nunca** `not_exists OR '='`: filtros OneSignal não suportam parênteses/
+agrupamento e são avaliados sequencialmente (cada operador aplica sobre o
+resultado acumulado até ali) — inserir um OR extra quebraria a segmentação
+por tenant/congregação/role já calculada antes dele. `!=` sozinho já cobre
+"tag ausente OU tag diferente de `false`" numa única condição, preservando o
+default seguro (ausência de tag = categoria ligada).
+
+**Consequência prática**: a tabela que guarda a preferência (ex.
+`notification_preferences`) é a fonte de verdade para a **tela** (o que
+mostra marcado, sincronizado entre aparelhos da mesma conta) — nunca para o
+**filtro de envio**, que sempre lê a tag do device. Duas fontes de verdade
+por design, não descuido; ver `preferencias-notificacao-mobile/design.md`,
+Tech Decisions.

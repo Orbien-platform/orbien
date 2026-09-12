@@ -17,14 +17,21 @@ const mockRegisterDevice = jest.fn();
 const mockUnregisterDevice = jest.fn();
 const mockOnNotificationClick = jest.fn();
 const mockRemoveClickListener = jest.fn();
+const mockSyncNotificationPreferenceTags = jest.fn();
 jest.mock("./onesignal-client", () => ({
   initializeOneSignal: (...args: unknown[]) => mockInitializeOneSignal(...args),
   registerDevice: (...args: unknown[]) => mockRegisterDevice(...args),
   unregisterDevice: (...args: unknown[]) => mockUnregisterDevice(...args),
+  syncNotificationPreferenceTags: (...args: unknown[]) => mockSyncNotificationPreferenceTags(...args),
   onNotificationClick: (...args: unknown[]) => {
     mockOnNotificationClick(...args);
     return mockRemoveClickListener;
   },
+}));
+
+const mockGetNotificationPreferences = jest.fn();
+jest.mock("./notification-preferences-client", () => ({
+  getNotificationPreferences: (...args: unknown[]) => mockGetNotificationPreferences(...args),
 }));
 
 import { NotificationsProvider } from "./notifications-provider";
@@ -32,6 +39,12 @@ import { NotificationsProvider } from "./notifications-provider";
 describe("NotificationsProvider", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetNotificationPreferences.mockResolvedValue({
+      avisos: true,
+      oracao: true,
+      eventos: true,
+      devocional: true,
+    });
   });
 
   it("inicializa o SDK e registra o listener de clique no mount", async () => {
@@ -79,6 +92,57 @@ describe("NotificationsProvider", () => {
     });
 
     expect(mockRegisterDevice).not.toHaveBeenCalled();
+  });
+
+  it("sessão presente: busca preferências e sincroniza as tags com o resultado (MOB-10b, AC2)", async () => {
+    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false };
+    mockGetNotificationPreferences.mockResolvedValue(prefs);
+    mockUseAuth.mockReturnValue({
+      session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
+    });
+
+    await act(async () => {
+      render(
+        <NotificationsProvider>
+          <Text>conteúdo</Text>
+        </NotificationsProvider>,
+      );
+    });
+
+    expect(mockGetNotificationPreferences).toHaveBeenCalled();
+    expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(prefs);
+  });
+
+  it("GET de preferências falhando (rede) não lança erro não tratado nem impede a navegação (MOB-10b, AC2)", async () => {
+    mockGetNotificationPreferences.mockRejectedValue(new Error("rede fora"));
+    mockUseAuth.mockReturnValue({
+      session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
+    });
+
+    await act(async () => {
+      render(
+        <NotificationsProvider>
+          <Text>conteúdo</Text>
+        </NotificationsProvider>,
+      );
+    });
+
+    expect(screen.getByText("conteúdo")).toBeTruthy();
+    expect(mockSyncNotificationPreferenceTags).not.toHaveBeenCalled();
+  });
+
+  it("sem sessão no mount: não busca preferências", async () => {
+    mockUseAuth.mockReturnValue({ session: null });
+
+    await act(async () => {
+      render(
+        <NotificationsProvider>
+          <Text>conteúdo</Text>
+        </NotificationsProvider>,
+      );
+    });
+
+    expect(mockGetNotificationPreferences).not.toHaveBeenCalled();
   });
 
   it("desmontar o provider (equivalente ao AuthGate trocar para /login) de-registra o dispositivo", async () => {

@@ -70,6 +70,66 @@ describe('NotificationsService', () => {
     });
   });
 
+  describe('notifyPost — filtro de preferência (MOB-10b)', () => {
+    it('inclui o filtro pref_<categoria> != false correspondente ao tipo do post', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const { prisma } = prismaWith();
+      const service = new NotificationsService(prisma);
+
+      await service.notifyPost(
+        { id: 'p1', tenant_id: 't1', congregation_id: 'g1', title: 'T', body: 'B', type: 'event' } as never,
+        [],
+      );
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.filters).toContainEqual({
+        field: 'tag',
+        key: 'pref_eventos',
+        relation: '!=',
+        value: 'false',
+      });
+    });
+
+    it('mapeia post do tipo prayer para pref_oracao', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const { prisma } = prismaWith();
+      const service = new NotificationsService(prisma);
+
+      await service.notifyPost(
+        { id: 'p1', tenant_id: 't1', congregation_id: 'g1', title: 'T', body: 'B', type: 'prayer' } as never,
+        [],
+      );
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.filters).toContainEqual({
+        field: 'tag',
+        key: 'pref_oracao',
+        relation: '!=',
+        value: 'false',
+      });
+    });
+
+    it('preserva os filtros de segmento já existentes (aditivo, não substitui buildFilters)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const { prisma } = prismaWith();
+      const service = new NotificationsService(prisma);
+
+      await service.notifyPost(
+        { id: 'p1', tenant_id: 't1', congregation_id: 'g1', title: 'T', body: 'B', type: 'notice' } as never,
+        [],
+      );
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.filters).toEqual([
+        { field: 'tag', key: 'tenant_id', relation: '=', value: 't1' },
+        { field: 'tag', key: 'pref_avisos', relation: '!=', value: 'false' },
+      ]);
+    });
+  });
+
   describe('sendManualNotification', () => {
     it('busca os segmentos quando segment_ids não é vazio', async () => {
       process.env['ONESIGNAL_APP_ID'] = 'app1';
@@ -102,6 +162,18 @@ describe('NotificationsService', () => {
       } as never);
 
       expect(system.audienceSegment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('não inclui filtro de preferência de categoria (fora do escopo — sem ContentPostType)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma } = prismaWith();
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: [] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.filters.some((f: { key?: string }) => f.key?.startsWith('pref_'))).toBe(false);
     });
   });
 
