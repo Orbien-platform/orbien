@@ -163,6 +163,34 @@ credenciais e profiles, mas não é o documento de deploy do monorepo.
 > `ORBIEN_ONESIGNAL_APP_ID` ausentes no profile `production` — **fecharam** em
 > 2026-09-11 (PR #72). Os profiles `preview` e `generic` seguem no placeholder
 > do OneSignal de propósito: builds internos não gastam cota do app real.
+>
+> A infra de OTA em si já existe (2026-09-12, ver `PROD-15` abaixo); o que
+> falta aqui é só o procedimento escrito — `eas update --branch <channel>`,
+> quando publicar e como isso se relaciona com bump de versão nativa.
+
+### ~~PROD-15 · Infra básica de expo-updates~~ · fechado
+
+Entregue em 2026-09-12, sem depender de data de publicação em loja — é
+infraestrutura que já serve às builds internas (`development`/`preview`) hoje:
+
+- `expo-updates@~57.0.22` instalado (versão pareada ao Expo SDK 57 via
+  `bundledNativeModules`).
+- `runtimeVersion: { policy: "appVersion" }` em `app.config.js` — a runtime
+  segue o `appVersion` remoto (`eas.json` já tinha `appVersionSource:
+  "remote"`), então qualquer build com módulo nativo novo exige bump de
+  versão, e é esse bump que barra um update JS incompatível de chegar num
+  binário antigo.
+- `updates.url` apontando para o projeto EAS já vinculado
+  (`extra.eas.projectId`).
+- Um `channel` por build profile em `eas.json`: `development`, `preview`
+  (compartilhado com `preview-ios-simulator`, que é só variante de simulador
+  do mesmo perfil) e `production`.
+
+O que **não** entrou, de propósito — fica registrado, não decidido: a
+granularidade de channel quando existir build própria por tenant
+(`DEC-02`). Hoje só existe a variante genérica multi-tenant, então channel
+por profile já cobre o que existe; channel por tenant é pergunta em aberto,
+ver `DEC-05`.
 
 ---
 
@@ -353,6 +381,18 @@ A arquitetura está pronta e é decisão registrada (AD-002 em `.specs/STATE.md`
 um só codebase, variantes por profile do EAS + `app.config.js` dinâmico). Falta
 o pipeline de release por tenant e a submissão de loja por igreja — e o Starter
 chegar às lojas antes, o que depende da seção 5.
+
+### DEC-05 · Granularidade de channel do OTA por tenant
+
+A infra básica de `expo-updates` está pronta (`PROD-15`, seção 5): um
+channel por build profile (`development`/`preview`/`production`), que cobre
+a variante genérica multi-tenant de hoje. Quando `DEC-02` sair do papel e
+existir build própria por tenant via EAS, falta decidir se cada tenant
+personalizado ganha o próprio channel (isolamento total — um update pensado
+pro app genérico nunca alcança uma build de tenant) ou se channel continua
+por profile e a distinção fica só na build (mais simples, mas um update teria
+que ser compatível com todo tenant que escuta aquele channel). Condicionado a
+`DEC-02` ter pipeline de release por tenant definido.
 
 ### DEC-03 · Primeiro cliente Premium fora do cliente zero
 
