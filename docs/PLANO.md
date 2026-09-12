@@ -45,7 +45,7 @@ foi retomado — cinco no total.
 | Auth + multi-tenant + papéis | Entregue — JWT próprio, RLS por `tenant_id`/`congregation_id`, papéis granulares |
 | Módulo 1 — Membros e Voluntários | Entregue, incluindo escalas, trocas e check-in |
 | Módulo 2 — Financeiro | Entregue — plano de contas, lançamentos, PIX cenários 1–3 com webhook Asaas, DRE, fluxo de caixa, forecast, exportação contábil |
-| Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, pedidos de oração da célula |
+| Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica, métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
@@ -246,6 +246,19 @@ Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
 leitura errar de novo.
 
+### ~~PROD-10 · Histórico de versões de materiais de estudo~~ · fechado
+
+Entregue em 2026-09-12: snapshot do `StudyMaterial` gravado em
+`StudyMaterialVersion` antes de cada `PATCH` (título, descrição, autor,
+arquivo, conteúdo, datas, tags e quem alterou), com RLS padrão B
+(`tenant_id` + `congregation_id`,
+`20260912140000_add_study_material_versions`) e rota
+`GET /study-materials/:id/versions`. `GroupDetailSheet`, no `apps/web`,
+ganhou um toggle de histórico por material, lazy e cacheado como o de
+reuniões. Concorrência otimista no `update()` (`updateMany` com
+`where.version` + `ConflictException`) evita duas edições simultâneas
+colidirem no índice único de `StudyMaterialVersion`.
+
 ### Funcionalidade prevista, sem código
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
@@ -256,7 +269,6 @@ leitura errar de novo.
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-09` | 3 | Chat fechado por célula | Starter | — |
-| `PROD-10` | 3 | Histórico de versões de materiais de estudo | Starter | `MaterialOpenRecord` (indicador de abertura) existe; versionamento não |
 | `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | — |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-13` | 3 | "Encontre uma célula" (mapa público, filtros, botão visitar) | Starter | `SmallGroup.is_public` existe e é filtrável, mas não há rota pública nem tela |
