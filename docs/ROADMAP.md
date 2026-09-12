@@ -100,6 +100,80 @@ O primeiro é operacional, não de produto: não exige decisão, só execução.
 Estão aqui, e não em `docs/PENDENCIAS.md`, porque são o que falta para um
 módulo do roadmap chegar ao usuário — não achados de revisão.
 
+## O que o material de produto prevê e ainda não existe
+
+A tabela "O que já foi entregue" fala por **módulo**, e todos os cinco estão
+entregues no sentido de que existem, com rota, tela e teste. Mas a matriz de
+funcionalidade por plano de `pricing-church-platform.md` (seção 5) e o
+mapeamento LGPD são mais finos que isso, e o levantamento abaixo — feito em
+2026-09-12 contra a `main`, funcionalidade por funcionalidade — é o que
+sobra quando se lê linha a linha.
+
+A coluna **Plano** é a da matriz de pricing: o que está como Starter é o que
+já se prometeu a quem assinar o plano base.
+
+### Tabela no schema, nenhum código a usa
+
+O caso mais caro de todos, porque parece entregue em qualquer leitura do
+`schema.prisma` e não existe em lugar nenhum do `apps/api`:
+
+| Tabela | Funcionalidade | Plano |
+|---|---|---|
+| `prayer_requests` | Pedidos de oração da célula | Starter |
+| `cost_centers` | Centros de custo (e o balancete por centro de custo, que depende deles) | Starter (balancete: Premium) |
+| `donation_receipts` | Recibo automático por e-mail/PDF | Premium |
+
+Nenhuma das três aparece em `apps/api/src` fora do schema — nem leitura, nem
+escrita, nem rota.
+
+### Direitos do titular (LGPD, seção 4) — nenhum endpoint existe
+
+O mapeamento especifica quatro rotas de autosserviço e **não há controller
+`me` no `apps/api`**. A matriz de pricing vende isso nos dois planos
+("LGPD — consentimento, histórico, exportação de dados pessoais"):
+
+- `GET /me/personal-data` — confirmação e acesso (Art. 18, I e II);
+- `GET /me/export` — portabilidade em ZIP, com `person.json`, `consents.json`,
+  `groups.json`, `donations.json` e fotos (Art. 18, V);
+- `POST /me/revoke-consent` — revogação por versão do termo (Art. 18, IX);
+- `PATCH /me` — correção pelo próprio titular (Art. 18, III).
+
+O que existe é o lado de dentro: `consent_records` é escrito no cadastro de
+visitante e na importação, e a anonimização revoga os consentimentos da
+pessoa. O titular é que não tem por onde pedir nada — hoje depende de admin.
+
+### Funcionalidade prevista, sem código
+
+| Módulo | Funcionalidade | Plano | Nota |
+|---|---|---|---|
+| 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
+| 1 | Fila CRM de trials não convertidos e inadimplentes | Premium | — |
+| 2 | Página pública de doação (Cenário 3) | Starter | **A API está pronta** — `POST /financial/pix/public-donation`, público e com throttle. Não há tela em `apps/web` nem em `apps/site` que a chame |
+| 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
+| 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
+| 3 | Chat fechado por célula | Starter | — |
+| 3 | Histórico de versões de materiais de estudo | Starter | `MaterialOpenRecord` (indicador de abertura) existe; versionamento não |
+| 3 | Alerta de ausência consecutiva para o líder | Starter | — |
+| 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
+| 3 | "Encontre uma célula" (mapa público, filtros, botão visitar) | Starter | `SmallGroup.is_public` existe e é filtrável, mas não há rota pública nem tela |
+| 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | — |
+| 4 | Evento com inscrição | Starter (sem pagamento) / Premium (com) | `ContentPostType.event` existe como tipo de post; não há modelo de inscrição |
+| 4 | Preferências de notificação por categoria | Starter | É o MOB-10 do mobile, acima |
+| 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
+| Plataforma | OTA via Expo Updates | Starter e Premium | `expo-updates` não está no `apps/mobile`; o ADR-004 prevê e o v1 adiou |
+| Plataforma | Domínio próprio por tenant, termos de uso próprios por tenant | Premium | — |
+
+**O que conferi e está entregue**, apesar de soar parecido com os de cima —
+para não virar trabalho repetido: detecção de duplicados no cadastro e na
+importação, métricas de notificação da OneSignal (`reached`/`opened`,
+sincronizadas), OC imprimível em PDF, exportação contábil OFX, forecast
+financeiro, PIX nos três cenários com webhook da Asaas, e o indicador de
+abertura de material por membro.
+
+Nada disso é compromisso de data: é o inventário do que o material de
+produto promete e a árvore não tem. Boa parte não foi decidida contra —
+simplesmente nunca entrou em uma fase.
+
 ## Ciclos de entrega
 
 O trabalho já não segue mais os sprints numerados dos briefings originais
