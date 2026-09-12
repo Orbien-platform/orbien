@@ -1,4 +1,14 @@
-# Pendências
+# Pendências — arquivo histórico
+
+> **Este documento não é mais a lista do que falta.** O que está aberto vive
+> em [`PLANO.md`](PLANO.md), com ID, evidência e estado — inclusive as
+> pendências que estavam aqui como "aberta por decisão" (`PEND-01` a
+> `PEND-04`).
+>
+> O que fica aqui é a história: o achado, a evidência que o produziu, o
+> diagnóstico e a decisão que o fechou. É o que responde "por que isso é
+> assim?" — o `CLAUDE.md` e o `DEPLOY.md` citam pendências numeradas daqui, e
+> vários `.specs/features/*/design.md` também.
 
 Achados mapeados, com a evidência que os produziu e o que foi decidido sobre
 cada um. Nenhum foi corrigido por decisão unilateral — a regra do `CLAUDE.md` é
@@ -1249,56 +1259,6 @@ assinado, e o `updateMany` que revoga tudo que estava ativo.
 
 ---
 
-## O front duplica as listas de papéis da API — aberta, por decisão
-
-Não é defeito: é a dívida que a nº 10 aceitou conscientemente, escrita aqui
-porque decisão que só existe na cabeça de quem decidiu não sobrevive ao próximo
-mês.
-
-### O que existe hoje
-
-`apps/web/src/lib/permissions.ts` repete, em `NAV_READ_ROLES`, os papéis de
-leitura de seis áreas — a mesma informação que vive no `@Roles` de cada
-controller da API. O sidebar a usa para não desenhar link que só levaria a 403.
-
-Repetir foi a escolha porque a alternativa direta está barrada pela regra do
-monorepo: nada que roda na Vercel importa código de `apps/api`, e os deploys são
-independentes. Um pacote compartilhado resolveria o import e criaria outro
-problema — front e API passariam a subir acoplados por versão de pacote, que é
-exatamente o que a independência dos deploys existe para evitar.
-
-### Por que não dói hoje
-
-Divergir do servidor é cosmético nos dois sentidos: link a menos (a tela segue
-alcançável pela URL, e responde "sem acesso" se for o caso) ou link a mais (a
-tela responde "sem acesso"). Em nenhum caso abre dado — a autoridade é o
-`@Roles`, avaliado pelo `RolesGuard`, e por baixo dele o RLS.
-
-O modo de falha silenciosa — papel escrito errado virando link que nunca
-aparece, que foi exatamente o defeito do `'tesoureiro'` do lado da API — já tem
-portão: um teste em `permissions.test.ts` trava que o mapa só cite papéis que
-existem em `prisma/seed.ts`.
-
-### A forma certa, quando for feita
-
-A API expõe o que a sessão lê, e o front para de adivinhar: um
-`GET /me/permissions` (ou um campo no que `/api/session` já devolve) respondendo
-a lista de áreas legíveis por aquele token. Aí o mapa some, e com ele a chance
-de divergir.
-
-Tem decisão embutida que não é pequena: onde mora a lista canônica de "área do
-produto" — hoje ela não existe em lugar nenhum, está espalhada nos `@Roles` de
-cada controller. Fazer isso direito é criar esse conceito no backend, não só
-adicionar uma rota.
-
-### O sinal de que chegou a hora
-
-Concreto, e vale esperar por ele: a primeira vez que alguém mexer no `@Roles` da
-API e esquecer do `permissions.ts`. Enquanto o mapa não divergir na prática, o
-custo de mantê-lo é menor que o de criar o conceito novo.
-
----
-
 ## `@Roles` citando papel que não existe na tabela `roles`
 
 Apareceu em 2026-09-05, ao montar o mapa de papéis do sidebar (nº 10): as listas
@@ -1443,131 +1403,10 @@ nem escrita de pessoas de tenants já existentes para o suporte.
 
 ---
 
-## `small-groups`: rota de encontros e de materiais não conferem participação real — aberta
-
-Achado durante o Design da feature "Pequenos Grupos no Mobile"
-(`.specs/features/pequenos-grupos-mobile/design.md`), 2026-09-09, ao
-liberar `member` em `GET /small-groups/:groupId/meetings` pra o mobile
-conseguir achar o material do próprio grupo. Decisão do usuário: seguir
-liberando `member` e registrar aqui, em vez de fechar a lacuna agora.
-
-### O que está errado
-
-`MeetingsController.findByGroup` (`GET /small-groups/:groupId/meetings`) e
-`MeetingsService.listMaterials` (`GET /small-groups/meetings/:meetingId/materials`)
-checam só a `role` do JWT — nenhum dos dois confere se a pessoa autenticada
-tem `GroupMembership` no grupo/encontro pedido. `listMaterials` já liberava
-`member` de propósito (`MATERIAL_READ_ROLES = ['member', ...]`) antes desta
-feature; o MOB-09 estendeu a mesma política pra `findByGroup`. Na prática,
-qualquer conta com role `member` (de qualquer grupo, ou de nenhum) pode
-listar os encontros e os materiais `visibility: all` de **qualquer outro**
-grupo do tenant — não só o seu.
-
-### Evidência
-
-`apps/api/src/small-groups/meetings.controller.ts:58-62` (`findByGroup`) e
-`:93-100` (`listMaterials`) não recebem `person_id` nem verificam
-`GroupMembership` antes de responder; o `where` das duas consultas em
-`meetings.service.ts` filtra só por `groupId`/`meetingId`, sem cláusula de
-participação.
-
-### Por que não foi corrigido aqui
-
-Fechar exige decidir e implementar a checagem de participação (via
-`GroupMembership` do `person_id` resolvido do usuário) nos dois endpoints,
-sem quebrar os papéis de liderança que hoje enxergam grupos que não lideram
-(ex.: `pastor`/`secretary` via `MEETING_READ_ROLES`) — logo não é "só
-adicionar um `where`", é decidir quem continua vendo tudo e quem passa a
-ver só o próprio. Maior que o MOB-09 e não estava no pedido. Registrado
-aqui para virar feature própria.
-
----
-
-## O vocabulário de status do `apps/admin` não é o `PlanStatus` da API — aberta
-
-Achado em 2026-09-12, ao atualizar este documento contra a `main`. Metade dele
-não existia antes de `c7d7d88`: até ele, nenhum código do `apps/api` colocava
-um `TenantPlan` em `cancelled`, então esse caso nunca chegava à tela.
-
-### O que está errado
-
-`PlanStatus` no `schema.prisma` (`apps/api/prisma/schema.prisma:1400-1405`)
-tem quatro valores: `active`, `trial`, `suspended`, `cancelled` — e é o valor
-cru que `ListTenantsService` devolve em `plan_status`
-(`apps/api/src/platform/list-tenants.service.ts:88`). A lista de tenants do
-console declara outros quatro, nos três lugares em que trata o status — o
-tipo (`apps/admin/src/app/(platform)/tenants/page.tsx:20`), `STATUS_LABELS`
-(`:35`) e `STATUS_CLS` (`:42`): `trial`, `active`, `past_due` e `canceled`.
-
-São duas divergências, não uma:
-
-- **`canceled` × `cancelled`** — um `l` a menos no console;
-- **`past_due` × `suspended`** — nome que não existe no enum, e o valor que
-  existe não tem entrada.
-
-Consequência nos dois casos: o selo renderiza vazio
-(`STATUS_LABELS[valor]` é `undefined`) e sem classe de cor
-(`STATUS_CLS[valor]` também), porque o `if` da linha `:159` testa só se
-`plan_status` é truthy. Não some a linha nem quebra a tela — some a
-informação, que é o modo de falha silenciosa de sempre. O tipo do `page.tsx`
-não protege: é escrito à mão no front, não derivado do Prisma, e o
-`apps/admin` não pode importar de `apps/api`.
-
-### Por que só agora
-
-`POST /platform/tenants/:id/cancel` nasceu em 2026-09-11 para dar um escritor
-a `TenantPlan.cancelled_at`, que os jobs de retenção da seção 5 do mapeamento
-LGPD usam como marco de fim de contrato. Antes disso o enum tinha o valor e
-ninguém o produzia. O typo estava lá desde que a tela existe; a rota nova é
-que o tornou alcançável.
-
-### Decisão pendente
-
-Corrigir é trocar seis literais no `page.tsx` (`canceled` → `cancelled`,
-`past_due` → `suspended`, nos três lugares). Não foi feito aqui porque este
-documento não conserta por conta própria o que não foi pedido — e porque vale
-decidir junto duas coisas maiores: se o console ganha o botão de
-cancelar/reativar, hoje sem tela nenhuma (a rota só responde a chamada
-direta), e se vale um teste que trave o mapa contra os valores do enum, como
-`permissions.test.ts` já faz no web com os papéis do `seed.ts`.
-
----
-
-## Resíduos declarados da verificação do mapa do monorepo — abertos
-
-A rodada 3 do Verifier de `.specs/features/mapa-monorepo-e-portoes/` terminou
-em FAIL e, sendo a última iteração, declarou o que sobrava em vez de corrigir
-(`validation.md`, "Achados pré-existentes"). O commit `08e0640` fechou as três
-contradições de `docs/TESTES.md` (gaps 9, 10 e 11) e o buraco do portão —
-`scripts/pre-push.sh:53,55` já traz `mobile` na alternação, então a fronteira
-do monorepo é vigiada nas duas direções. O que continua aberto, conferido
-contra a `main` em 2026-09-12:
-
-- **`scripts/pre-push.sh:120` anuncia "39 testes de RLS".** A suíte mede 61
-  em 2 arquivos. O rótulo do `passa` mente por 22 testes — não muda o
-  veredito do portão, mas é o número que alguém lê quando decide se confia
-  nele.
-- **Contagens envelhecidas em `docs/TESTES.md`.** RLS aparece como 39 em
-  `:53`, `:236` e `:334` e como 54 em `:1149` e `:1204` — medido: 61. E2E do
-  web aparece como 12 em 8 arquivos (`:1153`) — medido: 16 em 10. As duas
-  afirmações do documento já se contradizem entre si, que é o defeito que a
-  própria feature veio corrigir.
-- **`turbo run build --filter=orbien-web` "continua vermelho"**
-  (`docs/TESTES.md`, seção "Pendências abertas"). O Verifier mediu exit 0 com
-  `--force` em 2026-09-10. Ou a pendência fecha, ou vira "intermitente, só
-  neste sandbox" — as duas exigem decisão de quem é dono do texto.
-- **Os dez `MAP-NN` seguem "Implementing / Aguardando Verifier"** em
-  `.specs/features/mapa-monorepo-e-portoes/spec.md:226-235`, depois de três
-  rodadas em que nove foram verificados. Sugestão do próprio relatório:
-  MAP-01…MAP-09 ✅ Verified, MAP-10 ❌ Needs Fix.
-
-Nenhum é bug de comportamento: os quatro são documento ou rótulo divergindo
-do que a árvore mede. Estão aqui, e não esquecidos, porque foi exatamente
-isso que a feature do mapa nasceu para caçar.
-
----
-
 ## Registro
 
-Ao resolver uma pendência, remova a seção e registre no commit o que foi
-decidido — inclusive quando a decisão for aceitar o comportamento atual.
+Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.
+Este arquivo só recebe seção quando um item fecha e a história dele vale
+guardar — evidência, diagnóstico, incidente no caminho. Registre no commit o
+que foi decidido, inclusive quando a decisão for aceitar o comportamento
+atual.
