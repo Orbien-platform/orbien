@@ -34,7 +34,7 @@ somaram dois apps a mais: o `admin`, que não estava no plano original, e o
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria de acesso de plataforma |
-| App mobile (Fase 7, ADR-004/ADR-005) | **Entregue na variante Starter** — `apps/mobile` (Expo + React Native). Verificados: MOB-01/02 (sessão e fila de refresh serializada), MOB-03 (tema por tenant em runtime), MOB-04/05 (escala, check-in, indisponibilidade), MOB-06/07 (feed de conteúdo, push OneSignal com deep link), MOB-08 (Celebrações e OC), MOB-09 (Pequenos Grupos), MOB-11/12 (workspace e config dinâmica de identidade). Falta MOB-10 (preferências de notificação, P3). Ver `.specs/features/app-mobile/` |
+| App mobile (Fase 7, ADR-004/ADR-005) | **Entregue na variante Starter, com todos os requisitos funcionais fechados** — `apps/mobile` (Expo + React Native). Verificados: MOB-01/02 (sessão e fila de refresh serializada), MOB-03 (tema por tenant em runtime), MOB-04/05 (escala, check-in, indisponibilidade), MOB-06/07 (feed de conteúdo, push OneSignal com deep link), MOB-08 (Celebrações e OC), MOB-09 (Pequenos Grupos), MOB-10 (preferências de notificação), MOB-11/12 (workspace e config dinâmica de identidade). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render, runtime Node (backend) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
 Isso cobre a Fase 1 e a Fase 2 do roadmap de MVP original (seção 4 de
@@ -73,26 +73,26 @@ plano funciona hoje.
 
 ## O que falta no mobile
 
-A variante Starter está entregue e verificada, mas isso não é o mesmo que
-publicável. O que separa uma coisa da outra, hoje:
+A variante Starter está entregue e verificada. Dos quatro itens que este
+documento registrava como pendentes, três já fecharam:
 
-- **`ORBIEN_API_URL` não está no profile `production` do `eas.json`.** Os
-  profiles `preview` apontam para a API do Render; o `production` não define a
-  variável, e o default de `app.config.js` é `http://localhost:3000`. Uma
-  build de loja hoje sairia apontando para localhost.
-- **O app id do OneSignal é placeholder** (`REPLACE_WITH_ONESIGNAL_APP_ID` em
-  `app.config.js`). MOB-07 está verificado do lado do app — o registro de
-  dispositivo, as tags e o deep link do clique —, mas o app id real nunca foi
-  configurado como secret do EAS.
+- ~~`ORBIEN_API_URL` fora do profile `production` do `eas.json`~~ —
+  **corrigido**: `eas.json` define `ORBIEN_API_URL` também em `production`,
+  apontando para a API do Render.
+- ~~App id do OneSignal placeholder~~ — **corrigido**: `production` em
+  `eas.json` define `ORBIEN_ONESIGNAL_APP_ID` com o app id real; o default
+  `REPLACE_WITH_ONESIGNAL_APP_ID` em `app.config.js` só é alcançado se a env
+  faltar.
+- ~~MOB-10 — preferências de notificação por usuário~~ — **entregue** (PR
+  #76, validação PASS em
+  `.specs/features/preferencias-notificacao-mobile/validation.md`). Todos os
+  requisitos funcionais do `app-mobile/spec.md` estão fechados.
+
+Resta um item, ainda operacional, não de produto:
+
 - **`DEPLOY.md` não tem parte de mobile.** Cobre API, site, web e admin; não
   há procedimento escrito de build de produção, submissão às lojas nem OTA
   (Expo Updates, que o ADR-004 prevê e o v1 explicitamente adiou).
-- **MOB-10 — preferências de notificação por usuário** (P3). Único requisito
-  funcional do `app-mobile/spec.md` ainda pendente.
-
-Os três primeiros são operacionais, não de produto: nenhum exige decisão, só
-execução. Estão aqui, e não em `docs/PENDENCIAS.md`, porque são o que falta
-para um módulo do roadmap chegar ao usuário — não achados de revisão.
 
 ## Ciclos de entrega
 
@@ -123,9 +123,16 @@ não bloqueiam o ciclo:
 - Revisão jurídica formal dos documentos legais e do contrato v4
 - Resolução dos itens marcados `[REVISÃO JURÍDICA OBRIGATÓRIA]`
 - Checklist de pré-go-live da seção 9 de `orbien-lgpd-mapping.md`
-- Job de retenção de dados (anonimização/eliminação automática) — hoje
-  descrito no mapeamento LGPD como plano, sem confirmação de que existe
-  como cron no `apps/api`
+- ~~Job de retenção de dados~~ — **entregue**. As quatro categorias da seção 5
+  de `orbien-lgpd-mapping.md` rodam como cron em `apps/api`
+  (`PersonsRetentionScheduler` e o par financeiro/menor de
+  `.specs/features/reten-dados-fim-contrato/`), com notificação semanal ao
+  `admin_congregation` sobre prazos vencendo. O marco de "fim do contrato"
+  que faltava (`TenantPlan.cancelled_at`) tem escritor próprio —
+  `POST /platform/tenants/:id/cancel` e `/reactivate`, fluxo mínimo sem UI de
+  billing atrás, suficiente para os dois jobs terem um evento real de onde
+  contar. O que resta desta frente não é mais "existe o job?", é jurídico:
+  revisão formal continua em aberto (ver itens acima).
 
 ### Ciclos seguintes — decisão de produto, não apenas execução
 
