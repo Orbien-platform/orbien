@@ -99,12 +99,12 @@ describe('MeetingsController', () => {
     expect(result).toEqual({ id: 'meet1' });
   });
 
-  it('findByGroup delega ao service', async () => {
+  it('findByGroup delega ao service com o usuário atual', async () => {
     service.findByGroup.mockResolvedValue([]);
 
-    const result = await controller.findByGroup('sg1');
+    const result = await controller.findByGroup('sg1', USER);
 
-    expect(service.findByGroup).toHaveBeenCalledWith('sg1');
+    expect(service.findByGroup).toHaveBeenCalledWith('sg1', USER);
     expect(result).toEqual([]);
   });
 

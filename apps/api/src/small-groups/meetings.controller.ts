@@ -27,8 +27,16 @@ const MEETING_READ_ROLES = [...MEETING_WRITE_ROLES, 'treasurer'];
 // Só pra listar os encontros do grupo (MOB-09-10) — não pro detalhe de um
 // encontro (`findOne`, que devolve attendanceRecords sem o filtro de
 // visibility que listMaterials já aplica). `member` continua sem acesso a
-// findOne de propósito. Ver docs/PENDENCIAS.md sobre a lacuna de checagem
-// de participação real, aceita nesta rodada.
+// findOne de propósito.
+//
+// `member` só enxerga os encontros do **próprio** grupo: o `@Roles` aqui
+// autoriza qualquer `member` a chamar a rota, e é o `MeetingsService` quem
+// confere `GroupMembership` real antes de responder para quem não está em
+// `MEETING_READ_ROLES` (que continuam vendo grupos que não lideram, por
+// desenho). Fechava uma lacuna que ficou registrada em `docs/PENDENCIAS.md`
+// desde o MOB-09-09: `member` de qualquer grupo — ou de nenhum — conseguia
+// listar encontros e materiais `visibility: all` de qualquer outro grupo do
+// tenant.
 const MEETING_LIST_READ_ROLES = [...MEETING_READ_ROLES, 'member'];
 const MEETING_ADMIN_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const MATERIAL_WRITE_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
@@ -63,8 +71,11 @@ export class MeetingsController {
 
   @Get(':groupId/meetings')
   @Roles(...MEETING_LIST_READ_ROLES)
-  findByGroup(@Param('groupId', ParseUUIDPipe) groupId: string) {
-    return this.meetingsService.findByGroup(groupId);
+  findByGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.findByGroup(groupId, user);
   }
 
   @Post('meetings/:meetingId/attendance')
