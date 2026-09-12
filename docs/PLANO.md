@@ -374,13 +374,20 @@ caçar, e o que sobrou declarado da rodada 3 do Verifier.
 >   provado para o `web`.
 >
 > Não há workaround de código para o crash em si. O board do Vercel/Next não
-> aponta correção. Decisão que falta: se o build da Vercel (ambiente real de
-> deploy, fora deste sandbox) passa normalmente — se sim, é só um problema
-> deste ambiente de desenvolvimento/CI local e o portão de `scripts/pre-push.sh`
-> deveria parar de bloquear nisso (virar alerta, não bloqueio, para esta
-> falha específica); se o build da Vercel também falhar, é um bloqueador de
-> deploy real e precisa de decisão de produto (prender versão do Next,
-> reportar upstream com reprodução mínima, etc.).
+> aponta correção.
+>
+> **Resolvido em 2026-09-12, no próprio PR #84:** o build real da Vercel
+> passou — `orbien-web` saiu como `Ready` (deploy de preview concluído) no
+> commit que inclui exatamente o código que trava `next build` local neste
+> sandbox. Confirma que o crash é específico deste ambiente de
+> desenvolvimento/CI (a mesma classe de corrida de scheduling do Turbopack
+> que a issue upstream descreve, sensível a como o build é agendado —
+> `--debug-prerender` já apontava nessa direção). **`scripts/pre-push.sh`
+> não deveria mais bloquear o push por isso** — o build real de produção não
+> quebra. Ação que falta: trocar o `bloqueia` de `npx turbo run build` por
+> `alerta` especificamente para o padrão desse crash (prerender de
+> `/_global-error`/`/_not-found`), mantendo bloqueio para qualquer outra
+> falha de build.
 
 O buraco do portão que a mesma rodada apontou — `scripts/pre-push.sh` sem
 `mobile` na alternação da regra de fronteira — **fechou** em `08e0640`, junto
