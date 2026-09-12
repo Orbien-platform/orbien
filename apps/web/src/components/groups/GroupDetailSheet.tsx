@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
+import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -421,6 +422,9 @@ export function GroupDetailSheet({
                       <Tabs.Tab value="meetings" className={tabBtn(activeTab === "meetings")}>
                         Reuniões
                       </Tabs.Tab>
+                      <Tabs.Tab value="prayer" className={tabBtn(activeTab === "prayer")}>
+                        Oração
+                      </Tabs.Tab>
                     </Tabs.List>
                   </Tabs.Root>
                 </div>
@@ -509,6 +513,12 @@ export function GroupDetailSheet({
                     )}
                   </div>
                 )}
+
+                {/* ── Prayer tab ── */}
+                {/* Montado só quando a aba abre: a busca é por grupo e o 403
+                    de quem não participa não deve custar uma requisição em
+                    toda abertura da gaveta. */}
+                {activeTab === "prayer" && <PrayerRequestsPanel groupId={group.id} />}
 
                 {/* ── Meetings tab ── */}
                 {activeTab === "meetings" && (

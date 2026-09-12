@@ -49,6 +49,7 @@ let songA2Id: string;
 let userAccountA2Id: string;
 let notifPrefAId: string;
 let notifPrefA2Id: string;
+let prayerRequestA2Id: string;
 
 // Contas com papel, na congregação A-Main — para exercitar o ramo
 // `OR app_has_role('tenant_admin')` da policy, que os helpers sem
@@ -171,6 +172,38 @@ beforeAll(async () => {
     },
   });
   notifPrefA2Id = notifPrefA2.id;
+
+  // PROD-01: pedido de oração numa célula da A-Second, para provar que
+  // `009_rls_prayer_requests.sql` isola por congregação — a tabela nasceu em
+  // 001 só com isolamento de tenant, e o conteúdo é dado sensível.
+  const groupTypeA2 = await prismaAdmin.groupType.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      name: 'Célula A-Second',
+    },
+  });
+
+  const groupA2 = await prismaAdmin.smallGroup.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      name: 'Célula A-Second',
+      group_type_id: groupTypeA2.id,
+      leader_person_id: personA2Id,
+    },
+  });
+
+  const prayerA2 = await prismaAdmin.prayerRequest.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      small_group_id: groupA2.id,
+      person_id: personA2Id,
+      content: 'Pedido RLS Test — A-Second',
+    },
+  });
+  prayerRequestA2Id = prayerA2.id;
 
   const catA = await prismaAdmin.financialCategory.create({
     data: {
@@ -1488,6 +1521,66 @@ describe('24. NotificationPreference — isolamento por congregação (AD-001)',
       where: { id: notifPrefA2Id },
     });
     expect(after.avisos).toBe(false);
+    expect(after.congregation_id).toBe(congregationA2Id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 25. PrayerRequest — isolamento por congregação (AD-001, PROD-01)
+//
+// Caso oposto ao dos blocos 23 e 24: `prayer_requests` é tabela antiga, que
+// nasceu em `001` só com `tenant_isolation` porque nenhuma rota a usava. Com a
+// feature no ar, `009_rls_prayer_requests.sql` troca pela policy de
+// congregação, com `app_congregation_allowed()` nos dois lados. O conteúdo é
+// dado de saúde, família e conflito — congregação irmã do mesmo tenant não
+// pode ler. O `tenant_admin` mantém a exceção da função, como em Songs.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('25. PrayerRequest — isolamento por congregação (AD-001)', () => {
+  it('app context (runAsTenant): Tenant B não vê pedido de oração do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.prayerRequest.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} pedido(s) de oração do Tenant A visível(is) para o Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('admin_congregation na A-Main NÃO lê pedido de oração da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.prayerRequest.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} pedido(s) de oração de congregação irmã.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main LÊ pedido de oração da A-Second (exceção da policy)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.prayerRequest.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(prayerRequestA2Id);
+  });
+
+  it('tenant_admin na A-Main ATUALIZA pedido da A-Second (USING = WITH CHECK)', async () => {
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.prayerRequest.update({
+        where: { id: prayerRequestA2Id },
+        data: { content: 'Pedido RLS Test — A-Second (editado pelo tenant_admin)' },
+      }),
+    );
+
+    const after = await prismaAdmin.prayerRequest.findUniqueOrThrow({
+      where: { id: prayerRequestA2Id },
+    });
+    expect(after.content).toBe('Pedido RLS Test — A-Second (editado pelo tenant_admin)');
     expect(after.congregation_id).toBe(congregationA2Id);
   });
 });

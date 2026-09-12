@@ -1,4 +1,14 @@
-# Pendências
+# Pendências — arquivo histórico
+
+> **Este documento não é mais a lista do que falta.** O que está aberto vive
+> em [`PLANO.md`](PLANO.md), com ID, evidência e estado — inclusive as
+> pendências que estavam aqui como "aberta por decisão" (`PEND-01` a
+> `PEND-04`).
+>
+> O que fica aqui é a história: o achado, a evidência que o produziu, o
+> diagnóstico e a decisão que o fechou. É o que responde "por que isso é
+> assim?" — o `CLAUDE.md` e o `DEPLOY.md` citam pendências numeradas daqui, e
+> vários `.specs/features/*/design.md` também.
 
 Achados mapeados, com a evidência que os produziu e o que foi decidido sobre
 cada um. Nenhum foi corrigido por decisão unilateral — a regra do `CLAUDE.md` é
@@ -1347,5 +1357,8 @@ nem escrita de pessoas de tenants já existentes para o suporte.
 
 ## Registro
 
-Ao resolver uma pendência, remova a seção e registre no commit o que foi
-decidido — inclusive quando a decisão for aceitar o comportamento atual.
+Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.
+Este arquivo só recebe seção quando um item fecha e a história dele vale
+guardar — evidência, diagnóstico, incidente no caminho. Registre no commit o
+que foi decidido, inclusive quando a decisão for aceitar o comportamento
+atual.

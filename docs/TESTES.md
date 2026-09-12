@@ -1194,6 +1194,10 @@ existir e não descer, não o número ser 100.
 
 ## Pendências abertas
 
+> O que segue aberto hoje está em [`PLANO.md`](PLANO.md), que é a fonte única
+> — inclusive os ajustes de contagem deste arquivo (`AJU-02`, `AJU-03`) e o
+> build do web abaixo (`AJU-04`). O texto desta seção é o registro de origem.
+
 O primeiro run de CI (PR #1) revelou três pendências que **não** vêm deste
 plano e não foram corrigidas por decisão unilateral: RLS sem isolamento por
 congregação, lint do `site` quebrado no estado commitado, e e2e dependendo de

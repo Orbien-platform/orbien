@@ -54,6 +54,11 @@ leia o do app antes de mexer nele.
   nativamente: `/code-review`, `/simplify`, `/security-review`, memória em
   arquivos, subagentes, TodoWrite. Skill que reimplementa o embutido custa
   contexto em toda ativação e envelhece pior.
+- **`docs/PLANO.md` é a fonte única** sobre o que falta: direção de produto,
+  funcionalidade prevista e não construída, pendências abertas, ajustes e
+  decisões em aberto, cada item com ID (`PROD-`, `PEND-`, `AJU-`, `CONF-`,
+  `DEC-`). Pendência nova nasce lá. `docs/PENDENCIAS.md` é arquivo histórico
+  — o achado fechado, com evidência e decisão; não é lista de trabalho.
 - **Achado de revisão ou alerta de portão vira pergunta, não decisão
   unilateral.** Ao encontrar problema em revisão (`pr-review`, `/code-review`)
   ou alerta em `scripts/pre-push.sh`, apresente o achado com a evidência e
