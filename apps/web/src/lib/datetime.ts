@@ -11,15 +11,16 @@
  * correção:
  *
  * - `formatInstant` é para momento no tempo (`created_at`, `occurred_at`,
- *   `publish_at`, `scheduled_date`). Converter para São Paulo é exatamente
- *   o certo: o instante é o mesmo, muda só como ele é lido.
+ *   `publish_at`). Converter para São Paulo é exatamente o certo: o
+ *   instante é o mesmo, muda só como ele é lido.
  *
  * - `formatCivilDate` é para data sem hora (`birth_date`, `membership_date`,
- *   `baptism_date`, `anchor_date`). A API grava essas como meia-noite UTC —
- *   `new Date('2026-01-15')` em `persons-import.service.ts` é
- *   `2026-01-15T00:00:00Z`. Converter isso para São Paulo tira três horas e
- *   devolve **14/01**: aniversário um dia antes. Por isso ela formata em
- *   UTC — o dia que foi gravado é o dia que aparece.
+ *   `baptism_date`, `anchor_date`, `scheduled_date`). A API grava essas como
+ *   meia-noite UTC — `new Date('2026-01-15')` em `persons-import.service.ts`
+ *   é `2026-01-15T00:00:00Z`, e o mesmo vale para `scheduled_date` em
+ *   `celebration-instances.service.ts`. Converter isso para São Paulo tira
+ *   três horas e devolve **14/01**: aniversário (ou culto) um dia antes. Por
+ *   isso ela formata em UTC — o dia que foi gravado é o dia que aparece.
  *
  * Escolher a função errada não quebra teste nem tipo: devolve uma data
  * plausível e errada por um dia. Na dúvida, olhe se o campo tem hora.

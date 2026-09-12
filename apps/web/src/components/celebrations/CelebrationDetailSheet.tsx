@@ -18,7 +18,7 @@ import {
 } from "@/components/celebrations/CreateCelebrationModal";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { formatInstant } from "@/lib/datetime";
+import { formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ interface CelebrationDetailSheetProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
-  return formatInstant(iso, {
+  return formatCivilDate(iso, {
     weekday: "short", day: "2-digit", month: "2-digit", year: "numeric",
   });
 }

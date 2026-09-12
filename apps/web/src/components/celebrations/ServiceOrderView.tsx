@@ -14,7 +14,7 @@ import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
 import { songKey, type CatalogSong } from "@/lib/repertorio";
 import api from "@/lib/api";
-import { formatInstant } from "@/lib/datetime";
+import { formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ interface ServiceOrderViewProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
-  return formatInstant(iso, {
+  return formatCivilDate(iso, {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
   });
 }

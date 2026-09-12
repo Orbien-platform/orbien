@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
 import api, { isForbidden } from "@/lib/api";
-import { formatInstant } from "@/lib/datetime";
+import { formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ interface MyAssignment {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
-  return formatInstant(iso, {
+  return formatCivilDate(iso, {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
 }
