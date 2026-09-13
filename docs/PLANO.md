@@ -259,6 +259,32 @@ reuniões. Concorrência otimista no `update()` (`updateMany` com
 `where.version` + `ConflictException`) evita duas edições simultâneas
 colidirem no índice único de `StudyMaterialVersion`.
 
+### ~~PROD-20 · Transferência de conta entre tenants~~ · fechado
+
+Entregue em 2026-09-13, feature `login-email-global` (P2 — pré-condição do
+e-mail único global fechado em `PROD`/Fase 2 da mesma feature):
+`PATCH /platform/user-accounts/:id/transfer`, exclusiva de `platform_support`
+no `apps/admin` (`@Roles('platform_support')` + `@PlatformRoute()`, mesmas
+três marcas do resto de `PlatformController`). `TransferUserAccountService`
+move `UserAccount` + `Person` (mesma pessoa, mesmo `person_id` — nunca cria
+conta nova) para o tenant/congregação de destino numa única transação,
+revoga a família de refresh tokens da conta e zera os `role_assignments` do
+tenant de origem — exceto `platform_support`, que é global e nunca é tocado.
+Rejeita no-op (destino igual à origem) e destino inexistente/inativo antes
+de mover qualquer dado. `audit_logs` (`entity='user_account'`,
+`action='tenant_transfer'`) é gravado no tenant de ORIGEM, fora da
+transação de negócio, best-effort (mesmo princípio do `AuditInterceptor`,
+ver `AD-004` em `.specs/STATE.md`) — uma falha ao auditar não desfaz a
+transferência já confirmada.
+
+Sem tela ainda no `apps/admin` — só a rota da API. Ver
+`.specs/features/login-email-global/design.md` para o desenho completo;
+testes em `apps/api/src/platform/transfer-user-account.service.spec.ts`,
+`apps/api/src/platform/platform.controller.spec.ts` e RLS em
+`apps/api/test/rls/user-account-transfer.spec.ts` (prova que o tenant de
+origem deixa de ver a conta/pessoa e que histórico com `tenant_id` próprio,
+ex. `financial_transactions`, continua visível).
+
 ### Funcionalidade prevista, sem código
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
