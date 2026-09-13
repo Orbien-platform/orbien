@@ -15,7 +15,7 @@
  * derrubaria todos os outros specs. Ficam cobertos os dois ramos que não
  * dependem do token: pedido de link enviado, e token ausente/inválido.
  *
- * Uso: E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
+ * Uso: E2E_EMAIL=... E2E_PASSWORD=... npm run e2e -w orbien-web
  */
 
 import { expect, shot, test, realConsoleErrors, unexpectedHttp, type Page } from "./fixtures";
@@ -59,7 +59,6 @@ function semSessao(entradas: string[]): string[] {
 
 const EMAIL = process.env.E2E_EMAIL ?? "";
 const SENHA = process.env.E2E_PASSWORD ?? "";
-const TENANT = process.env.E2E_TENANT ?? "";
 
 test.describe("login", () => {
   test("credencial errada explica o erro; credencial certa entra no dashboard", async ({
@@ -68,48 +67,32 @@ test.describe("login", () => {
   }) => {
     await comoAnonimo(page);
 
-    const slug = page.locator("#tenant_slug");
     const email = page.locator("#email");
     const senha = page.locator("#password");
     const entrar = page.getByRole("button", { name: "Entrar" });
 
-    await test.step("formulário pede os três campos", async () => {
+    await test.step("formulário pede e-mail e senha, sem campo de igreja", async () => {
+      // A tela deixou de pedir tenant_slug — login resolve a conta por
+      // e-mail único em todo o banco (feature login-email-global).
       await page.goto("/login", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "orbien" })).toBeVisible();
-      await expect(slug).toBeVisible();
+      await expect(page.locator("#tenant_slug")).toHaveCount(0);
       await expect(email).toBeVisible();
       await expect(senha).toBeVisible();
       await shot(page, "40-login-formulario");
     });
 
     await test.step("campo vazio é barrado antes de chamar a API", async () => {
-      // A validação é local: sem os três campos o `handleSubmit` retorna antes
-      // do `login()`. Prender isso aqui é o que garante que a tela não manda
-      // requisição inútil — e o `unexpectedHttp` no fim confirma que nenhum
-      // 4xx foi disparado neste passo.
-      await slug.fill(TENANT);
+      // A validação é local: sem os dois campos o `handleSubmit` retorna
+      // antes do `login()` — e o `unexpectedHttp` no fim confirma que
+      // nenhum 4xx foi disparado neste passo.
       await email.fill("");
       await senha.fill("");
       await entrar.click();
       await expect(alerta(page)).toHaveText("Todos os campos são obrigatórios.");
     });
 
-    await test.step("código de igreja inexistente diz que é o código", async () => {
-      // Os três erros são mensagens distintas de propósito — a tela ajuda a
-      // pessoa a saber qual dado está errado. Trocar uma pela outra é
-      // regressão de usabilidade que nenhum teste de unidade pega, porque o
-      // mapeamento vive no `catch` desta tela.
-      await slug.fill(`tenant-que-nao-existe-${Date.now()}`);
-      await email.fill(EMAIL);
-      await senha.fill(SENHA);
-      await entrar.click();
-      await expect(alerta(page)).toHaveText(
-        "Código de igreja não encontrado. Verifique e tente novamente.",
-      );
-    });
-
-    await test.step("senha errada no tenant certo diz que é e-mail ou senha", async () => {
-      await slug.fill(TENANT);
+    await test.step("senha errada diz que é e-mail ou senha", async () => {
       await email.fill(EMAIL);
       await senha.fill("senha-definitivamente-errada");
       await entrar.click();
@@ -118,7 +101,6 @@ test.describe("login", () => {
     });
 
     await test.step("credencial certa entra e chega no dashboard", async () => {
-      await slug.fill(TENANT);
       await email.fill(EMAIL);
       await senha.fill(SENHA);
       await entrar.click();
@@ -160,7 +142,6 @@ test.describe("login", () => {
       // plataforma (ver CLAUDE.md): a tela não deve deixar descobrir quais
       // e-mails estão cadastrados. Usamos um e-mail inexistente de propósito —
       // testar com o real dispararia e-mail de verdade a cada execução.
-      await page.getByPlaceholder("ex: doca-church").fill(TENANT);
       await page
         .getByPlaceholder("seu@email.com")
         .fill(`ninguem-${Date.now()}@exemplo.test`);
