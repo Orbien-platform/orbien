@@ -426,20 +426,17 @@ export class AuthService {
     // Mesmo limitador das rotas de login, mesma tabela — e não mais um `Map` por
     // processo, que com N instâncias no Render valia 1/N e sumia a cada deploy.
     // A resposta segue genérica: dizer "muitas tentativas" contaria que alguém
-    // andou pedindo redefinição para este e-mail.
-    const limitKey = LoginRateLimitService.key(`reset:${dto.tenant_slug}`, dto.email);
+    // andou pedindo redefinição para este e-mail. Chave só por e-mail, mesmo
+    // princípio de `login()`: `user_accounts.email` é único em todo o banco,
+    // não há mais tenant a incluir na chave.
+    const limitKey = LoginRateLimitService.key('reset', dto.email);
     if (!(await this.rateLimit.check(limitKey, PASSWORD_RESET_POLICY))) {
       return genericResponse;
     }
     await this.rateLimit.register(limitKey, PASSWORD_RESET_POLICY);
 
-    const tenant = await this.prisma.system.tenant.findUnique({
-      where: { slug: dto.tenant_slug },
-    });
-    if (!tenant) return genericResponse;
-
     const user = await this.prisma.system.userAccount.findUnique({
-      where: { tenant_id_email: { tenant_id: tenant.id, email: dto.email } },
+      where: { email: dto.email },
       include: { person: { select: { full_name: true } } },
     });
     if (!user || !user.is_active) return genericResponse;

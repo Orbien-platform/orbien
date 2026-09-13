@@ -718,36 +718,28 @@ describe('AuthService.impersonate', () => {
 });
 
 describe('AuthService.forgotPassword', () => {
-  it('devolve a mesma mensagem genérica quando o tenant não existe', async () => {
+  it('devolve a mesma mensagem genérica quando o usuário não existe (busca só por e-mail, sem tenant_slug)', async () => {
     const { service, prisma } = serviceWith({});
-    (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue(null);
-
-    const result = await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
-    expect(result.message).toMatch(/Se o email estiver cadastrado/);
-  });
-
-  it('devolve a mesma mensagem genérica quando o usuário não existe', async () => {
-    const { service, prisma } = serviceWith({});
-    (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
     (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
-    const result = await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+    const result = await service.forgotPassword({ email: 'a@b.com' });
     expect(result.message).toMatch(/Se o email estiver cadastrado/);
     expect(prisma.system.passwordResetToken.create).not.toHaveBeenCalled();
+    expect(prisma.system.userAccount.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: 'a@b.com' } }),
+    );
   });
 
   it('devolve a mesma mensagem genérica quando o usuário está inativo', async () => {
     const { service, prisma } = serviceWith({});
-    (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
     (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({ is_active: false });
 
-    const result = await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+    const result = await service.forgotPassword({ email: 'a@b.com' });
     expect(result.message).toMatch(/Se o email estiver cadastrado/);
   });
 
   it('no caminho feliz invalida tokens antigos, cria um novo e envia o email', async () => {
     const { service, prisma, mail } = serviceWith({});
-    (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
     (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
       id: 'u1',
       email: 'a@b.com',
@@ -755,7 +747,7 @@ describe('AuthService.forgotPassword', () => {
       person: { full_name: 'Ana Silva' },
     });
 
-    const result = await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+    const result = await service.forgotPassword({ email: 'a@b.com' });
 
     expect(result.message).toMatch(/Se o email estiver cadastrado/);
     expect(prisma.system.passwordResetToken.updateMany).toHaveBeenCalledWith({
@@ -780,7 +772,6 @@ describe('AuthService.forgotPassword', () => {
     it('usa FRONTEND_URL do ambiente quando definida', async () => {
       process.env['FRONTEND_URL'] = 'https://web.useorbien.com.br';
       const { service, prisma, mail } = serviceWith({});
-      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
       (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
         id: 'u1',
         email: 'a@b.com',
@@ -788,7 +779,7 @@ describe('AuthService.forgotPassword', () => {
         person: { full_name: 'Ana Silva' },
       });
 
-      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+      await service.forgotPassword({ email: 'a@b.com' });
 
       expect(mail.sendPasswordReset).toHaveBeenCalledWith(
         'a@b.com',
@@ -800,7 +791,6 @@ describe('AuthService.forgotPassword', () => {
     it('cai para localhost:3001 quando FRONTEND_URL não está definida', async () => {
       delete process.env['FRONTEND_URL'];
       const { service, prisma, mail } = serviceWith({});
-      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
       (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
         id: 'u1',
         email: 'a@b.com',
@@ -808,7 +798,7 @@ describe('AuthService.forgotPassword', () => {
         person: { full_name: 'Ana Silva' },
       });
 
-      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+      await service.forgotPassword({ email: 'a@b.com' });
 
       expect(mail.sendPasswordReset).toHaveBeenCalledWith(
         'a@b.com',
@@ -820,7 +810,6 @@ describe('AuthService.forgotPassword', () => {
 
   it('usa string vazia como primeiro nome quando a pessoa não tem full_name', async () => {
     const { service, prisma, mail } = serviceWith({});
-    (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
     (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
       id: 'u1',
       email: 'a@b.com',
@@ -828,7 +817,7 @@ describe('AuthService.forgotPassword', () => {
       person: null,
     });
 
-    await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+    await service.forgotPassword({ email: 'a@b.com' });
 
     expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.any(String), '');
   });
@@ -838,7 +827,6 @@ describe('AuthService.forgotPassword', () => {
     process.env['FRONTEND_URL'] = 'https://app.orbien.com.br';
     try {
       const { service, prisma, mail } = serviceWith({});
-      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
       (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
         id: 'u1',
         email: 'a@b.com',
@@ -846,7 +834,7 @@ describe('AuthService.forgotPassword', () => {
         person: null,
       });
 
-      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+      await service.forgotPassword({ email: 'a@b.com' });
 
       expect(mail.sendPasswordReset).toHaveBeenCalledWith(
         'a@b.com',
@@ -864,7 +852,6 @@ describe('AuthService.forgotPassword', () => {
     delete process.env['FRONTEND_URL'];
     try {
       const { service, prisma, mail } = serviceWith({});
-      (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue({ id: 't1' });
       (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
         id: 'u1',
         email: 'a@b.com',
@@ -872,7 +859,7 @@ describe('AuthService.forgotPassword', () => {
         person: null,
       });
 
-      await service.forgotPassword({ email: 'a@b.com', tenant_slug: 'doca' });
+      await service.forgotPassword({ email: 'a@b.com' });
 
       expect(mail.sendPasswordReset).toHaveBeenCalledWith(
         'a@b.com',
@@ -885,18 +872,18 @@ describe('AuthService.forgotPassword', () => {
     }
   });
 
-  it('acima do limite de tentativas por hora, devolve genérico sem consultar o tenant', async () => {
+  it('acima do limite de tentativas por hora, devolve genérico sem consultar a conta', async () => {
     const { service, prisma } = serviceWith({});
-    (prisma.system.tenant.findUnique as jest.Mock).mockResolvedValue(null);
+    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
     for (let i = 0; i < 3; i++) {
-      await service.forgotPassword({ email: 'limite@b.com', tenant_slug: 'doca' });
+      await service.forgotPassword({ email: 'limite@b.com' });
     }
-    (prisma.system.tenant.findUnique as jest.Mock).mockClear();
+    (prisma.system.userAccount.findUnique as jest.Mock).mockClear();
 
-    const result = await service.forgotPassword({ email: 'limite@b.com', tenant_slug: 'doca' });
+    const result = await service.forgotPassword({ email: 'limite@b.com' });
     expect(result.message).toMatch(/Se o email estiver cadastrado/);
-    expect(prisma.system.tenant.findUnique).not.toHaveBeenCalled();
+    expect(prisma.system.userAccount.findUnique).not.toHaveBeenCalled();
   });
 });
 
