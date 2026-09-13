@@ -286,6 +286,23 @@ describe('SettingsService', () => {
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('propaga qualquer outro erro do upsert sem convertê-lo', async () => {
+      const client = clientWith();
+      const erroInesperado = new Error('conexão perdida');
+      client.brandingConfig.upsert.mockRejectedValue(erroInesperado);
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.updateSettings(
+          't1',
+          'g1',
+          ['tenant_admin'],
+          { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
+          'premium',
+        ),
+      ).rejects.toBe(erroInesperado);
+    });
   });
 
   describe('uploadLogo', () => {

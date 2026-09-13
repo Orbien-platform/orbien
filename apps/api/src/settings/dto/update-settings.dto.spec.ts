@@ -43,4 +43,26 @@ describe('UpdateSettingsDto', () => {
     const errors = await errorsFor({ tenant: { name: 42 } });
     expect(errors.some((e) => e.property === 'tenant')).toBe(true);
   });
+
+  // PROD-19 — domínio próprio e termos de uso.
+  it('aceita branding com custom_domain e terms_url válidos', async () => {
+    expect(
+      await errorsFor({
+        branding: {
+          custom_domain: 'doar.suaigreja.com.br',
+          terms_url: 'https://suaigreja.com.br/termos',
+        },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('rejeita custom_domain com formato de hostname inválido', async () => {
+    const errors = await errorsFor({ branding: { custom_domain: 'não é um domínio' } });
+    expect(errors.some((e) => e.property === 'branding')).toBe(true);
+  });
+
+  it('rejeita terms_url sem protocolo', async () => {
+    const errors = await errorsFor({ branding: { terms_url: 'suaigreja.com.br/termos' } });
+    expect(errors.some((e) => e.property === 'branding')).toBe(true);
+  });
 });
