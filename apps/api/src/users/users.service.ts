@@ -96,7 +96,7 @@ export class UsersService {
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Já existe uma conta com este e-mail neste tenant.');
+        throw new ConflictException('Já existe uma conta com este e-mail.');
       }
       throw err;
     }
