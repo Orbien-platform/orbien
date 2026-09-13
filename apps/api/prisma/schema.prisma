@@ -219,7 +219,7 @@ model UserAccount {
   notificationPreference  NotificationPreference?
   studyMaterialVersions   StudyMaterialVersion[]
 
-  @@unique([tenant_id, email])
+  @@unique([email])
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@map("user_accounts")

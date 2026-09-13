@@ -195,14 +195,42 @@ validar só a sintaxe/plan, não o resultado) e cola o mesmo bloco em
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Migration gerada, roda limpo localmente (`npx prisma migrate dev`)
-- [ ] Constraint antiga (`tenant_id, email`) removida, nova (`email`) presente
-- [ ] Gate: `npm run build:api`
+- [x] Migration gerada, roda limpo localmente (`npx prisma migrate dev` — via `scripts/migrate.sh`, o ambiente é não-interativo)
+- [x] Constraint antiga (`tenant_id, email`) removida, nova (`email`) presente
+- [x] Gate: `npm run build:api` — falha, ver SPEC_DEVIATION abaixo (esperado, não é defeito desta task)
 
 **Tests**: none (schema)
 **Gate**: build
 
 **Commit**: `feat(api): user_accounts.email único globalmente (pré-condição do login sem tenant_slug)`
+
+**Status**: ✅ Concluída (schema/migration) — commit `<preenchido no commit>`.
+
+**SPEC_DEVIATION**: o gate `npm run build:api` (e, por extensão,
+`npm run test -w orbien-backend` completo) fica vermelho depois desta task,
+e isso não é resolvível dentro do escopo de T3/T4/T5. `AuthService.login`
+(`apps/api/src/auth/auth.service.ts:119`) e `AuthService.forgotPassword`
+(`:441`) fazem `findUnique({ where: { tenant_id_email: {...} } })` — a chave
+composta que a migration removeu. 4 suites deixam de compilar por isso:
+`auth.service.spec.ts`, `auth.controller.spec.ts`, `auth.module.spec.ts`,
+`app.module.spec.ts` (as três últimas só porque importam `AuthModule`/
+`AuthService` transitivamente — nenhuma delas testa a lógica de `login`).
+**Reason**: `login()` só é reescrito em T6 (Fase 3, fora deste lote — a
+instrução explícita desta execução foi não tocar em `AuthService.login`).
+Confirmado com `npx jest --clearCache` antes de medir (o cache do `ts-jest` é
+por conteúdo de arquivo-fonte e não pega a mudança no client do Prisma
+gerado, então sem limpar o cache o erro fica escondido). Baseline medido:
+`Test Suites: 4 failed, 235 passed, 239 total` — as 235 que passam não usam
+`AuthService`.
+
+**Achado adicional, fora de qualquer task do plano**:
+`AuthService.forgotPassword` (`apps/api/src/auth/auth.service.ts:441`) usa a
+mesma chave composta e quebra pela mesma razão, mas nenhuma task em
+`tasks.md` cobre reescrevê-lo — só `login()` (T6/T7) está no plano. Sem uma
+task nova para `forgotPassword`, a Fase 3 termina com o build ainda vermelho.
+Registrado aqui como achado de portão para decisão do usuário (CLAUDE.md:
+achado de portão vira pergunta, não correção unilateral) — não corrigido
+nesta execução.
 
 ---
 
