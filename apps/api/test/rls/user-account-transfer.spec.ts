@@ -25,7 +25,7 @@
  * `transfer-user-account.service.spec.ts`).
  */
 
-import { prismaAdmin, runAsTenantWithRole } from '../helpers/rls';
+import { prismaAdmin, runAsPlatform, runAsTenantWithRole } from '../helpers/rls';
 
 const ts = Date.now();
 
@@ -38,6 +38,8 @@ let personId: string;
 let userAccountId: string;
 let categoryOriginId: string;
 let financialTransactionId: string;
+let supportUserId: string;
+let refreshTokenId: string;
 
 beforeAll(async () => {
   const tenantOrigin = await prismaAdmin.tenant.create({
@@ -110,6 +112,42 @@ beforeAll(async () => {
     },
   });
   financialTransactionId = transaction.id;
+
+  // Ator da transferência: platform_support, sem vínculo com o tenant de
+  // origem nem de destino — é assim que TransferUserAccountService roda
+  // (rota @PlatformRoute(), TenantContextInterceptor não fixa tenant).
+  await prismaAdmin.role.upsert({
+    where: { code: 'platform_support' },
+    update: {},
+    create: { code: 'platform_support', name: 'Platform Support' },
+  });
+  const supportUser = await prismaAdmin.userAccount.create({
+    data: {
+      tenant_id: tenantOriginId,
+      congregation_id: congregationOriginId,
+      email: `transfer-support-${ts}@rls-test.local`,
+      password_hash: 'x',
+    },
+  });
+  supportUserId = supportUser.id;
+  await prismaAdmin.roleAssignment.create({
+    data: {
+      tenant_id: tenantOriginId,
+      congregation_id: congregationOriginId,
+      user_account_id: supportUserId,
+      role_code: 'platform_support',
+    },
+  });
+
+  // Sessão ativa da conta a transferir — é o que AUTH-08 exige revogar.
+  const refreshToken = await prismaAdmin.refreshToken.create({
+    data: {
+      user_account_id: userAccountId,
+      token_hash: `hash-${ts}`,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+  refreshTokenId = refreshToken.id;
 }, 60_000);
 
 afterAll(async () => {
@@ -120,7 +158,8 @@ afterAll(async () => {
     where: { id: categoryOriginId },
   });
   await prismaAdmin.refreshToken.deleteMany({ where: { user_account_id: userAccountId } });
-  await prismaAdmin.userAccount.deleteMany({ where: { id: userAccountId } });
+  await prismaAdmin.roleAssignment.deleteMany({ where: { user_account_id: supportUserId } });
+  await prismaAdmin.userAccount.deleteMany({ where: { id: { in: [userAccountId, supportUserId] } } });
   await prismaAdmin.person.deleteMany({ where: { id: personId } });
   await prismaAdmin.tenant.deleteMany({
     where: { id: { in: [tenantOriginId, tenantDestId] } },
@@ -207,5 +246,35 @@ describe('Depois da transferência', () => {
     );
 
     expect(transaction).toBeNull();
+  });
+});
+
+describe('AC2 — revogação de refresh_tokens no contexto real de rota de plataforma', () => {
+  // Achado de code-review: a policy own_tokens filtrava só pelo ATOR da
+  // requisição (app_current_user()), nunca pela conta-alvo do WHERE — numa
+  // rota @PlatformRoute() os dois são pessoas diferentes por definição, então
+  // a interseção era vazia e o updateMany rodava como no-op silencioso
+  // (count: 0), sem erro nenhum. Corrigido em 011_rls_platform_transfer.sql
+  // (own_tokens ganha o ramo OR app_platform_access()). Este teste roda
+  // exatamente no contexto que TenantContextInterceptor monta para
+  // @PlatformRoute() — runAsPlatform(supportUserId, ...), sem tenant fixado
+  // — não mockado, contra o Postgres real.
+  it('platform_support revoga o refresh_token da conta-alvo, mesmo sem tenant fixado no contexto', async () => {
+    const antes = await prismaAdmin.refreshToken.findUnique({ where: { id: refreshTokenId } });
+    expect(antes?.revoked_at).toBeNull();
+
+    const result = await runAsPlatform(supportUserId, (tx) =>
+      tx.refreshToken.updateMany({
+        where: { user_account_id: userAccountId, revoked_at: null },
+        data: { revoked_at: new Date() },
+      }),
+    );
+
+    // count: 0 é exatamente o no-op silencioso do bug original — a policy
+    // rodava, não lançava erro, e simplesmente não achava nenhuma linha.
+    expect(result.count).toBe(1);
+
+    const depois = await prismaAdmin.refreshToken.findUnique({ where: { id: refreshTokenId } });
+    expect(depois?.revoked_at).not.toBeNull();
   });
 });

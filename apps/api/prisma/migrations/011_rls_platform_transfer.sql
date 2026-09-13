@@ -1,0 +1,43 @@
+-- =============================================================================
+-- 011_rls_platform_transfer.sql — refresh_tokens no ramo de plataforma
+--
+-- Roda DEPOIS de 004 (define app_platform_access()). Fora do histórico do
+-- Prisma, como os anteriores.
+--
+-- O QUE MUDA
+--
+-- Feature login-email-global: `TransferUserAccountService.transfer()`
+-- (rota `PATCH /platform/user-accounts/:id/transfer`, `@PlatformRoute()`)
+-- revoga a família de refresh tokens da conta transferida —
+-- `refreshToken.updateMany({ where: { user_account_id: <conta transferida> },
+-- data: { revoked_at: ... } })`, dentro da transação da rota, que roda como
+-- `app_user` sem tenant fixado (é assim que toda rota de plataforma roda —
+-- ver `TenantContextInterceptor`).
+--
+-- A única policy de `refresh_tokens` (`own_tokens`, 001_rls_setup.sql) filtra
+-- por `user_account_id = app_current_user()` — o ATOR da requisição
+-- (`platform_support` que chamou a rota), não a conta-alvo do `WHERE`. Numa
+-- rota de plataforma os dois são contas diferentes por definição (o suporte
+-- transfere a conta de outra pessoa), então a interseção da policy com o
+-- `WHERE` do `updateMany` é vazia: a query roda, não lança erro, devolve
+-- `count: 0`, e a família de tokens da conta transferida continua ativa —
+-- a sessão antiga nunca é revogada, ao contrário do que o serviço espera.
+--
+-- Sem esta migration, a chamada é um no-op silencioso: nenhum erro na API,
+-- nenhum teste unitário pega (eles mockam `tx.refreshToken.updateMany`, sem
+-- RLS real), e só um teste de RLS que simule o contexto de rota de
+-- plataforma contra `refresh_tokens` revelaria o problema.
+--
+-- O ALCANCE PRÁTICO
+--
+-- Mesmo raciocínio de 004/006: `app_platform_access()` exige
+-- `platform_support` (resolvido no banco) SEM tenant fixado no contexto.
+-- Qualquer requisição autenticada normal chega com tenant fixado, então o
+-- primeiro termo do `OR` (`user_account_id = app_current_user()`) já resolve
+-- e o ramo de plataforma nunca é avaliado — isto não abre `refresh_tokens`
+-- de tenants para o suporte fora da rota de transferência.
+-- =============================================================================
+
+ALTER POLICY own_tokens ON refresh_tokens
+  USING      (user_account_id = app_current_user() OR app_platform_access())
+  WITH CHECK (user_account_id = app_current_user() OR app_platform_access());
