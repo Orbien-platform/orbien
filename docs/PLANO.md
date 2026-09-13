@@ -47,7 +47,7 @@ foi retomado — cinco no total.
 | Auth + multi-tenant + papéis | Entregue — JWT próprio, RLS por `tenant_id`/`congregation_id`, papéis granulares |
 | Módulo 1 — Membros e Voluntários | Entregue, incluindo escalas, trocas e check-in |
 | Módulo 2 — Financeiro | Entregue — plano de contas, lançamentos, PIX cenários 1–3 com webhook Asaas, DRE, fluxo de caixa, forecast, exportação contábil |
-| Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, pedidos de oração da célula |
+| Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica, métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
@@ -248,6 +248,19 @@ Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
 leitura errar de novo.
 
+### ~~PROD-10 · Histórico de versões de materiais de estudo~~ · fechado
+
+Entregue em 2026-09-12: snapshot do `StudyMaterial` gravado em
+`StudyMaterialVersion` antes de cada `PATCH` (título, descrição, autor,
+arquivo, conteúdo, datas, tags e quem alterou), com RLS padrão B
+(`tenant_id` + `congregation_id`,
+`20260912140000_add_study_material_versions`) e rota
+`GET /study-materials/:id/versions`. `GroupDetailSheet`, no `apps/web`,
+ganhou um toggle de histórico por material, lazy e cacheado como o de
+reuniões. Concorrência otimista no `update()` (`updateMany` com
+`where.version` + `ConflictException`) evita duas edições simultâneas
+colidirem no índice único de `StudyMaterialVersion`.
+
 ### Funcionalidade prevista, sem código
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
@@ -267,12 +280,8 @@ leitura errar de novo.
 virar trabalho repetido: detecção de duplicados no cadastro e na importação,
 métricas de notificação da OneSignal (`reached`/`opened`, sincronizadas), OC
 imprimível em PDF, exportação contábil OFX, forecast financeiro, PIX nos três
-cenários com webhook da Asaas, o indicador de abertura de material por
-membro, e o histórico de versões de materiais de estudo (`PROD-10`, PR
-com commits `495639b`/`a25d46f`/`2847e06` — `StudyMaterialVersion` grava
-snapshot antes de cada `PATCH`, RLS padrão B, rota
-`GET /study-materials/:id/versions` e toggle no `GroupDetailSheet`; fechado
-em 2026-09-12, só não tinha saído desta tabela ainda).
+cenários com webhook da Asaas, e o indicador de abertura de material por
+membro (histórico de versões é `PROD-10` acima, já fechado).
 
 > `PROD-18` (OTA via Expo Updates) fechou em 2026-09-13 por ser o mesmo
 > item que `PROD-15` (seção 5, "Infra básica de expo-updates") — duas
