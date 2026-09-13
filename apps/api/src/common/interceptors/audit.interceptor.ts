@@ -99,7 +99,16 @@ export class AuditInterceptor implements NestInterceptor {
           ...(action === 'platform_access' ? { subject_tenant_id: tenantOf(body) } : {}),
         });
 
+        // Falha ao resolver o nome não pode custar o registro em si — o
+        // snapshot é um extra sobre o INSERT, nunca uma pré-condição dele.
+        // Sem este catch isolado, um erro só no `resolve_actor_name()` cairia
+        // no mesmo `.catch()` do `audit_insert()` e a linha de auditoria
+        // nunca seria gravada, mesmo a ação em si tendo funcionado.
         this.resolveActorNameSnapshot(actorUserId)
+          .catch((err: unknown) => {
+            this.logger.error(`falha ao resolver actor_name_snapshot de ${actorUserId}: ${String(err)}`);
+            return null;
+          })
           .then((actorNameSnapshot) =>
             this.prisma.$executeRaw`
               SELECT audit_insert(

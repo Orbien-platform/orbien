@@ -211,6 +211,18 @@ describe('AuditInterceptor', () => {
     expect(writes[0]?.[ACTOR_NAME_SNAPSHOT]).toBe('Fulano de Tal');
   });
 
+  it('falha ao resolver o nome do ator não impede o audit_insert — grava snapshot NULL', async () => {
+    // Achado de code-review: antes, um erro só em resolve_actor_name()
+    // caía no mesmo .catch() do executeRaw e o INSERT nunca rodava, mesmo
+    // a ação em si tendo funcionado. O nome é um extra sobre o registro,
+    // nunca uma pré-condição dele.
+    const { writes, result } = run({ user: suporte, resolveActorNameFails: true });
+    await result;
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.[ACTOR_NAME_SNAPSHOT]).toBeNull();
+  });
+
   it('falha ao gravar a auditoria não derruba a requisição — best-effort', async () => {
     // auditoria que derruba requisição trocaria observabilidade por
     // indisponibilidade (ver comentário do interceptor). O `.catch()` loga o
