@@ -74,4 +74,21 @@ describe("DoarPage", () => {
 
     expect(await screen.findByText(/igreja não encontrada/i)).toBeInTheDocument();
   });
+
+  it("repassa a mensagem do servidor em outros erros 4xx", async () => {
+    vi.mocked(api.post).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 400, data: { message: "Igreja não configurou chave PIX" } },
+    });
+
+    const user = userEvent.setup();
+    render(<DoarPage />);
+
+    await user.type(screen.getByLabelText("Valor"), "1000");
+    await user.click(screen.getByRole("button", { name: /continuar/i }));
+
+    expect(
+      await screen.findByText("Igreja não configurou chave PIX")
+    ).toBeInTheDocument();
+  });
 });

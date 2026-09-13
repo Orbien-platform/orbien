@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error";
 import axios from "axios";
 
 interface DonationResult {
@@ -53,12 +54,11 @@ export default function DoarPage() {
       });
       setResult(data);
     } catch (err: unknown) {
+      const fallback = "Não foi possível gerar a doação agora. Tente novamente.";
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         setApiError("Igreja não encontrada. Confira o link recebido.");
-      } else if (axios.isAxiosError(err) && err.response?.status === 400) {
-        setApiError("Esta igreja ainda não configurou doação por PIX.");
       } else {
-        setApiError("Não foi possível gerar a doação agora. Tente novamente.");
+        setApiError(apiErrorMessage(err, fallback));
       }
     } finally {
       setIsSubmitting(false);
