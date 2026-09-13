@@ -21,7 +21,6 @@ describe("EsqueciSenhaPage", () => {
     mockedAxios.post.mockResolvedValue({ data: {} });
     const user = userEvent.setup();
     render(<EsqueciSenhaPage />);
-    await user.type(screen.getByLabelText("Código da sua igreja"), "doca");
     await user.type(screen.getByLabelText("E-mail"), "Ana@Igreja.com");
     await user.click(screen.getByRole("button", { name: /enviar link/i }));
 
@@ -30,7 +29,6 @@ describe("EsqueciSenhaPage", () => {
     ).toBeInTheDocument();
     expect(mockedAxios.post).toHaveBeenCalledWith("/api-proxy/auth/forgot-password", {
       email: "ana@igreja.com",
-      tenant_slug: "doca",
     });
   });
 
@@ -38,7 +36,6 @@ describe("EsqueciSenhaPage", () => {
     mockedAxios.post.mockRejectedValue(new Error("boom"));
     const user = userEvent.setup();
     render(<EsqueciSenhaPage />);
-    await user.type(screen.getByLabelText("Código da sua igreja"), "doca");
     await user.type(screen.getByLabelText("E-mail"), "a@b.com");
     await user.click(screen.getByRole("button", { name: /enviar link/i }));
 
