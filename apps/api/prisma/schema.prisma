@@ -159,6 +159,14 @@ model BrandingConfig {
   app_name        String?
   splash_url      String?
   pix_key         String?
+  /// PROD-19 — domínio próprio do tenant (Premium). Só o registro; apontar o
+  /// domínio de fato (DNS/CNAME, certificado) é passo de infra fora deste
+  /// schema — ver docs/PLANO.md.
+  custom_domain   String?  @unique
+  /// PROD-19 — termos de uso próprios do tenant (Premium), como URL para o
+  /// documento (mesmo padrão de `logo_url`/`splash_url`: link, não conteúdo
+  /// inline).
+  terms_url       String?
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 

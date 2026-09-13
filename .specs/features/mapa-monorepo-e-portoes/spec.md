@@ -223,23 +223,24 @@ não contém promessa de `global: 100` no web sem a ressalva do que falta.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MAP-01 | P1: Mapa — `README.md` e `docs/MONOREPO.md` com 5 apps + Render Node | Implementing | Aguardando Verifier |
-| MAP-02 | P1: Mapa — `CLAUDE.md` da raiz com 5 apps | Implementing | Aguardando Verifier |
-| MAP-03 | P1: Mapa — `docs/ROADMAP.md` sem a negação do mobile, com entrega e ciclos atualizados | Implementing | Aguardando Verifier |
-| MAP-04 | P1: Mapa — `docs/CI.md` descrevendo os jobs reais, mobile incluído | Implementing | Aguardando Verifier |
-| MAP-05 | P1: Homogeneidade — `app-mobile/tasks.md` rodadas 2-4 Done com evidência | Implementing | Aguardando Verifier |
-| MAP-06 | P1: Homogeneidade — notas obsoletas do `spec.md`, AC2 de MOB-06 e numeração do `validation.md` | Implementing | Aguardando Verifier |
-| MAP-07 | P1: Portão — `collectCoverageFrom` + `coverageThreshold` no `jest.config.js` do mobile | Implementing | Aguardando Verifier |
-| MAP-08 | P1: Portão — script `test:cov` em `apps/mobile/package.json` | Implementing | Aguardando Verifier |
-| MAP-09 | P1: Portão — passo de cobertura do mobile no `ci.yml` e "5 apps" | Implementing | Aguardando Verifier |
-| MAP-10 | P2: `docs/TESTES.md` — linha do mobile, números medidos, exclusões e Fase 13 honesta | Implementing | Aguardando Verifier |
+| MAP-01 | P1: Mapa — `README.md` e `docs/MONOREPO.md` com 5 apps + Render Node | Implementing | ✅ Verified (rodada 2) |
+| MAP-02 | P1: Mapa — `CLAUDE.md` da raiz com 5 apps | Implementing | ✅ Verified |
+| MAP-03 | P1: Mapa — `docs/ROADMAP.md` sem a negação do mobile, com entrega e ciclos atualizados | Implementing | ✅ Verified (rodada 2) |
+| MAP-04 | P1: Mapa — `docs/CI.md` descrevendo os jobs reais, mobile incluído | Implementing | ✅ Verified (rodada 2) |
+| MAP-05 | P1: Homogeneidade — `app-mobile/tasks.md` rodadas 2-4 Done com evidência | Implementing | ✅ Verified |
+| MAP-06 | P1: Homogeneidade — notas obsoletas do `spec.md`, AC2 de MOB-06 e numeração do `validation.md` | Implementing | ✅ Verified |
+| MAP-07 | P1: Portão — `collectCoverageFrom` + `coverageThreshold` no `jest.config.js` do mobile | Implementing | ✅ Verified |
+| MAP-08 | P1: Portão — script `test:cov` em `apps/mobile/package.json` | Implementing | ✅ Verified |
+| MAP-09 | P1: Portão — passo de cobertura do mobile no `ci.yml` e "5 apps" | Implementing | ✅ Verified |
+| MAP-10 | P2: `docs/TESTES.md` — linha do mobile, números medidos, exclusões e Fase 13 honesta | Implementing | ❌ Needs Fix (rodada 3 — ver `validation.md`, "Rodada 3 — última iteração") |
 
 **ID format:** `MAP-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 10 total, 10 mapeados para tarefas, 10 implementados, 0 sem mapeamento.
-Status final por requisito depende do veredito do Verifier (`validation.md`).
+**Coverage:** 10 total, 10 mapeados para tarefas, 10 implementados, 9 Verified, 1 Needs Fix
+(MAP-10 — `docs/TESTES.md` ainda se contradiz em `:57-59`/`:78-82` e `:1202-1204`,
+ver `validation.md` rodada 3 para os gaps exatos). Ver `AJU-06` em `docs/PLANO.md`.
 
 ---
 

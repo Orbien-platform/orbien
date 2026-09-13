@@ -564,6 +564,7 @@ transferência de tenant existe, é `platform_support`-only, e onde vive
 **Gate**: build
 
 **Commit**: `docs: registra transferência de conta entre tenants em PLANO.md (PROD-20)`
+(renumerado para `PROD-22` no merge com `main`, que reusou `PROD-20` em paralelo — ver `docs/PLANO.md`)
 
 **Status**: ✅ Concluída — commit `23b74c4`.
 

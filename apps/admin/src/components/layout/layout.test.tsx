@@ -68,12 +68,13 @@ describe("Sidebar", () => {
     expect(screen.getByText("Plataforma")).toBeInTheDocument();
   });
 
-  it("lista as três rotas do console", () => {
+  it("lista as quatro rotas do console", () => {
     render(<Sidebar />);
 
     expect(navItems.map((i) => i.href)).toEqual([
       "/tenants",
       "/waitlist",
+      "/crm",
       "/auditoria",
     ]);
     expect(screen.getByRole("link", { name: /Tenants/ })).toHaveAttribute(
@@ -83,6 +84,10 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: /Waitlist/ })).toHaveAttribute(
       "href",
       "/waitlist"
+    );
+    expect(screen.getByRole("link", { name: "CRM" })).toHaveAttribute(
+      "href",
+      "/crm"
     );
     expect(screen.getByRole("link", { name: /Auditoria/ })).toHaveAttribute(
       "href",

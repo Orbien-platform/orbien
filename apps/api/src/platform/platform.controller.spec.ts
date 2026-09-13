@@ -2,6 +2,7 @@ import { Reflector } from '@nestjs/core';
 import { PlatformController } from './platform.controller';
 import { ProvisionTenantService } from './provision-tenant.service';
 import { ListTenantsService } from './list-tenants.service';
+import { ListCrmQueueService } from './list-crm-queue.service';
 import { ListAuditLogsService } from './list-audit-logs.service';
 import { UpdateTenantService } from './update-tenant.service';
 import { SetTenantActiveService } from './set-tenant-active.service';
@@ -18,6 +19,9 @@ function servicesMock() {
   const listTenants = {
     list: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 }),
   } as unknown as ListTenantsService;
+  const listCrmQueue = {
+    list: jest.fn().mockResolvedValue({ trials_expirados: [], inadimplentes: [] }),
+  } as unknown as ListCrmQueueService;
   const listAuditLogs = {
     list: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 }),
   } as unknown as ListAuditLogsService;
@@ -44,6 +48,7 @@ function servicesMock() {
   return {
     provisionTenant,
     listTenants,
+    listCrmQueue,
     listAuditLogs,
     updateTenant,
     setTenantActive,
@@ -56,6 +61,7 @@ function controllerWith(services: ReturnType<typeof servicesMock>) {
   return new PlatformController(
     services.provisionTenant,
     services.listTenants,
+    services.listCrmQueue,
     services.listAuditLogs,
     services.updateTenant,
     services.setTenantActive,
@@ -77,6 +83,17 @@ describe('PlatformController', () => {
       limit: 20,
     });
     expect(services.listTenants.list).toHaveBeenCalledWith(query);
+  });
+
+  it('crmQueue delega ao ListCrmQueueService', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+
+    await expect(controller.crmQueue()).resolves.toEqual({
+      trials_expirados: [],
+      inadimplentes: [],
+    });
+    expect(services.listCrmQueue.list).toHaveBeenCalledWith();
   });
 
   it('provision delega ao ProvisionTenantService com o DTO', async () => {
