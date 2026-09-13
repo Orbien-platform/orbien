@@ -307,16 +307,18 @@ mantém o mesmo erro 401 genérico. Troca a chave do rate limit para
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `login()` autentica sem `tenant_slug`, token carrega `tenant_id` correto
-- [ ] E-mail inexistente, senha errada, conta inativa e tenant inativo devolvem o mesmo 401 `INVALID_CREDENTIALS`
-- [ ] Rate limit por e-mail (5 falhas / 15 min) preservado
-- [ ] Testes antigos de `login` reescritos (assinatura do DTO mudou) — nenhum teste apagado sem substituto equivalente
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] `login()` autentica sem `tenant_slug`, token carrega `tenant_id` correto
+- [x] E-mail inexistente, senha errada, conta inativa e tenant inativo devolvem o mesmo 401 `INVALID_CREDENTIALS`
+- [x] Rate limit por e-mail (5 falhas / 15 min) preservado
+- [x] Testes antigos de `login` reescritos (assinatura do DTO mudou) — nenhum teste apagado sem substituto equivalente
+- [x] Gate: `npm run test -w orbien-backend` — verde para `login()`; o comando completo só fica 100% verde depois de T6b (mesma causa raiz, ver SPEC_DEVIATION de T4)
 
 **Tests**: unit — 1:1 com AUTH-01/02/03 + edge cases (conta inexistente, senha errada, conta inativa, tenant inativo, rate limit)
 **Gate**: quick
 
 **Commit**: `feat(api): POST /auth/login sem tenant_slug — resolve conta por e-mail único`
+
+**Status**: ✅ Concluída — commit `a51bbc1`.
 
 ---
 
@@ -336,15 +338,27 @@ coberto por nenhuma task original. Sem isto o build da API fica vermelho
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `forgotPassword()` localiza a conta por e-mail único, sem `tenant_slug`
-- [ ] Comportamento de erro genérico (não revela se o e-mail existe) preservado — mesmo princípio já documentado no código atual
-- [ ] `npx jest --clearCache && npm run test -w orbien-backend` — as 4 suites que T4/T5 deixaram vermelhas (`auth.service.spec.ts`, `auth.controller.spec.ts`, `auth.module.spec.ts`, `app.module.spec.ts`) voltam a compilar e passar
-- [ ] Gate: `npm run build:api && npm run test -w orbien-backend`
+- [x] `forgotPassword()` localiza a conta por e-mail único, sem `tenant_slug`
+- [x] Comportamento de erro genérico (não revela se o e-mail existe) preservado — mesmo princípio já documentado no código atual
+- [x] `npx jest --clearCache && npm run test -w orbien-backend` — as 4 suites que T4/T5 deixaram vermelhas (`auth.service.spec.ts`, `auth.controller.spec.ts`, `auth.module.spec.ts`, `app.module.spec.ts`) voltam a compilar e passar
+- [x] Gate: `npm run build:api && npm run test -w orbien-backend`
 
 **Tests**: unit — reescreve os casos de `forgotPassword` em `auth.service.spec.ts` para a busca por e-mail único (nenhum caso removido, só adaptado à nova assinatura)
 **Gate**: build
 
 **Commit**: `fix(api): forgotPassword busca por e-mail único (achado da migration de T4)`
+
+**Status**: ✅ Concluída — commit `6866f49`.
+
+**SPEC_DEVIATION**: além de `AuthService.forgotPassword` e `ForgotPasswordDto`
+(escopo original da task), `apps/api/prisma/seed.ts` também usava a chave
+composta `tenant_id_email` em dois `upsert()` de `UserAccount` — mesma causa
+raiz, não listada em nenhuma task, mas bloqueava exatamente o gate que esta
+task promete deixar verde (`npm run build:api`). Corrigido junto, mesmo
+padrão (`where: { email }`). Com isso o gate completo
+(`npx jest --clearCache && npm run lint && npm run build:api &&
+npm run test -w orbien-backend`) volta a ficar 100% verde: 239 suítes, 2240
+testes, 0 falhas — encerra o desvio aberto no SPEC_DEVIATION de T4.
 
 ---
 
@@ -360,11 +374,17 @@ payload com `tenant_slug`.
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Nenhum teste ou código de produção referencia `tenant_slug` em `login`
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] Nenhum teste ou código de produção referencia `tenant_slug` em `login`
+- [x] Gate: `npm run test -w orbien-backend`
 
 **Tests**: unit (ajuste dos specs existentes do controller)
 **Gate**: quick
+
+**Commit**: `test(api): remove tenant_slug residual dos specs de AuthController`
+
+**Status**: ✅ Concluída — commit `1597e71`. `auth.controller.ts` não mudou:
+já só encaminhava o DTO ao service; só os literais de dois testes ainda
+montavam o payload com `tenant_slug`.
 
 ---
 
