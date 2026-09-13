@@ -153,6 +153,12 @@ fi
 if [ -f prisma/migrations/006_rls_platform_provisioning.sql ]; then
   run_sql_file prisma/migrations/006_rls_platform_provisioning.sql
 fi
+# login-email-global: TransferUserAccountService revoga refresh_tokens da
+# conta transferida rodando como app_user sem tenant fixado. Depende de
+# app_platform_access(); roda depois de 004 pelo mesmo motivo de 005/006.
+if [ -f prisma/migrations/011_rls_platform_transfer.sql ]; then
+  run_sql_file prisma/migrations/011_rls_platform_transfer.sql
+fi
 
 echo ""
 echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
@@ -310,6 +316,21 @@ BEGIN
   RAISE NOTICE 'persons/financial_categories com o ramo de plataforma: %', n;
   IF n <> 2 THEN
     RAISE EXCEPTION 'esperava 2 policies (persons, financial_categories) com app_platform_access simétrico, encontrei % — 006_rls_platform_provisioning.sql rodou?', n;
+  END IF;
+
+  -- 011: sem isto, TransferUserAccountService.transfer() revoga
+  -- refresh_tokens da conta transferida como no-op silencioso — a policy
+  -- own_tokens filtra pelo ator (platform_support), não pela conta-alvo do
+  -- WHERE, então a interseção é vazia e a sessão antiga nunca cai.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'own_tokens'
+     AND tablename  = 'refresh_tokens'
+     AND qual LIKE '%app_platform_access%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'refresh_tokens com o ramo de plataforma: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'refresh_tokens sem o ramo de plataforma na policy own_tokens — 011_rls_platform_transfer.sql rodou?';
   END IF;
 
   -- 008: notification_preferences (MOB-10) precisa nascer com

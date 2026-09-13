@@ -13,9 +13,11 @@
  *      `audit_logs.tenant_id`. Essa coluna é NOT NULL com FK para `tenants`;
  *      um token sem tenant faria toda linha `platform_access` falhar no INSERT
  *      — e a auditoria é best-effort, então cairia em silêncio. É o desenho da
- *      pendência nº 6, e é o que este teste não deixa regredir;
- *   4. o mesmo e-mail com o papel em dois tenants é erro de configuração e
- *      falha alto, em vez de escolher um tenant em silêncio.
+ *      pendência nº 6, e é o que este teste não deixa regredir.
+ *
+ * `email` é único em todo o banco (T4): não há mais como o mesmo e-mail ter
+ * `platform_support` em dois tenants, então a rota não trata mais esse caso
+ * como ambiguidade (ver T7b) — não há cenário a prender aqui.
  *
  * Uso: DATABASE_URL=... DIRECT_URL=... npm run test:integration -w orbien-backend
  */
@@ -41,12 +43,10 @@ let http: () => request.Agent;
 const ts = Date.now();
 
 let tenantAId: string;
-let tenantBId: string;
 let supportEmail: string;
 let supportUserId: string;
 let comumEmail: string;
 let inativoEmail: string;
-let duplicadoEmail: string;
 let outraCongEmail: string;
 
 /** Cria tenant + congregação + plano, e devolve os dois ids. */
@@ -104,9 +104,7 @@ beforeAll(async () => {
   await ensureRole(admin, 'tenant_admin', 'Admin Tenant');
 
   const a = await criarTenant(`plogin-a-${ts}`, 'Tenant A');
-  const b = await criarTenant(`plogin-b-${ts}`, 'Tenant B');
   tenantAId = a.tenantId;
-  tenantBId = b.tenantId;
 
   supportEmail = `suporte-plogin-${ts}@orbien.test`;
   supportUserId = await criarConta(
@@ -127,13 +125,6 @@ beforeAll(async () => {
     'platform_support',
     false,
   );
-
-  // Mesmo e-mail, mesma senha, `platform_support` nos dois tenants. A unique
-  // de `user_accounts` é por (tenant_id, email), então isto é permitido pelo
-  // schema — e é exatamente a ambiguidade que a rota tem que recusar.
-  duplicadoEmail = `duplicado-plogin-${ts}@orbien.test`;
-  await criarConta(a.tenantId, a.congregationId, duplicadoEmail, 'platform_support');
-  await criarConta(b.tenantId, b.congregationId, duplicadoEmail, 'platform_support');
 
   // Conta cuja atribuição de `platform_support` está em OUTRA congregação do
   // mesmo tenant. `platform_support` é global — `app_is_platform_support()`
@@ -172,7 +163,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  const ids = [tenantAId, tenantBId].filter(Boolean);
+  const ids = [tenantAId].filter(Boolean);
   await admin.auditLog.deleteMany({ where: { tenant_id: { in: ids } } });
   await admin.roleAssignment.deleteMany({ where: { tenant_id: { in: ids } } });
   await admin.tenant.deleteMany({ where: { id: { in: ids } } });
@@ -229,11 +220,6 @@ describe('POST /api/auth/platform/login', () => {
   it('e-mail desconhecido devolve o mesmo 401', async () => {
     const res = await platformLogin(`nao-existe-${ts}@orbien.test`, SENHA).expect(401);
     expect((res.body as { code?: string }).code).toBe('INVALID_CREDENTIALS');
-  });
-
-  it('papel de plataforma em dois tenants falha alto, não escolhe um', async () => {
-    const res = await platformLogin(duplicadoEmail, SENHA).expect(409);
-    expect((res.body as { code?: string }).code).toBe('PLATFORM_ACCOUNT_AMBIGUOUS');
   });
 
   // Sem a união em `rolesForToken`, o papel sumia do token neste arranjo e a

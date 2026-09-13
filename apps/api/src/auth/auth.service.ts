@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
-  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -97,40 +96,39 @@ export class AuthService {
   async login(
     dto: LoginDto,
   ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
-    // A janela é conferida antes de tocar no banco de contas, e a chave inclui
-    // o tenant: bloquear um e-mail numa igreja não bloqueia o mesmo e-mail em
-    // outra, que é conta diferente.
-    const limitKey = LoginRateLimitService.key(`login:${dto.tenant_slug}`, dto.email);
+    // `user_accounts.email` é único em todo o banco (@@unique([email])), então
+    // a janela do limitador é só por e-mail — não há mais tenant a incluir na
+    // chave, e não há ambiguidade a resolver: zero ou uma conta, nunca mais.
+    const limitKey = LoginRateLimitService.key('login', dto.email);
     await this.rateLimit.assert(limitKey, LOGIN_POLICY);
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug: dto.tenant_slug },
-      include: { tenantPlan: { select: { plan: true } } },
+    const invalid = new UnauthorizedException({
+      message: 'Invalid credentials',
+      code: 'INVALID_CREDENTIALS',
     });
-    // Tenant inativo dá o mesmo erro de tenant inexistente: quem inativou a
-    // igreja não quer que o login continue distinguindo os dois casos. Quem
-    // barra de fato, em toda requisição — não só aqui — é o
-    // `JwtStrategy.validate`; este é o caminho que evita emitir um token que
-    // já nasceria inútil.
-    if (!tenant || !tenant.is_active)
-      throw new UnauthorizedException({ message: 'Tenant not found', code: 'TENANT_NOT_FOUND' });
 
     const user = await this.prisma.userAccount.findUnique({
-      where: { tenant_id_email: { tenant_id: tenant.id, email: dto.email } },
+      where: { email: dto.email },
       include: {
         roleAssignments: { select: { role_code: true, congregation_id: true } },
+        tenant: { include: { tenantPlan: { select: { plan: true } } } },
       },
     });
 
-    if (!user || !user.is_active) {
+    // E-mail inexistente, conta inativa e tenant inativo levam o mesmo 401
+    // genérico — quem tenta entrar não deve descobrir por qual desses motivos
+    // a tentativa falhou. Quem barra de fato tenant inativo em toda
+    // requisição — não só aqui — é o `JwtStrategy.validate`; este é o caminho
+    // que evita emitir um token que já nasceria inútil.
+    if (!user || !user.is_active || !user.tenant.is_active) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
-      throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+      throw invalid;
     }
 
     const valid = await argon2.verify(user.password_hash, dto.password);
     if (!valid) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
-      throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+      throw invalid;
     }
 
     // Credencial certa zera a janela: quem sabe a senha nunca esbarra no limite.
@@ -138,11 +136,11 @@ export class AuthService {
 
     const roles = rolesForToken(user.roleAssignments, user.congregation_id);
 
-    const plan = (tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+    const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
       sub: user.id,
-      tenant_id: tenant.id,
+      tenant_id: user.tenant_id,
       congregation_id: user.congregation_id,
       roles,
       plan,
@@ -157,11 +155,11 @@ export class AuthService {
   /**
    * Login do console da plataforma — sem `tenant_slug`.
    *
-   * `POST /auth/login` pede o slug porque `user_accounts` é única por
-   * `(tenant_id, email)`: sem o tenant não há chave para procurar a conta. Aqui
-   * o desempate vem de outro lugar — o papel. Só contas que têm
-   * `platform_support` em `role_assignments` são candidatas, e são poucas,
-   * porque o papel é da equipe que administra o ecossistema.
+   * `POST /auth/login` também busca só por e-mail hoje (`user_accounts` é
+   * única por `email` em todo o banco), e aqui é igual: zero ou uma conta,
+   * nunca mais — o mesmo `findUnique` de `login()`. A única diferença é o
+   * desempate por papel: só uma conta com `platform_support` em
+   * `role_assignments` pode entrar por esta rota.
    *
    * O token continua carregando o tenant e a congregação de origem da conta,
    * resolvidos aqui e não informados pelo cliente. Não é detalhe: as rotas de
@@ -189,52 +187,33 @@ export class AuthService {
     const limitKey = LoginRateLimitService.key('platform-login', dto.email);
     await this.rateLimit.assert(limitKey, LOGIN_POLICY);
 
-    // Busca por e-mail sem tenant não usa a unique `(tenant_id, email)` — é
-    // varredura. Aceitável e deliberado: o `where` do papel corta para as
-    // poucas contas de plataforma, e este login é de um punhado de pessoas.
-    const candidates = await this.prisma.userAccount.findMany({
-      where: {
-        email: dto.email,
-        is_active: true,
-        roleAssignments: { some: { role_code: PLATFORM_ROLE } },
-      },
+    const user = await this.prisma.userAccount.findUnique({
+      where: { email: dto.email },
       include: {
         roleAssignments: { select: { role_code: true, congregation_id: true } },
         tenant: { include: { tenantPlan: { select: { plan: true } } } },
       },
     });
 
-    // Uma conta sem o papel é indistinguível de e-mail inexistente, e tem que
-    // ser: quem tenta entrar aqui com credencial válida de `tenant_admin` não
-    // deve descobrir pela mensagem que a credencial serve em outro lugar.
-    const matches = [];
-    for (const candidate of candidates) {
-      if (await argon2.verify(candidate.password_hash, dto.password)) {
-        matches.push(candidate);
-      }
-    }
+    // Sem o papel é indistinguível de e-mail inexistente, e tem que ser: quem
+    // tenta entrar aqui com credencial válida de `tenant_admin` não deve
+    // descobrir pela mensagem que a credencial serve em outro lugar.
+    const hasPlatformRole =
+      user?.roleAssignments.some((ra) => ra.role_code === PLATFORM_ROLE) ?? false;
 
-    if (matches.length === 0) {
+    if (!user || !user.is_active || !hasPlatformRole) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
 
-    // O mesmo e-mail pode existir em dois tenants — a unique é por par. Se os
-    // dois tiverem `platform_support` e a mesma senha, não há como saber qual
-    // conta o token deveria representar, e escolher uma em silêncio poria o
-    // tenant errado em `audit_logs`. Falha alto: é erro de configuração.
-    if (matches.length > 1) {
-      throw new ConflictException({
-        message:
-          'Este e-mail tem acesso de plataforma em mais de um tenant. ' +
-          'Deixe o papel platform_support em apenas uma das contas.',
-        code: 'PLATFORM_ACCOUNT_AMBIGUOUS',
-      });
+    const valid = await argon2.verify(user.password_hash, dto.password);
+    if (!valid) {
+      await this.rateLimit.register(limitKey, LOGIN_POLICY);
+      throw invalid;
     }
 
     await this.rateLimit.clear(limitKey);
 
-    const user = matches[0]!;
     const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
@@ -425,20 +404,17 @@ export class AuthService {
     // Mesmo limitador das rotas de login, mesma tabela — e não mais um `Map` por
     // processo, que com N instâncias no Render valia 1/N e sumia a cada deploy.
     // A resposta segue genérica: dizer "muitas tentativas" contaria que alguém
-    // andou pedindo redefinição para este e-mail.
-    const limitKey = LoginRateLimitService.key(`reset:${dto.tenant_slug}`, dto.email);
+    // andou pedindo redefinição para este e-mail. Chave só por e-mail, mesmo
+    // princípio de `login()`: `user_accounts.email` é único em todo o banco,
+    // não há mais tenant a incluir na chave.
+    const limitKey = LoginRateLimitService.key('reset', dto.email);
     if (!(await this.rateLimit.check(limitKey, PASSWORD_RESET_POLICY))) {
       return genericResponse;
     }
     await this.rateLimit.register(limitKey, PASSWORD_RESET_POLICY);
 
-    const tenant = await this.prisma.system.tenant.findUnique({
-      where: { slug: dto.tenant_slug },
-    });
-    if (!tenant) return genericResponse;
-
     const user = await this.prisma.system.userAccount.findUnique({
-      where: { tenant_id_email: { tenant_id: tenant.id, email: dto.email } },
+      where: { email: dto.email },
       include: { person: { select: { full_name: true } } },
     });
     if (!user || !user.is_active) return genericResponse;

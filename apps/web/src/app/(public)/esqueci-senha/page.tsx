@@ -10,19 +10,17 @@ import axios from "axios";
 
 export default function EsqueciSenhaPage() {
   const [email, setEmail] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!email.trim() || !tenantSlug.trim()) return;
+    if (!email.trim()) return;
 
     setIsSubmitting(true);
     try {
       await axios.post("/api-proxy/auth/forgot-password", {
         email: email.trim().toLowerCase(),
-        tenant_slug: tenantSlug.trim().toLowerCase(),
       });
     } catch {
       // API always returns 200; any error treated the same as success
@@ -63,22 +61,6 @@ export default function EsqueciSenhaPage() {
             /* ── Form ── */
             <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tenant_slug" className="text-sm font-medium text-ink dark:text-white">
-                  Código da sua igreja
-                </Label>
-                <Input
-                  id="tenant_slug"
-                  type="text"
-                  placeholder="ex: doca-church"
-                  value={tenantSlug}
-                  onChange={(e) => setTenantSlug(e.target.value)}
-                  autoComplete="organization"
-                  disabled={isSubmitting}
-                  className="rounded-[8px]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="email" className="text-sm font-medium text-ink dark:text-white">
                   E-mail
                 </Label>
@@ -96,7 +78,7 @@ export default function EsqueciSenhaPage() {
 
               <Button
                 type="submit"
-                disabled={isSubmitting || !email.trim() || !tenantSlug.trim()}
+                disabled={isSubmitting || !email.trim()}
                 className="mt-1 h-10 w-full rounded-[8px] bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
               >
                 {isSubmitting ? (

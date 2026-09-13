@@ -78,3 +78,28 @@ mostra marcado, sincronizado entre aparelhos da mesma conta) — nunca para o
 **filtro de envio**, que sempre lê a tag do device. Duas fontes de verdade
 por design, não descuido; ver `preferencias-notificacao-mobile/design.md`,
 Tech Decisions.
+
+### AD-004 — `audit_insert()` resolve e congela o nome do autor uma vez, no `AuditInterceptor`
+
+**Status**: active
+**Origem**: feature `login-email-global`, fase Design, 2026-09-13
+
+Qualquer coluna de "snapshot" em `audit_logs` (ex.: `actor_name_snapshot`) é
+resolvida **uma única vez**, dentro do `AuditInterceptor` — nunca por cada
+chamador de `audit_insert()` individualmente. A função ganha o parâmetro
+correspondente e todo chamador (o interceptor global, e qualquer serviço que
+passe a chamá-la direto, como a transferência de tenant desta feature) passa
+o mesmo valor já resolvido.
+
+**Motivo**: `audit_insert()` hoje só recebe `actor_user_id`; se cada
+chamador decidisse por conta própria se resolve o nome (fazendo ou não o
+join até `persons`), o snapshot existiria só nos registros de quem se deu ao
+trabalho — inconsistência pior do que não ter o campo. Resolver no
+interceptor garante que **toda** linha de `audit_logs`, de qualquer rota
+auditada, tem o mesmo dado.
+
+**Consequência prática**: adicionar um novo dado "congelado no momento do
+registro" a `audit_logs` é sempre um parâmetro novo em `audit_insert()`
+(`001_rls_setup.sql`, `CREATE OR REPLACE FUNCTION`) resolvido no
+`AuditInterceptor` antes do `tap()`, nunca uma query solta em cada feature
+que precisar auditar algo.

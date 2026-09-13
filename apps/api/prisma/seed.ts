@@ -130,7 +130,7 @@ async function main(): Promise<void> {
 
   const supportUser = await prisma.userAccount.upsert({
     where: {
-      tenant_id_email: { tenant_id: tenant.id, email: 'fernando.vargas@fill.tech' },
+      email: 'fernando.vargas@fill.tech',
     },
     update: {},
     create: {
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
 
   const adminUser = await prisma.userAccount.upsert({
     where: {
-      tenant_id_email: { tenant_id: tenant.id, email: 'fvargaspf@gmail.com' },
+      email: 'fvargaspf@gmail.com',
     },
     update: {},
     create: {

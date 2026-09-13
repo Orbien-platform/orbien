@@ -26,7 +26,7 @@ export interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string, tenantSlug: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -59,11 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string, tenantSlug: string) => {
+    async (email: string, password: string) => {
       const { data } = await axios.post<{ user: AuthUser }>("/api/session", {
         email,
         password,
-        tenant_slug: tenantSlug,
       });
       setUser(data.user);
       router.push("/dashboard");

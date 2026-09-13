@@ -37,10 +37,10 @@ describe("AuthClient", () => {
         expires_in: 900,
       });
 
-      const session = await login("igreja-teste", "a@b.com", "senha123");
+      const session = await login("a@b.com", "senha123");
 
       expect(mockPost).toHaveBeenCalledWith("/auth/login", {
-        body: { tenant_slug: "igreja-teste", email: "a@b.com", password: "senha123" },
+        body: { email: "a@b.com", password: "senha123" },
       });
       expect(session).toEqual({
         accessToken: "access-abc",
@@ -59,7 +59,7 @@ describe("AuthClient", () => {
       const genericError = new HttpError(401, { message: "Credenciais inválidas" });
       mockPost.mockRejectedValue(genericError);
 
-      await expect(login("igreja-teste", "a@b.com", "errada")).rejects.toBe(genericError);
+      await expect(login("a@b.com", "errada")).rejects.toBe(genericError);
       // AuthClient não deve gravar sessão nenhuma quando o login falha.
       expect(mockSetItemAsync).not.toHaveBeenCalled();
     });

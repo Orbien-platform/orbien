@@ -1,9 +1,8 @@
-// Tela de Login (MOB-01) — tenant_slug + email + senha, chama
-// useAuth().login. Não navega: quem tira esta rota do ar e leva ao shell é
-// o `Stack.Protected` do layout raiz, assim que `status` vira
-// "authenticated" (src/app/_layout.tsx). Um `router.replace("/")` aqui
-// disputaria com o guard — a rota autenticada ainda nem existe no momento
-// em que ele rodaria.
+// Tela de Login (MOB-01) — email + senha, chama useAuth().login. Não
+// navega: quem tira esta rota do ar e leva ao shell é o `Stack.Protected` do
+// layout raiz, assim que `status` vira "authenticated" (src/app/_layout.tsx).
+// Um `router.replace("/")` aqui disputaria com o guard — a rota autenticada
+// ainda nem existe no momento em que ele rodaria.
 //
 // Visual conforme STYLE-GUIDE.md: marca do tenant no topo (logo quando há,
 // senão o nome no token `display`), campos de 48px com ícone e label (§3,
@@ -20,7 +19,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
 import { useAuth } from "../lib/auth/auth-provider";
-import { Building2, Eye, EyeOff, Lock, Mail } from "../lib/theme/icons";
+import { Eye, EyeOff, Lock, Mail } from "../lib/theme/icons";
 import { useTheme } from "../lib/theme/theme-provider";
 import { radius, spacing, typography } from "../lib/theme/tokens";
 
@@ -36,7 +35,6 @@ const LOGO_SIZE = 72;
 export default function LoginScreen() {
   const { login } = useAuth();
   const { appName, colors, shadow, isDark, primaryColor } = useTheme();
-  const [tenantSlug, setTenantSlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -47,7 +45,7 @@ export default function LoginScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(tenantSlug, email, password);
+      await login(email, password);
     } catch {
       setError(GENERIC_ERROR_MESSAGE);
     } finally {
@@ -85,18 +83,6 @@ export default function LoginScreen() {
           { backgroundColor: colors.bgSurface, borderColor: colors.border },
         ]}
       >
-        <Input
-          testID="tenant-slug-input"
-          label="Igreja"
-          icon={Building2}
-          placeholder="minha-igreja"
-          value={tenantSlug}
-          onChangeText={setTenantSlug}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="organization"
-          returnKeyType="next"
-        />
         <Input
           testID="email-input"
           label="E-mail"

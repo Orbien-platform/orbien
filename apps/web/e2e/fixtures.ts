@@ -9,7 +9,12 @@
  * Credenciais vêm do ambiente — nada de segredo no repositório:
  *   E2E_BASE_URL   (padrão http://localhost:3001, lido pelo playwright.config)
  *   E2E_API_URL    (padrão http://localhost:3000/api)
- *   E2E_EMAIL, E2E_PASSWORD, E2E_TENANT
+ *   E2E_EMAIL, E2E_PASSWORD
+ *
+ * `E2E_TENANT` não é mais exigido aqui — login resolve a conta por e-mail
+ * único em todo o banco (feature login-email-global). Alguns specs ainda o
+ * usam para escolher qual tenant exercitar (ex. `suporte.spec.ts`); ver o
+ * cabeçalho de cada um.
  */
 
 import path from "node:path";
@@ -108,10 +113,9 @@ function authHeaders(token: string): Record<string, string> {
 async function login(): Promise<Tokens> {
   const email = process.env.E2E_EMAIL;
   const password = process.env.E2E_PASSWORD;
-  const tenant_slug = process.env.E2E_TENANT;
 
-  if (!email || !password || !tenant_slug) {
-    throw new Error("Defina E2E_EMAIL, E2E_PASSWORD e E2E_TENANT no ambiente antes de rodar.");
+  if (!email || !password) {
+    throw new Error("Defina E2E_EMAIL e E2E_PASSWORD no ambiente antes de rodar.");
   }
 
   let last = "";
@@ -120,7 +124,7 @@ async function login(): Promise<Tokens> {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, tenant_slug }),
+        body: JSON.stringify({ email, password }),
         signal: AbortSignal.timeout(90_000),
       });
       if (res.ok) return (await res.json()) as Tokens;

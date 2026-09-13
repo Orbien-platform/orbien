@@ -92,6 +92,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md MOB-10b AC4 / apps/api/src/content/notifications.service.ts:43 (content)
 - last seen: 2026-09-11T18:12:57Z
 
+### L-014 — Quando um AC pede explicitamente rodar a migration contra dado duplicado fabricado ('Independent Test'), não aceite validar só a sintaxe da query manual — escreva o teste real que aplica a migration sobre a duplicata, mesmo que o mecanismo pareça garantido pelo banco.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `apps/api/prisma/migrations` · harmful: 0
+- features: login-email-global
+- evidence: spec.md P1 'E-mail único no banco' AC2 (apps/api/prisma/migrations)
+- last seen: 2026-09-13T18:58:23Z
+
+### L-015 — Quando um AC descreve o que 'a tela SHALL mostrar', confirme que existe uma task que constrói/atualiza essa tela ou endpoint de leitura — um AC pode ficar totalmente satisfeito na escrita (campo gravado, resolvido) e sem nenhum consumidor de leitura, o que não fecha o critério.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `.specs/features` · harmful: 0
+- features: login-email-global
+- evidence: spec.md P2 'Transferência de pessoa entre tenants' AC5 (.specs/features)
+- last seen: 2026-09-13T18:58:23Z
+
+### L-016 — Ao trocar uma constraint de unicidade de escopo por-tenant para global, procure mensagens de erro hardcoded que citam o escopo antigo (ex.: '...neste tenant') em código não tocado pelo diff — o comportamento pode continuar correto por acidente do catch genérico, mas o texto fica enganoso.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `apps/api/src` · harmful: 0
+- features: login-email-global
+- evidence: apps/api/src/users/users.service.ts:98 (apps/api/src)
+- last seen: 2026-09-13T18:58:23Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

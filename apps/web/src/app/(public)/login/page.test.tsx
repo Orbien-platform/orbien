@@ -22,11 +22,8 @@ function setup(login = vi.fn()) {
   return { login };
 }
 
-async function fillAndSubmit(opts: { tenant?: string; email?: string; password?: string } = {}) {
+async function fillAndSubmit(opts: { email?: string; password?: string } = {}) {
   const user = userEvent.setup();
-  if (opts.tenant !== undefined) {
-    await user.type(screen.getByLabelText("Código da sua igreja"), opts.tenant);
-  }
   if (opts.email !== undefined) {
     await user.type(screen.getByLabelText("E-mail"), opts.email);
   }
@@ -37,21 +34,27 @@ async function fillAndSubmit(opts: { tenant?: string; email?: string; password?:
 }
 
 describe("LoginPage", () => {
+  it("não mostra campo de igreja", () => {
+    setup();
+    render(<LoginPage />);
+    expect(screen.queryByLabelText("Código da sua igreja")).not.toBeInTheDocument();
+  });
+
   it("mostra erro de validação quando algum campo obrigatório falta", async () => {
     setup();
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com" });
+    await fillAndSubmit({ email: "a@b.com" });
     expect(
       await screen.findByText("Todos os campos são obrigatórios.")
     ).toBeInTheDocument();
   });
 
-  it("chama login com os valores normalizados em caso de sucesso", async () => {
+  it("chama login com os valores normalizados em caso de sucesso, sem tenant_slug", async () => {
     const { login } = setup(vi.fn().mockResolvedValue(undefined));
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "  DOCA-Church  ", email: " Ana@Igreja.com ", password: "123456" });
+    await fillAndSubmit({ email: " Ana@Igreja.com ", password: "123456" });
     await waitFor(() =>
-      expect(login).toHaveBeenCalledWith("Ana@Igreja.com", "123456", "doca-church")
+      expect(login).toHaveBeenCalledWith("Ana@Igreja.com", "123456")
     );
   });
 
@@ -60,7 +63,7 @@ describe("LoginPage", () => {
     vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
     setup(vi.fn().mockRejectedValue(err));
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com", password: "123456" });
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
     expect(
       await screen.findByText("Não foi possível conectar. Verifique sua internet.")
     ).toBeInTheDocument();
@@ -71,20 +74,9 @@ describe("LoginPage", () => {
     vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
     setup(vi.fn().mockRejectedValue(err));
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com", password: "123456" });
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
     expect(
       await screen.findByText("Serviço temporariamente indisponível. Tente novamente.")
-    ).toBeInTheDocument();
-  });
-
-  it("mostra mensagem de igreja não encontrada para TENANT_NOT_FOUND", async () => {
-    const err = { isAxiosError: true, response: { status: 404, data: { code: "TENANT_NOT_FOUND" } } };
-    vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
-    setup(vi.fn().mockRejectedValue(err));
-    render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com", password: "123456" });
-    expect(
-      await screen.findByText("Código de igreja não encontrado. Verifique e tente novamente.")
     ).toBeInTheDocument();
   });
 
@@ -93,7 +85,7 @@ describe("LoginPage", () => {
     vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
     setup(vi.fn().mockRejectedValue(err));
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com", password: "123456" });
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
     expect(await screen.findByText("E-mail ou senha incorretos.")).toBeInTheDocument();
   });
 
@@ -102,7 +94,7 @@ describe("LoginPage", () => {
     vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
     setup(vi.fn().mockRejectedValue(err));
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com", password: "123456" });
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
     expect(await screen.findByText("Erro ao entrar. Tente novamente.")).toBeInTheDocument();
   });
 
@@ -110,7 +102,7 @@ describe("LoginPage", () => {
     vi.spyOn(axios, "isAxiosError").mockReturnValue(false);
     setup(vi.fn().mockRejectedValue(new Error("boom")));
     render(<LoginPage />);
-    await fillAndSubmit({ tenant: "doca", email: "a@b.com", password: "123456" });
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
     expect(
       await screen.findByText("Não foi possível conectar. Verifique sua internet.")
     ).toBeInTheDocument();

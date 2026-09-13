@@ -15,7 +15,7 @@ export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 export interface AuthContextValue {
   session: Session | null;
   status: AuthStatus;
-  login: (tenantSlug: string, email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const login = useCallback(async (tenantSlug: string, email: string, password: string) => {
-    const newSession = await authLogin(tenantSlug, email, password);
+  const login = useCallback(async (email: string, password: string) => {
+    const newSession = await authLogin(email, password);
     setSession(newSession);
     setStatus("authenticated");
   }, []);

@@ -69,13 +69,12 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {
-      await result.current.login("joao@example.com", "senha", "igreja-x");
+      await result.current.login("joao@example.com", "senha");
     });
 
     expect(axios.post).toHaveBeenCalledWith("/api/session", {
       email: "joao@example.com",
       password: "senha",
-      tenant_slug: "igreja-x",
     });
     expect(result.current.user).toEqual(USER);
     expect(push).toHaveBeenCalledWith("/dashboard");

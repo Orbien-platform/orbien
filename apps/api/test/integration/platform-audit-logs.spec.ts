@@ -49,10 +49,10 @@ let supportEmail: string;
 let comumEmail: string;
 let supportUserId: string;
 
-async function login(email: string, slug: string): Promise<string> {
+async function login(email: string): Promise<string> {
   const res = await http()
     .post('/api/auth/login')
-    .send({ email, password: SENHA, tenant_slug: slug })
+    .send({ email, password: SENHA })
     .expect(200);
   return (res.body as { access_token: string }).access_token;
 }
@@ -171,7 +171,7 @@ describe('GET /api/platform/audit-logs/support-access', () => {
   });
 
   it('barra quem não é platform_support', async () => {
-    const token = await login(comumEmail, slugSuporte);
+    const token = await login(comumEmail);
     await http()
       .get('/api/platform/audit-logs/support-access')
       .set('Authorization', `Bearer ${token}`)
@@ -179,7 +179,7 @@ describe('GET /api/platform/audit-logs/support-access', () => {
   });
 
   it('platform_support lê a linha de support_access, de qualquer tenant', async () => {
-    const token = await login(supportEmail, slugSuporte);
+    const token = await login(supportEmail);
     const res = await http()
       .get('/api/platform/audit-logs/support-access')
       .set('Authorization', `Bearer ${token}`)
@@ -197,7 +197,7 @@ describe('GET /api/platform/audit-logs/support-access', () => {
   });
 
   it('não devolve linhas de platform_access — o filtro é fixo, não um parâmetro', async () => {
-    const token = await login(supportEmail, slugSuporte);
+    const token = await login(supportEmail);
     const res = await http()
       .get('/api/platform/audit-logs/support-access')
       .set('Authorization', `Bearer ${token}`)

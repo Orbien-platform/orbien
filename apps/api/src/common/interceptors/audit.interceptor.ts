@@ -81,6 +81,10 @@ export class AuditInterceptor implements NestInterceptor {
     const method = req.method;
     const ip = req.ip ?? null;
     const userAgent = req.get('user-agent') ?? null;
+    // impersonated_by é o usuário platform_support que abriu a sessão — o
+    // mesmo ator usado no INSERT abaixo, então o nome congelado tem que ser
+    // o dele, não o da conta impersonada.
+    const actorUserId = user.impersonated_by ?? user.sub;
 
     return next.handle().pipe(
       tap((body: unknown) => {
@@ -95,28 +99,57 @@ export class AuditInterceptor implements NestInterceptor {
           ...(action === 'platform_access' ? { subject_tenant_id: tenantOf(body) } : {}),
         });
 
-        this.prisma
-          .$executeRaw`
-            SELECT audit_insert(
-              ${user.tenant_id}::text,
-              ${user.congregation_id}::text,
-              -- impersonated_by é o usuário platform_support que abriu a sessão
-              ${user.impersonated_by ?? user.sub}::text,
-              NULL::text,
-              ${route}::text,
-              ${action}::text,
-              NULL::jsonb,
-              ${after}::jsonb,
-              ${ip}::text,
-              ${userAgent}::text
-            )
-          `.catch((err: unknown) => {
-          this.logger.error(
-            `falha ao registrar ${action} em ${method} ${route}: ${String(err)}`,
-          );
-        });
+        // Falha ao resolver o nome não pode custar o registro em si — o
+        // snapshot é um extra sobre o INSERT, nunca uma pré-condição dele.
+        // Sem este catch isolado, um erro só no `resolve_actor_name()` cairia
+        // no mesmo `.catch()` do `audit_insert()` e a linha de auditoria
+        // nunca seria gravada, mesmo a ação em si tendo funcionado.
+        this.resolveActorNameSnapshot(actorUserId)
+          .catch((err: unknown) => {
+            this.logger.error(`falha ao resolver actor_name_snapshot de ${actorUserId}: ${String(err)}`);
+            return null;
+          })
+          .then((actorNameSnapshot) =>
+            this.prisma.$executeRaw`
+              SELECT audit_insert(
+                ${user.tenant_id}::text,
+                ${user.congregation_id}::text,
+                ${actorUserId}::text,
+                NULL::text,
+                ${route}::text,
+                ${action}::text,
+                NULL::jsonb,
+                ${after}::jsonb,
+                ${ip}::text,
+                ${userAgent}::text,
+                ${actorNameSnapshot}::text
+              )
+            `,
+          )
+          .catch((err: unknown) => {
+            this.logger.error(
+              `falha ao registrar ${action} em ${method} ${route}: ${String(err)}`,
+            );
+          });
       }),
     );
+  }
+
+  /**
+   * Resolve o nome do autor para congelar em `actor_name_snapshot` (AD-004).
+   * `persons` não tem policy de bypass para `orbien_app` (só `user_accounts`
+   * tem, via `orbien_app_auth`) e este client roda sem `SET LOCAL
+   * ROLE app_user`/contexto de tenant — por isso a leitura passa por
+   * `resolve_actor_name()`, SECURITY DEFINER, em vez de um `findUnique` com
+   * `include: { person: true }`, que voltaria sempre vazio por RLS.
+   * Conta sem `person_id` (caso raro) resolve `NULL`, sem quebrar o insert.
+   */
+  private async resolveActorNameSnapshot(actorUserId: string): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<
+      { resolve_actor_name: string | null }[]
+    >`SELECT resolve_actor_name(${actorUserId}::text)`;
+
+    return rows[0]?.resolve_actor_name ?? null;
   }
 }
 

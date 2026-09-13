@@ -13,7 +13,6 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -21,22 +20,20 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password.trim() || !tenantSlug.trim()) {
+    if (!email.trim() || !password.trim()) {
       setError("Todos os campos são obrigatórios.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await login(email.trim(), password, tenantSlug.trim().toLowerCase());
+      await login(email.trim(), password);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         if (!err.response) {
           setError("Não foi possível conectar. Verifique sua internet.");
         } else if (err.response.status >= 500) {
           setError("Serviço temporariamente indisponível. Tente novamente.");
-        } else if (err.response.data?.code === "TENANT_NOT_FOUND") {
-          setError("Código de igreja não encontrado. Verifique e tente novamente.");
         } else if (err.response.status === 401) {
           setError("E-mail ou senha incorretos.");
         } else {
@@ -64,23 +61,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-            {/* Tenant Slug */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="tenant_slug" className="text-sm font-medium text-ink dark:text-white">
-                Código da sua igreja
-              </Label>
-              <Input
-                id="tenant_slug"
-                type="text"
-                placeholder="ex: doca-church"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                autoComplete="organization"
-                disabled={isSubmitting}
-                className="rounded-[8px]"
-              />
-            </div>
-
             {/* Email */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email" className="text-sm font-medium text-ink dark:text-white">

@@ -7,8 +7,4 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty()
   password!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  tenant_slug!: string;
 }

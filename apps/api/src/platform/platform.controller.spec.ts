@@ -1,3 +1,4 @@
+import { Reflector } from '@nestjs/core';
 import { PlatformController } from './platform.controller';
 import { ProvisionTenantService } from './provision-tenant.service';
 import { ListTenantsService } from './list-tenants.service';
@@ -6,6 +7,10 @@ import { ListAuditLogsService } from './list-audit-logs.service';
 import { UpdateTenantService } from './update-tenant.service';
 import { SetTenantActiveService } from './set-tenant-active.service';
 import { CancelTenantPlanService } from './cancel-tenant-plan.service';
+import { TransferUserAccountService } from './transfer-user-account.service';
+import { ROLES_KEY } from '../auth/decorators/roles.decorator';
+import { PLATFORM_ROUTE_KEY } from '../common/decorators/platform-route.decorator';
+import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 function servicesMock() {
   const provisionTenant = {
@@ -30,6 +35,15 @@ function servicesMock() {
     cancel: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', status: 'cancelled' }),
     reactivate: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', status: 'active' }),
   } as unknown as CancelTenantPlanService;
+  const transferUserAccount = {
+    transfer: jest.fn().mockResolvedValue({
+      user_account_id: 'user-1',
+      previous_tenant_id: 'tenant-origin',
+      previous_congregation_id: 'cong-origin',
+      tenant_id: 'tenant-dest',
+      congregation_id: 'cong-dest',
+    }),
+  } as unknown as TransferUserAccountService;
 
   return {
     provisionTenant,
@@ -39,6 +53,7 @@ function servicesMock() {
     updateTenant,
     setTenantActive,
     cancelTenantPlan,
+    transferUserAccount,
   };
 }
 
@@ -51,6 +66,7 @@ function controllerWith(services: ReturnType<typeof servicesMock>) {
     services.updateTenant,
     services.setTenantActive,
     services.cancelTenantPlan,
+    services.transferUserAccount,
   );
 }
 
@@ -151,5 +167,41 @@ describe('PlatformController', () => {
       status: 'active',
     });
     expect(services.cancelTenantPlan.reactivate).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('transfer delega ao TransferUserAccountService com id, DTO e o usuário atual', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+    const dto = { destination_tenant_id: 'tenant-dest', destination_congregation_id: 'cong-dest' };
+    const actor: JwtPayload = {
+      sub: 'support-1',
+      tenant_id: 'tenant-support-home',
+      congregation_id: 'cong-support-home',
+      roles: ['platform_support'],
+      plan: 'starter',
+    };
+
+    await expect(controller.transfer('user-1', dto, actor)).resolves.toEqual({
+      user_account_id: 'user-1',
+      previous_tenant_id: 'tenant-origin',
+      previous_congregation_id: 'cong-origin',
+      tenant_id: 'tenant-dest',
+      congregation_id: 'cong-dest',
+    });
+    expect(services.transferUserAccount.transfer).toHaveBeenCalledWith('user-1', dto, actor);
+  });
+
+  it('transfer não redeclara @Roles/@PlatformRoute — herda as marcas do controller', () => {
+    const reflector = new Reflector();
+
+    expect(reflector.get(ROLES_KEY, PlatformController.prototype.transfer)).toBeUndefined();
+    expect(
+      reflector.get(PLATFORM_ROUTE_KEY, PlatformController.prototype.transfer),
+    ).toBeUndefined();
+    // As marcas vivem na classe, não no método — é o que faz o RolesGuard e o
+    // TenantContextInterceptor valerem para toda rota do controller sem
+    // redeclaração por rota.
+    expect(reflector.get(ROLES_KEY, PlatformController)).toEqual(['platform_support']);
+    expect(reflector.get(PLATFORM_ROUTE_KEY, PlatformController)).toBe(true);
   });
 });

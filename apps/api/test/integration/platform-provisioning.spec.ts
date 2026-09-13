@@ -49,10 +49,10 @@ let supportEmail: string;
 let comumEmail: string;
 let tenantNovoId: string;
 
-async function login(email: string, senha: string, slug: string): Promise<string> {
+async function login(email: string, senha: string): Promise<string> {
   const res = await http()
     .post('/api/auth/login')
-    .send({ email, password: senha, tenant_slug: slug })
+    .send({ email, password: senha })
     .expect(200);
 
   return (res.body as { access_token: string }).access_token;
@@ -150,7 +150,7 @@ const payload = {
 
 describe('POST /api/platform/tenants', () => {
   it('barra quem não é platform_support', async () => {
-    const token = await login(comumEmail, SENHA, slugPlataforma);
+    const token = await login(comumEmail, SENHA);
 
     await http()
       .post('/api/platform/tenants')
@@ -164,7 +164,7 @@ describe('POST /api/platform/tenants', () => {
   });
 
   it('provisiona o tenant inteiro numa chamada', async () => {
-    const token = await login(supportEmail, SENHA, slugPlataforma);
+    const token = await login(supportEmail, SENHA);
 
     const res = await http()
       .post('/api/platform/tenants')
@@ -209,7 +209,7 @@ describe('POST /api/platform/tenants', () => {
   });
 
   it('o admin criado consegue logar no tenant novo', async () => {
-    const token = await login(`pastor-${ts}@nova.test`, SENHA_NOVO_ADMIN, slugNovo);
+    const token = await login(`pastor-${ts}@nova.test`, SENHA_NOVO_ADMIN);
 
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
@@ -228,7 +228,7 @@ describe('POST /api/platform/tenants', () => {
   });
 
   it('slug repetido responde 409', async () => {
-    const token = await login(supportEmail, SENHA, slugPlataforma);
+    const token = await login(supportEmail, SENHA);
 
     await http()
       .post('/api/platform/tenants')
@@ -252,7 +252,7 @@ describe('GET /api/platform/tenants', () => {
   });
 
   it('barra quem não é platform_support', async () => {
-    const token = await login(comumEmail, SENHA, slugPlataforma);
+    const token = await login(comumEmail, SENHA);
 
     await http()
       .get('/api/platform/tenants')
@@ -261,7 +261,7 @@ describe('GET /api/platform/tenants', () => {
   });
 
   it('atravessa tenants: lista o da plataforma e o provisionado juntos', async () => {
-    const token = await login(supportEmail, SENHA, slugPlataforma);
+    const token = await login(supportEmail, SENHA);
 
     const res = await http()
       .get('/api/platform/tenants?limit=100')
@@ -287,7 +287,7 @@ describe('GET /api/platform/tenants', () => {
   });
 
   it('a busca filtra por slug', async () => {
-    const token = await login(supportEmail, SENHA, slugPlataforma);
+    const token = await login(supportEmail, SENHA);
 
     const res = await http()
       .get(`/api/platform/tenants?search=${slugNovo}`)
@@ -300,7 +300,7 @@ describe('GET /api/platform/tenants', () => {
   });
 
   it('limit acima do teto é rejeitado', async () => {
-    const token = await login(supportEmail, SENHA, slugPlataforma);
+    const token = await login(supportEmail, SENHA);
 
     await http()
       .get('/api/platform/tenants?limit=1000')

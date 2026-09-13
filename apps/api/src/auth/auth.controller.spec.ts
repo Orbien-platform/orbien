@@ -31,7 +31,7 @@ describe('AuthController', () => {
   it('login delega ao AuthService com o DTO', async () => {
     const service = serviceMock();
     const controller = new AuthController(service);
-    const dto = { email: 'a@b.com', password: 'x', tenant_slug: 'doca' };
+    const dto = { email: 'a@b.com', password: 'x' };
 
     await expect(controller.login(dto)).resolves.toEqual({
       access_token: 'a',
@@ -74,7 +74,7 @@ describe('AuthController', () => {
   it('forgotPassword delega ao AuthService com o DTO', async () => {
     const service = serviceMock();
     const controller = new AuthController(service);
-    const dto = { email: 'a@b.com', tenant_slug: 'doca' };
+    const dto = { email: 'a@b.com' };
 
     await controller.forgotPassword(dto);
     expect(service.forgotPassword).toHaveBeenCalledWith(dto);

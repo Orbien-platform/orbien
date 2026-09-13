@@ -1457,6 +1457,38 @@ impersonando um tenant Starter.
 
 ---
 
+## Nota de deploy · verificação de e-mail duplicado antes de `@@unique([email])` em `user_accounts`
+
+Registrada em 2026-09-13, feature `login-email-global` (Fase 2, T3 de
+`.specs/features/login-email-global/tasks.md`). Não é achado fechado como as
+seções acima — é o passo manual que a migration da Task 4 exige antes de
+rodar em produção, documentado aqui porque `docs/PENDENCIAS.md` é o arquivo
+que `CLAUDE.md` e o `DEPLOY.md` já citam para esse tipo de nota.
+
+`user_accounts.email` hoje é único por `(tenant_id, email)`. A migration que
+troca isso por `@@unique([email])` falha se houver duas contas com o mesmo
+e-mail em tenants diferentes — e ela deve falhar alto, nunca escolher uma
+conta em silêncio (AUTH-05/06 do `spec.md`). Antes de aplicar essa migration
+em produção, alguém com acesso ao Postgres precisa rodar:
+
+```sql
+SELECT email, count(*) AS contas, array_agg(tenant_id) AS tenants
+FROM user_accounts
+GROUP BY email
+HAVING count(*) > 1;
+```
+
+Se vier alguma linha: resolver manualmente antes da migration — transferir
+uma das contas para o tenant da outra (rota de transferência da Fase 4 desta
+feature, quando existir) ou trocar o e-mail de uma delas. A migration em si
+não resolve isso por conta própria.
+
+Rodada localmente (Postgres desta sessão, provisionado sem seed) só para
+confirmar a sintaxe — zero linhas, como esperado num banco vazio; isso não
+prova nada sobre produção, só que a query é válida.
+
+---
+
 ## Registro
 
 Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.
