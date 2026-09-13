@@ -40,6 +40,7 @@ export class SettingsController {
       user.congregation_id,
       user.roles,
       dto,
+      user.plan,
     );
   }
 

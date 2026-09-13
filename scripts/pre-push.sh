@@ -104,8 +104,20 @@ fi
 # ── Portões determinísticos ───────────────────────────────────────────────
 echo
 echo "▶ Build, tipos e lint"
-npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 5 apps" \
-  || { bloqueia "build falhou — veja /tmp/prepush-build.log"; tail -15 /tmp/prepush-build.log | sed 's/^/      /'; }
+npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 5 apps" || {
+  # AJU-04: bug conhecido do Next 16.2.x/16.3.x (vercel/next.js#95741) — race
+  # condition do Turbopack ao prerenderizar /_global-error ou /_not-found.
+  # Reproduz só neste tipo de sandbox de dev/CI; o build real da Vercel passa
+  # (confirmado no PR #84). Alerta em vez de bloquear só para esse padrão
+  # exato — qualquer outra falha de build continua bloqueando o push.
+  if grep -qE "Cannot read properties of null \(reading 'useContext'\)" /tmp/prepush-build.log \
+      && grep -qE "/_global-error|/_not-found" /tmp/prepush-build.log; then
+    alerta "build falhou só no crash conhecido do Next 16.x ao prerenderizar /_global-error|/_not-found (vercel/next.js#95741) — o build real da Vercel passa, veja AJU-04 em docs/PLANO.md"
+  else
+    bloqueia "build falhou — veja /tmp/prepush-build.log"
+    tail -15 /tmp/prepush-build.log | sed 's/^/      /'
+  fi
+}
 npx tsc --noEmit -p apps/api/tsconfig.json >/tmp/prepush-tsc.log 2>&1 && passa "tipos da API, incluindo test/" \
   || { bloqueia "tsc falhou — veja /tmp/prepush-tsc.log"; head -10 /tmp/prepush-tsc.log | sed 's/^/      /'; }
 npx turbo run lint >/tmp/prepush-lint.log 2>&1 && passa "lint" \

@@ -139,15 +139,15 @@ describe("TenantsPage", () => {
   it("mostra os quatro estados de plano e o tenant sem plano", async () => {
     respondeCom([
       tenant({ id: "t-1", plan_status: "trial" }),
-      tenant({ id: "t-2", plan_status: "past_due", plan: "starter" }),
-      tenant({ id: "t-3", plan_status: "canceled" }),
+      tenant({ id: "t-2", plan_status: "suspended", plan: "starter" }),
+      tenant({ id: "t-3", plan_status: "cancelled" }),
       tenant({ id: "t-4", plan: null, plan_status: null }),
     ]);
 
     render(<TenantsPage />);
 
     expect(await screen.findByText("Trial")).toBeInTheDocument();
-    expect(screen.getByText("Em atraso")).toBeInTheDocument();
+    expect(screen.getByText("Suspenso")).toBeInTheDocument();
     expect(screen.getByText("Starter")).toBeInTheDocument();
     expect(screen.getByText("Cancelado")).toBeInTheDocument();
     // Sem plano: traço, e nenhum selo de status.

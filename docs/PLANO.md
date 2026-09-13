@@ -15,8 +15,10 @@ pendência:
   funcional, pricing, LGPD, contratos. Descreve **por que** o produto é como
   é, não o que falta.
 
-Última varredura completa contra a `main`: **2026-09-12** (revista depois dos
-PRs #74, #75 e #76, que entraram no mesmo dia).
+Última varredura completa contra a `main`: **2026-09-13** — fechou `AJU-04`,
+`AJU-06`, `PEND-02`, `PROD-04`, `PROD-06`, `PROD-10` (já entregue em
+2026-09-12, só não tinha saído desta lista), `PROD-18` (duplicata de
+`PROD-15`) e `PROD-19`; revisitou `PEND-04` sem mudança de código.
 
 ---
 
@@ -250,28 +252,54 @@ leitura errar de novo.
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-04` | 2 | Página pública de doação (Cenário 3) | Starter | **A API está pronta** — `POST /financial/pix/public-donation`, público e com throttle. Não há tela em `apps/web` nem em `apps/site` que a chame |
 | `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
-| `PROD-06` | 1 | Fila CRM de trials não convertidos e inadimplentes | Premium | — |
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-09` | 3 | Chat fechado por célula | Starter | — |
-| `PROD-10` | 3 | Histórico de versões de materiais de estudo | Starter | `MaterialOpenRecord` (indicador de abertura) existe; versionamento não |
-| `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | — |
+| `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-13` | 3 | "Encontre uma célula" (mapa público, filtros, botão visitar) | Starter | `SmallGroup.is_public` existe e é filtrável, mas não há rota pública nem tela |
-| `PROD-15` | 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | — |
 | `PROD-16` | 4 | Evento com inscrição | Starter (sem pagamento) / Premium (com) | `ContentPostType.event` existe como tipo de post; não há modelo de inscrição |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
-| `PROD-18` | Plataforma | OTA via Expo Updates | Starter e Premium | `expo-updates` não está no `apps/mobile`; o ADR-004 prevê e o v1 adiou |
-| `PROD-19` | Plataforma | Domínio próprio por tenant, termos de uso próprios por tenant | Premium | — |
+| `PROD-20` | 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | Renumerado de `PROD-15` em 2026-09-13 — esse ID já pertence ao item de infra OTA fechado na seção 5, e ID não se recicla |
 
 **Conferido e entregue**, apesar de soar parecido com os de cima — para não
 virar trabalho repetido: detecção de duplicados no cadastro e na importação,
 métricas de notificação da OneSignal (`reached`/`opened`, sincronizadas), OC
 imprimível em PDF, exportação contábil OFX, forecast financeiro, PIX nos três
-cenários com webhook da Asaas, e o indicador de abertura de material por
-membro.
+cenários com webhook da Asaas, o indicador de abertura de material por
+membro, e o histórico de versões de materiais de estudo (`PROD-10`, PR
+com commits `495639b`/`a25d46f`/`2847e06` — `StudyMaterialVersion` grava
+snapshot antes de cada `PATCH`, RLS padrão B, rota
+`GET /study-materials/:id/versions` e toggle no `GroupDetailSheet`; fechado
+em 2026-09-12, só não tinha saído desta tabela ainda).
+
+> `PROD-18` (OTA via Expo Updates) fechou em 2026-09-13 por ser o mesmo
+> item que `PROD-15` (seção 5, "Infra básica de expo-updates") — duas
+> entradas para a mesma entrega, uma fechada e outra não. A nota que dizia
+> "`expo-updates` não está no `apps/mobile`" estava desatualizada desde
+> 2026-09-12: o pacote está instalado e a infra descrita em `PROD-15` cobre
+> exatamente o que esta linha pedia.
+
+> `PROD-04` (página pública de doação, Cenário 3), `PROD-06` (fila CRM de
+> trials/inadimplentes) e `PROD-19` (domínio próprio e termos de uso por
+> tenant) **fecharam em 2026-09-13**:
+>
+> - `PROD-04` — `apps/web/src/app/(public)/doar/[tenant]/page.tsx`, sem
+>   login, chama `POST /financial/pix/public-donation` (já existia) e mostra
+>   a chave PIX manual para copiar — não há QR Asaas aqui, isso é o Cenário 2
+>   (Premium).
+> - `PROD-06` — `ListCrmQueueService` (`GET
+>   /platform/tenants/crm-queue`) separa trial vencido sem conversão
+>   (`status = trial` + `trial_ends_at` no passado) de inadimplente (`status
+>   = suspended`), e `apps/admin` ganhou a aba **CRM** para o time comercial
+>   abrir sessão de suporte a partir da fila.
+> - `PROD-19` — só o registro, não o provisionamento: `BrandingConfig`
+>   ganhou `custom_domain` (único) e `terms_url`, graváveis por
+>   `tenant_admin` em plano Premium via `PATCH /settings` (`dto.branding`).
+>   Apontar o domínio de fato — DNS/CNAME, certificado — é passo de infra
+>   que este PR não faz; falta decidir isso à parte antes de anunciar a
+>   funcionalidade como usável.
 
 ---
 
@@ -292,28 +320,18 @@ continuam vendo grupos que não lideram; só quem só tem `member` precisa da
 participação real. Diferente dos pedidos de oração, que não tinham
 comportamento anterior para quebrar.
 
-### PEND-02 · Vocabulário de status do `apps/admin` ≠ `PlanStatus` da API · defeito
+### ~~PEND-02 · Vocabulário de status do `apps/admin` ≠ `PlanStatus` da API~~ · fechado
 
-`PlanStatus` (`apps/api/prisma/schema.prisma:1400-1405`) tem `active`, `trial`,
-`suspended` e `cancelled`, e é o valor cru que `ListTenantsService` devolve
-(`list-tenants.service.ts:88`). A lista de tenants do console declara outros
-quatro — `trial`, `active`, `past_due`, `canceled` — nos três lugares em que
-trata status: o tipo (`apps/admin/src/app/(platform)/tenants/page.tsx:20`),
-`STATUS_LABELS` (`:35`) e `STATUS_CLS` (`:42`).
+Fechado em 2026-09-13: os seis literais de `apps/admin/src/app/(platform)/tenants/page.tsx`
+(o tipo `Tenant.plan_status`, `STATUS_LABELS` e `STATUS_CLS`) trocaram
+`past_due`/`canceled` por `suspended`/`cancelled`, batendo com o enum
+`PlanStatus` do schema. Rótulo de `suspended` ficou "Suspenso" — não havia um
+rótulo anterior para esse valor, porque ele nunca tinha renderizado direito.
+`page.test.tsx` ajustado para os literais corretos.
 
-São duas divergências: `canceled` × `cancelled` (um `l` a menos) e `past_due` ×
-`suspended` (nome que não existe no enum). Nos dois casos o selo renderiza
-vazio e sem cor, porque o `if` da linha `:159` testa só se `plan_status` é
-truthy. O tipo do `page.tsx` não protege: é escrito à mão, e o `apps/admin`
-não pode importar de `apps/api`.
-
-Só virou alcançável quando `POST /platform/tenants/:id/cancel` nasceu
-(2026-09-11): antes, nada colocava um `TenantPlan` em `cancelled`.
-
-Fix: seis literais no `page.tsx`. Vale decidir junto se o console ganha o
-botão de cancelar/reativar (hoje a rota só responde a chamada direta) e se um
-teste trava o mapa contra o enum, como `permissions.test.ts` já faz no web com
-os papéis do `seed.ts`.
+O botão de cancelar/reativar no console e o teste que trava o mapa contra o
+enum (como `permissions.test.ts` faz no web) ficaram de fora — não é o mesmo
+achado, é trabalho novo; abrir como pendência própria se for para frente.
 
 ### ~~PEND-03 · O front duplica as listas de papéis da API~~ · fechado
 
@@ -339,6 +357,16 @@ e esquecer do `permissions.ts`" — não precisou chegar.
   do Render. O recorte por origem fechou em 2026-09-07 com
   `app.set('trust proxy', 1)`; o que resta é decisão de infra, não código.
 
+**Revisitado em 2026-09-13, sem mudança de código.** Dos três pontos, dois
+não são código (rate limit é infra) e o terceiro segue exatamente como o
+texto acima descreve: mapear o que `AuthService`/`JwtStrategy` de fato leem
+antes do `SET LOCAL ROLE` para trocar `USING (true)` por um `USING` que só
+libera essas colunas — não as linhas inteiras — é auditoria de segurança do
+caminho de login, não um fix de uma tarde, e um `USING` errado quebra login
+em produção sem aviso. Ficou como pergunta, não decisão: seguir com o
+`USING (true)` conhecido, ou priorizar esse mapeamento como trabalho próprio
+antes de mexer na policy?
+
 ---
 
 ## 8. Ajustes — documento, rótulo e portão
@@ -352,10 +380,15 @@ caçar, e o que sobrou declarado da rodada 3 do Verifier.
 | `AJU-01` | Rótulo "39 testes de RLS" no portão de pre-push | `scripts/pre-push.sh:120` | 61 testes em 2 suítes |
 | `AJU-02` | Contagem de RLS envelhecida | `docs/TESTES.md:53`, `:236`, `:334` dizem 39; `:1149`, `:1204` dizem 54 | 61 |
 | `AJU-03` | Contagem de e2e do web envelhecida | `docs/TESTES.md:1153` diz 12 em 8 arquivos | 16 em 10 |
-| `AJU-04` | "`turbo run build --filter=orbien-web` continua vermelho" | `docs/TESTES.md`, "Pendências abertas" | **Vermelho de novo em 2026-09-12, agora nos 3 apps Next** — ver nota abaixo |
-| `AJU-06` | Os dez `MAP-NN` parados em "Implementing / Aguardando Verifier" | `.specs/features/mapa-monorepo-e-portoes/spec.md:226-235` | 9 verificados em 3 rodadas. Sugestão do relatório: MAP-01…09 ✅ Verified, MAP-10 ❌ Needs Fix |
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
+
+> **`AJU-06` fechou em 2026-09-13.** A tabela de traceability de
+> `.specs/features/mapa-monorepo-e-portoes/spec.md` agora diz o que a rodada
+> 3 do Verifier apurou: MAP-01…MAP-09 `✅ Verified`, MAP-10 `❌ Needs Fix`
+> (com o motivo e o `file:line` dos gaps, ver `validation.md` daquela
+> feature). MAP-10 em si continua aberto — o item fechado era só o board
+> mentir sobre o estado.
 
 > **`AJU-04`, retomado em 2026-09-12** (tentando corrigir o build do
 > `orbien-admin` para o portão de PROD-10): o mesmo crash —
@@ -404,6 +437,14 @@ caçar, e o que sobrou declarado da rodada 3 do Verifier.
 > `alerta` especificamente para o padrão desse crash (prerender de
 > `/_global-error`/`/_not-found`), mantendo bloqueio para qualquer outra
 > falha de build.
+>
+> **`AJU-04` fechou em 2026-09-13** — essa ação foi feita:
+> `scripts/pre-push.sh` grifa a saída do build por
+> `Cannot read properties of null (reading 'useContext')` junto de
+> `/_global-error`/`/_not-found` antes de decidir; batendo o padrão, vira
+> `alerta` (com o link da issue upstream); qualquer outra falha de build
+> continua `bloqueia`. O bug do Next em si segue aberto e sem fix — o que
+> fechou foi só o portão bloquear o push por ele.
 
 O buraco do portão que a mesma rodada apontou — `scripts/pre-push.sh` sem
 `mobile` na alternação da regra de fronteira — **fechou** em `08e0640`, junto
