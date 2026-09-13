@@ -138,7 +138,7 @@ afterAll(async () => {
 async function loginSuporte(): Promise<string> {
   const res = await http()
     .post('/api/auth/login')
-    .send({ email: `suporte-${ts}@orbien.test`, password: SENHA, tenant_slug: slugSuporte })
+    .send({ email: `suporte-${ts}@orbien.test`, password: SENHA })
     .expect(200);
   return res.body.access_token as string;
 }
