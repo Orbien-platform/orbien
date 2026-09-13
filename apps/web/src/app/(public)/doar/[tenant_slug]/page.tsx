@@ -66,8 +66,7 @@ export default function DoarPage() {
   }
 
   async function handleCopy() {
-    if (!result) return;
-    await navigator.clipboard.writeText(result.pix_key);
+    await navigator.clipboard.writeText(result!.pix_key);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
