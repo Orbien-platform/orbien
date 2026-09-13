@@ -38,8 +38,14 @@ function run(opts: {
   body?: unknown;
   auditInsertFails?: boolean;
   withoutIpAndUserAgent?: boolean;
+  resolveActorNameFails?: boolean;
+  // Nome que `resolve_actor_name()` devolveria — `null` simula ator sem
+  // `person_id` (conta sem pessoa vinculada), ausência de mock simula uma
+  // pessoa encontrada com este nome por padrão.
+  actorName?: string | null;
 }) {
   const writes: unknown[][] = [];
+  const queries: unknown[][] = [];
 
   const prisma = {
     $executeRaw: (_s: TemplateStringsArray, ...values: unknown[]) => {
@@ -47,6 +53,14 @@ function run(opts: {
       return opts.auditInsertFails
         ? Promise.reject(new Error('audit_insert indisponível'))
         : Promise.resolve(1);
+    },
+    $queryRaw: (_s: TemplateStringsArray, ...values: unknown[]) => {
+      queries.push(values);
+      if (opts.resolveActorNameFails) {
+        return Promise.reject(new Error('resolve_actor_name indisponível'));
+      }
+      const resolve_actor_name = opts.actorName === undefined ? 'Fulano de Tal' : opts.actorName;
+      return Promise.resolve([{ resolve_actor_name }]);
     },
   } as unknown as PrismaService;
 
@@ -73,7 +87,18 @@ function run(opts: {
 
   return {
     writes,
-    result: firstValueFrom(new AuditInterceptor(prisma, reflector).intercept(ctx, next)),
+    queries,
+    // A gravação agora depende de duas promises encadeadas
+    // (resolveActorNameSnapshot().then(executeRaw)), então o `write`
+    // correspondente só existe depois de a cadeia de microtasks esvaziar —
+    // por isso todo `result` já inclui essa espera, e nenhum teste precisa
+    // fazer isso na mão.
+    result: firstValueFrom(new AuditInterceptor(prisma, reflector).intercept(ctx, next)).then(
+      async (value) => {
+        await new Promise((resolve) => setImmediate(resolve));
+        return value;
+      },
+    ),
   };
 }
 
@@ -81,10 +106,12 @@ function run(opts: {
 // da assinatura: `p_subject_person_id` e `p_before` são NULL literal no SQL,
 // não interpolação, e por isso não entram na lista de valores.
 //   0 tenant · 1 congregation · 2 actor · 3 entity · 4 action · 5 after
+//   6 ip · 7 user_agent · 8 actor_name_snapshot
 const ACTION = 4;
 const AFTER = 5;
 const IP = 6;
 const USER_AGENT = 7;
+const ACTOR_NAME_SNAPSHOT = 8;
 
 describe('AuditInterceptor', () => {
   it('não registra requisição comum', async () => {
@@ -154,6 +181,34 @@ describe('AuditInterceptor', () => {
 
     expect(writes[0]?.[IP]).toBeNull();
     expect(writes[0]?.[USER_AGENT]).toBeNull();
+  });
+
+  it('resolve o nome da pessoa do ator (via resolve_actor_name) e grava em actor_name_snapshot', async () => {
+    // AD-004: o nome é resolvido uma vez, no interceptor, para o mesmo ator
+    // gravado como actor_user_id — impersonated_by quando há sessão de
+    // suporte, nunca a conta impersonada.
+    const { writes, queries, result } = run({ user: suporte, actorName: 'Fulano de Tal' });
+    await result;
+
+    expect(queries[0]?.[0]).toBe(suporte.impersonated_by);
+    expect(writes[0]?.[ACTOR_NAME_SNAPSHOT]).toBe('Fulano de Tal');
+  });
+
+  it('ator sem pessoa vinculada grava actor_name_snapshot NULL, sem quebrar o insert', async () => {
+    const { writes, result } = run({ user: comum, isPlatformRoute: true, actorName: null });
+    await result;
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.[ACTOR_NAME_SNAPSHOT]).toBeNull();
+  });
+
+  it('audit_insert é chamado com o argumento novo (11º parâmetro, actor_name_snapshot) em toda gravação', async () => {
+    const { writes, result } = run({ user: suporte });
+    await result;
+
+    // 9 valores interpolados agora (era 8): o novo é o último.
+    expect(writes[0]).toHaveLength(9);
+    expect(writes[0]?.[ACTOR_NAME_SNAPSHOT]).toBe('Fulano de Tal');
   });
 
   it('falha ao gravar a auditoria não derruba a requisição — best-effort', async () => {

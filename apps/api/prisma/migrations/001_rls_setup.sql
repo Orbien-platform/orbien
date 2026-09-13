@@ -451,17 +451,25 @@ CREATE POLICY tenant_read ON audit_logs
   USING (tenant_id = app_current_tenant());
 
 -- Função helper para inserção segura no audit_log (ignora RLS restrita)
+--
+-- `p_actor_name_snapshot` (AD-004, ver .specs/STATE.md): o nome do autor,
+-- resolvido UMA VEZ por quem chama esta função — hoje só o AuditInterceptor
+-- — e passado já pronto aqui. A função nunca resolve o nome por conta
+-- própria: se cada chamador decidisse fazer ou não o join até `persons`, o
+-- snapshot existiria só em parte dos registros, o que é pior do que não
+-- existir.
 CREATE OR REPLACE FUNCTION audit_insert(
-  p_tenant_id         TEXT,
-  p_congregation_id   TEXT,
-  p_actor_user_id     TEXT,
-  p_subject_person_id TEXT,
-  p_entity            TEXT,
-  p_action            TEXT,
-  p_before            JSONB,
-  p_after             JSONB,
-  p_ip                TEXT,
-  p_user_agent        TEXT
+  p_tenant_id           TEXT,
+  p_congregation_id     TEXT,
+  p_actor_user_id       TEXT,
+  p_subject_person_id   TEXT,
+  p_entity              TEXT,
+  p_action              TEXT,
+  p_before              JSONB,
+  p_after               JSONB,
+  p_ip                  TEXT,
+  p_user_agent          TEXT,
+  p_actor_name_snapshot TEXT DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE SQL SECURITY DEFINER
@@ -474,12 +482,32 @@ AS $$
   -- registrar o AuditInterceptor. Ver docs/PENDENCIAS.md.
   INSERT INTO audit_logs (
     id, tenant_id, congregation_id, actor_user_id, subject_person_id,
-    entity, action, before, after, ip, user_agent, at
+    entity, action, before, after, ip, user_agent, actor_name_snapshot, at
   ) VALUES (
     gen_random_uuid()::text,
     p_tenant_id, p_congregation_id, p_actor_user_id, p_subject_person_id,
-    p_entity, p_action, p_before, p_after, p_ip, p_user_agent, now()
+    p_entity, p_action, p_before, p_after, p_ip, p_user_agent,
+    p_actor_name_snapshot, now()
   );
+$$;
+
+-- Helper de leitura para o snapshot acima: `persons` não tem policy
+-- `orbien_app_auth` (só tenant_isolation normal), e quem chama
+-- `audit_insert()` roda sem `SET LOCAL ROLE app_user`/contexto de tenant
+-- (a transação da requisição já terminou quando o AuditInterceptor grava o
+-- log — ver o comentário do interceptor). Sem esta função SECURITY DEFINER,
+-- a leitura de `persons` devolveria sempre vazio por RLS, e o snapshot
+-- nasceria sempre NULL. Só resolve o nome; não decide auditar nada.
+CREATE OR REPLACE FUNCTION resolve_actor_name(
+  p_actor_user_id TEXT
+)
+RETURNS TEXT
+LANGUAGE SQL SECURITY DEFINER
+AS $$
+  SELECT p.full_name
+  FROM user_accounts ua
+  JOIN persons p ON p.id = ua.person_id
+  WHERE ua.id = p_actor_user_id;
 $$;
 
 -- ---------------------------------------------------------------------------
