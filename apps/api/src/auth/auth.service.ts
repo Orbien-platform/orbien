@@ -97,40 +97,39 @@ export class AuthService {
   async login(
     dto: LoginDto,
   ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
-    // A janela é conferida antes de tocar no banco de contas, e a chave inclui
-    // o tenant: bloquear um e-mail numa igreja não bloqueia o mesmo e-mail em
-    // outra, que é conta diferente.
-    const limitKey = LoginRateLimitService.key(`login:${dto.tenant_slug}`, dto.email);
+    // `user_accounts.email` é único em todo o banco (@@unique([email])), então
+    // a janela do limitador é só por e-mail — não há mais tenant a incluir na
+    // chave, e não há ambiguidade a resolver: zero ou uma conta, nunca mais.
+    const limitKey = LoginRateLimitService.key('login', dto.email);
     await this.rateLimit.assert(limitKey, LOGIN_POLICY);
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug: dto.tenant_slug },
-      include: { tenantPlan: { select: { plan: true } } },
+    const invalid = new UnauthorizedException({
+      message: 'Invalid credentials',
+      code: 'INVALID_CREDENTIALS',
     });
-    // Tenant inativo dá o mesmo erro de tenant inexistente: quem inativou a
-    // igreja não quer que o login continue distinguindo os dois casos. Quem
-    // barra de fato, em toda requisição — não só aqui — é o
-    // `JwtStrategy.validate`; este é o caminho que evita emitir um token que
-    // já nasceria inútil.
-    if (!tenant || !tenant.is_active)
-      throw new UnauthorizedException({ message: 'Tenant not found', code: 'TENANT_NOT_FOUND' });
 
     const user = await this.prisma.userAccount.findUnique({
-      where: { tenant_id_email: { tenant_id: tenant.id, email: dto.email } },
+      where: { email: dto.email },
       include: {
         roleAssignments: { select: { role_code: true, congregation_id: true } },
+        tenant: { include: { tenantPlan: { select: { plan: true } } } },
       },
     });
 
-    if (!user || !user.is_active) {
+    // E-mail inexistente, conta inativa e tenant inativo levam o mesmo 401
+    // genérico — quem tenta entrar não deve descobrir por qual desses motivos
+    // a tentativa falhou. Quem barra de fato tenant inativo em toda
+    // requisição — não só aqui — é o `JwtStrategy.validate`; este é o caminho
+    // que evita emitir um token que já nasceria inútil.
+    if (!user || !user.is_active || !user.tenant.is_active) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
-      throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+      throw invalid;
     }
 
     const valid = await argon2.verify(user.password_hash, dto.password);
     if (!valid) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
-      throw new UnauthorizedException({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+      throw invalid;
     }
 
     // Credencial certa zera a janela: quem sabe a senha nunca esbarra no limite.
@@ -138,11 +137,11 @@ export class AuthService {
 
     const roles = rolesForToken(user.roleAssignments, user.congregation_id);
 
-    const plan = (tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+    const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
       sub: user.id,
-      tenant_id: tenant.id,
+      tenant_id: user.tenant_id,
       congregation_id: user.congregation_id,
       roles,
       plan,
@@ -157,11 +156,13 @@ export class AuthService {
   /**
    * Login do console da plataforma — sem `tenant_slug`.
    *
-   * `POST /auth/login` pede o slug porque `user_accounts` é única por
-   * `(tenant_id, email)`: sem o tenant não há chave para procurar a conta. Aqui
-   * o desempate vem de outro lugar — o papel. Só contas que têm
+   * `POST /auth/login` também busca só por e-mail hoje (`user_accounts` é
+   * única por `email` em todo o banco). A diferença aqui é o desempate: em vez
+   * da unicidade do schema, quem resolve é o papel. Só contas que têm
    * `platform_support` em `role_assignments` são candidatas, e são poucas,
-   * porque o papel é da equipe que administra o ecossistema.
+   * porque o papel é da equipe que administra o ecossistema — por isso ainda
+   * vale o `findMany` + tratamento de ambiguidade, que `login()` não precisa
+   * mais ter.
    *
    * O token continua carregando o tenant e a congregação de origem da conta,
    * resolvidos aqui e não informados pelo cliente. Não é detalhe: as rotas de
