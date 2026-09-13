@@ -410,18 +410,31 @@ não dependa diretamente da constraint)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Transferência move conta+pessoa na mesma transação (AUTH-07)
-- [ ] Refresh tokens da conta revogados (AUTH-08... na verdade AUTH-08 da spec é sobre migration; aqui é o AC2 da história P2 — revogação de sessão)
-- [ ] `role_assignments` do tenant de origem removidos, `platform_support` preservado (AC3 da história P2)
-- [ ] `audit_logs` gravado com `before`/`after` corretos e `actor_name_snapshot` presente (AC4/AC5 da história P2)
-- [ ] Transferência para o mesmo tenant rejeitada com 400
-- [ ] Tenant/congregação de destino inexistente ou inativo rejeitados (404/400)
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] Transferência move conta+pessoa na mesma transação (AUTH-07)
+- [x] Refresh tokens da conta revogados (AUTH-08... na verdade AUTH-08 da spec é sobre migration; aqui é o AC2 da história P2 — revogação de sessão)
+- [x] `role_assignments` do tenant de origem removidos, `platform_support` preservado (AC3 da história P2)
+- [x] `audit_logs` gravado com `before`/`after` corretos e `actor_name_snapshot` presente (AC4/AC5 da história P2)
+- [x] Transferência para o mesmo tenant rejeitada com 400
+- [x] Tenant/congregação de destino inexistente ou inativo rejeitados (404/400)
+- [x] Gate: `npm run test -w orbien-backend`
 
 **Tests**: unit — 1:1 com AC1-AC5 da história P2 + edge cases (no-op, destino inexistente, destino inativo, falha do audit_insert não desfaz a transferência)
 **Gate**: quick
 
 **Commit**: `feat(api): transferência de conta entre tenants (platform_support)`
+
+**Status**: ✅ Concluída — commit `2fa719a`.
+
+**SPEC_DEVIATION**: usa `PrismaService.runInTx` (não `prisma.$transaction`
+direto) — é o padrão já estabelecido em todo o resto do `apps/api/src`
+(`ProvisionTenantService`, `PixService`, etc.) para reaproveitar a
+transação que o `TenantContextInterceptor` já abriu na rota de plataforma:
+continua sendo uma única transação Prisma, atômica, só que via o helper que
+já existia para não duplicar a máquina de transação. Também valida
+explicitamente que a congregação de destino pertence ao tenant de destino
+(400 se não pertencer) — não estava listado no "Done when" original, mas é
+condição necessária para o AC1 não gravar um estado inconsistente
+(congregação de um tenant, conta de outro).
 
 ---
 
@@ -437,12 +450,16 @@ e injeta `TransferUserAccountService`.
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Rota registrada, protegida pelas mesmas guards/decorators do controller
-- [ ] `platform.module.ts` provê o serviço novo
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] Rota registrada, protegida pelas mesmas guards/decorators do controller
+- [x] `platform.module.ts` provê o serviço novo
+- [x] Gate: `npm run test -w orbien-backend`
 
 **Tests**: unit (`platform.controller.spec.ts` — rota chama o serviço certo, guards presentes)
 **Gate**: quick
+
+**Commit**: `feat(api): PATCH /platform/user-accounts/:id/transfer`
+
+**Status**: ✅ Concluída — commit `4e5ac2c`.
 
 ---
 
@@ -460,14 +477,30 @@ transferência).
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Teste roda contra Postgres real (`npm run test:rls -w orbien-backend`)
-- [ ] Confirma AUTH-07/AUTH-12 (isolamento pós-transferência + histórico intacto)
-- [ ] Gate: `npm run test:rls -w orbien-backend`
+- [x] Teste roda contra Postgres real (`npm run test:rls -w orbien-backend`)
+- [x] Confirma AUTH-07/AUTH-12 (isolamento pós-transferência + histórico intacto)
+- [x] Gate: `npm run test:rls -w orbien-backend`
 
 **Tests**: rls
 **Gate**: full
 
 **Commit**: `test(api): RLS de transferência de conta entre tenants`
+
+**Status**: ✅ Concluída — commit `9fac295`.
+
+**SPEC_DEVIATION**: o gate `full` desta task nominalmente inclui
+`npm run test:integration -w orbien-backend`. Esse comando já falhava
+**antes** de T8/T9/T10 (4 suítes / 30 testes, `Unique constraint failed on
+the fields: (email)`) — confirmado rodando o mesmo comando num worktree no
+commit `3bc5f73` (fim da Fase 3, antes desta Fase 4). Causa raiz é a
+migration de T4 (`@@unique([email])`): os fixtures de
+`test/integration/{impersonation,platform-provisioning,platform-login,
+platform-audit-logs}.spec.ts` reusam o mesmo e-mail em tenants diferentes,
+válido sob a chave composta antiga, não sob a global. Fora do escopo de
+T8-T11 (nenhuma delas toca esses arquivos) — não corrigido aqui, registrado
+para decisão do usuário. `npm run test -w orbien-backend` (unit) e
+`npm run test:rls -w orbien-backend` (rls) — os dois comandos que esta task
+de fato exercita — continuam 100% verdes.
 
 ---
 
@@ -483,11 +516,15 @@ transferência de tenant existe, é `platform_support`-only, e onde vive
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Entrada registrada com ID novo
-- [ ] Gate: nenhum (documentação)
+- [x] Entrada registrada com ID novo
+- [x] Gate: nenhum (documentação)
 
 **Tests**: none
 **Gate**: build
+
+**Commit**: `docs: registra transferência de conta entre tenants em PLANO.md (PROD-20)`
+
+**Status**: ✅ Concluída — commit `23b74c4`.
 
 ---
 
