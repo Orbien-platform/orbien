@@ -110,12 +110,14 @@ dev --name add_actor_name_snapshot_to_audit_log`).
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Campo existe no schema e na migration gerada
-- [ ] `npx prisma migrate dev` roda limpo localmente
-- [ ] Gate: `npm run build:api`
+- [x] Campo existe no schema e na migration gerada
+- [x] `npx prisma migrate dev` roda limpo localmente
+- [x] Gate: `npm run build:api`
 
 **Tests**: none (schema/config)
 **Gate**: build
+
+**Status**: ✅ Concluída — commit `b45fb69`.
 
 ---
 
@@ -133,15 +135,31 @@ FUNCTION`, 11º parâmetro `p_actor_name_snapshot TEXT`) para gravar o campo.
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `audit_insert()` grava `actor_name_snapshot` em toda chamada (interceptor)
-- [ ] Registro sem `person` (caso raro) grava `NULL`, não quebra o insert
-- [ ] `bash scripts/bootstrap-db.sh` local aplica o `CREATE OR REPLACE` sem erro
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] `audit_insert()` grava `actor_name_snapshot` em toda chamada (interceptor)
+- [x] Registro sem `person` (caso raro) grava `NULL`, não quebra o insert
+- [x] `bash scripts/bootstrap-db.sh` local aplica o `CREATE OR REPLACE` sem erro
+- [x] Gate: `npm run test -w orbien-backend`
 
 **Tests**: unit (`audit.interceptor.spec.ts` — casos: com pessoa, sem pessoa, `audit_insert` chamado com o argumento novo)
 **Gate**: quick
 
 **Commit**: `feat(api): audit_logs.actor_name_snapshot, resolvido no AuditInterceptor`
+
+**Status**: ✅ Concluída — commit `28bd5bb`.
+
+**SPEC_DEVIATION**: o design previa resolver o nome com uma query simples
+(`user.sub` → join até `persons`). Na prática isso sempre voltaria vazio: a
+tabela `persons` não tem policy de bypass para `orbien_app` (só
+`user_accounts` tem, via `orbien_app_auth` em
+`20260608175621_fix_orbien_app_auth_policies`), e o `AuditInterceptor` lê
+fora de qualquer transação com `SET LOCAL ROLE app_user`/contexto de tenant.
+**Reason**: acrescentei `resolve_actor_name(p_actor_user_id)` em
+`001_rls_setup.sql`, `SECURITY DEFINER` como `audit_insert()` — só resolve o
+nome, não decide o que auditar — para bypassar essa RLS pontual. Confirmado
+manualmente via `psql` como `orbien_app` sem contexto antes de escrever o
+TypeScript (SELECT direto em `persons` devolve 0 linhas; a função devolve o
+nome certo). Não altera o acordo do AD-004 (resolvido uma vez, no
+interceptor, nunca dentro de `audit_insert()`).
 
 ---
 
