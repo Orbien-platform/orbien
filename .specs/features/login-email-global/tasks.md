@@ -79,7 +79,7 @@ T3 → T4 → T5
 ### Phase 3: Login sem tenant_slug
 
 ```
-T6 → T6b → T7
+T6 → T6b → T7 → T7b
 ```
 
 ### Phase 4: Transferência de tenant (API)
@@ -388,6 +388,45 @@ montavam o payload com `tenant_slug`.
 
 ---
 
+### T7b: `platformLogin` perde a branch de ambiguidade (achado da T11b)
+
+**What**: Com `email` globalmente único (T4), `platformLogin` nunca mais
+pode encontrar mais de uma conta com o mesmo e-mail — a branch
+`matches.length > 1` / `PLATFORM_ACCOUNT_AMBIGUOUS` (`auth.service.ts:227-232`)
+ficou morta, e o comentário que a explica (linhas ~193-194, ~223-226) ficou
+obsoleto (ainda descreve a chave composta antiga). Reescreve `platformLogin`
+para `findUnique({ where: { email } })` — mesmo padrão que T6 já aplicou em
+`login()` — e remove a branch de ambiguidade e o comentário que a justifica.
+Achado durante T11b: o teste de integração `platform-login.spec.ts` fabrica
+duas contas com o mesmo e-mail em tenants diferentes para exercitar esse
+cenário, e isso agora viola a constraint do banco no próprio `beforeAll`.
+**Where**: `apps/api/src/auth/auth.service.ts`,
+`apps/api/src/auth/auth.service.spec.ts` (remove o teste unitário mockado de
+`PLATFORM_ACCOUNT_AMBIGUOUS`, linha ~530 — ele simula via mock um cenário
+que o banco não permite mais, não prova nada de real),
+`apps/api/test/integration/platform-login.spec.ts` (remove o teste
+`'papel de plataforma em dois tenants falha alto, não escolhe um'` e o
+fixture que cria a conta duplicada — a garantia que ele testava passou a
+ser do banco, não da aplicação).
+**Depends on**: T4 (causa raiz), T6 (padrão a seguir)
+**Reuses**: a própria reescrita de `login()` feita em T6, como modelo direto.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [ ] `platformLogin` usa `findUnique({ where: { email } })`, sem branch de ambiguidade
+- [ ] Nenhuma referência a `PLATFORM_ACCOUNT_AMBIGUOUS` sobra em código de produção, testes unitários ou de integração
+- [ ] `apps/admin` — se o front tratar esse `code` na tela de login (`page.tsx`), remover também (achado a confirmar antes de editar; se remover, é parte desta mesma task, não uma task nova)
+- [ ] Nenhuma asserção de teste real (não-mockada) enfraquecida — o teste removido testava um cenário que deixou de existir, não um comportamento que ainda importa
+- [ ] Gate: `npm run test -w orbien-backend && npm run test:integration -w orbien-backend`
+
+**Tests**: unit + integration — remove os dois testes que ficaram sem cenário possível; nenhum teste novo exigido (não é funcionalidade nova, é remoção de código/teste morto)
+**Gate**: full
+
+**Commit**: `refactor(api): platformLogin usa e-mail único, remove ambiguidade morta (achado da T11b)`
+
+---
+
 ### T8: `TransferUserAccountDto` + `TransferUserAccountService`
 
 **What**: Cria o DTO (`destination_tenant_id`, `destination_congregation_id`)
@@ -551,9 +590,22 @@ exatos antes de editar — podem diferir ligeiramente).
 
 **Tools**: MCP: NONE · Skill: NONE
 
+**Escopo revisado (achado em andamento)**: rodando o gate primeiro (como o
+processo manda), ficou claro que só `platform-login.spec.ts` falha pela
+razão descrita acima (e-mail duplicado). As outras 3 falhavam por motivo
+diferente — os helpers `login()`/`loginSuporte()` ainda mandavam
+`tenant_slug` no corpo, campo que `LoginDto` já não aceita desde T5/T6
+(`forbidNonWhitelisted: true` rejeita com 400). Corrigir isso nessas 3
+continua dentro do escopo de T11b (é fixture, mesmo arquivo). Já
+`platform-login.spec.ts` tem um problema mais profundo — sua duplicata de
+e-mail é *proposital*, pra testar `PLATFORM_ACCOUNT_AMBIGUOUS`, que virou
+código morto (ver T7b, criada a partir deste achado). **A correção de
+`platform-login.spec.ts` migrou para T7b** — T11b cobre só as outras 3.
+
 **Done when**:
-- [ ] Nenhum fixture dessas 4 suítes reusa e-mail entre contas de tenants diferentes
-- [ ] `npm run test:integration -w orbien-backend` passa (as 4 suítes voltam a rodar, nenhum teste teve sua asserção enfraquecida ou removida — só o dado de fixture mudou)
+- [x] `impersonation.spec.ts`, `platform-provisioning.spec.ts`, `platform-audit-logs.spec.ts` não reusam e-mail entre tenants nem enviam `tenant_slug` residual
+- [x] As 3 suítes acima passam (24/24) — `platform-login.spec.ts` fica para T7b
+- [ ] `npm run test:integration -w orbien-backend` passa por completo (só depois de T7b, que resolve a 4ª suíte)
 - [ ] Gate: `npm run test:integration -w orbien-backend`
 
 **Tests**: integration — mesmos testes existentes, dado de fixture corrigido; nenhum teste novo exigido (não é funcionalidade nova, é correção de dado de teste)
@@ -610,7 +662,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 Phase 1:  T1 ──→ T2
 Phase 2:  T3 ──→ T4 ──→ T5
-Phase 3:  T6 ──→ T6b ──→ T7
+Phase 3:  T6 ──→ T6b ──→ T7 ──→ T7b
 Phase 4:  T8 ──→ T9 ──→ T10 ──→ T11 ──→ T11b
 Phase 5:  T12 ──→ T13
 ```
@@ -634,6 +686,7 @@ não por dependência real.
 | T6: `AuthService.login` reescrito | 1 função | ✅ Granular |
 | T6b: `AuthService.forgotPassword` reescrito | 1 função | ✅ Granular |
 | T7: limpeza do controller/specs | 1 arquivo + specs relacionados | ✅ Granular |
+| T7b: `platformLogin` sem ambiguidade | 1 função + specs unit/integration relacionados (mesma causa raiz) | ✅ Granular |
 | T8: `TransferUserAccountService` + DTO | 1 serviço + 1 DTO (acoplados) | ✅ Granular |
 | T9: rota no `PlatformController` | 1 endpoint | ✅ Granular |
 | T10: teste RLS de transferência | 1 arquivo de teste | ✅ Granular |
@@ -656,6 +709,7 @@ não por dependência real.
 | T6 | T5 | Fase 3 início, após Fase 2 | ✅ Match |
 | T6b | T6 | T6→T6b | ✅ Match |
 | T7 | T6b | T6b→T7 | ✅ Match |
+| T7b | T4, T6 | T7→T7b (via T4/T6 na ordem da fase, achado tardio) | ✅ Match |
 | T8 | T2, T4 | Fase 4 início, após Fases 1 e 2 | ✅ Match |
 | T9 | T8 | T8→T9 | ✅ Match |
 | T10 | T9 | T9→T10 | ✅ Match |
@@ -680,6 +734,7 @@ Nenhuma tarefa depende de uma tarefa de fase posterior.
 | T6 | Serviço de domínio | unit | unit | ✅ OK |
 | T6b | Serviço de domínio | unit | unit | ✅ OK |
 | T7 | Controller | unit | unit | ✅ OK |
+| T7b | Serviço de domínio | unit + integration (full) | unit + integration | ✅ OK |
 | T8 | Serviço de domínio | unit | unit | ✅ OK |
 | T9 | Controller | unit | unit | ✅ OK |
 | T10 | RLS | rls | rls | ✅ OK |
