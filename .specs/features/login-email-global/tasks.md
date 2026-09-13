@@ -79,7 +79,7 @@ T3 → T4 → T5
 ### Phase 3: Login sem tenant_slug
 
 ```
-T6 → T7
+T6 → T6b → T7
 ```
 
 ### Phase 4: Transferência de tenant (API)
@@ -320,6 +320,34 @@ mantém o mesmo erro 401 genérico. Troca a chave do rate limit para
 
 ---
 
+### T6b: `AuthService.forgotPassword` busca por e-mail único (achado da Fase 2)
+
+**What**: Reescreve `forgotPassword()` (`apps/api/src/auth/auth.service.ts:441`)
+para buscar a conta por `findUnique({ where: { email } })` em vez da chave
+composta `tenant_id_email`, que a migration de T4 removeu — mesma causa raiz
+de T6, achado durante a execução de T4/T5 (ver SPEC_DEVIATION em T4) e não
+coberto por nenhuma task original. Sem isto o build da API fica vermelho
+(`auth.service.spec.ts`, `auth.controller.spec.ts`, `auth.module.spec.ts`,
+`app.module.spec.ts` não compilam).
+**Where**: `apps/api/src/auth/auth.service.ts`, `apps/api/src/auth/dto/forgot-password.dto.ts` (se o DTO também tiver `tenant_slug` — confirmar antes de editar), specs relacionados.
+**Depends on**: T6 (mesmo arquivo, mesma migration-base; evita conflito de merge fazendo em sequência)
+**Reuses**: o mesmo padrão de busca por e-mail único já escrito em T6.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [ ] `forgotPassword()` localiza a conta por e-mail único, sem `tenant_slug`
+- [ ] Comportamento de erro genérico (não revela se o e-mail existe) preservado — mesmo princípio já documentado no código atual
+- [ ] `npx jest --clearCache && npm run test -w orbien-backend` — as 4 suites que T4/T5 deixaram vermelhas (`auth.service.spec.ts`, `auth.controller.spec.ts`, `auth.module.spec.ts`, `app.module.spec.ts`) voltam a compilar e passar
+- [ ] Gate: `npm run build:api && npm run test -w orbien-backend`
+
+**Tests**: unit — reescreve os casos de `forgotPassword` em `auth.service.spec.ts` para a busca por e-mail único (nenhum caso removido, só adaptado à nova assinatura)
+**Gate**: build
+
+**Commit**: `fix(api): forgotPassword busca por e-mail único (achado da migration de T4)`
+
+---
+
 ### T7: `AuthController` — remove qualquer referência residual a `tenant_slug`
 
 **What**: Confirma que `login()` no controller não passa nada além do DTO
@@ -490,7 +518,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 Phase 1:  T1 ──→ T2
 Phase 2:  T3 ──→ T4 ──→ T5
-Phase 3:  T6 ──→ T7
+Phase 3:  T6 ──→ T6b ──→ T7
 Phase 4:  T8 ──→ T9 ──→ T10 ──→ T11
 Phase 5:  T12 ──→ T13
 ```
@@ -512,6 +540,7 @@ não por dependência real.
 | T4: `@@unique([email])` | 1 mudança de schema | ✅ Granular |
 | T5: `LoginDto` sem `tenant_slug` | 1 arquivo | ✅ Granular |
 | T6: `AuthService.login` reescrito | 1 função | ✅ Granular |
+| T6b: `AuthService.forgotPassword` reescrito | 1 função | ✅ Granular |
 | T7: limpeza do controller/specs | 1 arquivo + specs relacionados | ✅ Granular |
 | T8: `TransferUserAccountService` + DTO | 1 serviço + 1 DTO (acoplados) | ✅ Granular |
 | T9: rota no `PlatformController` | 1 endpoint | ✅ Granular |
@@ -532,7 +561,8 @@ não por dependência real.
 | T4 | T3 | T3→T4 | ✅ Match |
 | T5 | T4 | T4→T5 | ✅ Match |
 | T6 | T5 | Fase 3 início, após Fase 2 | ✅ Match |
-| T7 | T6 | T6→T7 | ✅ Match |
+| T6b | T6 | T6→T6b | ✅ Match |
+| T7 | T6b | T6b→T7 | ✅ Match |
 | T8 | T2, T4 | Fase 4 início, após Fases 1 e 2 | ✅ Match |
 | T9 | T8 | T8→T9 | ✅ Match |
 | T10 | T9 | T9→T10 | ✅ Match |
@@ -554,6 +584,7 @@ Nenhuma tarefa depende de uma tarefa de fase posterior.
 | T4 | Entity/schema | none | none | ✅ OK |
 | T5 | DTO | unit (parte do controller layer) | unit | ✅ OK |
 | T6 | Serviço de domínio | unit | unit | ✅ OK |
+| T6b | Serviço de domínio | unit | unit | ✅ OK |
 | T7 | Controller | unit | unit | ✅ OK |
 | T8 | Serviço de domínio | unit | unit | ✅ OK |
 | T9 | Controller | unit | unit | ✅ OK |
