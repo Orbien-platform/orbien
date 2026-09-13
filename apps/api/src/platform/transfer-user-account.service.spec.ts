@@ -210,6 +210,21 @@ describe('TransferUserAccountService', () => {
     expect(values[10]).toBe('Suporte Plataforma'); // p_actor_name_snapshot
   });
 
+  it('AC4/AC5: ator sem pessoa vinculada grava actor_name_snapshot NULL, sem quebrar o audit_insert', async () => {
+    // Mesmo caso de borda de AuditInterceptor: resolve_actor_name() devolve
+    // null quando o actor_user_id não tem person_id — o `?? null` cobre
+    // tanto isso quanto rows vazio.
+    const { service, captured } = serviceWith({
+      client: { $queryRaw: () => Promise.resolve([{ resolve_actor_name: null }]) },
+    });
+
+    await service.transfer('user-1', dto, actor);
+
+    const rawArgs = captured['auditRawArgs'] as unknown[];
+    const values = rawArgs.slice(1);
+    expect(values[10]).toBeNull(); // p_actor_name_snapshot
+  });
+
   it('no-op: transferir para o mesmo tenant em que a conta já está vira 400 e não move nada', async () => {
     const { service, calls } = serviceWith({
       account: {
