@@ -31,11 +31,6 @@ export default function LoginPage() {
       if (axios.isAxiosError(err)) {
         if (!err.response) {
           setError("Não foi possível conectar. Verifique sua internet.");
-        } else if (err.response.data?.code === "PLATFORM_ACCOUNT_AMBIGUOUS") {
-          // Erro de configuração, não do usuário: o mesmo e-mail tem
-          // platform_support em mais de um tenant. A mensagem vem da API
-          // porque só ela sabe o que fazer a respeito.
-          setError(err.response.data.message);
         } else if (err.response.status === 401) {
           // A API não distingue senha errada de conta sem acesso de
           // plataforma, de propósito — ver AuthContext.login.

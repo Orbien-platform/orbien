@@ -103,25 +103,6 @@ describe("LoginPage do console", () => {
     );
   });
 
-  it("conta ambígua mostra a mensagem que veio da API", async () => {
-    const user = userEvent.setup();
-    login.mockRejectedValue(
-      axiosError(409, {
-        code: "PLATFORM_ACCOUNT_AMBIGUOUS",
-        message: "Esse e-mail tem acesso de plataforma em mais de um tenant.",
-      })
-    );
-
-    render(<LoginPage />);
-    await preencher(user);
-    await user.click(screen.getByRole("button", { name: "Entrar" }));
-
-    // É erro de configuração, não do usuário: só a API sabe o que dizer.
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Esse e-mail tem acesso de plataforma em mais de um tenant."
-    );
-  });
-
   it.each([
     [
       "sem resposta",

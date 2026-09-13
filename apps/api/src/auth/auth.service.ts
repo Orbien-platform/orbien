@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
-  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -157,12 +156,10 @@ export class AuthService {
    * Login do console da plataforma — sem `tenant_slug`.
    *
    * `POST /auth/login` também busca só por e-mail hoje (`user_accounts` é
-   * única por `email` em todo o banco). A diferença aqui é o desempate: em vez
-   * da unicidade do schema, quem resolve é o papel. Só contas que têm
-   * `platform_support` em `role_assignments` são candidatas, e são poucas,
-   * porque o papel é da equipe que administra o ecossistema — por isso ainda
-   * vale o `findMany` + tratamento de ambiguidade, que `login()` não precisa
-   * mais ter.
+   * única por `email` em todo o banco), e aqui é igual: zero ou uma conta,
+   * nunca mais — o mesmo `findUnique` de `login()`. A única diferença é o
+   * desempate por papel: só uma conta com `platform_support` em
+   * `role_assignments` pode entrar por esta rota.
    *
    * O token continua carregando o tenant e a congregação de origem da conta,
    * resolvidos aqui e não informados pelo cliente. Não é detalhe: as rotas de
@@ -190,52 +187,33 @@ export class AuthService {
     const limitKey = LoginRateLimitService.key('platform-login', dto.email);
     await this.rateLimit.assert(limitKey, LOGIN_POLICY);
 
-    // Busca por e-mail sem tenant não usa a unique `(tenant_id, email)` — é
-    // varredura. Aceitável e deliberado: o `where` do papel corta para as
-    // poucas contas de plataforma, e este login é de um punhado de pessoas.
-    const candidates = await this.prisma.userAccount.findMany({
-      where: {
-        email: dto.email,
-        is_active: true,
-        roleAssignments: { some: { role_code: PLATFORM_ROLE } },
-      },
+    const user = await this.prisma.userAccount.findUnique({
+      where: { email: dto.email },
       include: {
         roleAssignments: { select: { role_code: true, congregation_id: true } },
         tenant: { include: { tenantPlan: { select: { plan: true } } } },
       },
     });
 
-    // Uma conta sem o papel é indistinguível de e-mail inexistente, e tem que
-    // ser: quem tenta entrar aqui com credencial válida de `tenant_admin` não
-    // deve descobrir pela mensagem que a credencial serve em outro lugar.
-    const matches = [];
-    for (const candidate of candidates) {
-      if (await argon2.verify(candidate.password_hash, dto.password)) {
-        matches.push(candidate);
-      }
-    }
+    // Sem o papel é indistinguível de e-mail inexistente, e tem que ser: quem
+    // tenta entrar aqui com credencial válida de `tenant_admin` não deve
+    // descobrir pela mensagem que a credencial serve em outro lugar.
+    const hasPlatformRole =
+      user?.roleAssignments.some((ra) => ra.role_code === PLATFORM_ROLE) ?? false;
 
-    if (matches.length === 0) {
+    if (!user || !user.is_active || !hasPlatformRole) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
 
-    // O mesmo e-mail pode existir em dois tenants — a unique é por par. Se os
-    // dois tiverem `platform_support` e a mesma senha, não há como saber qual
-    // conta o token deveria representar, e escolher uma em silêncio poria o
-    // tenant errado em `audit_logs`. Falha alto: é erro de configuração.
-    if (matches.length > 1) {
-      throw new ConflictException({
-        message:
-          'Este e-mail tem acesso de plataforma em mais de um tenant. ' +
-          'Deixe o papel platform_support em apenas uma das contas.',
-        code: 'PLATFORM_ACCOUNT_AMBIGUOUS',
-      });
+    const valid = await argon2.verify(user.password_hash, dto.password);
+    if (!valid) {
+      await this.rateLimit.register(limitKey, LOGIN_POLICY);
+      throw invalid;
     }
 
     await this.rateLimit.clear(limitKey);
 
-    const user = matches[0]!;
     const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
