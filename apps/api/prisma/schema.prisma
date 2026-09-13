@@ -1250,20 +1250,20 @@ model SetlistSong {
 }
 
 model Song {
-  id               String   @id @default(uuid())
-  tenant_id        String
-  congregation_id  String
-  title            String
-  key              String?
-  key_alt          String?
-  bpm              Int?
-  link             String?
-  youtube_link     String?
-  spotify_link     String?
-  cifra_club_link  String?
-  notes            String?
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  title           String
+  key             String?
+  key_alt         String?
+  bpm             Int?
+  link            String?
+  youtube_link    String?
+  spotify_link    String?
+  cifra_club_link String?
+  notes           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -1422,18 +1422,19 @@ model ScheduleTemplateMinistry {
 /// Tabela append-only — sem updated_at por design
 /// congregation_id é UUID histórico bruto, sem FK: preserva rastreabilidade mesmo após deleção da congregação
 model AuditLog {
-  id                String   @id @default(uuid())
-  tenant_id         String
-  congregation_id   String?
-  actor_user_id     String
-  subject_person_id String?
-  entity            String
-  action            String
-  before            Json?
-  after             Json?
-  ip                String?
-  user_agent        String?
-  at                DateTime @default(now())
+  id                  String   @id @default(uuid())
+  tenant_id           String
+  congregation_id     String?
+  actor_user_id       String
+  subject_person_id   String?
+  entity              String
+  action              String
+  before              Json?
+  after               Json?
+  ip                  String?
+  user_agent          String?
+  actor_name_snapshot String?
+  at                  DateTime @default(now())
 
   tenant    Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   actorUser UserAccount @relation("AuditActorUser", fields: [actor_user_id], references: [id], onDelete: Restrict)
