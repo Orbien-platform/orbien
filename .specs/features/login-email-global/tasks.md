@@ -624,39 +624,73 @@ código morto (ver T7b, criada a partir deste achado). **A correção de
 
 **What**: Remove o campo/estado de `tenant_slug` da tela e do payload de
 login do `apps/web`; atualiza o teste do componente.
-**Where**: `apps/web/src/app/(public)/login/page.tsx` (ou caminho
-equivalente — confirmar no código antes de editar), teste correspondente.
+**Where**: `apps/web/src/app/(public)/login/page.tsx` (confirmado — caminho
+já correto), teste correspondente, e `apps/web/src/contexts/AuthContext.tsx`
+(é quem de fato monta o payload de `POST /auth/login`, via `/api/session`).
 **Depends on**: T6
 **Reuses**: nenhum específico — é a mesma tela, menos um campo.
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Tela não mostra nem envia `tenant_slug`
-- [ ] Gate: `npm run test -w orbien-web`
+- [x] Tela não mostra nem envia `tenant_slug`
+- [x] Gate: `npm run test -w orbien-web`
 
 **Tests**: unit (vitest) — submit sem o campo, mensagem de erro genérica preservada
 **Gate**: quick
 
 **Commit**: `feat(web): login sem campo de igreja`
 
+**Status**: ✅ Concluída — commit `4aa45e3`. 95 arquivos de teste / 1071
+testes, antes e depois (contagem líquida igual: `page.test.tsx` perdeu o
+teste de tenant not found — código morto, API nunca emite esse código — e
+ganhou um teste de ausência do campo). Removido também o ramo
+`TENANT_NOT_FOUND` do submit (confirmado inexistente em todo `apps/api/src`).
+SPEC_DEVIATION encontrado, fora do escopo desta task: `apps/web/src/app/(public)/esqueci-senha/page.tsx`
+ainda tem campo e estado de `tenant_slug` e o envia para `POST /api/session/forgot-password`,
+embora `ForgotPasswordDto` (T6b) já o ignore — ver
+`apps/api/src/auth/dto/forgot-password.dto.spec.ts` ("ignora tenant_slug
+enviado por cliente antigo, em vez de rejeitar"). Não corrigido — fora do
+`Where` de T12/T13.
+
 ---
 
 ### T13: `apps/mobile` — login sem campo de tenant
 
 **What**: Mesma remoção na tela de login do `apps/mobile`.
-**Where**: tela de login do Expo Router (confirmar caminho antes de editar).
+**Where**: `apps/mobile/src/app/login.tsx` (confirmado), mais
+`apps/mobile/src/lib/auth/auth-provider.tsx` e
+`apps/mobile/src/lib/auth/auth-client.ts` (quem de fato monta o payload de
+`POST /auth/login`), e os testes correspondentes.
 **Depends on**: T6
 **Reuses**: nenhum específico.
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Tela não mostra nem envia `tenant_slug`
-- [ ] Gate: `npm run build --filter=orbien-mobile` (ou o gate que o app usa — confirmar no `apps/mobile/package.json`)
+- [x] Tela não mostra nem envia `tenant_slug`
+- [x] Gate: `npm run test -w orbien-mobile` (confirmado — há suíte Jest
+      configurada, `"test": "jest --passWithNoTests"` em
+      `apps/mobile/package.json`; a nota "a confirmar" da task estava
+      desatualizada)
 
-**Tests**: none (sem suíte de teste de UI configurada no mobile hoje — confirmar antes de assumir; se existir, tratar como o `apps/web`)
-**Gate**: build
+**Tests**: unit (jest + @testing-library/react-native) — já existia suíte
+cobrindo `login.tsx` e `auth-client.ts`; atualizada junto (mesmo tratamento
+do `apps/web`)
+**Gate**: quick (rebaixado de build — há teste dedicado)
+
+**Commit**: `feat(mobile): login sem campo de igreja`
+
+**Status**: ✅ Concluída — commit `1a9a115`. `npm run test -w orbien-mobile`:
+252 testes totais antes e depois (contagem líquida igual — `login.test.tsx`
+perdeu o cenário "tenant não encontrado", que não é mais alcançável, e ganhou
+um teste de ausência do campo); `npx tsc --noEmit -p apps/mobile` e
+`npm run lint -w orbien-mobile` sem erro. SPEC_DEVIATION encontrado, fora do
+escopo desta task: **3 suítes já falhavam antes desta mudança** —
+`src/lib/splash/animated-splash.test.tsx`, `src/__tests__/app/_layout.test.tsx`
+e `src/__tests__/app/navigation-boot.test.tsx` (7 de 252 testes, confirmado
+idêntico via `git stash` rodando a suíte antes desta task) — não relacionadas
+a login/tenant_slug, não investigadas nem corrigidas.
 
 ---
 
