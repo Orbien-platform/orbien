@@ -204,7 +204,7 @@ validar só a sintaxe/plan, não o resultado) e cola o mesmo bloco em
 
 **Commit**: `feat(api): user_accounts.email único globalmente (pré-condição do login sem tenant_slug)`
 
-**Status**: ✅ Concluída (schema/migration) — commit `<preenchido no commit>`.
+**Status**: ✅ Concluída (schema/migration) — commit `ba0410b`.
 
 **SPEC_DEVIATION**: o gate `npm run build:api` (e, por extensão,
 `npm run test -w orbien-backend` completo) fica vermelho depois desta task,
@@ -246,11 +246,45 @@ outros dois).
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `tenant_slug` removido do DTO
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] `tenant_slug` removido do DTO
+- [x] Gate: `npm run test -w orbien-backend` — verde para o próprio DTO (`login.dto.spec.ts`, 4/4); o comando completo continua vermelho pelo mesmo motivo já registrado em T4 (`AuthService.login`/`forgotPassword`, Fase 3) — ver nota abaixo
 
 **Tests**: unit (validação do DTO)
 **Gate**: quick
+
+**Commit**: `feat(api): LoginDto perde tenant_slug (AUTH-01/02/03)`
+
+**Status**: ✅ Concluída — commit `<preenchido no commit>`.
+
+**Nota de gate**: rodar `npx jest --clearCache && npx jest --selectProjects
+unit` depois deste commit continua em `4 failed, 235 passed, 239 total` —
+mesma contagem de antes de T5 (ver SPEC_DEVIATION de T4). Nenhuma suíte nova
+quebrou; `auth.service.spec.ts` (que já estava quebrada) ganhou erros
+adicionais de `TS2353` nos literais `{ tenant_slug: 'doca' }` passados a
+`service.login(...)` — é exatamente a reescrita que T6 faz, não corrigido
+aqui por instrução explícita de não tocar `AuthService.login` nesta
+execução.
+
+**Test Adequacy Review**:
+
+*Check A — coverage:*
+
+| Done-when / AC | `file:line` + assertion | Spec outcome | Covered? |
+| --- | --- | --- | --- |
+| `tenant_slug` removido, DTO válido sem ele (AUTH-01/03) | `login.dto.spec.ts:12-15` — `expect(errors).toHaveLength(0)` | 0 erros de validação | ✅ |
+| Email malformado rejeitado | `login.dto.spec.ts:19-22` — `expect(errors.some((e) => e.property === 'email')).toBe(true)` | erro em `email` | ✅ |
+| Senha vazia rejeitada | `login.dto.spec.ts:24-27` — `expect(errors.some((e) => e.property === 'password')).toBe(true)` | erro em `password` | ✅ |
+| Cliente antigo envia `tenant_slug`: campo ignorado, não rejeitado (spec AC3, P1) | `login.dto.spec.ts:29-36` — `expect(errors).toHaveLength(0)` | 0 erros (campo ignorado no nível do DTO) | ✅ |
+
+*Check C — necessity:* as 4 asserções mapeiam 1:1 para o Done-when de T5 e
+para AUTH-01/03; nenhuma é especulativa. Nenhum teste apagado sem
+substituto — "rejeita tenant_slug ausente" (obsoleto, o campo não existe
+mais) foi trocado por "ignora tenant_slug enviado por cliente antigo", que
+cobre o AC3 real da spec.
+
+**Verdict**: coberto, sem asserção rasa, todo teste necessário. Check D:
+segue o mesmo padrão de `plainToInstance`/`validate` já usado nos outros
+specs de `dto/`.
 
 ---
 
