@@ -16,7 +16,8 @@ pendência:
   é, não o que falta.
 
 Última varredura completa contra a `main`: **2026-09-13** — fechou `AJU-04`,
-`AJU-06`, `PEND-02`, `PROD-04`, `PROD-06`, `PROD-10` (já entregue em
+`AJU-06`, `PEND-02`, `PROD-04` (PR #86, ver nota — em outra sessão, mais
+completo que a tentativa daqui), `PROD-06`, `PROD-10` (já entregue em
 2026-09-12, só não tinha saído desta lista), `PROD-18` (duplicata de
 `PROD-15`) e `PROD-19`; revisitou `PEND-04` sem mudança de código.
 
@@ -290,14 +291,19 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 > 2026-09-12: o pacote está instalado e a infra descrita em `PROD-15` cobre
 > exatamente o que esta linha pedia.
 
-> `PROD-04` (página pública de doação, Cenário 3), `PROD-06` (fila CRM de
-> trials/inadimplentes) e `PROD-19` (domínio próprio e termos de uso por
-> tenant) **fecharam em 2026-09-13**:
+> `PROD-04` (página pública de doação, Cenário 3) fechou em 2026-09-13, pelo
+> PR #86 (sessão paralela a esta, com `/code-review` e a skill `pr-review`
+> já rodados): `apps/web/src/app/(public)/doar/[tenant_slug]/page.tsx`, sem
+> login, chama `POST /financial/pix/public-donation` (já existia) e mostra a
+> chave PIX manual para copiar — não há QR Asaas aqui, isso é o Cenário 2
+> (Premium). Esta sessão tinha uma implementação equivalente e a descartou
+> em favor da do PR #86, mais revisada; ver a decisão registrada na conversa
+> desta rodada. Ao mesclar o PR #86, conferir que o link ainda bate
+> (`[tenant_slug]`, não `[tenant]`).
+
+> `PROD-06` (fila CRM de trials/inadimplentes) e `PROD-19` (domínio próprio
+> e termos de uso por tenant) **fecharam em 2026-09-13**:
 >
-> - `PROD-04` — `apps/web/src/app/(public)/doar/[tenant]/page.tsx`, sem
->   login, chama `POST /financial/pix/public-donation` (já existia) e mostra
->   a chave PIX manual para copiar — não há QR Asaas aqui, isso é o Cenário 2
->   (Premium).
 > - `PROD-06` — `ListCrmQueueService` (`GET
 >   /platform/tenants/crm-queue`) separa trial vencido sem conversão
 >   (`status = trial` + `trial_ends_at` no passado) de inadimplente (`status
