@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 14,
+  "next_id": 17,
   "lessons": [
     {
       "id": "L-001",
@@ -238,6 +238,60 @@
       ],
       "created": "2026-09-11T18:12:57Z",
       "last_seen": "2026-09-11T18:12:57Z"
+    },
+    {
+      "id": "L-014",
+      "key": "ac_gap::quando um ac pede explicitamente rodar a migration contra dado duplicado fabricado independent test n o aceite validar s a sintaxe da query manual escreva o teste real que aplica a migration sobre a duplicata mesmo que o mecanismo pare a garantido pelo banco",
+      "text": "Quando um AC pede explicitamente rodar a migration contra dado duplicado fabricado ('Independent Test'), não aceite validar só a sintaxe da query manual — escreva o teste real que aplica a migration sobre a duplicata, mesmo que o mecanismo pareça garantido pelo banco.",
+      "signal": "ac_gap",
+      "scope": "apps/api/prisma/migrations",
+      "status": "candidate",
+      "features": [
+        "login-email-global"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md P1 'E-mail único no banco' AC2 (apps/api/prisma/migrations)"
+      ],
+      "created": "2026-09-13T18:58:23Z",
+      "last_seen": "2026-09-13T18:58:23Z"
+    },
+    {
+      "id": "L-015",
+      "key": "ac_gap::quando um ac descreve o que a tela shall mostrar confirme que existe uma task que constr i atualiza essa tela ou endpoint de leitura um ac pode ficar totalmente satisfeito na escrita campo gravado resolvido e sem nenhum consumidor de leitura o que n o fecha o crit rio",
+      "text": "Quando um AC descreve o que 'a tela SHALL mostrar', confirme que existe uma task que constrói/atualiza essa tela ou endpoint de leitura — um AC pode ficar totalmente satisfeito na escrita (campo gravado, resolvido) e sem nenhum consumidor de leitura, o que não fecha o critério.",
+      "signal": "ac_gap",
+      "scope": ".specs/features",
+      "status": "candidate",
+      "features": [
+        "login-email-global"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md P2 'Transferência de pessoa entre tenants' AC5 (.specs/features)"
+      ],
+      "created": "2026-09-13T18:58:23Z",
+      "last_seen": "2026-09-13T18:58:23Z"
+    },
+    {
+      "id": "L-016",
+      "key": "spec_precision_gap::ao trocar uma constraint de unicidade de escopo por tenant para global procure mensagens de erro hardcoded que citam o escopo antigo ex neste tenant em c digo n o tocado pelo diff o comportamento pode continuar correto por acidente do catch gen rico mas o texto fica enganoso",
+      "text": "Ao trocar uma constraint de unicidade de escopo por-tenant para global, procure mensagens de erro hardcoded que citam o escopo antigo (ex.: '...neste tenant') em código não tocado pelo diff — o comportamento pode continuar correto por acidente do catch genérico, mas o texto fica enganoso.",
+      "signal": "spec_precision_gap",
+      "scope": "apps/api/src",
+      "status": "candidate",
+      "features": [
+        "login-email-global"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/users/users.service.ts:98 (apps/api/src)"
+      ],
+      "created": "2026-09-13T18:58:23Z",
+      "last_seen": "2026-09-13T18:58:23Z"
     }
   ]
 }
