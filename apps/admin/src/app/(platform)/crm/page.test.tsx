@@ -122,4 +122,84 @@ describe("CrmPage", () => {
       await screen.findByText(/não tem congregação — não é possível abrir sessão de suporte/)
     ).toBeInTheDocument();
   });
+
+  it("erro de configuração aparece com a mensagem que nomeia a variável", async () => {
+    respondeCom({ trials_expirados: [tenant()] });
+    abrirSessao.mockRejectedValue(
+      new Error(
+        "NEXT_PUBLIC_WEB_URL não está definida — sem ela não há para onde abrir a sessão."
+      )
+    );
+    const user = userEvent.setup();
+
+    render(<CrmPage />);
+
+    const botao = await screen.findByRole("button", { name: /Entrar no web como suporte/ });
+    await user.click(botao);
+
+    expect(await screen.findByText(/NEXT_PUBLIC_WEB_URL não está definida/)).toBeInTheDocument();
+  });
+
+  it("qualquer outro erro da API vira mensagem genérica", async () => {
+    respondeCom({ trials_expirados: [tenant()] });
+    abrirSessao.mockRejectedValue(axiosError(500));
+    const user = userEvent.setup();
+
+    render(<CrmPage />);
+
+    const botao = await screen.findByRole("button", { name: /Entrar no web como suporte/ });
+    await user.click(botao);
+
+    expect(
+      await screen.findByText("Não foi possível abrir a sessão de suporte.")
+    ).toBeInTheDocument();
+  });
+
+  it("mostra traço para contato e trial sem data", async () => {
+    respondeCom({
+      trials_expirados: [tenant({ email: null, trial_ends_at: null })],
+    });
+
+    render(<CrmPage />);
+
+    expect(await screen.findByText("Igreja em Trial")).toBeInTheDocument();
+    // Duas colunas caem no traço: contato (email nulo) e "Trial venceu em"
+    // (fmtDate com iso nulo) — mais "Cliente desde", que tem data real.
+    expect(screen.getAllByText("—")).toHaveLength(2);
+  });
+
+  it("resposta que chega depois do unmount não atualiza estado", async () => {
+    let resolver!: (v: unknown) => void;
+    getMock.mockImplementationOnce(() => new Promise((resolve) => (resolver = resolve)));
+
+    const { unmount } = render(<CrmPage />);
+    unmount();
+
+    expect(() =>
+      resolver({ data: { trials_expirados: [tenant()], inadimplentes: [] } })
+    ).not.toThrow();
+  });
+
+  it("erro que chega depois do unmount não atualiza estado", async () => {
+    let rejeitar!: (e: unknown) => void;
+    getMock.mockImplementationOnce(() => new Promise((_, reject) => (rejeitar = reject)));
+
+    const { unmount } = render(<CrmPage />);
+    unmount();
+
+    expect(() => rejeitar(new Error("falhou"))).not.toThrow();
+  });
+
+  it("tenta de novo a partir do estado de erro", async () => {
+    getMock.mockRejectedValueOnce(new Error("falhou"));
+    const user = userEvent.setup();
+
+    render(<CrmPage />);
+    await screen.findAllByText("Não foi possível carregar a fila.");
+
+    respondeCom({ trials_expirados: [tenant()] });
+    await user.click((await screen.findAllByRole("button", { name: /Tentar de novo/ }))[0]);
+
+    expect(await screen.findByText("Igreja em Trial")).toBeInTheDocument();
+  });
 });
