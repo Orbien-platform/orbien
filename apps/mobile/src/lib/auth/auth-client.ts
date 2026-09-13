@@ -91,17 +91,13 @@ function toSession(response: LoginResponse): Session {
 
 /**
  * `POST /auth/login`. A API já responde com mensagem de erro genérica para
- * credencial errada e tenant não encontrado (mesmo princípio das rotas de
- * plataforma, CLAUDE.md raiz) — este método não tenta distinguir os casos,
- * só repassa o que a API decidiu.
+ * credencial errada (mesmo princípio das rotas de plataforma, CLAUDE.md
+ * raiz) — este método não tenta distinguir os casos, só repassa o que a API
+ * decidiu.
  */
-export async function login(
-  tenantSlug: string,
-  email: string,
-  password: string,
-): Promise<Session> {
+export async function login(email: string, password: string): Promise<Session> {
   const response = await apiClient.post<LoginResponse>("/auth/login", {
-    body: { tenant_slug: tenantSlug, email, password },
+    body: { email, password },
   });
   const session = toSession(response);
   await SecureStore.setItemAsync(SESSION_STORAGE_KEY, JSON.stringify(session));

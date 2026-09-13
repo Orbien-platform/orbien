@@ -21,24 +21,27 @@ describe("LoginScreen", () => {
   // A tela não navega: quem troca de rota é o `Stack.Protected` do layout
   // raiz, quando `status` vira "authenticated" (ver navigation-boot.test.tsx,
   // que cobre a transição com o router real).
-  it("submit com credenciais válidas (mock) chama login com o que foi digitado", async () => {
+  it("não mostra campo de igreja", async () => {
+    await render(<LoginScreen />);
+    expect(screen.queryByTestId("tenant-slug-input")).toBeNull();
+  });
+
+  it("submit com credenciais válidas (mock) chama login com o que foi digitado, sem tenant_slug", async () => {
     mockLogin.mockResolvedValue(undefined);
 
     await render(<LoginScreen />);
-    await fireEvent.changeText(screen.getByTestId("tenant-slug-input"), "igreja-teste");
     await fireEvent.changeText(screen.getByTestId("email-input"), "a@b.com");
     await fireEvent.changeText(screen.getByTestId("password-input"), "senha123");
     await fireEvent.press(screen.getByTestId("login-submit"));
 
     await waitFor(() => {
-      expect(mockLogin).toHaveBeenCalledWith("igreja-teste", "a@b.com", "senha123");
+      expect(mockLogin).toHaveBeenCalledWith("a@b.com", "senha123");
     });
     expect(screen.queryByTestId("login-error")).toBeNull();
   });
 
   it.each([
     ["senha errada", new Error("Credenciais inválidas")],
-    ["tenant não encontrado", new Error("Tenant não encontrado")],
     ["erro de rede", new Error("Erro de rede")],
   ])(
     "submit com erro (%s, mock rejeita) mostra a mesma mensagem genérica, independentemente do motivo simulado",
