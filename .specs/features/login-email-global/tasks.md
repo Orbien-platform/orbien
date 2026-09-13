@@ -414,16 +414,18 @@ ser do banco, não da aplicação).
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `platformLogin` usa `findUnique({ where: { email } })`, sem branch de ambiguidade
-- [ ] Nenhuma referência a `PLATFORM_ACCOUNT_AMBIGUOUS` sobra em código de produção, testes unitários ou de integração
-- [ ] `apps/admin` — se o front tratar esse `code` na tela de login (`page.tsx`), remover também (achado a confirmar antes de editar; se remover, é parte desta mesma task, não uma task nova)
-- [ ] Nenhuma asserção de teste real (não-mockada) enfraquecida — o teste removido testava um cenário que deixou de existir, não um comportamento que ainda importa
-- [ ] Gate: `npm run test -w orbien-backend && npm run test:integration -w orbien-backend`
+- [x] `platformLogin` usa `findUnique({ where: { email } })`, sem branch de ambiguidade
+- [x] Nenhuma referência a `PLATFORM_ACCOUNT_AMBIGUOUS` sobra em código de produção, testes unitários ou de integração
+- [x] `apps/admin` tratava o code na tela de login (`page.tsx`) — removido junto, mesma task
+- [x] Nenhuma asserção de teste real (não-mockada) enfraquecida — o teste removido testava um cenário que deixou de existir, não um comportamento que ainda importa
+- [x] Gate: `npm run test -w orbien-backend && npm run test:integration -w orbien-backend` — unit 240/240 suites (2255 testes), integration 10/10 suites (53/53), admin 22/22 (186 testes), lint limpo
 
 **Tests**: unit + integration — remove os dois testes que ficaram sem cenário possível; nenhum teste novo exigido (não é funcionalidade nova, é remoção de código/teste morto)
 **Gate**: full
 
 **Commit**: `refactor(api): platformLogin usa e-mail único, remove ambiguidade morta (achado da T11b)`
+
+**Status**: ✅ Concluída — commit `4e13a4a`.
 
 ---
 
@@ -605,13 +607,16 @@ código morto (ver T7b, criada a partir deste achado). **A correção de
 **Done when**:
 - [x] `impersonation.spec.ts`, `platform-provisioning.spec.ts`, `platform-audit-logs.spec.ts` não reusam e-mail entre tenants nem enviam `tenant_slug` residual
 - [x] As 3 suítes acima passam (24/24) — `platform-login.spec.ts` fica para T7b
-- [ ] `npm run test:integration -w orbien-backend` passa por completo (só depois de T7b, que resolve a 4ª suíte)
+- [x] `npm run test:integration -w orbien-backend` passa por completo (10/10 suites, 53/53 testes — confirmado em T7b)
 - [ ] Gate: `npm run test:integration -w orbien-backend`
 
 **Tests**: integration — mesmos testes existentes, dado de fixture corrigido; nenhum teste novo exigido (não é funcionalidade nova, é correção de dado de teste)
 **Gate**: full
 
 **Commit**: `fix(api): fixtures de integração usam e-mail único por conta (achado da migration de T4)`
+
+**Status**: ✅ Concluída (escopo revisado — só as 3 suítes) — commit `39a4679`.
+`platform-login.spec.ts` segue para T7b.
 
 ---
 
