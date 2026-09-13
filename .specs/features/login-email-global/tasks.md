@@ -176,11 +176,15 @@ validar só a sintaxe/plan, não o resultado) e cola o mesmo bloco em
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Query documentada em `docs/PENDENCIAS.md` com instrução "rodar antes do deploy desta migration"
-- [ ] Gate: nenhum (documentação)
+- [x] Query documentada em `docs/PENDENCIAS.md` com instrução "rodar antes do deploy desta migration"
+- [x] Gate: nenhum (documentação) — sintaxe confirmada rodando a query contra o Postgres local (0 linhas, esperado — banco sem seed)
 
 **Tests**: none
 **Gate**: build (só para não deixar markdown quebrado — não há gate real aqui)
+
+**Commit**: `docs: nota de deploy da checagem de e-mail duplicado (login-email-global)`
+
+**Status**: ✅ Concluída — commit `437c02c`.
 
 ---
 
@@ -254,7 +258,7 @@ outros dois).
 
 **Commit**: `feat(api): LoginDto perde tenant_slug (AUTH-01/02/03)`
 
-**Status**: ✅ Concluída — commit `<preenchido no commit>`.
+**Status**: ✅ Concluída — commit `8e25a24`.
 
 **Nota de gate**: rodar `npx jest --clearCache && npx jest --selectProjects
 unit` depois deste commit continua em `4 failed, 235 passed, 239 total` —
