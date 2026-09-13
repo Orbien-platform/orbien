@@ -302,6 +302,7 @@ ex. `financial_transactions`, continua visível).
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-18` | Plataforma | OTA via Expo Updates | Starter e Premium | `expo-updates` não está no `apps/mobile`; o ADR-004 prevê e o v1 adiou |
 | `PROD-19` | Plataforma | Domínio próprio por tenant, termos de uso próprios por tenant | Premium | — |
+| `PROD-21` | Plataforma | Tela de audit log escopada a tenant (visível pro `tenant_admin`) | Premium | Não existe hoje — só o console de plataforma tem listagem de auditoria (`ListAuditLogsService`, escopada a `support_access`). O dado já está pronto: `audit_logs.actor_name_snapshot` (feature `login-email-global`) congela o nome do autor no momento do registro, justamente para sobreviver a uma transferência de tenant — falta só a rota/tela que leia isso do lado do tenant |
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com

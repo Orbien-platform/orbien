@@ -164,3 +164,26 @@ Executado em `git worktree` descartável (`/tmp/verify-worktree`, removido ao fi
 3. (Cosmético, não bloqueante) Mensagem de erro em `users.service.ts:98` ("e-mail já existe **neste tenant**") ficou desatualizada pela unicidade global — arquivo pré-existente, fora do diff desta feature, funciona por acidente do catch genérico de `P2002`.
 
 **Next steps**: decisão do usuário sobre os dois gaps — (1) aceitar a garantia estrutural do Postgres para AC2 sem teste dedicado, ou abrir uma fix task; (2) esclarecer se existe/deveria existir uma tela de auditoria tenant-scoped que consome `actor_name_snapshot`, ou se isso é uma capability futura fora deste recorte (e a spec deve ser ajustada).
+
+---
+
+## Resolução (pós-validação, decisão do usuário)
+
+1. **AC2 (e-mail único sem teste contra Postgres real)** — corrigido.
+   Adicionado `apps/api/test/integration/unique-email.spec.ts`, que fabrica
+   a duplicata de e-mail em dois tenants e confirma `P2002` contra o banco
+   de verdade. Commit `4b5a15a`.
+2. **AC5 (transferência sem tela que leia `actor_name_snapshot`)** — a spec
+   estava errada, não o código: não existe, em lugar nenhum do produto,
+   tela de audit log escopada a tenant (só o console de plataforma tem
+   uma, escopada a `support_access`). Construir essa tela agora seria
+   escopo novo, não parte de "login por e-mail único". `spec.md` AC5 foi
+   reescrito para descrever a garantia real (dado gravado e correto,
+   pronto para quando a tela existir) e a tela em si virou `PROD-21` em
+   `docs/PLANO.md`, fora desta feature.
+3. **Achado cosmético (mensagem "neste tenant")** — corrigido no mesmo
+   commit `4b5a15a`.
+
+**Status final**: ✅ Ready — os dois gaps reais têm disposição (um
+corrigido em código/teste, o outro corrigido na spec com a capability em
+falta registrada como pendência de produto separada).

@@ -150,12 +150,18 @@ antigo).
    `entity = 'user_account'`, `action = 'tenant_transfer'`, `before`/`after`
    contendo tenant/congregação de origem e destino, no tenant de origem
    (mesma convenção do `AuditInterceptor` para ações de plataforma).
-5. WHEN alguém do tenant de origem consulta um `audit_log` cujo autor foi
-   transferido para outro tenant depois daquele registro THEN a tela SHALL
-   mostrar o nome do autor gravado no momento do registro
-   (`actor_name_snapshot`), não uma busca ao vivo em `user_accounts`/`persons`
-   que já não resolve mais (RLS do tenant de origem não alcança o novo
-   tenant da conta).
+5. WHEN a transferência ocorre THEN `audit_logs.actor_name_snapshot` SHALL
+   gravar o nome do autor no momento do registro, resolvido pelo
+   `AuditInterceptor` (não por busca ao vivo em `user_accounts`/`persons`,
+   que já não resolve mais o autor depois da transferência — RLS do tenant
+   de origem não alcança o novo tenant da conta). **Não existe hoje** uma
+   tela de audit log escopada a tenant que leia essa coluna — a única
+   listagem de auditoria do produto (`ListAuditLogsService`) é do console
+   de plataforma, escopada a `support_access`. Este AC garante que o dado
+   está correto e disponível para quando essa tela existir; construir a
+   tela é capability nova, registrada como `PROD-21` em `docs/PLANO.md`,
+   fora do escopo desta feature (achado do Verifier, corrigido em
+   `validation.md`).
 6. WHEN alguém do tenant de origem consulta registros históricos com
    `tenant_id` próprio já gravado (`financial_transactions`,
    `attendance_records`, etc.) referentes ao período anterior à
