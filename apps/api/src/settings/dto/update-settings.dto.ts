@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsUrl, Matches, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   IsAccessibleBrandColor,
@@ -45,6 +45,24 @@ class CongregationSettingsDto {
   @IsOptional() @IsString() @IsBrandColor() accent_color?: string;
 }
 
+// PROD-19 — só o registro do domínio/termos, não o provisionamento em si
+// (DNS/certificado é passo de infra, fora do que este DTO grava). Restrito
+// a `tenant_admin` e Premium — checado no service, junto do resto das
+// exigências de papel, porque o mesmo `PATCH /settings` atende campos sem
+// essa exigência.
+class BrandingSettingsDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/, {
+    message: 'Domínio inválido — use um hostname sem protocolo (ex: doar.suaigreja.com.br)',
+  })
+  custom_domain?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true }, { message: 'URL de termos de uso inválida' })
+  terms_url?: string;
+}
+
 export class UpdateSettingsDto {
   @IsOptional()
   @ValidateNested()
@@ -55,4 +73,9 @@ export class UpdateSettingsDto {
   @ValidateNested()
   @Type(() => CongregationSettingsDto)
   congregation?: CongregationSettingsDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BrandingSettingsDto)
+  branding?: BrandingSettingsDto;
 }

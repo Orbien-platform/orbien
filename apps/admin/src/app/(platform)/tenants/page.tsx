@@ -19,7 +19,7 @@ interface Tenant {
   name: string;
   email: string | null;
   plan: "starter" | "premium" | null;
-  plan_status: "trial" | "active" | "past_due" | "canceled" | null;
+  plan_status: "trial" | "active" | "suspended" | "cancelled" | null;
   trial_ends_at: string | null;
   is_active: boolean;
   congregations_count: number;
@@ -34,15 +34,15 @@ const PLAN_LABELS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   trial: "Trial",
   active: "Ativo",
-  past_due: "Em atraso",
-  canceled: "Cancelado",
+  suspended: "Suspenso",
+  cancelled: "Cancelado",
 };
 
 const STATUS_CLS: Record<string, string> = {
   trial: "bg-navy-dim text-navy",
   active: "bg-teal-dim text-teal",
-  past_due: "bg-crimson-dim text-crimson",
-  canceled: "bg-[var(--surface-subtle)] text-stone",
+  suspended: "bg-crimson-dim text-crimson",
+  cancelled: "bg-[var(--surface-subtle)] text-stone",
 };
 
 function fmtDate(iso: string): string {

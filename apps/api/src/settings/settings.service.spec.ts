@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SettingsService } from './settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -7,7 +8,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     tenant: { findUnique: jest.fn(), update: jest.fn() },
     congregation: { findUnique: jest.fn(), update: jest.fn() },
-    brandingConfig: { findUnique: jest.fn() },
+    brandingConfig: { findUnique: jest.fn(), upsert: jest.fn() },
     ...overrides,
   };
 }
@@ -67,6 +68,8 @@ describe('SettingsService', () => {
         accent_color: '#333',
         logo_url: 'https://cdn/logo-congregacao.png',
         splash_url: 'https://cdn/splash.png',
+        custom_domain: null,
+        terms_url: null,
       });
     });
 
@@ -82,6 +85,8 @@ describe('SettingsService', () => {
         secondary_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
         splash_url: null,
+        custom_domain: 'doar.suaigreja.com.br',
+        terms_url: 'https://suaigreja.com.br/termos',
       });
       const { service } = serviceWith(client);
 
@@ -93,6 +98,8 @@ describe('SettingsService', () => {
         accent_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
         splash_url: null,
+        custom_domain: 'doar.suaigreja.com.br',
+        terms_url: 'https://suaigreja.com.br/termos',
       });
     });
 
@@ -111,6 +118,8 @@ describe('SettingsService', () => {
         accent_color: null,
         logo_url: null,
         splash_url: null,
+        custom_domain: null,
+        terms_url: null,
       });
     });
 
@@ -141,7 +150,7 @@ describe('SettingsService', () => {
       const { service } = serviceWith(client);
 
       await expect(
-        service.updateSettings('t1', 'g1', ['admin_congregation'], { tenant: { name: 'Novo' } } as never),
+        service.updateSettings('t1', 'g1', ['admin_congregation'], { tenant: { name: 'Novo' } } as never, 'starter'),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(client.tenant.update).not.toHaveBeenCalled();
     });
@@ -153,7 +162,7 @@ describe('SettingsService', () => {
       client.brandingConfig.findUnique.mockResolvedValue(null);
       const { service } = serviceWith(client);
 
-      await service.updateSettings('t1', 'g1', ['tenant_admin'], { tenant: { name: 'Novo' } } as never);
+      await service.updateSettings('t1', 'g1', ['tenant_admin'], { tenant: { name: 'Novo' } } as never, 'starter');
 
       expect(client.tenant.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { name: 'Novo' } });
     });
@@ -167,7 +176,7 @@ describe('SettingsService', () => {
 
       await service.updateSettings('t1', 'g1', ['admin_congregation'], {
         congregation: { name: 'Nova Sede' },
-      } as never);
+      } as never, 'starter');
 
       expect(client.congregation.update).toHaveBeenCalledWith({
         where: { id: 'g1' },
@@ -182,10 +191,117 @@ describe('SettingsService', () => {
       client.brandingConfig.findUnique.mockResolvedValue(null);
       const { service } = serviceWith(client);
 
-      await service.updateSettings('t1', 'g1', ['admin_congregation'], {} as never);
+      await service.updateSettings('t1', 'g1', ['admin_congregation'], {} as never, 'starter');
 
       expect(client.tenant.update).not.toHaveBeenCalled();
       expect(client.congregation.update).not.toHaveBeenCalled();
+    });
+
+    // PROD-19 — domínio próprio e termos de uso.
+    it('lança ForbiddenException ao alterar branding sem o papel tenant_admin', async () => {
+      const client = clientWith();
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.updateSettings(
+          't1',
+          'g1',
+          ['admin_congregation'],
+          { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
+          'premium',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.brandingConfig.upsert).not.toHaveBeenCalled();
+    });
+
+    it('lança ForbiddenException ao alterar branding fora do plano Premium', async () => {
+      const client = clientWith();
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.updateSettings(
+          't1',
+          'g1',
+          ['tenant_admin'],
+          { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
+          'starter',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.brandingConfig.upsert).not.toHaveBeenCalled();
+    });
+
+    it('grava custom_domain e terms_url quando tenant_admin e Premium', async () => {
+      const client = clientWith();
+      client.tenant.findUnique.mockResolvedValue(TENANT);
+      client.congregation.findUnique.mockResolvedValue(CONGREGATION);
+      client.brandingConfig.findUnique.mockResolvedValue(null);
+      client.brandingConfig.upsert.mockResolvedValue({});
+      const { service } = serviceWith(client);
+
+      await service.updateSettings(
+        't1',
+        'g1',
+        ['tenant_admin'],
+        {
+          branding: {
+            custom_domain: 'doar.suaigreja.com.br',
+            terms_url: 'https://suaigreja.com.br/termos',
+          },
+        } as never,
+        'premium',
+      );
+
+      expect(client.brandingConfig.upsert).toHaveBeenCalledWith({
+        where: { tenant_id: 't1' },
+        create: {
+          tenant_id: 't1',
+          custom_domain: 'doar.suaigreja.com.br',
+          terms_url: 'https://suaigreja.com.br/termos',
+        },
+        update: {
+          custom_domain: 'doar.suaigreja.com.br',
+          terms_url: 'https://suaigreja.com.br/termos',
+        },
+      });
+    });
+
+    it('lança BadRequestException quando custom_domain já pertence a outro tenant', async () => {
+      const client = clientWith();
+      client.brandingConfig.upsert.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('conflito', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['custom_domain'] },
+        }),
+      );
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.updateSettings(
+          't1',
+          'g1',
+          ['tenant_admin'],
+          { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
+          'premium',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('propaga qualquer outro erro do upsert sem convertê-lo', async () => {
+      const client = clientWith();
+      const erroInesperado = new Error('conexão perdida');
+      client.brandingConfig.upsert.mockRejectedValue(erroInesperado);
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.updateSettings(
+          't1',
+          'g1',
+          ['tenant_admin'],
+          { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
+          'premium',
+        ),
+      ).rejects.toBe(erroInesperado);
     });
   });
 

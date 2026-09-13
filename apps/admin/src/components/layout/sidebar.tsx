@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, ClipboardList, ShieldCheck } from "lucide-react";
+import { Building2, ClipboardList, ShieldCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const navItems = [
   { href: "/tenants", label: "Tenants", icon: Building2 },
   { href: "/waitlist", label: "Waitlist", icon: ClipboardList },
+  { href: "/crm", label: "CRM", icon: Users },
   { href: "/auditoria", label: "Auditoria", icon: ShieldCheck },
 ];
 

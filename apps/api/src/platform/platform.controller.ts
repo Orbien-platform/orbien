@@ -20,6 +20,7 @@ import { PlatformRoute } from '../common/decorators/platform-route.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { ProvisionTenantService, ProvisionedTenant } from './provision-tenant.service';
 import { ListTenantsService, TenantListPage } from './list-tenants.service';
+import { ListCrmQueueService, CrmQueue } from './list-crm-queue.service';
 import { ListAuditLogsService, AuditLogPage } from './list-audit-logs.service';
 import { UpdateTenantService, UpdatedTenant } from './update-tenant.service';
 import { SetTenantActiveService, TenantActiveState } from './set-tenant-active.service';
@@ -48,6 +49,7 @@ export class PlatformController {
   constructor(
     private readonly provisionTenant: ProvisionTenantService,
     private readonly listTenants: ListTenantsService,
+    private readonly listCrmQueue: ListCrmQueueService,
     private readonly listAuditLogs: ListAuditLogsService,
     private readonly updateTenant: UpdateTenantService,
     private readonly setTenantActive: SetTenantActiveService,
@@ -57,6 +59,12 @@ export class PlatformController {
   @Get('tenants')
   list(@Query() query: ListTenantsQueryDto): Promise<TenantListPage> {
     return this.listTenants.list(query);
+  }
+
+  // PROD-06 — fila CRM: trials expirados sem conversão e tenants inadimplentes.
+  @Get('tenants/crm-queue')
+  crmQueue(): Promise<CrmQueue> {
+    return this.listCrmQueue.list();
   }
 
   @Post('tenants')
