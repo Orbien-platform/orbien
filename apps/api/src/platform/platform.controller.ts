@@ -16,6 +16,8 @@ import { TenantPlan } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { PlatformRoute } from '../common/decorators/platform-route.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { ProvisionTenantService, ProvisionedTenant } from './provision-tenant.service';
@@ -24,10 +26,12 @@ import { ListAuditLogsService, AuditLogPage } from './list-audit-logs.service';
 import { UpdateTenantService, UpdatedTenant } from './update-tenant.service';
 import { SetTenantActiveService, TenantActiveState } from './set-tenant-active.service';
 import { CancelTenantPlanService } from './cancel-tenant-plan.service';
+import { TransferUserAccountService, TransferredAccount } from './transfer-user-account.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { TransferUserAccountDto } from './dto/transfer-user-account.dto';
 
 /**
  * Plano de plataforma: opera acima dos tenants, não dentro de um.
@@ -52,6 +56,7 @@ export class PlatformController {
     private readonly updateTenant: UpdateTenantService,
     private readonly setTenantActive: SetTenantActiveService,
     private readonly cancelTenantPlan: CancelTenantPlanService,
+    private readonly transferUserAccount: TransferUserAccountService,
   ) {}
 
   @Get('tenants')
@@ -100,5 +105,16 @@ export class PlatformController {
   @Post('tenants/:id/reactivate')
   reactivate(@Param('id', ParseUUIDPipe) id: string): Promise<TenantPlan> {
     return this.cancelTenantPlan.reactivate(id);
+  }
+
+  // Move UserAccount + Person para outro tenant/congregação — mudança de
+  // igreja-cliente. Herda as três marcas do controller (nenhuma redeclarada).
+  @Patch('user-accounts/:id/transfer')
+  transfer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TransferUserAccountDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<TransferredAccount> {
+    return this.transferUserAccount.transfer(id, dto, user);
   }
 }
