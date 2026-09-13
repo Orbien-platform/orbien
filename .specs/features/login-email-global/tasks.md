@@ -85,7 +85,7 @@ T6 → T6b → T7
 ### Phase 4: Transferência de tenant (API)
 
 ```
-T8 → T9 → T10 → T11
+T8 → T9 → T10 → T11 → T11b
 ```
 
 ### Phase 5: Front-ends
@@ -528,6 +528,41 @@ transferência de tenant existe, é `platform_support`-only, e onde vive
 
 ---
 
+### T11b: Corrige fixtures de integração para e-mail único por tenant (achado da Fase 4)
+
+**What**: Ajusta os fixtures de `apps/api/test/integration/{impersonation,
+platform-provisioning, platform-login, platform-audit-logs}.spec.ts` para
+não reusarem o mesmo e-mail em tenants diferentes — cada conta de teste
+criada nesses specs passa a ter um e-mail único (ex.: sufixo por tenant,
+`crypto.randomUUID()`, ou o padrão que os specs já usarem para outros campos
+únicos). Achado durante T10 (Fase 4): `npm run test:integration
+-w orbien-backend` já falhava antes de T8-T11 (`Unique constraint failed on
+the fields: (email)`), causa raiz na migration de T4 (`@@unique([email])`,
+Fase 2) — os fixtures eram válidos sob a chave composta antiga e não são sob
+a global.
+**Where**: `apps/api/test/integration/impersonation.spec.ts`,
+`apps/api/test/integration/platform-provisioning.spec.ts`,
+`apps/api/test/integration/platform-login.spec.ts`,
+`apps/api/test/integration/platform-audit-logs.spec.ts` (confirmar nomes
+exatos antes de editar — podem diferir ligeiramente).
+**Depends on**: T4 (causa raiz), independente de T8-T11 em termos de código
+— feito depois deles só pela ordem em que o achado surgiu.
+**Reuses**: nenhum — é ajuste pontual de fixture, não lógica de produção.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [ ] Nenhum fixture dessas 4 suítes reusa e-mail entre contas de tenants diferentes
+- [ ] `npm run test:integration -w orbien-backend` passa (as 4 suítes voltam a rodar, nenhum teste teve sua asserção enfraquecida ou removida — só o dado de fixture mudou)
+- [ ] Gate: `npm run test:integration -w orbien-backend`
+
+**Tests**: integration — mesmos testes existentes, dado de fixture corrigido; nenhum teste novo exigido (não é funcionalidade nova, é correção de dado de teste)
+**Gate**: full
+
+**Commit**: `fix(api): fixtures de integração usam e-mail único por conta (achado da migration de T4)`
+
+---
+
 ### T12: `apps/web` — login sem campo de tenant
 
 **What**: Remove o campo/estado de `tenant_slug` da tela e do payload de
@@ -576,7 +611,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 Phase 1:  T1 ──→ T2
 Phase 2:  T3 ──→ T4 ──→ T5
 Phase 3:  T6 ──→ T6b ──→ T7
-Phase 4:  T8 ──→ T9 ──→ T10 ──→ T11
+Phase 4:  T8 ──→ T9 ──→ T10 ──→ T11 ──→ T11b
 Phase 5:  T12 ──→ T13
 ```
 
@@ -603,6 +638,7 @@ não por dependência real.
 | T9: rota no `PlatformController` | 1 endpoint | ✅ Granular |
 | T10: teste RLS de transferência | 1 arquivo de teste | ✅ Granular |
 | T11: `docs/PLANO.md` | 1 documento | ✅ Granular |
+| T11b: fixtures de integração corrigidas | 4 arquivos, mesma mudança (e-mail único no fixture) | ✅ Granular (coesos, mesma causa raiz) |
 | T12: `apps/web` login | 1 componente | ✅ Granular |
 | T13: `apps/mobile` login | 1 componente | ✅ Granular |
 
@@ -624,6 +660,7 @@ não por dependência real.
 | T9 | T8 | T8→T9 | ✅ Match |
 | T10 | T9 | T9→T10 | ✅ Match |
 | T11 | T9 | T9→T11 (via T10 na ordem da fase) | ✅ Match |
+| T11b | T4 | T11→T11b (via T4 na ordem da fase, achado tardio) | ✅ Match |
 | T12 | T6 | Fase 5, após Fase 3 | ✅ Match |
 | T13 | T6 | Fase 5, após Fase 3 | ✅ Match |
 
@@ -647,6 +684,7 @@ Nenhuma tarefa depende de uma tarefa de fase posterior.
 | T9 | Controller | unit | unit | ✅ OK |
 | T10 | RLS | rls | rls | ✅ OK |
 | T11 | Documentação | none | none | ✅ OK |
+| T11b | Fixture de teste de integração | integration (full) | integration | ✅ OK |
 | T12 | Front-end (web) | unit | unit | ✅ OK |
 | T13 | Front-end (mobile) | none (sem suíte configurada — a confirmar) | none | ✅ OK (condicional — T13 deve virar `unit` se a checagem inicial da task encontrar suíte de teste já configurada no mobile) |
 
