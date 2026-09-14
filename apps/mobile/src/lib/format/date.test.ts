@@ -6,7 +6,7 @@
 // não com string ISO em UTC: as funções leem `getDate`/`getHours`, que são
 // locais, então uma string em Z faria a asserção depender do fuso da
 // máquina que roda o teste.
-import { formatDateTime, formatDayMonth, formatLongDate, formatMonthYear } from "./date";
+import { formatDateTime, formatDayMonth, formatLongDate, formatMonthYear, getGreeting } from "./date";
 
 function localIso(
   year: number,
@@ -68,5 +68,22 @@ describe("formatLongDate", () => {
 
   it("data inválida devolve null", () => {
     expect(formatLongDate("xx")).toBeNull();
+  });
+});
+
+describe("getGreeting", () => {
+  it("antes das 12h é bom dia", () => {
+    expect(getGreeting(new Date(2026, 8, 13, 0, 0))).toBe("Bom dia");
+    expect(getGreeting(new Date(2026, 8, 13, 11, 59))).toBe("Bom dia");
+  });
+
+  it("das 12h às 17h59 é boa tarde", () => {
+    expect(getGreeting(new Date(2026, 8, 13, 12, 0))).toBe("Boa tarde");
+    expect(getGreeting(new Date(2026, 8, 13, 17, 59))).toBe("Boa tarde");
+  });
+
+  it("a partir das 18h é boa noite", () => {
+    expect(getGreeting(new Date(2026, 8, 13, 18, 0))).toBe("Boa noite");
+    expect(getGreeting(new Date(2026, 8, 13, 23, 59))).toBe("Boa noite");
   });
 });

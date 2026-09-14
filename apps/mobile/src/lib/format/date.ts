@@ -60,3 +60,14 @@ export function formatLongDate(iso: string): string | null {
   if (!date) return null;
   return `${date.getDate()} de ${MONTHS[date.getMonth()] ?? ""} de ${date.getFullYear()}`;
 }
+
+/** "Bom dia"/"Boa tarde"/"Boa noite" — saudação da home (HOME-01). Recebe
+ * a data em vez de ler `Date.now()` para o teste não precisar mockar o
+ * relógio global; a tela chama com `new Date()`. Limites em 12:00 e 18:00,
+ * inclusive no lado da tarde/noite (11:59 ainda é manhã). */
+export function getGreeting(date: Date): string {
+  const hour = date.getHours();
+  if (hour < 12) return "Bom dia";
+  if (hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
