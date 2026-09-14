@@ -71,9 +71,9 @@ leia o do app antes de mexer nele.
   ajustada é `no-unused-vars` com `argsIgnorePattern: "^_"` — o código marca
   "não usado de propósito" com underscore (`_tx`, `_depth`).
 - Os scripts de RLS (`apps/api/prisma/migrations/0NN_rls_*.sql`, hoje 001 a
-  013) ficam **fora** do histórico do Prisma: `prisma migrate deploy` não os
+  015) ficam **fora** do histórico do Prisma: `prisma migrate deploy` não os
   aplica, só o `bootstrap-db.sh`, e a ordem entre eles importa — que não é a
-  numérica: o bootstrap roda 003 e os de tabela (007–010, 012, 013) antes do passo
+  numérica: o bootstrap roda 003 e os de tabela (007–010, 012–015) antes do passo
   que derruba as `tenant_isolation` redundantes, e só depois o plano de
   plataforma (004–006, 011). Script novo entra no `bootstrap-db.sh`, no lugar
   certo dessa ordem, e ganha sua verificação no passo 7 — tabela nova sem

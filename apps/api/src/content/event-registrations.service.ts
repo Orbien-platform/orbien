@@ -54,7 +54,7 @@ const ACTIVE: EventRegistrationStatus[] = ['confirmed', 'waitlisted'];
  * nunca lida antes: duas inscrições simultâneas no último lugar liam o mesmo
  * "tem vaga" e as duas entrariam como confirmadas.
  *
- * O isolamento é do RLS (`013_rls_event_registrations.sql`, escopo de
+ * O isolamento é do RLS (`015_rls_event_registrations.sql`, escopo de
  * congregação). O `tenant_id`/`congregation_id` no `where` é a redundância de
  * sempre — erra para o lado de não achar nada.
  */

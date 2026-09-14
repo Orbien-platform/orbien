@@ -1,5 +1,5 @@
 /**
- * As duas rotas públicas do produto, por HTTP.
+ * As rotas públicas do produto, por HTTP.
  *
  * Elas são as únicas que não passam pelo `TenantContextInterceptor` — e foi
  * exatamente por isso que quebraram sozinhas e ficaram meses assim: `get
@@ -30,6 +30,8 @@ const slug = `pub-${ts}`;
 let tenantId: string;
 let congregationId: string;
 let qrToken: string;
+let publicGroupId: string;
+let privateGroupId: string;
 
 beforeAll(async () => {
   const tenant = await admin.tenant.create({ data: { slug, name: 'Tenant Público' } });
@@ -50,6 +52,48 @@ beforeAll(async () => {
   });
   qrToken = qr.token;
 
+  // PROD-13 — duas células, uma pública e uma não, para a listagem de
+  // "Encontre uma célula" e o pedido de visita.
+  const groupType = await admin.groupType.create({
+    data: { tenant_id: tenantId, congregation_id: congregationId, name: 'Célula' },
+  });
+  const leader = await admin.person.create({
+    data: {
+      tenant_id: tenantId,
+      congregation_id: congregationId,
+      full_name: `Líder ${ts}`,
+      classification: 'member',
+    },
+  });
+  const publicGroup = await admin.smallGroup.create({
+    data: {
+      tenant_id: tenantId,
+      congregation_id: congregationId,
+      name: `Célula Pública ${ts}`,
+      group_type_id: groupType.id,
+      leader_person_id: leader.id,
+      is_public: true,
+      public_description: 'Toda quinta, 19h30',
+      address: 'Rua das Flores, 100',
+      lat: '-23.5505199',
+      lng: '-46.6333094',
+      meeting_time: '19:30',
+    },
+  });
+  publicGroupId = publicGroup.id;
+
+  const privateGroup = await admin.smallGroup.create({
+    data: {
+      tenant_id: tenantId,
+      congregation_id: congregationId,
+      name: `Célula Privada ${ts}`,
+      group_type_id: groupType.id,
+      leader_person_id: leader.id,
+      is_public: false,
+    },
+  });
+  privateGroupId = privateGroup.id;
+
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   app = moduleRef.createNestApplication();
   app.useGlobalPipes(
@@ -64,6 +108,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await admin.waitlistSubscriber.deleteMany({ where: { email: { contains: String(ts) } } });
   await admin.qrToken.deleteMany({ where: { tenant_id: tenantId } });
+  await admin.smallGroupVisitRequest.deleteMany({ where: { tenant_id: tenantId } });
+  await admin.smallGroup.deleteMany({ where: { tenant_id: tenantId } });
   await admin.person.deleteMany({ where: { tenant_id: tenantId } });
   await admin.tenant.deleteMany({ where: { id: tenantId } });
   await admin.$disconnect();
@@ -138,5 +184,109 @@ describe('POST /api/public/visitor/register', () => {
 
     const qr = await admin.qrToken.findUnique({ where: { token: qrToken } });
     expect(qr?.scan_count).toBe(1);
+  });
+});
+
+/**
+ * PROD-13 — "Encontre uma célula". Mesma razão de existir do bloco do QR
+ * acima: rota pública não passa pelo TenantContextInterceptor, então o que
+ * ela faz com RLS só aparece contra o banco de verdade. Aqui isso é literal —
+ * o insert do pedido de visita é `$executeRaw` justamente porque o `create` do
+ * Prisma usa RETURNING e o plano público não pode ler a linha de volta; um
+ * teste com Prisma mockado nunca veria esse 42501.
+ */
+describe('GET /api/public/small-groups', () => {
+  it('lista só a célula pública da igreja, com endereço e coordenada', async () => {
+    const res = await http().get('/api/public/small-groups').query({ tenant_slug: slug }).expect(200);
+
+    expect(res.body.church_name).toBe('Tenant Público');
+    const ids = res.body.groups.map((g: { id: string }) => g.id);
+    expect(ids).toEqual([publicGroupId]);
+    expect(ids).not.toContain(privateGroupId);
+
+    expect(res.body.groups[0]).toMatchObject({
+      name: `Célula Pública ${ts}`,
+      description: 'Toda quinta, 19h30',
+      address: 'Rua das Flores, 100',
+      lat: -23.5505199,
+      lng: -46.6333094,
+      meeting_time: '19:30',
+      congregation: { id: congregationId, name: 'Público — Sede' },
+    });
+  });
+
+  it('404 para igreja que não existe', async () => {
+    await http()
+      .get('/api/public/small-groups')
+      .query({ tenant_slug: `nao-existe-${ts}` })
+      .expect(404);
+  });
+
+  it('400 sem tenant_slug', async () => {
+    await http().get('/api/public/small-groups').expect(400);
+  });
+});
+
+describe('POST /api/public/small-groups/:id/visit-request', () => {
+  it('grava o pedido — a linha no banco é a prova, a resposta não devolve a linha', async () => {
+    const res = await http()
+      .post(`/api/public/small-groups/${publicGroupId}/visit-request`)
+      .send({
+        tenant_slug: slug,
+        visitor_name: `Interessada ${ts}`,
+        visitor_phone: '11999990000',
+        message: 'posso levar meu filho?',
+      })
+      .expect(200);
+
+    expect(res.body.status).toBe('received');
+
+    const saved = await admin.smallGroupVisitRequest.findMany({
+      where: { small_group_id: publicGroupId },
+    });
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      congregation_id: congregationId,
+      visitor_name: `Interessada ${ts}`,
+      visitor_phone: '11999990000',
+      message: 'posso levar meu filho?',
+      visitor_email: null,
+    });
+  });
+
+  it('404 em célula não pública — ela não existe para quem está de fora', async () => {
+    await http()
+      .post(`/api/public/small-groups/${privateGroupId}/visit-request`)
+      .send({ tenant_slug: slug, visitor_name: 'Alguém', visitor_phone: '11999990000' })
+      .expect(404);
+
+    const saved = await admin.smallGroupVisitRequest.findMany({
+      where: { small_group_id: privateGroupId },
+    });
+    expect(saved).toHaveLength(0);
+  });
+
+  it('400 sem telefone nem e-mail', async () => {
+    await http()
+      .post(`/api/public/small-groups/${publicGroupId}/visit-request`)
+      .send({ tenant_slug: slug, visitor_name: 'Sem contato' })
+      .expect(400);
+  });
+
+  it('honeypot responde 200 e não grava', async () => {
+    await http()
+      .post(`/api/public/small-groups/${publicGroupId}/visit-request`)
+      .send({
+        tenant_slug: slug,
+        visitor_name: `Robô ${ts}`,
+        visitor_phone: '11999990000',
+        website: 'http://spam',
+      })
+      .expect(200);
+
+    const saved = await admin.smallGroupVisitRequest.findMany({
+      where: { visitor_name: `Robô ${ts}` },
+    });
+    expect(saved).toHaveLength(0);
   });
 });

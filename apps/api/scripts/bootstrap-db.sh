@@ -106,11 +106,25 @@ fi
 if [ -f prisma/migrations/012_rls_group_messages.sql ]; then
   run_sql_file prisma/migrations/012_rls_group_messages.sql
 fi
-# Mesmo caso de 012, uma feature depois: `event_registrations` (PROD-16) é
-# tabela nova, nasce com a policy de congregação e não tem `tenant_isolation`
-# para o passo 4 derrubar.
-if [ -f prisma/migrations/013_rls_event_registrations.sql ]; then
-  run_sql_file prisma/migrations/013_rls_event_registrations.sql
+# PROD-13 ("Encontre uma célula"): acrescenta um ramo SELECT público a
+# `small_groups`, para a página sem login que só fixa `app.tenant_id`. Não
+# mexe na tenant_congregation_isolation que já está lá — por isso não depende
+# do passo 4, mas depende de 003 (app_current_user()/app_congregation_allowed
+# já definidas) como os cinco acima.
+if [ -f prisma/migrations/013_rls_small_groups_public.sql ]; then
+  run_sql_file prisma/migrations/013_rls_small_groups_public.sql
+fi
+# Mesma feature, tabela nova: `small_group_visit_requests` é criada pela
+# migration do Prisma no passo 2 e chega aqui SEM RLS — tabela nova nunca
+# passou por 001. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/014_rls_small_group_visit_requests.sql ]; then
+  run_sql_file prisma/migrations/014_rls_small_group_visit_requests.sql
+fi
+# Mesmo caso de 012 e 014, uma feature depois: `event_registrations` (PROD-16)
+# é tabela nova, nasce com a policy de congregação e não tem
+# `tenant_isolation` para o passo 4 derrubar.
+if [ -f prisma/migrations/015_rls_event_registrations.sql ]; then
+  run_sql_file prisma/migrations/015_rls_event_registrations.sql
 fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
@@ -426,7 +440,7 @@ BEGIN
      AND with_check IS NOT DISTINCT FROM qual;
   RAISE NOTICE 'event_registrations com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
-    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei % — 013_rls_event_registrations.sql rodou?', n;
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei % — 015_rls_event_registrations.sql rodou?', n;
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no

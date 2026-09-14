@@ -78,6 +78,7 @@ model Tenant {
   exportJobs              ExportJob[]
   importJobs              ImportJob[]
   notificationPreferences NotificationPreference[]
+  smallGroupVisitRequests SmallGroupVisitRequest[]
 
   @@index([id])
   @@map("tenants")
@@ -145,6 +146,7 @@ model Congregation {
   exportJobs              ExportJob[]
   importJobs              ImportJob[]
   notificationPreferences NotificationPreference[]
+  smallGroupVisitRequests SmallGroupVisitRequest[]
 
   @@index([tenant_id, id])
   @@map("congregations")
@@ -545,11 +547,37 @@ model SmallGroup {
   materialTargets MaterialTarget[]
   visitRecords    VisitRecord[]
   roleAssignments RoleAssignment[]
+  visitRequests   SmallGroupVisitRequest[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([group_type_id])
   @@map("small_groups")
+}
+
+/// Interesse de visita vindo do "Encontre uma célula" público (PROD-13).
+/// Não é presença: quem clicou ainda não foi a lugar nenhum — por isso não
+/// é `VisitRecord`, que conta visita acontecida e alimenta a
+/// reclassificação automática de visitante para frequentador.
+model SmallGroupVisitRequest {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  small_group_id  String
+  visitor_name    String
+  visitor_phone   String?
+  visitor_email   String?
+  message         String?
+  created_at      DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  smallGroup   SmallGroup   @relation(fields: [small_group_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  @@index([small_group_id, created_at])
+  @@map("small_group_visit_requests")
 }
 
 model GroupType {

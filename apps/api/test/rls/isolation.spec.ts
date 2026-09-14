@@ -270,7 +270,7 @@ beforeAll(async () => {
 
   // PROD-16: evento com inscrição na A-Second. `event_registrations` é tabela
   // NOVA, que já nasceu com a policy de congregação
-  // (`013_rls_event_registrations.sql`) — não há `tenant_isolation` de 001
+  // (`015_rls_event_registrations.sql`) — não há `tenant_isolation` de 001
   // para trocar, ao contrário de cost_centers e prayer_requests.
   const eventPostA2 = await prismaAdmin.contentPost.create({
     data: {
@@ -1824,7 +1824,7 @@ describe('28. GroupMessage — isolamento por congregação (AD-001)', () => {
 // 29. EventRegistration — isolamento por congregação (PROD-16, AD-001)
 //
 // Mesmo caso do bloco 28, uma feature depois: tabela nova, que nasce com
-// `tenant_congregation_isolation` em `013_rls_event_registrations.sql` e nunca
+// `tenant_congregation_isolation` em `015_rls_event_registrations.sql` e nunca
 // teve a `tenant_isolation` fraca de 001 para trocar. O que se prova é o de
 // sempre: o tenant vizinho não lê, a congregação irmã não lê, e o
 // `tenant_admin` lê E grava (USING = WITH CHECK), porque

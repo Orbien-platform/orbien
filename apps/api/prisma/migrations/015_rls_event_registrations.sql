@@ -1,8 +1,8 @@
 -- =============================================================================
--- 013_rls_event_registrations.sql — RLS das inscrições em evento (PROD-16)
+-- 015_rls_event_registrations.sql — RLS das inscrições em evento (PROD-16)
 --
 -- Roda DEPOIS de 003_rls_admin_write.sql, que define app_congregation_allowed().
--- Fora do histórico do Prisma, como os doze anteriores.
+-- Fora do histórico do Prisma, como os catorze anteriores.
 --
 -- Tabela nova (migration `add_event_registrations`), então não há
 -- `tenant_isolation` de 001 para derrubar depois — o passo 4 do bootstrap não
@@ -55,9 +55,9 @@ BEGIN
      AND qual LIKE '%app_congregation_allowed%'
      AND with_check IS NOT DISTINCT FROM qual;
 
-  RAISE NOTICE '013_rls_event_registrations: % policy(s) simétrica(s) em event_registrations', n;
+  RAISE NOTICE '015_rls_event_registrations: % policy(s) simétrica(s) em event_registrations', n;
 
   IF n <> 1 THEN
-    RAISE EXCEPTION '013_rls_event_registrations: esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei %', n;
+    RAISE EXCEPTION '015_rls_event_registrations: esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei %', n;
   END IF;
 END $$;
