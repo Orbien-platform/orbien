@@ -787,6 +787,61 @@ describe("PostDetailSheet — evento (PROD-16)", () => {
     expect(await screen.findByText(/Ninguém se inscreveu ainda/)).toBeInTheDocument();
   });
 
+  it("com fim e local, mostra o intervalo inteiro", async () => {
+    mockEventGet({ ...eventPost, event_ends_at: "2026-10-10T21:00:00.000Z" });
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-evt"
+        canEdit
+        canDelete
+        onUpdated={vi.fn()}
+      />
+    );
+
+    // 15:00Z–21:00Z é 12:00–18:00 em Brasília.
+    expect(await screen.findByText(/10\/10\/2026, 12:00 — 10\/10\/2026, 18:00/)).toBeInTheDocument();
+  });
+
+  it("evento só com local, sem data, ainda mostra o bloco", async () => {
+    mockEventGet({ ...eventPost, event_starts_at: null });
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-evt"
+        canEdit
+        canDelete
+        onUpdated={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Chácara da Sede")).toBeInTheDocument();
+  });
+
+  it("evento sem data nem local não desenha o bloco — só o painel de inscrições", async () => {
+    mockEventGet({ ...eventPost, event_starts_at: null, event_location: null });
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-evt"
+        canEdit
+        canDelete
+        onUpdated={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/Ninguém se inscreveu ainda/);
+    // `selector: "p"` porque "Evento" também é o rótulo do TIPO do post, no
+    // cabeçalho do sheet — o que não deve existir aqui é o título da seção.
+    expect(screen.queryByText("Evento", { selector: "p" })).not.toBeInTheDocument();
+  });
+
   it("post que não é evento não pede inscrições à API", async () => {
     mockGet(draftPost);
 

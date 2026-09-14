@@ -423,6 +423,14 @@ describe("CreatePostModal", () => {
  * tela.
  */
 describe("CreatePostModal — evento (PROD-16)", () => {
+  // O `beforeEach` do describe de cima não alcança este: sem limpar, o
+  // `api.post` aqui chega com as chamadas dos testes anteriores e
+  // `mock.calls[0]` é de outro teste.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.get).mockResolvedValue({ data: { data: segments, total: 1 } } as never);
+  });
+
   async function escolherEvento(user: ReturnType<typeof userEvent.setup>) {
     await user.selectOptions(screen.getByLabelText(/Tipo/), "event");
   }
@@ -489,6 +497,67 @@ describe("CreatePostModal — evento (PROD-16)", () => {
     const payload = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
     expect(payload).not.toHaveProperty("registration_enabled");
     expect(payload).not.toHaveProperty("event_location");
+  });
+
+  it("data de início, fim e prazo viajam em ISO", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Retiro");
+    await user.type(screen.getByLabelText("Começa em"), "2030-01-10T09:00");
+    await user.type(screen.getByLabelText("Termina em"), "2030-01-10T18:00");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText("Inscrições até"), "2030-01-05T23:59");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const payload = vi.mocked(api.post).mock.calls[0]![1] as Record<string, string>;
+    expect(payload.event_starts_at).toMatch(/^2030-01-10T/);
+    expect(payload.event_ends_at).toMatch(/^2030-01-10T/);
+    expect(payload.registration_deadline).toMatch(/^2030-01-0[56]T/);
+  });
+
+  it("limite zero é barrado na tela, antes de chegar à API", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Retiro");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText(/Limite de vagas/), "0");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "O limite de vagas precisa ser ao menos 1."
+    );
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("com inscrição desligada, limite e prazo preenchidos antes não vazam no payload", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Retiro");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText(/Limite de vagas/), "10");
+    // Desmarcar esconde os dois campos — e o payload tem que acompanhar.
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/content/posts",
+        expect.objectContaining({
+          registration_enabled: false,
+          registration_limit: null,
+          registration_deadline: null,
+        })
+      )
+    );
   });
 
   it("com inscrição ligada e limite vazio, o limite vai nulo — `sem limite`, não zero", async () => {

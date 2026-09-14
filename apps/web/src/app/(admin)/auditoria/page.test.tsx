@@ -106,6 +106,19 @@ describe("AuditoriaPage", () => {
     expect(screen.queryByText(/Nenhum acesso registrado/)).not.toBeInTheDocument();
   });
 
+  it("`Tentar de novo` recarrega sem mexer nos filtros", async () => {
+    mockedApi.get.mockRejectedValue({ response: { status: 500 } });
+    const user = userEvent.setup();
+
+    render(<AuditoriaPage />);
+    await screen.findByText("Não foi possível carregar a auditoria.");
+
+    respondWith([log()]);
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+
+    expect(await screen.findByText("Ana Suporte")).toBeInTheDocument();
+  });
+
   it("lista vazia sem filtro diz que nada foi registrado", async () => {
     respondWith([]);
 
@@ -167,6 +180,77 @@ describe("AuditoriaPage", () => {
     await user.selectOptions(screen.getByLabelText("Filtrar por ação"), "tenant_transfer");
 
     expect(await screen.findByText(/Nenhum registro com esses filtros/)).toBeInTheDocument();
+  });
+
+  it("ação desconhecida aparece pelo código cru, em vez de sumir da tela", async () => {
+    // A API só devolve as duas ações da lista fechada; se um dia devolver
+    // outra, a linha continua legível em vez de virar célula vazia.
+    respondWith([
+      log({ action: "acao_futura", entity: "algo", route: null, method: null, status: null }),
+    ]);
+
+    render(<AuditoriaPage />);
+
+    const table = within(await screen.findByRole("table"));
+    expect(table.getByText("acao_futura")).toBeInTheDocument();
+    expect(table.getByText("algo")).toBeInTheDocument();
+  });
+
+  it("`support_access` sem rota nem método cai na própria `entity`", async () => {
+    respondWith([log({ route: null, method: null, status: null })]);
+
+    render(<AuditoriaPage />);
+
+    expect(await screen.findByText("/persons")).toBeInTheDocument();
+  });
+
+  it("volta uma página pelo botão anterior", async () => {
+    respondWith([log()], 40);
+    const user = userEvent.setup();
+
+    render(<AuditoriaPage />);
+    await screen.findByText("Ana Suporte");
+
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+    await waitFor(() => expect(lastUrl()).toContain("page=2"));
+
+    await user.click(screen.getByRole("button", { name: "Página anterior" }));
+    await waitFor(() => expect(lastUrl()).toContain("page=1"));
+  });
+
+  // Desmontar no meio da requisição é o que o `signal.cancelled` existe para
+  // cobrir: sem ele, a resposta que chega depois chama setState em componente
+  // já desmontado.
+  it("resposta que chega depois do desmonte não é aplicada", async () => {
+    let resolver: (v: unknown) => void = () => {};
+    mockedApi.get.mockReturnValue(
+      new Promise((resolve) => {
+        resolver = resolve;
+      })
+    );
+
+    const { unmount } = render(<AuditoriaPage />);
+    unmount();
+    resolver({ data: { data: [log()], total: 1, page: 1, limit: 20 } });
+
+    await waitFor(() => expect(screen.queryByText("Ana Suporte")).not.toBeInTheDocument());
+  });
+
+  it("erro que chega depois do desmonte também não é aplicado", async () => {
+    let rejecter: (e: unknown) => void = () => {};
+    mockedApi.get.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejecter = reject;
+      })
+    );
+
+    const { unmount } = render(<AuditoriaPage />);
+    unmount();
+    rejecter({ response: { status: 500 } });
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Não foi possível carregar a auditoria/)).not.toBeInTheDocument()
+    );
   });
 
   it("sem paginação quando tudo cabe numa página", async () => {
