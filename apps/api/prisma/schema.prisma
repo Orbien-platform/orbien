@@ -47,6 +47,7 @@ model Tenant {
   groupMeetings           GroupMeeting[]
   attendanceRecords       AttendanceRecord[]
   prayerRequests          PrayerRequest[]
+  groupMessages           GroupMessage[]
   studyMaterials          StudyMaterial[]
   studyMaterialVersions   StudyMaterialVersion[]
   materialOpenRecords     MaterialOpenRecord[]
@@ -116,6 +117,7 @@ model Congregation {
   groupMeetings           GroupMeeting[]
   attendanceRecords       AttendanceRecord[]
   prayerRequests          PrayerRequest[]
+  groupMessages           GroupMessage[]
   studyMaterials          StudyMaterial[]
   financialCategories     FinancialCategory[]
   costCenters             CostCenter[]
@@ -361,6 +363,7 @@ model Person {
   groupMemberships        GroupMembership[]
   attendanceRecords       AttendanceRecord[]
   prayerRequests          PrayerRequest[]
+  groupMessages           GroupMessage[]
   materialOpenRecords     MaterialOpenRecord[]
   ledSmallGroups          SmallGroup[]            @relation("GroupLeader")
   donorTransactions       FinancialTransaction[]  @relation("TransactionDonor")
@@ -538,6 +541,7 @@ model SmallGroup {
   memberships     GroupMembership[]
   meetings        GroupMeeting[]
   prayerRequests  PrayerRequest[]
+  messages        GroupMessage[]
   materialTargets MaterialTarget[]
   visitRecords    VisitRecord[]
   roleAssignments RoleAssignment[]
@@ -656,6 +660,39 @@ model PrayerRequest {
   @@index([tenant_id, congregation_id])
   @@index([small_group_id])
   @@map("prayer_requests")
+}
+
+/// Chat fechado da célula (PROD-09).
+///
+/// Mesa separada de `PrayerRequest` de propósito: pedido de oração é registro
+/// pastoral, que a liderança da célula lê e modera; mensagem de chat é
+/// conversa, com volume e paginação próprios. O que as duas compartilham é a
+/// regra de acesso — participação no grupo, não papel do JWT.
+model GroupMessage {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  small_group_id  String
+  person_id       String
+  content         String
+  /// Apagar mensagem é soft delete: o histórico da conversa perderia o fio se
+  /// a linha sumisse no meio, e a moderação do líder precisa deixar rastro do
+  /// que foi removido. O conteúdo some da resposta da API, não da tabela.
+  deleted_at      DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  smallGroup   SmallGroup   @relation(fields: [small_group_id], references: [id], onDelete: Cascade)
+  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  // A leitura do chat é sempre "as últimas N deste grupo" e a paginação é por
+  // created_at desc — o índice composto é o que evita varrer o grupo inteiro.
+  @@index([small_group_id, created_at])
+  @@map("group_messages")
 }
 
 model StudyMaterial {

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
+import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -459,6 +460,9 @@ export function GroupDetailSheet({
                       <Tabs.Tab value="prayer" className={tabBtn(activeTab === "prayer")}>
                         Oração
                       </Tabs.Tab>
+                      <Tabs.Tab value="chat" className={tabBtn(activeTab === "chat")}>
+                        Conversa
+                      </Tabs.Tab>
                     </Tabs.List>
                   </Tabs.Root>
                 </div>
@@ -553,6 +557,12 @@ export function GroupDetailSheet({
                     de quem não participa não deve custar uma requisição em
                     toda abertura da gaveta. */}
                 {activeTab === "prayer" && <PrayerRequestsPanel groupId={group.id} />}
+
+                {/* ── Chat tab (PROD-09) ── */}
+                {/* Montado só quando a aba abre, mesmo motivo da aba de
+                    oração — e aqui pesa mais: o painel abre um polling, que
+                    não deve existir em gaveta cuja aba ninguém abriu. */}
+                {activeTab === "chat" && <GroupChatPanel groupId={group.id} />}
 
                 {/* ── Meetings tab ── */}
                 {activeTab === "meetings" && (

@@ -3,7 +3,7 @@
  *
  * `event_registrations` é tabela NOVA, e o que este arquivo mede é que ela
  * nasceu com a policy certa: escopo de CONGREGAÇÃO
- * (`012_rls_event_registrations.sql`), não de tenant. Sem o script, a tabela
+ * (`013_rls_event_registrations.sql`), não de tenant. Sem o script, a tabela
  * ficaria sem RLS e `app_user` — que tem GRANT em tudo em `public` por
  * ALTER DEFAULT PRIVILEGES — leria a lista de inscritos de todas as igrejas.
  *
