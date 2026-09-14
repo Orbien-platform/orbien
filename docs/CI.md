@@ -441,8 +441,14 @@ verificar por script**, em vez de depender de juízo:
 | `package-lock.json` em `apps/*` | bloqueia — a raiz é a única fonte |
 | `schema.prisma` sem migration, ou o inverso | alerta |
 | Tabela nova sem `ENABLE ROW LEVEL SECURITY` | alerta |
-| Tabela nova sem caso em `isolation.spec.ts` | alerta |
-| `CREATE POLICY` sem `DROP POLICY IF EXISTS` | alerta — quebra reexecução |
+| Tabela nova sem caso em `isolation.spec.ts` | alerta — procura o nome da tabela **ou** o delegate do Prisma (`study_material_versions` ou `studyMaterialVersion`), porque é assim que o teste fala |
+| `CREATE POLICY` sem `DROP POLICY IF EXISTS` **em `0NN_rls_*.sql`** | alerta — quebra reexecução |
+
+A última linha vale só para os scripts `0NN_rls_*.sql`, que o `bootstrap-db.sh`
+roda inteiros a cada deploy. Migration do Prisma é aplicada **uma** vez, e
+editar uma já aplicada muda o checksum e derruba o `prisma migrate deploy` em
+produção — cobrar a regra ali pedia justamente a correção que não se pode
+fazer.
 
 A distinção entre bloquear e alertar é deliberada: bloqueio é só para o que é
 inequívoco. Alerta que vira bloqueio falso ensina a usar `--no-verify`, e aí o

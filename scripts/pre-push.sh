@@ -78,27 +78,44 @@ elif [ -n "$MIGS" ]; then
   passa "migration e schema mudaram juntos"
 fi
 
+# Nome da tabela como o Prisma Client a chama: `study_material_versions` vira
+# `studyMaterialVersion`. O teste de isolamento fala por delegate
+# (`tx.studyMaterialVersion`), não pelo nome da tabela — procurar só o
+# snake_case dava alerta em tabela que TEM caso escrito, e alerta que mente
+# é alerta que se aprende a ignorar. A singularização é ingênua de propósito
+# (tira o `s` final): errar aqui volta ao comportamento antigo, o alerta
+# falso, nunca o silêncio.
+delegate_de() {
+  echo "$1" | awk -F_ '{ s=$1; for (i=2;i<=NF;i++) s = s toupper(substr($i,1,1)) substr($i,2); print s }' \
+             | sed 's/s$//'
+}
+
 # Tabela nova exige RLS e teste de isolamento. Alerta, não bloqueio: o RLS pode
 # estar nos scripts manuais (001/002), que são arquivos separados.
 if [ -n "$MIGS" ]; then
   NOVAS=$(grep -hoE 'CREATE TABLE (IF NOT EXISTS )?"?[a-z_]+"?' $MIGS 2>/dev/null \
           | grep -oE '"[a-z_]+"|[a-z_]+$' | tr -d '"' | sort -u | grep -vE '^(CREATE|TABLE|IF|NOT|EXISTS)$' || true)
   for t in $NOVAS; do
-    grep -qE "ALTER TABLE \"?$t\"? ENABLE ROW LEVEL SECURITY" $MIGS apps/api/prisma/migrations/00*.sql 2>/dev/null \
+    grep -qE "ALTER TABLE \"?$t\"? ENABLE ROW LEVEL SECURITY" $MIGS apps/api/prisma/migrations/0*_rls_*.sql 2>/dev/null \
       || alerta "tabela '$t' criada sem ENABLE ROW LEVEL SECURITY em nenhum script"
-    grep -q "$t" apps/api/test/rls/isolation.spec.ts 2>/dev/null \
+    grep -qE "$t|$(delegate_de "$t")" apps/api/test/rls/isolation.spec.ts 2>/dev/null \
       || alerta "tabela '$t' sem caso em test/rls/isolation.spec.ts — policy existir não prova que isola"
   done
   [ -z "$NOVAS" ] && passa "nenhuma tabela nova"
+fi
 
-  # CREATE POLICY sem DROP antes quebra reexecução do script.
-  if grep -hE "^CREATE POLICY" $MIGS 2>/dev/null | grep -q . ; then
-    for f in $MIGS; do
-      np=$(grep -cE "^CREATE POLICY" "$f" || true)
-      nd=$(grep -cE "^DROP POLICY IF EXISTS" "$f" || true)
-      [ "$np" -gt "$nd" ] && alerta "$f: $np CREATE POLICY para $nd DROP POLICY IF EXISTS — reexecução vai falhar"
-    done
-  fi
+# CREATE POLICY sem DROP antes quebra reexecução — e reexecução só existe nos
+# scripts `0NN_rls_*.sql`, que o `bootstrap-db.sh` roda inteiros a cada deploy.
+# Migration do Prisma é aplicada UMA vez, e editar uma já aplicada muda o
+# checksum e derruba o `prisma migrate deploy` em produção: cobrar a regra ali
+# pedia justamente a correção que não se pode fazer.
+RLS_SCRIPTS=$(echo "$CHANGED" | grep -E "^apps/api/prisma/migrations/0[0-9]+_rls_.*\.sql$" || true)
+if [ -n "$RLS_SCRIPTS" ]; then
+  for f in $RLS_SCRIPTS; do
+    np=$(grep -cE "^CREATE POLICY" "$f" || true)
+    nd=$(grep -cE "^DROP POLICY IF EXISTS" "$f" || true)
+    [ "$np" -gt "$nd" ] && alerta "$f: $np CREATE POLICY para $nd DROP POLICY IF EXISTS — reexecução vai falhar"
+  done
 fi
 
 # ── Portões determinísticos ───────────────────────────────────────────────
