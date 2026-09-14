@@ -100,6 +100,12 @@ fi
 if [ -f prisma/migrations/010_rls_cost_centers.sql ]; then
   run_sql_file prisma/migrations/010_rls_cost_centers.sql
 fi
+# Tabela NOVA (PROD-16), não herdada de 001: não há `tenant_isolation` para o
+# passo 4 derrubar. Depende de 003 pelo `app_congregation_allowed()`, como as
+# três acima.
+if [ -f prisma/migrations/012_rls_event_registrations.sql ]; then
+  run_sql_file prisma/migrations/012_rls_event_registrations.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -387,6 +393,19 @@ BEGIN
    WHERE policyname = 'tenant_isolation' AND tablename = 'cost_centers';
   IF n <> 0 THEN
     RAISE EXCEPTION 'cost_centers ainda tem a policy tenant_isolation de 001 — o passo 4 não rodou depois de 010, e a policy fraca anula a forte por OR';
+  END IF;
+
+  -- 012: event_registrations (PROD-16) nasceu com a policy de congregação, e
+  -- não com a de tenant — não há `tenant_isolation` para conferir a ausência.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'event_registrations'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'event_registrations com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei % — 012_rls_event_registrations.sql rodou?', n;
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no

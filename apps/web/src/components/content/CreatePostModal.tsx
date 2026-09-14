@@ -54,6 +54,14 @@ export function CreatePostModal({
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
   const [publishMode, setPublishMode] = useState<PublishMode>("now");
   const [publishAt, setPublishAt] = useState("");
+  // Evento (PROD-16). A API recusa esses campos em post que não é evento, e
+  // por isso `eventPayload()` só os manda quando `type === "event"`.
+  const [eventStartsAt, setEventStartsAt] = useState("");
+  const [eventEndsAt, setEventEndsAt] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [registrationLimit, setRegistrationLimit] = useState("");
+  const [registrationDeadline, setRegistrationDeadline] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -89,7 +97,33 @@ export function CreatePostModal({
     setType("post"); setTitle(""); setBody(""); setMediaMode("link"); setMediaUrl("");
     fileUpload.reset();
     setSelectedSegmentIds([]); setPublishMode("now"); setPublishAt("");
+    setEventStartsAt(""); setEventEndsAt(""); setEventLocation("");
+    setRegistrationEnabled(false); setRegistrationLimit(""); setRegistrationDeadline("");
     setError(""); setSuccess(false); hasFetched.current = false;
+  }
+
+  const isEvent = type === "event";
+
+  /**
+   * Os campos de evento, ou nada. Mandar `registration_enabled: false` num
+   * post comum não é inofensivo: a API recusa qualquer campo de evento fora
+   * de `type: "event"` (ver `assertEventFields`), inclusive o falso.
+   */
+  function eventPayload(): Record<string, unknown> {
+    if (!isEvent) return {};
+    return {
+      event_starts_at: eventStartsAt ? new Date(eventStartsAt).toISOString() : null,
+      event_ends_at: eventEndsAt ? new Date(eventEndsAt).toISOString() : null,
+      event_location: eventLocation.trim() || null,
+      registration_enabled: registrationEnabled,
+      registration_limit: registrationEnabled && registrationLimit
+        ? Number(registrationLimit)
+        : null,
+      registration_deadline:
+        registrationEnabled && registrationDeadline
+          ? new Date(registrationDeadline).toISOString()
+          : null,
+    };
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -97,6 +131,9 @@ export function CreatePostModal({
     if (!title.trim()) { setError("Título é obrigatório."); return; }
     if (publishMode === "schedule" && !publishAt) {
       setError("Defina a data/hora de publicação."); return;
+    }
+    if (isEvent && registrationEnabled && registrationLimit && Number(registrationLimit) < 1) {
+      setError("O limite de vagas precisa ser ao menos 1."); return;
     }
     setError("");
     setIsSubmitting(true);
@@ -114,6 +151,7 @@ export function CreatePostModal({
           segment_ids: selectedSegmentIds.length > 0 ? selectedSegmentIds : undefined,
           is_draft: isDraft,
           publish_at: scheduleDate ?? null,
+          ...eventPayload(),
         });
 
         try {
@@ -145,6 +183,7 @@ export function CreatePostModal({
         segment_ids: selectedSegmentIds.length > 0 ? selectedSegmentIds : undefined,
         is_draft: isDraft,
         publish_at: scheduleDate ?? null,
+        ...eventPayload(),
       });
       setSuccess(true);
       setTimeout(() => { onCreated(); onOpenChange(false); reset(); }, 1200);
@@ -219,6 +258,98 @@ export function CreatePostModal({
               className="rounded-[8px]"
             />
           </div>
+
+          {/* Evento (PROD-16) — só aparece no tipo que os usa */}
+          {isEvent && (
+            <div className="flex flex-col gap-3 rounded-[8px] bg-[var(--surface-subtle)] p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cp-event-start" className="text-sm font-medium text-ink dark:text-white">
+                    Começa em
+                  </Label>
+                  <Input
+                    id="cp-event-start"
+                    type="datetime-local"
+                    value={eventStartsAt}
+                    onChange={(e) => setEventStartsAt(e.target.value)}
+                    disabled={isSubmitting}
+                    className="rounded-[8px]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cp-event-end" className="text-sm font-medium text-ink dark:text-white">
+                    Termina em
+                  </Label>
+                  <Input
+                    id="cp-event-end"
+                    type="datetime-local"
+                    value={eventEndsAt}
+                    onChange={(e) => setEventEndsAt(e.target.value)}
+                    disabled={isSubmitting}
+                    className="rounded-[8px]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cp-event-location" className="text-sm font-medium text-ink dark:text-white">
+                  Local
+                </Label>
+                <Input
+                  id="cp-event-location"
+                  placeholder="Onde vai acontecer"
+                  value={eventLocation}
+                  onChange={(e) => setEventLocation(e.target.value)}
+                  disabled={isSubmitting}
+                  className="rounded-[8px]"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
+                <input
+                  type="checkbox"
+                  checked={registrationEnabled}
+                  onChange={(e) => setRegistrationEnabled(e.target.checked)}
+                  disabled={isSubmitting}
+                  className="size-4 rounded border-[var(--border-default)] accent-[var(--color-navy)]"
+                />
+                Abrir inscrições
+              </label>
+
+              {registrationEnabled && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cp-event-limit" className="text-sm font-medium text-ink dark:text-white">
+                      Limite de vagas{" "}
+                      <span className="text-xs font-normal text-stone">(vazio = sem limite)</span>
+                    </Label>
+                    <Input
+                      id="cp-event-limit"
+                      type="number"
+                      min={1}
+                      value={registrationLimit}
+                      onChange={(e) => setRegistrationLimit(e.target.value)}
+                      disabled={isSubmitting}
+                      className="rounded-[8px]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cp-event-deadline" className="text-sm font-medium text-ink dark:text-white">
+                      Inscrições até
+                    </Label>
+                    <Input
+                      id="cp-event-deadline"
+                      type="datetime-local"
+                      value={registrationDeadline}
+                      onChange={(e) => setRegistrationDeadline(e.target.value)}
+                      disabled={isSubmitting}
+                      className="rounded-[8px]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Corpo */}
           <div className="flex flex-col gap-1.5">

@@ -10,6 +10,8 @@ import { NotificationsController } from './notifications.controller';
 import { SchedulerService } from './scheduler.service';
 import { NotificationPreferencesController } from './notification-preferences.controller';
 import { NotificationPreferencesService } from './notification-preferences.service';
+import { EventRegistrationsController } from './event-registrations.controller';
+import { EventRegistrationsService } from './event-registrations.service';
 
 @Module({
   imports: [PrismaModule, StorageModule],
@@ -18,6 +20,7 @@ import { NotificationPreferencesService } from './notification-preferences.servi
     PostsController,
     NotificationsController,
     NotificationPreferencesController,
+    EventRegistrationsController,
   ],
   providers: [
     SegmentsService,
@@ -25,6 +28,7 @@ import { NotificationPreferencesService } from './notification-preferences.servi
     NotificationsService,
     SchedulerService,
     NotificationPreferencesService,
+    EventRegistrationsService,
   ],
   exports: [SegmentsService, NotificationsService],
 })

@@ -717,3 +717,95 @@ describe("PostDetailSheet", () => {
     expect(await screen.findByText("Erro ao salvar alterações.")).toBeInTheDocument();
   });
 });
+
+/**
+ * PROD-16 — o evento dentro do sheet.
+ *
+ * O painel de inscrições é componente à parte (`EventRegistrationsPanel`, com
+ * teste próprio); o que se cobra aqui é que ele só é montado em post do tipo
+ * evento — e que data e local aparecem.
+ */
+describe("PostDetailSheet — evento (PROD-16)", () => {
+  const eventPost: Post = {
+    id: "post-evt",
+    title: "Retiro de jovens",
+    body: "Vem!",
+    type: "event",
+    is_draft: false,
+    publish_at: "2020-01-01T10:00:00.000Z",
+    created_at: "2026-09-01T10:00:00.000Z",
+    media_url: null,
+    segments: [],
+    event_starts_at: "2026-10-10T15:00:00.000Z",
+    event_location: "Chácara da Sede",
+    registration_enabled: true,
+  };
+
+  function mockEventGet(post: Post) {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === `/content/posts/${post.id}`) return Promise.resolve({ data: post });
+      if (url === "/content/segments?limit=100") return Promise.resolve({ data: { data: [] } });
+      if (url === `/content/posts/${post.id}/registrations`) {
+        return Promise.resolve({
+          data: {
+            data: [],
+            registration_enabled: true,
+            registration_limit: null,
+            registration_deadline: null,
+            registrations_closed: false,
+            confirmed_count: 0,
+            waitlisted_count: 0,
+            seats_left: null,
+          },
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("mostra quando e onde, e monta o painel de inscrições", async () => {
+    mockEventGet(eventPost);
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-evt"
+        canEdit
+        canDelete
+        onUpdated={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Chácara da Sede")).toBeInTheDocument();
+    // 15:00Z é 12:00 em Brasília.
+    expect(screen.getByText("10/10/2026, 12:00")).toBeInTheDocument();
+    expect(await screen.findByText(/Ninguém se inscreveu ainda/)).toBeInTheDocument();
+  });
+
+  it("post que não é evento não pede inscrições à API", async () => {
+    mockGet(draftPost);
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-1"
+        canEdit
+        canDelete
+        onUpdated={vi.fn()}
+      />
+    );
+
+    await screen.findByText("Post rascunho");
+    await waitFor(() =>
+      expect(
+        vi.mocked(api.get).mock.calls.some(([url]) => String(url).includes("/registrations"))
+      ).toBe(false)
+    );
+  });
+});

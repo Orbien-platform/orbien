@@ -100,7 +100,9 @@ describe("CreatePostModal", () => {
     await user.type(screen.getByLabelText(/Corpo/), "Texto do corpo");
     expect(screen.getByLabelText(/Corpo/)).toHaveValue("Texto do corpo");
 
-    const checkbox = screen.getByRole("checkbox");
+    // Nomeado: com `type: "event"` a tela também desenha o "Abrir inscrições"
+    // (PROD-16), e o checkbox deste teste é o do segmento.
+    const checkbox = screen.getByRole("checkbox", { name: "Jovens" });
     await user.click(checkbox); // select
     expect(checkbox).toBeChecked();
     await user.click(checkbox); // deselect (covers the filter branch)
@@ -409,5 +411,101 @@ describe("CreatePostModal", () => {
         "Erro ao criar post. Tente novamente."
       );
     });
+  });
+});
+
+/**
+ * PROD-16 — os campos de evento.
+ *
+ * O que importa aqui é o payload: a API recusa campo de evento em post que
+ * não é evento (ver `assertEventFields` no `PostsService`), inclusive
+ * `registration_enabled: false`. Então o teste olha o corpo enviado, não só a
+ * tela.
+ */
+describe("CreatePostModal — evento (PROD-16)", () => {
+  async function escolherEvento(user: ReturnType<typeof userEvent.setup>) {
+    await user.selectOptions(screen.getByLabelText(/Tipo/), "event");
+  }
+
+  it("os campos de evento só aparecem no tipo evento", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Local")).not.toBeInTheDocument();
+
+    await escolherEvento(user);
+
+    expect(screen.getByLabelText("Local")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Abrir inscrições" })).toBeInTheDocument();
+  });
+
+  it("limite e prazo só aparecem com a inscrição ligada", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await escolherEvento(user);
+
+    expect(screen.queryByLabelText(/Limite de vagas/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+
+    expect(screen.getByLabelText(/Limite de vagas/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Inscrições até")).toBeInTheDocument();
+  });
+
+  it("manda os campos de evento no POST", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Retiro");
+    await user.type(screen.getByLabelText("Local"), "Sede");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText(/Limite de vagas/), "30");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/content/posts",
+        expect.objectContaining({
+          type: "event",
+          event_location: "Sede",
+          registration_enabled: true,
+          registration_limit: 30,
+        })
+      )
+    );
+  });
+
+  it("post comum não manda campo de evento nenhum — nem `registration_enabled: false`", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/Título/), "Aviso");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const payload = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("registration_enabled");
+    expect(payload).not.toHaveProperty("event_location");
+  });
+
+  it("com inscrição ligada e limite vazio, o limite vai nulo — `sem limite`, não zero", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Culto especial");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/content/posts",
+        expect.objectContaining({ registration_enabled: true, registration_limit: null })
+      )
+    );
   });
 });

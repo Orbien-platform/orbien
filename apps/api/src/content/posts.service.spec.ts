@@ -418,3 +418,118 @@ describe('PostsService', () => {
     });
   });
 });
+
+/**
+ * PROD-16 — os campos de evento no post.
+ *
+ * O que importa aqui é a coerência com `type`: o banco não tem CHECK amarrada
+ * ao enum (ver `assertEventFields`), então é este serviço que impede um
+ * `notice` de sair com inscrição ligada.
+ */
+describe('PostsService — campos de evento (PROD-16)', () => {
+  const evento = {
+    type: 'event' as const,
+    title: 'Retiro',
+    event_starts_at: new Date('2026-10-10T12:00:00Z'),
+    event_location: 'Sede',
+    registration_enabled: true,
+    registration_limit: 50,
+  };
+
+  it('grava os campos de evento no create', async () => {
+    const client = clientWith();
+    client.contentPost.create.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.create('t1', 'g1', 'u1', evento as never);
+
+    expect(client.contentPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          event_starts_at: evento.event_starts_at,
+          event_location: 'Sede',
+          registration_enabled: true,
+          registration_limit: 50,
+        }),
+      }),
+    );
+  });
+
+  it('post comum grava os campos de evento zerados, não indefinidos', async () => {
+    const client = clientWith();
+    client.contentPost.create.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.create('t1', 'g1', 'u1', { type: 'post', title: 'Oi' } as never);
+
+    expect(client.contentPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          registration_enabled: false,
+          registration_limit: null,
+          event_starts_at: null,
+        }),
+      }),
+    );
+  });
+
+  it('campo de evento em post que não é evento é recusado no create', async () => {
+    const { service } = serviceWith(clientWith());
+
+    await expect(
+      service.create('t1', 'g1', 'u1', {
+        type: 'notice',
+        title: 'Aviso',
+        registration_enabled: true,
+      } as never),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('no update, o tipo que vale é o já gravado quando o corpo não manda outro', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    client.contentPost.update.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.update('t1', 'g1', 'p1', { registration_limit: 30 } as never);
+
+    expect(client.contentPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ registration_limit: 30 }) }),
+    );
+  });
+
+  it('no update, ligar inscrição num post que não é evento é recusado', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'notice' });
+    const { service } = serviceWith(client);
+
+    await expect(
+      service.update('t1', 'g1', 'p1', { registration_enabled: true } as never),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('mudar o tipo para algo que não é evento no mesmo PATCH também é recusado', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    const { service } = serviceWith(client);
+
+    await expect(
+      service.update('t1', 'g1', 'p1', { type: 'notice', registration_limit: 10 } as never),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('limpar um campo de evento com null continua valendo (não é `undefined`)', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    client.contentPost.update.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.update('t1', 'g1', 'p1', { registration_deadline: null } as never);
+
+    expect(client.contentPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ registration_deadline: null }),
+      }),
+    );
+  });
+});
