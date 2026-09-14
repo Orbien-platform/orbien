@@ -100,6 +100,20 @@ fi
 if [ -f prisma/migrations/010_rls_cost_centers.sql ]; then
   run_sql_file prisma/migrations/010_rls_cost_centers.sql
 fi
+# PROD-13 ("Encontre uma célula"): acrescenta um ramo SELECT público a
+# `small_groups`, para a página sem login que só fixa `app.tenant_id`. Não
+# mexe na tenant_congregation_isolation que já está lá — por isso não depende
+# do passo 4, mas depende de 003 (app_current_user()/app_congregation_allowed
+# já definidas) como os quatro acima.
+if [ -f prisma/migrations/012_rls_small_groups_public.sql ]; then
+  run_sql_file prisma/migrations/012_rls_small_groups_public.sql
+fi
+# Mesma feature, tabela nova: `small_group_visit_requests` é criada pela
+# migration do Prisma no passo 2 e chega aqui SEM RLS — tabela nova nunca
+# passou por 001. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/013_rls_small_group_visit_requests.sql ]; then
+  run_sql_file prisma/migrations/013_rls_small_group_visit_requests.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration

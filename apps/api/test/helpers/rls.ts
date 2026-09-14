@@ -175,3 +175,33 @@ export async function runAsPlatform<T>(
     { timeout: 30_000, maxWait: 10_000 },
   );
 }
+
+/**
+ * Espelha o plano PÚBLICO (PROD-13, "Encontre uma célula"): troca para
+ * `app_user` e fixa só `app.tenant_id` — resolvido no servidor a partir do
+ * slug da igreja —, sem `app.user_id` e, por padrão, sem congregação.
+ *
+ * É a ausência de `app.user_id` que habilita `public_discovery_read`
+ * (012_rls_small_groups_public.sql) e `public_visit_request_insert`
+ * (013), e é a mesma ausência que fecha a policy autenticada dos pedidos de
+ * visita. `congregationId` existe porque o serviço fixa a congregação DA
+ * CÉLULA antes de gravar o pedido — é o passo que o WITH CHECK exige.
+ */
+export async function runAsPublic<T>(
+  tenantId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  congregationId = '',
+): Promise<T> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE app_user`;
+      await tx.$executeRaw`
+        SELECT
+          set_config('app.tenant_id',       ${tenantId},       true),
+          set_config('app.congregation_id', ${congregationId}, true)
+      `;
+      return fn(tx);
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
+}

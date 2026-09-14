@@ -34,6 +34,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     },
     groupMeeting: { findMany: jest.fn() },
     attendanceRecord: { findMany: jest.fn() },
+    smallGroupVisitRequest: { findMany: jest.fn() },
     $queryRaw: jest.fn(),
     ...overrides,
   };
@@ -474,6 +475,23 @@ describe('SmallGroupsService', () => {
           where: { person_id: 'p1', tenant_id: 't1', congregation_id: 'g1' },
         }),
       );
+    });
+  });
+
+  describe('listVisitRequests', () => {
+    it('devolve os pedidos da célula, do mais recente para o mais antigo', async () => {
+      const client = clientWith();
+      const pedidos = [{ id: 'vr1' }, { id: 'vr2' }];
+      client.smallGroupVisitRequest.findMany.mockResolvedValue(pedidos);
+      const service = serviceWith(client);
+
+      const result = await service.listVisitRequests('sg1');
+
+      expect(result).toBe(pedidos);
+      expect(client.smallGroupVisitRequest.findMany).toHaveBeenCalledWith({
+        where: { small_group_id: 'sg1' },
+        orderBy: { created_at: 'desc' },
+      });
     });
   });
 });

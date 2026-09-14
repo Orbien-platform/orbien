@@ -81,6 +81,15 @@ export class SmallGroupsController {
     return this.smallGroupsService.checkAbsenceAlerts(id);
   }
 
+  // Pedidos de visita vindos da página pública (PROD-13). Mesma lista de
+  // papéis de `:id/absence-alerts`: é informação operacional da célula, que
+  // inclui o líder — quem vai responder ao pedido.
+  @Get(':id/visit-requests')
+  @Roles(...ALERT_ROLES)
+  listVisitRequests(@Param('id', ParseUUIDPipe) id: string) {
+    return this.smallGroupsService.listVisitRequests(id);
+  }
+
   @Get(':id')
   @Roles(...READ_ROLES)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
