@@ -21,6 +21,22 @@ describe('CreateGroupMessageDto', () => {
     expect(errors.some((e) => e.property === 'content')).toBe(true);
   });
 
+  it('apara antes de validar — só espaço é mensagem vazia', async () => {
+    const errors = await errorsFor({ content: '   ' });
+    expect(errors.some((e) => e.property === 'content')).toBe(true);
+  });
+
+  it('apara as pontas do conteúdo aceito', async () => {
+    const dto = plainToInstance(CreateGroupMessageDto, { content: '  bom dia \n' });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.content).toBe('bom dia');
+  });
+
+  it('não quebra quando content não é string — quem rejeita é o @IsString', async () => {
+    const errors = await errorsFor({ content: 42 });
+    expect(errors.some((e) => e.property === 'content')).toBe(true);
+  });
+
   it('rejeita string vazia', async () => {
     const errors = await errorsFor({ content: '' });
     expect(errors.some((e) => e.property === 'content')).toBe(true);

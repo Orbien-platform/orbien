@@ -122,6 +122,10 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
   useEffect(() => {
     if (loading || forbidden) return;
 
+    // Mesma guarda do effect de carga: o `clearInterval` sozinho não alcança
+    // o ciclo que já está no ar quando a gaveta fecha.
+    const signal = { cancelled: false };
+
     const interval = setInterval(() => {
       if (pollingRef.current) return;
       pollingRef.current = true;
@@ -131,7 +135,10 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
         : `/small-groups/${groupId}/messages`;
       api
         .get<GroupMessagePage>(url)
-        .then(({ data }) => merge(data.messages))
+        .then(({ data }) => {
+          if (signal.cancelled) return;
+          merge(data.messages);
+        })
         // Falha de ciclo é silenciosa de propósito: o próximo tenta de novo,
         // e um banner de erro piscando a cada 15 segundos seria pior que o
         // atraso.
@@ -141,7 +148,10 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
         });
     }, POLL_MS);
 
-    return () => clearInterval(interval);
+    return () => {
+      signal.cancelled = true;
+      clearInterval(interval);
+    };
   }, [groupId, loading, forbidden, merge]);
 
   async function handleLoadOlder() {

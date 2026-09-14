@@ -301,6 +301,34 @@ describe("GroupChatPanel", () => {
     expect(api.get).toHaveBeenCalledTimes(1);
   });
 
+  it("ciclo de polling que volta depois do unmount não vira setState", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(api.get).mockResolvedValue(page(MESSAGES));
+
+    const { unmount } = render(<GroupChatPanel groupId="g1" />);
+    await waitFor(() => expect(screen.getByText("Eu levo")).toBeInTheDocument());
+
+    // Ciclo em voo no momento em que a gaveta fecha: o `clearInterval` não
+    // alcança essa resposta, quem alcança é o `signal.cancelled`.
+    let resolvePoll: (v: ReturnType<typeof page>) => void = () => {};
+    vi.mocked(api.get).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePoll = resolve;
+      }) as never,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    unmount();
+    await act(async () => {
+      resolvePoll(page([{ ...MESSAGES[0], id: "m9", content: "tardia" }]));
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it("resposta que chega depois do unmount não vira setState", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     let resolveGet: (v: ReturnType<typeof page>) => void = () => {};

@@ -68,7 +68,7 @@ export class GroupMessagesService {
         congregation_id: user.congregation_id,
         small_group_id: groupId,
         person_id: personId,
-        content: dto.content.trim(),
+        content: dto.content,
       },
       include: { person: { select: { id: true, full_name: true } } },
     });

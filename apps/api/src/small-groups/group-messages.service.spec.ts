@@ -113,18 +113,6 @@ describe('GroupMessagesService', () => {
         can_delete: true,
       });
     });
-
-    it('apara o conteúdo antes de gravar', async () => {
-      const client = clientWith();
-      client.groupMessage.create.mockResolvedValue(row());
-      const service = serviceWith(client);
-
-      await service.create('sg1', { content: '  bom dia \n' }, USER);
-
-      expect(client.groupMessage.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ content: 'bom dia' }) }),
-      );
-    });
   });
 
   describe('findByGroup', () => {
