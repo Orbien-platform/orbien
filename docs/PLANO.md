@@ -299,7 +299,6 @@ ex. `financial_transactions`, continua visível).
 | `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
-| `PROD-09` | 3 | Chat fechado por célula | Starter | — |
 | `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-16` | 4 | Evento com inscrição | Starter (sem pagamento) / Premium (com) | `ContentPostType.event` existe como tipo de post; não há modelo de inscrição |
@@ -321,6 +320,28 @@ ex. `financial_transactions`, continua visível).
 > do Cenário 3 Premium (ADR-007) segue sem tela, porque exige o fluxo
 > autenticado de `POST /financial/pix/dynamic`, que essa página pública não
 > usa.
+
+> `PROD-09` (chat fechado por célula, Módulo 3, Starter) **fechou em
+> 2026-09-14**. Tabela nova `group_messages`
+> (`20260914120000_add_group_messages`) com RLS de congregação já na
+> primeira versão (`012_rls_group_messages.sql`, AD-001 — caso de 007/008,
+> não de 009/010: nunca teve a `tenant_isolation` fraca de 001). Três rotas
+> em `/small-groups/:groupId/messages` (POST, GET, DELETE), com a mesma
+> regra de `PROD-01`: **participação, não papel** — toda rota exige
+> `GroupMembership` no grupo, inclusive para `pastor`, `admin_congregation`
+> e `tenant_admin`. O RLS é o piso (tenant + congregação) e não conhece
+> participação em grupo; quem fecha o chat na célula é o
+> `GroupMessagesService`. Paginação por cursor (`before`/`after` sobre o par
+> `created_at`+`id`), não por página: a lista cresce pelo fim e `offset`
+> repetiria ou pularia mensagem. Apagar é **soft delete** (`deleted_at`) —
+> autor ou líder da célula, pela `GroupMembership.role` — e a mensagem vira
+> lápide na conversa, sem abrir buraco no histórico e deixando rastro da
+> moderação. No `apps/web`, aba "Conversa" na `GroupDetailSheet`
+> (`GroupChatPanel`), montada só quando a aba abre, com polling de 15s
+> pedindo só o que chegou depois da última mensagem. **Não** tem tempo real
+> (não há gateway de websocket na API e nada mais na base tem) nem
+> notificação push de mensagem nova — se isso for pedido, é trabalho
+> próprio, não ajuste deste.
 
 **Conferido e entregue**, apesar de soar parecido com os de cima — para não
 virar trabalho repetido: detecção de duplicados no cadastro e na importação,
@@ -384,8 +405,8 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 >   a tabela própria, `small_group_visit_requests`
 >   (`20260914182840_add_small_group_visit_requests`).
 > - **O plano público ganhou ramo de RLS próprio**, em
->   `012_rls_small_groups_public.sql` (leitura) e
->   `013_rls_small_group_visit_requests.sql` (escrita), os dois fora do
+>   `013_rls_small_groups_public.sql` (leitura) e
+>   `014_rls_small_group_visit_requests.sql` (escrita), os dois fora do
 >   histórico do Prisma e ligados no `bootstrap-db.sh` como os anteriores.
 >   Toda policy pública exige `app_current_user() IS NULL`: como o
 >   `TenantContextInterceptor` fixa `app.user_id` em toda requisição

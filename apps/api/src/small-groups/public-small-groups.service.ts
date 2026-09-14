@@ -47,7 +47,7 @@ export class PublicSmallGroupsService {
       //
       // Só `app.tenant_id`: é a ausência de `app.user_id` que habilita a
       // policy `public_discovery_read`
-      // (012_rls_small_groups_public.sql), e é ela que limita esta leitura
+      // (013_rls_small_groups_public.sql), e é ela que limita esta leitura
       // às células marcadas como públicas. O `is_public` do WHERE abaixo é
       // redundante de propósito — se a policy sumir, a listagem some junto
       // em vez de vazar célula privada.
@@ -126,7 +126,7 @@ export class PublicSmallGroupsService {
       // A congregação entra no contexto AGORA, tirada da célula — antes dela
       // ser lida não havia como saber qual é. É o que satisfaz o WITH CHECK
       // de `public_visit_request_insert`
-      // (013_rls_small_group_visit_requests.sql), que compara
+      // (014_rls_small_group_visit_requests.sql), que compara
       // `congregation_id` com `app_current_congregation()`: o pedido cai na
       // congregação da célula, não numa escolhida por quem preencheu o
       // formulário.
@@ -136,7 +136,7 @@ export class PublicSmallGroupsService {
       // RETURNING: o Prisma sempre devolve a linha criada, e o Postgres exige
       // que ela seja visível por alguma policy de SELECT para fazer isso. O
       // plano público não lê pedido de visita nenhum, de propósito
-      // (013_rls_small_group_visit_requests.sql), então o create do Prisma
+      // (014_rls_small_group_visit_requests.sql), então o create do Prisma
       // morre com 42501 — "new row violates row-level security policy" —
       // mesmo com o WITH CHECK satisfeito. Sem RETURNING não há o que ler.
       //

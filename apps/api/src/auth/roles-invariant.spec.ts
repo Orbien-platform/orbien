@@ -33,7 +33,7 @@ const ALLOWLIST = new Set([
   'visitor/visitor.public.controller.ts',
   // PROD-13, "Encontre uma célula": página sem login. Quem limita o que sai
   // daqui não é papel nenhum — é o ramo público das policies de RLS
-  // (012_rls_small_groups_public.sql), que só existe fora de sessão
+  // (013_rls_small_groups_public.sql), que só existe fora de sessão
   // autenticada e só alcança célula marcada como pública.
   'small-groups/public-small-groups.controller.ts',
   // `GET /me/permissions` responde sobre o próprio token de quem pergunta: a

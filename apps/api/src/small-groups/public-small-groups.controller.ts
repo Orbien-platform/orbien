@@ -19,7 +19,7 @@ import { CreateVisitRequestDto } from './dto/create-visit-request.dto';
 // `public/` do cadastro de visitante por QR. Não há JwtAuthGuard nem
 // TenantContextInterceptor aqui de propósito — o contexto de RLS é escrito
 // pelo serviço a partir do slug da igreja, e é a ausência de `app.user_id`
-// que habilita o ramo público das policies (012_rls_small_groups_public.sql).
+// que habilita o ramo público das policies (013_rls_small_groups_public.sql).
 @Controller('public/small-groups')
 @UseGuards(ThrottlerGuard)
 export class PublicSmallGroupsController {

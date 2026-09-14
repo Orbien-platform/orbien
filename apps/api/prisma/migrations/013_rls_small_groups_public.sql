@@ -1,7 +1,7 @@
 -- =============================================================================
--- 012_rls_small_groups_public.sql — leitura pública de células (PROD-13)
+-- 013_rls_small_groups_public.sql — leitura pública de células (PROD-13)
 --
--- Roda DEPOIS de 003_rls_admin_write.sql, como 007–010: as três tabelas aqui
+-- Roda DEPOIS de 003_rls_admin_write.sql, como 007–010 e 012: as três tabelas aqui
 -- já têm `tenant_congregation_isolation`, e este arquivo NÃO a toca — só
 -- acrescenta um segundo caminho, estreito, para o plano público.
 --

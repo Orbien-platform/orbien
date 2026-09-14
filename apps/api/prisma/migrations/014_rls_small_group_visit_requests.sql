@@ -1,12 +1,12 @@
 -- =============================================================================
--- 013_rls_small_group_visit_requests.sql — RLS dos pedidos de visita (PROD-13)
+-- 014_rls_small_group_visit_requests.sql — RLS dos pedidos de visita (PROD-13)
 --
 -- Tabela nova (20260914182840_add_small_group_visit_requests): a migration do
 -- Prisma cria a tabela, RLS é sempre daqui — 001 nunca a viu, e tabela nova
 -- nasce SEM row level security no Postgres.
 --
 -- Roda DEPOIS de 003_rls_admin_write.sql, que define
--- `app_congregation_allowed()`. Mesmo padrão de 007/008/010: já nasce com o
+-- `app_congregation_allowed()`. Mesmo padrão de 007/008/010/012: já nasce com o
 -- predicado certo (AD-001, .specs/STATE.md) nos DOIS lados, USING e WITH
 -- CHECK, dizendo a mesma coisa.
 --

@@ -182,7 +182,7 @@ export async function runAsPlatform<T>(
  * slug da igreja —, sem `app.user_id` e, por padrão, sem congregação.
  *
  * É a ausência de `app.user_id` que habilita `public_discovery_read`
- * (012_rls_small_groups_public.sql) e `public_visit_request_insert`
+ * (013_rls_small_groups_public.sql) e `public_visit_request_insert`
  * (013), e é a mesma ausência que fecha a policy autenticada dos pedidos de
  * visita. `congregationId` existe porque o serviço fixa a congregação DA
  * CÉLULA antes de gravar o pedido — é o passo que o WITH CHECK exige.
