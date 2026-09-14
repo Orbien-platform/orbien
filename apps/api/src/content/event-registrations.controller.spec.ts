@@ -90,6 +90,18 @@ describe('EventRegistrationsController', () => {
     expect(service.list).toHaveBeenCalledWith('t-do-token', 'g-do-token', 'p1', {});
   });
 
+  it('o resumo não devolve nomes — só vagas e prazo', () => {
+    controller.summary('p1', user());
+
+    expect(service.summary).toHaveBeenCalledWith('t1', 'g1', 'p1');
+  });
+
+  it('`/me` pergunta pela inscrição do próprio usuário, pelo `sub` do token', () => {
+    controller.findMine('p1', user({ sub: 'membro-1' }));
+
+    expect(service.findMine).toHaveBeenCalledWith('t1', 'g1', 'p1', 'membro-1');
+  });
+
   it('cancelar a própria inscrição não precisa do id dela', () => {
     controller.cancelMine('p1', user());
 

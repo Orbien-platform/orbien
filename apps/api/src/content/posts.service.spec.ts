@@ -518,6 +518,38 @@ describe('PostsService — campos de evento (PROD-16)', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('o update grava os seis campos de evento, cada um pelo seu `!== undefined`', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    client.contentPost.update.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+    const inicio = new Date('2026-10-10T12:00:00Z');
+    const fim = new Date('2026-10-10T18:00:00Z');
+    const prazo = new Date('2026-10-01T12:00:00Z');
+
+    await service.update('t1', 'g1', 'p1', {
+      event_starts_at: inicio,
+      event_ends_at: fim,
+      event_location: 'Chácara',
+      registration_enabled: true,
+      registration_limit: 40,
+      registration_deadline: prazo,
+    } as never);
+
+    expect(client.contentPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          event_starts_at: inicio,
+          event_ends_at: fim,
+          event_location: 'Chácara',
+          registration_enabled: true,
+          registration_limit: 40,
+          registration_deadline: prazo,
+        }),
+      }),
+    );
+  });
+
   it('limpar um campo de evento com null continua valendo (não é `undefined`)', async () => {
     const client = clientWith();
     client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });

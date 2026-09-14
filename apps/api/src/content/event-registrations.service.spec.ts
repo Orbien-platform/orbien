@@ -259,6 +259,31 @@ describe('EventRegistrationsService', () => {
       });
     });
 
+    it('pessoa do token que não existe no tenant é 404', async () => {
+      const client = clientWith();
+      client.person.findFirst.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('cadastro sem e-mail nem telefone entra sem eles, não com a string "null"', async () => {
+      const client = clientWith();
+      client.person.findFirst.mockResolvedValue({
+        id: 'person-1',
+        full_name: 'Maria Sem Contato',
+        email: null,
+        phone: null,
+      });
+      const service = serviceWith(client);
+
+      const row = await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(row).toMatchObject({ full_name: 'Maria Sem Contato', email: null, phone: null });
+    });
+
     it('conta sem pessoa vinculada é 404', async () => {
       const client = clientWith();
       client.userAccount.findUnique.mockResolvedValue({ person_id: null });
