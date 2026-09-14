@@ -100,6 +100,12 @@ fi
 if [ -f prisma/migrations/010_rls_cost_centers.sql ]; then
   run_sql_file prisma/migrations/010_rls_cost_centers.sql
 fi
+# Mesma dependência de 003, caso de 007/008: `group_messages` é tabela nova
+# (PROD-09) e já nasce com a policy de congregação. Não passa pelo passo 4 —
+# não existe em 001, então não há `tenant_isolation` para derrubar.
+if [ -f prisma/migrations/012_rls_group_messages.sql ]; then
+  run_sql_file prisma/migrations/012_rls_group_messages.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -387,6 +393,20 @@ BEGIN
    WHERE policyname = 'tenant_isolation' AND tablename = 'cost_centers';
   IF n <> 0 THEN
     RAISE EXCEPTION 'cost_centers ainda tem a policy tenant_isolation de 001 — o passo 4 não rodou depois de 010, e a policy fraca anula a forte por OR';
+  END IF;
+
+  -- 012: group_messages (PROD-09) é tabela nova, caso de 007/008 — nasce com
+  -- a policy de congregação e nunca teve `tenant_isolation`. O piso é tenant
+  -- + congregação; o fechamento na célula é do service, por GroupMembership.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'group_messages'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'group_messages com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em group_messages, encontrei % — 012_rls_group_messages.sql rodou?', n;
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no
