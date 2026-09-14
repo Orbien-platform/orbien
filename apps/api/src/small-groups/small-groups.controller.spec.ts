@@ -47,6 +47,7 @@ describe('SmallGroupsController', () => {
       addMember: jest.fn(),
       removeMember: jest.fn(),
       findMine: jest.fn(),
+      listVisitRequests: jest.fn(),
     } as unknown as jest.Mocked<SmallGroupsService>;
 
     controller = new SmallGroupsController(service);
@@ -74,6 +75,19 @@ describe('SmallGroupsController', () => {
 
   it('checkAbsenceAlerts aceita cell_leader além dos papéis de gestão', () => {
     expect(rolesFor('checkAbsenceAlerts')).toEqual(ALERT_ROLES);
+  });
+
+  it('listVisitRequests aceita cell_leader — quem responde ao pedido é a liderança da célula', () => {
+    expect(rolesFor('listVisitRequests')).toEqual(ALERT_ROLES);
+  });
+
+  it('listVisitRequests delega ao service', async () => {
+    service.listVisitRequests.mockResolvedValue([]);
+
+    const result = await controller.listVisitRequests('sg1');
+
+    expect(service.listVisitRequests).toHaveBeenCalledWith('sg1');
+    expect(result).toEqual([]);
   });
 
   it('findMine aceita member (MOB-09-09) — autoescopado pelo próprio usuário', () => {

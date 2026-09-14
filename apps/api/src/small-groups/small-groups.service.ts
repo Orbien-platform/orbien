@@ -10,6 +10,7 @@ import {
   Person,
   Prisma,
   SmallGroup,
+  SmallGroupVisitRequest,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -371,5 +372,17 @@ export class SmallGroupsService {
     return memberships
       .filter((m) => !presentIds.has(m.person_id))
       .map((m) => m.person);
+  }
+
+  // O outro lado do "Quero visitar" da página pública (PROD-13): a liderança
+  // lê aqui os pedidos que chegaram pela célula. O isolamento é o de sempre —
+  // contexto do JWT, policy `tenant_congregation_isolation` da tabela — e o
+  // `small_group_id` no WHERE é só o recorte, não a autorização: célula de
+  // outra congregação já não é visível daqui.
+  async listVisitRequests(groupId: string): Promise<SmallGroupVisitRequest[]> {
+    return this.prisma.client.smallGroupVisitRequest.findMany({
+      where: { small_group_id: groupId },
+      orderBy: { created_at: 'desc' },
+    });
   }
 }

@@ -301,11 +301,11 @@ ex. `financial_transactions`, continua visível).
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
-| `PROD-13` | 3 | "Encontre uma célula" (mapa público, filtros, botão visitar) | Starter | `SmallGroup.is_public` existe e é filtrável, mas não há rota pública nem tela |
 | `PROD-16` | 4 | Evento com inscrição | Starter (sem pagamento) / Premium (com) | `ContentPostType.event` existe como tipo de post; não há modelo de inscrição |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-20` | 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | Renumerado de `PROD-15` em 2026-09-13 — esse ID já pertence ao item de infra OTA fechado na seção 5, e ID não se recicla |
 | `PROD-21` | Plataforma | Tela de audit log escopada a tenant (visível pro `tenant_admin`) | Premium | Não existe hoje — só o console de plataforma tem listagem de auditoria (`ListAuditLogsService`, escopada a `support_access`). O dado já está pronto: `audit_logs.actor_name_snapshot` (feature `login-email-global`) congela o nome do autor no momento do registro, justamente para sobreviver a uma transferência de tenant — falta só a rota/tela que leia isso do lado do tenant |
+| `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com
@@ -381,6 +381,47 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 >   Apontar o domínio de fato — DNS/CNAME, certificado — é passo de infra
 >   que este PR não faz; falta decidir isso à parte antes de anunciar a
 >   funcionalidade como usável.
+
+> `PROD-13` ("Encontre uma célula") **fechou em 2026-09-14**. São duas rotas
+> públicas novas em `apps/api`, no mesmo prefixo `public/` do cadastro de
+> visitante por QR: `GET /public/small-groups?tenant_slug=` lista as células
+> `is_public` da igreja (sem líder e sem contato de ninguém — só os campos
+> `public_*`, endereço, coordenada, horário, tipo e congregação) e
+> `POST /public/small-groups/:id/visit-request` grava o "quero visitar". A
+> tela é `apps/web/src/app/(public)/celulas/[tenant_slug]/page.tsx`, sem grupo
+> de rota autenticada, mesmo padrão de `/doar/[tenant_slug]`: mapa (Leaflet +
+> OpenStreetMap, sem chave de API, carregado por `import()` dentro do efeito
+> porque o Leaflet toca `document`), filtros de texto/tipo/congregação
+> resolvidos no cliente e ordenação por proximidade quando o visitante
+> permite a geolocalização.
+>
+> Duas coisas que valem registro:
+>
+> - **O pedido de visita não é `VisitRecord`.** Quem clica ainda não foi a
+>   lugar nenhum, e `VisitRecord` conta visita acontecida — é o que alimenta a
+>   reclassificação automática de visitante para frequentador
+>   (`ClassificationService.checkAutoReclassification`, 3 visitas em 60 dias).
+>   Gravar interesse ali inflaria classificação sem ninguém ter aparecido. Daí
+>   a tabela própria, `small_group_visit_requests`
+>   (`20260914182840_add_small_group_visit_requests`).
+> - **O plano público ganhou ramo de RLS próprio**, em
+>   `013_rls_small_groups_public.sql` (leitura) e
+>   `014_rls_small_group_visit_requests.sql` (escrita), os dois fora do
+>   histórico do Prisma e ligados no `bootstrap-db.sh` como os anteriores.
+>   Toda policy pública exige `app_current_user() IS NULL`: como o
+>   `TenantContextInterceptor` fixa `app.user_id` em toda requisição
+>   autenticada, esses ramos são inalcançáveis de dentro do produto e não
+>   afrouxam o isolamento por congregação de quem está logado. O público lê
+>   célula pública (e só o tipo e a congregação dessa célula) e **escreve**
+>   pedido de visita, sem poder lê-lo de volta — por isso o insert é
+>   `$executeRaw`, e não `create` do Prisma, que usa RETURNING. Provas em
+>   `apps/api/test/rls/small-groups-public.spec.ts`.
+>
+> Falta a tela do outro lado: a rota autenticada
+> `GET /small-groups/:id/visit-requests` existe (papéis de liderança, mesma
+> lista de `:id/absence-alerts`), mas nenhuma tela do `apps/web` a chama
+> ainda — hoje o pedido chega ao banco e só aparece para quem consultar a
+> API. Ver `PROD-23` na tabela acima.
 
 ---
 
