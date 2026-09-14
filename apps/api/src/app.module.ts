@@ -23,6 +23,7 @@ import { CelebrationsModule } from './celebrations/celebrations.module';
 import { SongsModule } from './songs/songs.module';
 import { SettingsModule } from './settings/settings.module';
 import { PlatformModule } from './platform/platform.module';
+import { AuditModule } from './audit/audit.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -58,6 +59,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     SongsModule,
     SettingsModule,
     PlatformModule,
+    AuditModule,
   ],
   providers: [
     // Global de propósito: é o rastro das sessões de suporte, que satisfazem

@@ -292,6 +292,43 @@ testes em `apps/api/src/platform/transfer-user-account.service.spec.ts`,
 origem deixa de ver a conta/pessoa e que histórico com `tenant_id` próprio,
 ex. `financial_transactions`, continua visível).
 
+### ~~PROD-21 · Tela de audit log escopada a tenant~~ · fechado
+
+Entregue em 2026-09-14. Nada novo é gravado — o dado já estava em
+`audit_logs` desde a Fase 1, escrito pelo `AuditInterceptor`; o que faltava
+era a leitura do lado do tenant. `GET /audit-logs` (`apps/api/src/audit/`)
+é rota de **tenant**, não de plataforma: passa pelo
+`TenantContextInterceptor` como qualquer tela do produto e quem recorta as
+linhas é a policy `tenant_read` de `audit_logs` (001, ampliada por 005) —
+nenhum SQL novo foi preciso. `@Roles('tenant_admin')` +
+`@RequiresPlan('premium')`, com a lista de papéis vindo de
+`product-areas.ts` (área nova `audit`, também em `PREMIUM_ONLY_AREAS`), que
+é de onde `GET /me/permissions` responde — é assim que a barra lateral do
+`apps/web` sabe se desenha o link.
+
+Três escolhas que a implementação registra por escrito, em
+`tenant-audit-logs.service.ts`:
+
+- **`platform_access` fica fora**, por lista fechada no DTO. Aquela linha
+  tem `tenant_id` preenchido — o tenant de ORIGEM da conta de suporte,
+  porque `audit_logs.tenant_id` é NOT NULL com FK — e não tem relação com a
+  igreja que hospeda a conta. O RLS não pode barrar: para ele a linha é do
+  tenant. Sobram `support_access` e `tenant_transfer`.
+- **O nome do autor sai de `actor_name_snapshot`, nunca de join.** Sob o RLS
+  do tenant, `user_accounts` só mostra conta do próprio tenant, e os dois
+  autores que aparecem aqui tipicamente não estão nele. É o caso de uso que
+  `AD-004` previu.
+- **`ip`/`user_agent` não são devolvidos** — no console eles são rastro de
+  quem opera a plataforma, para quem responde por ela; aqui seriam o IP do
+  funcionário do suporte entregue ao cliente.
+
+Tela em `apps/web/src/app/(admin)/auditoria/`, par visível do
+`SupportSessionBanner`: a faixa avisa durante a sessão de suporte, a tela
+responde depois. Testes em `apps/api/src/audit/*.spec.ts`,
+`apps/web/src/app/(admin)/auditoria/page.test.tsx` e RLS em
+`apps/api/test/rls/tenant-audit-read.spec.ts` (prova que um tenant não lê a
+linha do outro, e que a escrita direta por `app_user` continua negada).
+
 ### Funcionalidade prevista, sem código
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
@@ -306,7 +343,6 @@ ex. `financial_transactions`, continua visível).
 | `PROD-16` | 4 | Evento com inscrição | Starter (sem pagamento) / Premium (com) | `ContentPostType.event` existe como tipo de post; não há modelo de inscrição |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-20` | 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | Renumerado de `PROD-15` em 2026-09-13 — esse ID já pertence ao item de infra OTA fechado na seção 5, e ID não se recicla |
-| `PROD-21` | Plataforma | Tela de audit log escopada a tenant (visível pro `tenant_admin`) | Premium | Não existe hoje — só o console de plataforma tem listagem de auditoria (`ListAuditLogsService`, escopada a `support_access`). O dado já está pronto: `audit_logs.actor_name_snapshot` (feature `login-email-global`) congela o nome do autor no momento do registro, justamente para sobreviver a uma transferência de tenant — falta só a rota/tela que leia isso do lado do tenant |
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com

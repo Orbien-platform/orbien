@@ -50,6 +50,7 @@ describe("canAccessRoute", () => {
       "content",
       "volunteers",
       "celebrations",
+      "audit",
     ];
 
     for (const [route, area] of Object.entries(ROUTE_AREAS)) {

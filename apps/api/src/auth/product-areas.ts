@@ -43,6 +43,11 @@ export const PRODUCT_AREA_READ_ROLES = {
   content: ['admin_congregation', 'pastor', 'secretary', 'tenant_admin', 'member'],
   volunteers: ['admin_congregation', 'pastor', 'tenant_admin', 'secretary', 'ministry_leader'],
   celebrations: ['admin_congregation', 'pastor', 'tenant_admin', 'secretary', 'ministry_leader'],
+  // `tenant_admin` sozinho, e é o recorte do próprio PROD-21: a auditoria diz
+  // quem abriu o quê dentro da igreja, incluindo o que o suporte da plataforma
+  // fez em sessão de impersonação. Quem responde pela igreja lê; papel de
+  // operação, não.
+  audit: ['tenant_admin'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type ProductArea = keyof typeof PRODUCT_AREA_READ_ROLES;
@@ -52,13 +57,14 @@ export const PRODUCT_AREAS = Object.keys(PRODUCT_AREA_READ_ROLES) as ProductArea
 /**
  * Áreas inteiras que só existem no plano Premium, além do recorte por papel
  * — `pricing-church-platform.md` §5.5: Celebrações/OC não tem nenhuma linha
- * Starter. `financial` fica de fora deste conjunto de propósito: a maior
+ * Starter, e a auditoria vista pela igreja (`PROD-21`) é Premium por linha
+ * própria. `financial` fica de fora deste conjunto de propósito: a maior
  * parte do módulo (lançamentos, PIX cenário 1/3, dashboard semanal) é dos
  * dois planos, só peças específicas (DRE, exportação, forecast, PIX
  * cenário 2) são Premium — e essas são gate de rota (`PlanGuard` +
  * `@RequiresPlan`), não de área inteira.
  */
-const PREMIUM_ONLY_AREAS = new Set<ProductArea>(['celebrations']);
+const PREMIUM_ONLY_AREAS = new Set<ProductArea>(['celebrations', 'audit']);
 
 /**
  * As áreas que esta sessão lê.

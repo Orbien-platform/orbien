@@ -38,6 +38,7 @@ export const config = {
     "/conteudo/:path*",
     "/voluntarios/:path*",
     "/celebracoes/:path*",
+    "/auditoria/:path*",
     "/configuracoes/:path*",
   ],
 };
