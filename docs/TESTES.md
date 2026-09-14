@@ -233,7 +233,7 @@ Scripts em `apps/api/package.json`:
 
 `npm run test:rls` continua fazendo exatamente o que fazia. Isso é requisito:
 o job `rls` do CI depende dele. **É o único sem `--passWithNoTests`**: ele tem
-39 testes e deve falhar alto se eles sumirem. Os outros precisam da flag
+118 testes e deve falhar alto se eles sumirem. Os outros precisam da flag
 enquanto não houver spec — `jest` sai com código 1 em "No tests found", o que
 derrubaria o CI já na Fase 0. A Fase 13 remove as flags.
 
@@ -331,7 +331,7 @@ npm run test:cov -w orbien-backend   # imprime relatório de cobertura
 ```
 
 `npm run test:rls -w orbien-backend` exige banco e não roda na máquina sem
-`DATABASE_URL`/`DIRECT_URL`; no CI ele continua verde com os 39 testes. Para
+`DATABASE_URL`/`DIRECT_URL`; no CI ele continua verde com os 118 testes. Para
 conferir localmente sem banco, `npx jest --selectProjects rls --listTests`
 deve listar `test/rls/isolation.spec.ts`.
 
@@ -1146,11 +1146,11 @@ npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-site      # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-admin     # piso 99/98/100/100 travado (Fase 14)
 npm run test:cov -w orbien-mobile    # piso 94/84/93/97 travado (Fase 15)
-npm run test:rls -w orbien-backend   # 54 testes verdes
+npm run test:rls -w orbien-backend   # 118 testes verdes
 node scripts/check-skills.mjs
 
 # e2e do web, com API e web em pé (é o que o job `E2E` faz)
-npm run e2e -w orbien-web            # 12 testes em 8 arquivos, todos verdes
+npm run e2e -w orbien-web            # 16 testes em 10 arquivos, todos verdes
 
 # smoke do site, com o site em pé (job `smoke-site`)
 E2E_BASE_URL=http://localhost:3002 npm run e2e -w orbien-site   # 18 verdes
@@ -1205,8 +1205,8 @@ dados que o seed não cria. Estão mapeadas com evidência em
 [PENDENCIAS.md](PENDENCIAS.md).
 
 A primeira tocava este plano enquanto o job `Testes de RLS` estava vermelho.
-**Não está mais**: `npm run test:rls -w orbien-backend` fecha em 54 testes
-verdes (o plano falava em 39 — a suíte cresceu desde então). O que impede a
+**Não está mais**: `npm run test:rls -w orbien-backend` fecha em 118 testes
+verdes (o plano falava em 39, depois 54 — a suíte cresceu desde então). O que impede a
 Fase 13 de declarar fechamento hoje não é o RLS nem a Fase 10, que fechou:
 é a decisão pendente sobre os pisos fracionários do web; ver
 "Estado da Fase 13".
