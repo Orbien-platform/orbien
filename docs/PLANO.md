@@ -26,6 +26,18 @@ sessão — ver a nota da seção 6), `PROD-21` (auditoria escopada ao tenant) e
 `PROD-16` na variante Starter — a metade Premium dele, o evento com
 pagamento, abriu como `PROD-24`.
 
+Nova varredura em **2026-09-14**: `npm run test:rls -w orbien-backend`
+resulta hoje em **118 testes em 6 suítes** (`isolation.spec.ts` 75,
+`platform-plane.spec.ts` 12, `small-groups-public.spec.ts` 12,
+`event-registrations.spec.ts` 6, `tenant-audit-read.spec.ts` 5,
+`user-account-transfer.spec.ts` 8) — os arquivos de RLS que as entregas de
+`PROD-13`, `PROD-16`, `PROD-21` e `PROD-22` trouxeram deixaram o número "61
+em 2 suítes" de `AJU-01`/`AJU-02` desatualizado de novo; atualizado nesta
+rodada. Conferidos e sem mudança: `CONF-02`/`CONF-03` (nenhuma rota nova de
+`/me/*` além de `permissions`, nenhum cron novo de retenção de log de acesso
+ou de consentimento), `PROD-05/07/08/11/12/17/20/23/24` (nenhum código novo),
+`PEND-04` e os itens de mobile da seção 5.
+
 ---
 
 ## 1. Visão do produto
@@ -595,8 +607,8 @@ caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
 | ID | O quê | Onde | Medido hoje |
 |---|---|---|---|
-| `AJU-01` | Rótulo "39 testes de RLS" no portão de pre-push | `scripts/pre-push.sh:120` | 61 testes em 2 suítes |
-| `AJU-02` | Contagem de RLS envelhecida | `docs/TESTES.md:53`, `:236`, `:334` dizem 39; `:1149`, `:1204` dizem 54 | 61 |
+| `AJU-01` | Rótulo "39 testes de RLS" no portão de pre-push | `scripts/pre-push.sh:120` | 118 testes em 6 suítes |
+| `AJU-02` | Contagem de RLS envelhecida | `docs/TESTES.md:53`, `:236`, `:334` dizem 39; `:1149`, `:1204` dizem 54 | 118 |
 | `AJU-03` | Contagem de e2e do web envelhecida | `docs/TESTES.md:1153` diz 12 em 8 arquivos | 16 em 10 |
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
