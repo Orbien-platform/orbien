@@ -4,6 +4,10 @@ import {
   readableAreas,
 } from './product-areas';
 
+/** As áreas que o Starter não enxerga — o mesmo conjunto de `PREMIUM_ONLY_AREAS`. */
+const PREMIUM_ONLY = ['celebrations', 'audit'];
+const starterAreas = () => PRODUCT_AREAS.filter((area) => !PREMIUM_ONLY.includes(area));
+
 describe('readableAreas', () => {
   it('devolve só as áreas cujo READ cita algum papel da sessão', () => {
     expect(readableAreas({ roles: ['cell_leader'], plan: 'premium' })).toEqual(['small_groups']);
@@ -22,6 +26,31 @@ describe('readableAreas', () => {
 
   it('`tenant_admin` enxerga todas as áreas no plano Premium', () => {
     expect(readableAreas({ roles: ['tenant_admin'], plan: 'premium' })).toEqual(PRODUCT_AREAS);
+  });
+
+  describe('`audit` (PROD-21) — só `tenant_admin`, e só no Premium', () => {
+    it('`tenant_admin` Premium enxerga', () => {
+      expect(readableAreas({ roles: ['tenant_admin'], plan: 'premium' })).toContain('audit');
+    });
+
+    it('nenhum outro papel abre a área, nem o `admin_congregation`', () => {
+      for (const role of [
+        'admin_congregation',
+        'pastor',
+        'secretary',
+        'treasurer',
+        'cell_leader',
+        'ministry_leader',
+        'volunteer',
+        'member',
+      ]) {
+        expect(readableAreas({ roles: [role], plan: 'premium' })).not.toContain('audit');
+      }
+    });
+
+    it('`tenant_admin` no Starter não enxerga', () => {
+      expect(readableAreas({ roles: ['tenant_admin'], plan: 'starter' })).not.toContain('audit');
+    });
   });
 
   it('papel desconhecido não abre nada', () => {
@@ -47,17 +76,13 @@ describe('readableAreas', () => {
     expect(PRODUCT_AREAS).toEqual(Object.keys(PRODUCT_AREA_READ_ROLES));
   });
 
-  describe('recorte por plano — celebrations é Premium-only (pricing-church-platform.md §5.5)', () => {
-    it('Starter perde `celebrations` mesmo com papel que a abriria', () => {
-      expect(readableAreas({ roles: ['tenant_admin'], plan: 'starter' })).toEqual(
-        PRODUCT_AREAS.filter((area) => area !== 'celebrations'),
-      );
+  describe('recorte por plano — `celebrations` e `audit` são Premium-only (pricing-church-platform.md §5.5)', () => {
+    it('Starter perde as áreas Premium mesmo com papel que as abriria', () => {
+      expect(readableAreas({ roles: ['tenant_admin'], plan: 'starter' })).toEqual(starterAreas());
     });
 
     it('`plan` ausente é tratado como não-Premium — nega por padrão', () => {
-      expect(readableAreas({ roles: ['tenant_admin'] })).toEqual(
-        PRODUCT_AREAS.filter((area) => area !== 'celebrations'),
-      );
+      expect(readableAreas({ roles: ['tenant_admin'] })).toEqual(starterAreas());
     });
 
     it('nenhuma outra área é afetada pelo plano Starter', () => {
@@ -65,11 +90,11 @@ describe('readableAreas', () => {
       expect(areas).toEqual(['persons', 'small_groups', 'financial', 'volunteers']);
     });
 
-    it('sessão de suporte também perde `celebrations` quando o tenant impersonado é Starter', () => {
+    it('sessão de suporte também perde as áreas Premium quando o tenant impersonado é Starter', () => {
       // O plano no token de impersonação é o do tenant ALVO, não o do
       // suporte — a sessão vê o que o cliente vê, não mais que isso.
       expect(readableAreas({ roles: [], support_session: true, plan: 'starter' })).toEqual(
-        PRODUCT_AREAS.filter((area) => area !== 'celebrations'),
+        starterAreas(),
       );
     });
   });

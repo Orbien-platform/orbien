@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ContentPost, Prisma } from '@prisma/client';
+import { ContentPost, ContentPostType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { NotificationsService } from './notifications.service';
@@ -33,6 +33,8 @@ export class PostsService {
     const isDraft = dto.is_draft !== false;
     const publishedAt = !isDraft && !dto.publish_at ? new Date() : undefined;
 
+    assertEventFields(dto.type, dto);
+
     return this.prisma.runInTx(async (tx) => {
       const post = await tx.contentPost.create({
         data: {
@@ -46,6 +48,12 @@ export class PostsService {
           is_draft: isDraft,
           publish_at: dto.publish_at ?? null,
           published_at: publishedAt ?? null,
+          event_starts_at: dto.event_starts_at ?? null,
+          event_ends_at: dto.event_ends_at ?? null,
+          event_location: dto.event_location ?? null,
+          registration_enabled: dto.registration_enabled ?? false,
+          registration_limit: dto.registration_limit ?? null,
+          registration_deadline: dto.registration_deadline ?? null,
         },
       });
 
@@ -135,7 +143,13 @@ export class PostsService {
     id: string,
     dto: UpdatePostDto,
   ): Promise<ContentPost> {
-    await this.findOne(tenantId, congregationId, id);
+    const current = await this.findOne(tenantId, congregationId, id);
+
+    // O tipo que vale é o do corpo quando ele vem, senão o que já está
+    // gravado: ligar inscrição num post que já é evento não obriga a reenviar
+    // `type`, e mudar o tipo para algo que não é evento no mesmo PATCH que
+    // manda campo de evento continua sendo recusado.
+    assertEventFields(dto.type ?? current.type, dto);
 
     return this.prisma.runInTx(async (tx) => {
       const data: Record<string, unknown> = {};
@@ -145,6 +159,18 @@ export class PostsService {
       if (dto.media_url !== undefined) data['media_url'] = dto.media_url;
       if (dto.is_draft !== undefined) data['is_draft'] = dto.is_draft;
       if (dto.publish_at !== undefined) data['publish_at'] = dto.publish_at;
+      if (dto.event_starts_at !== undefined) data['event_starts_at'] = dto.event_starts_at;
+      if (dto.event_ends_at !== undefined) data['event_ends_at'] = dto.event_ends_at;
+      if (dto.event_location !== undefined) data['event_location'] = dto.event_location;
+      if (dto.registration_enabled !== undefined) {
+        data['registration_enabled'] = dto.registration_enabled;
+      }
+      if (dto.registration_limit !== undefined) {
+        data['registration_limit'] = dto.registration_limit;
+      }
+      if (dto.registration_deadline !== undefined) {
+        data['registration_deadline'] = dto.registration_deadline;
+      }
 
       const post = await tx.contentPost.update({ where: { id }, data });
 
@@ -206,5 +232,51 @@ export class PostsService {
     });
 
     return { media_url };
+  }
+}
+
+/**
+ * Campo de evento em post que não é evento (PROD-16).
+ *
+ * A checagem é aqui, e não no banco: `ContentPostType` já é o discriminador, e
+ * uma CHECK constraint amarrada a um valor de enum é a primeira coisa a
+ * envelhecer quando o enum cresce. Sem isto, um `notice` com
+ * `registration_enabled: true` gravaria sem reclamar e ficaria com inscrição
+ * que nenhuma tela mostra.
+ *
+ * A validação é só de coerência de tipo. Ordem de datas (`starts` antes de
+ * `ends`, prazo antes do evento) fica de fora de propósito: evento
+ * remarcado passa por estados temporariamente incoerentes, e recusar o PATCH
+ * no meio disso obrigaria o organizador a adivinhar a ordem dos campos.
+ */
+function assertEventFields(
+  type: ContentPostType,
+  dto: Pick<
+    CreatePostDto,
+    | 'event_starts_at'
+    | 'event_ends_at'
+    | 'event_location'
+    | 'registration_enabled'
+    | 'registration_limit'
+    | 'registration_deadline'
+  >,
+): void {
+  if (type === 'event') return;
+
+  const used = (
+    [
+      'event_starts_at',
+      'event_ends_at',
+      'event_location',
+      'registration_enabled',
+      'registration_limit',
+      'registration_deadline',
+    ] as const
+  ).filter((field) => dto[field] !== undefined);
+
+  if (used.length) {
+    throw new BadRequestException(
+      `Campos de evento só valem em post do tipo "event": ${used.join(', ')}`,
+    );
   }
 }

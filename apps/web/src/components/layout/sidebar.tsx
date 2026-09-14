@@ -11,6 +11,7 @@ import {
   CalendarDays,
   Church,
   Music,
+  ScrollText,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/voluntarios", label: "Voluntários", icon: CalendarDays },
   { href: "/celebracoes", label: "Celebrações", icon: Church },
   { href: "/repertorio", label: "Repertório", icon: Music },
+  { href: "/auditoria", label: "Auditoria", icon: ScrollText },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 

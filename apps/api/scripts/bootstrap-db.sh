@@ -120,6 +120,12 @@ fi
 if [ -f prisma/migrations/014_rls_small_group_visit_requests.sql ]; then
   run_sql_file prisma/migrations/014_rls_small_group_visit_requests.sql
 fi
+# Mesmo caso de 012 e 014, uma feature depois: `event_registrations` (PROD-16)
+# é tabela nova, nasce com a policy de congregação e não tem
+# `tenant_isolation` para o passo 4 derrubar.
+if [ -f prisma/migrations/015_rls_event_registrations.sql ]; then
+  run_sql_file prisma/migrations/015_rls_event_registrations.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -421,6 +427,20 @@ BEGIN
   RAISE NOTICE 'group_messages com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em group_messages, encontrei % — 012_rls_group_messages.sql rodou?', n;
+  END IF;
+
+  -- 013: event_registrations (PROD-16), mesmo caso de 012 — nasceu com a
+  -- policy de congregação, então não há `tenant_isolation` para conferir a
+  -- ausência.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'event_registrations'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'event_registrations com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei % — 015_rls_event_registrations.sql rodou?', n;
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no

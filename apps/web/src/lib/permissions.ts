@@ -35,6 +35,9 @@ export const ROUTE_AREAS: Record<string, string> = {
   "/conteudo": "content",
   "/voluntarios": "volunteers",
   "/celebracoes": "celebrations",
+  // `PROD-21`. Área Premium e só de `tenant_admin`, os dois recortes vindo da
+  // API (`readableAreas`) — aqui só mora o de→para de URL.
+  "/auditoria": "audit",
 };
 
 interface AccessSubject {

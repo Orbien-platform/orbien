@@ -70,9 +70,14 @@ leia o do app antes de mexer nele.
   `typescript-eslint` recommended **sem** checagem de tipos, e a única regra
   ajustada é `no-unused-vars` com `argsIgnorePattern: "^_"` — o código marca
   "não usado de propósito" com underscore (`_tx`, `_depth`).
-- Os scripts de RLS (`apps/api/prisma/migrations/00{1,2,3,4,5}_*.sql`) ficam
-  **fora** do histórico do Prisma: `prisma migrate deploy` não os aplica, só o
-  `bootstrap-db.sh`, e a ordem entre eles importa. Ao mexer em policy, o
+- Os scripts de RLS (`apps/api/prisma/migrations/0NN_rls_*.sql`, hoje 001 a
+  015) ficam **fora** do histórico do Prisma: `prisma migrate deploy` não os
+  aplica, só o `bootstrap-db.sh`, e a ordem entre eles importa — que não é a
+  numérica: o bootstrap roda 003 e os de tabela (007–010, 012–015) antes do passo
+  que derruba as `tenant_isolation` redundantes, e só depois o plano de
+  plataforma (004–006, 011). Script novo entra no `bootstrap-db.sh`, no lugar
+  certo dessa ordem, e ganha sua verificação no passo 7 — tabela nova sem
+  script de RLS faz o passo 7 falhar de propósito. Ao mexer em policy, o
   `USING` e o `WITH CHECK` têm que dizer a mesma coisa — divergir faz o admin
   ler a linha e falhar ao gravar com 42501. O passo 7 do bootstrap falha alto
   se isso acontecer.

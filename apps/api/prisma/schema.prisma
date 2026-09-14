@@ -60,6 +60,7 @@ model Tenant {
   pixPayments             PixPayment[]
   donationReceipts        DonationReceipt[]
   contentPosts            ContentPost[]
+  eventRegistrations      EventRegistration[]
   audienceSegments        AudienceSegment[]
   notificationDispatches  NotificationDispatch[]
   ministries              Ministry[]
@@ -125,6 +126,7 @@ model Congregation {
   recurringRules          RecurringRule[]
   pixPayments             PixPayment[]
   contentPosts            ContentPost[]
+  eventRegistrations      EventRegistration[]
   audienceSegments        AudienceSegment[]
   notificationDispatches  NotificationDispatch[]
   ministries              Ministry[]
@@ -371,6 +373,7 @@ model Person {
   pixDonations            PixPayment[]            @relation("PixDonor")
   volunteerProfile        VolunteerProfile?
   serviceOrderItems       ServiceOrderItem[]
+  eventRegistrations      EventRegistration[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1034,6 +1037,20 @@ model ContentPost {
   created_at         DateTime        @default(now())
   updated_at         DateTime        @updatedAt
 
+  // --- Evento (PROD-16) ---
+  // Só fazem sentido em `type = event`, e quem cobra isso é o serviço, não o
+  // banco: `ContentPostType` já é o discriminador, e uma CHECK constraint
+  // amarrada a um valor de enum é a primeira coisa a envelhecer quando o
+  // enum cresce. Post que não é evento simplesmente deixa tudo NULL.
+  event_starts_at       DateTime?
+  event_ends_at         DateTime?
+  event_location        String?
+  registration_enabled  Boolean   @default(false)
+  // NULL é "sem limite". Zero não é vaga nenhuma, é erro de entrada — o DTO
+  // exige >= 1.
+  registration_limit    Int?
+  registration_deadline DateTime?
+
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   createdBy    UserAccount  @relation(fields: [created_by_user_id], references: [id], onDelete: Restrict)
@@ -1041,11 +1058,54 @@ model ContentPost {
   audienceSegments       AudienceSegment[]
   postSegments           PostSegment[]
   notificationDispatches NotificationDispatch[]
+  eventRegistrations     EventRegistration[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, published_at])
   @@map("content_posts")
+}
+
+/**
+ * Inscrição em evento (PROD-16, variante Starter — sem pagamento).
+ * Uma linha por inscrito, e **uma vaga por linha**: não há acompanhante. É
+ * escolha de escopo, não esquecimento — "levo dois" tornaria a fila de espera
+ * um problema de encaixe (promover quem cabe, e não o próximo), e a igreja que
+ * precisa disso cadastra as duas pessoas.
+ * `person_id` é opcional porque o organizador inscreve quem ainda não tem
+ * cadastro; `full_name` é obrigatório sempre, e para o membro vem do próprio
+ * cadastro. Os dois índices únicos parciais que impedem inscrição repetida
+ * (por pessoa e por e-mail, cada um ignorando as canceladas) estão na
+ * migration: o Prisma não modela unique parcial.
+ */
+model EventRegistration {
+  id                    String                  @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  content_post_id       String
+  person_id             String?
+  full_name             String
+  email                 String?
+  phone                 String?
+  status                EventRegistrationStatus @default(confirmed)
+  /**
+   * Quem registrou. NULL quando a própria pessoa se inscreveu.
+   */
+  registered_by_user_id String?
+  cancelled_at          DateTime?
+  created_at            DateTime                @default(now())
+  updated_at            DateTime                @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  contentPost  ContentPost  @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
+  person       Person?      @relation(fields: [person_id], references: [id], onDelete: SetNull)
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  // A ordem da fila de espera e a contagem de vagas saem daqui.
+  @@index([content_post_id, status, created_at])
+  @@map("event_registrations")
 }
 
 model AudienceSegment {
@@ -1653,6 +1713,12 @@ enum ContentPostType {
   event
   notice
   prayer
+}
+
+enum EventRegistrationStatus {
+  confirmed
+  waitlisted
+  cancelled
 }
 
 enum AudienceSegmentType {

@@ -21,6 +21,11 @@ completo que a tentativa daqui), `PROD-06`, `PROD-10` (já entregue em
 2026-09-12, só não tinha saído desta lista), `PROD-18` (duplicata de
 `PROD-15`) e `PROD-19`; revisitou `PEND-04` sem mudança de código.
 
+Em **2026-09-14** fecharam `PROD-09` (chat fechado por célula, em outra
+sessão — ver a nota da seção 6), `PROD-21` (auditoria escopada ao tenant) e
+`PROD-16` na variante Starter — a metade Premium dele, o evento com
+pagamento, abriu como `PROD-24`.
+
 ---
 
 ## 1. Visão do produto
@@ -292,6 +297,98 @@ testes em `apps/api/src/platform/transfer-user-account.service.spec.ts`,
 origem deixa de ver a conta/pessoa e que histórico com `tenant_id` próprio,
 ex. `financial_transactions`, continua visível).
 
+### ~~PROD-21 · Tela de audit log escopada a tenant~~ · fechado
+
+Entregue em 2026-09-14. Nada novo é gravado — o dado já estava em
+`audit_logs` desde a Fase 1, escrito pelo `AuditInterceptor`; o que faltava
+era a leitura do lado do tenant. `GET /audit-logs` (`apps/api/src/audit/`)
+é rota de **tenant**, não de plataforma: passa pelo
+`TenantContextInterceptor` como qualquer tela do produto e quem recorta as
+linhas é a policy `tenant_read` de `audit_logs` (001, ampliada por 005) —
+nenhum SQL novo foi preciso. `@Roles('tenant_admin')` +
+`@RequiresPlan('premium')`, com a lista de papéis vindo de
+`product-areas.ts` (área nova `audit`, também em `PREMIUM_ONLY_AREAS`), que
+é de onde `GET /me/permissions` responde — é assim que a barra lateral do
+`apps/web` sabe se desenha o link.
+
+Três escolhas que a implementação registra por escrito, em
+`tenant-audit-logs.service.ts`:
+
+- **`platform_access` fica fora**, por lista fechada no DTO. Aquela linha
+  tem `tenant_id` preenchido — o tenant de ORIGEM da conta de suporte,
+  porque `audit_logs.tenant_id` é NOT NULL com FK — e não tem relação com a
+  igreja que hospeda a conta. O RLS não pode barrar: para ele a linha é do
+  tenant. Sobram `support_access` e `tenant_transfer`.
+- **O nome do autor sai de `actor_name_snapshot`, nunca de join.** Sob o RLS
+  do tenant, `user_accounts` só mostra conta do próprio tenant, e os dois
+  autores que aparecem aqui tipicamente não estão nele. É o caso de uso que
+  `AD-004` previu.
+- **`ip`/`user_agent` não são devolvidos** — no console eles são rastro de
+  quem opera a plataforma, para quem responde por ela; aqui seriam o IP do
+  funcionário do suporte entregue ao cliente.
+
+Tela em `apps/web/src/app/(admin)/auditoria/`, par visível do
+`SupportSessionBanner`: a faixa avisa durante a sessão de suporte, a tela
+responde depois. Testes em `apps/api/src/audit/*.spec.ts`,
+`apps/web/src/app/(admin)/auditoria/page.test.tsx` e RLS em
+`apps/api/test/rls/tenant-audit-read.spec.ts` (prova que um tenant não lê a
+linha do outro, e que a escrita direta por `app_user` continua negada).
+
+### ~~PROD-16 · Evento com inscrição (Starter, sem pagamento)~~ · fechado
+
+Entregue em 2026-09-14 na **variante Starter**. A linha Premium do item — o
+evento **com pagamento** — segue aberta e virou `PROD-24` abaixo; nenhuma
+rota desta entrega tem `@RequiresPlan`, porque evento gratuito é dos dois
+planos.
+
+O evento não ganhou modelo próprio: `ContentPostType.event` já existia e o
+que faltava era o post carregar **quando, onde e com quais regras de
+inscrição** (`event_starts_at`, `event_ends_at`, `event_location`,
+`registration_enabled`, `registration_limit`, `registration_deadline` em
+`content_posts`). Quem ganhou tabela foi a inscrição: `EventRegistration`
+(`20260914184045_add_event_registrations`), com RLS de **congregação** em
+`015_rls_event_registrations.sql` — padrão B, o mesmo de 008/009/010 — e o
+passo correspondente no `bootstrap-db.sh`, inclusive na verificação do passo
+7.
+
+Duas portas em `content/posts/:postId/registrations`, e não uma rota que
+muda de forma conforme o papel: `.../me` (o próprio usuário se inscreve e
+desiste — **sem corpo**, nome e pessoa saem do cadastro, então ninguém se
+inscreve como outra pessoa) e a raiz, do organizador
+(`admin_congregation`/`pastor`/`tenant_admin`), que lista, inscreve o
+visitante ainda sem cadastro e cancela. `.../summary` dá vagas e prazo sem
+a lista de nomes, para a tela de quem vai se inscrever.
+
+As regras, e onde cada uma é decidida:
+
+- **Prazo** fecha as inscrições; o **cancelamento não o respeita** — segurar
+  a vaga de quem desistiu é o pior dos dois erros.
+- **Lotado não recusa**: entra como `waitlisted`. Recusar devolveria erro a
+  quem fez tudo certo e deixaria o organizador sem saber quantos ficaram de
+  fora.
+- **Cancelar uma confirmada promove a mais antiga da fila**, na mesma
+  transação; cancelar quem já esperava não promove ninguém.
+- A contagem que decide vaga é feita **dentro** da transação da escrita —
+  lida antes, duas inscrições simultâneas no último lugar entrariam as duas.
+- **Uma vaga por linha**: não há acompanhante. Escolha de escopo — "levo
+  dois" tornaria a fila um problema de encaixe, e a igreja que precisa disso
+  cadastra as duas pessoas.
+- Reinscrição depois de cancelar **reaproveita a linha**; os dois índices
+  únicos são parciais (por pessoa e por e-mail, ignorando as canceladas) e
+  estão escritos à mão na migration, porque o Prisma não modela unique
+  parcial.
+
+No `apps/web`, `CreatePostModal` mostra o bloco de evento só em
+`type: "event"` — e só manda esses campos nesse caso, porque o `PostsService`
+recusa campo de evento fora do tipo, inclusive `registration_enabled: false`.
+`PostDetailSheet` mostra data/local e monta o `EventRegistrationsPanel`, que
+carrega e recarrega sozinho. Testes: `apps/api/src/content/
+event-registrations.{service,controller}.spec.ts`, os DTOs, o bloco novo em
+`posts.service.spec.ts`, `apps/api/test/rls/event-registrations.spec.ts`
+(prova que a congregação irmã do mesmo tenant não lê nem escreve) e, no web,
+`EventRegistrationsPanel.test.tsx` mais os blocos novos de
+`CreatePostModal.test.tsx` e `PostDetailSheet.test.tsx`.
+
 ### Funcionalidade prevista, sem código
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
@@ -301,11 +398,10 @@ ex. `financial_transactions`, continua visível).
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
-| `PROD-16` | 4 | Evento com inscrição | Starter (sem pagamento) / Premium (com) | `ContentPostType.event` existe como tipo de post; não há modelo de inscrição |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-20` | 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | Renumerado de `PROD-15` em 2026-09-13 — esse ID já pertence ao item de infra OTA fechado na seção 5, e ID não se recicla |
-| `PROD-21` | Plataforma | Tela de audit log escopada a tenant (visível pro `tenant_admin`) | Premium | Não existe hoje — só o console de plataforma tem listagem de auditoria (`ListAuditLogsService`, escopada a `support_access`). O dado já está pronto: `audit_logs.actor_name_snapshot` (feature `login-email-global`) congela o nome do autor no momento do registro, justamente para sobreviver a uma transferência de tenant — falta só a rota/tela que leia isso do lado do tenant |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
+| `PROD-24` | 4 | Evento com inscrição **paga** | Premium | Metade Starter fechou em 2026-09-14 (ver `PROD-16` acima): o evento tem data, local, limite, prazo e fila de espera. Falta o pagamento — cobrar a inscrição encostaria em `PixPayment`/Asaas, que já existem para doação, e na pergunta de quando a vaga é confirmada (no pedido ou no webhook). Renumerado de `PROD-23` em 2026-09-14, porque esse ID ficou com a tela de pedidos de visita, aberta em paralelo na `main` — ID não se recicla |
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com

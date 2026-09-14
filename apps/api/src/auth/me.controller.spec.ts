@@ -38,12 +38,15 @@ describe('MeController', () => {
     expect(result.areas).toEqual(PRODUCT_AREAS);
   });
 
-  it('mesmo em sessão de suporte, tenant Starter não abre `celebrations`', () => {
+  it('mesmo em sessão de suporte, tenant Starter não abre as áreas Premium', () => {
     const result = controller.permissions(
       payload({ roles: ['platform_support'], support_session: true, plan: 'starter' }),
     );
 
-    expect(result.areas).toEqual(PRODUCT_AREAS.filter((area) => area !== 'celebrations'));
+    // `celebrations` e `audit` (PROD-21) — ver `PREMIUM_ONLY_AREAS`.
+    expect(result.areas).toEqual(
+      PRODUCT_AREAS.filter((area) => area !== 'celebrations' && area !== 'audit'),
+    );
   });
 
   it('`platform_support` sem sessão de suporte não enxerga área nenhuma', () => {

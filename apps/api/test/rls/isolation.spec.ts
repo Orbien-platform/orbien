@@ -54,6 +54,8 @@ let groupMessageA2Id: string;
 let studyMaterialAId: string;
 let studyMaterialVersionAId: string;
 let costCenterA2Id: string;
+let eventPostA2Id: string;
+let eventRegistrationA2Id: string;
 
 // Contas com papel, na congregação A-Main — para exercitar o ramo
 // `OR app_has_role('tenant_admin')` da policy, que os helpers sem
@@ -265,6 +267,32 @@ beforeAll(async () => {
     },
   });
   costCenterA2Id = costCenterA2.id;
+
+  // PROD-16: evento com inscrição na A-Second. `event_registrations` é tabela
+  // NOVA, que já nasceu com a policy de congregação
+  // (`015_rls_event_registrations.sql`) — não há `tenant_isolation` de 001
+  // para trocar, ao contrário de cost_centers e prayer_requests.
+  const eventPostA2 = await prismaAdmin.contentPost.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      created_by_user_id: userAccountAId,
+      type: 'event',
+      title: 'Evento RLS Test — A-Second',
+      registration_enabled: true,
+    },
+  });
+  eventPostA2Id = eventPostA2.id;
+
+  const eventRegistrationA2 = await prismaAdmin.eventRegistration.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      content_post_id: eventPostA2Id,
+      full_name: 'Inscrito RLS Test — A-Second',
+    },
+  });
+  eventRegistrationA2Id = eventRegistrationA2.id;
 
   const catA = await prismaAdmin.financialCategory.create({
     data: {
@@ -1788,6 +1816,79 @@ describe('28. GroupMessage — isolamento por congregação (AD-001)', () => {
       where: { id: groupMessageA2Id },
     });
     expect(after.deleted_at).not.toBeNull();
+    expect(after.congregation_id).toBe(congregationA2Id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 29. EventRegistration — isolamento por congregação (PROD-16, AD-001)
+//
+// Mesmo caso do bloco 28, uma feature depois: tabela nova, que nasce com
+// `tenant_congregation_isolation` em `015_rls_event_registrations.sql` e nunca
+// teve a `tenant_isolation` fraca de 001 para trocar. O que se prova é o de
+// sempre: o tenant vizinho não lê, a congregação irmã não lê, e o
+// `tenant_admin` lê E grava (USING = WITH CHECK), porque
+// `app_congregation_allowed()` abre para ele nos dois lados.
+//
+// Existe também `test/rls/event-registrations.spec.ts`, com fixture própria e
+// o caso de ESCRITA na congregação alheia ser negada. Este bloco não é
+// duplicata dele por acaso: a suíte de isolamento é onde se olha tabela por
+// tabela quando a pergunta é "o que vaza", e tabela ausente daqui é tabela
+// que ninguém confere nessa varredura.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('29. EventRegistration — isolamento por congregação (PROD-16, AD-001)', () => {
+  it('app context (runAsTenant): Tenant B não vê inscrição do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.eventRegistration.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = await countVisibleFromB(rows);
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} inscrição(ões) do Tenant A visível(is) para o Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('app_user role: Tenant B não busca inscrição do Tenant A por ID', async () => {
+    const row = await runAsTenantWithRole(tenantBId, congregationBId, (tx) =>
+      tx.eventRegistration.findUnique({ where: { id: eventRegistrationA2Id } }),
+    );
+    expect(row).toBeNull();
+  });
+
+  it('admin_congregation na A-Main NÃO lê inscrição da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.eventRegistration.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} inscrição(ões) de congregação irmã.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main LÊ inscrição da A-Second (exceção da policy)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.eventRegistration.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(eventRegistrationA2Id);
+  });
+
+  it('tenant_admin na A-Main ATUALIZA inscrição da A-Second (USING = WITH CHECK)', async () => {
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.eventRegistration.update({
+        where: { id: eventRegistrationA2Id },
+        data: { status: 'cancelled', cancelled_at: new Date() },
+      }),
+    );
+
+    const after = await prismaAdmin.eventRegistration.findUniqueOrThrow({
+      where: { id: eventRegistrationA2Id },
+    });
+    expect(after.status).toBe('cancelled');
     expect(after.congregation_id).toBe(congregationA2Id);
   });
 });

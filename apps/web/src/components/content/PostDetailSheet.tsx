@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Trash2, Clock, ExternalLink } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  ExternalLink,
+  Loader2,
+  MapPin,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { POST_TYPE_LABELS, type PostType } from "@/components/content/CreatePostModal";
 import { MediaUploadField, iconForFile } from "@/components/content/MediaUploadField";
+import { EventRegistrationsPanel } from "@/components/content/EventRegistrationsPanel";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -45,6 +54,11 @@ export interface Post {
   created_at: string;
   media_url?: string | null;
   segments?: Segment[];
+  // Evento (PROD-16). Só vêm preenchidos em `type: "event"`.
+  event_starts_at?: string | null;
+  event_ends_at?: string | null;
+  event_location?: string | null;
+  registration_enabled?: boolean;
 }
 
 type PostStatus = "draft" | "scheduled" | "published";
@@ -484,6 +498,31 @@ export function PostDetailSheet({
                         ))}
                       </div>
                     </div>
+                  )}
+
+                  {/* Evento: quando e onde (PROD-16) */}
+                  {post.type === "event" && (post.event_starts_at || post.event_location) && (
+                    <div className="flex flex-col gap-1 border-t border-[var(--border-default)] pt-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-stone">Evento</p>
+                      {post.event_starts_at && (
+                        <p className="flex items-center gap-1.5 text-sm text-ink dark:text-white">
+                          <CalendarDays size={13} strokeWidth={1.5} className="text-stone" />
+                          {fmtDateTime(post.event_starts_at)}
+                          {post.event_ends_at && ` — ${fmtDateTime(post.event_ends_at)}`}
+                        </p>
+                      )}
+                      {post.event_location && (
+                        <p className="flex items-center gap-1.5 text-sm text-ink dark:text-white">
+                          <MapPin size={13} strokeWidth={1.5} className="text-stone" />
+                          {post.event_location}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Inscrições (PROD-16) */}
+                  {post.type === "event" && (
+                    <EventRegistrationsPanel postId={post.id} reloadKey={reloadTick} />
                   )}
 
                   {/* Meta */}
