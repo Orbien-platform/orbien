@@ -50,6 +50,7 @@ let userAccountA2Id: string;
 let notifPrefAId: string;
 let notifPrefA2Id: string;
 let prayerRequestA2Id: string;
+let groupMessageA2Id: string;
 let studyMaterialAId: string;
 let studyMaterialVersionAId: string;
 let costCenterA2Id: string;
@@ -207,6 +208,22 @@ beforeAll(async () => {
     },
   });
   prayerRequestA2Id = prayerA2.id;
+
+  // PROD-09: mensagem do chat fechado na mesma célula da A-Second. Tabela
+  // nova, que já nasce com `012_rls_group_messages.sql` — o piso é tenant +
+  // congregação, e é isso que este bloco prova; o fechamento na célula (só
+  // quem tem GroupMembership) é do service, e está em
+  // group-messages.service.spec.ts.
+  const messageA2 = await prismaAdmin.groupMessage.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congregationA2Id,
+      small_group_id: groupA2.id,
+      person_id: personA2Id,
+      content: 'Mensagem RLS Test — A-Second',
+    },
+  });
+  groupMessageA2Id = messageA2.id;
 
   const studyMaterialA = await prismaAdmin.studyMaterial.create({
     data: {
@@ -1712,5 +1729,65 @@ describe('27. Cross-tenant read — StudyMaterialVersion (PROD-10)', () => {
       tx.studyMaterialVersion.findUnique({ where: { id: studyMaterialVersionAId } }),
     );
     expect(row).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 28. GroupMessage — isolamento por congregação (AD-001, PROD-09)
+//
+// Caso de 007/008, não de 009/010: `group_messages` é tabela nova e nasce com
+// a policy de congregação em `012_rls_group_messages.sql`, sem nunca ter tido
+// a `tenant_isolation` fraca de 001. Conversa de célula é o conteúdo mais
+// informal da base e o mais fácil de vazar sem ninguém notar — congregação
+// irmã do mesmo tenant não lê. O `tenant_admin` mantém a exceção da função,
+// como em PrayerRequest e Songs.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('28. GroupMessage — isolamento por congregação (AD-001)', () => {
+  it('app context (runAsTenant): Tenant B não vê mensagem de célula do Tenant A', async () => {
+    const rows = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.groupMessage.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    const leaked = rows.filter((r) => r.tenant_id === tenantAId).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: ${leaked} mensagem(ns) de célula do Tenant A visível(is) para o Tenant B.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('admin_congregation na A-Main NÃO lê mensagem de célula da A-Second', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.groupMessage.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    const leaked = rows.filter((r) => r.congregation_id === congregationA2Id).length;
+    if (leaked > 0) {
+      console.error(
+        `SECURITY GAP: admin_congregation enxergou ${leaked} mensagem(ns) de célula de congregação irmã.`,
+      );
+    }
+    expect(leaked).toBe(0);
+  });
+
+  it('tenant_admin na A-Main LÊ mensagem de célula da A-Second (exceção da policy)', async () => {
+    const rows = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.groupMessage.findMany({ where: { congregation_id: congregationA2Id } }),
+    );
+    expect(rows.map((r) => r.id)).toContain(groupMessageA2Id);
+  });
+
+  it('tenant_admin na A-Main APAGA (soft delete) mensagem da A-Second — USING = WITH CHECK', async () => {
+    await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.groupMessage.update({
+        where: { id: groupMessageA2Id },
+        data: { deleted_at: new Date() },
+      }),
+    );
+
+    const after = await prismaAdmin.groupMessage.findUniqueOrThrow({
+      where: { id: groupMessageA2Id },
+    });
+    expect(after.deleted_at).not.toBeNull();
+    expect(after.congregation_id).toBe(congregationA2Id);
   });
 });
