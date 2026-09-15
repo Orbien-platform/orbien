@@ -28,7 +28,7 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 4 | 6 mudanças de comportamento do `c84fc02` sem cobertura permanente | risco de regressão | ✔ **fechada** — e2e nas três telas |
 | 5 | Lint em `apps/api` | portão | ✔ fechada — lint nos 3 apps, portão verde |
 | 6 | Sessão de suporte não levava a nada, e a auditoria dela era tripla­mente morta | segurança | ✔ fechada — `audit_insert()` aplicado em produção em 2026-09-03 |
-| 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; **falta rodar o bootstrap** |
+| 7 | RLS das tabelas de plataforma não valia em produção: a app roda como `orbien_app`, que tem `USING (true)` nelas | segurança | ✔ fechada — interceptor troca para `app_user`; bootstrap rodado em produção em 2026-09-07 |
 | 8 | As duas rotas públicas do produto estavam mortas: `PrismaService.client` devolvia o cliente sem delegates de modelo | defeito | ✔ fechada |
 | 9 | Cadastro de visitante por QR nunca conseguiu gravar sob RLS — rota pública sem contexto de tenant | defeito | ✔ fechada — contexto vem do QR token |
 | 10 | Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — vale para as 8 telas de `(admin)` | UX | ✔ fechada — 403 distinguido de lista vazia, sidebar filtrada por papel |
@@ -41,6 +41,12 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 > As nº 8 e 9 não vieram do primeiro run de CI: apareceram em 2026-09-03, ao
 > verificar a Fase 2 em produção. As duas são anteriores à fase e nenhuma tinha
 > teste que as alcançasse.
+>
+> A linha da nº 7 dizia "**falta rodar o bootstrap**" até 2026-09-15, quando
+> essa tabela foi conferida contra o corpo da própria seção 7: o bootstrap
+> rodou em produção em **2026-09-07**, com `004`/`005`/`006` aplicados — está
+> escrito lá desde então, inclusive o incidente de `ORBIEN_APP_PASSWORD` no
+> caminho. Era a tabela de resumo que tinha envelhecido, não o estado.
 >
 > O passo operacional que restava foi feito em 2026-09-03: o
 > `003_rls_admin_write.sql` e o `audit_insert()` corrigido da nº 6 estão
