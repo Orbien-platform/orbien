@@ -385,9 +385,22 @@ export class SmallGroupsService {
   ): Promise<SmallGroup> {
     const existing = await this.prisma.client.smallGroup.findUnique({
       where: { id },
-      select: { id: true, leader_person_id: true },
+      select: { id: true, leader_person_id: true, congregation_id: true },
     });
     if (!existing) throw new NotFoundException('Grupo não encontrado');
+
+    // Vínculo de rede (PROD-20, CEL20-07/AC7): a rede referenciada precisa
+    // ser da mesma congregação da célula. `network_id: null` (desvínculo) não
+    // passa por aqui — só valida quando um id é informado.
+    if (dto.network_id) {
+      const network = await this.prisma.client.network.findUnique({
+        where: { id: dto.network_id },
+        select: { congregation_id: true },
+      });
+      if (!network || network.congregation_id !== existing.congregation_id) {
+        throw new BadRequestException('Rede informada não pertence a esta congregação');
+      }
+    }
 
     const leaderChanged =
       dto.leader_person_id && dto.leader_person_id !== existing.leader_person_id;

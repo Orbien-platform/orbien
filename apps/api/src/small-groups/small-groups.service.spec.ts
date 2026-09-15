@@ -38,6 +38,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     smallGroupVisitRequest: { findMany: jest.fn() },
     person: { findUnique: jest.fn() },
     roleAssignment: { findFirst: jest.fn() },
+    network: { findUnique: jest.fn() },
     $queryRaw: jest.fn(),
     ...overrides,
   };
@@ -505,6 +506,82 @@ describe('SmallGroupsService', () => {
         },
         update: { role: 'leader' },
       });
+    });
+
+    // Vínculo de rede (PROD-20, CEL20-07/AC7)
+    it('vincula a célula a uma rede da mesma congregação', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue({
+        id: 'sg1',
+        leader_person_id: 'p1',
+        congregation_id: 'g1',
+      });
+      client.network.findUnique.mockResolvedValue({ congregation_id: 'g1' });
+      client.smallGroup.update.mockResolvedValue({ id: 'sg1', network_id: 'net1' });
+      const service = serviceWith(client);
+
+      const result = await service.update(
+        'sg1',
+        { network_id: 'net1' } as never,
+        USER,
+      );
+
+      expect(client.network.findUnique).toHaveBeenCalledWith({
+        where: { id: 'net1' },
+        select: { congregation_id: true },
+      });
+      expect(result).toEqual({ id: 'sg1', network_id: 'net1' });
+    });
+
+    it('rejeita vincular a uma rede de outra congregação (AC7 — 400)', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue({
+        id: 'sg1',
+        leader_person_id: 'p1',
+        congregation_id: 'g1',
+      });
+      client.network.findUnique.mockResolvedValue({ congregation_id: 'outra-congregacao' });
+      const service = serviceWith(client);
+
+      await expect(
+        service.update('sg1', { network_id: 'net1' } as never, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.smallGroup.update).not.toHaveBeenCalled();
+    });
+
+    it('rejeita vincular a uma rede inexistente (400)', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue({
+        id: 'sg1',
+        leader_person_id: 'p1',
+        congregation_id: 'g1',
+      });
+      client.network.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.update('sg1', { network_id: 'net1' } as never, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('desvincula a rede (network_id: null) sem validar contra Network', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue({
+        id: 'sg1',
+        leader_person_id: 'p1',
+        congregation_id: 'g1',
+      });
+      client.smallGroup.update.mockResolvedValue({ id: 'sg1', network_id: null });
+      const service = serviceWith(client);
+
+      const result = await service.update('sg1', { network_id: null } as never, USER);
+
+      expect(client.network.findUnique).not.toHaveBeenCalled();
+      expect(client.smallGroup.update).toHaveBeenCalledWith({
+        where: { id: 'sg1' },
+        data: { network_id: null },
+      });
+      expect(result).toEqual({ id: 'sg1', network_id: null });
     });
   });
 
