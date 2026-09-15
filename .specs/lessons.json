@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 17,
+  "next_id": 18,
   "lessons": [
     {
       "id": "L-001",
@@ -292,6 +292,24 @@
       ],
       "created": "2026-09-13T18:58:23Z",
       "last_seen": "2026-09-13T18:58:23Z"
+    },
+    {
+      "id": "L-017",
+      "key": "surviving_mutant::ao testar um agregado percentual com m ltiplas categorias que contam a favor ex green yellow como n o vermelho inclua ao menos um caso de fixture com cada categoria n o trivial presente simultaneamente sen o um teste com s duas categorias mascara a f rmula errada",
+      "text": "Ao testar um agregado percentual com múltiplas categorias que contam a favor (ex.: green+yellow como 'não vermelho'), inclua ao menos um caso de fixture com cada categoria não-trivial presente simultaneamente — senão um teste com só duas categorias mascara a fórmula errada.",
+      "signal": "surviving_mutant",
+      "scope": "apps/api/src/small-groups",
+      "status": "candidate",
+      "features": [
+        "prod-20-multiplicacao-celula"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/small-groups/networks.service.ts:107 — mutação (green+yellow)→(green) sobreviveu em networks.service.spec.ts e networks.spec.ts (apps/api/src/small-groups)"
+      ],
+      "created": "2026-09-15T02:10:01Z",
+      "last_seen": "2026-09-15T02:10:01Z"
     }
   ]
 }

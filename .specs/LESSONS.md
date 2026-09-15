@@ -110,6 +110,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: apps/api/src/users/users.service.ts:98 (apps/api/src)
 - last seen: 2026-09-13T18:58:23Z
 
+### L-017 — Ao testar um agregado percentual com múltiplas categorias que contam a favor (ex.: green+yellow como 'não vermelho'), inclua ao menos um caso de fixture com cada categoria não-trivial presente simultaneamente — senão um teste com só duas categorias mascara a fórmula errada.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `apps/api/src/small-groups` · harmful: 0
+- features: prod-20-multiplicacao-celula
+- evidence: apps/api/src/small-groups/networks.service.ts:107 — mutação (green+yellow)→(green) sobreviveu em networks.service.spec.ts e networks.spec.ts (apps/api/src/small-groups)
+- last seen: 2026-09-15T02:10:01Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
