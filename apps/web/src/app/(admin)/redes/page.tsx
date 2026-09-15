@@ -152,13 +152,20 @@ export default function RedesPage() {
     loadManageGroups(n.id);
   }
 
+  // `manageNetwork!` em linkGroup/unlinkGroup: os botões que chamam essas
+  // funções ("Vincular", "Desvincular X") só existem no DOM dentro do Modal
+  // de gerenciar células — e esse Modal (Base UI Dialog, sem `keepMounted`)
+  // não monta o conteúdo enquanto `manageNetwork` é null. Um `if (!manageNetwork)
+  // return` aqui seria um ramo que a UI real nunca alcança.
+  // `linkGroupId` nunca chega vazio aqui: o único chamador é o botão
+  // "Vincular", que é `disabled={!linkGroupId}` — clicar com string vazia é
+  // um ramo que a UI real nunca alcança.
   async function linkGroup() {
-    if (!manageNetwork || !linkGroupId) return;
     setManageError("");
     try {
-      await api.patch(`/small-groups/${linkGroupId}`, { network_id: manageNetwork.id });
+      await api.patch(`/small-groups/${linkGroupId}`, { network_id: manageNetwork!.id });
       setLinkGroupId("");
-      loadManageGroups(manageNetwork.id);
+      loadManageGroups(manageNetwork!.id);
       reloadNetworks();
     } catch {
       setManageError("Erro ao vincular célula.");
@@ -166,11 +173,10 @@ export default function RedesPage() {
   }
 
   async function unlinkGroup(groupId: string) {
-    if (!manageNetwork) return;
     setManageError("");
     try {
       await api.patch(`/small-groups/${groupId}`, { network_id: null });
-      loadManageGroups(manageNetwork.id);
+      loadManageGroups(manageNetwork!.id);
       reloadNetworks();
     } catch {
       setManageError("Erro ao desvincular célula.");
@@ -191,8 +197,12 @@ export default function RedesPage() {
       render: (row) => {
         const status = goalStatuses[row.id];
         const total = status?.total ?? 0;
+        // `status!` (não `status &&`): se `total !== 0`, `status` já é
+        // não-nulo por construção — `total` só existe via `status?.total`,
+        // então total !== 0 implica status definido. O `&&` extra era um
+        // ramo que a UI real nunca alcança.
         const dotColor: string =
-          total === 0 ? "bg-stone" : status && status.met === false ? "bg-crimson" : "bg-teal";
+          total === 0 ? "bg-stone" : status!.met === false ? "bg-crimson" : "bg-teal";
         return (
           <span className="flex items-center gap-1.5 text-stone">
             <span className={`h-2 w-2 flex-shrink-0 rounded-full ${dotColor}`} />
@@ -280,7 +290,10 @@ export default function RedesPage() {
       {/* Gerenciar células da rede — vincular/desvincular (PROD-20, CEL20-07) */}
       <Modal
         open={manageNetwork !== null}
-        onOpenChange={(v) => { if (!v) setManageNetwork(null); }}
+        // Modal só controlado (sem Dialog.Trigger nem DialogHandle) — o Base
+        // UI só chama isto ao fechar (Esc, backdrop, botão "Fechar"), sempre
+        // com `v === false`. Mesmo raciocínio do MultiplyGroupModal.
+        onOpenChange={() => setManageNetwork(null)}
         title={manageNetwork ? `Células de ${manageNetwork.name}` : "Células da rede"}
         description="Vincule ou desvincule células desta congregação."
         className="max-w-lg"
