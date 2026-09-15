@@ -49,7 +49,7 @@ export class PostsController {
   @Post()
   @Roles(...WRITE_ROLES)
   create(@Body() dto: CreatePostDto, @CurrentUser() user: JwtPayload) {
-    return this.postsService.create(user.tenant_id, user.congregation_id, user.sub, dto);
+    return this.postsService.create(user.tenant_id, user.congregation_id, user.sub, dto, user.plan);
   }
 
   @Get()
@@ -71,7 +71,7 @@ export class PostsController {
     @Body() dto: UpdatePostDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.postsService.update(user.tenant_id, user.congregation_id, id, dto);
+    return this.postsService.update(user.tenant_id, user.congregation_id, id, dto, user.plan);
   }
 
   @Delete(':id')

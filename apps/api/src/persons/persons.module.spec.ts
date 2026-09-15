@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PersonsModule } from './persons.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
@@ -14,8 +15,12 @@ import { PersonsRetentionNotifier } from './persons-retention-notifier.service';
 describe('PersonsModule', () => {
   it('compila e registra todos os providers', async () => {
     const moduleRef = await Test.createTestingModule({
+      // ThrottlerModule: `PersonsModule` importa `ContentModule`, que importa
+      // `PixModule` (PROD-24) — `PixController` usa
+      // `@UseGuards(ThrottlerGuard)`.
       imports: [
         JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
+        ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
         PrismaModule,
         StorageModule,
         PersonsModule,

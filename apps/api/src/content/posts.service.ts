@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ContentPost, ContentPostType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -29,11 +29,13 @@ export class PostsService {
     congregationId: string,
     userId: string,
     dto: CreatePostDto,
+    plan?: string,
   ): Promise<ContentPost> {
     const isDraft = dto.is_draft !== false;
     const publishedAt = !isDraft && !dto.publish_at ? new Date() : undefined;
 
     assertEventFields(dto.type, dto);
+    assertRegistrationPricePlan(dto.registration_price, plan);
 
     return this.prisma.runInTx(async (tx) => {
       const post = await tx.contentPost.create({
@@ -54,6 +56,10 @@ export class PostsService {
           registration_enabled: dto.registration_enabled ?? false,
           registration_limit: dto.registration_limit ?? null,
           registration_deadline: dto.registration_deadline ?? null,
+          registration_price:
+            dto.registration_price !== undefined
+              ? new Prisma.Decimal(dto.registration_price)
+              : null,
         },
       });
 
@@ -142,6 +148,7 @@ export class PostsService {
     congregationId: string,
     id: string,
     dto: UpdatePostDto,
+    plan?: string,
   ): Promise<ContentPost> {
     const current = await this.findOne(tenantId, congregationId, id);
 
@@ -150,6 +157,7 @@ export class PostsService {
     // `type`, e mudar o tipo para algo que não é evento no mesmo PATCH que
     // manda campo de evento continua sendo recusado.
     assertEventFields(dto.type ?? current.type, dto);
+    assertRegistrationPricePlan(dto.registration_price, plan);
 
     return this.prisma.runInTx(async (tx) => {
       const data: Record<string, unknown> = {};
@@ -170,6 +178,9 @@ export class PostsService {
       }
       if (dto.registration_deadline !== undefined) {
         data['registration_deadline'] = dto.registration_deadline;
+      }
+      if (dto.registration_price !== undefined) {
+        data['registration_price'] = new Prisma.Decimal(dto.registration_price);
       }
 
       const post = await tx.contentPost.update({ where: { id }, data });
@@ -259,6 +270,7 @@ function assertEventFields(
     | 'registration_enabled'
     | 'registration_limit'
     | 'registration_deadline'
+    | 'registration_price'
   >,
 ): void {
   if (type === 'event') return;
@@ -271,6 +283,7 @@ function assertEventFields(
       'registration_enabled',
       'registration_limit',
       'registration_deadline',
+      'registration_price',
     ] as const
   ).filter((field) => dto[field] !== undefined);
 
@@ -278,5 +291,19 @@ function assertEventFields(
     throw new BadRequestException(
       `Campos de evento só valem em post do tipo "event": ${used.join(', ')}`,
     );
+  }
+}
+
+/**
+ * Evento pago é Premium (`PROD-24`) — mesmo princípio de `assertEventFields`:
+ * quem cobra é o serviço, não o banco. `plan` vem do JWT de quem chama
+ * (`JwtPayload.plan`); sem ele (chamada interna sem usuário), o campo passa —
+ * só a rota HTTP, que sempre tem usuário autenticado, aplica o guard de
+ * verdade.
+ */
+function assertRegistrationPricePlan(price: number | undefined, plan: string | undefined): void {
+  if (price === undefined) return;
+  if (plan !== undefined && plan !== 'premium') {
+    throw new ForbiddenException('Inscrição paga em evento exige o plano Premium');
   }
 }

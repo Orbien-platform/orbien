@@ -285,4 +285,27 @@ describe("EventRegistrationsPanel", () => {
     render(<EventRegistrationsPanel postId="p1" />);
     expect(await screen.findByText(/Prazo encerrado em/)).toBeInTheDocument();
   });
+
+  describe("evento pago (PROD-24)", () => {
+    it("mostra o preço e some com o botão 'Inscrever' do organizador", async () => {
+      respondWith({ registration_price: 49.9 });
+
+      render(<EventRegistrationsPanel postId="p1" />);
+
+      expect(await screen.findByText(/Inscrição paga — R\$\s*49,90/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Inscrever$/ })).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/não há inscrição manual pelo organizador para este evento/i)
+      ).toBeInTheDocument();
+    });
+
+    it("evento gratuito continua com o botão 'Inscrever' normal", async () => {
+      respondWith({ registration_price: null });
+
+      render(<EventRegistrationsPanel postId="p1" />);
+
+      expect(await screen.findByRole("button", { name: /Inscrever/ })).toBeInTheDocument();
+      expect(screen.queryByText(/Inscrição paga/)).not.toBeInTheDocument();
+    });
+  });
 });
