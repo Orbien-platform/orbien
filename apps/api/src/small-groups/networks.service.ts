@@ -4,6 +4,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateNetworkDto } from './dto/create-network.dto';
 import { UpdateNetworkDto } from './dto/update-network.dto';
+import { classifyHealth } from './small-groups.service';
+
+export type NetworkGoalStatus = {
+  goal_pct: number | null;
+  current_pct: number | null;
+  met: boolean | null;
+  green: number;
+  yellow: number;
+  red: number;
+  total: number;
+};
 
 // CRUD de Network (PROD-20, CEL20-07) — mesmo padrão de SmallGroupsService:
 // tenant/congregação vêm do JwtPayload, NotFoundException em
@@ -49,5 +60,53 @@ export class NetworksService {
     });
     if (!existing) throw new NotFoundException('Rede não encontrada');
     return this.prisma.client.network.delete({ where: { id } });
+  }
+
+  // Status da meta de saúde da rede (PROD-20, CEL20-08): agrega o semáforo
+  // (classifyHealth, mesma função pura de SmallGroupsService) de todas as
+  // células da rede numa única consulta agregada, cobrindo os 3 casos do AC:
+  // com meta, sem meta (goal_pct/met null) e sem células (total 0,
+  // current_pct null — sem dividir por zero).
+  async getGoalStatus(id: string): Promise<NetworkGoalStatus> {
+    const network = await this.prisma.client.network.findUnique({
+      where: { id },
+      select: { health_goal_pct: true },
+    });
+    if (!network) throw new NotFoundException('Rede não encontrada');
+
+    const goalPct = network.health_goal_pct ?? null;
+
+    const groups = await this.prisma.client.smallGroup.findMany({
+      where: { network_id: id },
+      select: { id: true },
+    });
+    const total = groups.length;
+
+    if (total === 0) {
+      return { goal_pct: goalPct, current_pct: null, met: null, green: 0, yellow: 0, red: 0, total: 0 };
+    }
+
+    const groupIds = groups.map((g) => g.id);
+    const rows = await this.prisma.client.groupMeeting.groupBy({
+      by: ['small_group_id'],
+      where: { small_group_id: { in: groupIds } },
+      _max: { occurred_at: true },
+    });
+    const lastMeetingByGroupId = new Map(rows.map((r) => [r.small_group_id, r._max.occurred_at]));
+
+    let green = 0;
+    let yellow = 0;
+    let red = 0;
+    for (const groupId of groupIds) {
+      const status = classifyHealth(lastMeetingByGroupId.get(groupId) ?? null);
+      if (status === 'green') green += 1;
+      else if (status === 'yellow') yellow += 1;
+      else red += 1;
+    }
+
+    const currentPct = Math.round(((green + yellow) / total) * 10000) / 100;
+    const met = goalPct === null ? null : currentPct >= goalPct;
+
+    return { goal_pct: goalPct, current_pct: currentPct, met, green, yellow, red, total };
   }
 }
