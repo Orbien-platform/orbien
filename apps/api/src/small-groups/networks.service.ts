@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Network } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -24,6 +24,8 @@ export class NetworksService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateNetworkDto, user: JwtPayload): Promise<Network> {
+    await this.assertLeaderExists(dto.leader_person_id, user.tenant_id);
+
     return this.prisma.client.network.create({
       data: {
         ...dto,
@@ -31,6 +33,26 @@ export class NetworksService {
         congregation_id: user.congregation_id,
       },
     });
+  }
+
+  // Mesmo padrão de SmallGroupsService.multiply para leader_person_id:
+  // SPEC_DEVIATION (design.md pede NotFoundException, spec.md AC2 é
+  // explícita — 400) resolvida a favor do spec.md, BadRequestException com
+  // a mesma mensagem. Sem isso, um leader_person_id inexistente ou de outro
+  // tenant estoura P2003 (FK) do Prisma como 500 genérico.
+  private async assertLeaderExists(
+    leaderPersonId: string | null | undefined,
+    tenantId: string,
+  ): Promise<void> {
+    if (!leaderPersonId) return;
+
+    const leader = await this.prisma.client.person.findUnique({
+      where: { id: leaderPersonId },
+      select: { id: true, tenant_id: true },
+    });
+    if (!leader || leader.tenant_id !== tenantId) {
+      throw new BadRequestException('Pessoa não encontrada');
+    }
   }
 
   async findAll(): Promise<Network[]> {
@@ -46,9 +68,11 @@ export class NetworksService {
   async update(id: string, dto: UpdateNetworkDto): Promise<Network> {
     const existing = await this.prisma.client.network.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, tenant_id: true },
     });
     if (!existing) throw new NotFoundException('Rede não encontrada');
+
+    await this.assertLeaderExists(dto.leader_person_id, existing.tenant_id);
 
     return this.prisma.client.network.update({ where: { id }, data: dto });
   }

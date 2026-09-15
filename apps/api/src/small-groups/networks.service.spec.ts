@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { NetworksService } from './networks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -22,6 +22,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     },
     smallGroup: { findMany: jest.fn() },
     groupMeeting: { groupBy: jest.fn() },
+    person: { findUnique: jest.fn() },
     ...overrides,
   };
 }
@@ -44,6 +45,43 @@ describe('NetworksService', () => {
         data: { name: 'Rede Central', tenant_id: 't1', congregation_id: 'g1' },
       });
       expect(result).toEqual({ id: 'n1', name: 'Rede Central' });
+    });
+
+    it('cria a rede com um leader_person_id válido do mesmo tenant', async () => {
+      const client = clientWith();
+      client.person.findUnique.mockResolvedValue({ id: 'p1', tenant_id: 't1' });
+      client.network.create.mockResolvedValue({ id: 'n1', name: 'Rede Central' });
+      const service = serviceWith(client);
+
+      await service.create({ name: 'Rede Central', leader_person_id: 'p1' }, USER);
+
+      expect(client.person.findUnique).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        select: { id: true, tenant_id: true },
+      });
+      expect(client.network.create).toHaveBeenCalled();
+    });
+
+    it('rejeita leader_person_id inexistente com BadRequestException', async () => {
+      const client = clientWith();
+      client.person.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.create({ name: 'Rede Central', leader_person_id: 'p-inexistente' }, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.network.create).not.toHaveBeenCalled();
+    });
+
+    it('rejeita leader_person_id de outro tenant com BadRequestException', async () => {
+      const client = clientWith();
+      client.person.findUnique.mockResolvedValue({ id: 'p1', tenant_id: 't-outro' });
+      const service = serviceWith(client);
+
+      await expect(
+        service.create({ name: 'Rede Central', leader_person_id: 'p1' }, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.network.create).not.toHaveBeenCalled();
     });
   });
 
@@ -119,6 +157,30 @@ describe('NetworksService', () => {
         data: { leader_person_id: null, health_goal_pct: null },
       });
       expect(result).toEqual({ id: 'n1', leader_person_id: null, health_goal_pct: null });
+    });
+
+    it('rejeita leader_person_id inexistente com BadRequestException', async () => {
+      const client = clientWith();
+      client.network.findUnique.mockResolvedValue({ id: 'n1', tenant_id: 't1' });
+      client.person.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.update('n1', { leader_person_id: 'p-inexistente' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.network.update).not.toHaveBeenCalled();
+    });
+
+    it('rejeita leader_person_id de outro tenant com BadRequestException', async () => {
+      const client = clientWith();
+      client.network.findUnique.mockResolvedValue({ id: 'n1', tenant_id: 't1' });
+      client.person.findUnique.mockResolvedValue({ id: 'p1', tenant_id: 't-outro' });
+      const service = serviceWith(client);
+
+      await expect(service.update('n1', { leader_person_id: 'p1' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(client.network.update).not.toHaveBeenCalled();
     });
   });
 
