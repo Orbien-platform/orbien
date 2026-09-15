@@ -21,7 +21,7 @@ describe('CelebrationsModule', () => {
   it('compila e registra todos os providers', async () => {
     const moduleRef = await Test.createTestingModule({
       // ThrottlerModule: `ContentModule` importa `PixModule` (PROD-24), e
-      // `PixController` usa `@UseGuards(ThrottlerGuard)`.
+      // `PixController` usa `@UseGuards(ProxyClientIpThrottlerGuard)`.
       imports: [
         JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
         ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),

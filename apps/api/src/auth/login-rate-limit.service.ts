@@ -39,10 +39,13 @@ export const PASSWORD_RESET_POLICY: RateLimitPolicy = { max: 3, windowMs: 60 * 6
  * por e-mail e por rota, que é o mesmo recorte que o limitador antigo usava.
  *
  * O recorte aqui é só por identificador (e-mail). O recorte por origem (IP) é
- * responsabilidade do `ThrottlerGuard` nas rotas de credencial
+ * responsabilidade do `ProxyClientIpThrottlerGuard` nas rotas de credencial
  * (`auth.controller.ts`) — os dois se complementam. O IP depende de
  * `app.set('trust proxy', 1)` em `main.ts`: sem isso `req.ip` é o proxy da
- * Render, igual para todo mundo, e o limite por IP não isola nada.
+ * Render, igual para todo mundo, e o limite por IP não isola nada. Quando a
+ * chamada vem pelo `/api-proxy` do apps/web, nem `trust proxy` basta — o
+ * cabeçalho já foi reescrito pela borda da Render com o IP da função da
+ * Vercel; ver o cabeçalho do guard.
  *
  * **Tabela ausente não derruba o login.** As migrations do projeto são manuais
  * (ver DEPLOY.md) e o deploy da API é automático no push para `main`: entre um

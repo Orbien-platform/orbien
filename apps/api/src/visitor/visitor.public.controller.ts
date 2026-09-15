@@ -7,13 +7,14 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { Request } from 'express';
 import { VisitorService } from './visitor.service';
 import { RegisterVisitorDto } from './dto/register-visitor.dto';
 
 @Controller('public/visitor')
-@UseGuards(ThrottlerGuard)
+@UseGuards(ProxyClientIpThrottlerGuard)
 export class VisitorPublicController {
   constructor(private readonly visitorService: VisitorService) {}
 

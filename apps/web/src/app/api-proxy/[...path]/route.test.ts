@@ -123,3 +123,98 @@ describe("api-proxy [...path]", () => {
     expect(fetchMock.mock.calls[0][1].method).toBe(method);
   });
 });
+
+describe("origem do visitante", () => {
+  const ambiente = process.env.ORBIEN_PROXY_SECRET;
+
+  afterEach(() => {
+    if (ambiente === undefined) delete process.env.ORBIEN_PROXY_SECRET;
+    else process.env.ORBIEN_PROXY_SECRET = ambiente;
+  });
+
+  async function encaminhar(headers: Record<string, string>) {
+    const fetchMock = vi.fn().mockResolvedValue(upstreamResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api-proxy/public/small-groups", {
+      method: "GET",
+      headers,
+    });
+    await GET(request, ctx(["public", "small-groups"]));
+
+    const [, init] = fetchMock.mock.calls[0];
+    return init.headers as Headers;
+  }
+
+  it("declara à API o IP do visitante, assinado pelo segredo", async () => {
+    process.env.ORBIEN_PROXY_SECRET = "segredo-do-proxy";
+
+    const headers = await encaminhar({ "x-real-ip": "9.9.9.9" });
+
+    expect(headers.get("x-orbien-client-ip")).toBe("9.9.9.9");
+    expect(headers.get("x-orbien-proxy-secret")).toBe("segredo-do-proxy");
+  });
+
+  it("usa a última entrada do x-forwarded-for quando não há x-real-ip", async () => {
+    process.env.ORBIEN_PROXY_SECRET = "segredo-do-proxy";
+
+    // Proxies acrescentam à direita: a última entrada é a escrita pelo salto
+    // mais próximo, e a única que um cliente não empurra para o fim da lista.
+    const headers = await encaminhar({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" });
+
+    expect(headers.get("x-orbien-client-ip")).toBe("9.9.9.9");
+  });
+
+  it("não anexa nada quando o segredo não está configurado — a API cai no req.ip", async () => {
+    delete process.env.ORBIEN_PROXY_SECRET;
+
+    const headers = await encaminhar({ "x-real-ip": "9.9.9.9" });
+
+    expect(headers.has("x-orbien-client-ip")).toBe(false);
+    expect(headers.has("x-orbien-proxy-secret")).toBe(false);
+  });
+
+  it("não anexa nada quando a plataforma não informa origem alguma", async () => {
+    process.env.ORBIEN_PROXY_SECRET = "segredo-do-proxy";
+
+    const headers = await encaminhar({});
+
+    expect(headers.has("x-orbien-client-ip")).toBe(false);
+    expect(headers.has("x-orbien-proxy-secret")).toBe(false);
+  });
+
+  it("ignora x-forwarded-for vazio", async () => {
+    process.env.ORBIEN_PROXY_SECRET = "segredo-do-proxy";
+
+    const headers = await encaminhar({ "x-forwarded-for": "  " });
+
+    expect(headers.has("x-orbien-client-ip")).toBe(false);
+  });
+
+  // A asserção que sustenta o desenho: sem isto, qualquer visitante escolheria
+  // o próprio balde no limite de taxa da API mandando o cabeçalho na mão.
+  it("nunca repassa os cabeçalhos de origem vindos do browser", async () => {
+    process.env.ORBIEN_PROXY_SECRET = "segredo-do-proxy";
+
+    const headers = await encaminhar({
+      "x-real-ip": "9.9.9.9",
+      "x-orbien-client-ip": "1.2.3.4",
+      "x-orbien-proxy-secret": "chute",
+    });
+
+    expect(headers.get("x-orbien-client-ip")).toBe("9.9.9.9");
+    expect(headers.get("x-orbien-proxy-secret")).toBe("segredo-do-proxy");
+  });
+
+  it("descarta os cabeçalhos forjados mesmo sem segredo configurado", async () => {
+    delete process.env.ORBIEN_PROXY_SECRET;
+
+    const headers = await encaminhar({
+      "x-orbien-client-ip": "1.2.3.4",
+      "x-orbien-proxy-secret": "chute",
+    });
+
+    expect(headers.has("x-orbien-client-ip")).toBe(false);
+    expect(headers.has("x-orbien-proxy-secret")).toBe(false);
+  });
+});

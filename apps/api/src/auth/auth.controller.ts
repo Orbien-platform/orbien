@@ -1,5 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { PlatformLoginDto } from './dto/platform-login.dto';
@@ -17,13 +18,17 @@ import { JwtPayload } from './interfaces/jwt-payload.interface';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // Público — sem guard de papel. O ThrottlerGuard aqui é o recorte por IP que
-  // o LoginRateLimitService não cobre: aquele é por e-mail, então quem varre
+  // Público — sem guard de papel. O throttler aqui é o recorte por IP que o
+  // LoginRateLimitService não cobre: aquele é por e-mail, então quem varre
   // muitos e-mails diferentes da mesma origem não esbarrava em nada. O limite é
-  // por conexão (rastreado por req.ip, que exige `trust proxy` — ver main.ts),
-  // não por identificador — os dois se complementam, nenhum substitui o outro.
+  // por origem, não por identificador — os dois se complementam, nenhum
+  // substitui o outro. Quem resolve a origem é o
+  // `ProxyClientIpThrottlerGuard`: `req.ip` (que exige `trust proxy` — ver
+  // main.ts) quando a chamada chega direto, e o IP que o `/api-proxy` do
+  // apps/web declara quando ela chega por lá, autenticado por segredo
+  // compartilhado. Sem ele, toda chamada vinda do proxy divide o mesmo balde.
   @Post('login')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ProxyClientIpThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 900_000 } })
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
@@ -35,7 +40,7 @@ export class AuthController {
   // AuthService.platformLogin. Limite por IP mais apertado que o login comum —
   // é a porta que leva ao console da plataforma.
   @Post('platform/login')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ProxyClientIpThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 900_000 } })
   @HttpCode(HttpStatus.OK)
   platformLogin(@Body() dto: PlatformLoginDto) {
@@ -60,7 +65,7 @@ export class AuthController {
   // Público — sem guard de papel. Mesmo recorte por IP das rotas de login,
   // acima do limite por e-mail que o serviço já aplica.
   @Post('forgot-password')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ProxyClientIpThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body() dto: ForgotPasswordDto) {

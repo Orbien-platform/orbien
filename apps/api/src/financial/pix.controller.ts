@@ -8,7 +8,8 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanGuard } from '../auth/guards/plan.guard';
@@ -27,7 +28,7 @@ export class PixController {
   // ── Cenário 1: PIX manual — PÚBLICO ──────────────────────────────────────
 
   @Post()
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ProxyClientIpThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   createManual(@Body() dto: CreatePixDto) {
@@ -48,7 +49,7 @@ export class PixController {
   // ── Cenário 3: Doação pública — PÚBLICO ──────────────────────────────────
 
   @Post('public-donation')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ProxyClientIpThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   createPublicDonation(@Body() dto: CreatePixDto) {

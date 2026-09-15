@@ -150,9 +150,22 @@ Serviço novo significa URL nova até o domínio ser reapontado.
 | `R2_BUCKET_NAME` | Nome do bucket R2 | Cloudflare → R2 |
 | `R2_PUBLIC_URL` | URL pública do bucket R2 | Cloudflare → R2 → Settings |
 | `RESEND_API_KEY` | API key do Resend | Dashboard Resend |
+| `ORBIEN_PROXY_SECRET` | Segredo compartilhado com o `/api-proxy` do `apps/web` | `openssl rand -hex 32` — **o mesmo valor nos dois dashboards** |
 
 Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
 `ALLOWED_ORIGINS`, `MAIL_FROM`, `FRONTEND_URL`.
+
+`ORBIEN_PROXY_SECRET` é o que faz o limite de taxa por IP voltar a isolar
+visitante. Todo o tráfego público chega à API pelo Route Handler de
+`/api-proxy` na Vercel, e a borda da Render reescreve o `X-Forwarded-For` com o
+IP de quem conectou — a função da Vercel. Sem o segredo, `req.ip` é o mesmo
+para o planeta inteiro e o `@Throttle` das rotas públicas e de credencial vira
+uma cota global. Com ele, o proxy declara o IP do visitante em
+`x-orbien-client-ip` e a API só acredita quando o segredo confere — a API é
+alcançável direto, então um cabeçalho sem assinatura seria pior que nada (ver
+`ProxyClientIpThrottlerGuard`). **Configurar nas duas pontas ou em nenhuma**:
+com o valor só de um lado, o guard ignora o cabeçalho e cai no `req.ip`, sem
+erro e sem ganho.
 
 `ALLOWED_ORIGINS` é a lista de origens do CORS, separada por vírgula. Se o
 domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
@@ -429,6 +442,12 @@ esperado.
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
 | `NEXT_PUBLIC_API_UPLOAD_URL` | `https://orbien-api.onrender.com/api` | browser — **só o upload** |
+| `ORBIEN_PROXY_SECRET` | o mesmo valor do Environment Group `orbien-secrets` do Render | **server-only** |
+
+`ORBIEN_PROXY_SECRET` é o par do que está na seção 1.4: é ele que autoriza o
+handler de `/api-proxy` a dizer à API qual é o IP do visitante, para o limite
+de taxa não virar cota global. **Nunca prefixar com `NEXT_PUBLIC_`** — só o
+servidor precisa dele, e um segredo que chega ao browser não é segredo.
 
 `NEXT_PUBLIC_API_UPLOAD_URL` é nova e já vem versionada em
 `apps/web/.env.production`; só precisa entrar no dashboard se o domínio da API

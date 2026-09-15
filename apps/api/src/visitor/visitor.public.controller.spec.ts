@@ -1,11 +1,11 @@
 /**
  * Rota sem autenticação — o que importa aqui, além da delegação normal, é o
- * limite de taxa (`@Throttle`, avaliado pelo `ThrottlerGuard` já no
+ * limite de taxa (`@Throttle`, avaliado pelo `ProxyClientIpThrottlerGuard` já no
  * `@UseGuards` do controller) e a validação de entrada, coberta à parte em
  * `dto/register-visitor.dto.spec.ts`.
  */
 import { Reflector } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { VisitorPublicController } from './visitor.public.controller';
 import { VisitorService } from './visitor.service';
 
@@ -24,9 +24,9 @@ describe('VisitorPublicController', () => {
     expect(result).toEqual({ status: 'registered', message: 'ok' });
   });
 
-  it('é protegida por ThrottlerGuard e limita a 20 chamadas por hora', () => {
+  it('é protegida pelo throttler por IP e limita a 20 chamadas por hora', () => {
     const guards = Reflect.getMetadata('__guards__', VisitorPublicController) as unknown[];
-    expect(guards).toContain(ThrottlerGuard);
+    expect(guards).toContain(ProxyClientIpThrottlerGuard);
 
     const reflector = new Reflector();
     const limit = reflector.get<number>('THROTTLER:LIMITdefault', VisitorPublicController.prototype.register);

@@ -7,13 +7,14 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { Request } from 'express';
 import { WaitlistService } from './waitlist.service';
 import { CreateWaitlistDto } from './dto/create-waitlist.dto';
 
 @Controller('public/waitlist')
-@UseGuards(ThrottlerGuard)
+@UseGuards(ProxyClientIpThrottlerGuard)
 export class WaitlistPublicController {
   constructor(private readonly service: WaitlistService) {}
 

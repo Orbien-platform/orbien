@@ -6,7 +6,7 @@ import { WaitlistService } from './waitlist.service';
 
 describe('WaitlistModule', () => {
   it('compila e registra o WaitlistService', async () => {
-    // WaitlistPublicController usa `@UseGuards(ThrottlerGuard)` — o próprio
+    // WaitlistPublicController usa `@UseGuards(ProxyClientIpThrottlerGuard)` — o próprio
     // guard precisa do ThrottlerModule no grafo de DI para o módulo compilar.
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]), PrismaModule, WaitlistModule],

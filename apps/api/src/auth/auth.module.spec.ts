@@ -16,7 +16,7 @@ describe('AuthModule', () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
         JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
-        // AuthController usa ThrottlerGuard nas rotas de credencial — o mesmo
+        // AuthController usa o throttler por IP nas rotas de credencial — o mesmo
         // módulo que a raiz da aplicação registra em app.module.ts.
         ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
         AuthModule,

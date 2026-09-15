@@ -44,7 +44,7 @@ import { DonationReceiptService } from './donation-receipts.service';
 describe('FinancialModule', () => {
   it('compila e registra todos os controllers e providers', async () => {
     const moduleRef = await Test.createTestingModule({
-      // PixController usa `@UseGuards(ThrottlerGuard)` — o próprio guard
+      // PixController usa `@UseGuards(ProxyClientIpThrottlerGuard)` — o próprio guard
       // precisa do ThrottlerModule no grafo de DI para o módulo compilar.
       imports: [
         ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),

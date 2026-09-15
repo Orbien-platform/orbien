@@ -648,11 +648,27 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
-- **Rate limit de login por IP** depende de `X-Forwarded-For` confiável atrás
-  do Render. O recorte por origem fechou em 2026-09-07 com
-  `app.set('trust proxy', 1)`; o que resta é decisão de infra, não código.
+- ~~**Rate limit de login por IP** depende de `X-Forwarded-For` confiável atrás
+  do Render.~~ **Fechado em 2026-09-15**, e a conclusão de 2026-09-13 ("é
+  decisão de infra, não código") estava errada: `trust proxy` resolve o salto
+  da borda da Render, mas não o salto anterior. Todo o tráfego público chega
+  pelo Route Handler de `/api-proxy` na Vercel, e a borda da Render reescreve o
+  cabeçalho com o IP de quem conectou — a função da Vercel. `req.ip` era o
+  mesmo para o planeta inteiro, e o `@Throttle` de `/auth/login`,
+  `/auth/platform/login`, `/auth/forgot-password` e das quatro rotas públicas
+  era uma cota global, não um recorte por origem. Agora o proxy declara o IP do
+  visitante em `x-orbien-client-ip`, autenticado por `ORBIEN_PROXY_SECRET`
+  (mesmo valor nas duas pontas), e o `ProxyClientIpThrottlerGuard` só acredita
+  quando o segredo confere — a API é alcançável direto, e um cabeçalho sem
+  assinatura deixaria qualquer cliente escolher o próprio balde. Sem a variável
+  configurada, o guard cai em `req.ip`: volta a cota global, nunca a ausência
+  de limite. **Resta o `apps/admin`**, que alcança a API por um `rewrite` do
+  `next.config`, e não por Route Handler — rewrite não escreve cabeçalho, então
+  o login do console segue dividindo um balde só (10 por 15 min). É o item
+  `PEND-05`.
 
-**Revisitado em 2026-09-13, sem mudança de código.** Dos três pontos, dois
+**Revisitado em 2026-09-13, sem mudança de código** (o terceiro item acima
+fechou depois, em 2026-09-15). Dos três pontos, dois
 não são código (rate limit é infra) e o terceiro segue exatamente como o
 texto acima descreve: mapear o que `AuthService`/`JwtStrategy` de fato leem
 antes do `SET LOCAL ROLE` para trocar `USING (true)` por um `USING` que só
@@ -661,6 +677,24 @@ caminho de login, não um fix de uma tarde, e um `USING` errado quebra login
 em produção sem aviso. Ficou como pergunta, não decisão: seguir com o
 `USING (true)` conhecido, ou priorizar esse mapeamento como trabalho próprio
 antes de mexer na policy?
+
+### PEND-05 · Login do `apps/admin` divide um balde só de rate limit · dívida
+
+Nasceu junto com o fim do terceiro item de `PEND-04`, em 2026-09-15. O `web`
+alcança a API por um Route Handler (`/api-proxy`), que agora declara o IP do
+visitante à API; o `admin` alcança por um `rewrite` do `next.config`, que
+encaminha a requisição como ela chegou e não tem onde escrever cabeçalho. Com
+isso, `POST /auth/platform/login` continua vendo uma origem só — a da Vercel —
+e o limite de 10 tentativas por 15 minutos vale para o console inteiro, não por
+pessoa. O efeito prático é de disponibilidade, não de brecha: quem erra a senha
+algumas vezes tranca a porta para os outros administradores. O limite por
+e-mail (`LoginRateLimitService`) continua valendo normalmente.
+
+Fechar é trocar o `rewrite` do `admin` por um Route Handler igual ao do `web` —
+mudança pequena em linha de código, mas que mexe no caminho de autenticação de
+um app que está no ar, e por isso não entrou junto. Pergunta em aberto: vale
+fazer agora, ou esperar o `admin` precisar de sessão em cookie `HttpOnly` (que
+é o que obrigou o `web` a trocar) e fazer as duas coisas de uma vez?
 
 ---
 

@@ -1,5 +1,5 @@
 import { Reflector } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ROLES_KEY } from './decorators/roles.decorator';
@@ -110,7 +110,7 @@ describe('AuthController', () => {
     }
   });
 
-  it('login, platformLogin e forgotPassword têm ThrottlerGuard por IP, além do limite por e-mail do serviço', () => {
+  it('login, platformLogin e forgotPassword têm o throttler por IP, além do limite por e-mail do serviço', () => {
     const reflector = new Reflector();
 
     const cases = [
@@ -122,7 +122,7 @@ describe('AuthController', () => {
     for (const { handler, limit, ttl } of cases) {
       const method = AuthController.prototype[handler];
       const guards = Reflect.getMetadata('__guards__', method) as unknown[];
-      expect(guards).toContain(ThrottlerGuard);
+      expect(guards).toContain(ProxyClientIpThrottlerGuard);
       expect(reflector.get<number>('THROTTLER:LIMITdefault', method)).toBe(limit);
       expect(reflector.get<number>('THROTTLER:TTLdefault', method)).toBe(ttl);
     }
@@ -134,7 +134,7 @@ describe('AuthController', () => {
       const guards = Reflect.getMetadata('__guards__', AuthController.prototype[handler]) as
         | unknown[]
         | undefined;
-      expect(guards ?? []).not.toContain(ThrottlerGuard);
+      expect(guards ?? []).not.toContain(ProxyClientIpThrottlerGuard);
     }
   });
 });

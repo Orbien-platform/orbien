@@ -1,5 +1,5 @@
 import { Reflector } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { PublicSmallGroupsController } from './public-small-groups.controller';
 import { PublicSmallGroupsService } from './public-small-groups.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
@@ -38,9 +38,9 @@ describe('PublicSmallGroupsController', () => {
     }
   });
 
-  it('é protegida por ThrottlerGuard, e o POST é bem mais apertado que o GET', () => {
+  it('é protegida pelo throttler por IP, e o POST é bem mais apertado que o GET', () => {
     const guards = Reflect.getMetadata('__guards__', PublicSmallGroupsController) as unknown[];
-    expect(guards).toContain(ThrottlerGuard);
+    expect(guards).toContain(ProxyClientIpThrottlerGuard);
 
     const list = throttleFor('findPublic');
     const post = throttleFor('requestVisit');

@@ -10,7 +10,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { PublicSmallGroupsService } from './public-small-groups.service';
 import { ListPublicSmallGroupsQueryDto } from './dto/list-public-small-groups-query.dto';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto';
@@ -21,7 +22,7 @@ import { CreateVisitRequestDto } from './dto/create-visit-request.dto';
 // pelo serviço a partir do slug da igreja, e é a ausência de `app.user_id`
 // que habilita o ramo público das policies (013_rls_small_groups_public.sql).
 @Controller('public/small-groups')
-@UseGuards(ThrottlerGuard)
+@UseGuards(ProxyClientIpThrottlerGuard)
 export class PublicSmallGroupsController {
   constructor(private readonly publicSmallGroupsService: PublicSmallGroupsService) {}
 

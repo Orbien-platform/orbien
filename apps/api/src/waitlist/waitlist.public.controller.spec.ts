@@ -1,10 +1,10 @@
 /**
  * Rota sem autenticação — além da delegação, o que importa é o limite de taxa
- * (`@Throttle`, avaliado pelo `ThrottlerGuard` do `@UseGuards` do controller)
+ * (`@Throttle`, avaliado pelo `ProxyClientIpThrottlerGuard` do `@UseGuards` do controller)
  * e a validação de entrada, coberta à parte em `dto/create-waitlist.dto.spec.ts`.
  */
 import { Reflector } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ProxyClientIpThrottlerGuard } from '../common/guards/proxy-client-ip-throttler.guard';
 import { WaitlistPublicController } from './waitlist.public.controller';
 import { WaitlistService } from './waitlist.service';
 
@@ -25,9 +25,9 @@ describe('WaitlistPublicController', () => {
     expect(waitlistService.subscribe).toHaveBeenCalledWith(dto, '', '');
   });
 
-  it('é protegida por ThrottlerGuard e limita a 5 chamadas por hora', () => {
+  it('é protegida pelo throttler por IP e limita a 5 chamadas por hora', () => {
     const guards = Reflect.getMetadata('__guards__', WaitlistPublicController) as unknown[];
-    expect(guards).toContain(ThrottlerGuard);
+    expect(guards).toContain(ProxyClientIpThrottlerGuard);
 
     const reflector = new Reflector();
     const limit = reflector.get<number>('THROTTLER:LIMITdefault', WaitlistPublicController.prototype.subscribe);

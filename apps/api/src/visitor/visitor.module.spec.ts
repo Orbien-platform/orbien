@@ -8,7 +8,7 @@ import { VisitorService } from './visitor.service';
 
 describe('VisitorModule', () => {
   it('compila e registra o VisitorService', async () => {
-    // VisitorPublicController usa `@UseGuards(ThrottlerGuard)` — o próprio guard
+    // VisitorPublicController usa `@UseGuards(ProxyClientIpThrottlerGuard)` — o próprio guard
     // precisa do ThrottlerModule no grafo de DI para o módulo compilar.
     // PersonsModule agora importa ContentModule (retenção pós-contrato
     // notifica via NotificationsService), que traz PostsController —
