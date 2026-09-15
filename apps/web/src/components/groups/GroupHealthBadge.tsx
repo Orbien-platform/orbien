@@ -37,10 +37,10 @@ export function GroupHealthBadge({ groupId }: GroupHealthBadgeProps) {
 
   // Sem estado de "oculto" separado: em 403 (sem Premium) ou qualquer outra
   // falha, `health` fica null e o componente não renderiza nada — mesmo
-  // resultado de "ocultar silenciosamente", sem distinguir a causa.
+  // resultado de "ocultar silenciosamente", sem distinguir a causa. Nenhum
+  // setState síncrono no corpo do effect — mesmo padrão de GroupChatPanel.
   useEffect(() => {
     const signal = { cancelled: false };
-    setHealth(null);
     api
       .get<HealthResponse>(`/small-groups/${groupId}/health`)
       .then(({ data }) => {
@@ -48,7 +48,8 @@ export function GroupHealthBadge({ groupId }: GroupHealthBadgeProps) {
         setHealth(data);
       })
       .catch(() => {
-        // silencioso de propósito — ver comentário acima do componente.
+        if (signal.cancelled) return;
+        setHealth(null);
       });
     return () => {
       signal.cancelled = true;

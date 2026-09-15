@@ -70,25 +70,29 @@ function NodeRow({ node, indent = 0 }: { node: GenealogyTreeNode; indent?: numbe
 export function GroupGenealogyTree({ groupId }: GroupGenealogyTreeProps) {
   const [data, setData] = useState<GenealogyResponse | null>(null);
   const [accessDenied, setAccessDenied] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+
+  // "Carregando" é derivado, não um setState no corpo do effect — mesmo
+  // padrão de GroupChatPanel, e é o que a regra
+  // `react-hooks/set-state-in-effect` cobra.
+  const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
+  const isLoading = loadedGroupId !== groupId;
 
   useEffect(() => {
     const signal = { cancelled: false };
-    setIsLoading(true);
-    setData(null);
-    setAccessDenied(false);
     api
       .get<GenealogyResponse>(`/small-groups/${groupId}/hierarchy`)
       .then(({ data }) => {
         if (signal.cancelled) return;
         setData(data);
+        setAccessDenied(false);
       })
       .catch((error) => {
         if (signal.cancelled) return;
+        setData(null);
         setAccessDenied(isForbidden(error));
       })
       .finally(() => {
-        if (!signal.cancelled) setIsLoading(false);
+        if (!signal.cancelled) setLoadedGroupId(groupId);
       });
     return () => {
       signal.cancelled = true;
