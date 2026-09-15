@@ -240,7 +240,17 @@ export class EventRegistrationsService {
         where: { content_post_id: post.id, ...identity },
         orderBy: { created_at: 'desc' },
       });
-      if (existing && existing.status !== 'cancelled') {
+
+      // `pending_payment` cujo QR já passou da janela de reserva não bloqueia
+      // nova tentativa — mesmo raciocínio de `PENDING_PAYMENT_HOLD_MS` na
+      // contagem de vaga abaixo. Sem isto, quem gerou o QR e não pagou ficava
+      // com "já está inscrita" para sempre: `cancelled` é o único status que o
+      // guard abaixo deixa passar, e nada aqui cancela a linha sozinha.
+      const isExpiredHold =
+        existing?.status === 'pending_payment' &&
+        existing.created_at.getTime() < Date.now() - PENDING_PAYMENT_HOLD_MS;
+
+      if (existing && existing.status !== 'cancelled' && !isExpiredHold) {
         throw new ConflictException('Esta pessoa já está inscrita neste evento');
       }
 

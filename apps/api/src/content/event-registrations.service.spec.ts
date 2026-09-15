@@ -88,7 +88,14 @@ function clientWith(post: Row | null = { ...EVENT }, rows: Row[] = []) {
         return Promise.resolve(store.filter((r) => r['status'] === w['status']).length);
       }),
       create: jest.fn().mockImplementation(({ data }: never) => {
-        const row = { id: `r${store.length + 1}`, created_at: store.length + 1, ...(data as Row) };
+        // `Date`, não número puro: `registerSelfPaid` chama
+        // `existing.created_at.getTime()` para checar a janela de reserva
+        // (PROD-24), igual ao Prisma de verdade devolveria.
+        const row = {
+          id: `r${store.length + 1}`,
+          created_at: new Date(store.length + 1),
+          ...(data as Row),
+        };
         store.push(row);
         return Promise.resolve(row);
       }),
@@ -360,6 +367,47 @@ describe('EventRegistrationsService', () => {
       await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow('Asaas fora');
 
       expect(client.rows[0]['status']).toBe('cancelled');
+    });
+
+    it('pending_payment expirado (QR vencido, nunca pago) não bloqueia nova tentativa', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      // Simula o resultado de uma tentativa anterior cujo QR expirou sem
+      // pagamento: ninguém cancela essa linha sozinha (ver o cabeçalho do
+      // serviço), então ela fica pending_payment para sempre — só a janela
+      // de 24h deixa de contar como reserva.
+      client.eventRegistration.create({
+        data: {
+          person_id: 'person-1',
+          status: 'pending_payment',
+          payment_status: 'pending',
+          created_at: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        },
+      } as never);
+      const pix = pixServiceMock();
+      const service = serviceWith(client, pix);
+
+      const result = await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(result).toMatchObject({ registration: { status: 'pending_payment' } });
+      // Reaproveita a linha antiga, não cria uma segunda.
+      expect(client.rows).toHaveLength(1);
+    });
+
+    it('pending_payment ainda dentro da janela de 24h continua bloqueando — só o expirado libera', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      client.eventRegistration.create({
+        data: {
+          person_id: 'person-1',
+          status: 'pending_payment',
+          payment_status: 'pending',
+          created_at: new Date(Date.now() - 1000),
+        },
+      } as never);
+      const service = serviceWith(client);
+
+      await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('evento pago lotado recusa a tentativa — sem fila de espera para quem paga', async () => {
