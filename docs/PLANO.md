@@ -38,6 +38,42 @@ rodada. Conferidos e sem mudança: `CONF-02`/`CONF-03` (nenhuma rota nova de
 ou de consentimento), `PROD-05/07/08/11/12/17/20/23/24` (nenhum código novo),
 `PEND-04` e os itens de mobile da seção 5.
 
+Varredura de **2026-09-15**, contra a `main` em `244897f` (merge do PR #95):
+fecharam `PROD-20` (multiplicação de célula, árvore genealógica, semáforo de
+saúde e rede com meta) e `PROD-24` (evento com inscrição paga, backend +
+painel do organizador) — os dois com nota própria na seção 6. `PEND-05`
+nasceu nesta rodada, com os três achados menores declarados no PR do
+`PROD-20`, e os três seguem abertos: conferidos um a um aqui (sem assertiva
+SQL dedicada para `networks` no passo 7 do `bootstrap-db.sh`; `.catch(() =>
+{})` em `MultiplyGroupModal.tsx:57` e `NetworkFormModal.tsx:62`; nenhum
+`apps/web/e2e/*.spec.ts` toca multiplicação ou redes). O PR #95, que veio
+depois, fechou lacunas de **cobertura de componente** do `PROD-20` — não é o
+e2e que o terceiro ponto do `PEND-05` pede.
+
+Contagem de RLS nesta rodada: `npm run test:rls -w orbien-backend` fecha em
+**125 testes em 7 suítes** (`isolation.spec.ts` 75, `platform-plane.spec.ts`
+12, `small-groups-public.spec.ts` 12, `user-account-transfer.spec.ts` 8,
+`networks.spec.ts` 7, `event-registrations.spec.ts` 6,
+`tenant-audit-read.spec.ts` 5). O `016_rls_networks.sql` e o
+`test/rls/networks.spec.ts` do `PROD-20` desatualizaram o "118 em 6 suítes"
+medido em 2026-09-14 — terceira vez que essa contagem envelhece. Atualizada
+aqui e em `docs/TESTES.md`; o mesmo rótulo em `scripts/pre-push.sh` ficou
+como `AJU-07` na seção 8, porque é portão, não documento.
+
+Conferidos nesta varredura e **sem mudança de código** — seguem abertos
+exatamente como descritos: `CONF-01` (as marcações
+`[REVISÃO JURÍDICA OBRIGATÓRIA]` continuam nos dois documentos, 18 e 4),
+`CONF-02` (nenhum cron de retenção de log de acesso ou de registro de
+consentimento — os seis de `apps/api/src/persons/` são os mesmos),
+`CONF-03` (`me.controller.ts` segue com `GET /me/permissions` e nada mais),
+`PROD-05` (nenhuma rota de sugestão de escala), `PROD-07` (o OFX de
+`financial/export/` continua sendo só exportação), `PROD-08`, `PROD-11`
+(`checkAbsenceAlerts` segue sem tela e sem job), `PROD-12`, `PROD-17`,
+`PROD-23` (`GET /small-groups/:id/visit-requests` existe; nenhuma tela do
+`apps/web` a chama), `PROD-25` (nenhum arquivo de `apps/web` ou
+`apps/mobile` chama `POST .../registrations/me`), `AJU-05`, `PEND-04` e os
+`DEC-` da seção 9.
+
 ---
 
 ## 1. Visão do produto
@@ -514,7 +550,9 @@ Premium, `IsPositive`), `content.module.spec.ts`/`financial.module.spec.ts`
 atualizados para o `PixModule` novo. RLS: nenhum script novo — a mudança é
 só coluna em tabela existente (`event_registrations`), a policy de
 `015_rls_event_registrations.sql` já cobre; `event-registrations.spec.ts`
-(118 testes de RLS) roda sem alteração.
+roda sem alteração (a suíte inteira fecha hoje em 125 testes — a contagem
+citada aqui na redação original, 118, era a de antes do `networks.spec.ts`
+que o `PROD-20` trouxe no mesmo dia).
 
 ### Funcionalidade prevista, sem código
 
@@ -743,7 +781,27 @@ Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
 árvore mede — exatamente o que a feature `mapa-monorepo-e-portoes` nasceu para
 caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
-Nenhum item pendente nesta tabela — ver os três fechados abaixo.
+Um item pendente: `AJU-07`, abaixo.
+
+### AJU-07 · `scripts/pre-push.sh` imprime "118 testes de RLS" · cosmético
+
+Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já fecharam duas
+vezes: `scripts/pre-push.sh:149` imprime `passa "118 testes de RLS"` e a
+suíte fecha hoje em **125 em 7 suítes** — o `016_rls_networks.sql` e o
+`test/rls/networks.spec.ts` do `PROD-20` (2026-09-15) mudaram o número.
+
+É rótulo, não comportamento: o `passa`/`bloqueia` vem do código de saída do
+Jest, não da contagem, então o portão decide certo e só reporta errado. As
+contagens de `docs/PLANO.md` e `docs/TESTES.md` foram atualizadas na
+varredura de 2026-09-15; esta ficou de fora **de propósito**, porque
+`pre-push.sh` é portão e a regra do `CLAUDE.md` manda apresentar o achado
+antes de mexer.
+
+A pergunta que o item carrega não é só o número: é se vale continuar
+escrevendo uma contagem literal num portão que a envelhece a cada feature
+com tabela nova. As duas saídas são trocar o literal por uma leitura da
+própria saída do Jest (`Tests: N passed`), ou aceitar a deriva e corrigir a
+cada varredura, como nas três vezes até aqui. Seguir assim, ou ajustar?
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
 

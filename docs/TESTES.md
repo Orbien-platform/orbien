@@ -233,7 +233,7 @@ Scripts em `apps/api/package.json`:
 
 `npm run test:rls` continua fazendo exatamente o que fazia. Isso é requisito:
 o job `rls` do CI depende dele. **É o único sem `--passWithNoTests`**: ele tem
-118 testes e deve falhar alto se eles sumirem. Os outros precisam da flag
+125 testes e deve falhar alto se eles sumirem. Os outros precisam da flag
 enquanto não houver spec — `jest` sai com código 1 em "No tests found", o que
 derrubaria o CI já na Fase 0. A Fase 13 remove as flags.
 
@@ -331,7 +331,7 @@ npm run test:cov -w orbien-backend   # imprime relatório de cobertura
 ```
 
 `npm run test:rls -w orbien-backend` exige banco e não roda na máquina sem
-`DATABASE_URL`/`DIRECT_URL`; no CI ele continua verde com os 118 testes. Para
+`DATABASE_URL`/`DIRECT_URL`; no CI ele continua verde com os 125 testes. Para
 conferir localmente sem banco, `npx jest --selectProjects rls --listTests`
 deve listar `test/rls/isolation.spec.ts`.
 
@@ -1146,7 +1146,7 @@ npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-site      # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-admin     # piso 99/98/100/100 travado (Fase 14)
 npm run test:cov -w orbien-mobile    # piso 94/84/93/97 travado (Fase 15)
-npm run test:rls -w orbien-backend   # 118 testes verdes
+npm run test:rls -w orbien-backend   # 125 testes verdes
 node scripts/check-skills.mjs
 
 # e2e do web, com API e web em pé (é o que o job `E2E` faz)
@@ -1196,7 +1196,13 @@ existir e não descer, não o número ser 100.
 
 > O que segue aberto hoje está em [`PLANO.md`](PLANO.md), que é a fonte única
 > — inclusive os ajustes de contagem deste arquivo (`AJU-02`, `AJU-03`) e o
-> build do web abaixo (`AJU-04`). O texto desta seção é o registro de origem.
+> build do web abaixo (`AJU-04`), os três já fechados. O texto desta seção é o
+> registro de origem.
+>
+> As contagens de RLS deste arquivo foram de 118 para **125** na varredura de
+> 2026-09-15 (o `PROD-20` trouxe `test/rls/networks.spec.ts`). O mesmo rótulo
+> em `scripts/pre-push.sh` segue em 118, aberto como `AJU-07` no `PLANO.md`:
+> é portão, e achado de portão vira pergunta antes de mexer.
 
 O primeiro run de CI (PR #1) revelou três pendências que **não** vêm deste
 plano e não foram corrigidas por decisão unilateral: RLS sem isolamento por
@@ -1205,8 +1211,9 @@ dados que o seed não cria. Estão mapeadas com evidência em
 [PENDENCIAS.md](PENDENCIAS.md).
 
 A primeira tocava este plano enquanto o job `Testes de RLS` estava vermelho.
-**Não está mais**: `npm run test:rls -w orbien-backend` fecha em 118 testes
-verdes (o plano falava em 39, depois 54 — a suíte cresceu desde então). O que impede a
+**Não está mais**: `npm run test:rls -w orbien-backend` fecha em 125 testes
+verdes (o plano falava em 39, depois 54, depois 118 — a suíte cresceu desde
+então, e cresce a cada feature com tabela nova). O que impede a
 Fase 13 de declarar fechamento hoje não é o RLS nem a Fase 10, que fechou:
 é a decisão pendente sobre os pisos fracionários do web; ver
 "Estado da Fase 13".

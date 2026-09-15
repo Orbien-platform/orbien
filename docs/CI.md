@@ -1,8 +1,14 @@
 # Plano de CI
 
-Racional das decisões de CI. **As fases 1, 2, 3 e 6 estão implementadas** em
-`.github/workflows/ci.yml`; a fase 4 segue como plano e a 5 já existe como
-script (`scripts/check-skills.mjs`), rodando como step da fase 1.
+Racional das decisões de CI. **As fases 1, 2, 3, 3b e 6 estão implementadas**
+em `.github/workflows/ci.yml` — os seis jobs `build`, `unit`, `rls`,
+`smoke-site`, `e2e` e `mobile-eas-build`. A fase 4 não é pendência: está
+**decidida** como revisão local, fora do CI, e é por isso que não há job para
+ela. A fase 5 já existe como script (`scripts/check-skills.mjs`), rodando como
+step da fase 1.
+
+Este documento é o racional das decisões, não a lista do que falta — o que
+segue aberto vive em [`PLANO.md`](PLANO.md).
 
 O contexto que motiva: com mais de uma pessoa no projeto, os deploys deixam de
 ser suficientes como rede de proteção. Render e Vercel só constroem o app que
@@ -100,6 +106,11 @@ Tempo estimado: 2–4 min com cache.
 O ganho mais alto do plano: RLS é a fronteira multi-tenant do sistema, e hoje
 nada a verifica automaticamente. São 39 testes, incluindo um controle positivo
 que garante que os testes de isolamento não passam por vacuidade.
+
+> Redação de quando a fase era proposta: o job `rls` existe desde então, e os
+> 39 testes de um arquivo viraram **125 em 7 suítes** (medido em 2026-09-15 —
+> a contagem corrente mora em [`TESTES.md`](TESTES.md), não aqui). O controle
+> positivo continua no `test/rls/isolation.spec.ts`.
 
 ```yaml
   rls:
