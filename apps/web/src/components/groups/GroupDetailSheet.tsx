@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
+import { MultiplyGroupModal } from "@/components/groups/MultiplyGroupModal";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
@@ -73,6 +74,7 @@ interface GroupDetail {
   public_description?: string;
   leader?: { id: string; full_name: string };
   memberships?: Membership[];
+  childGroups?: { id: string; name: string }[];
   _count?: { memberships: number };
 }
 
@@ -279,6 +281,7 @@ export function GroupDetailSheet({
   const [activeTab, setActiveTab] = useState("info");
   const [editing, setEditing] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [multiplyOpen, setMultiplyOpen] = useState(false);
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const [meetingMaterials, setMeetingMaterials] = useState<Record<string, MeetingMaterial[]>>({});
   const [loadingMaterialsId, setLoadingMaterialsId] = useState<string | null>(null);
@@ -520,6 +523,34 @@ export function GroupDetailSheet({
                           Nenhuma informação adicional.
                         </p>
                       )}
+
+                      {/* Multiplicação de célula (PROD-20, CEL20-01) */}
+                      {canEdit && (
+                        <div className="px-4 py-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full rounded-[8px]"
+                            onClick={() => setMultiplyOpen(true)}
+                          >
+                            Multiplicar célula
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Células filhas (AC5 — aparecem aqui após multiplicar) */}
+                      {group.childGroups && group.childGroups.length > 0 && (
+                        <div className="px-4 py-3">
+                          <p className="mb-1.5 text-xs text-stone">Células filhas</p>
+                          <ul className="flex flex-col gap-1">
+                            {group.childGroups.map((child) => (
+                              <li key={child.id} className="text-sm text-ink dark:text-white">
+                                {child.name}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )
                 )}
@@ -754,6 +785,21 @@ export function GroupDetailSheet({
           onRegistered={() => {
             // Refresh meetings list
             setReloadTick((t) => t + 1);
+          }}
+        />
+      )}
+
+      {group && (
+        <MultiplyGroupModal
+          open={multiplyOpen}
+          onOpenChange={setMultiplyOpen}
+          groupId={group.id}
+          members={members}
+          onMultiplied={() => {
+            // Recarrega o detalhe (nova célula filha aparece na lista) e a
+            // lista de grupos da tela pai.
+            setReloadTick((t) => t + 1);
+            onUpdated();
           }}
         />
       )}
