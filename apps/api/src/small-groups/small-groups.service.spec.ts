@@ -750,6 +750,21 @@ describe('SmallGroupsService', () => {
       ).toBe(2);
       expect(result.tree?.children.find((c) => c.id === 'sg3')?.children).toEqual([]);
     });
+
+    it('CEL20-06: célula com reunião recente sai verde — exercita a agregação real de groupBy', async () => {
+      const client = clientWith();
+      client.$queryRaw.mockResolvedValue([row('sg1', null, 1)]);
+      client.smallGroup.findUnique.mockResolvedValue({ parent_group_id: null });
+      const hoje = new Date();
+      client.groupMeeting.groupBy.mockResolvedValue([
+        { small_group_id: 'sg1', _max: { occurred_at: hoje } },
+      ]);
+      const service = serviceWith(client);
+
+      const result = await service.getHierarchy('sg1');
+
+      expect(result.tree?.health_status).toBe('green');
+    });
   });
 
   describe('getHealth', () => {
@@ -849,6 +864,34 @@ describe('SmallGroupsService', () => {
       expect(result.map((a) => a.id)).toEqual(['pai', 'avo', 'bisavo']);
       // A 4ª geração (tataravo) nunca é buscada — teto de 3 corta o loop antes.
       expect(client.smallGroup.findUnique).toHaveBeenCalledTimes(4);
+    });
+
+    it('CEL20-06: pai referenciado sumiu entre as duas consultas — para o loop sem estourar', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique
+        .mockResolvedValueOnce({ parent_group_id: 'pai' })
+        .mockResolvedValueOnce(null);
+      const service = serviceWith(client);
+
+      const result = await service.getAncestors('sg1');
+
+      expect(result).toEqual([]);
+    });
+
+    it('CEL20-06: pai sem relação de líder resolvida — leader_person_name null', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValueOnce({ parent_group_id: 'pai' }).mockResolvedValueOnce({
+        id: 'pai',
+        name: 'Grupo pai',
+        leader_person_id: 'lider',
+        parent_group_id: null,
+        leader: null,
+      });
+      const service = serviceWith(client);
+
+      const result = await service.getAncestors('sg1');
+
+      expect(result).toEqual([mapped('pai', null)].map((a) => ({ ...a, leader_person_name: null })));
     });
   });
 

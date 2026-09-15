@@ -126,20 +126,24 @@ function buildGenealogyTree(
   nodeId: string,
   healthByGroupId: Map<string, HealthStatus>,
   generation = 0,
-): GenealogyTreeNode | null {
-  const node = flat.find((n) => n.id === nodeId);
-  if (!node) return null;
+): GenealogyTreeNode {
+  // `nodeId` sempre vem de `flat` (a raiz já foi confirmada presente por
+  // quem chama; os filhos vêm do próprio `flat.filter(...)` abaixo) — nunca
+  // ausente, então sem branch de "não encontrado".
+  const node = flat.find((n) => n.id === nodeId)!;
 
   return {
     id: node.id,
     name: node.name,
     leader_person_name: node.leader_person_name,
     generation,
-    health_status: healthByGroupId.get(node.id) ?? classifyHealth(null),
+    // Todo id que passa por aqui já foi incluído em `buildHealthMap` por
+    // quem chama (getHierarchy junta rows + ancestors antes de montar a
+    // árvore) — a entrada sempre existe.
+    health_status: healthByGroupId.get(node.id)!,
     children: flat
       .filter((n) => n.parent_group_id === nodeId)
-      .map((c) => buildGenealogyTree(flat, c.id, healthByGroupId, generation + 1)!)
-      .filter(Boolean),
+      .map((c) => buildGenealogyTree(flat, c.id, healthByGroupId, generation + 1)),
   };
 }
 
@@ -247,7 +251,9 @@ export class SmallGroupsService {
       throw new BadRequestException('Pessoa não encontrada');
     }
 
-    const memberIds = dto.member_ids ?? [];
+    // `member_ids` tem default `[]` no DTO, aplicado pelo
+    // `ValidationPipe({ transform: true })` global — nunca chega undefined.
+    const memberIds = dto.member_ids;
 
     return this.prisma.runInTx(
       async (tx) => {
@@ -575,8 +581,9 @@ export class SmallGroupsService {
   // agregada para todas as células envolvidas (ancestrais + árvore), em vez
   // de N chamadas a getHealth (design.md).
   private async buildHealthMap(groupIds: string[]): Promise<Map<string, HealthStatus>> {
+    // Único chamador (getHierarchy) sempre passa pelo menos o próprio
+    // `groupId` — nunca lista vazia — então sem guarda de atalho aqui.
     const healthByGroupId = new Map<string, HealthStatus>();
-    if (groupIds.length === 0) return healthByGroupId;
 
     const rows = await this.prisma.client.groupMeeting.groupBy({
       by: ['small_group_id'],
@@ -639,7 +646,9 @@ export class SmallGroupsService {
       name: a.name,
       leader_person_name: a.leader_person_name,
       generation: -(index + 1),
-      health_status: healthByGroupId.get(a.id) ?? classifyHealth(null),
+      // Mesma garantia de buildGenealogyTree: `a.id` está incluído na lista
+      // passada a buildHealthMap logo acima, então a entrada sempre existe.
+      health_status: healthByGroupId.get(a.id)!,
     }));
 
     return { ancestors, tree };
