@@ -112,7 +112,11 @@ export function MultiplyGroupModal({
   return (
     <Modal
       open={open}
-      onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
+      // O Modal (Dialog.Root) é controlado só por `open` — não há
+      // Dialog.Trigger nem DialogHandle imperativo aqui, então o único jeito
+      // do Base UI chamar isto é ao fechar (Esc, backdrop, botão "Fechar"),
+      // sempre com `v === false`. `v === true` nunca chega pela UI real.
+      onOpenChange={(v) => { reset(); onOpenChange(v); }}
       title="Multiplicar célula"
       description="Crie uma célula filha e escolha quem vai com ela."
       className="max-w-lg"

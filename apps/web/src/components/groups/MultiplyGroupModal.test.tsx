@@ -187,4 +187,151 @@ describe("MultiplyGroupModal", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(api.post).not.toHaveBeenCalled();
   });
+
+  it("fecha e limpa o rascunho ao pressionar Esc, sem submeter", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={onOpenChange}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    await user.type(screen.getByLabelText(/Nome da célula filha/), "Rascunho");
+    await user.keyboard("{Escape}");
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("desmarca um membro já selecionado ao clicar de novo", async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: "Ana Souza" });
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
+    await user.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+  });
+
+  it("não busca pessoas de novo ao reabrir sem desmontar (hasFetched já verdadeiro)", async () => {
+    const { rerender } = render(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <MultiplyGroupModal
+        open={false}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+    rerender(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("mantém a lista de líderes vazia quando a resposta de /persons não traz `data`", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/persons")) {
+        return Promise.resolve({ data: {} });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/persons?limit=100"));
+    const select = screen.getByLabelText(/Novo líder/) as HTMLSelectElement;
+    expect(select.options).toHaveLength(1);
+  });
+
+  it("ignora silenciosamente a falha ao carregar pessoas para o select de líder", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/persons")) {
+        return Promise.reject(new Error("network down"));
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/persons?limit=100"));
+    const select = screen.getByLabelText(/Novo líder/) as HTMLSelectElement;
+    expect(select.options).toHaveLength(1);
+  });
+
+  it("mostra a mensagem genérica de 400 quando a API não traz `message`", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockRejectedValue({
+      response: { status: 400, data: {} },
+      isAxiosError: true,
+    });
+
+    render(
+      <MultiplyGroupModal
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="sg1"
+        members={members}
+        onMultiplied={vi.fn()}
+      />
+    );
+
+    await user.type(screen.getByLabelText(/Nome da célula filha/), "Célula Filha");
+    await user.selectOptions(screen.getByLabelText(/Novo líder/), "p2");
+    await user.click(screen.getByRole("button", { name: "Multiplicar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Dados inválidos para multiplicar a célula."
+    );
+  });
 });
