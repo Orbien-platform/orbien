@@ -451,6 +451,71 @@ campo com `undefined`, `leader_person_id` sem validação em
 `NetworksService`). Três achados menores ficaram como pendência declarada,
 ver `PEND-05`.
 
+### ~~PROD-24 · Evento com inscrição paga (Premium)~~ · fechado (backend + painel do organizador)
+
+Entregue em 2026-09-15, sobre a variante Starter do `PROD-16` acima.
+`content_posts.registration_price` (`Decimal(12,2)`, NULL = gratuito) liga o
+modo pago; setar preço exige plano Premium — quem cobra isso é o
+`PostsService` (`assertRegistrationPricePlan`), não o banco, mesmo princípio
+de `assertEventFields`.
+
+Resposta à pergunta que o `PROD-16` deixou em aberto — **a vaga é confirmada
+no webhook, nunca no pedido**, seguindo o mesmo padrão do `PixPayment` de
+doação (`PixService.handleWebhook`, `pending → confirmed` por `updateMany`
+condicional, idempotente à reentrega da Asaas):
+
+- `EventRegistrationStatus` ganhou `pending_payment` — nasce assim no
+  `POST .../registrations/me`, fora de `ACTIVE` (não ocupa vaga confirmada,
+  não aparece na listagem padrão do organizador). `EventRegistrationPaymentStatus`
+  (`not_required`/`pending`/`paid`/`refunded`) registra o lado do pagamento;
+  `pix_payment_id` (`@unique`) liga a inscrição ao `PixPayment`.
+- **A vaga é reservada no pedido, não no pagamento** — sem isso, dois
+  pedidos simultâneos para o último lugar pagariam os dois e só um teria
+  vaga. A reserva conta `confirmed` **e** `pending_payment` criado nas
+  últimas 24h (a validade do QR da Asaas) contra `registration_limit`;
+  passada a janela, a linha para de contar sozinha, sem job de expiração.
+- **Sem fila de espera para evento pago** — cobrar por uma vaga incerta
+  reabriria a pergunta de reembolso, que esta entrega não resolve; evento
+  lotado recusa a tentativa (`400`). Escolha de escopo, registrada no
+  cabeçalho de `EventRegistrationsService`.
+- **Só o próprio inscrito paga.** `POST .../registrations` (organizador
+  inscreve visitante) recusa post pago — não há vínculo de pagamento a gerar
+  para uma inscrição feita por outra pessoa. Quem recebeu em espécie/fora do
+  PIX segue sem tela nesta entrega.
+- Falha da Asaas ao gerar o QR desfaz a reserva (`status: cancelled`) — não
+  deixa vaga presa esperando um QR que não existe.
+- `PixScenario` ganhou `event_registration`; `PixService.createForEventRegistration`
+  é o mesmo mecanismo do cenário 2 (QR dinâmico), chamado sem `JwtPayload`
+  (quem paga não é staff). Categoria financeira busca por `"inscri"`, com a
+  mesma queda para `"Oferta"` de sempre — zero-config para tenant que não
+  cadastrou categoria própria.
+- **Módulo próprio** (`PixModule`, não `FinancialModule` inteiro): o
+  `ContentModule` só precisa de `PixService`, e importar `FinancialModule`
+  arrastaria `ExportController` → `archiver` (ESM-only) para o grafo do
+  `ContentModule`, quebrando o Jest de módulos que nem tocam em exportação.
+
+**Sem tela de member self-service** — mesma lacuna que o `PROD-16` já tinha:
+não existe, em `apps/web` nem `apps/mobile`, nenhuma tela que chame
+`POST .../registrations/me` (só o painel do organizador, que é
+`admin_congregation`/`pastor`/`tenant_admin`). Sem essa tela, não há onde
+mostrar o QR do PIX dinâmico que esta entrega devolve. O que o `apps/web`
+ganhou: `EventRegistrationsPanel` mostra o preço e esconde "Inscrever" do
+organizador em evento pago (com a nota de que só o inscrito paga), e
+`CreatePostModal` ganhou o campo de preço, condicionado a inscrição ligada.
+A tela de member (provavelmente `apps/mobile`, que é onde o membro consome
+conteúdo) é trabalho novo, não coberto aqui.
+
+Testes: `event-registrations.service.spec.ts` (reserva/hold/24h, recusa de
+organizador em evento pago, desfazer reserva em falha da Asaas),
+`pix.service.spec.ts` (`createForEventRegistration`, webhook com
+`scenario: event_registration` finalizando a inscrição na mesma transação,
+sem recibo), `posts.service.spec.ts`/`create-post.dto.spec.ts` (preço exige
+Premium, `IsPositive`), `content.module.spec.ts`/`financial.module.spec.ts`
+atualizados para o `PixModule` novo. RLS: nenhum script novo — a mudança é
+só coluna em tabela existente (`event_registrations`), a policy de
+`015_rls_event_registrations.sql` já cobre; `event-registrations.spec.ts`
+(118 testes de RLS) roda sem alteração.
+
 ### Funcionalidade prevista, sem código
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
@@ -462,7 +527,7 @@ ver `PEND-05`.
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
-| `PROD-24` | 4 | Evento com inscrição **paga** | Premium | Metade Starter fechou em 2026-09-14 (ver `PROD-16` acima): o evento tem data, local, limite, prazo e fila de espera. Falta o pagamento — cobrar a inscrição encostaria em `PixPayment`/Asaas, que já existem para doação, e na pergunta de quando a vaga é confirmada (no pedido ou no webhook). Renumerado de `PROD-23` em 2026-09-14, porque esse ID ficou com a tela de pedidos de visita, aberta em paralelo na `main` — ID não se recicla |
+| `PROD-25` | 4 | Tela de member self-service para inscrição em evento (gratuito e pago) | Starter (gratuito) / Premium (pago) | `POST .../registrations/me` existe desde o `PROD-16` (2026-09-14) e nunca ganhou tela — nem `apps/web` nem `apps/mobile` chamam essa rota hoje, só o painel do organizador. Com o `PROD-24` (2026-09-15) a lacuna cresceu: sem essa tela também não há onde mostrar o QR do PIX dinâmico que `registerSelf` passou a devolver para evento pago. Provavelmente `apps/mobile`, que é onde o membro consome conteúdo — a decidir |
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com
@@ -678,13 +743,20 @@ Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
 árvore mede — exatamente o que a feature `mapa-monorepo-e-portoes` nasceu para
 caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
-| ID | O quê | Onde | Medido hoje |
-|---|---|---|---|
-| `AJU-01` | Rótulo "39 testes de RLS" no portão de pre-push | `scripts/pre-push.sh:120` | 118 testes em 6 suítes |
-| `AJU-02` | Contagem de RLS envelhecida | `docs/TESTES.md:53`, `:236`, `:334` dizem 39; `:1149`, `:1204` dizem 54 | 118 |
-| `AJU-03` | Contagem de e2e do web envelhecida | `docs/TESTES.md:1153` diz 12 em 8 arquivos | 16 em 10 |
+Nenhum item pendente nesta tabela — ver os três fechados abaixo.
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
+
+> **`AJU-01`, `AJU-02` e `AJU-03` fecharam em 2026-09-14.** Os três eram só
+> rótulo desatualizado, sem mudança de comportamento: `scripts/pre-push.sh:149`
+> passou a imprimir "118 testes de RLS" (era "39 testes de RLS"); em
+> `docs/TESTES.md`, as menções não-datadas de contagem de RLS em `:236`, `:334`
+> e no bloco de comandos da Fase 13 (a mensagem "39, depois 54 — a suíte
+> cresceu desde então") foram para 118, e a de e2e do web foi de "12 testes em
+> 8 arquivos" para "16 testes em 10 arquivos". A linha `:53` ("Ponto de partida
+> medido em 2026-09-02: 1 suíte na API, 39 testes de RLS") ficou como estava —
+> é medição histórica datada, não contagem corrente, e "corrigi-la" para 118
+> reescreveria o passado.
 
 > **`AJU-06` fechou em 2026-09-13.** A tabela de traceability de
 > `.specs/features/mapa-monorepo-e-portoes/spec.md` agora diz o que a rodada

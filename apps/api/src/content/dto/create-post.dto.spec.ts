@@ -117,3 +117,42 @@ describe('CreatePostDto — campos de evento (PROD-16)', () => {
     expect(await validate(dto)).toHaveLength(0);
   });
 });
+
+describe('CreatePostDto — inscrição paga (PROD-24)', () => {
+  it('converte `registration_price` de string para número', async () => {
+    const dto = plainToInstance(CreatePostDto, {
+      type: 'event',
+      title: 'Retiro',
+      registration_price: '49.90',
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.registration_price).toBe(49.9);
+  });
+
+  it('rejeita preço zero ou negativo — evento gratuito não manda o campo', async () => {
+    const dto = plainToInstance(CreatePostDto, {
+      type: 'event',
+      title: 'Retiro',
+      registration_price: '0',
+    });
+
+    expect((await validate(dto)).some((e) => e.property === 'registration_price')).toBe(true);
+  });
+
+  it('rejeita mais de duas casas decimais', async () => {
+    const dto = plainToInstance(CreatePostDto, {
+      type: 'event',
+      title: 'Retiro',
+      registration_price: '49.999',
+    });
+
+    expect((await validate(dto)).some((e) => e.property === 'registration_price')).toBe(true);
+  });
+
+  it('sem `registration_price`, evento gratuito passa normal', async () => {
+    const dto = plainToInstance(CreatePostDto, { type: 'event', title: 'Retiro' });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+});

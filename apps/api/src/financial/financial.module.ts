@@ -11,8 +11,7 @@ import { BalanceteController } from './balancete.controller';
 import { BalanceteService } from './balancete.service';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
-import { PixController } from './pix.controller';
-import { PixService } from './pix.service';
+import { PixModule } from './pix.module';
 import { ForecastService } from './forecast.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
@@ -26,28 +25,23 @@ import { ZipExportService } from './export/zip-export.service';
 import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
 import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
-import { DonationReceiptsController } from './donation-receipts.controller';
-import { DonationReceiptService } from './donation-receipts.service';
 
 @Module({
-  imports: [PrismaModule, HttpModule, StorageModule, MailModule, RecurringRuleModule],
+  imports: [PrismaModule, HttpModule, StorageModule, MailModule, RecurringRuleModule, PixModule],
   controllers: [
     CategoriesController,
     CostCentersController,
     BalanceteController,
     TransactionsController,
-    PixController,
     DashboardController,
     DreController,
     ExportController,
-    DonationReceiptsController,
   ],
   providers: [
     CategoriesService,
     CostCentersService,
     BalanceteService,
     TransactionsService,
-    PixService,
     ForecastService,
     DashboardService,
     DreService,
@@ -57,7 +51,6 @@ import { DonationReceiptService } from './donation-receipts.service';
     ZipExportService,
     SpedExportService,
     JobsService,
-    DonationReceiptService,
   ],
 })
 export class FinancialModule {}

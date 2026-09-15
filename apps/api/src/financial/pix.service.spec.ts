@@ -66,6 +66,8 @@ type Opts = {
   perdeCorrida?: boolean;
   /** Simula falha na geração do recibo (email fora do ar, etc). */
   receiptRejects?: boolean;
+  /** `count` que `tx.eventRegistration.updateMany` devolve (PROD-24). */
+  eventRegistrationFinalizeCount?: number;
 };
 
 function harness(opts: Opts = {}) {
@@ -78,6 +80,7 @@ function harness(opts: Opts = {}) {
     posts: [] as { url: string; body: unknown }[],
     gets: [] as string[],
     receiptCalls: [] as string[],
+    eventRegistrationUpdates: [] as Record<string, unknown>[],
   };
 
   let catCall = 0;
@@ -103,6 +106,14 @@ function harness(opts: Opts = {}) {
       create: (args: { data: Record<string, unknown> }) => {
         cap.transactions.push(args.data);
         return Promise.resolve({ id: 'tx-1' });
+      },
+    },
+    eventRegistration: {
+      updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        cap.eventRegistrationUpdates.push(args);
+        return Promise.resolve({
+          count: opts.eventRegistrationFinalizeCount ?? 1,
+        });
       },
     },
     pixPayment: {
@@ -553,6 +564,90 @@ describe('PixService', () => {
     });
   });
 
+  describe('createForEventRegistration (PROD-24)', () => {
+    beforeEach(() => {
+      process.env['ASAAS_API_KEY'] = 'chave-asaas';
+      process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+    });
+
+    it('devolve o QR e grava o pagamento no cenário `event_registration`', async () => {
+      const { service, cap } = harness();
+
+      const result = await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição — Acampamento');
+
+      expect(result).toMatchObject({ payment_id: 'pix-1', amount: 50 });
+      expect(cap.pixPayments[0]).toMatchObject({
+        scenario: 'event_registration',
+        status: 'pending',
+        asaas_payment_id: 'pay_123',
+      });
+    });
+
+    it('sem chave da Asaas, 503 antes de tocar no banco', async () => {
+      delete process.env['ASAAS_API_KEY'];
+      const { service, cap } = harness();
+
+      await expect(
+        service.createForEventRegistration('t1', 'g1', 50, 'Inscrição'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(cap.pixPayments).toEqual([]);
+    });
+
+    it('busca a categoria por "inscri", caindo para "Oferta" se não achar', async () => {
+      const { service, cap } = harness();
+
+      await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição');
+
+      expect(cap.categoryQueries[0]?.['name']).toEqual({ contains: 'inscri', mode: 'insensitive' });
+    });
+
+    it('igreja sem chave PIX vira 400', async () => {
+      const { service } = harness({ branding: null });
+
+      await expect(
+        service.createForEventRegistration('t1', 'g1', 50, 'Inscrição'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('Asaas fora do ar vira 503 e não grava pagamento órfão', async () => {
+      const { service, cap } = harness({ httpFails: true });
+
+      await expect(
+        service.createForEventRegistration('t1', 'g1', 50, 'Inscrição'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(cap.pixPayments).toEqual([]);
+    });
+
+    it('sem `app_name` no branding, cai para o nome do tenant', async () => {
+      const { service, cap } = harness({
+        branding: { pix_key: 'k', app_name: null },
+        httpGet: (url) =>
+          url.includes('/customers')
+            ? { data: [] }
+            : { encodedImage: '', payload: '', expirationDate: '' },
+      });
+
+      await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição');
+
+      expect((cap.posts[0]?.body as { name: string }).name).toBe('Igreja Central');
+    });
+
+    it('tenant sem nome no banco vira string vazia, não `undefined`', async () => {
+      const { service, cap } = harness({
+        branding: { pix_key: 'k', app_name: null },
+        tenant: null,
+        httpGet: (url) =>
+          url.includes('/customers')
+            ? { data: [] }
+            : { encodedImage: '', payload: '', expirationDate: '' },
+      });
+
+      await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição');
+
+      expect((cap.posts[0]?.body as { name: string }).name).toBe('');
+    });
+  });
+
   describe('createPublicDonation', () => {
     it('cria lançamento e pagamento na MESMA transação', async () => {
       const { service, cap } = harness();
@@ -959,6 +1054,74 @@ describe('PixService', () => {
       expect(cap.transactions).toEqual([]);
       // E não audita uma confirmação que não foi desta entrega.
       expect(cap.audits).toEqual([]);
+    });
+
+    it('inscrição de evento (PROD-24): confirma a vaga pendente na mesma transação, com descrição própria', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+          scenario: 'event_registration',
+        },
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      await Promise.resolve();
+
+      expect(cap.transactions[0]).toMatchObject({ description: 'Inscrição de evento paga via Asaas' });
+      expect(cap.eventRegistrationUpdates[0]).toMatchObject({
+        where: { pix_payment_id: 'pix-1', status: 'pending_payment' },
+        data: { status: 'confirmed', payment_status: 'paid' },
+      });
+      // Inscrição não é doação — não emite recibo.
+      expect(cap.receiptCalls).toEqual([]);
+    });
+
+    it('inscrição de evento: webhook sem registro pendente correspondente só loga, não falha', async () => {
+      // Pode acontecer se a inscrição foi cancelada entre o pedido e a
+      // confirmação da Asaas — o `updateMany` não acha `pending_payment` para
+      // atualizar, mas o pagamento em si segue confirmado normalmente.
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+          scenario: 'event_registration',
+        },
+        eventRegistrationFinalizeCount: 0,
+      });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.eventRegistrationUpdates).toHaveLength(1);
+    });
+
+    it('inscrição de evento: doação normal continua sem tocar em event_registration nem pular o recibo', async () => {
+      const { service, cap } = harness();
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      await Promise.resolve();
+
+      expect(cap.eventRegistrationUpdates).toEqual([]);
+      expect(cap.receiptCalls).toEqual(['tx-1']);
     });
 
     it('pagamento que já chegou `confirmed` do banco é ignorado de saída', async () => {

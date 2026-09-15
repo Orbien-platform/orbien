@@ -1012,11 +1012,12 @@ model PixPayment {
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
-  tenant       Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  transaction  FinancialTransaction? @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
-  donorPerson  Person?               @relation("PixDonor", fields: [donor_person_id], references: [id], onDelete: SetNull)
-  category     FinancialCategory     @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  tenant            Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation      Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  transaction       FinancialTransaction? @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
+  donorPerson       Person?               @relation("PixDonor", fields: [donor_person_id], references: [id], onDelete: SetNull)
+  category          FinancialCategory     @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  eventRegistration EventRegistration?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1076,6 +1077,10 @@ model ContentPost {
   // exige >= 1.
   registration_limit    Int?
   registration_deadline DateTime?
+  // NULL (ou 0) é evento gratuito. Setar preço exige plano Premium — quem
+  // cobra isso é o `PostsService`, não o banco, mesmo motivo do resto deste
+  // bloco (`PROD-24`).
+  registration_price    Decimal?  @db.Decimal(12, 2)
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -1105,7 +1110,7 @@ model ContentPost {
  * migration: o Prisma não modela unique parcial.
  */
 model EventRegistration {
-  id                    String                  @id @default(uuid())
+  id                    String                         @id @default(uuid())
   tenant_id             String
   congregation_id       String
   content_post_id       String
@@ -1113,19 +1118,29 @@ model EventRegistration {
   full_name             String
   email                 String?
   phone                 String?
-  status                EventRegistrationStatus @default(confirmed)
+  status                EventRegistrationStatus        @default(confirmed)
   /**
    * Quem registrou. NULL quando a própria pessoa se inscreveu.
    */
   registered_by_user_id String?
   cancelled_at          DateTime?
-  created_at            DateTime                @default(now())
-  updated_at            DateTime                @updatedAt
+  created_at            DateTime                       @default(now())
+  updated_at            DateTime                       @updatedAt
+  // --- Pagamento (PROD-24, Premium) ---
+  // `not_required` é o evento gratuito de sempre (PROD-16) — nada muda para
+  // ele. Evento pago nasce com `status = pending_payment` (fora da contagem
+  // de vagas) e só vira `confirmed` quando o webhook da Asaas confirma o
+  // pagamento (`PixService.handleWebhook`); nunca no pedido. Ver o cabeçalho
+  // do `EventRegistrationsService` para a reserva de vaga de quem está
+  // pagando.
+  payment_status        EventRegistrationPaymentStatus @default(not_required)
+  pix_payment_id        String?                        @unique
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   contentPost  ContentPost  @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
   person       Person?      @relation(fields: [person_id], references: [id], onDelete: SetNull)
+  pixPayment   PixPayment?  @relation(fields: [pix_payment_id], references: [id], onDelete: SetNull)
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1720,6 +1735,7 @@ enum PixScenario {
   manual
   dynamic
   public
+  event_registration
 }
 
 enum PixStatus {
@@ -1745,6 +1761,18 @@ enum EventRegistrationStatus {
   confirmed
   waitlisted
   cancelled
+  // Evento pago (PROD-24): reservou a vaga, aguardando o webhook da Asaas
+  // confirmar. Fica fora de `ACTIVE` (não conta em vaga nem aparece na
+  // listagem padrão do organizador) até virar `confirmed`.
+  pending_payment
+}
+
+enum EventRegistrationPaymentStatus {
+  // Evento gratuito (PROD-16) — o padrão de sempre, nunca muda.
+  not_required
+  pending
+  paid
+  refunded
 }
 
 enum AudienceSegmentType {

@@ -159,6 +159,30 @@ export class PixService {
     return category;
   }
 
+  /**
+   * Igual a `resolveTenantFromUser`, mas para quando quem paga não é staff
+   * (inscrição de evento, PROD-24: o inscrito não tem `admin_congregation`/
+   * `treasurer`) e a congregação já é conhecida — não precisa "a primeira do
+   * tenant".
+   */
+  private async resolvePixConfig(
+    tenantId: string,
+  ): Promise<Pick<TenantContext, 'pixKey' | 'churchName'>> {
+    const [branding, tenant] = await Promise.all([
+      this.prisma.client.brandingConfig.findUnique({
+        where: { tenant_id: tenantId },
+        select: { pix_key: true, app_name: true },
+      }),
+      this.prisma.client.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+    ]);
+
+    if (!branding?.pix_key) {
+      throw new BadRequestException('Igreja não configurou chave PIX');
+    }
+
+    return { pixKey: branding.pix_key, churchName: branding.app_name ?? (tenant?.name ?? '') };
+  }
+
   private async resolveTenantAdmin(tenantId: string): Promise<string> {
     const assignment = await this.prisma.client.roleAssignment.findFirst({
       where: { tenant_id: tenantId, role_code: 'tenant_admin' },
@@ -272,6 +296,79 @@ export class PixService {
     };
   }
 
+  // ── Inscrição de evento paga (PROD-24, Premium) ──────────────────────────
+  //
+  // Mesmo mecanismo do cenário 2 (QR dinâmico via Asaas), chamado pelo
+  // `ContentModule` em nome de quem está se inscrevendo — não de staff, por
+  // isso não recebe `JwtPayload` nem exige papel financeiro. Quem decide se
+  // a vaga existe e reserva o lugar é o `EventRegistrationsService`; esta
+  // função só cobra e devolve o QR.
+
+  async createForEventRegistration(
+    tenantId: string,
+    congregationId: string,
+    amount: number,
+    description: string,
+  ): Promise<{
+    payment_id: string;
+    qr_code: string;
+    qr_code_image: string;
+    amount: number;
+    expires_at: string;
+  }> {
+    if (!this.asaasKey) {
+      throw new ServiceUnavailableException('Serviço PIX indisponível');
+    }
+
+    const ctx = await this.resolvePixConfig(tenantId);
+    const category = await this.resolveCategory(tenantId, congregationId, 'inscri');
+    const externalRef = `ORB-${this.shortRef()}`;
+
+    let asaasPaymentId: string;
+    let qrCode: AsaasQrCode;
+
+    try {
+      const customerId = await this.resolveAsaasCustomer(tenantId, ctx.churchName);
+
+      const payment = await this.asaasPost<AsaasPayment>('/payments', {
+        customer: customerId,
+        billingType: 'PIX',
+        value: amount,
+        dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        description,
+        externalReference: externalRef,
+      });
+
+      asaasPaymentId = payment.id;
+      qrCode = await this.asaasGet<AsaasQrCode>(`/payments/${asaasPaymentId}/pixQrCode`);
+    } catch (err) {
+      this.logger.error('Asaas API error', err);
+      throw new ServiceUnavailableException('Serviço PIX indisponível');
+    }
+
+    const pixPayment = await this.prisma.client.pixPayment.create({
+      data: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        scenario: PixScenario.event_registration,
+        status: PixStatus.pending,
+        amount: new Prisma.Decimal(amount),
+        pix_key: ctx.pixKey,
+        asaas_payment_id: asaasPaymentId,
+        qr_code: qrCode.payload,
+        category_id: category.id,
+      },
+    });
+
+    return {
+      payment_id: pixPayment.id,
+      qr_code: qrCode.payload,
+      qr_code_image: qrCode.encodedImage,
+      amount,
+      expires_at: qrCode.expirationDate,
+    };
+  }
+
   // ── Cenário 3: Doação pública ─────────────────────────────────────────────
 
   async createPublicDonation(dto: CreatePixDto) {
@@ -352,6 +449,7 @@ export class PixService {
         category_id: true,
         status: true,
         donor_person_id: true,
+        scenario: true,
       },
     });
 
@@ -406,7 +504,10 @@ export class PixService {
           type: TransactionType.income,
           amount,
           occurred_at: new Date(),
-          description: 'PIX confirmado via Asaas',
+          description:
+            pixPayment.scenario === PixScenario.event_registration
+              ? 'Inscrição de evento paga via Asaas'
+              : 'PIX confirmado via Asaas',
           category_id: pixPayment.category_id,
           source: TransactionSource.pix_webhook,
           created_by_user_id: adminUserId,
@@ -414,6 +515,23 @@ export class PixService {
         },
         select: { id: true },
       });
+
+      // Inscrição de evento (PROD-24): a vaga já foi reservada no pedido
+      // (`EventRegistrationsService`, status `pending_payment`, fora da
+      // contagem de `confirmed`/`waitlisted`) — aqui só confirma. Sem
+      // recontagem de vaga: a reserva já aconteceu, e recontar abriria a
+      // mesma corrida que o pedido evitou.
+      if (pixPayment.scenario === PixScenario.event_registration) {
+        const { count } = await tx.eventRegistration.updateMany({
+          where: { pix_payment_id: pixPayment.id, status: 'pending_payment' },
+          data: { status: 'confirmed', payment_status: 'paid' },
+        });
+        if (count === 0) {
+          this.logger.warn(
+            `Webhook de inscrição paga sem registro pendente para pix_payment=${pixPayment.id}`,
+          );
+        }
+      }
 
       return transaction.id;
     });
@@ -438,12 +556,16 @@ export class PixService {
       })
       .catch(() => void 0);
 
-    // Recibo automático (Premium, PROD-03) — não pode desfazer um pagamento
-    // já confirmado pela Asaas nem fazer o webhook responder com erro (isso
-    // faria ela reenviar um evento já tratado). Ver DonationReceiptService.
-    this.donationReceiptService.generateForTransaction(transactionId).catch((err) => {
-      this.logger.warn(`Falha ao gerar recibo de doação (transaction=${transactionId}): ${String(err)}`);
-    });
+    // Recibo automático (Premium, PROD-03) — só para doação; inscrição de
+    // evento (PROD-24) não é doação e não emite recibo. Não pode desfazer um
+    // pagamento já confirmado pela Asaas nem fazer o webhook responder com
+    // erro (isso faria ela reenviar um evento já tratado). Ver
+    // DonationReceiptService.
+    if (pixPayment.scenario !== PixScenario.event_registration) {
+      this.donationReceiptService.generateForTransaction(transactionId).catch((err) => {
+        this.logger.warn(`Falha ao gerar recibo de doação (transaction=${transactionId}): ${String(err)}`);
+      });
+    }
 
     return { received: true };
   }

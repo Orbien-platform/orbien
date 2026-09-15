@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -563,5 +563,107 @@ describe('PostsService — campos de evento (PROD-16)', () => {
         data: expect.objectContaining({ registration_deadline: null }),
       }),
     );
+  });
+});
+
+/**
+ * PROD-24 — evento com inscrição paga. `registration_price` exige Premium; a
+ * checagem é do serviço (`assertRegistrationPricePlan`), mesmo princípio do
+ * `assertEventFields` acima.
+ */
+describe('PostsService — preço de inscrição exige Premium (PROD-24)', () => {
+  it('cria evento pago quando o plano é premium', async () => {
+    const client = clientWith();
+    client.contentPost.create.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.create(
+      't1',
+      'g1',
+      'u1',
+      { type: 'event', title: 'Acampamento', registration_price: 50 } as never,
+      'premium',
+    );
+
+    expect(client.contentPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ registration_price: expect.anything() }),
+      }),
+    );
+  });
+
+  it('plano starter não pode criar evento pago', async () => {
+    const { service } = serviceWith(clientWith());
+
+    await expect(
+      service.create(
+        't1',
+        'g1',
+        'u1',
+        { type: 'event', title: 'Acampamento', registration_price: 50 } as never,
+        'starter',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('sem plano informado (chamada interna), o campo passa — só a rota HTTP aplica o guard', async () => {
+    const client = clientWith();
+    client.contentPost.create.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await expect(
+      service.create('t1', 'g1', 'u1', {
+        type: 'event',
+        title: 'Acampamento',
+        registration_price: 50,
+      } as never),
+    ).resolves.toEqual({ id: 'p1' });
+  });
+
+  it('premium grava o preço no update, convertido para Decimal', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    client.contentPost.update.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.update(
+      't1',
+      'g1',
+      'p1',
+      { registration_price: 79.9 } as never,
+      'premium',
+    );
+
+    expect(client.contentPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ registration_price: expect.anything() }),
+      }),
+    );
+  });
+
+  it('starter não pode setar preço no update de um evento já existente', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    const { service } = serviceWith(client);
+
+    await expect(
+      service.update('t1', 'g1', 'p1', { registration_price: 50 } as never, 'starter'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('evento gratuito (sem `registration_price`) passa em qualquer plano', async () => {
+    const client = clientWith();
+    client.contentPost.create.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await expect(
+      service.create(
+        't1',
+        'g1',
+        'u1',
+        { type: 'event', title: 'Culto aberto', registration_enabled: true } as never,
+        'starter',
+      ),
+    ).resolves.toEqual({ id: 'p1' });
   });
 });

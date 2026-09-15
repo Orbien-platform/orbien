@@ -28,21 +28,26 @@ const ALL_ROLES = PRODUCT_AREA_READ_ROLES.content;
 const ORGANIZER_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'] as const;
 
 /**
- * Inscrição em evento — `PROD-16`, variante Starter (sem pagamento).
+ * Inscrição em evento — `PROD-16` (Starter, sem pagamento) e `PROD-24`
+ * (Premium, com pagamento).
  *
  * Duas portas, de propósito, e não uma rota que muda de forma conforme o papel
  * de quem chama:
  *
  *   `.../registrations/me`  o próprio usuário se inscreve e desiste. Sem
  *                           corpo: nome e pessoa vêm do cadastro, então
- *                           ninguém se inscreve como outra pessoa.
+ *                           ninguém se inscreve como outra pessoa. Em evento
+ *                           pago, é a única porta — ver o guard em
+ *                           `EventRegistrationsService.register`.
  *   `.../registrations`     o organizador administra a lista — inclusive
  *                           inscrevendo o visitante que confirmou por
- *                           telefone e ainda não é cadastro.
+ *                           telefone e ainda não é cadastro. Recusa evento
+ *                           pago: não há vínculo de pagamento a gerar para
+ *                           quem não é o próprio inscrito.
  *
- * Nada aqui é Premium: a linha Premium do `PROD-16` é o evento **com
- * pagamento**, que não existe nesta entrega. Um evento gratuito é Starter, e
- * por isso não há `PlanGuard` neste controller.
+ * Sem `PlanGuard` neste controller: o preço é o que exige Premium, e quem
+ * cobra isso é `PostsService.assertRegistrationPricePlan`, na escrita do
+ * post — não aqui. Um evento sem preço continua Starter, dos dois papéis.
  */
 @Controller('content/posts/:postId/registrations')
 @UseGuards(JwtAuthGuard, RolesGuard)

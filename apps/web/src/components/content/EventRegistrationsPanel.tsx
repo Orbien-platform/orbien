@@ -28,6 +28,12 @@ interface RegistrationsResponse {
   confirmed_count: number;
   waitlisted_count: number;
   seats_left: number | null;
+  /** NULL é evento gratuito (PROD-16). Setado, é pago — Premium (PROD-24). */
+  registration_price: number | null;
+}
+
+function formatPrice(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 interface EventRegistrationsPanelProps {
@@ -172,6 +178,10 @@ export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistra
 
   const confirmed = info.data.filter((r) => r.status === "confirmed");
   const waitlisted = info.data.filter((r) => r.status === "waitlisted");
+  // `Boolean`, não `!== null`: respostas antigas sem o campo (ou testes que
+  // não o simulam) mandam `undefined`, e preço sempre é positivo quando
+  // presente — não há `0` "de verdade" a distinguir de ausente.
+  const isPaid = Boolean(info.registration_price);
 
   return (
     <div className="flex flex-col gap-3 border-t border-[var(--border-default)] pt-3">
@@ -183,6 +193,11 @@ export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistra
             {info.registration_limit !== null && ` de ${info.registration_limit}`}
             {info.waitlisted_count > 0 && ` · ${info.waitlisted_count} na fila de espera`}
           </p>
+          {isPaid && (
+            <p className="mt-0.5 text-xs text-stone">
+              Inscrição paga — {formatPrice(info.registration_price as number)}
+            </p>
+          )}
           {info.registration_deadline && (
             <p className="mt-0.5 text-xs text-stone">
               {info.registrations_closed ? "Prazo encerrado em " : "Inscrições até "}
@@ -190,7 +205,10 @@ export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistra
             </p>
           )}
         </div>
-        {!adding && (
+        {/* Evento pago não tem "Inscrever" do organizador: só o próprio
+            inscrito paga, pelo PIX (PROD-24) — ver a nota no
+            `EventRegistrationsController` do backend. */}
+        {!adding && !isPaid && (
           <Button
             variant="outline"
             size="sm"
@@ -202,6 +220,13 @@ export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistra
           </Button>
         )}
       </div>
+
+      {isPaid && (
+        <p className="text-xs text-stone">
+          Inscrição paga é feita pelo próprio inscrito, via PIX — não há inscrição manual pelo
+          organizador para este evento.
+        </p>
+      )}
 
       {adding && (
         <form onSubmit={handleAdd} noValidate className="flex flex-col gap-2 rounded-[8px] bg-[var(--surface-subtle)] p-3">

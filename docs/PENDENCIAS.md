@@ -1489,6 +1489,42 @@ prova nada sobre produção, só que a query é válida.
 
 ---
 
+## `NativeAnimatedHelper` sem mock derrubava o piso de cobertura do mobile
+
+Achado em 2026-09-14, durante a implementação da home do `apps/mobile`
+(`.specs/features/home-dashboard-mobile/`) — apresentado ao usuário como
+achado de portão (regra do `CLAUDE.md`) e a decisão foi investigar e
+corrigir na hora, não só registrar.
+
+**Sintoma:** `npm run test -w orbien-mobile` falhava em 3 suítes, 7 testes
+(`animated-splash.test.tsx`, `_layout.test.tsx`, `navigation-boot.test.tsx`),
+todas com `Unable to locate attached view in the native tree` a partir de
+`AnimatedProps._connectAnimatedView2`. Confirmado com `git stash` que
+reproduzia igual **antes** de qualquer mudança desta sessão — não era a
+feature nova, era pré-existente no repositório. Com essas 3 suítes falhando,
+`npm run test:cov -w orbien-mobile` também furava os quatro limiares do piso
+da Fase 15 (94/84/93/97): 93.32/83.48/92.92/97.17 medido antes da correção.
+
+**Causa:** `AnimatedSplash` usa `useNativeDriver: true`, que precisa de uma
+view nativa attachada — inexistente no test renderer. O RN espera isso
+resolvido por um mock de `NativeAnimatedHelper`, que `jest.setup.js` nunca
+teve. Não é falta de mock por falta de tela testada: é que o caminho do
+módulo mudou entre versões do React Native (hoje
+`react-native/src/private/animated/NativeAnimatedHelper.js`, não o
+`Libraries/Animated/...` de versões antigas — a doc oficial mais buscada
+ensina o caminho antigo), então quem tentasse adicionar o mock pelo caminho
+"óbvio" continuaria vendo o erro.
+
+**Correção:** uma linha em `jest.setup.js`:
+`jest.mock("react-native/src/private/animated/NativeAnimatedHelper")`.
+
+**Evidência:** `npm run test -w orbien-mobile` passa a fechar em 41 suítes /
+264 testes, 0 falhas. `npm run test:cov -w orbien-mobile` fecha em
+94.25/84.67/94.06/98.08 — os quatro limiares do piso voltam a passar de
+verdade, sem abaixar o threshold.
+
+---
+
 ## Registro
 
 Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.

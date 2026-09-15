@@ -13,12 +13,24 @@
 // que estado cada escala estava), e `scheduled_date` finalmente em tela:
 // o campo já vinha da API e não era mostrado em lugar nenhum, então a
 // escala não dizia *quando*.
+//
+// Home (HOME-01..05, .specs/features/home-dashboard-mobile/): esta é a
+// aba raiz, então é a home do app, não só a escala. Saudação por horário
+// (sem nome — o app não guarda nome/e-mail do usuário em lugar nenhum, ver
+// perfil.tsx) e dois destaques secundários, "Meus grupos" e "Avisos
+// recentes", de fontes já usadas em outras abas sem gate de papel
+// (`listMyGroups`, `getPosts`). Os dois degradam em silêncio: falha ou
+// lista vazia só omite a seção, nunca disputa espaço com o erro de escala
+// (que é o dado principal da tela) nem aparece como alerta.
+// `listUpcomingInstances` (Celebrações) fica fora de propósito — é
+// exclusiva de `ministry_leader`+.
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../components/Alert";
 import { AppButton } from "../../components/AppButton";
+import { Avatar } from "../../components/Avatar";
 import { BrandHeader } from "../../components/BrandHeader";
 import { Badge, type BadgeTone } from "../../components/Badge";
 import { Card } from "../../components/Card";
@@ -28,9 +40,13 @@ import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { getPosts } from "../../lib/content/content-client";
+import type { Post } from "../../lib/content/types";
 import { checkIn, getMyAssignments, respondToAssignment } from "../../lib/escala/escala-client";
 import type { Assignment, AssignmentStatus } from "../../lib/escala/types";
-import { formatDateTime } from "../../lib/format/date";
+import { formatDateTime, getGreeting } from "../../lib/format/date";
+import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
+import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
 import {
   CalendarCheck,
   CalendarOff,
@@ -38,12 +54,20 @@ import {
   CircleAlert,
   CircleCheck,
   Church,
+  Clock,
+  Newspaper,
   WifiOff,
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
 const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
+
+// HOME-02: 2 grupos cabem sem a home virar uma segunda tela de Grupos.
+const MAX_HOME_GROUPS = 2;
+// HOME-03: mesmo limite já pedido à API — evita truncar client-side algo
+// que o backend já poderia ter paginado menor.
+const MAX_HOME_POSTS = 3;
 
 const STATUS_BADGE: Record<AssignmentStatus, { label: string; tone: BadgeTone }> = {
   pending: { label: "Pendente", tone: "info" },
@@ -66,6 +90,11 @@ export default function EscalaScreen() {
   // (state) só existe para o `disabled` visual dos botões.
   const pendingIdsRef = useRef<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  // Destaques secundários da home (HOME-02/03): `null` = ainda não
+  // chegou (não desenha nada, igual ao `assignments` acima); erro cai no
+  // `catch` sem `setError` — a seção some, a tela não trava por isso.
+  const [groups, setGroups] = useState<SmallGroupMine[] | null>(null);
+  const [posts, setPosts] = useState<Post[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,10 +109,25 @@ export default function EscalaScreen() {
         setError(describeLoadError(err, "sua escala"));
       });
 
+    listMyGroups()
+      .then((result) => {
+        if (cancelled) return;
+        setGroups(result);
+      })
+      .catch(() => undefined);
+
+    getPosts(1, MAX_HOME_POSTS)
+      .then((result) => {
+        if (cancelled) return;
+        setPosts(result.data);
+      })
+      .catch(() => undefined);
+
     return () => {
       cancelled = true;
     };
   }, []);
+  const greeting = getGreeting(new Date());
 
   function updateAssignment(id: string, patch: Partial<Assignment>) {
     setAssignments((current) =>
@@ -148,6 +192,12 @@ export default function EscalaScreen() {
   return (
     <Screen>
       <BrandHeader />
+      <Text
+        testID="home-greeting"
+        style={[typography.h2, styles.greeting, { color: colors.textPrimary }]}
+      >
+        {greeting}
+      </Text>
       <Card
         testID="indisponibilidade-link"
         onPress={() => router.push("/indisponibilidade")}
@@ -170,6 +220,82 @@ export default function EscalaScreen() {
           />
         </View>
       </Card>
+
+      {groups && groups.length > 0 ? (
+        <View testID="home-groups-section" style={styles.section}>
+          <SectionLabel>Meus grupos</SectionLabel>
+          {groups.slice(0, MAX_HOME_GROUPS).map((group) => (
+            <Card
+              key={group.id}
+              testID={`home-group-${group.id}`}
+              onPress={() => router.push(`/grupo/${group.id}`)}
+              accessibilityLabel={group.name}
+            >
+              <View style={styles.highlightRow}>
+                <Avatar name={group.name} />
+                <View style={styles.cardBody}>
+                  <Text style={[typography.h3, { color: colors.textPrimary }]}>{group.name}</Text>
+                  {group.meeting_time ? (
+                    <View style={styles.metaRow}>
+                      <Clock
+                        size={iconSize.inline}
+                        color={colors.textTertiary}
+                        strokeWidth={ICON_STROKE_WIDTH}
+                      />
+                      <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+                        {group.meeting_time}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <ChevronRight
+                  size={iconSize.inline}
+                  color={colors.textTertiary}
+                  strokeWidth={ICON_STROKE_WIDTH}
+                />
+              </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {posts && posts.length > 0 ? (
+        <View testID="home-posts-section" style={styles.section}>
+          <SectionLabel>Avisos recentes</SectionLabel>
+          {posts.slice(0, MAX_HOME_POSTS).map((post) => (
+            <Card
+              key={post.id}
+              testID={`home-post-${post.id}`}
+              onPress={() => router.push(`/post/${post.id}`)}
+              accessibilityLabel={post.title}
+            >
+              <View style={styles.highlightRow}>
+                <Avatar icon={Newspaper} />
+                <View style={styles.cardBody}>
+                  <Text
+                    style={[typography.h3, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {post.title}
+                  </Text>
+                  {post.published_at ? (
+                    <Text
+                      style={[typography.caption, styles.when, { color: colors.textTertiary }]}
+                    >
+                      {formatDateTime(post.published_at)}
+                    </Text>
+                  ) : null}
+                </View>
+                <ChevronRight
+                  size={iconSize.inline}
+                  color={colors.textTertiary}
+                  strokeWidth={ICON_STROKE_WIDTH}
+                />
+              </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
 
       {actionError ? (
         <Alert messageTestID="escala-action-error" message={actionError} />
@@ -284,6 +410,13 @@ export default function EscalaScreen() {
 }
 
 const styles = StyleSheet.create({
+  greeting: { marginBottom: spacing.lg },
+  section: { marginBottom: spacing.lg },
+  highlightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
   shortcut: { marginBottom: spacing.lg },
   shortcutRow: {
     flexDirection: "row",
