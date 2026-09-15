@@ -33,7 +33,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn(),
       count: jest.fn(),
     },
-    groupMeeting: { findMany: jest.fn() },
+    groupMeeting: { findMany: jest.fn(), aggregate: jest.fn() },
     attendanceRecord: { findMany: jest.fn() },
     smallGroupVisitRequest: { findMany: jest.fn() },
     person: { findUnique: jest.fn() },
@@ -658,6 +658,51 @@ describe('SmallGroupsService', () => {
         'sg4',
       ]);
       expect(tree?.children.find((c) => c.id === 'sg3')?.children).toEqual([]);
+    });
+  });
+
+  describe('getHealth', () => {
+    it('CEL20-04: célula sem GroupMeeting nenhum é red, com last_meeting_at e days_since_last_meeting nulos', async () => {
+      const client = clientWith();
+      client.groupMeeting.aggregate.mockResolvedValue({ _max: { occurred_at: null } });
+      const service = serviceWith(client);
+
+      const result = await service.getHealth('sg1');
+
+      expect(client.groupMeeting.aggregate).toHaveBeenCalledWith({
+        where: { small_group_id: 'sg1' },
+        _max: { occurred_at: true },
+      });
+      expect(result).toEqual({
+        status: 'red',
+        last_meeting_at: null,
+        days_since_last_meeting: null,
+      });
+    });
+
+    it('CEL20-04: encontro recente (hoje) é green, com days_since_last_meeting = 0', async () => {
+      const client = clientWith();
+      const now = new Date();
+      client.groupMeeting.aggregate.mockResolvedValue({ _max: { occurred_at: now } });
+      const service = serviceWith(client);
+
+      const result = await service.getHealth('sg1');
+
+      expect(result.status).toBe('green');
+      expect(result.last_meeting_at).toBe(now);
+      expect(result.days_since_last_meeting).toBe(0);
+    });
+
+    it('CEL20-04: encontro há 20 dias é yellow', async () => {
+      const client = clientWith();
+      const vinteDias = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
+      client.groupMeeting.aggregate.mockResolvedValue({ _max: { occurred_at: vinteDias } });
+      const service = serviceWith(client);
+
+      const result = await service.getHealth('sg1');
+
+      expect(result.status).toBe('yellow');
+      expect(result.days_since_last_meeting).toBe(20);
     });
   });
 

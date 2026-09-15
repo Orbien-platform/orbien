@@ -456,6 +456,30 @@ export class SmallGroupsService {
     return this.prisma.client.groupMembership.delete({ where: { id: membership.id } });
   }
 
+  // Semáforo de saúde da célula (PROD-20, CEL20-04): último encontro numa
+  // única agregação, classificado por `classifyHealth`.
+  async getHealth(groupId: string): Promise<{
+    status: HealthStatus;
+    last_meeting_at: Date | null;
+    days_since_last_meeting: number | null;
+  }> {
+    const { _max } = await this.prisma.client.groupMeeting.aggregate({
+      where: { small_group_id: groupId },
+      _max: { occurred_at: true },
+    });
+
+    const lastMeetingAt = _max.occurred_at;
+    const daysSinceLastMeeting = lastMeetingAt
+      ? Math.floor((Date.now() - lastMeetingAt.getTime()) / MS_PER_DAY)
+      : null;
+
+    return {
+      status: classifyHealth(lastMeetingAt),
+      last_meeting_at: lastMeetingAt,
+      days_since_last_meeting: daysSinceLastMeeting,
+    };
+  }
+
   async getHierarchy(groupId: string): Promise<HierarchyNode | null> {
     const rows = await this.prisma.client.$queryRaw<HierarchyRow[]>`
       WITH RECURSIVE hierarchy AS (
