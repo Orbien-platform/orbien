@@ -86,6 +86,13 @@ interface GroupDetailSheetProps {
   groupId: string | null;
   onUpdated: () => void;
   canEdit: boolean;
+  /**
+   * O usuário logado tem o papel `cell_leader` (em alguma célula, não
+   * necessariamente esta). Dispara a checagem de "sou líder desta célula"
+   * via `GET /small-groups/mine` — mesma fonte que o backend usa para
+   * autorizar `multiply` quando o líder não é admin/pastor (CEL20-01).
+   */
+  isCellLeader?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -277,8 +284,10 @@ export function GroupDetailSheet({
   groupId,
   onUpdated,
   canEdit,
+  isCellLeader,
 }: GroupDetailSheetProps) {
   const [group, setGroup] = useState<GroupDetail | null>(null);
+  const [isLeaderOfGroup, setIsLeaderOfGroup] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [activeTab, setActiveTab] = useState("info");
   const [editing, setEditing] = useState(false);
@@ -330,6 +339,31 @@ export function GroupDetailSheet({
     };
   }, [open, groupId, reloadTick]);
 
+  // "Sou líder desta célula" (CEL20-01): canEdit já cobre admin/pastor; um
+  // cell_leader sem canEdit só multiplica a célula que lidera, então checa
+  // `GET /small-groups/mine` (mesma fonte que o backend usa) e compara pelo
+  // id do grupo. Efeito à parte do de cima para não custar essa chamada a
+  // quem já tem canEdit nem mexer no fluxo de carregamento já testado.
+  useEffect(() => {
+    if (!open || !groupId || !isCellLeader) {
+      setIsLeaderOfGroup(false);
+      return;
+    }
+    const signal = { cancelled: false };
+    api
+      .get<{ id: string; role: string }[]>("/small-groups/mine")
+      .then(({ data }) => {
+        if (signal.cancelled) return;
+        setIsLeaderOfGroup(data.some((g) => g.id === groupId && g.role === "leader"));
+      })
+      .catch(() => {
+        if (!signal.cancelled) setIsLeaderOfGroup(false);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, groupId, isCellLeader]);
+
   // Reset ao fechar acontece no handler, não em effect.
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -340,6 +374,7 @@ export function GroupDetailSheet({
       setExpandedMeetingId(null);
       setMeetingMaterials({});
       setLoadedKey(null);
+      setIsLeaderOfGroup(false);
     }
     onOpenChange(next);
   }
@@ -411,6 +446,9 @@ export function GroupDetailSheet({
   }
 
   const members: Membership[] = group?.memberships ?? [];
+  // CEL20-01: admin/pastor (canEdit) OU o cell_leader dono desta célula —
+  // nunca cell_leader de outra célula.
+  const canMultiply = canEdit || isLeaderOfGroup;
 
   return (
     <>
@@ -531,7 +569,7 @@ export function GroupDetailSheet({
                       )}
 
                       {/* Multiplicação de célula (PROD-20, CEL20-01) */}
-                      {canEdit && (
+                      {canMultiply && (
                         <div className="px-4 py-3">
                           <Button
                             type="button"

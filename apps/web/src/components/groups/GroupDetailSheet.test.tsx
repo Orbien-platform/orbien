@@ -830,6 +830,73 @@ describe("GroupDetailSheet", () => {
     );
   });
 
+  it("shows the multiply button for the cell_leader who owns this group", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine")
+        return Promise.resolve({ data: [{ id: "g1", role: "leader" }] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Multiplicar célula" })).toBeInTheDocument();
+  });
+
+  it("hides the multiply button for a cell_leader of a different group", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine")
+        return Promise.resolve({ data: [{ id: "g2", role: "leader" }] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/mine"));
+    expect(screen.queryByRole("button", { name: "Multiplicar célula" })).not.toBeInTheDocument();
+  });
+
+  it("does not fetch /small-groups/mine, nor show the multiply button, for a non-cell_leader without canEdit", async () => {
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Multiplicar célula" })).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalledWith("/small-groups/mine");
+  });
+
   it("opens the register-meeting modal and refreshes the meetings list on completion", async () => {
     let meetingsCallCount = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
