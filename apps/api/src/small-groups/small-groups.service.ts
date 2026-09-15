@@ -66,19 +66,37 @@ type HierarchyRow = {
   group_type_name: string | null;
   parent_group_id: string | null;
   leader_person_id: string;
+  leader_person_name: string | null;
   is_public: boolean;
   meeting_time: string | null;
   recurrence: string | null;
   depth: number;
 };
 
-type HierarchyNode = Omit<HierarchyRow, 'depth'> & { children: HierarchyNode[] };
-
 type AncestorRow = {
   id: string;
   name: string;
   leader_person_id: string;
+  leader_person_name: string | null;
   parent_group_id: string | null;
+};
+
+// Árvore genealógica (PROD-20, CEL20-06): `generation` negativo para
+// ancestrais, 0 para a própria célula, positivo para descendentes.
+// `ancestors` é achatado (sem `children`); `tree` mantém a recursão.
+export type GenealogyNode = {
+  id: string;
+  name: string;
+  leader_person_name: string | null;
+  generation: number;
+  health_status: HealthStatus;
+};
+
+export type GenealogyTreeNode = GenealogyNode & { children: GenealogyTreeNode[] };
+
+export type GenealogyResponse = {
+  ancestors: GenealogyNode[];
+  tree: GenealogyTreeNode | null;
 };
 
 // Teto de ancestrais retornados (PROD-20, CEL20-06): simétrico às 3 gerações
@@ -103,15 +121,24 @@ export function classifyHealth(lastMeetingAt: Date | null, now: Date = new Date(
   return 'red';
 }
 
-function buildTree(flat: HierarchyRow[], nodeId: string): HierarchyNode | null {
+function buildGenealogyTree(
+  flat: HierarchyRow[],
+  nodeId: string,
+  healthByGroupId: Map<string, HealthStatus>,
+  generation = 0,
+): GenealogyTreeNode | null {
   const node = flat.find((n) => n.id === nodeId);
   if (!node) return null;
-  const { depth: _depth, ...rest } = node;
+
   return {
-    ...rest,
+    id: node.id,
+    name: node.name,
+    leader_person_name: node.leader_person_name,
+    generation,
+    health_status: healthByGroupId.get(node.id) ?? classifyHealth(null),
     children: flat
       .filter((n) => n.parent_group_id === nodeId)
-      .map((c) => buildTree(flat, c.id)!)
+      .map((c) => buildGenealogyTree(flat, c.id, healthByGroupId, generation + 1)!)
       .filter(Boolean),
   };
 }
@@ -508,36 +535,74 @@ export class SmallGroupsService {
     while (parentId && ancestors.length < ANCESTOR_DEPTH_CAP) {
       const parent = await this.prisma.client.smallGroup.findUnique({
         where: { id: parentId },
-        select: { id: true, name: true, leader_person_id: true, parent_group_id: true },
+        select: {
+          id: true,
+          name: true,
+          leader_person_id: true,
+          parent_group_id: true,
+          leader: { select: { full_name: true } },
+        },
       });
       if (!parent) break;
 
-      ancestors.push(parent);
+      ancestors.push({
+        id: parent.id,
+        name: parent.name,
+        leader_person_id: parent.leader_person_id,
+        leader_person_name: parent.leader?.full_name ?? null,
+        parent_group_id: parent.parent_group_id,
+      });
       parentId = parent.parent_group_id;
     }
 
     return ancestors;
   }
 
-  async getHierarchy(groupId: string): Promise<HierarchyNode | null> {
+  // Semáforo de saúde por nó (PROD-20, CEL20-06): uma única consulta
+  // agregada para todas as células envolvidas (ancestrais + árvore), em vez
+  // de N chamadas a getHealth (design.md).
+  private async buildHealthMap(groupIds: string[]): Promise<Map<string, HealthStatus>> {
+    const healthByGroupId = new Map<string, HealthStatus>();
+    if (groupIds.length === 0) return healthByGroupId;
+
+    const rows = await this.prisma.client.groupMeeting.groupBy({
+      by: ['small_group_id'],
+      where: { small_group_id: { in: groupIds } },
+      _max: { occurred_at: true },
+    });
+    const lastMeetingByGroupId = new Map(rows.map((r) => [r.small_group_id, r._max.occurred_at]));
+
+    for (const id of groupIds) {
+      healthByGroupId.set(id, classifyHealth(lastMeetingByGroupId.get(id) ?? null));
+    }
+
+    return healthByGroupId;
+  }
+
+  // Árvore genealógica (PROD-20, CEL20-06): ancestrais (getAncestors) +
+  // descendentes (CTE existente), cada nó com health_status calculado numa
+  // única query agregada.
+  async getHierarchy(groupId: string): Promise<GenealogyResponse> {
     const rows = await this.prisma.client.$queryRaw<HierarchyRow[]>`
       WITH RECURSIVE hierarchy AS (
         SELECT
           sg.id, sg.name, sg.group_type_id, gt.name AS group_type_name,
-          sg.parent_group_id, sg.leader_person_id,
+          sg.parent_group_id, sg.leader_person_id, p.full_name AS leader_person_name,
           sg.is_public, sg.meeting_time, sg.recurrence, 1 AS depth
         FROM small_groups sg
         LEFT JOIN group_types gt ON gt.id = sg.group_type_id
+        LEFT JOIN persons p ON p.id = sg.leader_person_id
         WHERE sg.id = ${groupId}
 
         UNION ALL
 
         SELECT
           sg.id, sg.name, sg.group_type_id, gt.name,
-          sg.parent_group_id, sg.leader_person_id,
+          sg.parent_group_id, sg.leader_person_id, p.full_name,
           sg.is_public, sg.meeting_time, sg.recurrence, h.depth + 1
         FROM small_groups sg
         LEFT JOIN group_types gt ON gt.id = sg.group_type_id
+        LEFT JOIN persons p ON p.id = sg.leader_person_id
         INNER JOIN hierarchy h ON sg.parent_group_id = h.id
         WHERE h.depth < 4
       )
@@ -545,7 +610,26 @@ export class SmallGroupsService {
       ORDER BY depth, name
     `;
 
-    return buildTree(rows, groupId);
+    if (rows.length === 0) return { ancestors: [], tree: null };
+
+    const ancestorRows = await this.getAncestors(groupId);
+
+    const healthByGroupId = await this.buildHealthMap([
+      ...rows.map((r) => r.id),
+      ...ancestorRows.map((a) => a.id),
+    ]);
+
+    const tree = buildGenealogyTree(rows, groupId, healthByGroupId);
+
+    const ancestors: GenealogyNode[] = ancestorRows.map((a, index) => ({
+      id: a.id,
+      name: a.name,
+      leader_person_name: a.leader_person_name,
+      generation: -(index + 1),
+      health_status: healthByGroupId.get(a.id) ?? classifyHealth(null),
+    }));
+
+    return { ancestors, tree };
   }
 
   async checkAbsenceAlerts(groupId: string): Promise<Person[]> {

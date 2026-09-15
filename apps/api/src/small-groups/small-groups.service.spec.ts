@@ -33,7 +33,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn(),
       count: jest.fn(),
     },
-    groupMeeting: { findMany: jest.fn(), aggregate: jest.fn() },
+    groupMeeting: { findMany: jest.fn(), aggregate: jest.fn(), groupBy: jest.fn() },
     attendanceRecord: { findMany: jest.fn() },
     smallGroupVisitRequest: { findMany: jest.fn() },
     person: { findUnique: jest.fn() },
@@ -617,6 +617,11 @@ describe('SmallGroupsService', () => {
     });
   });
 
+  // A CTE recursiva ($queryRaw) em si — descendentes reais contra Postgres —
+  // não se testa com mock (docs/TESTES.md, Fase 5); cobertura ponta a ponta
+  // fica em test/integration/small-groups-hierarchy.spec.ts. Este describe
+  // cobre só a montagem de { ancestors, tree } a partir de linhas já
+  // resolvidas (mockadas) — o formato do retorno, não o SQL.
   describe('getHierarchy', () => {
     const row = (id: string, parent: string | null, depth: number) => ({
       id,
@@ -625,21 +630,22 @@ describe('SmallGroupsService', () => {
       group_type_name: 'Célula',
       parent_group_id: parent,
       leader_person_id: 'lider',
+      leader_person_name: 'Líder',
       is_public: true,
       meeting_time: null,
       recurrence: null,
       depth,
     });
 
-    it('retorna null quando o grupo raiz não está no resultado', async () => {
+    it('retorna ancestors: [] e tree: null quando o grupo raiz não está no resultado', async () => {
       const client = clientWith();
       client.$queryRaw.mockResolvedValue([]);
       const service = serviceWith(client);
 
-      expect(await service.getHierarchy('sg1')).toBeNull();
+      expect(await service.getHierarchy('sg1')).toEqual({ ancestors: [], tree: null });
     });
 
-    it('monta a árvore com filhos aninhados, sem a coluna depth', async () => {
+    it('monta a árvore com filhos aninhados e generation por nível, célula raiz sem ancestrais', async () => {
       const client = clientWith();
       client.$queryRaw.mockResolvedValue([
         row('sg1', null, 1),
@@ -647,17 +653,25 @@ describe('SmallGroupsService', () => {
         row('sg3', 'sg1', 2),
         row('sg4', 'sg2', 3),
       ]);
+      client.smallGroup.findUnique.mockResolvedValue({ parent_group_id: null }); // sg1 é raiz
+      client.groupMeeting.groupBy.mockResolvedValue([]); // ninguém teve reunião → red
       const service = serviceWith(client);
 
-      const tree = await service.getHierarchy('sg1');
+      const result = await service.getHierarchy('sg1');
 
-      expect(tree).not.toHaveProperty('depth');
-      expect(tree?.id).toBe('sg1');
-      expect(tree?.children.map((c) => c.id)).toEqual(['sg2', 'sg3']);
-      expect(tree?.children.find((c) => c.id === 'sg2')?.children.map((c) => c.id)).toEqual([
+      expect(result.ancestors).toEqual([]);
+      expect(result.tree?.id).toBe('sg1');
+      expect(result.tree?.generation).toBe(0);
+      expect(result.tree?.health_status).toBe('red');
+      expect(result.tree?.children.map((c) => c.id)).toEqual(['sg2', 'sg3']);
+      expect(result.tree?.children[0]?.generation).toBe(1);
+      expect(result.tree?.children.find((c) => c.id === 'sg2')?.children.map((c) => c.id)).toEqual([
         'sg4',
       ]);
-      expect(tree?.children.find((c) => c.id === 'sg3')?.children).toEqual([]);
+      expect(
+        result.tree?.children.find((c) => c.id === 'sg2')?.children[0]?.generation,
+      ).toBe(2);
+      expect(result.tree?.children.find((c) => c.id === 'sg3')?.children).toEqual([]);
     });
   });
 
@@ -707,10 +721,20 @@ describe('SmallGroupsService', () => {
   });
 
   describe('getAncestors', () => {
-    const ancestor = (id: string, parent: string | null) => ({
+    // Formato bruto que o Prisma devolve (com o `leader` aninhado) — o que o
+    // método expõe já achata para `leader_person_name` (ver `mapped`).
+    const rawAncestor = (id: string, parent: string | null) => ({
       id,
       name: `Grupo ${id}`,
       leader_person_id: 'lider',
+      parent_group_id: parent,
+      leader: { full_name: 'Líder' },
+    });
+    const mapped = (id: string, parent: string | null) => ({
+      id,
+      name: `Grupo ${id}`,
+      leader_person_id: 'lider',
+      leader_person_name: 'Líder',
       parent_group_id: parent,
     });
 
@@ -722,25 +746,25 @@ describe('SmallGroupsService', () => {
       expect(await service.getAncestors('sg1')).toEqual([]);
     });
 
-    it('CEL20-06: 1 ancestral — retorna só o pai', async () => {
+    it('CEL20-06: 1 ancestral — retorna só o pai, com o nome do líder achatado', async () => {
       const client = clientWith();
       client.smallGroup.findUnique
         .mockResolvedValueOnce({ parent_group_id: 'pai' })
-        .mockResolvedValueOnce(ancestor('pai', null));
+        .mockResolvedValueOnce(rawAncestor('pai', null));
       const service = serviceWith(client);
 
       const result = await service.getAncestors('sg1');
 
-      expect(result).toEqual([ancestor('pai', null)]);
+      expect(result).toEqual([mapped('pai', null)]);
     });
 
     it('CEL20-06: 3 ancestrais (teto) — mais próximo primeiro, mesmo com uma 4ª geração acima', async () => {
       const client = clientWith();
       client.smallGroup.findUnique
         .mockResolvedValueOnce({ parent_group_id: 'pai' })
-        .mockResolvedValueOnce(ancestor('pai', 'avo'))
-        .mockResolvedValueOnce(ancestor('avo', 'bisavo'))
-        .mockResolvedValueOnce(ancestor('bisavo', 'tataravo'));
+        .mockResolvedValueOnce(rawAncestor('pai', 'avo'))
+        .mockResolvedValueOnce(rawAncestor('avo', 'bisavo'))
+        .mockResolvedValueOnce(rawAncestor('bisavo', 'tataravo'));
       const service = serviceWith(client);
 
       const result = await service.getAncestors('sg1');

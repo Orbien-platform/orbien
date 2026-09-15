@@ -172,12 +172,12 @@ describe('SmallGroupsController', () => {
   });
 
   it('getHierarchy delega ao service', async () => {
-    service.getHierarchy.mockResolvedValue(null);
+    service.getHierarchy.mockResolvedValue({ ancestors: [], tree: null });
 
     const result = await controller.getHierarchy('sg1');
 
     expect(service.getHierarchy).toHaveBeenCalledWith('sg1');
-    expect(result).toBeNull();
+    expect(result).toEqual({ ancestors: [], tree: null });
   });
 
   it('checkAbsenceAlerts delega ao service', async () => {
