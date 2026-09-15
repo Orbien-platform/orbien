@@ -706,6 +706,51 @@ describe('SmallGroupsService', () => {
     });
   });
 
+  describe('getAncestors', () => {
+    const ancestor = (id: string, parent: string | null) => ({
+      id,
+      name: `Grupo ${id}`,
+      leader_person_id: 'lider',
+      parent_group_id: parent,
+    });
+
+    it('CEL20-06: célula raiz (sem parent_group_id) não tem ancestrais', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue({ parent_group_id: null });
+      const service = serviceWith(client);
+
+      expect(await service.getAncestors('sg1')).toEqual([]);
+    });
+
+    it('CEL20-06: 1 ancestral — retorna só o pai', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique
+        .mockResolvedValueOnce({ parent_group_id: 'pai' })
+        .mockResolvedValueOnce(ancestor('pai', null));
+      const service = serviceWith(client);
+
+      const result = await service.getAncestors('sg1');
+
+      expect(result).toEqual([ancestor('pai', null)]);
+    });
+
+    it('CEL20-06: 3 ancestrais (teto) — mais próximo primeiro, mesmo com uma 4ª geração acima', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique
+        .mockResolvedValueOnce({ parent_group_id: 'pai' })
+        .mockResolvedValueOnce(ancestor('pai', 'avo'))
+        .mockResolvedValueOnce(ancestor('avo', 'bisavo'))
+        .mockResolvedValueOnce(ancestor('bisavo', 'tataravo'));
+      const service = serviceWith(client);
+
+      const result = await service.getAncestors('sg1');
+
+      expect(result.map((a) => a.id)).toEqual(['pai', 'avo', 'bisavo']);
+      // A 4ª geração (tataravo) nunca é buscada — teto de 3 corta o loop antes.
+      expect(client.smallGroup.findUnique).toHaveBeenCalledTimes(4);
+    });
+  });
+
   describe('checkAbsenceAlerts', () => {
     it('retorna vazio quando não há reuniões registradas', async () => {
       const client = clientWith();

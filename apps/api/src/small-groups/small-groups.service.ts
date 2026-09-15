@@ -74,6 +74,18 @@ type HierarchyRow = {
 
 type HierarchyNode = Omit<HierarchyRow, 'depth'> & { children: HierarchyNode[] };
 
+type AncestorRow = {
+  id: string;
+  name: string;
+  leader_person_id: string;
+  parent_group_id: string | null;
+};
+
+// Teto de ancestrais retornados (PROD-20, CEL20-06): simétrico às 3 gerações
+// de descendentes que getHierarchy já traz abaixo da própria célula
+// (self=depth 1 até depth 4).
+const ANCESTOR_DEPTH_CAP = 3;
+
 export type HealthStatus = 'green' | 'yellow' | 'red';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -478,6 +490,33 @@ export class SmallGroupsService {
       last_meeting_at: lastMeetingAt,
       days_since_last_meeting: daysSinceLastMeeting,
     };
+  }
+
+  // Ancestrais (PROD-20, CEL20-06): cadeia linear subindo por
+  // parent_group_id, mais próximo primeiro. Iterativo, não CTE recursiva
+  // (design.md, Tech Decisions) — teto de 3 ancestrais, simétrico ao teto de
+  // 4 níveis (self + 3 gerações) já usado em getHierarchy.
+  async getAncestors(groupId: string): Promise<AncestorRow[]> {
+    const ancestors: AncestorRow[] = [];
+
+    const start = await this.prisma.client.smallGroup.findUnique({
+      where: { id: groupId },
+      select: { parent_group_id: true },
+    });
+
+    let parentId = start?.parent_group_id ?? null;
+    while (parentId && ancestors.length < ANCESTOR_DEPTH_CAP) {
+      const parent = await this.prisma.client.smallGroup.findUnique({
+        where: { id: parentId },
+        select: { id: true, name: true, leader_person_id: true, parent_group_id: true },
+      });
+      if (!parent) break;
+
+      ancestors.push(parent);
+      parentId = parent.parent_group_id;
+    }
+
+    return ancestors;
   }
 
   async getHierarchy(groupId: string): Promise<HierarchyNode | null> {
