@@ -48,6 +48,7 @@ describe('SmallGroupsController', () => {
       removeMember: jest.fn(),
       findMine: jest.fn(),
       listVisitRequests: jest.fn(),
+      multiply: jest.fn(),
     } as unknown as jest.Mocked<SmallGroupsService>;
 
     controller = new SmallGroupsController(service);
@@ -79,6 +80,27 @@ describe('SmallGroupsController', () => {
 
   it('listVisitRequests aceita cell_leader — quem responde ao pedido é a liderança da célula', () => {
     expect(rolesFor('listVisitRequests')).toEqual(ALERT_ROLES);
+  });
+
+  it('multiply aceita cell_leader — escopo real é checado no service (PROD-20)', () => {
+    expect(rolesFor('multiply')).toEqual(ALERT_ROLES);
+  });
+
+  it('multiply delega ao service com id, dto e usuário', async () => {
+    service.multiply.mockResolvedValue({ id: 'child-1' } as never);
+
+    const result = await controller.multiply(
+      'sg1',
+      { name: 'Filha', leader_person_id: 'p2', member_ids: ['p1'] } as never,
+      USER,
+    );
+
+    expect(service.multiply).toHaveBeenCalledWith(
+      'sg1',
+      { name: 'Filha', leader_person_id: 'p2', member_ids: ['p1'] },
+      USER,
+    );
+    expect(result).toEqual({ id: 'child-1' });
   });
 
   it('listVisitRequests delega ao service', async () => {

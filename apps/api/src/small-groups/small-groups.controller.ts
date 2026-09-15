@@ -20,6 +20,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { SmallGroupsService } from './small-groups.service';
 import { CreateSmallGroupDto } from './dto/create-small-group.dto';
 import { UpdateSmallGroupDto } from './dto/update-small-group.dto';
+import { MultiplySmallGroupDto } from './dto/multiply-small-group.dto';
 import { ListSmallGroupsQueryDto } from './dto/list-small-groups-query.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
@@ -88,6 +89,19 @@ export class SmallGroupsController {
   @Roles(...ALERT_ROLES)
   listVisitRequests(@Param('id', ParseUUIDPipe) id: string) {
     return this.smallGroupsService.listVisitRequests(id);
+  }
+
+  // Multiplicação de célula (PROD-20, Starter — sem PlanGuard). ALERT_ROLES
+  // abre a porta pro cell_leader; o service confirma que é o líder DESTA
+  // célula antes de prosseguir (design.md, "Permissões de multiply").
+  @Post(':id/multiply')
+  @Roles(...ALERT_ROLES)
+  multiply(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MultiplySmallGroupDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.smallGroupsService.multiply(id, dto, user);
   }
 
   @Get(':id')
