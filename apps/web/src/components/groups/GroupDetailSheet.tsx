@@ -345,10 +345,9 @@ export function GroupDetailSheet({
   // id do grupo. Efeito à parte do de cima para não custar essa chamada a
   // quem já tem canEdit nem mexer no fluxo de carregamento já testado.
   useEffect(() => {
-    if (!open || !groupId || !isCellLeader) {
-      setIsLeaderOfGroup(false);
-      return;
-    }
+    // Guarda sem setState: o estado inicial já é `false`, e o fechamento do
+    // sheet já reseta em `handleOpenChange` — nada aqui precisa reafirmar.
+    if (!open || !groupId || !isCellLeader) return;
     const signal = { cancelled: false };
     api
       .get<{ id: string; role: string }[]>("/small-groups/mine")
