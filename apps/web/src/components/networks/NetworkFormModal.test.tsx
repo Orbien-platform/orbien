@@ -141,11 +141,38 @@ describe("NetworkFormModal", () => {
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith("/networks/n1", {
         name: "Rede Renomeada",
-        leader_person_id: undefined,
-        health_goal_pct: undefined,
+        leader_person_id: null,
+        health_goal_pct: null,
       })
     );
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("sends null (not undefined) when clearing the leader and health goal on an existing network", async () => {
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+
+    render(
+      <NetworkFormModal
+        open={true}
+        onOpenChange={vi.fn()}
+        network={{ id: "n1", name: "Rede Central", leader_person_id: "p1", health_goal_pct: 80 }}
+        onSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/persons?limit=100"));
+    await user.selectOptions(screen.getByLabelText(/Líder de rede/), "");
+    await user.clear(screen.getByLabelText(/Meta de saúde/));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/networks/n1", {
+        name: "Rede Central",
+        leader_person_id: null,
+        health_goal_pct: null,
+      })
+    );
   });
 
   it("shows a generic error message when the create request fails", async () => {

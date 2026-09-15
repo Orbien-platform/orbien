@@ -25,4 +25,12 @@ describe('UpdateNetworkDto', () => {
     const errors = await errorsFor({ leader_person_id: 'não-uuid' });
     expect(errors.some((e) => e.property === 'leader_person_id')).toBe(true);
   });
+
+  it('aceita leader_person_id null para desvincular o líder', async () => {
+    expect(await errorsFor({ leader_person_id: null })).toHaveLength(0);
+  });
+
+  it('aceita health_goal_pct null para zerar a meta', async () => {
+    expect(await errorsFor({ health_goal_pct: null })).toHaveLength(0);
+  });
 });

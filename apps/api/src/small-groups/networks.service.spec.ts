@@ -105,6 +105,21 @@ describe('NetworksService', () => {
       });
       expect(result).toEqual({ id: 'n1', name: 'Rede Renomeada' });
     });
+
+    it('grava leader_person_id e health_goal_pct como null quando o front limpa os campos', async () => {
+      const client = clientWith();
+      client.network.findUnique.mockResolvedValue({ id: 'n1' });
+      client.network.update.mockResolvedValue({ id: 'n1', leader_person_id: null, health_goal_pct: null });
+      const service = serviceWith(client);
+
+      const result = await service.update('n1', { leader_person_id: null, health_goal_pct: null });
+
+      expect(client.network.update).toHaveBeenCalledWith({
+        where: { id: 'n1' },
+        data: { leader_person_id: null, health_goal_pct: null },
+      });
+      expect(result).toEqual({ id: 'n1', leader_person_id: null, health_goal_pct: null });
+    });
   });
 
   describe('remove', () => {

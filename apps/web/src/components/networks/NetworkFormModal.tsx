@@ -77,7 +77,11 @@ export function NetworkFormModal({ open, onOpenChange, network, onSaved }: Netwo
     if (!name.trim()) { setError("Nome é obrigatório."); return; }
 
     const trimmedGoal = goalPct.trim();
-    let health_goal_pct: number | undefined;
+    // Em edição, campo vazio é "limpar": manda `null` explícito, porque
+    // `undefined` some do JSON (JSON.stringify remove a chave) e o PATCH
+    // chega sem o campo — o backend nunca zera o valor antigo. Na criação,
+    // vazio é "não informado": `undefined` continua correto.
+    let health_goal_pct: number | null | undefined = isEdit ? null : undefined;
     if (trimmedGoal) {
       const parsed = Number(trimmedGoal);
       if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
@@ -91,7 +95,7 @@ export function NetworkFormModal({ open, onOpenChange, network, onSaved }: Netwo
     try {
       const payload = {
         name: name.trim(),
-        leader_person_id: leaderId || undefined,
+        leader_person_id: leaderId || (isEdit ? null : undefined),
         health_goal_pct,
       };
       if (isEdit && network?.id) {
