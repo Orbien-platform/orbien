@@ -608,6 +608,44 @@ describe('PixService', () => {
         service.createForEventRegistration('t1', 'g1', 50, 'Inscrição'),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('Asaas fora do ar vira 503 e não grava pagamento órfão', async () => {
+      const { service, cap } = harness({ httpFails: true });
+
+      await expect(
+        service.createForEventRegistration('t1', 'g1', 50, 'Inscrição'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(cap.pixPayments).toEqual([]);
+    });
+
+    it('sem `app_name` no branding, cai para o nome do tenant', async () => {
+      const { service, cap } = harness({
+        branding: { pix_key: 'k', app_name: null },
+        httpGet: (url) =>
+          url.includes('/customers')
+            ? { data: [] }
+            : { encodedImage: '', payload: '', expirationDate: '' },
+      });
+
+      await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição');
+
+      expect((cap.posts[0]?.body as { name: string }).name).toBe('Igreja Central');
+    });
+
+    it('tenant sem nome no banco vira string vazia, não `undefined`', async () => {
+      const { service, cap } = harness({
+        branding: { pix_key: 'k', app_name: null },
+        tenant: null,
+        httpGet: (url) =>
+          url.includes('/customers')
+            ? { data: [] }
+            : { encodedImage: '', payload: '', expirationDate: '' },
+      });
+
+      await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição');
+
+      expect((cap.posts[0]?.body as { name: string }).name).toBe('');
+    });
   });
 
   describe('createPublicDonation', () => {
@@ -1044,6 +1082,33 @@ describe('PixService', () => {
       });
       // Inscrição não é doação — não emite recibo.
       expect(cap.receiptCalls).toEqual([]);
+    });
+
+    it('inscrição de evento: webhook sem registro pendente correspondente só loga, não falha', async () => {
+      // Pode acontecer se a inscrição foi cancelada entre o pedido e a
+      // confirmação da Asaas — o `updateMany` não acha `pending_payment` para
+      // atualizar, mas o pagamento em si segue confirmado normalmente.
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+          scenario: 'event_registration',
+        },
+        eventRegistrationFinalizeCount: 0,
+      });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.eventRegistrationUpdates).toHaveLength(1);
     });
 
     it('inscrição de evento: doação normal continua sem tocar em event_registration nem pular o recibo', async () => {

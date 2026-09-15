@@ -620,6 +620,27 @@ describe('PostsService — preço de inscrição exige Premium (PROD-24)', () =>
     ).resolves.toEqual({ id: 'p1' });
   });
 
+  it('premium grava o preço no update, convertido para Decimal', async () => {
+    const client = clientWith();
+    client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });
+    client.contentPost.update.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await service.update(
+      't1',
+      'g1',
+      'p1',
+      { registration_price: 79.9 } as never,
+      'premium',
+    );
+
+    expect(client.contentPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ registration_price: expect.anything() }),
+      }),
+    );
+  });
+
   it('starter não pode setar preço no update de um evento já existente', async () => {
     const client = clientWith();
     client.contentPost.findFirst.mockResolvedValue({ id: 'p1', type: 'event' });

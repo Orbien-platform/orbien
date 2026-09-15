@@ -329,6 +329,32 @@ describe('EventRegistrationsService', () => {
   });
 
   describe('registerSelf em evento pago (PROD-24)', () => {
+    it('inscrição fechada no evento pago é recusada, igual ao gratuito', async () => {
+      const client = clientWith({
+        ...EVENT,
+        registration_price: price(50),
+        registration_enabled: false,
+      });
+      const service = serviceWith(client);
+
+      await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('prazo vencido no evento pago é recusado, igual ao gratuito', async () => {
+      const client = clientWith({
+        ...EVENT,
+        registration_price: price(50),
+        registration_deadline: new Date(Date.now() - 1000),
+      });
+      const service = serviceWith(client);
+
+      await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
     it('reserva a vaga como pending_payment e devolve o QR, sem confirmar na hora', async () => {
       const client = clientWith({ ...EVENT, registration_price: price(50) });
       const pix = pixServiceMock();
@@ -355,6 +381,32 @@ describe('EventRegistrationsService', () => {
       await service.registerSelf('t1', 'g1', 'p1', 'user-1');
 
       expect(client.rows[0]['status']).toBe('pending_payment');
+    });
+
+    it('cadastro sem e-mail nem telefone entra sem eles, também no evento pago', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      client.person.findFirst.mockResolvedValue({
+        id: 'person-1',
+        full_name: 'Maria Sem Contato',
+        email: null,
+        phone: null,
+      });
+      const service = serviceWith(client);
+
+      const result = await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(result).toMatchObject({
+        registration: { full_name: 'Maria Sem Contato', email: null, phone: null },
+      });
+    });
+
+    it('com limite definido e vaga sobrando, reserva normalmente — não é só o caminho sem limite', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50), registration_limit: 5 });
+      const service = serviceWith(client);
+
+      const result = await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(result).toMatchObject({ registration: { status: 'pending_payment' } });
     });
 
     it('falha na Asaas desfaz a reserva — não deixa vaga presa', async () => {
@@ -566,6 +618,18 @@ describe('EventRegistrationsService', () => {
       const service = serviceWith(clientWith());
 
       expect((await service.summary('t1', 'g1', 'p1')).seats_left).toBeNull();
+    });
+
+    it('evento pago devolve o preço em número, não o Decimal cru (PROD-24)', async () => {
+      const service = serviceWith(clientWith({ ...EVENT, registration_price: price(49.9) }));
+
+      expect((await service.summary('t1', 'g1', 'p1')).registration_price).toBe(49.9);
+    });
+
+    it('evento gratuito devolve `registration_price: null`', async () => {
+      const service = serviceWith(clientWith());
+
+      expect((await service.summary('t1', 'g1', 'p1')).registration_price).toBeNull();
     });
 
     it('prazo vencido e inscrição desligada fecham, cada um por si', async () => {

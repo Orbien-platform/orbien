@@ -231,13 +231,12 @@ export class EventRegistrationsService {
       throw new BadRequestException('O prazo de inscrição para este evento já encerrou');
     }
 
-    const identity: Prisma.EventRegistrationWhereInput = dto.person_id
-      ? { person_id: dto.person_id }
-      : { email: { equals: dto.email, mode: 'insensitive' } };
-
+    // Sem o `? :` de `register()`: quem chega aqui sempre veio de `registerSelf`,
+    // que sempre resolve `person_id` do cadastro antes de montar o `dto` — não
+    // há convidado sem cadastro pagando por conta própria.
     const registration = await this.prisma.runInTx(async (tx) => {
       const existing = await tx.eventRegistration.findFirst({
-        where: { content_post_id: post.id, ...identity },
+        where: { content_post_id: post.id, person_id: dto.person_id },
         orderBy: { created_at: 'desc' },
       });
 
@@ -272,11 +271,14 @@ export class EventRegistrationsService {
         }
       }
 
+      // `person_id` sem `?? null`: diferente de `register()`, quem chega aqui
+      // sempre tem pessoa — `registerSelf` resolve isso antes de montar o
+      // `dto`, e não há convidado sem cadastro pagando por conta própria.
       const data = {
         tenant_id: tenantId,
         congregation_id: congregationId,
         content_post_id: post.id,
-        person_id: dto.person_id ?? null,
+        person_id: dto.person_id,
         full_name: dto.full_name,
         email: dto.email ?? null,
         phone: dto.phone ?? null,
