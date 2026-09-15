@@ -75,6 +75,10 @@ describe('SmallGroupsController', () => {
     expect(rolesFor('findOne')).toEqual(READ_ROLES);
   });
 
+  it('getHierarchy exige plano Premium (CEL20-06)', () => {
+    expect(requiredPlanFor('getHierarchy')).toBe('premium');
+  });
+
   it('update e removeMember exigem papel de gestão', () => {
     expect(rolesFor('update')).toEqual(MANAGE_ROLES);
     expect(rolesFor('removeMember')).toEqual(MANAGE_ROLES);

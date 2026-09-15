@@ -75,8 +75,10 @@ export class SmallGroupsController {
     return this.smallGroupsService.findMine(user.sub, user.tenant_id, user.congregation_id);
   }
 
+  // Árvore genealógica (PROD-20, CEL20-06) — Premium.
   @Get(':id/hierarchy')
   @Roles(...READ_ROLES)
+  @RequiresPlan('premium')
   getHierarchy(@Param('id', ParseUUIDPipe) id: string) {
     return this.smallGroupsService.getHierarchy(id);
   }
