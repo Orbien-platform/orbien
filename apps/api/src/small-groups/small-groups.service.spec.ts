@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SmallGroupsService } from './small-groups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -31,10 +31,13 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       upsert: jest.fn(),
       delete: jest.fn(),
       findMany: jest.fn(),
+      count: jest.fn(),
     },
     groupMeeting: { findMany: jest.fn() },
     attendanceRecord: { findMany: jest.fn() },
     smallGroupVisitRequest: { findMany: jest.fn() },
+    person: { findUnique: jest.fn() },
+    roleAssignment: { findFirst: jest.fn() },
     $queryRaw: jest.fn(),
     ...overrides,
   };
@@ -126,6 +129,238 @@ describe('SmallGroupsService', () => {
       expect(client.smallGroup.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ is_public: true }) }),
       );
+    });
+  });
+
+  describe('multiply', () => {
+    const MOTHER = {
+      id: 'mother-1',
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      group_type_id: 'gt1',
+      leader_person_id: 'old-leader',
+    };
+    const DTO = {
+      name: 'Célula Bairro A',
+      leader_person_id: 'new-leader',
+      member_ids: ['p1', 'p2'],
+    };
+    const CELL_LEADER_USER: JwtPayload = {
+      sub: 'u2',
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      roles: ['cell_leader'],
+      plan: 'starter',
+    };
+    const MANAGER_USER: JwtPayload = {
+      sub: 'u3',
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      roles: ['pastor'],
+      plan: 'starter',
+    };
+
+    it('lança NotFoundException quando a célula mãe não existe', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(service.multiply('mother-1', DTO as never, USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('AC1: cria a célula filha, move os membros e promove o novo líder, numa transação', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.groupMembership.count.mockResolvedValue(2);
+      client.smallGroup.create.mockResolvedValue({ id: 'child-1' });
+      const service = serviceWith(client);
+
+      const result = await service.multiply('mother-1', DTO as never, MANAGER_USER);
+
+      expect(client.smallGroup.create).toHaveBeenCalledWith({
+        data: {
+          name: 'Célula Bairro A',
+          group_type_id: 'gt1',
+          parent_group_id: 'mother-1',
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          leader_person_id: 'new-leader',
+          meeting_time: undefined,
+          recurrence: undefined,
+          address: undefined,
+        },
+      });
+      expect(client.groupMembership.updateMany).toHaveBeenCalledWith({
+        where: { small_group_id: 'mother-1', person_id: { in: ['p1', 'p2'] } },
+        data: { small_group_id: 'child-1' },
+      });
+      expect(client.groupMembership.upsert).toHaveBeenCalledWith({
+        where: { small_group_id_person_id: { small_group_id: 'child-1', person_id: 'new-leader' } },
+        create: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          small_group_id: 'child-1',
+          person_id: 'new-leader',
+          role: 'leader',
+        },
+        update: { role: 'leader' },
+      });
+      expect(result).toEqual({ id: 'child-1' });
+    });
+
+    it('AC2: 400 quando leader_person_id não é Person do mesmo tenant, sem abrir transação', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 'outro-tenant' });
+      const runInTx = jest.fn();
+      const service = serviceWith(client, runInTx);
+
+      await expect(service.multiply('mother-1', DTO as never, MANAGER_USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(runInTx).not.toHaveBeenCalled();
+    });
+
+    it('AC2: 400 quando leader_person_id não existe, sem abrir transação', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue(null);
+      const runInTx = jest.fn();
+      const service = serviceWith(client, runInTx);
+
+      await expect(service.multiply('mother-1', DTO as never, MANAGER_USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(runInTx).not.toHaveBeenCalled();
+    });
+
+    it('AC2: 400 quando algum member_id não é membro ativo da mãe, sem criar nada', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.groupMembership.count.mockResolvedValue(1); // só 1 dos 2 member_ids pertence à mãe
+      const service = serviceWith(client);
+
+      await expect(service.multiply('mother-1', DTO as never, MANAGER_USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(client.smallGroup.create).not.toHaveBeenCalled();
+    });
+
+    it('AC3: member_ids vazio é permitido — célula filha nasce só com o líder', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.smallGroup.create.mockResolvedValue({ id: 'child-1' });
+      const service = serviceWith(client);
+
+      await service.multiply(
+        'mother-1',
+        { name: 'Filha', leader_person_id: 'new-leader', member_ids: [] } as never,
+        MANAGER_USER,
+      );
+
+      expect(client.groupMembership.count).not.toHaveBeenCalled();
+      expect(client.groupMembership.updateMany).not.toHaveBeenCalled();
+      expect(client.groupMembership.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ update: { role: 'leader' } }),
+      );
+    });
+
+    it('AC4: 403 quando o usuário não tem MANAGE_ROLES nem é líder desta célula', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'outra-pessoa' });
+      client.roleAssignment.findFirst.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.multiply('mother-1', DTO as never, CELL_LEADER_USER),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('permite o cell_leader multiplicar quando é o leader_person_id da própria célula', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'old-leader' });
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.groupMembership.count.mockResolvedValue(2);
+      client.smallGroup.create.mockResolvedValue({ id: 'child-1' });
+      const service = serviceWith(client);
+
+      const result = await service.multiply('mother-1', DTO as never, CELL_LEADER_USER);
+
+      expect(result).toEqual({ id: 'child-1' });
+    });
+
+    it('permite o cell_leader multiplicar via RoleAssignment escopado à célula, mesmo sem ser o leader_person_id', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'outra-pessoa' });
+      client.roleAssignment.findFirst.mockResolvedValue({ id: 'ra1' });
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.groupMembership.count.mockResolvedValue(2);
+      client.smallGroup.create.mockResolvedValue({ id: 'child-1' });
+      const service = serviceWith(client);
+
+      const result = await service.multiply('mother-1', DTO as never, CELL_LEADER_USER);
+
+      expect(client.roleAssignment.findFirst).toHaveBeenCalledWith({
+        where: { user_account_id: 'u2', small_group_id: 'mother-1', role_code: 'cell_leader' },
+        select: { id: true },
+      });
+      expect(result).toEqual({ id: 'child-1' });
+    });
+
+    it('edge case: member_ids inclui o próprio líder atual da mãe — ele é movido para a filha', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.groupMembership.count.mockResolvedValue(1);
+      client.smallGroup.create.mockResolvedValue({ id: 'child-1' });
+      const service = serviceWith(client);
+
+      await service.multiply(
+        'mother-1',
+        { name: 'Filha', leader_person_id: 'new-leader', member_ids: ['old-leader'] } as never,
+        MANAGER_USER,
+      );
+
+      expect(client.groupMembership.updateMany).toHaveBeenCalledWith({
+        where: { small_group_id: 'mother-1', person_id: { in: ['old-leader'] } },
+        data: { small_group_id: 'child-1' },
+      });
+    });
+
+    it('edge case: leader_person_id da nova célula já lidera outra célula — permitido sem checagem extra', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      client.groupMembership.count.mockResolvedValue(2);
+      client.smallGroup.create.mockResolvedValue({ id: 'child-1' });
+      const service = serviceWith(client);
+
+      await expect(service.multiply('mother-1', DTO as never, MANAGER_USER)).resolves.toEqual({
+        id: 'child-1',
+      });
+    });
+
+    it('edge case: corrida entre duas multiplicações movendo o mesmo person_id — a segunda falha com 400', async () => {
+      const client = clientWith();
+      client.smallGroup.findUnique.mockResolvedValue(MOTHER);
+      client.person.findUnique.mockResolvedValue({ id: 'new-leader', tenant_id: 't1' });
+      // A primeira chamada já moveu 'p1' para outra filha: a recontagem da
+      // segunda não encontra mais os 2 member_ids na mãe.
+      client.groupMembership.count.mockResolvedValue(1);
+      const service = serviceWith(client);
+
+      await expect(service.multiply('mother-1', DTO as never, MANAGER_USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(client.smallGroup.create).not.toHaveBeenCalled();
     });
   });
 

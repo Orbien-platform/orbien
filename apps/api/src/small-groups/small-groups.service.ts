@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,8 +17,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateSmallGroupDto } from './dto/create-small-group.dto';
 import { UpdateSmallGroupDto } from './dto/update-small-group.dto';
+import { MultiplySmallGroupDto } from './dto/multiply-small-group.dto';
 import { ListSmallGroupsQueryDto } from './dto/list-small-groups-query.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+
+// Quem pode multiplicar sem depender de ser o líder desta célula específica
+// (design.md, "Permissões de multiply"). cell_leader entra pelo ALERT_ROLES do
+// controller (RolesGuard já libera a rota); o service é quem confirma que,
+// sendo só cell_leader, é o líder DESTA célula.
+const MULTIPLY_MANAGE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 
 type GroupTypeSummary = Pick<GroupType, 'id' | 'name' | 'color'>;
 const GROUP_TYPE_SUMMARY_SELECT = { id: true, name: true, color: true } as const;
@@ -120,6 +128,123 @@ export class SmallGroupsService {
         });
 
         return group;
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
+  }
+
+  // Design.md, "Permissões de multiply": o RolesGuard já liberou a rota por
+  // ALERT_ROLES (inclui cell_leader de qualquer célula). Quem tem
+  // MULTIPLY_MANAGE_ROLES multiplica qualquer célula do tenant; quem só tem
+  // cell_leader precisa ser o líder DESTA célula — por leader_person_id ou
+  // por um RoleAssignment escopado a ela (small_group_id).
+  private async canMultiply(user: JwtPayload, mother: SmallGroup): Promise<boolean> {
+    if (MULTIPLY_MANAGE_ROLES.some((role) => user.roles.includes(role))) return true;
+
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: user.sub },
+      select: { person_id: true },
+    });
+    if (account?.person_id && account.person_id === mother.leader_person_id) return true;
+
+    const assignment = await this.prisma.client.roleAssignment.findFirst({
+      where: {
+        user_account_id: user.sub,
+        small_group_id: mother.id,
+        role_code: 'cell_leader',
+      },
+      select: { id: true },
+    });
+    return !!assignment;
+  }
+
+  // Multiplicação de célula (PROD-20, CEL20-01 a 03): cria a filha e move os
+  // membros escolhidos numa única transação. Validação em duas etapas: antes
+  // de abrir a transação (líder existe no tenant) e dentro dela, com
+  // recontagem (member_ids ainda pertencem à mãe) — cobre tanto IDs inválidos
+  // quanto a corrida de duas multiplicações concorrentes movendo o mesmo
+  // person_id (edge case da spec).
+  async multiply(
+    motherId: string,
+    dto: MultiplySmallGroupDto,
+    user: JwtPayload,
+  ): Promise<SmallGroup> {
+    const mother = await this.prisma.client.smallGroup.findUnique({
+      where: { id: motherId },
+    });
+    if (!mother) throw new NotFoundException('Grupo não encontrado');
+
+    if (!(await this.canMultiply(user, mother))) {
+      throw new ForbiddenException('Você só pode multiplicar células que lidera');
+    }
+
+    // SPEC_DEVIATION: design.md (Error Handling Strategy) descreve
+    // NotFoundException (404) para leader_person_id de outro tenant, mas a
+    // spec.md AC2 é explícita: "sistema SHALL responder 400" tanto para
+    // leader_person_id inválido quanto para member_ids inválidos. spec.md é
+    // a fonte de verdade dos critérios de aceite — seguido aqui como 400.
+    const leader = await this.prisma.client.person.findUnique({
+      where: { id: dto.leader_person_id },
+      select: { id: true, tenant_id: true },
+    });
+    if (!leader || leader.tenant_id !== mother.tenant_id) {
+      throw new BadRequestException('Pessoa não encontrada');
+    }
+
+    const memberIds = dto.member_ids ?? [];
+
+    return this.prisma.runInTx(
+      async (tx) => {
+        if (memberIds.length > 0) {
+          const activeCount = await tx.groupMembership.count({
+            where: { small_group_id: motherId, person_id: { in: memberIds } },
+          });
+          if (activeCount !== memberIds.length) {
+            throw new BadRequestException(
+              'Um ou mais membros informados não pertencem a este grupo',
+            );
+          }
+        }
+
+        const child = await tx.smallGroup.create({
+          data: {
+            name: dto.name,
+            group_type_id: mother.group_type_id,
+            parent_group_id: motherId,
+            tenant_id: mother.tenant_id,
+            congregation_id: mother.congregation_id,
+            leader_person_id: dto.leader_person_id,
+            meeting_time: dto.meeting_time,
+            recurrence: dto.recurrence,
+            address: dto.address,
+          },
+        });
+
+        if (memberIds.length > 0) {
+          await tx.groupMembership.updateMany({
+            where: { small_group_id: motherId, person_id: { in: memberIds } },
+            data: { small_group_id: child.id },
+          });
+        }
+
+        await tx.groupMembership.upsert({
+          where: {
+            small_group_id_person_id: {
+              small_group_id: child.id,
+              person_id: dto.leader_person_id,
+            },
+          },
+          create: {
+            tenant_id: mother.tenant_id,
+            congregation_id: mother.congregation_id,
+            small_group_id: child.id,
+            person_id: dto.leader_person_id,
+            role: GroupMemberRole.leader,
+          },
+          update: { role: GroupMemberRole.leader },
+        });
+
+        return child;
       },
       { timeout: 30_000, maxWait: 10_000 },
     );
