@@ -207,3 +207,50 @@ Pulado por instrução explícita do orquestrador — fluxo autônomo, sem usuá
 1. `NetworksService.getGoalStatus` — cálculo de `current_pct` correto no código, mas não discriminado de uma fórmula que ignorasse `yellow`, por nenhum teste (unit ou integração). Ver Fix 1.
 
 **Next steps**: rotear Fix 1 como fix task ao implementador (adicionar 1-2 casos de teste com célula `yellow` na mistura); depois disso, PASS completo. Não é bloqueante para uso em produção — o comportamento real já está correto, é lacuna de rede de segurança de teste.
+
+---
+
+## Re-verificação (iteração 2)
+
+**Date**: 2026-09-15
+**Verifier**: independente, fresco (sem contexto da iteração 1 além do que está escrito neste arquivo e em `spec.md`)
+**Escopo**: restrito ao Fix 1 (gap único da iteração 1) + confirmação de não-regressão nos gates. Não repete a matriz completa de 26 critérios nem o code quality review — ambos já cobertos na iteração 1 acima.
+
+**Commit avaliado**: `236f880` — "test(api): discrimina yellow no current_pct de goal-status de redes"
+
+### Fix 1 — verificação do fechamento
+
+- **Diff lido** (`git show 236f880`): adiciona exatamente 1 caso de teste em cada um dos dois arquivos apontados pelo Fix Plan da iteração 1 — `apps/api/src/small-groups/networks.service.spec.ts` (unit, mocks) e `apps/api/test/integration/networks.spec.ts` (integração, Postgres real). Nenhuma outra linha de produção foi tocada (`networks.service.ts` fica idêntico — confirmado, o fix é só de teste, como o commit message diz).
+- **Fixture do caso novo**: 3 células na mesma rede — 1 com reunião recente (`green`), 1 com reunião há 20 dias (`twentyDaysAgo`, cai na faixa 14–27 → `yellow`), 1 sem nenhuma `GroupMeeting` (`red`). As três coexistem na mesma chamada de `getGoalStatus`, o que faltava na iteração 1 (os fixtures anteriores sempre fixavam `yellow: 0`).
+- **Assertion discriminante**: ambos os testes afirmam `result.green===1`, `result.yellow===1`, `result.red===1`, `result.total===3` e, principalmente, `current_pct===66.67` — que só bate com `(green+yellow)/total = 2/3`. Uma fórmula errada `green/total` daria `33.33`, e o comentário no próprio teste (`// se a fórmula ignorasse yellow, daria green/total = 33.33`) declara isso explicitamente. Não há ambiguidade: os dois valores são bem separados (33.33 vs 66.67), não um caso de arredondamento que colidiria por acaso.
+- **Sensor de mutação, re-executado nesta iteração** (git worktree descartável `/tmp/orbien-mutate`, criado a partir de `HEAD` = `b0fec16`, `node_modules` symlinkado da árvore real só para rodar o teste, nunca copiado nem versionado; removido com `git worktree remove --force` ao final — árvore real (`git status` antes/depois) permaneceu limpa o tempo todo):
+  - Mutação reaplicada: `apps/api/src/small-groups/networks.service.ts:107`, `(green + yellow) / total` → `(green) / total`.
+  - Comando: `npx jest --selectProjects unit -t "AC3" networks.service.spec.ts` (dentro do worktree).
+  - Resultado: **FALHA** — `expect(result.current_pct).toBe(66.67)` recebeu `33.33`. Mutante morto pelo teste novo.
+  - Worktree descartado logo em seguida; nenhuma alteração ficou na árvore real.
+- **Veredito do gap**: ✅ **Fechado**. O teste novo (unit e integration) discrimina corretamente `(green+yellow)/total` de `green/total`; a mutação que sobreviveu na iteração 1 agora morre.
+
+### Gates completos (não-regressão)
+
+| Comando | Resultado | Contagem |
+| --- | --- | --- |
+| `npm run test:unit -w orbien-backend` | ✅ PASS | 262 suites / **2534** testes (era 2533 — +1, exatamente o novo caso unit) |
+| `npm run test:integration -w orbien-backend` | ✅ PASS | 15 suites / **73** testes (era 72 — +1, exatamente o novo caso integration) |
+| `npm run test:rls -w orbien-backend` | ✅ PASS | 7 suites / 125 testes (inalterado, esperado — Fix 1 não toca RLS) |
+| `npm run test -w orbien-web` | ✅ PASS | 105 arquivos / 1216 testes (inalterado, esperado — Fix 1 não toca web) |
+| `npm run build:api` | ✅ PASS | `nest build` sucesso, sem erros de tipo |
+| `npm run lint` (turbo, 5 apps) | ✅ PASS | 0 erros; só os mesmos warnings pré-existentes em `orbien-mobile` (não relacionados a esta feature, mesmos da iteração 1) |
+
+Contagens batem exatamente com o esperado pelo orquestrador (unit 2533→2534, integration 72→73), e nenhuma outra camada regrediu ou ganhou teste inesperado.
+
+### Requirement Traceability — atualização final
+
+| Requirement | Status (iteração 1) | Status (iteração 2) |
+| ----------- | -------------------- | --------------------- |
+| CEL20-08 | ⚠️ Verified com ressalva (Fix 1 pendente) | ✅ Verified — Fix 1 fechado e confirmado |
+
+Os demais CEL20-01..07 permanecem ✅ Verified (sem mudança nesta iteração, fora de escopo).
+
+### Veredito geral atualizado
+
+**Overall**: ✅ **PASS** — o único gap aberto pela iteração 1 (discriminação de `yellow` em `NetworksService.getGoalStatus`) está fechado, confirmado por leitura de diff, execução dos testes novos, sensor de mutação reaplicado (mata o mutante) e gates completos sem regressão. As 3 notas de "spec-precision" fracas da iteração 1 (AC5-web-P1, AC6-multiply-ausência-de-guard, AC6-networks-403-direto) não fazem parte do escopo desta re-verificação — não foram tocadas pelo commit `236f880` e continuam como notas informativas, não bloqueantes, sem novo achado nesta rodada.
