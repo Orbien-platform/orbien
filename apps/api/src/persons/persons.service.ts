@@ -137,6 +137,44 @@ export class PersonsService {
     return this.prisma.client.person.update({ where: { id }, data: dto });
   }
 
+  // A escrita vai por `audit_insert()`, nunca por `prisma.auditLog.create()`.
+  // A requisição autenticada roda como `app_user`, e `audit_logs` só tem
+  // policy de SELECT para esse role — a escrita é reservada à função, que é
+  // SECURITY DEFINER (ver 001_rls_setup.sql, grupo 8). O INSERT direto era
+  // negado com 42501, e como estes dois chamadores estão dentro da transação
+  // da requisição, o erro derrubava a operação inteira: a exclusão e a
+  // anonimização por Art. 18 faziam rollback e nunca aconteciam. É o mesmo
+  // defeito que o `AuditInterceptor` corrigiu em 2026-09-03 — estes dois call
+  // sites ficaram para trás. Ver a pendência nº 11.
+  //
+  // Ao contrário do interceptor, aqui o registro é transacional de propósito:
+  // ele descreve a mudança que acabou de acontecer na mesma transação, então
+  // se o handler rolar back não deve sobrar linha dizendo que a pessoa foi
+  // excluída. Por isso usa `prisma.client` (o `tx` ativo), não o client
+  // principal, e por isso a falha propaga em vez de ser engolida.
+  private async writeAuditLog(
+    scope: { tenant_id: string; congregation_id: string | null },
+    actorUserId: string,
+    subjectPersonId: string,
+    action: string,
+  ): Promise<void> {
+    await this.prisma.client.$executeRaw`
+      SELECT audit_insert(
+        ${scope.tenant_id}::text,
+        ${scope.congregation_id}::text,
+        ${actorUserId}::text,
+        ${subjectPersonId}::text,
+        'person'::text,
+        ${action}::text,
+        NULL::jsonb,
+        NULL::jsonb,
+        NULL::text,
+        NULL::text,
+        NULL::text
+      )
+    `;
+  }
+
   // DT-05 (LGPD, Art. 18): soft delete, não hard delete. Pessoa com doação
   // vinculada não pode ser removida — só anonimizada, porque
   // `financial_transaction.donor_person_id` precisa continuar íntegro para
@@ -162,16 +200,7 @@ export class PersonsService {
       data: { deleted_at: new Date() },
     });
 
-    await this.prisma.client.auditLog.create({
-      data: {
-        tenant_id: existing.tenant_id,
-        congregation_id: existing.congregation_id,
-        actor_user_id: user.sub,
-        subject_person_id: id,
-        entity: 'person',
-        action: 'person.deleted',
-      },
-    });
+    await this.writeAuditLog(existing, user.sub, id, 'person.deleted');
 
     return person;
   }
@@ -197,16 +226,7 @@ export class PersonsService {
       data: { revoked_at: new Date(), revocation_reason: 'Anonimização solicitada' },
     });
 
-    await this.prisma.client.auditLog.create({
-      data: {
-        tenant_id: existing.tenant_id,
-        congregation_id: existing.congregation_id,
-        actor_user_id: user.sub,
-        subject_person_id: id,
-        entity: 'person',
-        action: 'person.anonymized',
-      },
-    });
+    await this.writeAuditLog(existing, user.sub, id, 'person.anonymized');
 
     return person;
   }
