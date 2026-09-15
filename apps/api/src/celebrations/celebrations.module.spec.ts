@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CelebrationsModule } from './celebrations.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ContentModule } from '../content/content.module';
@@ -19,8 +20,11 @@ import { PdfExportService } from './pdf-export.service';
 describe('CelebrationsModule', () => {
   it('compila e registra todos os providers', async () => {
     const moduleRef = await Test.createTestingModule({
+      // ThrottlerModule: `ContentModule` importa `PixModule` (PROD-24), e
+      // `PixController` usa `@UseGuards(ThrottlerGuard)`.
       imports: [
         JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
+        ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
         PrismaModule,
         ContentModule,
         StorageModule,

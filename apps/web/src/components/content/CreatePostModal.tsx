@@ -62,6 +62,9 @@ export function CreatePostModal({
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const [registrationLimit, setRegistrationLimit] = useState("");
   const [registrationDeadline, setRegistrationDeadline] = useState("");
+  // Inscrição paga (PROD-24, Premium). Vazio é evento gratuito — a API
+  // recusa preço zero (não é "gratuito", é erro de digitação).
+  const [registrationPrice, setRegistrationPrice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -99,6 +102,7 @@ export function CreatePostModal({
     setSelectedSegmentIds([]); setPublishMode("now"); setPublishAt("");
     setEventStartsAt(""); setEventEndsAt(""); setEventLocation("");
     setRegistrationEnabled(false); setRegistrationLimit(""); setRegistrationDeadline("");
+    setRegistrationPrice("");
     setError(""); setSuccess(false); hasFetched.current = false;
   }
 
@@ -123,6 +127,9 @@ export function CreatePostModal({
         registrationEnabled && registrationDeadline
           ? new Date(registrationDeadline).toISOString()
           : null,
+      ...(registrationEnabled && registrationPrice
+        ? { registration_price: Number(registrationPrice) }
+        : {}),
     };
   }
 
@@ -134,6 +141,9 @@ export function CreatePostModal({
     }
     if (isEvent && registrationEnabled && registrationLimit && Number(registrationLimit) < 1) {
       setError("O limite de vagas precisa ser ao menos 1."); return;
+    }
+    if (isEvent && registrationEnabled && registrationPrice && Number(registrationPrice) <= 0) {
+      setError("O preço da inscrição precisa ser maior que zero."); return;
     }
     setError("");
     setIsSubmitting(true);
@@ -342,6 +352,25 @@ export function CreatePostModal({
                       type="datetime-local"
                       value={registrationDeadline}
                       onChange={(e) => setRegistrationDeadline(e.target.value)}
+                      disabled={isSubmitting}
+                      className="rounded-[8px]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cp-event-price" className="text-sm font-medium text-ink dark:text-white">
+                      Preço da inscrição{" "}
+                      <span className="text-xs font-normal text-stone">
+                        (vazio = gratuito · Premium)
+                      </span>
+                    </Label>
+                    <Input
+                      id="cp-event-price"
+                      type="number"
+                      min={0.01}
+                      step={0.01}
+                      placeholder="R$"
+                      value={registrationPrice}
+                      onChange={(e) => setRegistrationPrice(e.target.value)}
                       disabled={isSubmitting}
                       className="rounded-[8px]"
                     />

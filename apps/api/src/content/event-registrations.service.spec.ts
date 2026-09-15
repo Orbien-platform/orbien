@@ -12,16 +12,24 @@ import {
 } from '@nestjs/common';
 import { EventRegistrationsService } from './event-registrations.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PixService } from '../financial/pix.service';
 
 type Row = Record<string, unknown>;
 
 const EVENT = {
   id: 'p1',
+  title: 'Acampamento',
   type: 'event',
   registration_enabled: true,
   registration_limit: null as number | null,
   registration_deadline: null as Date | null,
+  registration_price: null as { greaterThan: (n: number) => boolean; toNumber: () => number } | null,
 };
+
+/** Fake de `Prisma.Decimal` — só o que o service chama (`greaterThan`, `toNumber`). */
+function price(value: number) {
+  return { greaterThan: (n: number) => value > n, toNumber: () => value };
+}
 
 function clientWith(post: Row | null = { ...EVENT }, rows: Row[] = []) {
   const store = [...rows];
@@ -71,6 +79,12 @@ function clientWith(post: Row | null = { ...EVENT }, rows: Row[] = []) {
       }),
       count: jest.fn().mockImplementation(({ where }: never) => {
         const w = where as Row;
+        if (w['OR']) {
+          const clauses = w['OR'] as Row[];
+          return Promise.resolve(
+            store.filter((r) => clauses.some((c) => c['status'] === r['status'])).length,
+          );
+        }
         return Promise.resolve(store.filter((r) => r['status'] === w['status']).length);
       }),
       create: jest.fn().mockImplementation(({ data }: never) => {
@@ -89,12 +103,24 @@ function clientWith(post: Row | null = { ...EVENT }, rows: Row[] = []) {
   return client;
 }
 
-function serviceWith(client: ReturnType<typeof clientWith>) {
+function pixServiceMock() {
+  return {
+    createForEventRegistration: jest.fn().mockResolvedValue({
+      payment_id: 'pix-1',
+      qr_code: '000201...',
+      qr_code_image: 'data:image/png;base64,...',
+      amount: 50,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    }),
+  } as unknown as PixService;
+}
+
+function serviceWith(client: ReturnType<typeof clientWith>, pixService = pixServiceMock()) {
   const prisma = {
     client,
     runInTx: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
   } as unknown as PrismaService;
-  return new EventRegistrationsService(prisma);
+  return new EventRegistrationsService(prisma, pixService);
 }
 
 const dto = { full_name: 'João Convidado', email: 'joao@ex.com' };
@@ -292,6 +318,78 @@ describe('EventRegistrationsService', () => {
       await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('registerSelf em evento pago (PROD-24)', () => {
+    it('reserva a vaga como pending_payment e devolve o QR, sem confirmar na hora', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      const pix = pixServiceMock();
+      const service = serviceWith(client, pix);
+
+      const result = await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(pix.createForEventRegistration).toHaveBeenCalledWith(
+        't1',
+        'g1',
+        50,
+        expect.stringContaining('Acampamento'),
+      );
+      expect(result).toMatchObject({
+        registration: { status: 'pending_payment', payment_status: 'pending', pix_payment_id: 'pix-1' },
+        payment: { payment_id: 'pix-1' },
+      });
+    });
+
+    it('inscrição pendente não conta como confirmada — só o webhook confirma', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      const service = serviceWith(client);
+
+      await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(client.rows[0]['status']).toBe('pending_payment');
+    });
+
+    it('falha na Asaas desfaz a reserva — não deixa vaga presa', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      const pix = {
+        createForEventRegistration: jest.fn().mockRejectedValue(new Error('Asaas fora')),
+      } as unknown as PixService;
+      const service = serviceWith(client, pix);
+
+      await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow('Asaas fora');
+
+      expect(client.rows[0]['status']).toBe('cancelled');
+    });
+
+    it('evento pago lotado recusa a tentativa — sem fila de espera para quem paga', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50), registration_limit: 1 });
+      client.eventRegistration.create({
+        data: { status: 'confirmed', person_id: 'outra-pessoa', created_at: Date.now() },
+      } as never);
+      const service = serviceWith(client);
+
+      await expect(service.registerSelf('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('organizador não pode inscrever visitante em evento pago — só o próprio inscrito paga', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(50) });
+      const service = serviceWith(client);
+
+      await expect(service.register('t1', 'g1', 'p1', dto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('evento com preço zerado segue o fluxo gratuito de sempre', async () => {
+      const client = clientWith({ ...EVENT, registration_price: price(0) });
+      const pix = pixServiceMock();
+      const service = serviceWith(client, pix);
+
+      const result = await service.registerSelf('t1', 'g1', 'p1', 'user-1');
+
+      expect(pix.createForEventRegistration).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ status: 'confirmed' });
     });
   });
 

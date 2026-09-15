@@ -73,7 +73,7 @@ describe('PostsController', () => {
 
     const result = await controller.create({ title: 'Olá' } as never, USER);
 
-    expect(service.create).toHaveBeenCalledWith('t1', 'g1', 'u1', { title: 'Olá' });
+    expect(service.create).toHaveBeenCalledWith('t1', 'g1', 'u1', { title: 'Olá' }, 'premium');
     expect(result).toEqual({ id: 'p1' });
   });
 
@@ -103,7 +103,7 @@ describe('PostsController', () => {
 
     const result = await controller.update('p1', { title: 'Novo' } as never, USER);
 
-    expect(service.update).toHaveBeenCalledWith('t1', 'g1', 'p1', { title: 'Novo' });
+    expect(service.update).toHaveBeenCalledWith('t1', 'g1', 'p1', { title: 'Novo' }, 'premium');
     expect(result).toEqual({ id: 'p1' });
   });
 

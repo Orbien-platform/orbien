@@ -4,7 +4,9 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
   MaxLength,
@@ -49,4 +51,12 @@ export class CreatePostDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) registration_limit?: number;
 
   @IsOptional() @Type(() => Date) registration_deadline?: Date;
+
+  // NULL/ausente é evento gratuito. `IsPositive` pela mesma razão do `Min(1)`
+  // de `registration_limit`: preço zero não é "gratuito", é erro de
+  // digitação — quem não quer cobrar deixa o campo de fora. Exige plano
+  // Premium; quem cobra isso é o `PostsService` (`PROD-24`), não o DTO — o
+  // plano não está aqui.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive()
+  registration_price?: number;
 }

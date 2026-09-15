@@ -6,8 +6,32 @@ import {
 } from '@nestjs/common';
 import { EventRegistration, EventRegistrationStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PixService } from '../financial/pix.service';
 import { CreateEventRegistrationDto } from './dto/create-event-registration.dto';
 import { ListEventRegistrationsQueryDto } from './dto/list-event-registrations-query.dto';
+
+export interface EventRegistrationPayment {
+  payment_id: string;
+  qr_code: string;
+  qr_code_image: string;
+  amount: number;
+  expires_at: string;
+}
+
+export interface PaidEventRegistrationResult {
+  registration: EventRegistration;
+  payment: EventRegistrationPayment;
+}
+
+interface EventPostForRegistration {
+  id: string;
+  title: string;
+  type: string;
+  registration_enabled: boolean;
+  registration_limit: number | null;
+  registration_deadline: Date | null;
+  registration_price: Prisma.Decimal | null;
+}
 
 export interface EventRegistrationSummary {
   registration_enabled: boolean;
@@ -17,6 +41,8 @@ export interface EventRegistrationSummary {
   confirmed_count: number;
   waitlisted_count: number;
   seats_left: number | null;
+  /** NULL é evento gratuito (`PROD-16`). Setado, é Premium (`PROD-24`). */
+  registration_price: number | null;
 }
 
 export interface EventRegistrationList extends EventRegistrationSummary {
@@ -25,6 +51,22 @@ export interface EventRegistrationList extends EventRegistrationSummary {
 
 /** O que a fila de espera e a contagem de vagas consideram "ocupando lugar". */
 const ACTIVE: EventRegistrationStatus[] = ['confirmed', 'waitlisted'];
+
+/**
+ * O que `findMine`/`cancelMine` enxergam. Além de `ACTIVE`, inclui
+ * `pending_payment`: quem gerou o QR e ainda não pagou (ou desistiu) precisa
+ * conseguir ver e cancelar a própria inscrição (PROD-24).
+ */
+const MINE_VISIBLE: EventRegistrationStatus[] = ['confirmed', 'waitlisted', 'pending_payment'];
+
+/**
+ * Janela em que uma inscrição `pending_payment` ainda "segura" a vaga para
+ * efeito de vagas esgotadas (PROD-24). Mesma janela do `dueDate` que o PIX
+ * dinâmico da Asaas usa (`PixService.createForEventRegistration`): depois
+ * dela, o QR expirou e a vaga volta a valer para outra tentativa — sem exigir
+ * um job para cancelar a linha antiga, ela só some da contagem.
+ */
+const PENDING_PAYMENT_HOLD_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Inscrição em evento — `PROD-16`, variante Starter (sem pagamento).
@@ -57,10 +99,27 @@ const ACTIVE: EventRegistrationStatus[] = ['confirmed', 'waitlisted'];
  * O isolamento é do RLS (`015_rls_event_registrations.sql`, escopo de
  * congregação). O `tenant_id`/`congregation_id` no `where` é a redundância de
  * sempre — erra para o lado de não achar nada.
+ *
+ * INSCRIÇÃO PAGA (`PROD-24`, Premium)
+ *
+ * `registration_price` no post liga o modo pago. A vaga só é confirmada
+ * quando o webhook da Asaas confirma o pagamento (`PixService.handleWebhook`
+ * → `EventRegistrationsService` nunca chama `nextStatus` para ela) — nunca no
+ * pedido, para não vender vaga que ninguém pagou. Entre o pedido e o
+ * pagamento, a linha nasce `pending_payment` e SEGURA a vaga por
+ * `PENDING_PAYMENT_HOLD_MS` (a validade do QR): é a contagem de
+ * `registerSelfPaid`, não a de `nextStatus`. Sem fila de espera para evento
+ * pago — cobrar por uma vaga incerta reabriria a pergunta de reembolso, que
+ * esta entrega não resolve; evento lotado recusa a tentativa, de propósito.
+ * Só o próprio inscrito paga (`registerSelfPaid`); o organizador que inscreve
+ * um visitante (`register`) recusa post pago — ver o guard lá.
  */
 @Injectable()
 export class EventRegistrationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pixService: PixService,
+  ) {}
 
   async list(
     tenantId: string,
@@ -112,18 +171,25 @@ export class EventRegistrationsService {
         congregation_id: congregationId,
         content_post_id: postId,
         person_id: personId,
-        status: { in: ACTIVE },
+        status: { in: MINE_VISIBLE },
       },
     });
   }
 
-  /** O membro se inscreve. Nome e pessoa vêm do cadastro, nunca do corpo. */
+  /**
+   * O membro se inscreve. Nome e pessoa vêm do cadastro, nunca do corpo.
+   *
+   * Evento gratuito confirma na hora (`register`); evento pago devolve o QR
+   * do PIX, com a vaga já reservada como `pending_payment`
+   * (`registerSelfPaid`) — quem chama trata os dois formatos de retorno.
+   */
   async registerSelf(
     tenantId: string,
     congregationId: string,
     postId: string,
     userId: string,
-  ): Promise<EventRegistration> {
+  ): Promise<EventRegistration | PaidEventRegistrationResult> {
+    const post = await this.requireEventPost(tenantId, congregationId, postId);
     const personId = await this.requirePersonOf(userId);
     const person = await this.prisma.client.person.findFirst({
       where: { id: personId, tenant_id: tenantId },
@@ -131,15 +197,127 @@ export class EventRegistrationsService {
     });
     if (!person) throw new NotFoundException('Pessoa não encontrada');
 
-    return this.register(tenantId, congregationId, postId, {
+    const dto: CreateEventRegistrationDto = {
       person_id: personId,
       full_name: person.full_name,
       email: person.email ?? undefined,
       phone: person.phone ?? undefined,
-    });
+    };
+
+    if (post.registration_price && post.registration_price.greaterThan(0)) {
+      return this.registerSelfPaid(tenantId, congregationId, post, dto);
+    }
+
+    return this.register(tenantId, congregationId, postId, dto);
   }
 
-  /** O organizador inscreve alguém — membro ou convidado sem cadastro. */
+  /**
+   * Inscrição paga (`PROD-24`): reserva a vaga como `pending_payment` e pede
+   * o QR do PIX à Asaas. Se a Asaas falhar, a reserva é desfeita — sem isso
+   * ficaria uma linha presa em `pending_payment` que bloquearia (via
+   * `identity`) uma nova tentativa e não expiraria até
+   * `PENDING_PAYMENT_HOLD_MS` se passarem.
+   */
+  private async registerSelfPaid(
+    tenantId: string,
+    congregationId: string,
+    post: EventPostForRegistration,
+    dto: CreateEventRegistrationDto,
+  ): Promise<PaidEventRegistrationResult> {
+    if (!post.registration_enabled) {
+      throw new BadRequestException('Este evento não está com inscrições abertas');
+    }
+    if (post.registration_deadline && post.registration_deadline.getTime() < Date.now()) {
+      throw new BadRequestException('O prazo de inscrição para este evento já encerrou');
+    }
+
+    const identity: Prisma.EventRegistrationWhereInput = dto.person_id
+      ? { person_id: dto.person_id }
+      : { email: { equals: dto.email, mode: 'insensitive' } };
+
+    const registration = await this.prisma.runInTx(async (tx) => {
+      const existing = await tx.eventRegistration.findFirst({
+        where: { content_post_id: post.id, ...identity },
+        orderBy: { created_at: 'desc' },
+      });
+      if (existing && existing.status !== 'cancelled') {
+        throw new ConflictException('Esta pessoa já está inscrita neste evento');
+      }
+
+      if (post.registration_limit !== null) {
+        const holding = await tx.eventRegistration.count({
+          where: {
+            content_post_id: post.id,
+            OR: [
+              { status: 'confirmed' },
+              {
+                status: 'pending_payment',
+                created_at: { gte: new Date(Date.now() - PENDING_PAYMENT_HOLD_MS) },
+              },
+            ],
+          },
+        });
+        if (holding >= post.registration_limit) {
+          throw new BadRequestException('Vagas esgotadas para este evento');
+        }
+      }
+
+      const data = {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        content_post_id: post.id,
+        person_id: dto.person_id ?? null,
+        full_name: dto.full_name,
+        email: dto.email ?? null,
+        phone: dto.phone ?? null,
+        status: 'pending_payment' as const,
+        payment_status: 'pending' as const,
+        registered_by_user_id: null,
+      };
+
+      if (existing) {
+        return tx.eventRegistration.update({
+          where: { id: existing.id },
+          data: { ...data, cancelled_at: null },
+        });
+      }
+      return tx.eventRegistration.create({ data });
+    });
+
+    try {
+      const payment = await this.pixService.createForEventRegistration(
+        tenantId,
+        congregationId,
+        post.registration_price!.toNumber(),
+        `Inscrição — ${post.title}`,
+      );
+
+      const updated = await this.prisma.client.eventRegistration.update({
+        where: { id: registration.id },
+        data: { pix_payment_id: payment.payment_id },
+      });
+
+      return { registration: updated, payment };
+    } catch (err) {
+      // A vaga reservada não pode ficar presa se a Asaas falhou: devolve para
+      // `cancelled`, que o `identity` acima ignora, então a próxima tentativa
+      // não esbarra num "já está inscrita" fantasma.
+      await this.prisma.client.eventRegistration.update({
+        where: { id: registration.id },
+        data: { status: 'cancelled', cancelled_at: new Date() },
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * O organizador inscreve alguém — membro ou convidado sem cadastro.
+   *
+   * Evento pago (`PROD-24`) não passa por aqui: quem paga é o próprio
+   * inscrito (`registerSelfPaid`), e este caminho não tem vínculo de
+   * pagamento para gerar. O organizador que recebeu em espécie/fora do PIX
+   * segue sem tela nesta entrega — ver a nota em `docs/PLANO.md`.
+   */
   async register(
     tenantId: string,
     congregationId: string,
@@ -149,6 +327,11 @@ export class EventRegistrationsService {
   ): Promise<EventRegistration> {
     const post = await this.requireEventPost(tenantId, congregationId, postId);
 
+    if (post.registration_price && post.registration_price.greaterThan(0)) {
+      throw new BadRequestException(
+        'Este evento é pago — a inscrição precisa ser feita pelo próprio inscrito',
+      );
+    }
     if (!post.registration_enabled) {
       throw new BadRequestException('Este evento não está com inscrições abertas');
     }
@@ -287,15 +470,21 @@ export class EventRegistrationsService {
    * Post que não é evento responde 404, não 400: para quem chama esta rota,
    * "não existe evento com esse id" é a verdade — o id é de outra coisa.
    */
-  private async requireEventPost(tenantId: string, congregationId: string, postId: string) {
+  private async requireEventPost(
+    tenantId: string,
+    congregationId: string,
+    postId: string,
+  ): Promise<EventPostForRegistration> {
     const post = await this.prisma.client.contentPost.findFirst({
       where: { id: postId, tenant_id: tenantId, congregation_id: congregationId },
       select: {
         id: true,
+        title: true,
         type: true,
         registration_enabled: true,
         registration_limit: true,
         registration_deadline: true,
+        registration_price: true,
       },
     });
 
@@ -331,6 +520,7 @@ export class EventRegistrationsService {
     registration_enabled: boolean;
     registration_limit: number | null;
     registration_deadline: Date | null;
+    registration_price?: Prisma.Decimal | null;
   }): Promise<EventRegistrationSummary> {
     const [confirmed, waitlisted] = await Promise.all([
       this.prisma.client.eventRegistration.count({
@@ -356,6 +546,7 @@ export class EventRegistrationsService {
         post.registration_limit === null
           ? null
           : Math.max(0, post.registration_limit - confirmed),
+      registration_price: post.registration_price ? post.registration_price.toNumber() : null,
     };
   }
 }

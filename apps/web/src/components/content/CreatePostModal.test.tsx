@@ -578,3 +578,82 @@ describe("CreatePostModal — evento (PROD-16)", () => {
     );
   });
 });
+
+describe("CreatePostModal — inscrição paga (PROD-24)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.get).mockResolvedValue({ data: { data: segments, total: 1 } } as never);
+  });
+
+  async function escolherEvento(user: ReturnType<typeof userEvent.setup>) {
+    await user.selectOptions(screen.getByLabelText(/Tipo/), "event");
+  }
+
+  it("manda `registration_price` quando preenchido", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Acampamento");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText(/Preço da inscrição/), "49.9");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/content/posts",
+        expect.objectContaining({ registration_price: 49.9 })
+      )
+    );
+  });
+
+  it("sem preço, o campo não vai no payload — evento gratuito de sempre", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Culto aberto");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const payload = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("registration_price");
+  });
+
+  it("preço zero ou negativo é barrado na tela, antes de chegar à API", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Acampamento");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText(/Preço da inscrição/), "0");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "O preço da inscrição precisa ser maior que zero."
+    );
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("com inscrição desligada, preço preenchido antes não vaza no payload", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.type(screen.getByLabelText(/Título/), "Acampamento");
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.type(screen.getByLabelText(/Preço da inscrição/), "49.9");
+    // Desmarcar esconde o campo — e o payload tem que acompanhar.
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const payload = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("registration_price");
+  });
+});
