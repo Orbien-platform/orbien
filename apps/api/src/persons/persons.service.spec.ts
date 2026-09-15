@@ -13,6 +13,16 @@ const user: JwtPayload = {
   plan: 'starter',
 };
 
+// `$executeRaw` é tagged template: recebe (strings, ...valores). Só os
+// valores interpolados chegam aqui — `'person'` e os NULLs são literais no
+// SQL, então a lista é (tenant, congregação, autor, pessoa, ação).
+function auditValues(client: { $executeRaw: jest.Mock }): unknown[] {
+  expect(client.$executeRaw).toHaveBeenCalledTimes(1);
+  const [strings, ...values] = client.$executeRaw.mock.calls[0];
+  expect(String(strings[0])).toContain('audit_insert');
+  return values;
+}
+
 function serviceWith(overrides: Record<string, unknown> = {}) {
   const client = {
     person: {
@@ -39,6 +49,9 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
     auditLog: {
       create: jest.fn(),
     },
+    // A auditoria de `remove`/`anonymize` vai por `audit_insert()` via
+    // $executeRaw — INSERT direto em `audit_logs` é negado pelo RLS.
+    $executeRaw: jest.fn(),
   };
 
   const system = {
@@ -338,16 +351,8 @@ describe('PersonsService', () => {
         where: { id: 'p1' },
         data: { deleted_at: expect.any(Date) },
       });
-      expect(client.auditLog.create).toHaveBeenCalledWith({
-        data: {
-          tenant_id: 'tenant-1',
-          congregation_id: 'cong-1',
-          actor_user_id: 'user-1',
-          subject_person_id: 'p1',
-          entity: 'person',
-          action: 'person.deleted',
-        },
-      });
+      expect(client.auditLog.create).not.toHaveBeenCalled();
+      expect(auditValues(client)).toEqual(['tenant-1', 'cong-1', 'user-1', 'p1', 'person.deleted']);
       expect(result).toEqual({ id: 'p1', deleted_at: expect.any(Date) });
     });
   });
@@ -387,16 +392,8 @@ describe('PersonsService', () => {
         where: { person_id: 'p1', revoked_at: null },
         data: { revoked_at: expect.any(Date), revocation_reason: 'Anonimização solicitada' },
       });
-      expect(client.auditLog.create).toHaveBeenCalledWith({
-        data: {
-          tenant_id: 'tenant-1',
-          congregation_id: 'cong-1',
-          actor_user_id: 'user-1',
-          subject_person_id: 'p1',
-          entity: 'person',
-          action: 'person.anonymized',
-        },
-      });
+      expect(client.auditLog.create).not.toHaveBeenCalled();
+      expect(auditValues(client)).toEqual(['tenant-1', 'cong-1', 'user-1', 'p1', 'person.anonymized']);
       expect(result).toEqual({ id: 'p1', full_name: 'ANONIMIZADO' });
     });
   });

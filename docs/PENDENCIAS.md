@@ -32,6 +32,7 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 8 | As duas rotas públicas do produto estavam mortas: `PrismaService.client` devolvia o cliente sem delegates de modelo | defeito | ✔ fechada |
 | 9 | Cadastro de visitante por QR nunca conseguiu gravar sob RLS — rota pública sem contexto de tenant | defeito | ✔ fechada — contexto vem do QR token |
 | 10 | Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — vale para as 8 telas de `(admin)` | UX | ✔ fechada — 403 distinguido de lista vazia, sidebar filtrada por papel |
+| 11 | Exclusão e anonimização de pessoa faziam rollback: auditoria gravada com INSERT direto, negado pelo RLS | defeito (LGPD) | ✔ fechada — as duas passaram a gravar por `audit_insert()` |
 
 > Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
 > nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
@@ -460,21 +461,30 @@ As seis foram relidas contra o código atual. Nenhuma se mostrou defeituosa:
 - **1 e 6 são a mesma técnica.** O reset no fechamento
   (`RegisterMeetingModal.tsx:258`, `onOpenChange={(v) => { if (!v) reset(); ... }}`)
   cobre todos os caminhos de saída do modal. O effect removido em (6) apenas
-  pré-preenchia todos os membros com `false`; as três leituras usam
-  `attendance[personId] ?? false` e a contagem só olha `true`, então o mapa
-  esparso é equivalente. Resta um caso de borda **não alcançável hoje**: se o
+  pré-preenchia todos os membros com `false`; as três leituras são
+  `!attendance[personId]` (o toggle), `Object.values(attendance).filter(Boolean)`
+  (a contagem, que só olha `true`) e `attendance[personId] ?? false` (o render),
+  e `undefined` dá o mesmo resultado que `false` nas três — o mapa esparso é
+  equivalente. Resta um caso de borda **não alcançável hoje**: se o
   `GroupDetailSheet` trocasse de grupo com o modal aberto, o mapa não seria
   limpo — antes o effect limparia, porque dependia de `members`.
 - **2 e 3 estão corretas** no padrão `requestKey = id|tick` + `loadedKey`, com
   `signal.cancelled` checado antes de cada `setState` e o `loadedKey` marcado
-  no `.finally` só se não cancelado. Em `PostDetailSheet.tsx:144-167` a falha
-  de rede mantém `post` nulo e o render (`:279`) cai em `isLoading || !post`,
+  no `.finally` só se não cancelado. Em `PostDetailSheet.tsx` (hoje 159-181) a falha
+  de rede mantém `post` nulo e o render (hoje `:294`) cai em `isLoading || !post`,
   ou seja, o spinner permanece — igual ao comportamento anterior.
 - **4 e 5** só têm evidência em specs que não existem mais.
 
 Conclusão da revisão: **o risco não é o código estar errado hoje, é não haver
 nada que avise quando parar de estar.** Dez arquivos usam
 `loadedFor`/`loadedKey` e nenhum deles tem teste.
+
+> Revisto em 2026-09-15: o padrão se espalhou para **14** arquivos, e os e2e
+> que fecharam esta pendência cobrem 5 deles (`PersonSheet`,
+> `GroupDetailSheet`, `PostDetailSheet` e as páginas de pessoas e grupos). Os
+> outros 9 seguem sem teste — é a mesma conclusão de 2026-09-03, numa
+> superfície maior. As linhas citadas acima e a contagem de specs são do dia
+> em que a pendência fechou; o código andou desde então.
 
 ### Fechada em 2026-09-03 — as três telas têm e2e
 
@@ -491,6 +501,7 @@ O que cada comportamento ganhou:
 | 2 | conteúdo: filtro de status recarrega a lista; grupos: sheet reabre após mutação |
 | 3, 4 | pessoas e grupos: dois termos de busca em sequência, sem esperar o primeiro — vence o último |
 | 5 | as três: registro criado pela UI aparece na lista sem recarregar a página |
+| 6 | **não tem e2e, e é deliberado** — fechou pela equivalência por leitura da revisão acima, não por teste. O mapa esparso de presença dá o mesmo resultado nas três leituras (`!attendance[id]`, a contagem `filter(Boolean)` e `attendance[id] ?? false`), e o único caso de borda é inalcançável: o modal é `{group && <RegisterMeetingModal/>}` e `handleOpenChange` faz `setGroup(null)`, então fechar o sheet desmonta o modal e joga o mapa fora |
 
 Mais as três telas afirmando ausência de erro de console e de resposta HTTP
 inesperada, que é o que a verificação manual do `c84fc02` fazia a olho.
@@ -1528,6 +1539,74 @@ ensina o caminho antigo), então quem tentasse adicionar o mock pelo caminho
 264 testes, 0 falhas. `npm run test:cov -w orbien-mobile` fecha em
 94.25/84.67/94.06/98.08 — os quatro limiares do piso voltam a passar de
 verdade, sem abaixar o threshold.
+
+---
+
+## 11. Exclusão e anonimização de pessoa faziam rollback — resolvida
+
+Achada em 2026-09-15, ao **verificar a pendência nº 4**: os e2e passavam, mas
+cada execução deixava para trás um `Visitante E2E <timestamp>`. O teardown do
+spec de pessoas chama `DELETE /persons/:id`, e a rota respondia 500.
+
+### Evidência
+
+No log da API, a cada saída de spec:
+
+```
+código 42501: new row violates row-level security policy for table "audit_logs"
+  at async PersonsService.remove (persons.service.js:110)
+```
+
+A pessoa continuava no banco com `deleted_at` nulo — ou seja, não era um
+registro de auditoria perdido, era a **operação inteira desfeita**.
+
+### Diagnóstico
+
+`persons.service.ts` gravava a auditoria com `prisma.client.auditLog.create()`
+em dois lugares: `remove()` (`person.deleted`) e `anonymize()`
+(`person.anonymized`). Toda requisição autenticada roda como `app_user`, e
+`audit_logs` só tem policy de SELECT para esse role — a escrita é reservada à
+`audit_insert()`, SECURITY DEFINER (`001_rls_setup.sql`, grupo 8).
+
+É exatamente o defeito que o cabeçalho do `AuditInterceptor` já descrevia e que
+a pendência nº 6 fechou em 2026-09-03 — **estes dois call sites ficaram para
+trás**. A diferença é que no interceptor a escrita é best-effort, fora da
+transação e com `.catch` que só loga; aqui o `await` está **dentro da transação
+da requisição**, então o 42501 propagava e derrubava tudo.
+
+O impacto não era só de teste: `DELETE /persons/:id` e a anonimização por
+Art. 18 da LGPD nunca funcionaram em requisição autenticada.
+
+### Correção
+
+Um helper `writeAuditLog()` em `persons.service.ts`, usado pelos dois métodos,
+que chama `audit_insert()` por `$executeRaw`. Transacional de propósito, ao
+contrário do interceptor: o registro descreve a mudança da mesma transação,
+então se o handler rolar back não deve sobrar linha dizendo que a pessoa foi
+excluída. Nenhuma policy de RLS foi tocada.
+
+### Verificação
+
+Contra o banco local com RLS aplicado, autenticado como `tenant_admin`:
+
+```
+DELETE /api/persons/<id>            → 200   (era 500)
+  persons.deleted_at                → 2026-09-15 15:19:44
+  audit_logs                        → person.deleted
+
+PATCH  /api/persons/<id>/anonymize  → 200   (era 500)
+  persons.full_name                 → ANONIMIZADO
+  audit_logs                        → person.anonymized
+```
+
+E o sintoma que abriu a investigação sumiu — duas execuções seguidas dos três
+specs agora **de fato** deixam o banco no estado anterior (5 pessoas → 5
+pessoas), que era o que a nº 4 afirmava e não era verdade.
+
+Suíte da API: 284 suítes / 2777 testes, 0 falhas. `turbo run lint`: 5/5.
+Nenhum `auditLog.create()` sobrou em `apps/api/src` fora de specs — os três
+chamadores de auditoria hoje são o `AuditInterceptor`,
+`transfer-user-account.service.ts` e este.
 
 ---
 
