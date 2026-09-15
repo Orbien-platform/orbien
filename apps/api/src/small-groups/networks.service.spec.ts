@@ -190,6 +190,30 @@ describe('NetworksService', () => {
       expect(result.total).toBe(6);
     });
 
+    it('AC3: current_pct soma green e yellow (não só green) — 1 verde, 1 amarela, 1 vermelha', async () => {
+      const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000); // 14-27 dias → yellow
+      const client = clientWith();
+      client.network.findUnique.mockResolvedValue({ health_goal_pct: 50 });
+      client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }, { id: 'g2' }, { id: 'g3' }]);
+      client.groupMeeting.groupBy.mockResolvedValue([
+        { small_group_id: 'g1', _max: { occurred_at: recent } },
+        { small_group_id: 'g2', _max: { occurred_at: twentyDaysAgo } },
+        // g3 sem GroupMeeting → red
+      ]);
+      const service = serviceWith(client);
+
+      const result = await service.getGoalStatus('n1');
+
+      expect(result.green).toBe(1);
+      expect(result.yellow).toBe(1);
+      expect(result.red).toBe(1);
+      expect(result.total).toBe(3);
+      // (green+yellow)/total = 2/3 = 66.67 — se a fórmula ignorasse yellow,
+      // daria green/total = 33.33.
+      expect(result.current_pct).toBe(66.67);
+      expect(result.met).toBe(true);
+    });
+
     it('AC4: rede sem meta definida — goal_pct e met são null, contagens continuam úteis', async () => {
       const client = clientWith();
       client.network.findUnique.mockResolvedValue({ health_goal_pct: null });

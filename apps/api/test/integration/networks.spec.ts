@@ -191,6 +191,47 @@ describe('Networks — CRUD e goal-status, contra Postgres real', () => {
     expect(statusNotMet.total).toBe(6);
   });
 
+  it('AC3: current_pct soma green e yellow (não só green) — 1 verde, 1 amarela, 1 vermelha', async () => {
+    const network = await runAsUser(tenantId, congregationId, userId, (tx) =>
+      prismaService.withTx(tx, () =>
+        service.create({ name: `Rede Mista ${ts}`, health_goal_pct: 50 }, USER),
+      ),
+    );
+
+    const [greenId, yellowId, redId] = await Promise.all([
+      createGroup('Célula Verde Mista'),
+      createGroup('Célula Amarela Mista'),
+      createGroup('Célula Vermelha Mista'),
+    ]);
+    await prismaAdmin.smallGroup.updateMany({
+      where: { id: { in: [greenId, yellowId, redId] } },
+      data: { network_id: network.id },
+    });
+    await registerRecentMeeting(greenId);
+    await prismaAdmin.groupMeeting.create({
+      data: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        small_group_id: yellowId,
+        occurred_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000), // 14-27 dias → yellow
+      },
+    });
+    // redId nunca se reuniu → red
+
+    const status = await runAsUser(tenantId, congregationId, userId, (tx) =>
+      prismaService.withTx(tx, () => service.getGoalStatus(network.id)),
+    );
+
+    expect(status.green).toBe(1);
+    expect(status.yellow).toBe(1);
+    expect(status.red).toBe(1);
+    expect(status.total).toBe(3);
+    // (green+yellow)/total = 2/3 = 66.67 — se a fórmula ignorasse yellow,
+    // daria green/total = 33.33.
+    expect(status.current_pct).toBe(66.67);
+    expect(status.met).toBe(true);
+  });
+
   it('AC4/AC5: rede sem meta e rede sem células', async () => {
     const semMeta = await runAsUser(tenantId, congregationId, userId, (tx) =>
       prismaService.withTx(tx, () => service.create({ name: `Rede Sem Meta ${ts}` }, USER)),
