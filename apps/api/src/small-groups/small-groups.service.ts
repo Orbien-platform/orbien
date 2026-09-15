@@ -74,6 +74,23 @@ type HierarchyRow = {
 
 type HierarchyNode = Omit<HierarchyRow, 'depth'> & { children: HierarchyNode[] };
 
+export type HealthStatus = 'green' | 'yellow' | 'red';
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Semáforo de saúde (PROD-20, CEL20-04/05): função pura, exportada (não
+// método) per design.md — reusada por NetworksService sem acoplar os dois
+// services. `< 14` dias → green; `14–27` → yellow; `>= 28` ou nunca se reuniu
+// (`null`) → red.
+export function classifyHealth(lastMeetingAt: Date | null, now: Date = new Date()): HealthStatus {
+  if (lastMeetingAt === null) return 'red';
+
+  const daysSince = Math.floor((now.getTime() - lastMeetingAt.getTime()) / MS_PER_DAY);
+  if (daysSince < 14) return 'green';
+  if (daysSince < 28) return 'yellow';
+  return 'red';
+}
+
 function buildTree(flat: HierarchyRow[], nodeId: string): HierarchyNode | null {
   const node = flat.find((n) => n.id === nodeId);
   if (!node) return null;

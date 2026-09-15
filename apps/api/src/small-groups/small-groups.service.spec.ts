@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { SmallGroupsService } from './small-groups.service';
+import { SmallGroupsService, classifyHealth } from './small-groups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -50,6 +50,30 @@ function serviceWith(client: ReturnType<typeof clientWith>, runInTx?: jest.Mock)
   } as unknown as PrismaService;
   return new SmallGroupsService(prisma);
 }
+
+describe('classifyHealth', () => {
+  const NOW = new Date('2026-09-15T12:00:00.000Z');
+
+  it('CEL20-04/05: null (nunca se reuniu) é red', () => {
+    expect(classifyHealth(null, NOW)).toBe('red');
+  });
+
+  it('fronteira 13/14 dias: 13 dias é green, 14 dias é yellow', () => {
+    const treze = new Date(NOW.getTime() - 13 * 24 * 60 * 60 * 1000);
+    const catorze = new Date(NOW.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    expect(classifyHealth(treze, NOW)).toBe('green');
+    expect(classifyHealth(catorze, NOW)).toBe('yellow');
+  });
+
+  it('fronteira 27/28 dias: 27 dias é yellow, 28 dias é red', () => {
+    const vinteSete = new Date(NOW.getTime() - 27 * 24 * 60 * 60 * 1000);
+    const vinteOito = new Date(NOW.getTime() - 28 * 24 * 60 * 60 * 1000);
+
+    expect(classifyHealth(vinteSete, NOW)).toBe('yellow');
+    expect(classifyHealth(vinteOito, NOW)).toBe('red');
+  });
+});
 
 describe('SmallGroupsService', () => {
   describe('create', () => {
