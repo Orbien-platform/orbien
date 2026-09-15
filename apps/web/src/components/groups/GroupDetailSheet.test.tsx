@@ -830,6 +830,73 @@ describe("GroupDetailSheet", () => {
     );
   });
 
+  it("shows the multiply button for the cell_leader who owns this group", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine")
+        return Promise.resolve({ data: [{ id: "g1", role: "leader" }] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Multiplicar célula" })).toBeInTheDocument();
+  });
+
+  it("hides the multiply button for a cell_leader of a different group", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine")
+        return Promise.resolve({ data: [{ id: "g2", role: "leader" }] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/mine"));
+    expect(screen.queryByRole("button", { name: "Multiplicar célula" })).not.toBeInTheDocument();
+  });
+
+  it("does not fetch /small-groups/mine, nor show the multiply button, for a non-cell_leader without canEdit", async () => {
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Multiplicar célula" })).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalledWith("/small-groups/mine");
+  });
+
   it("opens the register-meeting modal and refreshes the meetings list on completion", async () => {
     let meetingsCallCount = 0;
     vi.mocked(api.get).mockImplementation((url: string) => {
@@ -871,5 +938,212 @@ describe("GroupDetailSheet", () => {
     await user.click(screen.getByRole("button", { name: "Finalizar" }));
 
     await waitFor(() => expect(meetingsCallCount).toBeGreaterThan(1));
+  });
+
+  it("esconde o botão de multiplicar quando /small-groups/mine falha (rede fora do ar)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine") return Promise.reject(new Error("network down"));
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/mine"));
+    expect(screen.queryByRole("button", { name: "Multiplicar célula" })).not.toBeInTheDocument();
+  });
+
+  it("descarta a resposta de /small-groups/mine se a gaveta fechar antes dela chegar", async () => {
+    let resolveMine!: (value: { data: unknown }) => void;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine")
+        return new Promise((resolve) => { resolveMine = resolve; });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const onOpenChange = vi.fn();
+
+    const { rerender } = render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={onOpenChange}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/mine"));
+
+    rerender(
+      <GroupDetailSheet
+        open={false}
+        onOpenChange={onOpenChange}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    resolveMine({ data: [{ id: "g1", role: "leader" }] });
+    // A gaveta fechou antes da resposta chegar: nada deve setar estado num
+    // efeito já cancelado (senão o React acusaria o warning correspondente).
+  });
+
+  it("descarta a falha de /small-groups/mine se a gaveta fechar antes dela chegar", async () => {
+    let rejectMine!: (error: unknown) => void;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine")
+        return new Promise((_resolve, reject) => { rejectMine = reject; });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const onOpenChange = vi.fn();
+
+    const { rerender } = render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={onOpenChange}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/mine"));
+
+    rerender(
+      <GroupDetailSheet
+        open={false}
+        onOpenChange={onOpenChange}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    rejectMine(new Error("network down"));
+    // A gaveta fechou antes da resposta chegar: o catch não deve setar
+    // estado num efeito já cancelado.
+  });
+
+  it("mostra as células filhas depois de uma multiplicação (AC5)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1")
+        return Promise.resolve({
+          data: { ...group, childGroups: [{ id: "g2", name: "Célula Alfa 2" }] },
+        });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(await screen.findByText("Células filhas")).toBeInTheDocument();
+    expect(screen.getByText("Célula Alfa 2")).toBeInTheDocument();
+  });
+
+  it("abre a aba Genealogia e monta a árvore genealógica do grupo", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/g1/hierarchy")
+        return Promise.resolve({ data: { ancestors: [], tree: null } });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Genealogia" }));
+
+    expect(await screen.findByText("Célula raiz, sem descendentes.")).toBeInTheDocument();
+  });
+
+  it("multiplica a célula pelo botão da gaveta e recarrega o detalhe e a lista pai", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/persons?limit=100")
+        return Promise.resolve({ data: { data: [{ id: "p9", full_name: "Novo Líder" }] } });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "child-1" } });
+    const onUpdated = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={onUpdated}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Multiplicar célula" }));
+
+    await user.type(await screen.findByLabelText(/Nome da célula filha/), "Célula Alfa 2");
+    await user.selectOptions(screen.getByLabelText(/Novo líder/), "p9");
+
+    const callsBefore = vi.mocked(api.get).mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Multiplicar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/small-groups/g1/multiply", expect.anything())
+    );
+    await vi.advanceTimersByTimeAsync(1200);
+
+    expect(onUpdated).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(callsBefore)
+    );
+    vi.useRealTimers();
   });
 });

@@ -4,6 +4,7 @@ import { SmallGroupsModule } from './small-groups.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SmallGroupsService } from './small-groups.service';
 import { PublicSmallGroupsService } from './public-small-groups.service';
+import { NetworksService } from './networks.service';
 import { MeetingsService } from './meetings.service';
 import { PrayerRequestsService } from './prayer-requests.service';
 import { GroupMessagesService } from './group-messages.service';
@@ -25,6 +26,7 @@ describe('SmallGroupsModule', () => {
     expect(moduleRef.get(PrayerRequestsService)).toBeInstanceOf(PrayerRequestsService);
     expect(moduleRef.get(GroupMessagesService)).toBeInstanceOf(GroupMessagesService);
     expect(moduleRef.get(PublicSmallGroupsService)).toBeInstanceOf(PublicSmallGroupsService);
+    expect(moduleRef.get(NetworksService)).toBeInstanceOf(NetworksService);
 
     await moduleRef.close();
   });

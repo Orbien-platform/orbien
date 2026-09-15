@@ -401,6 +401,56 @@ event-registrations.{service,controller}.spec.ts`, os DTOs, o bloco novo em
 `EventRegistrationsPanel.test.tsx` mais os blocos novos de
 `CreatePostModal.test.tsx` e `PostDetailSheet.test.tsx`.
 
+### ~~PROD-20 · Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede~~ · fechado
+
+Entregue em 2026-09-15. Renumerado de `PROD-15` em 2026-09-13 (esse ID
+pertence ao item de infra OTA, fechado na seção 5) — ID não se recicla.
+Escopo completo: multiplicação (Starter) + árvore genealógica, semáforo de
+saúde e rede com meta (Premium).
+
+`SmallGroup.parent_group_id`/`childGroups` já existiam sem nenhuma ação que
+os usasse; o item inteiro nasceu em cima disso. `POST
+/small-groups/:id/multiply` cria a célula filha (`parent_group_id` = mãe) e
+move os `GroupMembership` escolhidos numa única transação, com
+recontagem dentro dela contra corrida de duas multiplicações simultâneas;
+`cell_leader` da própria célula multiplica sem depender de admin (checagem
+de escopo no service, não um novo papel), e não tem `@RequiresPlan` — é
+Starter.
+
+O semáforo (`classifyHealth`) é calculado on-demand a partir do
+`MAX(GroupMeeting.occurred_at)`, sem job novo: verde <14 dias, amarelo
+14–27, vermelho ≥28 ou sem encontro registrado. `GET
+/small-groups/:id/hierarchy` — que já existia (`getHierarchy`, CTE
+recursiva, sem nenhum consumidor no front) — ganhou ancestrais (cadeia
+iterativa, não uma segunda CTE) e `health_status` por nó, e passou a exigir
+Premium; não quebrou nada porque não tinha consumidor antes desta entrega.
+
+`Network` é tabela nova (`networks`, RLS em `016_rls_networks.sql`, mesmo
+template de `014` — `tenant_congregation_isolation` simétrica, AD-001),
+por congregação, com líder opcional e `health_goal_pct` opcional.
+`GET /networks/:id/goal-status` agrega saúde de todas as células da rede
+(`green+yellow` sobre o total = "não vermelho") — reusa `classifyHealth`,
+não duplica o cálculo. `NetworksController` inteiro é Premium
+(`@RequiresPlan` de classe, mesmo padrão de `AuditController`/
+`DreController`).
+
+No `apps/web`: wizard de multiplicar (seleção de membros + novo líder) no
+`GroupDetailSheet`, visível também ao `cell_leader` dono da célula (não só
+admin/pastor — achado de revisão corrigido antes do PR); indicador de saúde
+(bolinha, oculta silenciosamente sem Premium); aba de árvore genealógica
+(`NoAccessState` sem Premium); tela `/redes` (`(admin)` do `apps/web`, não
+o app `apps/admin` — é dado de igreja, não de plataforma) para criar/editar
+rede, vincular/desvincular célula e ver o status da meta.
+
+Verificado por um Verifier independente (`.specs/features/
+prod-20-multiplicacao-celula/`) com PASS após uma iteração de fix (gap de
+teste em `getGoalStatus`, não bug de produção) e uma rodada de
+`/code-review`+`pr-review` que corrigiu 3 achados antes do PR (botão de
+multiplicar invisível ao `cell_leader`, `PATCH` de rede não limpando
+campo com `undefined`, `leader_person_id` sem validação em
+`NetworksService`). Três achados menores ficaram como pendência declarada,
+ver `PEND-05`.
+
 ### ~~PROD-24 · Evento com inscrição paga (Premium)~~ · fechado (backend + painel do organizador)
 
 Entregue em 2026-09-15, sobre a variante Starter do `PROD-16` acima.
@@ -476,7 +526,6 @@ só coluna em tabela existente (`event_registrations`), a policy de
 | `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
-| `PROD-20` | 3 | Multiplicação de célula, árvore genealógica, semáforo de saúde, metas por rede | Starter (multiplicação) / Premium (resto) | Renumerado de `PROD-15` em 2026-09-13 — esse ID já pertence ao item de infra OTA fechado na seção 5, e ID não se recicla |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 | `PROD-25` | 4 | Tela de member self-service para inscrição em evento (gratuito e pago) | Starter (gratuito) / Premium (pago) | `POST .../registrations/me` existe desde o `PROD-16` (2026-09-14) e nunca ganhou tela — nem `apps/web` nem `apps/mobile` chamam essa rota hoje, só o painel do organizador. Com o `PROD-24` (2026-09-15) a lacuna cresceu: sem essa tela também não há onde mostrar o QR do PIX dinâmico que `registerSelf` passou a devolver para evento pago. Provavelmente `apps/mobile`, que é onde o membro consome conteúdo — a decidir |
 
@@ -661,6 +710,30 @@ caminho de login, não um fix de uma tarde, e um `USING` errado quebra login
 em produção sem aviso. Ficou como pergunta, não decisão: seguir com o
 `USING (true)` conhecido, ou priorizar esse mapeamento como trabalho próprio
 antes de mexer na policy?
+
+### PEND-05 · Três achados menores de PROD-20, declarados no PR · dívida
+
+Achados de `/code-review`+`pr-review` na feature `prod-20-multiplicacao-celula`
+que o dev decidiu não bloquear o PR — nenhum é vazamento de isolamento nem
+bug de produção:
+
+- **`bootstrap-db.sh` passo 7 não tem assertiva SQL dedicada para `networks`**
+  como tem para 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
+  FROM qual`). O catch-all genérico (qualquer tabela `public` sem RLS
+  habilitado derruba o passo 7) ainda cobre ausência total de RLS — o que
+  falta é só a checagem de simetria *específica* dessa tabela, que pegaria
+  um `USING`/`WITH CHECK` divergente escrito à mão numa mudança futura no
+  `016_rls_networks.sql`.
+- **`MultiplyGroupModal` e `NetworkFormModal` engolem erro ao carregar
+  pessoas** (`.catch(() => {})` no `GET /persons`) — o select de "novo
+  líder"/"líder de rede" fica vazio sem indicar que a chamada falhou,
+  indistinguível de "não há pessoas cadastradas". Mesmo padrão em
+  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`): falha em
+  `GET /small-groups` vira "nenhuma célula vinculada" em vez de erro.
+- **Sem cobertura E2E** para os dois fluxos de escrita novos — o wizard de
+  multiplicar célula e o CRUD de rede (criar/editar rede, vincular/
+  desvincular célula) em `apps/web/e2e/`. Há teste de componente
+  (`.test.tsx`) para as duas telas, não o fluxo ponta a ponta no browser.
 
 ---
 

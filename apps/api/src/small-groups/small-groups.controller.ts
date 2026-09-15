@@ -13,13 +13,16 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { SmallGroupsService } from './small-groups.service';
 import { CreateSmallGroupDto } from './dto/create-small-group.dto';
 import { UpdateSmallGroupDto } from './dto/update-small-group.dto';
+import { MultiplySmallGroupDto } from './dto/multiply-small-group.dto';
 import { ListSmallGroupsQueryDto } from './dto/list-small-groups-query.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
@@ -43,8 +46,11 @@ const MINE_ROLES = [
   'tenant_admin',
 ];
 
+// PlanGuard entra no guard de classe (PROD-20): é no-op nas rotas sem
+// `@RequiresPlan` (dashboard.controller.ts é o precedente) — as rotas de
+// multiplicar e as pré-existentes continuam sem gate de plano.
 @Controller('small-groups')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
 export class SmallGroupsController {
   constructor(private readonly smallGroupsService: SmallGroupsService) {}
@@ -69,10 +75,20 @@ export class SmallGroupsController {
     return this.smallGroupsService.findMine(user.sub, user.tenant_id, user.congregation_id);
   }
 
+  // Árvore genealógica (PROD-20, CEL20-06) — Premium.
   @Get(':id/hierarchy')
   @Roles(...READ_ROLES)
+  @RequiresPlan('premium')
   getHierarchy(@Param('id', ParseUUIDPipe) id: string) {
     return this.smallGroupsService.getHierarchy(id);
+  }
+
+  // Semáforo de saúde (PROD-20, CEL20-04) — Premium.
+  @Get(':id/health')
+  @Roles(...READ_ROLES)
+  @RequiresPlan('premium')
+  getHealth(@Param('id', ParseUUIDPipe) id: string) {
+    return this.smallGroupsService.getHealth(id);
   }
 
   @Get(':id/absence-alerts')
@@ -88,6 +104,19 @@ export class SmallGroupsController {
   @Roles(...ALERT_ROLES)
   listVisitRequests(@Param('id', ParseUUIDPipe) id: string) {
     return this.smallGroupsService.listVisitRequests(id);
+  }
+
+  // Multiplicação de célula (PROD-20, Starter — sem PlanGuard). ALERT_ROLES
+  // abre a porta pro cell_leader; o service confirma que é o líder DESTA
+  // célula antes de prosseguir (design.md, "Permissões de multiply").
+  @Post(':id/multiply')
+  @Roles(...ALERT_ROLES)
+  multiply(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MultiplySmallGroupDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.smallGroupsService.multiply(id, dto, user);
   }
 
   @Get(':id')

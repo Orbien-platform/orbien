@@ -3,6 +3,12 @@
  * não se testa com mock (ver docs/TESTES.md, Fase 5). Este teste roda contra
  * o Postgres efêmero, sob RLS real, reusando `test/helpers/rls.ts`.
  *
+ * PROD-20 (CEL20-06) estendeu o retorno para `{ ancestors, tree }`, cada nó
+ * com `health_status` — as asserções abaixo foram adaptadas para o novo
+ * shape, mantendo toda cobertura que já existia (árvore completa, subárvore
+ * a partir de um nó intermediário, grupo inexistente, isolamento por RLS) e
+ * somando um teste novo de ancestrais em 2+ gerações.
+ *
  * Uso: DATABASE_URL=... DIRECT_URL=... npm run test:integration -w orbien-backend
  */
 
@@ -93,35 +99,60 @@ afterAll(async () => {
 }, 60_000);
 
 describe('SmallGroupsService.getHierarchy — $queryRaw recursivo, contra RLS real', () => {
-  it('monta a árvore completa (raiz → filho → neto) a partir da raiz', async () => {
-    const tree = await runAsTenant(tenantId, congregationId, (tx) =>
+  it('a partir da raiz: sem ancestrais, árvore completa (raiz → filho → neto), todos red (nunca se reuniram)', async () => {
+    const result = await runAsTenant(tenantId, congregationId, (tx) =>
       prismaService.withTx(tx, () => service.getHierarchy(rootId)),
     );
 
-    expect(tree?.id).toBe(rootId);
-    expect(tree?.children).toHaveLength(1);
-    expect(tree?.children[0]?.id).toBe(childId);
-    expect(tree?.children[0]?.children).toHaveLength(1);
-    expect(tree?.children[0]?.children[0]?.id).toBe(grandchildId);
-    expect(tree?.children[0]?.children[0]?.children).toEqual([]);
+    expect(result.ancestors).toEqual([]);
+    expect(result.tree?.id).toBe(rootId);
+    expect(result.tree?.generation).toBe(0);
+    expect(result.tree?.health_status).toBe('red');
+    expect(result.tree?.children).toHaveLength(1);
+    expect(result.tree?.children[0]?.id).toBe(childId);
+    expect(result.tree?.children[0]?.generation).toBe(1);
+    expect(result.tree?.children[0]?.children).toHaveLength(1);
+    expect(result.tree?.children[0]?.children[0]?.id).toBe(grandchildId);
+    expect(result.tree?.children[0]?.children[0]?.generation).toBe(2);
+    expect(result.tree?.children[0]?.children[0]?.children).toEqual([]);
   });
 
-  it('a partir de um nó intermediário, retorna apenas a subárvore abaixo dele', async () => {
-    const tree = await runAsTenant(tenantId, congregationId, (tx) =>
+  it('a partir de um nó intermediário: 1 ancestral (a raiz) e a subárvore abaixo dele', async () => {
+    const result = await runAsTenant(tenantId, congregationId, (tx) =>
       prismaService.withTx(tx, () => service.getHierarchy(childId)),
     );
 
-    expect(tree?.id).toBe(childId);
-    expect(tree?.children).toHaveLength(1);
-    expect(tree?.children[0]?.id).toBe(grandchildId);
+    expect(result.ancestors).toEqual([
+      expect.objectContaining({ id: rootId, generation: -1 }),
+    ]);
+    expect(result.tree?.id).toBe(childId);
+    expect(result.tree?.generation).toBe(0);
+    expect(result.tree?.children).toHaveLength(1);
+    expect(result.tree?.children[0]?.id).toBe(grandchildId);
   });
 
-  it('retorna null quando o grupo não existe (ou pertence a outro tenant, via RLS)', async () => {
-    const tree = await runAsTenant(tenantId, congregationId, (tx) =>
+  it('a partir do neto: 2 ancestrais (pai e avô), mais próximo primeiro (CEL20-06)', async () => {
+    const result = await runAsTenant(tenantId, congregationId, (tx) =>
+      prismaService.withTx(tx, () => service.getHierarchy(grandchildId)),
+    );
+
+    expect(result.ancestors).toHaveLength(2);
+    expect(result.ancestors[0]).toEqual(
+      expect.objectContaining({ id: childId, generation: -1 }),
+    );
+    expect(result.ancestors[1]).toEqual(
+      expect.objectContaining({ id: rootId, generation: -2 }),
+    );
+    expect(result.tree?.id).toBe(grandchildId);
+    expect(result.tree?.children).toEqual([]);
+  });
+
+  it('retorna ancestors: [] e tree: null quando o grupo não existe (ou pertence a outro tenant, via RLS)', async () => {
+    const result = await runAsTenant(tenantId, congregationId, (tx) =>
       prismaService.withTx(tx, () => service.getHierarchy('00000000-0000-4000-8000-000000000000')),
     );
 
-    expect(tree).toBeNull();
+    expect(result).toEqual({ ancestors: [], tree: null });
   });
 
   it('RLS isola: sob outro tenant, o mesmo id não é visível', async () => {
@@ -133,11 +164,11 @@ describe('SmallGroupsService.getHierarchy — $queryRaw recursivo, contra RLS re
     });
 
     try {
-      const tree = await runAsTenant(outroTenant.id, outraCong.id, (tx) =>
+      const result = await runAsTenant(outroTenant.id, outraCong.id, (tx) =>
         prismaService.withTx(tx, () => service.getHierarchy(rootId)),
       );
 
-      expect(tree).toBeNull();
+      expect(result).toEqual({ ancestors: [], tree: null });
     } finally {
       await prismaAdmin.congregation.deleteMany({ where: { tenant_id: outroTenant.id } });
       await prismaAdmin.tenant.deleteMany({ where: { id: outroTenant.id } });

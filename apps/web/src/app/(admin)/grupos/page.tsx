@@ -43,6 +43,10 @@ export default function GruposPage() {
     roles.includes("tenant_admin") ||
     roles.includes("pastor");
   const canManageTypes = roles.includes("admin_congregation") || roles.includes("tenant_admin");
+  // CEL20-01: o botão "Multiplicar célula" também vale para o cell_leader
+  // dono da célula — canEdit não inclui esse papel. A checagem de "é dono
+  // desta célula" acontece dentro do GroupDetailSheet.
+  const isCellLeader = roles.includes("cell_leader");
 
   const [groups, setGroups] = useState<SmallGroup[]>([]);
   const [total, setTotal] = useState(0);
@@ -278,6 +282,7 @@ export default function GruposPage() {
         onOpenChange={setSheetOpen}
         groupId={selectedId}
         canEdit={canEdit}
+        isCellLeader={isCellLeader}
         onUpdated={reloadGroups}
       />
 

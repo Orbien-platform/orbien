@@ -2,6 +2,7 @@ import { Reflector } from '@nestjs/core';
 import { SmallGroupsController } from './small-groups.controller';
 import { SmallGroupsService } from './small-groups.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
+import { REQUIRES_PLAN_KEY } from '../auth/decorators/requires-plan.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 const USER: JwtPayload = {
@@ -31,6 +32,14 @@ function rolesFor(methodName: keyof SmallGroupsController): string[] | undefined
   return reflector.get<string[] | undefined>(ROLES_KEY, SmallGroupsController.prototype[methodName]);
 }
 
+function requiredPlanFor(methodName: keyof SmallGroupsController): string | undefined {
+  const reflector = new Reflector();
+  return reflector.get<string | undefined>(
+    REQUIRES_PLAN_KEY,
+    SmallGroupsController.prototype[methodName],
+  );
+}
+
 describe('SmallGroupsController', () => {
   let service: jest.Mocked<SmallGroupsService>;
   let controller: SmallGroupsController;
@@ -48,6 +57,8 @@ describe('SmallGroupsController', () => {
       removeMember: jest.fn(),
       findMine: jest.fn(),
       listVisitRequests: jest.fn(),
+      multiply: jest.fn(),
+      getHealth: jest.fn(),
     } as unknown as jest.Mocked<SmallGroupsService>;
 
     controller = new SmallGroupsController(service);
@@ -62,6 +73,10 @@ describe('SmallGroupsController', () => {
     expect(rolesFor('findAll')).toEqual(READ_ROLES);
     expect(rolesFor('getHierarchy')).toEqual(READ_ROLES);
     expect(rolesFor('findOne')).toEqual(READ_ROLES);
+  });
+
+  it('getHierarchy exige plano Premium (CEL20-06)', () => {
+    expect(requiredPlanFor('getHierarchy')).toBe('premium');
   });
 
   it('update e removeMember exigem papel de gestão', () => {
@@ -79,6 +94,45 @@ describe('SmallGroupsController', () => {
 
   it('listVisitRequests aceita cell_leader — quem responde ao pedido é a liderança da célula', () => {
     expect(rolesFor('listVisitRequests')).toEqual(ALERT_ROLES);
+  });
+
+  it('multiply aceita cell_leader — escopo real é checado no service (PROD-20)', () => {
+    expect(rolesFor('multiply')).toEqual(ALERT_ROLES);
+  });
+
+  it('multiply delega ao service com id, dto e usuário', async () => {
+    service.multiply.mockResolvedValue({ id: 'child-1' } as never);
+
+    const result = await controller.multiply(
+      'sg1',
+      { name: 'Filha', leader_person_id: 'p2', member_ids: ['p1'] } as never,
+      USER,
+    );
+
+    expect(service.multiply).toHaveBeenCalledWith(
+      'sg1',
+      { name: 'Filha', leader_person_id: 'p2', member_ids: ['p1'] },
+      USER,
+    );
+    expect(result).toEqual({ id: 'child-1' });
+  });
+
+  it('getHealth aceita papéis de leitura e exige plano Premium (CEL20-04)', () => {
+    expect(rolesFor('getHealth')).toEqual(READ_ROLES);
+    expect(requiredPlanFor('getHealth')).toBe('premium');
+  });
+
+  it('getHealth delega ao service', async () => {
+    service.getHealth.mockResolvedValue({
+      status: 'green',
+      last_meeting_at: null,
+      days_since_last_meeting: null,
+    });
+
+    const result = await controller.getHealth('sg1');
+
+    expect(service.getHealth).toHaveBeenCalledWith('sg1');
+    expect(result).toEqual({ status: 'green', last_meeting_at: null, days_since_last_meeting: null });
   });
 
   it('listVisitRequests delega ao service', async () => {
@@ -122,12 +176,12 @@ describe('SmallGroupsController', () => {
   });
 
   it('getHierarchy delega ao service', async () => {
-    service.getHierarchy.mockResolvedValue(null);
+    service.getHierarchy.mockResolvedValue({ ancestors: [], tree: null });
 
     const result = await controller.getHierarchy('sg1');
 
     expect(service.getHierarchy).toHaveBeenCalledWith('sg1');
-    expect(result).toBeNull();
+    expect(result).toEqual({ ancestors: [], tree: null });
   });
 
   it('checkAbsenceAlerts delega ao service', async () => {

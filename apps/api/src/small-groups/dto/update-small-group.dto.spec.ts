@@ -25,4 +25,20 @@ describe('UpdateSmallGroupDto', () => {
     const errors = await errorsFor({ lat: 'norte' });
     expect(errors.some((e) => e.property === 'lat')).toBe(true);
   });
+
+  // Vínculo de rede (PROD-20, CEL20-07)
+  it('aceita network_id como UUID válido', async () => {
+    expect(
+      await errorsFor({ network_id: '11111111-1111-4111-8111-111111111111' }),
+    ).toHaveLength(0);
+  });
+
+  it('aceita network_id explicitamente null (desvínculo)', async () => {
+    expect(await errorsFor({ network_id: null })).toHaveLength(0);
+  });
+
+  it('rejeita network_id que não é UUID', async () => {
+    const errors = await errorsFor({ network_id: 'não-uuid' });
+    expect(errors.some((e) => e.property === 'network_id')).toBe(true);
+  });
 });

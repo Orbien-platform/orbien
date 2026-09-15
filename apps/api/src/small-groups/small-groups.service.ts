@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,8 +17,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateSmallGroupDto } from './dto/create-small-group.dto';
 import { UpdateSmallGroupDto } from './dto/update-small-group.dto';
+import { MultiplySmallGroupDto } from './dto/multiply-small-group.dto';
 import { ListSmallGroupsQueryDto } from './dto/list-small-groups-query.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+
+// Quem pode multiplicar sem depender de ser o líder desta célula específica
+// (design.md, "Permissões de multiply"). cell_leader entra pelo ALERT_ROLES do
+// controller (RolesGuard já libera a rota); o service é quem confirma que,
+// sendo só cell_leader, é o líder DESTA célula.
+const MULTIPLY_MANAGE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 
 type GroupTypeSummary = Pick<GroupType, 'id' | 'name' | 'color'>;
 const GROUP_TYPE_SUMMARY_SELECT = { id: true, name: true, color: true } as const;
@@ -58,24 +66,84 @@ type HierarchyRow = {
   group_type_name: string | null;
   parent_group_id: string | null;
   leader_person_id: string;
+  leader_person_name: string | null;
   is_public: boolean;
   meeting_time: string | null;
   recurrence: string | null;
   depth: number;
 };
 
-type HierarchyNode = Omit<HierarchyRow, 'depth'> & { children: HierarchyNode[] };
+type AncestorRow = {
+  id: string;
+  name: string;
+  leader_person_id: string;
+  leader_person_name: string | null;
+  parent_group_id: string | null;
+};
 
-function buildTree(flat: HierarchyRow[], nodeId: string): HierarchyNode | null {
-  const node = flat.find((n) => n.id === nodeId);
-  if (!node) return null;
-  const { depth: _depth, ...rest } = node;
+// Árvore genealógica (PROD-20, CEL20-06): `generation` negativo para
+// ancestrais, 0 para a própria célula, positivo para descendentes.
+// `ancestors` é achatado (sem `children`); `tree` mantém a recursão.
+export type GenealogyNode = {
+  id: string;
+  name: string;
+  leader_person_name: string | null;
+  generation: number;
+  health_status: HealthStatus;
+};
+
+export type GenealogyTreeNode = GenealogyNode & { children: GenealogyTreeNode[] };
+
+export type GenealogyResponse = {
+  ancestors: GenealogyNode[];
+  tree: GenealogyTreeNode | null;
+};
+
+// Teto de ancestrais retornados (PROD-20, CEL20-06): simétrico às 3 gerações
+// de descendentes que getHierarchy já traz abaixo da própria célula
+// (self=depth 1 até depth 4).
+const ANCESTOR_DEPTH_CAP = 3;
+
+export type HealthStatus = 'green' | 'yellow' | 'red';
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Semáforo de saúde (PROD-20, CEL20-04/05): função pura, exportada (não
+// método) per design.md — reusada por NetworksService sem acoplar os dois
+// services. `< 14` dias → green; `14–27` → yellow; `>= 28` ou nunca se reuniu
+// (`null`) → red.
+export function classifyHealth(lastMeetingAt: Date | null, now: Date = new Date()): HealthStatus {
+  if (lastMeetingAt === null) return 'red';
+
+  const daysSince = Math.floor((now.getTime() - lastMeetingAt.getTime()) / MS_PER_DAY);
+  if (daysSince < 14) return 'green';
+  if (daysSince < 28) return 'yellow';
+  return 'red';
+}
+
+function buildGenealogyTree(
+  flat: HierarchyRow[],
+  nodeId: string,
+  healthByGroupId: Map<string, HealthStatus>,
+  generation = 0,
+): GenealogyTreeNode {
+  // `nodeId` sempre vem de `flat` (a raiz já foi confirmada presente por
+  // quem chama; os filhos vêm do próprio `flat.filter(...)` abaixo) — nunca
+  // ausente, então sem branch de "não encontrado".
+  const node = flat.find((n) => n.id === nodeId)!;
+
   return {
-    ...rest,
+    id: node.id,
+    name: node.name,
+    leader_person_name: node.leader_person_name,
+    generation,
+    // Todo id que passa por aqui já foi incluído em `buildHealthMap` por
+    // quem chama (getHierarchy junta rows + ancestors antes de montar a
+    // árvore) — a entrada sempre existe.
+    health_status: healthByGroupId.get(node.id)!,
     children: flat
       .filter((n) => n.parent_group_id === nodeId)
-      .map((c) => buildTree(flat, c.id)!)
-      .filter(Boolean),
+      .map((c) => buildGenealogyTree(flat, c.id, healthByGroupId, generation + 1)),
   };
 }
 
@@ -120,6 +188,125 @@ export class SmallGroupsService {
         });
 
         return group;
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
+  }
+
+  // Design.md, "Permissões de multiply": o RolesGuard já liberou a rota por
+  // ALERT_ROLES (inclui cell_leader de qualquer célula). Quem tem
+  // MULTIPLY_MANAGE_ROLES multiplica qualquer célula do tenant; quem só tem
+  // cell_leader precisa ser o líder DESTA célula — por leader_person_id ou
+  // por um RoleAssignment escopado a ela (small_group_id).
+  private async canMultiply(user: JwtPayload, mother: SmallGroup): Promise<boolean> {
+    if (MULTIPLY_MANAGE_ROLES.some((role) => user.roles.includes(role))) return true;
+
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: user.sub },
+      select: { person_id: true },
+    });
+    if (account?.person_id && account.person_id === mother.leader_person_id) return true;
+
+    const assignment = await this.prisma.client.roleAssignment.findFirst({
+      where: {
+        user_account_id: user.sub,
+        small_group_id: mother.id,
+        role_code: 'cell_leader',
+      },
+      select: { id: true },
+    });
+    return !!assignment;
+  }
+
+  // Multiplicação de célula (PROD-20, CEL20-01 a 03): cria a filha e move os
+  // membros escolhidos numa única transação. Validação em duas etapas: antes
+  // de abrir a transação (líder existe no tenant) e dentro dela, com
+  // recontagem (member_ids ainda pertencem à mãe) — cobre tanto IDs inválidos
+  // quanto a corrida de duas multiplicações concorrentes movendo o mesmo
+  // person_id (edge case da spec).
+  async multiply(
+    motherId: string,
+    dto: MultiplySmallGroupDto,
+    user: JwtPayload,
+  ): Promise<SmallGroup> {
+    const mother = await this.prisma.client.smallGroup.findUnique({
+      where: { id: motherId },
+    });
+    if (!mother) throw new NotFoundException('Grupo não encontrado');
+
+    if (!(await this.canMultiply(user, mother))) {
+      throw new ForbiddenException('Você só pode multiplicar células que lidera');
+    }
+
+    // SPEC_DEVIATION: design.md (Error Handling Strategy) descreve
+    // NotFoundException (404) para leader_person_id de outro tenant, mas a
+    // spec.md AC2 é explícita: "sistema SHALL responder 400" tanto para
+    // leader_person_id inválido quanto para member_ids inválidos. spec.md é
+    // a fonte de verdade dos critérios de aceite — seguido aqui como 400.
+    const leader = await this.prisma.client.person.findUnique({
+      where: { id: dto.leader_person_id },
+      select: { id: true, tenant_id: true },
+    });
+    if (!leader || leader.tenant_id !== mother.tenant_id) {
+      throw new BadRequestException('Pessoa não encontrada');
+    }
+
+    // `member_ids` tem default `[]` no DTO, aplicado pelo
+    // `ValidationPipe({ transform: true })` global — nunca chega undefined.
+    const memberIds = dto.member_ids;
+
+    return this.prisma.runInTx(
+      async (tx) => {
+        if (memberIds.length > 0) {
+          const activeCount = await tx.groupMembership.count({
+            where: { small_group_id: motherId, person_id: { in: memberIds } },
+          });
+          if (activeCount !== memberIds.length) {
+            throw new BadRequestException(
+              'Um ou mais membros informados não pertencem a este grupo',
+            );
+          }
+        }
+
+        const child = await tx.smallGroup.create({
+          data: {
+            name: dto.name,
+            group_type_id: mother.group_type_id,
+            parent_group_id: motherId,
+            tenant_id: mother.tenant_id,
+            congregation_id: mother.congregation_id,
+            leader_person_id: dto.leader_person_id,
+            meeting_time: dto.meeting_time,
+            recurrence: dto.recurrence,
+            address: dto.address,
+          },
+        });
+
+        if (memberIds.length > 0) {
+          await tx.groupMembership.updateMany({
+            where: { small_group_id: motherId, person_id: { in: memberIds } },
+            data: { small_group_id: child.id },
+          });
+        }
+
+        await tx.groupMembership.upsert({
+          where: {
+            small_group_id_person_id: {
+              small_group_id: child.id,
+              person_id: dto.leader_person_id,
+            },
+          },
+          create: {
+            tenant_id: mother.tenant_id,
+            congregation_id: mother.congregation_id,
+            small_group_id: child.id,
+            person_id: dto.leader_person_id,
+            role: GroupMemberRole.leader,
+          },
+          update: { role: GroupMemberRole.leader },
+        });
+
+        return child;
       },
       { timeout: 30_000, maxWait: 10_000 },
     );
@@ -204,9 +391,22 @@ export class SmallGroupsService {
   ): Promise<SmallGroup> {
     const existing = await this.prisma.client.smallGroup.findUnique({
       where: { id },
-      select: { id: true, leader_person_id: true },
+      select: { id: true, leader_person_id: true, congregation_id: true },
     });
     if (!existing) throw new NotFoundException('Grupo não encontrado');
+
+    // Vínculo de rede (PROD-20, CEL20-07/AC7): a rede referenciada precisa
+    // ser da mesma congregação da célula. `network_id: null` (desvínculo) não
+    // passa por aqui — só valida quando um id é informado.
+    if (dto.network_id) {
+      const network = await this.prisma.client.network.findUnique({
+        where: { id: dto.network_id },
+        select: { congregation_id: true },
+      });
+      if (!network || network.congregation_id !== existing.congregation_id) {
+        throw new BadRequestException('Rede informada não pertence a esta congregação');
+      }
+    }
 
     const leaderChanged =
       dto.leader_person_id && dto.leader_person_id !== existing.leader_person_id;
@@ -314,25 +514,115 @@ export class SmallGroupsService {
     return this.prisma.client.groupMembership.delete({ where: { id: membership.id } });
   }
 
-  async getHierarchy(groupId: string): Promise<HierarchyNode | null> {
+  // Semáforo de saúde da célula (PROD-20, CEL20-04): último encontro numa
+  // única agregação, classificado por `classifyHealth`.
+  async getHealth(groupId: string): Promise<{
+    status: HealthStatus;
+    last_meeting_at: Date | null;
+    days_since_last_meeting: number | null;
+  }> {
+    const { _max } = await this.prisma.client.groupMeeting.aggregate({
+      where: { small_group_id: groupId },
+      _max: { occurred_at: true },
+    });
+
+    const lastMeetingAt = _max.occurred_at;
+    const daysSinceLastMeeting = lastMeetingAt
+      ? Math.floor((Date.now() - lastMeetingAt.getTime()) / MS_PER_DAY)
+      : null;
+
+    return {
+      status: classifyHealth(lastMeetingAt),
+      last_meeting_at: lastMeetingAt,
+      days_since_last_meeting: daysSinceLastMeeting,
+    };
+  }
+
+  // Ancestrais (PROD-20, CEL20-06): cadeia linear subindo por
+  // parent_group_id, mais próximo primeiro. Iterativo, não CTE recursiva
+  // (design.md, Tech Decisions) — teto de 3 ancestrais, simétrico ao teto de
+  // 4 níveis (self + 3 gerações) já usado em getHierarchy.
+  async getAncestors(groupId: string): Promise<AncestorRow[]> {
+    const ancestors: AncestorRow[] = [];
+
+    const start = await this.prisma.client.smallGroup.findUnique({
+      where: { id: groupId },
+      select: { parent_group_id: true },
+    });
+
+    let parentId = start?.parent_group_id ?? null;
+    while (parentId && ancestors.length < ANCESTOR_DEPTH_CAP) {
+      const parent = await this.prisma.client.smallGroup.findUnique({
+        where: { id: parentId },
+        select: {
+          id: true,
+          name: true,
+          leader_person_id: true,
+          parent_group_id: true,
+          leader: { select: { full_name: true } },
+        },
+      });
+      if (!parent) break;
+
+      ancestors.push({
+        id: parent.id,
+        name: parent.name,
+        leader_person_id: parent.leader_person_id,
+        leader_person_name: parent.leader?.full_name ?? null,
+        parent_group_id: parent.parent_group_id,
+      });
+      parentId = parent.parent_group_id;
+    }
+
+    return ancestors;
+  }
+
+  // Semáforo de saúde por nó (PROD-20, CEL20-06): uma única consulta
+  // agregada para todas as células envolvidas (ancestrais + árvore), em vez
+  // de N chamadas a getHealth (design.md).
+  private async buildHealthMap(groupIds: string[]): Promise<Map<string, HealthStatus>> {
+    // Único chamador (getHierarchy) sempre passa pelo menos o próprio
+    // `groupId` — nunca lista vazia — então sem guarda de atalho aqui.
+    const healthByGroupId = new Map<string, HealthStatus>();
+
+    const rows = await this.prisma.client.groupMeeting.groupBy({
+      by: ['small_group_id'],
+      where: { small_group_id: { in: groupIds } },
+      _max: { occurred_at: true },
+    });
+    const lastMeetingByGroupId = new Map(rows.map((r) => [r.small_group_id, r._max.occurred_at]));
+
+    for (const id of groupIds) {
+      healthByGroupId.set(id, classifyHealth(lastMeetingByGroupId.get(id) ?? null));
+    }
+
+    return healthByGroupId;
+  }
+
+  // Árvore genealógica (PROD-20, CEL20-06): ancestrais (getAncestors) +
+  // descendentes (CTE existente), cada nó com health_status calculado numa
+  // única query agregada.
+  async getHierarchy(groupId: string): Promise<GenealogyResponse> {
     const rows = await this.prisma.client.$queryRaw<HierarchyRow[]>`
       WITH RECURSIVE hierarchy AS (
         SELECT
           sg.id, sg.name, sg.group_type_id, gt.name AS group_type_name,
-          sg.parent_group_id, sg.leader_person_id,
+          sg.parent_group_id, sg.leader_person_id, p.full_name AS leader_person_name,
           sg.is_public, sg.meeting_time, sg.recurrence, 1 AS depth
         FROM small_groups sg
         LEFT JOIN group_types gt ON gt.id = sg.group_type_id
+        LEFT JOIN persons p ON p.id = sg.leader_person_id
         WHERE sg.id = ${groupId}
 
         UNION ALL
 
         SELECT
           sg.id, sg.name, sg.group_type_id, gt.name,
-          sg.parent_group_id, sg.leader_person_id,
+          sg.parent_group_id, sg.leader_person_id, p.full_name,
           sg.is_public, sg.meeting_time, sg.recurrence, h.depth + 1
         FROM small_groups sg
         LEFT JOIN group_types gt ON gt.id = sg.group_type_id
+        LEFT JOIN persons p ON p.id = sg.leader_person_id
         INNER JOIN hierarchy h ON sg.parent_group_id = h.id
         WHERE h.depth < 4
       )
@@ -340,7 +630,28 @@ export class SmallGroupsService {
       ORDER BY depth, name
     `;
 
-    return buildTree(rows, groupId);
+    if (rows.length === 0) return { ancestors: [], tree: null };
+
+    const ancestorRows = await this.getAncestors(groupId);
+
+    const healthByGroupId = await this.buildHealthMap([
+      ...rows.map((r) => r.id),
+      ...ancestorRows.map((a) => a.id),
+    ]);
+
+    const tree = buildGenealogyTree(rows, groupId, healthByGroupId);
+
+    const ancestors: GenealogyNode[] = ancestorRows.map((a, index) => ({
+      id: a.id,
+      name: a.name,
+      leader_person_name: a.leader_person_name,
+      generation: -(index + 1),
+      // Mesma garantia de buildGenealogyTree: `a.id` está incluído na lista
+      // passada a buildHealthMap logo acima, então a entrada sempre existe.
+      health_status: healthByGroupId.get(a.id)!,
+    }));
+
+    return { ancestors, tree };
   }
 
   async checkAbsenceAlerts(groupId: string): Promise<Person[]> {

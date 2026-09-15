@@ -15,6 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
+import { MultiplyGroupModal } from "@/components/groups/MultiplyGroupModal";
+import { GroupHealthBadge } from "@/components/groups/GroupHealthBadge";
+import { GroupGenealogyTree } from "@/components/groups/GroupGenealogyTree";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
@@ -73,6 +76,7 @@ interface GroupDetail {
   public_description?: string;
   leader?: { id: string; full_name: string };
   memberships?: Membership[];
+  childGroups?: { id: string; name: string }[];
   _count?: { memberships: number };
 }
 
@@ -82,6 +86,13 @@ interface GroupDetailSheetProps {
   groupId: string | null;
   onUpdated: () => void;
   canEdit: boolean;
+  /**
+   * O usuário logado tem o papel `cell_leader` (em alguma célula, não
+   * necessariamente esta). Dispara a checagem de "sou líder desta célula"
+   * via `GET /small-groups/mine` — mesma fonte que o backend usa para
+   * autorizar `multiply` quando o líder não é admin/pastor (CEL20-01).
+   */
+  isCellLeader?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -273,12 +284,15 @@ export function GroupDetailSheet({
   groupId,
   onUpdated,
   canEdit,
+  isCellLeader,
 }: GroupDetailSheetProps) {
   const [group, setGroup] = useState<GroupDetail | null>(null);
+  const [isLeaderOfGroup, setIsLeaderOfGroup] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [activeTab, setActiveTab] = useState("info");
   const [editing, setEditing] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [multiplyOpen, setMultiplyOpen] = useState(false);
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const [meetingMaterials, setMeetingMaterials] = useState<Record<string, MeetingMaterial[]>>({});
   const [loadingMaterialsId, setLoadingMaterialsId] = useState<string | null>(null);
@@ -325,6 +339,30 @@ export function GroupDetailSheet({
     };
   }, [open, groupId, reloadTick]);
 
+  // "Sou líder desta célula" (CEL20-01): canEdit já cobre admin/pastor; um
+  // cell_leader sem canEdit só multiplica a célula que lidera, então checa
+  // `GET /small-groups/mine` (mesma fonte que o backend usa) e compara pelo
+  // id do grupo. Efeito à parte do de cima para não custar essa chamada a
+  // quem já tem canEdit nem mexer no fluxo de carregamento já testado.
+  useEffect(() => {
+    // Guarda sem setState: o estado inicial já é `false`, e o fechamento do
+    // sheet já reseta em `handleOpenChange` — nada aqui precisa reafirmar.
+    if (!open || !groupId || !isCellLeader) return;
+    const signal = { cancelled: false };
+    api
+      .get<{ id: string; role: string }[]>("/small-groups/mine")
+      .then(({ data }) => {
+        if (signal.cancelled) return;
+        setIsLeaderOfGroup(data.some((g) => g.id === groupId && g.role === "leader"));
+      })
+      .catch(() => {
+        if (!signal.cancelled) setIsLeaderOfGroup(false);
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, groupId, isCellLeader]);
+
   // Reset ao fechar acontece no handler, não em effect.
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -335,6 +373,7 @@ export function GroupDetailSheet({
       setExpandedMeetingId(null);
       setMeetingMaterials({});
       setLoadedKey(null);
+      setIsLeaderOfGroup(false);
     }
     onOpenChange(next);
   }
@@ -406,6 +445,9 @@ export function GroupDetailSheet({
   }
 
   const members: Membership[] = group?.memberships ?? [];
+  // CEL20-01: admin/pastor (canEdit) OU o cell_leader dono desta célula —
+  // nunca cell_leader de outra célula.
+  const canMultiply = canEdit || isLeaderOfGroup;
 
   return (
     <>
@@ -421,8 +463,9 @@ export function GroupDetailSheet({
               <SheetHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
                 <div className="flex items-start justify-between gap-3 pr-8">
                   <div className="flex flex-col gap-1">
-                    <SheetTitle className="text-base font-medium text-ink dark:text-white leading-tight">
+                    <SheetTitle className="flex items-center gap-2 text-base font-medium text-ink dark:text-white leading-tight">
                       {group.name}
+                      <GroupHealthBadge groupId={group.id} />
                     </SheetTitle>
                     <SheetDescription className="flex items-center gap-1.5 text-xs text-stone">
                       <span
@@ -462,6 +505,9 @@ export function GroupDetailSheet({
                       </Tabs.Tab>
                       <Tabs.Tab value="chat" className={tabBtn(activeTab === "chat")}>
                         Conversa
+                      </Tabs.Tab>
+                      <Tabs.Tab value="genealogy" className={tabBtn(activeTab === "genealogy")}>
+                        Genealogia
                       </Tabs.Tab>
                     </Tabs.List>
                   </Tabs.Root>
@@ -520,6 +566,34 @@ export function GroupDetailSheet({
                           Nenhuma informação adicional.
                         </p>
                       )}
+
+                      {/* Multiplicação de célula (PROD-20, CEL20-01) */}
+                      {canMultiply && (
+                        <div className="px-4 py-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full rounded-[8px]"
+                            onClick={() => setMultiplyOpen(true)}
+                          >
+                            Multiplicar célula
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Células filhas (AC5 — aparecem aqui após multiplicar) */}
+                      {group.childGroups && group.childGroups.length > 0 && (
+                        <div className="px-4 py-3">
+                          <p className="mb-1.5 text-xs text-stone">Células filhas</p>
+                          <ul className="flex flex-col gap-1">
+                            {group.childGroups.map((child) => (
+                              <li key={child.id} className="text-sm text-ink dark:text-white">
+                                {child.name}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )
                 )}
@@ -563,6 +637,10 @@ export function GroupDetailSheet({
                     oração — e aqui pesa mais: o painel abre um polling, que
                     não deve existir em gaveta cuja aba ninguém abriu. */}
                 {activeTab === "chat" && <GroupChatPanel groupId={group.id} />}
+
+                {/* ── Genealogia tab (PROD-20, CEL20-06) ── */}
+                {/* Montada só quando a aba abre, mesmo motivo das abas acima. */}
+                {activeTab === "genealogy" && <GroupGenealogyTree groupId={group.id} />}
 
                 {/* ── Meetings tab ── */}
                 {activeTab === "meetings" && (
@@ -754,6 +832,21 @@ export function GroupDetailSheet({
           onRegistered={() => {
             // Refresh meetings list
             setReloadTick((t) => t + 1);
+          }}
+        />
+      )}
+
+      {group && (
+        <MultiplyGroupModal
+          open={multiplyOpen}
+          onOpenChange={setMultiplyOpen}
+          groupId={group.id}
+          members={members}
+          onMultiplied={() => {
+            // Recarrega o detalhe (nova célula filha aparece na lista) e a
+            // lista de grupos da tela pai.
+            setReloadTick((t) => t + 1);
+            onUpdated();
           }}
         />
       )}
