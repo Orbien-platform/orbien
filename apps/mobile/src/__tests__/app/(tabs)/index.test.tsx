@@ -22,6 +22,19 @@ jest.mock("../../../lib/escala/escala-client", () => ({
   checkIn: (...args: unknown[]) => mockCheckIn(...args),
 }));
 
+// Destaques da home (HOME-02/03) — mockados com resolução vazia por padrão
+// (`beforeEach` abaixo), para os testes de MOB-04 que não os mencionam não
+// dependerem de setup próprio.
+const mockListMyGroups = jest.fn();
+jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
+  listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
+}));
+
+const mockGetPosts = jest.fn();
+jest.mock("../../../lib/content/content-client", () => ({
+  getPosts: (...args: unknown[]) => mockGetPosts(...args),
+}));
+
 import { HttpError } from "../../../lib/api/errors";
 import EscalaScreen from "../../../app/(tabs)/index";
 
@@ -46,6 +59,8 @@ const CONFIRMED_ASSIGNMENT = {
 describe("EscalaScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockListMyGroups.mockResolvedValue([]);
+    mockGetPosts.mockResolvedValue({ data: [], total: 0 });
   });
 
   it("carrega e lista os assignments retornados por getMyAssignments (AC 1)", async () => {
@@ -241,5 +256,141 @@ describe("EscalaScreen", () => {
     });
 
     expect(mockCheckIn).toHaveBeenCalledTimes(1);
+  });
+
+  // HOME-01: saudação sempre aparece — a data real decide o texto
+  // (getGreeting tem cobertura própria em date.test.ts), aqui só confirma
+  // que a tela a desenha.
+  it("mostra a saudação da home (HOME-01)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    expect(screen.getByTestId("home-greeting")).toBeTruthy();
+  });
+
+  // HOME-02: destaque "Meus grupos".
+  it("mostra até 2 grupos, mesmo com mais retornados pela API (HOME-02)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockListMyGroups.mockResolvedValue([
+      { id: "g1", name: "Célula Central", meeting_time: "Quintas, 19h30", recurrence: "weekly", role: "member" },
+      { id: "g2", name: "Célula Norte", meeting_time: null, recurrence: null, role: "leader" },
+      { id: "g3", name: "Célula Sul", meeting_time: null, recurrence: null, role: "member" },
+    ]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("home-groups-section"));
+    expect(screen.getByTestId("home-group-g1")).toBeTruthy();
+    expect(screen.getByTestId("home-group-g2")).toBeTruthy();
+    expect(screen.queryByTestId("home-group-g3")).toBeNull();
+  });
+
+  it("sem grupo, a seção não aparece (HOME-02)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockListMyGroups.mockResolvedValue([]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("home-greeting"));
+    expect(screen.queryByTestId("home-groups-section")).toBeNull();
+  });
+
+  it("erro ao carregar grupos não derruba a tela nem mostra escala-error (HOME-02)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockListMyGroups.mockRejectedValue(new Error("falha de rede"));
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("home-greeting"));
+    expect(screen.queryByTestId("home-groups-section")).toBeNull();
+    expect(screen.queryByTestId("escala-error")).toBeNull();
+  });
+
+  it("toque num grupo navega para /grupo/[id] (HOME-02)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockListMyGroups.mockResolvedValue([
+      { id: "g1", name: "Célula Central", meeting_time: null, recurrence: null, role: "member" },
+    ]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("home-group-g1"));
+
+    fireEvent.press(screen.getByTestId("home-group-g1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/grupo/g1");
+  });
+
+  // HOME-03: destaque "Avisos recentes".
+  it("mostra os posts recentes retornados por getPosts (HOME-03)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockGetPosts.mockResolvedValue({
+      data: [
+        { id: "p1", type: "announcement", title: "Aviso 1", body: null, media_url: null, published_at: "2026-09-10T10:00:00.000Z", created_at: "2026-09-10T10:00:00.000Z" },
+      ],
+      total: 1,
+    });
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("home-posts-section"));
+    expect(screen.getByTestId("home-post-p1")).toBeTruthy();
+    expect(mockGetPosts).toHaveBeenCalledWith(1, 3);
+  });
+
+  it("sem post recente, a seção não aparece (HOME-03)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockGetPosts.mockResolvedValue({ data: [], total: 0 });
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("home-greeting"));
+    expect(screen.queryByTestId("home-posts-section")).toBeNull();
+  });
+
+  it("erro ao carregar posts não derruba a tela nem mostra escala-error (HOME-03)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockGetPosts.mockRejectedValue(new Error("falha de rede"));
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("home-greeting"));
+    expect(screen.queryByTestId("home-posts-section")).toBeNull();
+    expect(screen.queryByTestId("escala-error")).toBeNull();
+  });
+
+  it("toque num post navega para /post/[id] (HOME-03)", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockGetPosts.mockResolvedValue({
+      data: [
+        { id: "p1", type: "announcement", title: "Aviso 1", body: null, media_url: null, published_at: null, created_at: "2026-09-10T10:00:00.000Z" },
+      ],
+      total: 1,
+    });
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("home-post-p1"));
+
+    fireEvent.press(screen.getByTestId("home-post-p1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/post/p1");
   });
 });

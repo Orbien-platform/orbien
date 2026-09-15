@@ -25,3 +25,9 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 jest.mock("react-native-safe-area-context", () =>
   require("react-native-safe-area-context/jest/mock").default,
 );
+
+// Animated com useNativeDriver: true (AnimatedSplash) precisa de uma view
+// nativa attachada, que o test renderer não tem — sem isto, qualquer teste
+// que monte o componente quebra com "Unable to locate attached view in the
+// native tree". Mock oficial recomendado pelo RN para este caso.
+jest.mock("react-native/src/private/animated/NativeAnimatedHelper");

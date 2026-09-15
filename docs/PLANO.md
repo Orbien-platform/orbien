@@ -670,13 +670,20 @@ Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
 árvore mede — exatamente o que a feature `mapa-monorepo-e-portoes` nasceu para
 caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
-| ID | O quê | Onde | Medido hoje |
-|---|---|---|---|
-| `AJU-01` | Rótulo "39 testes de RLS" no portão de pre-push | `scripts/pre-push.sh:120` | 118 testes em 6 suítes |
-| `AJU-02` | Contagem de RLS envelhecida | `docs/TESTES.md:53`, `:236`, `:334` dizem 39; `:1149`, `:1204` dizem 54 | 118 |
-| `AJU-03` | Contagem de e2e do web envelhecida | `docs/TESTES.md:1153` diz 12 em 8 arquivos | 16 em 10 |
+Nenhum item pendente nesta tabela — ver os três fechados abaixo.
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
+
+> **`AJU-01`, `AJU-02` e `AJU-03` fecharam em 2026-09-14.** Os três eram só
+> rótulo desatualizado, sem mudança de comportamento: `scripts/pre-push.sh:149`
+> passou a imprimir "118 testes de RLS" (era "39 testes de RLS"); em
+> `docs/TESTES.md`, as menções não-datadas de contagem de RLS em `:236`, `:334`
+> e no bloco de comandos da Fase 13 (a mensagem "39, depois 54 — a suíte
+> cresceu desde então") foram para 118, e a de e2e do web foi de "12 testes em
+> 8 arquivos" para "16 testes em 10 arquivos". A linha `:53` ("Ponto de partida
+> medido em 2026-09-02: 1 suíte na API, 39 testes de RLS") ficou como estava —
+> é medição histórica datada, não contagem corrente, e "corrigi-la" para 118
+> reescreveria o passado.
 
 > **`AJU-06` fechou em 2026-09-13.** A tabela de traceability de
 > `.specs/features/mapa-monorepo-e-portoes/spec.md` agora diz o que a rodada

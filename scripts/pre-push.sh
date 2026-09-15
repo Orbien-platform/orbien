@@ -146,7 +146,7 @@ if toca "^apps/api/(src|prisma)/"; then
   echo
   echo "▶ Isolamento multi-tenant (o diff toca a API)"
   echo "  … a suíte leva ~2,5 min contra o Supabase"
-  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && passa "39 testes de RLS" || {
+  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && passa "118 testes de RLS" || {
     # Distinguir banco inacessível de teste vermelho: bloquear por
     # infraestrutura ensina a ignorar o portão.
     if grep -qE "Exceeded timeout|Can't reach database|P1001|ECONNREFUSED" /tmp/prepush-rls.log; then
