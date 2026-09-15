@@ -13,7 +13,9 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -44,8 +46,11 @@ const MINE_ROLES = [
   'tenant_admin',
 ];
 
+// PlanGuard entra no guard de classe (PROD-20): é no-op nas rotas sem
+// `@RequiresPlan` (dashboard.controller.ts é o precedente) — as rotas de
+// multiplicar e as pré-existentes continuam sem gate de plano.
 @Controller('small-groups')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
 @UseInterceptors(TenantContextInterceptor)
 export class SmallGroupsController {
   constructor(private readonly smallGroupsService: SmallGroupsService) {}
@@ -74,6 +79,14 @@ export class SmallGroupsController {
   @Roles(...READ_ROLES)
   getHierarchy(@Param('id', ParseUUIDPipe) id: string) {
     return this.smallGroupsService.getHierarchy(id);
+  }
+
+  // Semáforo de saúde (PROD-20, CEL20-04) — Premium.
+  @Get(':id/health')
+  @Roles(...READ_ROLES)
+  @RequiresPlan('premium')
+  getHealth(@Param('id', ParseUUIDPipe) id: string) {
+    return this.smallGroupsService.getHealth(id);
   }
 
   @Get(':id/absence-alerts')

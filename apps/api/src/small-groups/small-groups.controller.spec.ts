@@ -2,6 +2,7 @@ import { Reflector } from '@nestjs/core';
 import { SmallGroupsController } from './small-groups.controller';
 import { SmallGroupsService } from './small-groups.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
+import { REQUIRES_PLAN_KEY } from '../auth/decorators/requires-plan.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 const USER: JwtPayload = {
@@ -31,6 +32,14 @@ function rolesFor(methodName: keyof SmallGroupsController): string[] | undefined
   return reflector.get<string[] | undefined>(ROLES_KEY, SmallGroupsController.prototype[methodName]);
 }
 
+function requiredPlanFor(methodName: keyof SmallGroupsController): string | undefined {
+  const reflector = new Reflector();
+  return reflector.get<string | undefined>(
+    REQUIRES_PLAN_KEY,
+    SmallGroupsController.prototype[methodName],
+  );
+}
+
 describe('SmallGroupsController', () => {
   let service: jest.Mocked<SmallGroupsService>;
   let controller: SmallGroupsController;
@@ -49,6 +58,7 @@ describe('SmallGroupsController', () => {
       findMine: jest.fn(),
       listVisitRequests: jest.fn(),
       multiply: jest.fn(),
+      getHealth: jest.fn(),
     } as unknown as jest.Mocked<SmallGroupsService>;
 
     controller = new SmallGroupsController(service);
@@ -101,6 +111,24 @@ describe('SmallGroupsController', () => {
       USER,
     );
     expect(result).toEqual({ id: 'child-1' });
+  });
+
+  it('getHealth aceita papéis de leitura e exige plano Premium (CEL20-04)', () => {
+    expect(rolesFor('getHealth')).toEqual(READ_ROLES);
+    expect(requiredPlanFor('getHealth')).toBe('premium');
+  });
+
+  it('getHealth delega ao service', async () => {
+    service.getHealth.mockResolvedValue({
+      status: 'green',
+      last_meeting_at: null,
+      days_since_last_meeting: null,
+    });
+
+    const result = await controller.getHealth('sg1');
+
+    expect(service.getHealth).toHaveBeenCalledWith('sg1');
+    expect(result).toEqual({ status: 'green', last_meeting_at: null, days_since_last_meeting: null });
   });
 
   it('listVisitRequests delega ao service', async () => {
