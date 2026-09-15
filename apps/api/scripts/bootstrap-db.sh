@@ -126,6 +126,12 @@ fi
 if [ -f prisma/migrations/015_rls_event_registrations.sql ]; then
   run_sql_file prisma/migrations/015_rls_event_registrations.sql
 fi
+# Mesmo caso de 012/014/015, mais uma feature depois: `networks` (PROD-20) é
+# tabela nova, nasce com a policy de congregação e não tem `tenant_isolation`
+# para o passo 4 derrubar. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/016_rls_networks.sql ]; then
+  run_sql_file prisma/migrations/016_rls_networks.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
