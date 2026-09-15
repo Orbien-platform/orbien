@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { HEALTH_DOT_COLOR, type HealthStatus } from "@/lib/health";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type HealthStatus = "green" | "yellow" | "red";
 
 interface HealthResponse {
   status: HealthStatus;
@@ -18,12 +17,6 @@ interface GroupHealthBadgeProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const DOT_COLOR: Record<HealthStatus, string> = {
-  green: "bg-teal",
-  yellow: "bg-amber-500",
-  red: "bg-crimson",
-};
 
 function tooltipFor(health: HealthResponse): string {
   if (health.days_since_last_meeting === null) {
@@ -69,7 +62,7 @@ export function GroupHealthBadge({ groupId }: GroupHealthBadgeProps) {
       role="status"
       title={tooltipFor(health)}
       aria-label={tooltipFor(health)}
-      className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${DOT_COLOR[health.status]}`}
+      className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${HEALTH_DOT_COLOR[health.status]}`}
     />
   );
 }

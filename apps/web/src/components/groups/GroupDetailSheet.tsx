@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
 import { MultiplyGroupModal } from "@/components/groups/MultiplyGroupModal";
 import { GroupHealthBadge } from "@/components/groups/GroupHealthBadge";
+import { GroupGenealogyTree } from "@/components/groups/GroupGenealogyTree";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
@@ -468,6 +469,9 @@ export function GroupDetailSheet({
                       <Tabs.Tab value="chat" className={tabBtn(activeTab === "chat")}>
                         Conversa
                       </Tabs.Tab>
+                      <Tabs.Tab value="genealogy" className={tabBtn(activeTab === "genealogy")}>
+                        Genealogia
+                      </Tabs.Tab>
                     </Tabs.List>
                   </Tabs.Root>
                 </div>
@@ -596,6 +600,10 @@ export function GroupDetailSheet({
                     oração — e aqui pesa mais: o painel abre um polling, que
                     não deve existir em gaveta cuja aba ninguém abriu. */}
                 {activeTab === "chat" && <GroupChatPanel groupId={group.id} />}
+
+                {/* ── Genealogia tab (PROD-20, CEL20-06) ── */}
+                {/* Montada só quando a aba abre, mesmo motivo das abas acima. */}
+                {activeTab === "genealogy" && <GroupGenealogyTree groupId={group.id} />}
 
                 {/* ── Meetings tab ── */}
                 {activeTab === "meetings" && (
