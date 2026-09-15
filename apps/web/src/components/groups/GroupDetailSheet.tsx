@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RegisterMeetingModal } from "@/components/groups/RegisterMeetingModal";
 import { MultiplyGroupModal } from "@/components/groups/MultiplyGroupModal";
+import { GroupHealthBadge } from "@/components/groups/GroupHealthBadge";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
@@ -424,8 +425,9 @@ export function GroupDetailSheet({
               <SheetHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
                 <div className="flex items-start justify-between gap-3 pr-8">
                   <div className="flex flex-col gap-1">
-                    <SheetTitle className="text-base font-medium text-ink dark:text-white leading-tight">
+                    <SheetTitle className="flex items-center gap-2 text-base font-medium text-ink dark:text-white leading-tight">
                       {group.name}
+                      <GroupHealthBadge groupId={group.id} />
                     </SheetTitle>
                     <SheetDescription className="flex items-center gap-1.5 text-xs text-stone">
                       <span
