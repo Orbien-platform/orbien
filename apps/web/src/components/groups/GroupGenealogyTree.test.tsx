@@ -92,4 +92,38 @@ describe("GroupGenealogyTree", () => {
       await screen.findByText("Não foi possível carregar a árvore genealógica.")
     ).toBeInTheDocument();
   });
+
+  it("mostra 'sem descendentes' quando a API retorna tree nula (célula sem descendentes nem ancestrais)", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ancestors: [], tree: null } });
+
+    render(<GroupGenealogyTree groupId="b1" />);
+
+    expect(await screen.findByText("Célula raiz, sem descendentes.")).toBeInTheDocument();
+  });
+
+  it("descarta a resposta de sucesso se o componente desmontar antes dela chegar", async () => {
+    let resolveGet!: (value: { data: unknown }) => void;
+    vi.mocked(api.get).mockImplementation(
+      () => new Promise((resolve) => { resolveGet = resolve; })
+    );
+
+    const { unmount } = render(<GroupGenealogyTree groupId="b1" />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/b1/hierarchy"));
+    unmount();
+
+    resolveGet({ data: { ancestors: [], tree: null } });
+  });
+
+  it("descarta a falha se o componente desmontar antes dela chegar", async () => {
+    let rejectGet!: (error: unknown) => void;
+    vi.mocked(api.get).mockImplementation(
+      () => new Promise((_resolve, reject) => { rejectGet = reject; })
+    );
+
+    const { unmount } = render(<GroupGenealogyTree groupId="b1" />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/small-groups/b1/hierarchy"));
+    unmount();
+
+    rejectGet(new Error("network down"));
+  });
 });
