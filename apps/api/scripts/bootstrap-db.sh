@@ -449,6 +449,22 @@ BEGIN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em event_registrations, encontrei % — 015_rls_event_registrations.sql rodou?', n;
   END IF;
 
+  -- 016: networks (PROD-20), mesmo caso de 012/015 — nasceu com a policy de
+  -- congregação, sem tenant_isolation herdada de 001 para conferir ausência.
+  -- PEND-05: até aqui só o catch-all genérico (qualquer tabela public sem RLS
+  -- habilitado derruba o passo 7) cobria essa tabela — não pegava um
+  -- USING/WITH CHECK divergente escrito à mão.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'networks'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'networks com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em networks, encontrei % — 016_rls_networks.sql rodou?', n;
+  END IF;
+
   -- Este é o portão que torna seguro aplicar migration automaticamente no
   -- deploy (ver `npm run db:deploy` e /DEPLOY.md). Migration comum cria a
   -- tabela; quem liga o RLS dela é um script 00X, fora do histórico do

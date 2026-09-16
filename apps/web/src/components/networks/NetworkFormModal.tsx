@@ -47,6 +47,7 @@ export function NetworkFormModal({ open, onOpenChange, network, onSaved }: Netwo
     network?.health_goal_pct != null ? String(network.health_goal_pct) : "",
   );
   const [persons, setPersons] = useState<Person[]>([]);
+  const [personsError, setPersonsError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const hasFetched = useRef(false);
@@ -56,10 +57,11 @@ export function NetworkFormModal({ open, onOpenChange, network, onSaved }: Netwo
   const loadPersons = useCallback(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
+    setPersonsError(false);
     api
       .get<{ data: Person[]; total: number }>("/persons?limit=100")
       .then((r) => setPersons(r.data.data ?? []))
-      .catch(() => {});
+      .catch(() => setPersonsError(true));
   }, []);
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export function NetworkFormModal({ open, onOpenChange, network, onSaved }: Netwo
 
   function reset() {
     setError("");
+    setPersonsError(false);
     hasFetched.current = false;
   }
 
@@ -152,6 +155,18 @@ export function NetworkFormModal({ open, onOpenChange, network, onSaved }: Netwo
               <option key={p.id} value={p.id}>{p.full_name}</option>
             ))}
           </select>
+          {personsError && (
+            <p className="text-xs text-crimson" role="alert">
+              Não foi possível carregar as pessoas.{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => { hasFetched.current = false; loadPersons(); }}
+              >
+                Tentar de novo
+              </button>
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
