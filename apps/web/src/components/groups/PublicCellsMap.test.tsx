@@ -5,10 +5,17 @@ import { PublicCellsMap } from "./PublicCellsMap";
 // O Leaflet é carregado por `import()` dentro do efeito — é o que mantém a
 // página renderizável no servidor. O dublê registra o que o componente pede a
 // ele: centro, marcadores, enquadramento e a limpeza na desmontagem.
+// Os parâmetros dos dublês estão declarados — e prefixados com `_`, porque
+// nenhum corpo os usa — para que `mock.calls[n][i]` continue tipado. Um
+// `vi.fn(() => x)` sem parâmetro é uma função de aridade zero para o
+// TypeScript, e `mock.calls[0][0]` nele não compila: é tupla vazia.
+type LatLng = [number, number];
+type MarkerOptions = Record<string, unknown>;
+
 const marker = {
   addTo: vi.fn(() => marker),
-  bindTooltip: vi.fn(() => marker),
-  on: vi.fn(() => marker),
+  bindTooltip: vi.fn((_text: string) => marker),
+  on: vi.fn((_event: string, _handler: () => void) => marker),
 };
 const map = {
   setView: vi.fn(() => map),
@@ -19,8 +26,8 @@ const tileLayer = { addTo: vi.fn() };
 
 const L = {
   map: vi.fn(() => map),
-  tileLayer: vi.fn(() => tileLayer),
-  circleMarker: vi.fn(() => marker),
+  tileLayer: vi.fn((_url: string, _options?: MarkerOptions) => tileLayer),
+  circleMarker: vi.fn((_latlng: LatLng, _options?: MarkerOptions) => marker),
 };
 
 vi.mock("leaflet", () => ({ default: L }));
@@ -76,7 +83,7 @@ describe("PublicCellsMap", () => {
     render(<PublicCellsMap points={POINTS} selectedId={null} onSelect={onSelect} />);
 
     await waitFor(() => expect(marker.on).toHaveBeenCalled());
-    const [, handler] = marker.on.mock.calls[0] as [string, () => void];
+    const [, handler] = marker.on.mock.calls[0];
     handler();
 
     expect(onSelect).toHaveBeenCalledWith("sg1");
