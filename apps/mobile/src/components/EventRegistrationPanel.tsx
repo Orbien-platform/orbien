@@ -15,7 +15,7 @@
 // dot+texto para o status (§7 — cor sozinha não comunica), `AppButton` do
 // §7 para as ações, e nenhum hex nem número solto — tudo de
 // `lib/theme/tokens.ts`.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 
@@ -25,6 +25,7 @@ import { Badge, type BadgeTone } from "./Badge";
 import { Card } from "./Card";
 import { SectionLabel } from "./SectionLabel";
 import { HttpError } from "../lib/api/errors";
+import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
 import {
   cancelMyEventRegistration,
   getEventRegistrationSummary,
@@ -40,11 +41,10 @@ import type {
 } from "../lib/content/types";
 import { formatBRL } from "../lib/format/currency";
 import { formatDateTime } from "../lib/format/date";
-import { CircleAlert, Copy, Ticket, UserCheck } from "../lib/theme/icons";
+import { CircleAlert, Copy, RefreshCw, Ticket, UserCheck, WifiOff } from "../lib/theme/icons";
 import { useTheme } from "../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../lib/theme/tokens";
 
-const LOAD_ERROR = "Não foi possível carregar as inscrições deste evento.";
 const ACTION_ERROR = "Não foi possível concluir. Tente novamente.";
 
 /** Rótulo e tom de cada status que o membro pode ter. `cancelled` não entra:
@@ -82,7 +82,9 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   // de tela e some ao sair dela; a nota abaixo do QR diz ao usuário o que
   // fazer nesse caso (cancelar e se inscrever de novo gera outro).
   const [payment, setPayment] = useState<EventRegistrationPayment | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
+  // Incrementado por "Tentar novamente" — mesma mecânica de `presenca.tsx`.
+  const [retryCount, setRetryCount] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -90,32 +92,39 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   // seguinte, e dois POST seguidos aqui custam duas cobranças de PIX.
   const submittingRef = useRef(false);
 
-  const load = useCallback(async () => {
-    const [nextSummary, nextMine] = await Promise.all([
-      getEventRegistrationSummary(postId),
-      getMyEventRegistration(postId),
-    ]);
-    return { nextSummary, nextMine };
-  }, [postId]);
-
+  // As duas chamadas são independentes e o resumo é o que a tela precisa para
+  // existir; a inscrição do usuário é o que ela acrescenta. Com `Promise.all`,
+  // um 5xx em `.../me` apagava também preço, vagas e prazo, que já tinham
+  // chegado — o mesmo erro que `handleRegister` evita logo abaixo com
+  // `.catch(() => summary)`. Por isso `allSettled`: o resumo que voltou
+  // renderiza, e só a metade que falhou some.
   useEffect(() => {
     let cancelled = false;
 
-    load()
-      .then(({ nextSummary, nextMine }) => {
-        if (cancelled) return;
-        setSummary(nextSummary);
-        setMine(nextMine);
-        setLoadError(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError(true);
-      });
+    Promise.allSettled([
+      getEventRegistrationSummary(postId),
+      getMyEventRegistration(postId),
+    ]).then(([summaryResult, mineResult]) => {
+      if (cancelled) return;
+
+      if (summaryResult.status === "fulfilled") {
+        setSummary(summaryResult.value);
+        setLoadError(null);
+      } else {
+        setLoadError(describeLoadError(summaryResult.reason, "as inscrições"));
+        return;
+      }
+
+      // `mine` que falhou não derruba a tela: o membro continua vendo vagas e
+      // prazo, e a ausência de status é indistinguível de "não inscrito" — o
+      // que a API corrige no próximo toque, recusando inscrição duplicada.
+      setMine(mineResult.status === "fulfilled" ? (mineResult.value ?? null) : null);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [postId, retryCount]);
 
   /** Mensagem da API quando ela tem uma ("Vagas esgotadas para este
    * evento", "O prazo de inscrição para este evento já encerrou") — são
@@ -171,6 +180,9 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
 
   async function handleCopy() {
     if (!payment) return;
+    // Sem isto, um retry bem-sucedido mostrava "Código copiado" ao lado do
+    // alerta de falha da tentativa anterior.
+    setActionError(null);
     try {
       await Clipboard.setStringAsync(payment.qr_code);
       setCopied(true);
@@ -183,16 +195,24 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   if (loadError) {
     return (
       <Card testID="event-registration-error">
-        <View style={styles.errorRow}>
-          <CircleAlert
-            size={iconSize.inline}
-            color={colors.danger}
-            strokeWidth={ICON_STROKE_WIDTH}
-          />
-          <Text style={[typography.bodyMedium, styles.flex, { color: colors.textSecondary }]}>
-            {LOAD_ERROR}
-          </Text>
-        </View>
+        <Alert
+          messageTestID="event-registration-load-error"
+          message={loadError.message}
+          icon={loadError.offline ? WifiOff : CircleAlert}
+        />
+        <Text style={[typography.bodyMedium, styles.line, { color: colors.textSecondary }]}>
+          {loadError.description}
+        </Text>
+        <AppButton
+          testID="event-registration-retry"
+          title="Tentar novamente"
+          icon={RefreshCw}
+          variant="secondary"
+          onPress={() => {
+            setLoadError(null);
+            setRetryCount((n) => n + 1);
+          }}
+        />
       </Card>
     );
   }
@@ -206,6 +226,11 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       </Card>
     );
   }
+
+  // Inscrição desligada e o usuário sem nada nela: não há o que mostrar.
+  // É o caso do evento que nunca abriu inscrição — e a razão de a tela poder
+  // montar o painel para todo post de evento sem poluir os que não têm.
+  if (!summary.registration_enabled && !mine) return null;
 
   const isPaid = summary.registration_price !== null && summary.registration_price > 0;
   const soldOut = summary.seats_left !== null && summary.seats_left === 0;
@@ -289,7 +314,9 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
             <Text
               testID="event-registration-pix-code"
               selectable
-              numberOfLines={3}
+              // Sem `numberOfLines`: truncar o payload entrega um código
+              // inválido, e é justamente ele o fallback de quem não
+              // conseguiu copiar.
               style={[typography.mono, styles.pixCode, { color: colors.textSecondary, backgroundColor: colors.bgSubtle }]}
             >
               {payment.qr_code}
@@ -359,11 +386,6 @@ const styles = StyleSheet.create({
   line: { marginBottom: spacing.sm },
   badge: { marginTop: spacing.sm, marginBottom: spacing.sm },
   action: { marginTop: spacing.sm },
-  errorRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-  },
   payment: {
     alignItems: "stretch",
     marginTop: spacing.md,

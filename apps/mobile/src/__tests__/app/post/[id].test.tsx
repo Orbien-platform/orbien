@@ -102,7 +102,11 @@ describe("PostScreen", () => {
     expect(screen.getByTestId("event-registration-panel").props.children).toBe("post-1");
   });
 
-  it("evento sem inscrição ligada mostra data e local, mas não o painel", async () => {
+  // O painel é montado para todo post de evento, inclusive com
+  // `registration_enabled: false` — é ele que decide não desenhar nada.
+  // Sem isso, desligar as inscrições tirava o botão de cancelar de quem já
+  // estava inscrito.
+  it("evento com inscrição desligada ainda monta o painel — quem decide é ele", async () => {
     mockGetPost.mockResolvedValue({ ...EVENT_POST, registration_enabled: false });
 
     await act(async () => {
@@ -110,7 +114,7 @@ describe("PostScreen", () => {
     });
 
     await waitFor(() => expect(screen.getByTestId("post-event")).toBeTruthy());
-    expect(screen.queryByTestId("event-registration-panel")).toBeNull();
+    expect(screen.getByTestId("event-registration-panel")).toBeTruthy();
   });
 
   it("post comum não mostra bloco de evento nem painel", async () => {

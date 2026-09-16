@@ -622,12 +622,44 @@ onde o membro consome conteúdo.
   silêncio**, e "R$ 1.234,56" viraria "R$1,234.56". O web segue com
   `toLocaleString`, e está certo lá.
 
-Testes: `EventRegistrationPanel.test.tsx` (24 casos — os dois caminhos de
-lotado, prazo, os três status, QR/copiar, e a trava de toque duplo, que
+**Correção de bug pré-existente, arrastada por esta entrega.** `ApiClient`
+(`src/lib/api/client.ts`) chamava `response.json()` em toda resposta 2xx que
+não fosse 204. O Nest serializa `null` como **200 com corpo vazio**
+(`isNil(body)` → `response.send()` no `ExpressAdapter`), então `JSON.parse("")`
+jogava. Duas rotas caem nisso: `GET .../registrations/me` (o caminho principal
+desta tela — membro que ainda não se inscreveu) e `GET
+/volunteers/unavailability` num mês sem registro, que **já estava quebrada em
+produção** desde o MOB-08 pelo mesmo motivo, mostrando erro de carga no lugar
+do estado vazio. O client agora lê o corpo como texto e devolve `undefined`
+quando ele é vazio; 204 segue sem ler corpo nenhum.
+
+**Achados de revisão corrigidos antes do PR** (`/code-review` + `pr-review`,
+dimensões B e C — A não se aplica, não há `apps/api/**` no diff): além do bug
+acima, o painel era montado só com `registration_enabled`, e desligar as
+inscrições tirava o botão de cancelar de quem já estava inscrito (agora a tela
+monta o painel para todo post de evento e **o painel** decide não desenhar
+nada); `Promise.all` no carregamento fazia um 5xx em `.../me` apagar preço,
+vagas e prazo já carregados (virou `allSettled`, com as duas metades
+independentes); o erro de carga não usava `describeLoadError` nem oferecia
+retry, divergindo das outras 12 superfícies de carga do app; e
+`numberOfLines={3}` truncava o payload do PIX, justamente o fallback de quem
+não conseguiu copiar.
+
+**Pendência de deploy — não vai por OTA.** `expo-clipboard` é módulo nativo,
+então só entra em binário novo. O `runtimeVersion` é `appVersion` e o
+`autoIncrement` do profile `production` mexe em build number, não em
+`version`: publicar só um update OTA deixaria o app quebrando em
+`Clipboard.setStringAsync` nos binários antigos. Esta entrega **exige build
+nova com bump de `version`** antes de qualquer update no mesmo canal.
+
+Testes: `EventRegistrationPanel.test.tsx` (30 casos — os dois caminhos de
+lotado, prazo, os três status, QR/copiar, as duas metades do carregamento,
+retry, inscrição desligada com e sem inscrito, e a trava de toque duplo, que
 evita duas cobranças de PIX), `currency.test.ts`, os blocos novos de
-`content-client.test.ts` e de `__tests__/app/post/[id].test.tsx`. A suíte do
-mobile fecha em **304 testes em 43 suítes**, com a cobertura acima do piso
-do `jest.config.js` (94,41 / 85,78 / 94,08 / 98,23).
+`content-client.test.ts`, `client.test.ts` (corpo vazio e 204) e
+`__tests__/app/post/[id].test.tsx`. A suíte do mobile fecha em **313 testes
+em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
+(94,63 / 86,26 / 94,37 / 98,33).
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com

@@ -298,6 +298,59 @@ describe("EventRegistrationPanel", () => {
     expect(screen.getByTestId("event-registration-pix-code")).toBeTruthy();
   });
 
+  it("copiar com sucesso depois de uma falha limpa o alerta anterior", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockRegister.mockResolvedValue({
+      registration: { id: "r1", status: "pending_payment" },
+      payment: PAYMENT,
+    });
+    mockSetStringAsync
+      .mockRejectedValueOnce(new Error("sem clipboard"))
+      .mockResolvedValue(true);
+
+    await renderPanel();
+    await waitFor(() => expect(screen.getByTestId("event-registration-submit")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-submit"));
+    });
+    await waitFor(() => expect(screen.getByTestId("event-registration-copy")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-copy"));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("event-registration-action-error")).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-copy"));
+    });
+
+    await waitFor(() => expect(screen.getByText("Código copiado")).toBeTruthy());
+    expect(screen.queryByTestId("event-registration-action-error")).toBeNull();
+  });
+
+  it("o payload do PIX não é truncado — é o fallback de quem não copiou", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockRegister.mockResolvedValue({
+      registration: { id: "r1", status: "pending_payment" },
+      payment: PAYMENT,
+    });
+
+    await renderPanel();
+    await waitFor(() => expect(screen.getByTestId("event-registration-submit")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-submit"));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("event-registration-pix-code")).toBeTruthy(),
+    );
+    expect(
+      screen.getByTestId("event-registration-pix-code").props.numberOfLines,
+    ).toBeUndefined();
+  });
+
   it("pending_payment carregado de uma sessão anterior aparece sem QR", async () => {
     mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
     mockGetMine.mockResolvedValue({
@@ -317,13 +370,87 @@ describe("EventRegistrationPanel", () => {
 
   // ─── Erros ────────────────────────────────────────────────────────────────
 
-  it("erro ao carregar mostra o aviso e não o formulário", async () => {
+  it("erro ao carregar o resumo distingue falta de rede e oferece retry", async () => {
     mockGetSummary.mockRejectedValue(new NetworkError());
 
     await renderPanel();
 
     await waitFor(() => expect(screen.getByTestId("event-registration-error")).toBeTruthy());
+    expect(screen.getByTestId("event-registration-load-error").props.children).toBe(
+      "Não foi possível carregar as inscrições. Verifique sua conexão.",
+    );
+    expect(screen.getByTestId("event-registration-retry")).toBeTruthy();
     expect(screen.queryByTestId("event-registration-submit")).toBeNull();
+  });
+
+  it("erro do servidor não fala de conexão", async () => {
+    mockGetSummary.mockRejectedValue(new HttpError(500, {}));
+
+    await renderPanel();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("event-registration-load-error").props.children).toBe(
+        "Não foi possível carregar as inscrições.",
+      ),
+    );
+  });
+
+  it("'Tentar novamente' recarrega e mostra a tela quando a segunda tentativa passa", async () => {
+    mockGetSummary.mockRejectedValueOnce(new NetworkError()).mockResolvedValue(FREE_OPEN);
+
+    await renderPanel();
+    await waitFor(() => expect(screen.getByTestId("event-registration-retry")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-retry"));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-submit")).toBeTruthy());
+    expect(screen.queryByTestId("event-registration-error")).toBeNull();
+  });
+
+  it("falha só em .../me não apaga preço, vagas e prazo que já vieram", async () => {
+    mockGetMine.mockRejectedValue(new HttpError(500, {}));
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-seats")).toBeTruthy());
+    expect(screen.getByTestId("event-registration-deadline")).toBeTruthy();
+    expect(screen.getByTestId("event-registration-submit")).toBeTruthy();
+    expect(screen.queryByTestId("event-registration-error")).toBeNull();
+  });
+
+  it("inscrição desligada e usuário sem inscrição: painel não desenha nada", async () => {
+    mockGetSummary.mockResolvedValue({
+      ...FREE_OPEN,
+      registration_enabled: false,
+      registrations_closed: true,
+    });
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.queryByTestId("event-registration-loading")).toBeNull());
+    expect(screen.queryByTestId("event-registration")).toBeNull();
+  });
+
+  it("inscrição desligada com o usuário inscrito: o cancelar continua em tela", async () => {
+    mockGetSummary.mockResolvedValue({
+      ...FREE_OPEN,
+      registration_enabled: false,
+      registrations_closed: true,
+    });
+    mockGetMine.mockResolvedValue({
+      id: "r1",
+      full_name: "Ana",
+      status: "confirmed",
+      payment_status: "not_required",
+      created_at: "2026-09-16T10:00:00.000Z",
+    });
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-cancel")).toBeTruthy());
+    expect(screen.getByText("Inscrição confirmada")).toBeTruthy();
   });
 
   it("erro 4xx da API é mostrado com a mensagem da própria API", async () => {

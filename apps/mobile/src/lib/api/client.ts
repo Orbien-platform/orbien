@@ -64,8 +64,19 @@ async function request<T>(
     throw new HttpError(response.status, body);
   }
 
+  // Corpo vazio é resposta legítima, não erro de parse: o Nest serializa
+  // `null`/`undefined` como 200 com corpo vazio (`isNil(body)` →
+  // `response.send()` no `ExpressAdapter`), e é assim que chegam as rotas
+  // que devolvem "não achei, mas não é 404" — `GET /volunteers/unavailability`
+  // (mês sem indisponibilidade) e `GET .../registrations/me` (quem ainda não
+  // se inscreveu). Passar isso direto para `response.json()` faz
+  // `JSON.parse("")` jogar, e a tela mostra erro no lugar do estado vazio.
+  // Por isso o texto é lido antes: 204 nem sempre é a forma que o corpo
+  // vazio toma.
   if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  const text = await response.text();
+  if (text.length === 0) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export const apiClient = {

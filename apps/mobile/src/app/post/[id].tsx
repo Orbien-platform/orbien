@@ -145,9 +145,13 @@ export default function PostScreen() {
           {post.body}
         </Text>
       ) : null}
-      {/* O painel bate em duas rotas por conta própria, então só é montado
-          quando há inscrição para mostrar — post comum não paga a chamada. */}
-      {post.registration_enabled ? (
+      {/* Montado para todo post de evento, não só quando
+          `registration_enabled` está ligado: o organizador pode desligar as
+          inscrições com gente já inscrita, e quem tem vaga (ou um PIX
+          pendente) precisa continuar podendo cancelar. Quem decide não
+          desenhar nada é o painel, que já tem o resumo e a inscrição em
+          mãos. Post comum não paga as chamadas. */}
+      {post.type === "event" ? (
         <View style={styles.registration}>
           <EventRegistrationPanel postId={post.id} />
         </View>

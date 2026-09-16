@@ -29,7 +29,7 @@ describe("ApiClient", () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ id: "abc123" }),
+      text: async () => JSON.stringify({ id: "abc123" }),
     }) as unknown as typeof fetch;
 
     const result = await apiClient.get<{ id: string }>("/pessoas/me");
@@ -41,7 +41,7 @@ describe("ApiClient", () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({}),
+      text: async () => "{}",
     }) as unknown as typeof fetch;
 
     await apiClient.get("/settings");
@@ -56,7 +56,7 @@ describe("ApiClient", () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({}),
+      text: async () => "{}",
     }) as unknown as typeof fetch;
 
     await apiClient.get("/settings", { token: "tok-123" });
@@ -81,6 +81,34 @@ describe("ApiClient", () => {
     expect(error).toBeInstanceOf(HttpError);
     expect((error as HttpError).status).toBe(401);
     expect((error as HttpError).message).toBe("Credenciais inválidas");
+  });
+
+  // O Nest serializa `null`/`undefined` como 200 com corpo VAZIO (`isNil(body)`
+  // → `response.send()`), e é assim que respondem as rotas de "não achei, mas
+  // não é 404": `GET /volunteers/unavailability` num mês sem registro e
+  // `GET /content/posts/:id/registrations/me` para quem não se inscreveu.
+  // `JSON.parse("")` joga — antes disso, as duas telas mostravam erro de
+  // carga no lugar do estado vazio.
+  it("200 com corpo vazio devolve undefined em vez de estourar no parse", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "",
+    }) as unknown as typeof fetch;
+
+    await expect(apiClient.get("/content/posts/p1/registrations/me")).resolves.toBeUndefined();
+  });
+
+  it("204 continua devolvendo undefined, sem ler corpo nenhum", async () => {
+    const text = jest.fn();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      text,
+    }) as unknown as typeof fetch;
+
+    await expect(apiClient.delete("/algo")).resolves.toBeUndefined();
+    expect(text).not.toHaveBeenCalled();
   });
 
   it("erro de rede (fetch rejeita): rejeita com NetworkError, distinto de HttpError", async () => {
