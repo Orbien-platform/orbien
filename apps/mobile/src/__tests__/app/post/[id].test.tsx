@@ -10,6 +10,17 @@ jest.mock("../../../lib/content/content-client", () => ({
   getPost: (...args: unknown[]) => mockGetPost(...args),
 }));
 
+// O painel de inscrição tem testes próprios (EventRegistrationPanel.test.tsx)
+// e faz chamadas de rede por conta própria; aqui só importa SE ele é montado.
+jest.mock("../../../components/EventRegistrationPanel", () => {
+  const { Text } = require("react-native");
+  return {
+    EventRegistrationPanel: ({ postId }: { postId: string }) => (
+      <Text testID="event-registration-panel">{postId}</Text>
+    ),
+  };
+});
+
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import PostScreen from "../../../app/post/[id]";
 
@@ -63,5 +74,62 @@ describe("PostScreen", () => {
         screen.getByText("Não foi possível carregar o post. Verifique sua conexão."),
       ).toBeTruthy();
     });
+  });
+
+  const EVENT_POST = {
+    id: "post-1",
+    type: "event",
+    title: "Retiro de jovens",
+    body: null,
+    media_url: null,
+    published_at: "2026-09-01T00:00:00.000Z",
+    created_at: "2026-08-30T00:00:00.000Z",
+    event_starts_at: "2026-10-10T19:00:00.000Z",
+    event_location: "Templo sede",
+    registration_enabled: true,
+  };
+
+  it("post de evento mostra quando e onde, e monta o painel de inscrição", async () => {
+    mockGetPost.mockResolvedValue(EVENT_POST);
+
+    await act(async () => {
+      render(<PostScreen />);
+    });
+
+    await waitFor(() => expect(screen.getByTestId("post-event")).toBeTruthy());
+    expect(screen.getByTestId("post-event-date")).toBeTruthy();
+    expect(screen.getByTestId("post-event-location").props.children).toBe("Templo sede");
+    expect(screen.getByTestId("event-registration-panel").props.children).toBe("post-1");
+  });
+
+  it("evento sem inscrição ligada mostra data e local, mas não o painel", async () => {
+    mockGetPost.mockResolvedValue({ ...EVENT_POST, registration_enabled: false });
+
+    await act(async () => {
+      render(<PostScreen />);
+    });
+
+    await waitFor(() => expect(screen.getByTestId("post-event")).toBeTruthy());
+    expect(screen.queryByTestId("event-registration-panel")).toBeNull();
+  });
+
+  it("post comum não mostra bloco de evento nem painel", async () => {
+    mockGetPost.mockResolvedValue({
+      id: "post-1",
+      type: "announcement",
+      title: "Aviso",
+      body: "Corpo",
+      media_url: null,
+      published_at: "2026-09-01T00:00:00.000Z",
+      created_at: "2026-08-30T00:00:00.000Z",
+    });
+
+    await act(async () => {
+      render(<PostScreen />);
+    });
+
+    await waitFor(() => expect(screen.getByTestId("post-title")).toBeTruthy());
+    expect(screen.queryByTestId("post-event")).toBeNull();
+    expect(screen.queryByTestId("event-registration-panel")).toBeNull();
   });
 });
