@@ -49,9 +49,17 @@ test.describe("multiplicar célula", () => {
     });
 
     await test.step("célula filha aparece na lista de células filhas da mãe", async () => {
+      // `getByText` sozinho bateria em 2 lugares: a lista de "Células
+      // filhas" do sheet E a linha nova na tabela de grupos por trás dele
+      // (onMultiplied recarrega as duas). `getByRole("listitem")` não serve
+      // de escopo aqui — o Tailwind preflight zera `list-style` do `<ul>`, o
+      // que faz o Chromium remover o papel ARIA de lista/item do `<li>` real
+      // (a própria árvore de acessibilidade, não o snapshot do Playwright,
+      // que usa outro algoritmo e continua "vendo" o papel). `li` como
+      // seletor de tag ignora ARIA e escopa pelo DOM de verdade.
       await expect(
-        page.getByText(nomeFilha),
-        "a célula filha não apareceu no sheet da célula mãe"
+        page.locator("li").filter({ hasText: nomeFilha }),
+        "a célula filha não apareceu na lista de células filhas do sheet"
       ).toBeVisible();
       await shot(page, "41-multiplicar-filha-listada");
     });

@@ -12,6 +12,8 @@ import { expect, shot, test, realConsoleErrors, unexpectedHttp } from "./fixture
 
 interface Group { id: string; name: string }
 interface Network { id: string; name: string }
+interface GroupType { id: string; name: string }
+interface Person { id: string; full_name: string }
 
 test.describe("redes", () => {
   test("cria, edita e vincula/desvincula célula", async ({ page, errorLog, api }) => {
@@ -22,9 +24,16 @@ test.describe("redes", () => {
     let groupId: string | undefined;
 
     await test.step("cria célula sem rede via API, para vincular depois", async () => {
+      // CreateSmallGroupDto exige group_type_id e leader_person_id (UUID) —
+      // reaproveita o primeiro tipo e a primeira pessoa que o tenant de
+      // teste já tem cadastrados, mesmo dado que a UI usa em `#cg-type`/
+      // `#cg-leader` (ver grupos.spec.ts).
+      const tipos = await api.call<GroupType[]>("GET", "/groups/types");
+      const pessoas = await api.call<{ data: Person[] }>("GET", "/persons?limit=1");
       const criada = await api.call<Group>("POST", "/small-groups", {
         name: nomeCelula,
-        type: "cell",
+        group_type_id: tipos[0].id,
+        leader_person_id: pessoas.data[0].id,
       });
       groupId = criada.id;
     });
@@ -41,7 +50,8 @@ test.describe("redes", () => {
 
     await test.step("edita o nome da rede", async () => {
       await page
-        .getByRole("row", { name: new RegExp(nomeRede) })
+        .getByRole("row")
+        .filter({ hasText: nomeRede })
         .getByRole("button", { name: "Editar rede" })
         .click();
       const nomeInput = page.getByPlaceholder("ex: Rede Zona Sul");
@@ -52,7 +62,8 @@ test.describe("redes", () => {
 
     await test.step("vincula a célula sem rede", async () => {
       await page
-        .getByRole("row", { name: new RegExp(nomeRedeEditada) })
+        .getByRole("row")
+        .filter({ hasText: nomeRedeEditada })
         .getByRole("button", { name: "Gerenciar células" })
         .click();
       await expect(page.getByRole("heading", { name: `Células de ${nomeRedeEditada}` })).toBeVisible();
@@ -67,7 +78,9 @@ test.describe("redes", () => {
     await test.step("desvincula a célula", async () => {
       await page.getByRole("button", { name: `Desvincular ${nomeCelula}` }).click();
       await expect(page.getByText("Nenhuma célula vinculada.")).toBeVisible();
-      await page.getByRole("button", { name: "Close" }).click();
+      // Este modal usa o `Modal` (Dialog.Close aria-label="Fechar") — não o
+      // Sheet do GroupDetailSheet, cujo botão vem em inglês ("Close").
+      await page.getByRole("button", { name: "Fechar" }).click();
     });
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {
