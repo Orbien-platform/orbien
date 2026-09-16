@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 import { DonationReceiptService } from './donation-receipts.service';
+import { writeAuditLog } from '../common/audit/write-audit-log';
 
 type TenantContext = {
   tenantId: string;
@@ -543,18 +544,21 @@ export class PixService {
       return { received: true };
     }
 
-    this.prisma.client.auditLog
-      .create({
-        data: {
-          tenant_id: pixPayment.tenant_id,
-          congregation_id: pixPayment.congregation_id,
-          actor_user_id: adminUserId,
-          entity: 'pix_payment',
-          action: 'pix.confirmed',
-          after: { asaas_payment_id: asaasPaymentId, event } as Prisma.InputJsonValue,
-        },
-      })
-      .catch(() => void 0);
+    // Best-effort por necessidade, não por conveniência: devolver erro à
+    // Asaas faz ela reenviar o evento, e o reenvio de um evento já tratado é
+    // o que a idempotência acima existe para conter.
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: pixPayment.tenant_id,
+        congregation_id: pixPayment.congregation_id,
+        actor_user_id: adminUserId,
+        entity: 'pix_payment',
+        action: 'pix.confirmed',
+        after: { asaas_payment_id: asaasPaymentId, event },
+      },
+      this.logger,
+    );
 
     // Recibo automático (Premium, PROD-03) — só para doação; inscrição de
     // evento (PROD-24) não é doação e não emite recibo. Não pode desfazer um
