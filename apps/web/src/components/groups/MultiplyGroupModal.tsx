@@ -43,6 +43,7 @@ export function MultiplyGroupModal({
   const [leaderId, setLeaderId] = useState("");
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
   const [persons, setPersons] = useState<Person[]>([]);
+  const [personsError, setPersonsError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -51,10 +52,11 @@ export function MultiplyGroupModal({
   const loadPersons = useCallback(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
+    setPersonsError(false);
     api
       .get<{ data: Person[]; total: number }>("/persons?limit=100")
       .then((r) => setPersons(r.data.data ?? []))
-      .catch(() => {});
+      .catch(() => setPersonsError(true));
   }, []);
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export function MultiplyGroupModal({
     setSelectedMemberIds(new Set());
     setError("");
     setSuccess(false);
+    setPersonsError(false);
     hasFetched.current = false;
   }
 
@@ -162,6 +165,18 @@ export function MultiplyGroupModal({
                 <option key={p.id} value={p.id}>{p.full_name}</option>
               ))}
             </select>
+            {personsError && (
+              <p className="text-xs text-crimson" role="alert">
+                Não foi possível carregar as pessoas.{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => { hasFetched.current = false; loadPersons(); }}
+                >
+                  Tentar de novo
+                </button>
+              </p>
+            )}
           </div>
 
           {/* Membros a mover */}
