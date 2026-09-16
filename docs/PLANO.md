@@ -749,6 +749,49 @@ em produção sem aviso. Ficou como pergunta, não decisão: seguir com o
 `USING (true)` conhecido, ou priorizar esse mapeamento como trabalho próprio
 antes de mexer na policy?
 
+**Mapeamento feito em 2026-09-16** (sem mudança de código — o item continua
+aberto, isto só troca a suposição por evidência). Três achados que mudam o
+enquadramento do ponto acima:
+
+- **O alcance não é só o login.** `JwtStrategy.validate()`
+  (`apps/api/src/auth/strategies/jwt.strategy.ts:22`) roda como `orbien_app`
+  em **toda** requisição autenticada, não só no login — porque usa o client
+  Prisma base (`this.prisma.userAccount`), que não entra na transação em que
+  o `TenantContextInterceptor` faz `SET LOCAL ROLE app_user`; Guards rodam
+  antes de Interceptors no ciclo do Nest. `AuthService.impersonate()`
+  (`auth.service.ts:361`) tem o mesmo problema. É estrutural: qualquer método
+  de `AuthService`/`JwtStrategy` que use o client base em vez de
+  `this.prisma.client` roda como `orbien_app` por construção, não só "antes
+  de existir contexto".
+- **A policy é `FOR ALL`/`WITH CHECK (true)`, não só leitura.** Está em
+  `20260608175621_fix_orbien_app_auth_policies` (migration datada normal,
+  histórico do Prisma — não um dos scripts `0NN_rls_*.sql`), em 7 tabelas:
+  `tenants`, `congregations`, `user_accounts`, `role_assignments`,
+  `refresh_tokens`, `branding_configs`, `tenant_plans`, `audit_logs`. Busca
+  por escrita via client base a `user_accounts`/`role_assignments`/
+  `audit_logs` não achou nenhuma ocorrência — o `WITH CHECK (true)` nessas
+  três é permissão morta hoje, mas aberta no banco.
+- **`audit_logs` não parece ter consumidor real da policy no fluxo de
+  auth.** A escrita de auditoria vai por `audit_insert()` (`SECURITY
+  DEFINER`, ignora RLS); nenhuma leitura/escrita direta a `audit_logs` foi
+  encontrada em `auth.service.ts`/`jwt.strategy.ts`. É candidato a ser o
+  ponto mais barato de apertar primeiro, possivelmente sem o mapeamento fino
+  que as outras duas tabelas exigem.
+
+Proposta que ficou registrada, não aplicada: `GRANT SELECT` restrito às
+colunas que o login de fato consome em `user_accounts`
+(`id`/`email`/`password_hash`/`is_active`/`tenant_id`/`congregation_id`) e
+`role_assignments` (`role_code`/`congregation_id`/`user_account_id`); trocar
+`FOR ALL` por `FOR SELECT` nas três tabelas fecha a escrita morta sem tocar
+em código; restringir por **linha** (não só coluna) exigiria mover essas
+leituras para uma função `SECURITY DEFINER` — mudança de arquitetura, maior
+que fechar a escrita ou a coluna. Duas pontas não verificadas: escrita via
+`$executeRaw` fora do client base/`.system` que o grep não pega, e se algum
+script numerado recria a policy depois da migration datada com texto
+diferente. Continua em aberto, como pergunta: seguir só documentado, ou
+priorizar uma dessas três ações (fechar a escrita morta, tirar `audit_logs`
+da policy, ou o `SECURITY DEFINER` completo) como trabalho próprio?
+
 ### PEND-05 · Três achados menores de PROD-20, declarados no PR · dívida
 
 Achados de `/code-review`+`pr-review` na feature `prod-20-multiplicacao-celula`
