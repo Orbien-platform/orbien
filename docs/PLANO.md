@@ -838,29 +838,28 @@ Continua em aberto, como pergunta: priorizar **C** (trocar os `include` por
 parar aqui — A e B fecharam a permissão sem chamador, e o que sobra é o
 `USING (true)` de leitura, que é o desenho original do item.
 
-### PEND-05 · Três achados menores de PROD-20, declarados no PR · dívida
+### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
 Achados de `/code-review`+`pr-review` na feature `prod-20-multiplicacao-celula`
-que o dev decidiu não bloquear o PR — nenhum é vazamento de isolamento nem
-bug de produção:
+que o dev decidiu não bloquear o PR — nenhum era vazamento de isolamento nem
+bug de produção. **Os três fecharam em 2026-09-16 (`70b62fa`)**, e a
+verificação abaixo é contra a árvore, não contra a mensagem do commit:
 
-- **`bootstrap-db.sh` passo 7 não tem assertiva SQL dedicada para `networks`**
-  como tem para 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
-  FROM qual`). O catch-all genérico (qualquer tabela `public` sem RLS
-  habilitado derruba o passo 7) ainda cobre ausência total de RLS — o que
-  falta é só a checagem de simetria *específica* dessa tabela, que pegaria
-  um `USING`/`WITH CHECK` divergente escrito à mão numa mudança futura no
-  `016_rls_networks.sql`.
-- **`MultiplyGroupModal` e `NetworkFormModal` engolem erro ao carregar
-  pessoas** (`.catch(() => {})` no `GET /persons`) — o select de "novo
-  líder"/"líder de rede" fica vazio sem indicar que a chamada falhou,
-  indistinguível de "não há pessoas cadastradas". Mesmo padrão em
-  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`): falha em
-  `GET /small-groups` vira "nenhuma célula vinculada" em vez de erro.
-- **Sem cobertura E2E** para os dois fluxos de escrita novos — o wizard de
-  multiplicar célula e o CRUD de rede (criar/editar rede, vincular/
-  desvincular célula) em `apps/web/e2e/`. Há teste de componente
-  (`.test.tsx`) para as duas telas, não o fluxo ponta a ponta no browser.
+- **`bootstrap-db.sh` passo 7 sem assertiva SQL dedicada para `networks`.** O
+  catch-all genérico já cobria ausência total de RLS; o que faltava era a
+  checagem de simetria específica, que pega um `USING`/`WITH CHECK` divergente
+  escrito à mão numa mudança futura no `016_rls_networks.sql`. Entrou no mesmo
+  formato das de 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
+  FROM qual`).
+- **`MultiplyGroupModal` e `NetworkFormModal` engoliam erro ao carregar
+  pessoas** (`.catch(() => {})` no `GET /persons`), e
+  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`) fazia o mesmo
+  com `GET /small-groups`. Não resta nenhum `.catch(() => {})` nos três
+  arquivos.
+- **Sem cobertura E2E** para os dois fluxos de escrita novos. Existem agora
+  `apps/web/e2e/multiplicar-celula.spec.ts` e `apps/web/e2e/redes.spec.ts` —
+  é o e2e que o item pedia, e que o PR #95 (cobertura de componente) não
+  entregava.
 
 ---
 
@@ -870,27 +869,28 @@ Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
 árvore mede — exatamente o que a feature `mapa-monorepo-e-portoes` nasceu para
 caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
-Um item pendente: `AJU-07`, abaixo.
+Nenhum item pendente: `AJU-07`, o último em aberto, fechou em 2026-09-16.
 
-### AJU-07 · `scripts/pre-push.sh` imprime "118 testes de RLS" · cosmético
+### ~~AJU-07 · `scripts/pre-push.sh` imprimia "118 testes de RLS"~~ · fechado
 
-Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já fecharam duas
-vezes: `scripts/pre-push.sh:149` imprime `passa "118 testes de RLS"` e a
-suíte fecha hoje em **125 em 7 suítes** — o `016_rls_networks.sql` e o
+Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já tinham fechado
+duas vezes: `scripts/pre-push.sh:149` imprimia `passa "118 testes de RLS"`
+enquanto a suíte fechava em 125 — o `016_rls_networks.sql` e o
 `test/rls/networks.spec.ts` do `PROD-20` (2026-09-15) mudaram o número.
 
-É rótulo, não comportamento: o `passa`/`bloqueia` vem do código de saída do
-Jest, não da contagem, então o portão decide certo e só reporta errado. As
-contagens de `docs/PLANO.md` e `docs/TESTES.md` foram atualizadas na
-varredura de 2026-09-15; esta ficou de fora **de propósito**, porque
-`pre-push.sh` é portão e a regra do `CLAUDE.md` manda apresentar o achado
-antes de mexer.
+Era rótulo, não comportamento: o `passa`/`bloqueia` sempre veio do código de
+saída do Jest, não da contagem, então o portão decidia certo e só reportava
+errado.
 
-A pergunta que o item carrega não é só o número: é se vale continuar
-escrevendo uma contagem literal num portão que a envelhece a cada feature
-com tabela nova. As duas saídas são trocar o literal por uma leitura da
-própria saída do Jest (`Tests: N passed`), ou aceitar a deriva e corrigir a
-cada varredura, como nas três vezes até aqui. Seguir assim, ou ajustar?
+**Fechado em 2026-09-16 (`70b62fa`), pela saída que o item preferia:** o
+literal saiu, e `scripts/pre-push.sh:152` passou a ler `Tests: N passed` da
+própria saída do Jest (`RLS_SUMMARY`), com fallback para "testes de RLS" se o
+`grep` não achar a linha. A pergunta que o item carregava — se valia seguir
+escrevendo contagem literal num portão que a envelhece a cada feature com
+tabela nova — ficou respondida na prática: a quarta deriva não chegou a
+existir. Quando `test/rls/auth-tables.spec.ts` (`PEND-04`, ações A e B) levou
+a suíte de 125 para 133 no mesmo dia, o `pre-push.sh` acompanhou sozinho, e
+só as contagens de `docs/PLANO.md` e `docs/TESTES.md` precisaram de mão.
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
 

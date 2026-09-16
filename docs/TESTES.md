@@ -1202,9 +1202,12 @@ existir e não descer, não o número ser 100.
 > As contagens de RLS deste arquivo foram de 118 para **125** na varredura de
 > 2026-09-15 (o `PROD-20` trouxe `test/rls/networks.spec.ts`) e para **133** em
 > 2026-09-16 (as ações A e B do `PEND-04` trouxeram
-> `test/rls/auth-tables.spec.ts`, com 8). O mesmo rótulo
-> em `scripts/pre-push.sh` segue em 118, aberto como `AJU-07` no `PLANO.md`:
-> é portão, e achado de portão vira pergunta antes de mexer.
+> `test/rls/auth-tables.spec.ts`, com 8).
+>
+> O mesmo rótulo em `scripts/pre-push.sh` não é mais contagem literal: o
+> `AJU-07` fechou em 2026-09-16 trocando-o por uma leitura do `Tests: N
+> passed` da própria saída do Jest, então ele acompanha a suíte sozinho e não
+> entra nas atualizações desta nota.
 
 O primeiro run de CI (PR #1) revelou três pendências que **não** vêm deste
 plano e não foram corrigidas por decisão unilateral: RLS sem isolamento por
