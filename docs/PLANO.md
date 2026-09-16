@@ -727,11 +727,12 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 
-- **`user_accounts`, `role_assignments` e `audit_logs` seguem com
-  `orbien_app_auth USING (true)`.** Não incomoda nas rotas autenticadas (que
-  rodam como `app_user`), mas qualquer rota pública futura que toque essas
-  tabelas as lê inteiras. Fechar exige mapear o que o login precisa ler antes
-  de existir contexto.
+- **`user_accounts` e `role_assignments` seguem com `orbien_app_auth
+  USING (true)` na LEITURA.** A escrita fechou em 2026-09-16 (ação B) e
+  `audit_logs` saiu da policy (ação A) — ver o registro no fim do item. O que
+  resta é o `USING (true)`: quem lê por esse caminho lê as linhas de todos os
+  tenants. Fechar isso é a ação D, e exige mover as leituras do login para
+  função `SECURITY DEFINER`.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
@@ -778,19 +779,64 @@ enquadramento do ponto acima:
   ponto mais barato de apertar primeiro, possivelmente sem o mapeamento fino
   que as outras duas tabelas exigem.
 
-Proposta que ficou registrada, não aplicada: `GRANT SELECT` restrito às
-colunas que o login de fato consome em `user_accounts`
+Proposta que ficou registrada: `GRANT SELECT` restrito às colunas que o login
+de fato consome em `user_accounts`
 (`id`/`email`/`password_hash`/`is_active`/`tenant_id`/`congregation_id`) e
 `role_assignments` (`role_code`/`congregation_id`/`user_account_id`); trocar
-`FOR ALL` por `FOR SELECT` nas três tabelas fecha a escrita morta sem tocar
-em código; restringir por **linha** (não só coluna) exigiria mover essas
-leituras para uma função `SECURITY DEFINER` — mudança de arquitetura, maior
-que fechar a escrita ou a coluna. Duas pontas não verificadas: escrita via
-`$executeRaw` fora do client base/`.system` que o grep não pega, e se algum
-script numerado recria a policy depois da migration datada com texto
-diferente. Continua em aberto, como pergunta: seguir só documentado, ou
-priorizar uma dessas três ações (fechar a escrita morta, tirar `audit_logs`
-da policy, ou o `SECURITY DEFINER` completo) como trabalho próprio?
+`FOR ALL` por `FOR SELECT` fecha a escrita morta; restringir por **linha**
+(não só coluna) exigiria mover essas leituras para uma função
+`SECURITY DEFINER` — mudança de arquitetura, maior que fechar a escrita ou a
+coluna.
+
+**Ações A e B aplicadas em 2026-09-16** (`017_rls_auth_tables.sql`,
+`test/rls/auth-tables.spec.ts`, passo 7 do `bootstrap-db.sh`). `audit_logs`
+saiu inteira da policy; `user_accounts` e `role_assignments` passaram de
+`FOR ALL` para `FOR SELECT`, sem `WITH CHECK`. As ações C e D seguem abertas,
+com o enquadramento corrigido abaixo. As duas pontas não verificadas
+fecharam, as duas negativas:
+
+- **Nenhum script numerado recria a policy.** `orbien_app_auth` só existia na
+  migration datada; as citações em `001_rls_setup.sql:495` e
+  `013_rls_small_groups_public.sql:37` são comentário. O estado do banco
+  conferia com o texto da migration — oito tabelas, `cmd=ALL`, `qual=true`,
+  `with_check=true`, `relforcerowsecurity=f`.
+- **Nenhuma escrita por `$executeRaw` fora do client base.** O único raw que
+  alcança `audit_logs` é `audit.interceptor.ts:113`, via `audit_insert()`, e
+  o nome do ator por `resolve_actor_name()` — as duas `SECURITY DEFINER`.
+
+Três correções ao mapeamento, achadas ao aplicar:
+
+- **A escrita não era toda morta.** `refresh_tokens` tem INSERT e UPDATE vivos
+  pelo client base (`auth.service.ts:254`, `:283`, `:293`, `:327`, `:478`) —
+  login, refresh e logout. O `FOR SELECT` vale nas três tabelas do texto
+  acima; estendido às sete, derruba a autenticação. O passo 7 do
+  `bootstrap-db.sh` passou a falhar nos **dois** sentidos: se a policy voltar
+  a `FOR ALL` onde foi apertada, e se sumir de `refresh_tokens`.
+- **A ação C (coluna) não é "sem tocar em código".** As quatro consultas do
+  login usam `include:`, não `select:` (`auth.service.ts:110`, `:190`,
+  `:238`, `:371`), e `include` faz o Prisma pedir **todas** as colunas
+  escalares do model — de `user_accounts`, `tenants` e `tenant_plans`. Com a
+  lista de colunas proposta, todo login falharia com 42501. Trocar esses
+  quatro `include` por `select` explícito é **pré-requisito** de C.
+  `role_assignments` e `jwt.strategy.ts:22` já usam `select`.
+- **O alcance já passou de auth, e não é "rota pública futura".**
+  `public-small-groups.service.ts:163` e `:168` leem `tenants` e
+  `branding_configs` pelo client base, sem JWT e sem `SET LOCAL ROLE` — o
+  `runInTx` de lá só fixa `app.tenant_id`. São quatro tabelas com consumidor
+  público hoje (`tenants`, `congregations`, `branding_configs`,
+  `tenant_plans`), e é por isso que nenhuma delas entrou em A/B.
+
+O `017` declara a policy nas **oito** tabelas, não só nas três que muda. Não é
+estilo: a policy nasceu numa migration datada, que `migrate deploy` aplica uma
+vez só — num banco já provisionado o `bootstrap-db.sh` não teria por onde
+recriá-la se fosse derrubada, e o portão do passo 7 falharia sem conserto
+possível a não ser SQL manual. Descoberto ao testar o portão de propósito.
+
+Continua em aberto, como pergunta: priorizar **C** (trocar os `include` por
+`select` e restringir por coluna as quatro tabelas de consumidor público) ou
+**D** (`SECURITY DEFINER`, restrição por linha) como trabalho próprio, ou
+parar aqui — A e B fecharam a permissão sem chamador, e o que sobra é o
+`USING (true)` de leitura, que é o desenho original do item.
 
 ### PEND-05 · Três achados menores de PROD-20, declarados no PR · dívida
 

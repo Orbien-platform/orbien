@@ -191,6 +191,16 @@ fi
 if [ -f prisma/migrations/011_rls_platform_transfer.sql ]; then
   run_sql_file prisma/migrations/011_rls_platform_transfer.sql
 fi
+# PEND-04 (A+B): aperta a policy `orbien_app_auth` que a migration datada
+# 20260608175621 criou com USING(true)/WITH CHECK(true) em oito tabelas. Tira
+# `audit_logs` da policy (não tem consumidor: a auditoria escreve por
+# audit_insert(), SECURITY DEFINER) e troca FOR ALL por FOR SELECT em
+# `user_accounts` e `role_assignments` (a escrita por orbien_app sem contexto
+# não tem chamador). Roda por último no passo 5 porque nenhum outro script
+# toca `orbien_app_auth` — o passo 7 confere que continua assim.
+if [ -f prisma/migrations/017_rls_auth_tables.sql ]; then
+  run_sql_file prisma/migrations/017_rls_auth_tables.sql
+fi
 
 echo ""
 echo "▶ 6/8 Configurando o role de aplicação orbien_app..."
@@ -463,6 +473,62 @@ BEGIN
   RAISE NOTICE 'networks com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em networks, encontrei % — 016_rls_networks.sql rodou?', n;
+  END IF;
+
+  -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu
+  -- USING(true)/WITH CHECK(true) FOR ALL em oito tabelas, na migration datada
+  -- 20260608175621. 017 tira `audit_logs` da policy e fecha a escrita em
+  -- `user_accounts`/`role_assignments`. As três checagens abaixo cobrem os
+  -- dois modos de errar isto, que são opostos:
+  --
+  --   apertar de menos — 017 não rodou, ou a migration datada reabriu a
+  --   policy num banco provisionado antes dele. Volta o `OR true` na escrita,
+  --   em silêncio: nada falha, a permissão só fica aberta de novo.
+  --
+  --   apertar demais — alguém estende o mesmo aperto a `refresh_tokens`, onde
+  --   a escrita por `orbien_app` é o caminho vivo de login, refresh e logout
+  --   (`auth.service.ts:254,283,293,327,478`). Isso derruba a autenticação
+  --   inteira em produção, e o sintoma seria 42501 no login — caro de
+  --   descobrir tarde.
+  IF EXISTS (
+    SELECT 1 FROM pg_policies
+     WHERE policyname = 'orbien_app_auth' AND tablename = 'audit_logs'
+  ) THEN
+    RAISE EXCEPTION 'audit_logs ainda tem a policy orbien_app_auth — 017_rls_auth_tables.sql nao rodou, ou a migration datada a recriou depois';
+  END IF;
+
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'orbien_app_auth'
+     AND tablename IN ('user_accounts', 'role_assignments')
+     AND cmd = 'SELECT'
+     AND with_check IS NULL;
+  RAISE NOTICE 'orbien_app_auth restrita a leitura em user_accounts/role_assignments: %', n;
+  IF n <> 2 THEN
+    RAISE EXCEPTION 'esperava 2 policies orbien_app_auth FOR SELECT sem WITH CHECK (user_accounts, role_assignments), encontrei % — 017_rls_auth_tables.sql rodou?', n;
+  END IF;
+
+  -- O contrapeso: `refresh_tokens` TEM que continuar aberta para escrita por
+  -- orbien_app. Ver o cabeçalho de 017 — é a tabela que o aperto nao alcanca.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'orbien_app_auth'
+     AND tablename  = 'refresh_tokens'
+     AND cmd = 'ALL';
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'refresh_tokens perdeu a policy orbien_app_auth FOR ALL — login, refresh e logout escrevem nela como orbien_app, sem contexto, e passam a falhar com 42501';
+  END IF;
+
+  -- A auditoria so sobrevive a saida de `audit_logs` da policy porque
+  -- `audit_insert()` e SECURITY DEFINER. Trocar a funcao por um INSERT
+  -- direto no client base faria o registro falhar em silencio — o
+  -- AuditInterceptor grava best-effort, com `.catch()` que so loga.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+      JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+     WHERE p.proname = 'audit_insert' AND p.prosecdef
+  ) THEN
+    RAISE EXCEPTION 'audit_insert() nao e SECURITY DEFINER — sem ela e sem a policy orbien_app_auth, o registro de auditoria falha em silencio';
   END IF;
 
   -- Este é o portão que torna seguro aplicar migration automaticamente no
