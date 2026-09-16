@@ -510,13 +510,36 @@ BEGIN
 
   -- O contrapeso: `refresh_tokens` TEM que continuar aberta para escrita por
   -- orbien_app. Ver o cabeçalho de 017 — é a tabela que o aperto nao alcanca.
+  --
+  -- `with_check IS NOT DISTINCT FROM qual` não é redundante com `cmd = 'ALL'`:
+  -- uma policy `FOR ALL USING (true) WITH CHECK (false)` passaria pela
+  -- checagem de cmd e derrubaria login, refresh e logout com 42501 — o modo
+  -- de falha que esta checagem existe para impedir. É o mesmo par que as
+  -- checagens de 012/015/016 acima usam.
   SELECT count(*) INTO n
     FROM pg_policies
    WHERE policyname = 'orbien_app_auth'
      AND tablename  = 'refresh_tokens'
-     AND cmd = 'ALL';
+     AND cmd = 'ALL'
+     AND with_check IS NOT DISTINCT FROM qual;
   IF n <> 1 THEN
-    RAISE EXCEPTION 'refresh_tokens perdeu a policy orbien_app_auth FOR ALL — login, refresh e logout escrevem nela como orbien_app, sem contexto, e passam a falhar com 42501';
+    RAISE EXCEPTION 'refresh_tokens perdeu a policy orbien_app_auth FOR ALL simetrica — login, refresh e logout escrevem nela como orbien_app, sem contexto, e passam a falhar com 42501';
+  END IF;
+
+  -- As quatro que 017 deixa abertas de propósito. Não basta conferir o que
+  -- foi apertado: se `orbien_app_auth` sumir de uma DESTAS, o login para de
+  -- resolver o tenant e a página pública de células (que lê `tenants` e
+  -- `branding_configs` sem JWT, por `public-small-groups.service.ts:163,168`)
+  -- para junto — e, sem esta checagem, o passo 7 passaria verde.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'orbien_app_auth'
+     AND tablename IN ('tenants', 'congregations', 'branding_configs', 'tenant_plans')
+     AND cmd = 'ALL'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'orbien_app_auth intacta nas tabelas de leitura pre-autenticacao: %', n;
+  IF n <> 4 THEN
+    RAISE EXCEPTION 'esperava 4 policies orbien_app_auth FOR ALL simetricas (tenants, congregations, branding_configs, tenant_plans), encontrei % — o login e a rota publica de celulas leem essas tabelas como orbien_app, sem contexto', n;
   END IF;
 
   -- A auditoria so sobrevive a saida de `audit_logs` da policy porque

@@ -83,6 +83,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Ordem explícita, não cascata. `AuditLog.actorUser` é `onDelete: Restrict`
+  // e `AuditLog.tenant` é `onDelete: Cascade`: apagar só o tenant faz o
+  // Postgres cascatear para `user_accounts` E `audit_logs` ao mesmo tempo, e
+  // se a conta sair primeiro o `Restrict` dispara — teardown quebrado, e as
+  // fixtures da rodada anterior fazem a contagem de `audit_logs` do último
+  // teste falhar na rodada seguinte. Mesmo motivo e mesma ordem de
+  // `tenant-audit-read.spec.ts:99`.
+  await prismaAdmin.auditLog.deleteMany({
+    where: { tenant_id: { in: [tenantAId, tenantBId] } },
+  });
+  await prismaAdmin.userAccount.deleteMany({ where: { id: { in: [userAId, userBId] } } });
   await prismaAdmin.tenant.deleteMany({ where: { id: { in: [tenantAId, tenantBId] } } });
   await prismaAdmin.$disconnect();
   await prisma.$disconnect();
@@ -217,12 +228,18 @@ describe('audit_logs — fora da policy orbien_app_auth', () => {
 
     // A linha existe — o admin a enxerga.
     expect(
-      await prismaAdmin.auditLog.count({ where: { entity: 'auth-tables-spec' } }),
+      await prismaAdmin.auditLog.count({
+        where: { entity: 'auth-tables-spec', tenant_id: tenantAId },
+      }),
     ).toBe(1);
 
     // `orbien_app` sem contexto, não. Sobra só a policy `tenant_read`
     // (001 + 005), que exige tenant no contexto ou `app_platform_access()`.
-    expect(await prisma.auditLog.count({ where: { entity: 'auth-tables-spec' } })).toBe(0);
+    expect(
+      await prisma.auditLog.count({
+        where: { entity: 'auth-tables-spec', tenant_id: tenantAId },
+      }),
+    ).toBe(0);
   });
 
   it('não escreve direto, e é por isso que audit_insert() é SECURITY DEFINER', async () => {
