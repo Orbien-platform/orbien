@@ -142,6 +142,7 @@ export default function RedesPage() {
       .catch(() => {
         setManageGroups([]);
         setUnlinkedGroups([]);
+        setManageError("Erro ao carregar as células — tente de novo.");
       })
       .finally(() => setManageLoading(false));
   }

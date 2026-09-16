@@ -146,7 +146,12 @@ if toca "^apps/api/(src|prisma)/"; then
   echo
   echo "▶ Isolamento multi-tenant (o diff toca a API)"
   echo "  … a suíte leva ~2,5 min contra o Supabase"
-  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && passa "118 testes de RLS" || {
+  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && {
+    # AJU-07: contagem lida da própria saída do Jest, não mais literal — o
+    # literal desatualizou três vezes (39→118→125) a cada suíte nova de RLS.
+    RLS_SUMMARY=$(grep -E "^Tests:" /tmp/prepush-rls.log | sed -E 's/^Tests:\s*//')
+    passa "${RLS_SUMMARY:-testes de RLS} (veja /tmp/prepush-rls.log)"
+  } || {
     # Distinguir banco inacessível de teste vermelho: bloquear por
     # infraestrutura ensina a ignorar o portão.
     if grep -qE "Exceeded timeout|Can't reach database|P1001|ECONNREFUSED" /tmp/prepush-rls.log; then

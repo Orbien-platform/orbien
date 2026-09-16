@@ -286,7 +286,8 @@ describe("MultiplyGroupModal", () => {
     expect(select.options).toHaveLength(1);
   });
 
-  it("ignora silenciosamente a falha ao carregar pessoas para o select de líder", async () => {
+  it("mostra erro com opção de tentar de novo quando falha ao carregar pessoas (PEND-05)", async () => {
+    const user = userEvent.setup();
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url.startsWith("/persons")) {
         return Promise.reject(new Error("network down"));
@@ -304,9 +305,26 @@ describe("MultiplyGroupModal", () => {
       />
     );
 
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/persons?limit=100"));
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
     const select = screen.getByLabelText(/Novo líder/) as HTMLSelectElement;
     expect(select.options).toHaveLength(1);
+    expect(
+      await screen.findByText("Não foi possível carregar as pessoas.")
+    ).toBeInTheDocument();
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/persons")) {
+        return Promise.resolve({ data: { data: persons, total: 2 } });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByText("Não foi possível carregar as pessoas.")
+    ).not.toBeInTheDocument();
+    expect(select.options).toHaveLength(3);
   });
 
   it("mostra a mensagem genérica de 400 quando a API não traz `message`", async () => {
