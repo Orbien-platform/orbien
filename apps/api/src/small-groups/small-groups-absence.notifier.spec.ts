@@ -9,7 +9,7 @@ function row(overrides: Partial<AbsenceAlertRow> = {}): AbsenceAlertRow {
     small_group_id: 'sg1',
     group_name: 'Célula Centro',
     leader_person_id: 'p-lider',
-    absent_count: 2n,
+    absent_person_ids: ['p-ana', 'p-bruno'],
     meetings_considered: 3,
     ...overrides,
   };
@@ -36,7 +36,7 @@ describe('SmallGroupsAbsenceNotifier', () => {
         tenantId: 't1',
         congregationId: 'c1',
         title: 'Faltas na Célula Centro',
-        body: '2 membros não apareceram nas últimas 3 reuniões.',
+        body: '2 membros sem presença nas últimas 3 reuniões da célula.',
         filters: [{ field: 'tag', key: 'person_id', relation: '=', value: 'p-lider' }],
         data: { type: 'absence_alert', small_group_id: 'sg1' },
       }),
@@ -45,13 +45,13 @@ describe('SmallGroupsAbsenceNotifier', () => {
 
   it('conta as reuniões que existem quando a célula ainda não tem três', async () => {
     const { notifier, notifications } = notifierWith([
-      row({ absent_count: 1n, meetings_considered: 1 }),
+      row({ absent_person_ids: ['p-ana'], meetings_considered: 1 }),
     ]);
 
     await notifier.cronNotifyAbsenceAlerts();
 
     expect(notifications.sendPush).toHaveBeenCalledWith(
-      expect.objectContaining({ body: '1 membro não apareceu na última reunião.' }),
+      expect.objectContaining({ body: '1 membro sem presença na última reunião da célula.' }),
     );
   });
 

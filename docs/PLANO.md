@@ -601,11 +601,20 @@ que o `PROD-20` trouxe no mesmo dia).
 > célula sem reunião não gera alerta, célula com menos de 3 reuniões usa as
 > que tem, e presença numa 4ª reunião mais antiga não tira ninguém da lista.
 >
-> **Fica em aberto, declarado e não corrigido** (virou `PEND-06` na seção 7):
-> membro que entrou na célula depois das 3 últimas reuniões é contado como
-> ausente, porque nem a rota nem o job olham `group_memberships.joined_at`. É
-> comportamento da rota desde que ela existe; o job herdou por paridade
-> deliberada. Corrigir exige mudar os dois juntos.
+> O `joined_at` **entrou na mesma rodada**, depois de o dev pedir o ajuste
+> antes de fechar: a janela é por membro, não pela célula — só conta reunião
+> posterior à entrada da pessoa, e presença anterior a ela também não vale.
+> Quem entrou depois das três não aparece no alerta. Mudou o que a rota
+> responde, o que é comportamento em produção; foi decisão declarada, não
+> silêncio. Nasceu como `PEND-06` e fechou no mesmo dia (seção 7).
+>
+> E a paridade entre as duas definições **deixou de depender de disciplina**:
+> `test/integration/small-groups-absence-alerts.spec.ts` monta um cenário só
+> (janela de 3 com uma quarta reunião fora dela, membro que entrou depois,
+> membro que entrou no meio, presença registrada antes da entrada) e exige a
+> mesma resposta da rota (Prisma, sob RLS, via `runAsTenant`) e do job (SQL,
+> cross-tenant, via `absencesByGroup`). Conferido nos dois sentidos: quebrar o
+> `joined_at` só no SQL derruba a suíte, quebrar só no service também.
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com
@@ -856,27 +865,26 @@ bug de produção:
   desvincular célula) em `apps/web/e2e/`. Há teste de componente
   (`.test.tsx`) para as duas telas, não o fluxo ponta a ponta no browser.
 
-### PEND-06 · Alerta de ausência ignora quem entrou depois · dívida
+### ~~PEND-06 · Alerta de ausência ignora quem entrou depois~~ · fechado
 
-`SmallGroupsService.checkAbsenceAlerts` (rota) e `SmallGroupsAbsenceNotifier`
-(job semanal, `PROD-11`) contam como ausente todo membro sem
-`attendance_records` nas 3 últimas reuniões da célula — **inclusive quem
-entrou na célula depois delas**. Nenhum dos dois olha
-`group_memberships.joined_at`.
+Nasceu e fechou em 2026-09-16, dentro do `PROD-11`. `checkAbsenceAlerts`
+(rota) e `SmallGroupsAbsenceNotifier` (job semanal) contavam como ausente
+todo membro sem `attendance_records` nas 3 últimas reuniões da célula —
+**inclusive quem entrou depois delas**. Membro adicionado hoje entraria no
+alerta de segunda-feira como se tivesse faltado três vezes.
 
-Na prática: membro adicionado hoje entra no alerta da segunda-feira como se
-tivesse faltado três vezes, e o líder é mandado atrás de alguém que nunca
-teve reunião para faltar. É ruído, não vazamento — o recorte de célula,
-congregação e tenant é o de sempre.
+Apresentado como achado antes de fechar o `PROD-11`, como manda o
+`CLAUDE.md` — muda o que a rota responde, que é comportamento em produção —
+e o dev respondeu ajustar antes. A janela passou a ser **por membro**: só
+reunião com `occurred_at >= group_memberships.joined_at`, e a mesma condição
+no lado da presença, para que presença anterior à entrada não conte como
+presença (nem a falta dela como falta). Membro sem nenhuma reunião aplicável
+sai do alerta.
 
-Não é regressão: a rota se comporta assim desde que existe, e o job herdou a
-regra **por paridade deliberada** (o cabeçalho do notifier declara que as
-duas definições têm que dizer a mesma coisa). Corrigir é somar
-`joined_at <= gm.occurred_at` na janela — nos dois lugares, na mesma
-mudança; corrigir só um lado reintroduz a divergência que o cabeçalho
-proíbe. Declarado no fechamento do `PROD-11` (seção 6) e não corrigido ali
-porque muda o que a rota responde, que é comportamento em produção, e a
-regra do `CLAUDE.md` manda perguntar antes.
+Mudou nos dois lugares na mesma alteração, que era a exigência: corrigir só
+um lado reintroduziria a divergência que o cabeçalho do notifier proíbe. É
+o que `test/integration/small-groups-absence-alerts.spec.ts` agora mede —
+ver a nota do `PROD-11` na seção 6.
 
 ---
 

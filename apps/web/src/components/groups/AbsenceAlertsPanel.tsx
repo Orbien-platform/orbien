@@ -17,7 +17,8 @@ export interface AbsentPerson {
  *
  * `GET /small-groups/:id/absence-alerts` devolve quem, entre os membros da
  * célula, não tem presença em nenhuma das 3 últimas reuniões (menos, se a
- * célula tiver menos). A mesma conta alimenta o push semanal ao líder
+ * célula tiver menos) — contando, para cada membro, só as que aconteceram
+ * depois de ele entrar. A mesma conta alimenta o push semanal ao líder
  * (`SmallGroupsAbsenceNotifier`); aqui é a consulta sob demanda, para quem
  * quer olhar sem esperar a segunda-feira.
  *
@@ -97,7 +98,9 @@ export function AbsenceAlertsPanel({ groupId }: { groupId: string }) {
   return (
     <div className="flex flex-col">
       <p className="border-b border-[var(--border-default)] px-4 py-3 text-xs text-stone">
-        Sem presença registrada em nenhuma das 3 últimas reuniões da célula.
+        Sem presença em nenhuma das 3 últimas reuniões da célula. Quem entrou
+        depois delas não aparece aqui — só contam as reuniões posteriores à
+        entrada de cada membro.
       </p>
       <ul className="divide-y divide-[var(--border-default)]">
         {people.map((p) => (

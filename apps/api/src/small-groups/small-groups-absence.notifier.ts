@@ -10,7 +10,7 @@ export interface AbsenceAlertRow {
   small_group_id: string;
   group_name: string;
   leader_person_id: string;
-  absent_count: bigint;
+  absent_person_ids: string[];
   meetings_considered: number;
 }
 
@@ -29,9 +29,12 @@ export interface AbsenceAlertRow {
  * Prisma porque a rota roda sob RLS com o contexto do request. As duas têm
  * que dizer a mesma coisa — tela e push divergindo é pior do que qualquer uma
  * das duas estar errada sozinha. São as mesmas regras: as 3 reuniões mais
- * recentes da célula (menos, se houver menos), ausente é quem não tem
- * `attendance_records` em nenhuma delas, célula sem reunião nenhuma não gera
- * alerta.
+ * recentes da célula (menos, se houver menos), contando por membro só as que
+ * aconteceram depois de ele entrar (`joined_at` — era o `PEND-06`), ausente é
+ * quem não tem `attendance_records` em nenhuma delas, célula sem reunião
+ * nenhuma não gera alerta. `test/integration/small-groups-absence-alerts.spec.ts`
+ * roda as duas contra o mesmo cenário e exige a mesma resposta — é o que
+ * impede a divergência silenciosa.
  */
 @Injectable()
 export class SmallGroupsAbsenceNotifier {
@@ -73,26 +76,35 @@ export class SmallGroupsAbsenceNotifier {
   }
 
   private buildBody(row: AbsenceAlertRow): string {
-    const people = Number(row.absent_count);
+    const people = row.absent_person_ids.length;
     const pessoas = people === 1 ? '1 membro' : `${people} membros`;
-    // O texto conta quantas reuniões entraram na conta em vez de dizer "as
-    // últimas 3" sempre: célula recém-criada tem 1 ou 2, e prometer 3 faria o
-    // líder procurar uma reunião que não existe.
+    // O texto conta quantas reuniões a CÉLULA teve na janela em vez de dizer
+    // "as últimas 3" sempre: célula recém-criada tem 1 ou 2, e prometer 3
+    // faria o líder procurar uma reunião que não existe. A janela de cada
+    // membro pode ser menor que essa (quem entrou no meio), e é por isso que
+    // a frase é "sem presença em", da célula para fora, e não "faltou às três"
+    // pessoa por pessoa — a lista nominal, com o recorte certo, está na aba
+    // Ausências, que é para onde o alerta manda o líder.
     const reunioes =
       row.meetings_considered === 1
-        ? 'na última reunião'
-        : `nas últimas ${row.meetings_considered} reuniões`;
-    return `${pessoas} não ${people === 1 ? 'apareceu' : 'apareceram'} ${reunioes}.`;
+        ? 'na última reunião da célula'
+        : `nas últimas ${row.meetings_considered} reuniões da célula`;
+    return `${pessoas} sem presença ${reunioes}.`;
   }
 
-  private async absencesByGroup(): Promise<AbsenceAlertRow[]> {
+  /**
+   * Público por causa do teste de paridade, que precisa da lista de ausentes
+   * sem disparar push nenhum — o cron é o único chamador em produção.
+   */
+  async absencesByGroup(): Promise<AbsenceAlertRow[]> {
     return this.prisma.system.$queryRaw<AbsenceAlertRow[]>(Prisma.sql`
       WITH recent_meetings AS (
-        SELECT id, small_group_id
+        SELECT id, small_group_id, occurred_at
         FROM (
           SELECT
             gm.id,
             gm.small_group_id,
+            gm.occurred_at,
             row_number() OVER (
               PARTITION BY gm.small_group_id ORDER BY gm.occurred_at DESC
             ) AS rn
@@ -106,18 +118,28 @@ export class SmallGroupsAbsenceNotifier {
         sg.id AS small_group_id,
         sg.name AS group_name,
         sg.leader_person_id,
-        count(*) AS absent_count,
+        array_agg(m.person_id) AS absent_person_ids,
         (SELECT count(*)::int FROM recent_meetings rm WHERE rm.small_group_id = sg.id)
           AS meetings_considered
       FROM small_groups sg
       JOIN group_memberships m ON m.small_group_id = sg.id
-      WHERE EXISTS (SELECT 1 FROM recent_meetings rm WHERE rm.small_group_id = sg.id)
+      -- Janela por membro: só reunião posterior à entrada dele na célula. O
+      -- EXISTS abaixo substitui a checagem de "a célula tem reunião" — quem
+      -- não tem nenhuma reunião aplicável não entra no alerta, e célula sem
+      -- reunião nenhuma não tem membro com reunião aplicável.
+      WHERE EXISTS (
+          SELECT 1
+          FROM recent_meetings rm
+          WHERE rm.small_group_id = sg.id
+            AND rm.occurred_at >= m.joined_at
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM attendance_records ar
           JOIN recent_meetings rm ON rm.id = ar.group_meeting_id
           WHERE rm.small_group_id = sg.id
             AND ar.person_id = m.person_id
+            AND rm.occurred_at >= m.joined_at
         )
       GROUP BY sg.tenant_id, sg.congregation_id, sg.id, sg.name, sg.leader_person_id
     `);
