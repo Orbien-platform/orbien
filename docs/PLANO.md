@@ -68,9 +68,7 @@ consentimento — os seis de `apps/api/src/persons/` são os mesmos),
 `CONF-03` (`me.controller.ts` segue com `GET /me/permissions` e nada mais),
 `PROD-05` (nenhuma rota de sugestão de escala), `PROD-07` (o OFX de
 `financial/export/` continua sendo só exportação), `PROD-08`, `PROD-11`
-(`checkAbsenceAlerts` segue sem tela e sem job), `PROD-12`, `PROD-17`,
-`PROD-23` (`GET /small-groups/:id/visit-requests` existe; nenhuma tela do
-`apps/web` a chama), `PROD-25` (nenhum arquivo de `apps/web` ou
+(`checkAbsenceAlerts` segue sem tela e sem job), `PROD-12`, `PROD-17`, `PROD-25` (nenhum arquivo de `apps/web` ou
 `apps/mobile` chama `POST .../registrations/me`), `AJU-05`, `PEND-04` e os
 `DEC-` da seção 9.
 
@@ -564,7 +562,6 @@ que o `PROD-20` trouxe no mesmo dia).
 | `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
-| `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 | `PROD-25` | 4 | Tela de member self-service para inscrição em evento (gratuito e pago) | Starter (gratuito) / Premium (pago) | `POST .../registrations/me` existe desde o `PROD-16` (2026-09-14) e nunca ganhou tela — nem `apps/web` nem `apps/mobile` chamam essa rota hoje, só o painel do organizador. Com o `PROD-24` (2026-09-15) a lacuna cresceu: sem essa tela também não há onde mostrar o QR do PIX dinâmico que `registerSelf` passou a devolver para evento pago. Provavelmente `apps/mobile`, que é onde o membro consome conteúdo — a decidir |
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
@@ -677,11 +674,37 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 >   `$executeRaw`, e não `create` do Prisma, que usa RETURNING. Provas em
 >   `apps/api/test/rls/small-groups-public.spec.ts`.
 >
-> Falta a tela do outro lado: a rota autenticada
-> `GET /small-groups/:id/visit-requests` existe (papéis de liderança, mesma
-> lista de `:id/absence-alerts`), mas nenhuma tela do `apps/web` a chama
-> ainda — hoje o pedido chega ao banco e só aparece para quem consultar a
-> API. Ver `PROD-23` na tabela acima.
+> A tela do outro lado veio depois, no `PROD-23` (2026-09-16) — a nota está
+> logo abaixo.
+
+> `PROD-23` (tela da liderança para os pedidos de visita) **fechou em
+> 2026-09-16**. Não houve mudança em `apps/api`: a rota
+> `GET /small-groups/:id/visit-requests` já existia desde o `PROD-13`, com
+> `ALERT_ROLES` (`tenant_admin`, `admin_congregation`, `pastor`,
+> `cell_leader`) — o trabalho inteiro foi no `apps/web`, e nenhum script de
+> RLS foi tocado (`014_rls_small_group_visit_requests.sql` já cobre a
+> leitura autenticada).
+>
+> Ficou como aba **"Visitas"** da `GroupDetailSheet`
+> (`apps/web/src/components/groups/VisitRequestsPanel.tsx`), e não como tela
+> própria: o pedido é de uma célula, e quem vai responder já está com a
+> gaveta daquela célula aberta. Montada só quando a aba abre, pelo mesmo
+> motivo de "Oração", "Conversa" e "Genealogia" — aqui com um peso a mais,
+> porque a requisição responde 403 para quem abre a gaveta sem papel de
+> liderança, e esse custo não deve existir em toda abertura.
+>
+> O 403 vira `NoAccessState`, não lista vazia. É a mesma regra do
+> `PrayerRequestsPanel`, por outro motivo: lá a API exige participação no
+> grupo, aqui exige papel. "Nenhum pedido de visita recebido" e "você não
+> tem acesso" são leituras opostas, e a primeira, dita no lugar da segunda,
+> faz o líder concluir que ninguém se interessou pela célula dele.
+>
+> **O painel só lê.** Não há rota de escrita e não deveria haver: a
+> liderança responde por telefone ou e-mail — daí os contatos saírem como
+> link `tel:`/`mailto:`, que é a única ação que existe ali — e o registro da
+> visita que de fato aconteceu continua sendo `VisitRecord`, que é outra
+> coisa (ver a nota do `PROD-13`, logo acima). `created_at` é instante, não
+> data civil, então sai por `formatInstant`.
 
 ---
 

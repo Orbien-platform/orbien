@@ -20,6 +20,7 @@ import { GroupHealthBadge } from "@/components/groups/GroupHealthBadge";
 import { GroupGenealogyTree } from "@/components/groups/GroupGenealogyTree";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
+import { VisitRequestsPanel } from "@/components/groups/VisitRequestsPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -506,6 +507,9 @@ export function GroupDetailSheet({
                       <Tabs.Tab value="chat" className={tabBtn(activeTab === "chat")}>
                         Conversa
                       </Tabs.Tab>
+                      <Tabs.Tab value="visits" className={tabBtn(activeTab === "visits")}>
+                        Visitas
+                      </Tabs.Tab>
                       <Tabs.Tab value="genealogy" className={tabBtn(activeTab === "genealogy")}>
                         Genealogia
                       </Tabs.Tab>
@@ -637,6 +641,13 @@ export function GroupDetailSheet({
                     oração — e aqui pesa mais: o painel abre um polling, que
                     não deve existir em gaveta cuja aba ninguém abriu. */}
                 {activeTab === "chat" && <GroupChatPanel groupId={group.id} />}
+
+                {/* ── Visitas tab (PROD-23) ── */}
+                {/* Montada só quando a aba abre, mesmo motivo das abas acima —
+                    e aqui a requisição responde 403 para quem abre a gaveta
+                    sem papel de liderança, que é justamente quem não deve
+                    pagar por ela em toda abertura. */}
+                {activeTab === "visits" && <VisitRequestsPanel groupId={group.id} />}
 
                 {/* ── Genealogia tab (PROD-20, CEL20-06) ── */}
                 {/* Montada só quando a aba abre, mesmo motivo das abas acima. */}

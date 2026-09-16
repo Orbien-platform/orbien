@@ -6,6 +6,9 @@ import api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() },
+  // O `VisitRequestsPanel` (PROD-23) importa `isForbidden` do mesmo módulo;
+  // sem ele no mock, o 403 da aba estoura em vez de virar "sem acesso".
+  isForbidden: () => false,
 }));
 
 function findSelectByOptionText(text: string): HTMLSelectElement {
@@ -1145,5 +1148,53 @@ describe("GroupDetailSheet", () => {
       expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(callsBefore)
     );
     vi.useRealTimers();
+  });
+  // ── Aba "Visitas" (PROD-23) ──────────────────────────────────────────────
+
+  it("carrega os pedidos de visita só quando a aba Visitas abre", async () => {
+    const visitRequests = [
+      {
+        id: "vr1",
+        visitor_name: "Marina Alves",
+        visitor_phone: "11988887777",
+        visitor_email: null,
+        message: "Posso levar meu filho?",
+        created_at: "2026-09-14T21:30:00.000Z",
+      },
+    ];
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/g1/visit-requests")
+        return Promise.resolve({ data: visitRequests });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    // Gaveta aberta na aba "Informações": o painel não é montado, e a
+    // requisição do 403 de quem não lidera não é paga à toa.
+    expect(
+      vi.mocked(api.get).mock.calls.filter((c) => c[0] === "/small-groups/g1/visit-requests")
+    ).toHaveLength(0);
+
+    await user.click(screen.getByRole("tab", { name: "Visitas" }));
+
+    expect(await screen.findByText("Marina Alves")).toBeInTheDocument();
+    expect(screen.getByText("Posso levar meu filho?")).toBeInTheDocument();
+    expect(
+      vi.mocked(api.get).mock.calls.filter((c) => c[0] === "/small-groups/g1/visit-requests")
+    ).toHaveLength(1);
   });
 });
