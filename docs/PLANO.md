@@ -70,9 +70,14 @@ consentimento — os seis de `apps/api/src/persons/` são os mesmos),
 `financial/export/` continua sendo só exportação), `PROD-08`, `PROD-12`,
 `PROD-17`,
 `PROD-23` (`GET /small-groups/:id/visit-requests` existe; nenhuma tela do
-`apps/web` a chama), `PROD-25` (nenhum arquivo de `apps/web` ou
-`apps/mobile` chama `POST .../registrations/me`), `AJU-05`, `PEND-04` e os
-`DEC-` da seção 9.
+`apps/web` a chama), `AJU-05`, `PEND-04` e os `DEC-` da seção 9.
+
+Em **2026-09-16** fecharam `PROD-11` (alerta de ausência consecutiva, em
+outra branch — ver a nota da seção 6 e o `PEND-06` da seção 7, que nasceu e
+fechou junto) e `PROD-25` (tela de member self-service para inscrição em
+evento), no `apps/mobile`. Com o `PROD-25`,
+`POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
+que o `PROD-24` devolve passa a ter onde aparecer.
 
 ---
 
@@ -564,7 +569,98 @@ que o `PROD-20` trouxe no mesmo dia).
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
-| `PROD-25` | 4 | Tela de member self-service para inscrição em evento (gratuito e pago) | Starter (gratuito) / Premium (pago) | `POST .../registrations/me` existe desde o `PROD-16` (2026-09-14) e nunca ganhou tela — nem `apps/web` nem `apps/mobile` chamam essa rota hoje, só o painel do organizador. Com o `PROD-24` (2026-09-15) a lacuna cresceu: sem essa tela também não há onde mostrar o QR do PIX dinâmico que `registerSelf` passou a devolver para evento pago. Provavelmente `apps/mobile`, que é onde o membro consome conteúdo — a decidir |
+
+### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
+
+Entregue em 2026-09-16, no `apps/mobile`. Fecha a lacuna que o `PROD-16`
+abriu em 2026-09-14 e que o `PROD-24` agravou em 2026-09-15: `POST
+.../registrations/me` existia desde então sem nenhum consumidor — só o
+painel do organizador chamava a API de inscrição —, e o QR do PIX dinâmico
+que `registerSelf` passou a devolver para evento pago não tinha onde
+aparecer. **Nada de backend nesta entrega**: nenhuma rota, migration ou
+script de RLS novo. É tela sobre API pronta.
+
+**`apps/mobile`, não `apps/web`** — a pergunta que o item deixou em aberto.
+O `apps/web` é só `(admin)` e `(public)`: não tem área de membro nenhuma, e
+criar uma (grupo de rota, layout, nav, guard) seria trabalho maior que a
+tela em si. O mobile já tem `app/post/[id].tsx` e `content-client.ts`, e é
+onde o membro consome conteúdo.
+
+- `app/post/[id].tsx` ganhou o bloco de **quando e onde**
+  (`event_starts_at`/`event_location` — campos que a API já devolvia, porque
+  `findOne` não tem `select`, e que nenhuma tela mostrava) e monta o
+  `EventRegistrationPanel` **só quando `registration_enabled`**: post comum
+  não paga as duas chamadas.
+- `EventRegistrationPanel` é o par que faltava do `EventRegistrationsPanel`
+  do web. Bate em `.../registrations/summary` e `.../registrations/me`, e
+  **em nenhum momento** na raiz `GET .../registrations` — essa é do
+  organizador e responde 403 para `member`. Não há função para ela no
+  `content-client.ts`, de propósito.
+- A tela reflete as regras que o backend já decidiu, sem duplicá-las:
+  lotado **e gratuito** oferece "Entrar na fila de espera" (a API não
+  recusa, entra como `waitlisted`); lotado **e pago** não oferece botão
+  nenhum (a API responde 400 — não há fila quando se cobra); prazo vencido
+  esconde o botão de inscrever mas **mantém o de cancelar**, porque o
+  cancelamento não respeita o prazo.
+- Erro de ação mostra a **mensagem da própria API** quando ela é 4xx
+  ("Vagas esgotadas para este evento"): são escritas para o usuário final.
+  5xx e erro de rede caem no texto genérico — "Serviço PIX indisponível"
+  não ajuda quem está tentando pagar.
+- **Evento pago**: QR como `Image` de `data:image/png;base64,…` (a Asaas
+  devolve `encodedImage` sem o prefixo, quem monta a URI é a tela), payload
+  copia-e-cola em `<Text selectable>` mais botão "Copiar código PIX" com
+  **`expo-clipboard`** — dependência nova do `orbien-mobile`, instalada da
+  raiz, sem config plugin. Falha ao copiar não esconde o código.
+- **Limitação conhecida, declarada em tela**: o QR só existe na resposta do
+  `POST`. `GET .../registrations/me` devolve a inscrição, não o payload do
+  PIX, então quem sai da tela antes de pagar perde o código — a nota abaixo
+  do QR manda cancelar e se inscrever de novo, que gera outro. Resolver
+  isso de verdade seria trabalho de backend (expor o `qr_code` do
+  `PixPayment` ligado à inscrição), fora do escopo desta entrega; nasceu
+  como `PEND-07` na seção 8.
+- `formatBRL` (`src/lib/format/currency.ts`) é manual pelo mesmo motivo que
+  `date.ts` documenta: sem `Intl` completo o Hermes cai em en-US **em
+  silêncio**, e "R$ 1.234,56" viraria "R$1,234.56". O web segue com
+  `toLocaleString`, e está certo lá.
+
+**Correção de bug pré-existente, arrastada por esta entrega.** `ApiClient`
+(`src/lib/api/client.ts`) chamava `response.json()` em toda resposta 2xx que
+não fosse 204. O Nest serializa `null` como **200 com corpo vazio**
+(`isNil(body)` → `response.send()` no `ExpressAdapter`), então `JSON.parse("")`
+jogava. Duas rotas caem nisso: `GET .../registrations/me` (o caminho principal
+desta tela — membro que ainda não se inscreveu) e `GET
+/volunteers/unavailability` num mês sem registro, que **já estava quebrada em
+produção** desde o MOB-08 pelo mesmo motivo, mostrando erro de carga no lugar
+do estado vazio. O client agora lê o corpo como texto e devolve `undefined`
+quando ele é vazio; 204 segue sem ler corpo nenhum.
+
+**Achados de revisão corrigidos antes do PR** (`/code-review` + `pr-review`,
+dimensões B e C — A não se aplica, não há `apps/api/**` no diff): além do bug
+acima, o painel era montado só com `registration_enabled`, e desligar as
+inscrições tirava o botão de cancelar de quem já estava inscrito (agora a tela
+monta o painel para todo post de evento e **o painel** decide não desenhar
+nada); `Promise.all` no carregamento fazia um 5xx em `.../me` apagar preço,
+vagas e prazo já carregados (virou `allSettled`, com as duas metades
+independentes); o erro de carga não usava `describeLoadError` nem oferecia
+retry, divergindo das outras 12 superfícies de carga do app; e
+`numberOfLines={3}` truncava o payload do PIX, justamente o fallback de quem
+não conseguiu copiar.
+
+**Pendência de deploy — não vai por OTA.** `expo-clipboard` é módulo nativo,
+então só entra em binário novo. O `runtimeVersion` é `appVersion` e o
+`autoIncrement` do profile `production` mexe em build number, não em
+`version`: publicar só um update OTA deixaria o app quebrando em
+`Clipboard.setStringAsync` nos binários antigos. Esta entrega **exige build
+nova com bump de `version`** antes de qualquer update no mesmo canal.
+
+Testes: `EventRegistrationPanel.test.tsx` (30 casos — os dois caminhos de
+lotado, prazo, os três status, QR/copiar, as duas metades do carregamento,
+retry, inscrição desligada com e sem inscrito, e a trava de toque duplo, que
+evita duas cobranças de PIX), `currency.test.ts`, os blocos novos de
+`content-client.test.ts`, `client.test.ts` (corpo vazio e 204) e
+`__tests__/app/post/[id].test.tsx`. A suíte do mobile fecha em **313 testes
+em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
+(94,63 / 86,26 / 94,37 / 98,33).
 
 > `PROD-11` (alerta de ausência consecutiva para o líder, Módulo 3, Starter)
 > **fechou em 2026-09-16**. A conta já existia —
@@ -885,6 +981,29 @@ Mudou nos dois lugares na mesma alteração, que era a exigência: corrigir só
 um lado reintroduziria a divergência que o cabeçalho do notifier proíbe. É
 o que `test/integration/small-groups-absence-alerts.spec.ts` agora mede —
 ver a nota do `PROD-11` na seção 6.
+
+### PEND-07 · O QR do PIX da inscrição só existe na resposta do POST · dívida
+
+Nasceu declarada no `PROD-25` (2026-09-16), com a limitação escrita na
+própria tela — não é achado que sobrou de revisão. Nasceu como `PEND-06`
+e foi renumerada no merge com a `main`: o `PROD-11` fechou um `PEND-06`
+próprio no mesmo dia, em outra branch, e ID não se recicla.
+
+`POST .../registrations/me` devolve `{ registration, payment }` em evento
+pago, e o `payment.qr_code`/`qr_code_image` **só existe ali**: `GET
+.../registrations/me` devolve a linha de `event_registrations`, que guarda
+`pix_payment_id` mas não o payload. Quem gera o QR e sai da tela antes de
+pagar não tem como voltar a ele.
+
+O contorno em produção funciona e está dito em tela ("cancele a inscrição e
+inscreva-se de novo para gerar outro") — cancelar solta o `identity` que
+bloquearia a segunda tentativa, e a nova gera outro QR válido por 24h. O
+custo é uma cobrança órfã na Asaas por tentativa abandonada.
+
+A correção é de backend, não de tela: expor o `qr_code` do `PixPayment`
+ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
+ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
+tela sobre API pronta.
 
 ---
 
