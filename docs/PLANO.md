@@ -872,11 +872,12 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 
-- **`user_accounts`, `role_assignments` e `audit_logs` seguem com
-  `orbien_app_auth USING (true)`.** Não incomoda nas rotas autenticadas (que
-  rodam como `app_user`), mas qualquer rota pública futura que toque essas
-  tabelas as lê inteiras. Fechar exige mapear o que o login precisa ler antes
-  de existir contexto.
+- **`user_accounts` e `role_assignments` seguem com `orbien_app_auth
+  USING (true)` na LEITURA.** A escrita fechou em 2026-09-16 (ação B) e
+  `audit_logs` saiu da policy (ação A) — ver o registro no fim do item. O que
+  resta é o `USING (true)`: quem lê por esse caminho lê as linhas de todos os
+  tenants. Fechar isso é a ação D, e exige mover as leituras do login para
+  função `SECURITY DEFINER`.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
@@ -923,43 +924,87 @@ enquadramento do ponto acima:
   ponto mais barato de apertar primeiro, possivelmente sem o mapeamento fino
   que as outras duas tabelas exigem.
 
-Proposta que ficou registrada, não aplicada: `GRANT SELECT` restrito às
-colunas que o login de fato consome em `user_accounts`
+Proposta que ficou registrada: `GRANT SELECT` restrito às colunas que o login
+de fato consome em `user_accounts`
 (`id`/`email`/`password_hash`/`is_active`/`tenant_id`/`congregation_id`) e
 `role_assignments` (`role_code`/`congregation_id`/`user_account_id`); trocar
-`FOR ALL` por `FOR SELECT` nas três tabelas fecha a escrita morta sem tocar
-em código; restringir por **linha** (não só coluna) exigiria mover essas
-leituras para uma função `SECURITY DEFINER` — mudança de arquitetura, maior
-que fechar a escrita ou a coluna. Duas pontas não verificadas: escrita via
-`$executeRaw` fora do client base/`.system` que o grep não pega, e se algum
-script numerado recria a policy depois da migration datada com texto
-diferente. Continua em aberto, como pergunta: seguir só documentado, ou
-priorizar uma dessas três ações (fechar a escrita morta, tirar `audit_logs`
-da policy, ou o `SECURITY DEFINER` completo) como trabalho próprio?
+`FOR ALL` por `FOR SELECT` fecha a escrita morta; restringir por **linha**
+(não só coluna) exigiria mover essas leituras para uma função
+`SECURITY DEFINER` — mudança de arquitetura, maior que fechar a escrita ou a
+coluna.
 
-### PEND-05 · Três achados menores de PROD-20, declarados no PR · dívida
+**Ações A e B aplicadas em 2026-09-16** (`017_rls_auth_tables.sql`,
+`test/rls/auth-tables.spec.ts`, passo 7 do `bootstrap-db.sh`). `audit_logs`
+saiu inteira da policy; `user_accounts` e `role_assignments` passaram de
+`FOR ALL` para `FOR SELECT`, sem `WITH CHECK`. As ações C e D seguem abertas,
+com o enquadramento corrigido abaixo. As duas pontas não verificadas
+fecharam, as duas negativas:
+
+- **Nenhum script numerado recria a policy.** `orbien_app_auth` só existia na
+  migration datada; as citações em `001_rls_setup.sql:495` e
+  `013_rls_small_groups_public.sql:37` são comentário. O estado do banco
+  conferia com o texto da migration — oito tabelas, `cmd=ALL`, `qual=true`,
+  `with_check=true`, `relforcerowsecurity=f`.
+- **Nenhuma escrita por `$executeRaw` fora do client base.** O único raw que
+  alcança `audit_logs` é `audit.interceptor.ts:113`, via `audit_insert()`, e
+  o nome do ator por `resolve_actor_name()` — as duas `SECURITY DEFINER`.
+
+Três correções ao mapeamento, achadas ao aplicar:
+
+- **A escrita não era toda morta.** `refresh_tokens` tem INSERT e UPDATE vivos
+  pelo client base (`auth.service.ts:254`, `:283`, `:293`, `:327`, `:478`) —
+  login, refresh e logout. O `FOR SELECT` vale nas três tabelas do texto
+  acima; estendido às sete, derruba a autenticação. O passo 7 do
+  `bootstrap-db.sh` passou a falhar nos **dois** sentidos: se a policy voltar
+  a `FOR ALL` onde foi apertada, e se sumir de `refresh_tokens`.
+- **A ação C (coluna) não é "sem tocar em código".** As quatro consultas do
+  login usam `include:`, não `select:` (`auth.service.ts:110`, `:190`,
+  `:238`, `:371`), e `include` faz o Prisma pedir **todas** as colunas
+  escalares do model — de `user_accounts`, `tenants` e `tenant_plans`. Com a
+  lista de colunas proposta, todo login falharia com 42501. Trocar esses
+  quatro `include` por `select` explícito é **pré-requisito** de C.
+  `role_assignments` e `jwt.strategy.ts:22` já usam `select`.
+- **O alcance já passou de auth, e não é "rota pública futura".**
+  `public-small-groups.service.ts:163` e `:168` leem `tenants` e
+  `branding_configs` pelo client base, sem JWT e sem `SET LOCAL ROLE` — o
+  `runInTx` de lá só fixa `app.tenant_id`. São quatro tabelas com consumidor
+  público hoje (`tenants`, `congregations`, `branding_configs`,
+  `tenant_plans`), e é por isso que nenhuma delas entrou em A/B.
+
+O `017` declara a policy nas **oito** tabelas, não só nas três que muda. Não é
+estilo: a policy nasceu numa migration datada, que `migrate deploy` aplica uma
+vez só — num banco já provisionado o `bootstrap-db.sh` não teria por onde
+recriá-la se fosse derrubada, e o portão do passo 7 falharia sem conserto
+possível a não ser SQL manual. Descoberto ao testar o portão de propósito.
+
+Continua em aberto, como pergunta: priorizar **C** (trocar os `include` por
+`select` e restringir por coluna as quatro tabelas de consumidor público) ou
+**D** (`SECURITY DEFINER`, restrição por linha) como trabalho próprio, ou
+parar aqui — A e B fecharam a permissão sem chamador, e o que sobra é o
+`USING (true)` de leitura, que é o desenho original do item.
+
+### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
 Achados de `/code-review`+`pr-review` na feature `prod-20-multiplicacao-celula`
-que o dev decidiu não bloquear o PR — nenhum é vazamento de isolamento nem
-bug de produção:
+que o dev decidiu não bloquear o PR — nenhum era vazamento de isolamento nem
+bug de produção. **Os três fecharam em 2026-09-16 (`70b62fa`)**, e a
+verificação abaixo é contra a árvore, não contra a mensagem do commit:
 
-- **`bootstrap-db.sh` passo 7 não tem assertiva SQL dedicada para `networks`**
-  como tem para 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
-  FROM qual`). O catch-all genérico (qualquer tabela `public` sem RLS
-  habilitado derruba o passo 7) ainda cobre ausência total de RLS — o que
-  falta é só a checagem de simetria *específica* dessa tabela, que pegaria
-  um `USING`/`WITH CHECK` divergente escrito à mão numa mudança futura no
-  `016_rls_networks.sql`.
-- **`MultiplyGroupModal` e `NetworkFormModal` engolem erro ao carregar
-  pessoas** (`.catch(() => {})` no `GET /persons`) — o select de "novo
-  líder"/"líder de rede" fica vazio sem indicar que a chamada falhou,
-  indistinguível de "não há pessoas cadastradas". Mesmo padrão em
-  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`): falha em
-  `GET /small-groups` vira "nenhuma célula vinculada" em vez de erro.
-- **Sem cobertura E2E** para os dois fluxos de escrita novos — o wizard de
-  multiplicar célula e o CRUD de rede (criar/editar rede, vincular/
-  desvincular célula) em `apps/web/e2e/`. Há teste de componente
-  (`.test.tsx`) para as duas telas, não o fluxo ponta a ponta no browser.
+- **`bootstrap-db.sh` passo 7 sem assertiva SQL dedicada para `networks`.** O
+  catch-all genérico já cobria ausência total de RLS; o que faltava era a
+  checagem de simetria específica, que pega um `USING`/`WITH CHECK` divergente
+  escrito à mão numa mudança futura no `016_rls_networks.sql`. Entrou no mesmo
+  formato das de 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
+  FROM qual`).
+- **`MultiplyGroupModal` e `NetworkFormModal` engoliam erro ao carregar
+  pessoas** (`.catch(() => {})` no `GET /persons`), e
+  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`) fazia o mesmo
+  com `GET /small-groups`. Não resta nenhum `.catch(() => {})` nos três
+  arquivos.
+- **Sem cobertura E2E** para os dois fluxos de escrita novos. Existem agora
+  `apps/web/e2e/multiplicar-celula.spec.ts` e `apps/web/e2e/redes.spec.ts` —
+  é o e2e que o item pedia, e que o PR #95 (cobertura de componente) não
+  entregava.
 
 ### ~~PEND-06 · Alerta de ausência ignora quem entrou depois~~ · fechado
 
@@ -1013,27 +1058,28 @@ Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
 árvore mede — exatamente o que a feature `mapa-monorepo-e-portoes` nasceu para
 caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
-Um item pendente: `AJU-07`, abaixo.
+Nenhum item pendente: `AJU-07`, o último em aberto, fechou em 2026-09-16.
 
-### AJU-07 · `scripts/pre-push.sh` imprime "118 testes de RLS" · cosmético
+### ~~AJU-07 · `scripts/pre-push.sh` imprimia "118 testes de RLS"~~ · fechado
 
-Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já fecharam duas
-vezes: `scripts/pre-push.sh:149` imprime `passa "118 testes de RLS"` e a
-suíte fecha hoje em **125 em 7 suítes** — o `016_rls_networks.sql` e o
+Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já tinham fechado
+duas vezes: `scripts/pre-push.sh:149` imprimia `passa "118 testes de RLS"`
+enquanto a suíte fechava em 125 — o `016_rls_networks.sql` e o
 `test/rls/networks.spec.ts` do `PROD-20` (2026-09-15) mudaram o número.
 
-É rótulo, não comportamento: o `passa`/`bloqueia` vem do código de saída do
-Jest, não da contagem, então o portão decide certo e só reporta errado. As
-contagens de `docs/PLANO.md` e `docs/TESTES.md` foram atualizadas na
-varredura de 2026-09-15; esta ficou de fora **de propósito**, porque
-`pre-push.sh` é portão e a regra do `CLAUDE.md` manda apresentar o achado
-antes de mexer.
+Era rótulo, não comportamento: o `passa`/`bloqueia` sempre veio do código de
+saída do Jest, não da contagem, então o portão decidia certo e só reportava
+errado.
 
-A pergunta que o item carrega não é só o número: é se vale continuar
-escrevendo uma contagem literal num portão que a envelhece a cada feature
-com tabela nova. As duas saídas são trocar o literal por uma leitura da
-própria saída do Jest (`Tests: N passed`), ou aceitar a deriva e corrigir a
-cada varredura, como nas três vezes até aqui. Seguir assim, ou ajustar?
+**Fechado em 2026-09-16 (`70b62fa`), pela saída que o item preferia:** o
+literal saiu, e `scripts/pre-push.sh:152` passou a ler `Tests: N passed` da
+própria saída do Jest (`RLS_SUMMARY`), com fallback para "testes de RLS" se o
+`grep` não achar a linha. A pergunta que o item carregava — se valia seguir
+escrevendo contagem literal num portão que a envelhece a cada feature com
+tabela nova — ficou respondida na prática: a quarta deriva não chegou a
+existir. Quando `test/rls/auth-tables.spec.ts` (`PEND-04`, ações A e B) levou
+a suíte de 125 para 133 no mesmo dia, o `pre-push.sh` acompanhou sozinho, e
+só as contagens de `docs/PLANO.md` e `docs/TESTES.md` precisaram de mão.
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
 

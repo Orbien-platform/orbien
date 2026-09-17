@@ -23,12 +23,28 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
       update: jest.fn(),
       delete: jest.fn(),
     },
-    auditLog: { create: jest.fn().mockResolvedValue({}) },
     ...overrides,
   };
-  const prisma = { client } as unknown as PrismaService;
-  return { service: new TransactionsService(prisma), client };
+  // A auditoria vai por `audit_insert()` no client BASE, não por
+  // `client.auditLog.create()` — `audit_logs` não tem policy de INSERT para
+  // `app_user`, e sair da transação é o que faz "auditoria que falha não
+  // desfaz a operação" ser verdade. Ver `src/common/audit/write-audit-log.ts`.
+  const auditRaw = jest.fn().mockResolvedValue(1);
+  const prisma = { client, $executeRaw: auditRaw } as unknown as PrismaService;
+  return { service: new TransactionsService(prisma), client, auditRaw };
 }
+
+/** Posição dos valores no template de `audit_insert()` que o helper monta. */
+const AUDIT = {
+  tenant_id: 1,
+  congregation_id: 2,
+  actor_user_id: 3,
+  subject_person_id: 4,
+  entity: 5,
+  action: 6,
+  before: 7,
+  after: 8,
+} as const;
 
 const validDto = {
   type: 'income',
@@ -64,10 +80,10 @@ describe('TransactionsService', () => {
     });
 
     it('cria a transação, grava auditoria e não propaga falha de auditoria', async () => {
-      const { service, client } = serviceWith();
+      const { service, client, auditRaw } = serviceWith();
       client.financialCategory.findFirst.mockResolvedValue({ id: 'cat-1', type: 'income' });
       client.financialTransaction.create.mockResolvedValue({ id: 't1' });
-      client.auditLog.create.mockRejectedValue(new Error('falha de auditoria'));
+      auditRaw.mockRejectedValue(new Error('falha de auditoria'));
 
       const result = await service.create(validDto as never, user);
 
@@ -268,7 +284,7 @@ describe('TransactionsService', () => {
     });
 
     it('falha ao gravar a auditoria não impede a atualização — best-effort', async () => {
-      const { service, client } = serviceWith();
+      const { service, client, auditRaw } = serviceWith();
       client.financialTransaction.findFirst.mockResolvedValue({
         id: 't1',
         status: 'pending',
@@ -276,7 +292,7 @@ describe('TransactionsService', () => {
         type: 'income',
       });
       client.financialTransaction.update.mockResolvedValue({ id: 't1', amount: '200' });
-      client.auditLog.create.mockRejectedValue(new Error('falha de auditoria'));
+      auditRaw.mockRejectedValue(new Error('falha de auditoria'));
 
       await expect(service.update('t1', { amount: 200 } as never, user)).resolves.toEqual({
         id: 't1',
@@ -363,10 +379,10 @@ describe('TransactionsService', () => {
     });
 
     it('falha ao gravar a auditoria não impede a remoção — best-effort', async () => {
-      const { service, client } = serviceWith();
+      const { service, client, auditRaw } = serviceWith();
       client.financialTransaction.findFirst.mockResolvedValue({ id: 't1', status: 'pending' });
       client.financialTransaction.delete.mockResolvedValue({ id: 't1' });
-      client.auditLog.create.mockRejectedValue(new Error('falha de auditoria'));
+      auditRaw.mockRejectedValue(new Error('falha de auditoria'));
 
       await expect(service.remove('t1', user)).resolves.toEqual({ id: 't1' });
     });
@@ -401,10 +417,10 @@ describe('TransactionsService', () => {
     });
 
     it('falha ao gravar a auditoria não impede a troca de status — best-effort', async () => {
-      const { service, client } = serviceWith();
+      const { service, client, auditRaw } = serviceWith();
       client.financialTransaction.findFirst.mockResolvedValue({ id: 't1', status: 'pending' });
       client.financialTransaction.update.mockResolvedValue({ id: 't1', status: 'paid' });
-      client.auditLog.create.mockRejectedValue(new Error('falha de auditoria'));
+      auditRaw.mockRejectedValue(new Error('falha de auditoria'));
 
       await expect(
         service.updateStatus('t1', { status: 'paid' } as never, user),
@@ -414,16 +430,14 @@ describe('TransactionsService', () => {
 
   describe('impersonated_by na auditoria', () => {
     it('usa impersonated_by como actor quando presente', async () => {
-      const { service, client } = serviceWith();
+      const { service, client, auditRaw } = serviceWith();
       client.financialCategory.findFirst.mockResolvedValue({ id: 'cat-1', type: 'income' });
       client.financialTransaction.create.mockResolvedValue({ id: 't1' });
 
       const support = { ...user, impersonated_by: 'support-1' };
       await service.create(validDto as never, support as never);
 
-      expect(client.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ actor_user_id: 'support-1' }),
-      });
+      expect(auditRaw.mock.calls[0][AUDIT.actor_user_id]).toBe('support-1');
     });
   });
 });

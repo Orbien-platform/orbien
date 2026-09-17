@@ -32,7 +32,10 @@ function serviceWith() {
     })),
   };
   const consentRecordClient = { create: jest.fn().mockResolvedValue({}) };
-  const auditLogClient = { create: jest.fn().mockResolvedValue({}) };
+  // A auditoria vai por `audit_insert()` no client BASE — `audit_logs` não
+  // tem policy de INSERT para `app_user`. Ver
+  // `src/common/audit/write-audit-log.ts`.
+  const auditRaw = jest.fn().mockResolvedValue(1);
   const importJobClient = {
     create: jest.fn().mockResolvedValue({ id: 'job-1' }),
     findFirst: jest.fn(),
@@ -42,7 +45,6 @@ function serviceWith() {
   const client = {
     person: personClient,
     consentRecord: consentRecordClient,
-    auditLog: auditLogClient,
     importJob: importJobClient,
   };
   const system = {
@@ -51,13 +53,13 @@ function serviceWith() {
     importJob: { ...importJobClient, update: jest.fn().mockResolvedValue({}) },
   };
 
-  const prisma = { client, system } as unknown as PrismaService;
+  const prisma = { client, system, $executeRaw: auditRaw } as unknown as PrismaService;
   const storage = {
     upload: jest.fn().mockResolvedValue('https://cdn.test/file'),
     downloadBuffer: jest.fn(),
   } as unknown as jest.Mocked<StorageService>;
 
-  return { service: new PersonsImportService(prisma, storage), storage, client, system };
+  return { service: new PersonsImportService(prisma, storage), storage, client, system, auditRaw };
 }
 
 const VALID_CSV = [
@@ -552,16 +554,17 @@ describe('PersonsImportService', () => {
       }
     });
 
-    it('erro ao gravar o log de auditoria não interrompe nem falha a importação (fire-and-forget)', async () => {
-      const { service, storage, client } = serviceWith();
+    it('erro ao gravar o log de auditoria não interrompe nem falha a importação', async () => {
+      const { service, storage, auditRaw } = serviceWith();
       storage.downloadBuffer.mockResolvedValue(Buffer.from(VALID_CSV, 'utf-8'));
-      client.auditLog.create.mockRejectedValue(new Error('falha ao gravar auditoria'));
+      auditRaw.mockRejectedValue(new Error('falha ao gravar auditoria'));
 
       const result = await service.confirm({ file_id: 'arquivo.csv', mapping: MAPPING }, user);
 
+      // A escrita agora é esperada (`await`) e a falha tratada dentro do
+      // helper, então não há mais promise solta para assentar no fim do teste
+      // — o que também era um jeito de a linha se perder em silêncio.
       expect((result as ImportResult).imported).toBe(1);
-      // Deixa a promise fire-and-forget do audit log assentar antes do fim do teste.
-      await new Promise((resolve) => setImmediate(resolve));
     });
 
     it('processa arquivo grande (>500 linhas) de forma assíncrona, criando um job', async () => {
