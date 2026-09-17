@@ -76,6 +76,38 @@ operacional da igreja.
 Mesmos e-mails de plataforma; as contas dos tenants de teste têm **senha
 própria**, definida ao provisionar, e vivem em secret do GitHub (§5).
 
+**Conceder `platform_support` em produção é SQL.** Não há rota para isso — o
+controller de plataforma cria e edita tenant, lê auditoria e transfere conta,
+mas não atribui papel. Quem abre `POST /auth/platform/login` é
+`role_assignments`, então a linha entra à mão, com `DIRECT_URL`:
+
+```sql
+INSERT INTO role_assignments (id, tenant_id, congregation_id, user_account_id, role_code, updated_at)
+SELECT gen_random_uuid()::text, u.tenant_id, u.congregation_id, u.id, 'platform_support', now()
+  FROM user_accounts u
+ WHERE u.email = 'fvargaspf@gmail.com'
+   AND NOT EXISTS (
+     SELECT 1 FROM role_assignments r
+      WHERE r.user_account_id = u.id AND r.role_code = 'platform_support'
+   );
+```
+
+Três detalhes que não são estilo:
+
+- **`::text`** — as chaves deste schema são `TEXT`, não `uuid`. O Prisma gera o
+  UUID na aplicação (`@default(uuid())`) e a coluna é `TEXT NOT NULL`. Sem o
+  cast, o INSERT falha por tipo.
+- **`updated_at` explícito** — é `@updatedAt` no Prisma, que a aplicação
+  preenche; no banco a coluna é NOT NULL **sem default**. INSERT cru que a
+  omite falha.
+- **`NOT EXISTS`** — não há unique na tabela, então rodar duas vezes sem ele
+  daria duas linhas do mesmo papel.
+
+A congregação vem da própria conta porque `role_assignments.congregation_id` é
+NOT NULL — e não restringe nada aqui: `app_is_platform_support()` não filtra por
+tenant nem por congregação, e `rolesForToken()` mantém o papel no token vindo de
+qualquer uma.
+
 ---
 
 ## 4. Rodar e2e

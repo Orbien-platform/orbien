@@ -65,9 +65,12 @@ DECLARE
   v_emails    text[] := string_to_array(current_setting('limpeza.emails'), ',');
   v_aplicar   boolean := current_setting('limpeza.aplicar') = 'true';
 
-  v_tenant    uuid;
-  v_accounts  uuid[];
-  v_persons   uuid[];
+  -- `text`, não `uuid`: as chaves deste schema são TEXT. O Prisma gera o UUID
+  -- na aplicação (`@default(uuid())`) e a coluna nasce `TEXT NOT NULL`.
+  -- Declarar como uuid aqui faria o `id <> ALL(...)` estourar por tipo.
+  v_tenant    text;
+  v_accounts  text[];
+  v_persons   text[];
   v_found     text[];
   v_missing   text[];
 
@@ -107,7 +110,7 @@ BEGIN
     FROM user_accounts
    WHERE id = ANY(v_accounts) AND person_id IS NOT NULL;
 
-  v_persons := COALESCE(v_persons, ARRAY[]::uuid[]);
+  v_persons := COALESCE(v_persons, ARRAY[]::text[]);
   RAISE NOTICE 'preservando % conta(s): %', array_length(v_accounts, 1), array_to_string(v_found, ', ');
 
   -- ── 3. Tabelas alvo ──────────────────────────────────────────────────────
@@ -128,9 +131,9 @@ BEGIN
     FOREACH v_table IN ARRAY v_pending LOOP
       -- Os recortes por linha. Fora destes, a tabela inteira do tenant sai.
       v_where := CASE v_table
-        WHEN 'user_accounts'        THEN format('id <> ALL(%L::uuid[])', v_accounts)
-        WHEN 'persons'              THEN format('id <> ALL(%L::uuid[])', v_persons)
-        WHEN 'role_assignments'     THEN format('user_account_id <> ALL(%L::uuid[])', v_accounts)
+        WHEN 'user_accounts'        THEN format('id <> ALL(%L::text[])', v_accounts)
+        WHEN 'persons'              THEN format('id <> ALL(%L::text[])', v_persons)
+        WHEN 'role_assignments'     THEN format('user_account_id <> ALL(%L::text[])', v_accounts)
         WHEN 'financial_categories' THEN 'is_system IS NOT TRUE'
         ELSE 'true'
       END;
