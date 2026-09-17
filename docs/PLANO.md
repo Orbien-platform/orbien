@@ -956,6 +956,36 @@ das três contradições de `docs/TESTES.md`.
 Estes dependem de uma decisão explícita antes de virar trabalho. Não são
 compromissos: são o que o material de produto deixa em aberto.
 
+### ~~DEC-06 · Onde os testes rodam e sobre qual tenant~~ · decidido e executado
+
+Decidido em 2026-09-17, junto com o `PROD-23`: **só `teste1-church` e
+`teste2-church` podem ser usados para teste**, em qualquer ambiente, produção
+inclusive. Nenhum outro tenant — `doca-church` é a igreja do cliente zero, e
+teste que a toca é incidente, não teste. A regra está em `/CLAUDE.md` e
+detalhada em `docs/AMBIENTES.md`, que passa a ser a fonte única sobre
+ambientes, contas e credenciais.
+
+Três consequências que já entraram:
+
+- **`apps/api/prisma/seed.ts` cria os três tenants**, não mais um só. A criação
+  virou `seedTenant(spec)` sobre uma lista — os de teste nascem com celebração,
+  ministério e voluntários, o mesmo mínimo que a suíte de e2e precisa, para que
+  nenhum spec tenha motivo de procurar dado noutro tenant. `fvargaspf@gmail.com`
+  passa a acumular `tenant_admin` do `doca-church` **e** `platform_support`;
+  `fernando.vargas@fill.tech` fica como conta quebra-vidro da plataforma.
+- **O CI ganhou `e2e-prod`**, rodando a mesma suíte contra
+  `web.useorbien.com.br` sobre `teste1-church`. Não substitui o `e2e` local, que
+  segue provando a suíte contra banco limpo — e `needs: [e2e]` garante que
+  produção só é tocada depois que o job determinístico passou. É o primeiro job
+  do repositório que precisa de secret, o que quebra o "PR de fork roda igual"
+  do cabeçalho do workflow: `e2e-prod` se pula em fork, porque secret não chega lá.
+- **Dois scripts novos**: `scripts/provisionar-tenants-teste.sh` (cria os dois
+  em produção por `POST /platform/tenants`, a rota atômica — não por SQL) e
+  `scripts/limpar-tenant.sh` (esvazia um tenant preservando plano, branding,
+  congregações, plano de contas de sistema e as contas indicadas, com a mesma
+  senha). O segundo descobre as tabelas do catálogo, não de lista escrita à
+  mão: são 66 tabelas com `tenant_id` hoje e a lista cresce a cada migration.
+
 ### ~~DEC-01 · Gating por plano~~ · decidido e executado
 
 Decidido em 2026-09-12: implementar tudo que a matriz Starter × Premium já
