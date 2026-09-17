@@ -24,6 +24,30 @@ qualquer coisa, o slug é `teste1-church` ou `teste2-church`. Se você se pegar
 precisando de dado que só existe em outro tenant, o que falta é seed nos de
 teste — não é permissão para usar o outro.
 
+### Quem escolhe o tenant é `E2E_EMAIL`, não `E2E_TENANT`
+
+Esta é a parte que engana, e vale ler duas vezes.
+
+`fixtures.ts` faz o login com **só `{ email, password }`** — sem tenant. O
+tenant da sessão sai de `user_accounts.tenant_id` da conta que entrou. Ou seja:
+o e-mail é que decide onde tudo será escrito.
+
+`E2E_TENANT` é lido em **um** lugar em toda a suíte — `suporte.spec.ts`, para
+escolher em qual tenant a sessão de suporte vai impersonar. Para os outros
+specs ele não faz nada.
+
+Então isto **viola a regra**, apesar de parecer correto:
+
+```bash
+E2E_TENANT=teste1-church E2E_EMAIL=fvargaspf@gmail.com ...   # escreve no doca-church
+```
+
+`fvargaspf@gmail.com` é conta do `doca-church`; a suíte inteira cairia lá. É
+por isso que existem contas próprias nos tenants de teste
+(`teste1@useorbien.com.br`, `teste2@useorbien.com.br`): elas são a única coisa
+que de fato aponta a escrita para o tenant certo. Ao revisar um workflow ou um
+comando, olhe o **e-mail** — o slug ao lado pode estar certo e mentindo.
+
 **Por que dois.** Um para o fluxo comum e outro para o que precisa de um
 segundo tenant na mesma cena: isolamento entre tenants, transferência de conta
 (`PATCH /platform/user-accounts/:id/transfer`), listagem de plataforma com mais
@@ -152,6 +176,16 @@ O job `e2e-prod` do CI é o único que precisa de secret.
 | `E2E_PROD_PASSWORD` | senha dessa conta |
 | `E2E_PROD_SUPPORT_EMAIL` | conta de plataforma usada por `suporte.spec.ts` |
 | `E2E_PROD_SUPPORT_PASSWORD` | senha dessa conta |
+
+A conta de `E2E_PROD_EMAIL` **tem que ser a do tenant de teste** — pelo motivo
+do §1: é ela que decide onde a suíte escreve. A de `E2E_PROD_SUPPORT_EMAIL` só
+precisa ter `platform_support`, e aí qualquer conta de plataforma serve, porque
+ela não escreve dado de igreja: entra no console e impersona no tenant que
+`E2E_TENANT` aponta.
+
+Em nenhum dos dois casos a senha pode ser a do seed (`A3dodfemf`): ela está em
+texto claro num repositório público, e é inofensiva só enquanto vale apenas em
+banco descartável.
 
 **O slug do tenant não é secret** e está em texto claro no workflow: `teste1-church`
 não é credencial, é o nome público do alvo — e mantê-lo visível é o que permite
