@@ -67,8 +67,8 @@ exatamente como descritos: `CONF-01` (as marcações
 consentimento — os seis de `apps/api/src/persons/` são os mesmos),
 `CONF-03` (`me.controller.ts` segue com `GET /me/permissions` e nada mais),
 `PROD-05` (nenhuma rota de sugestão de escala), `PROD-07` (o OFX de
-`financial/export/` continua sendo só exportação), `PROD-08`, `PROD-11`
-(`checkAbsenceAlerts` segue sem tela e sem job), `PROD-12`, `PROD-17`,
+`financial/export/` continua sendo só exportação), `PROD-08`, `PROD-12`,
+`PROD-17`,
 `PROD-23` (`GET /small-groups/:id/visit-requests` existe; nenhuma tela do
 `apps/web` a chama), `PROD-25` (nenhum arquivo de `apps/web` ou
 `apps/mobile` chama `POST .../registrations/me`), `AJU-05`, `PEND-04` e os
@@ -561,11 +561,60 @@ que o `PROD-20` trouxe no mesmo dia).
 | `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
-| `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 | `PROD-25` | 4 | Tela de member self-service para inscrição em evento (gratuito e pago) | Starter (gratuito) / Premium (pago) | `POST .../registrations/me` existe desde o `PROD-16` (2026-09-14) e nunca ganhou tela — nem `apps/web` nem `apps/mobile` chamam essa rota hoje, só o painel do organizador. Com o `PROD-24` (2026-09-15) a lacuna cresceu: sem essa tela também não há onde mostrar o QR do PIX dinâmico que `registerSelf` passou a devolver para evento pago. Provavelmente `apps/mobile`, que é onde o membro consome conteúdo — a decidir |
+
+> `PROD-11` (alerta de ausência consecutiva para o líder, Módulo 3, Starter)
+> **fechou em 2026-09-16**. A conta já existia —
+> `SmallGroupsService.checkAbsenceAlerts`, em
+> `GET /small-groups/:id/absence-alerts` — e faltavam as duas pontas que
+> fazem dela um *alerta*: a tela que pergunta e o job que empurra sem que
+> ninguém pergunte. As duas entraram.
+>
+> No `apps/web`, aba "Ausências" na `GroupDetailSheet` (`AbsenceAlertsPanel`),
+> montada só quando a aba abre — mesmo padrão da aba "Conversa" do `PROD-09`.
+> A aba aparece para `canEdit` **ou** `isCellLeader`, que é exatamente o
+> `ALERT_ROLES` da rota: papel, não "líder desta célula". Não é descuido — a
+> rota é assim, e o `isLeaderOfGroup` do `PROD-20` existe para a escrita
+> (multiplicar), não para leitura operacional. O painel distingue 403 de
+> lista vazia pelo motivo da pendência nº 10, o mesmo do
+> `PrayerRequestsPanel`: "sem acesso" e "ninguém faltou" são respostas
+> diferentes.
+>
+> O push é o `SmallGroupsAbsenceNotifier` (`0 9 * * 1`, semanal): varre todos
+> os tenants por `prisma.system` — cron não tem request nem contexto de
+> tenant, mesma razão do `PersonsRetentionNotifier` — e avisa o líder de cada
+> célula que tem ausente. O filtro é `person_id` do
+> `small_groups.leader_person_id`, não a tag `role: cell_leader`: a falta é da
+> célula dele, e a tag pegaria todo líder da congregação. Semanal porque o
+> alerta só muda quando uma reunião é registrada, e célula reúne uma vez por
+> semana; diário repetiria o mesmo aviso sem informação nova.
+>
+> A regra de "ausente" ficou escrita **duas vezes** — em Prisma no service
+> (rota, sob RLS, com contexto do request) e em SQL no notifier (cross-tenant,
+> N queries do Prisma não se pagariam). É duplicação consciente e o cabeçalho
+> do notifier a declara: as duas precisam dizer a mesma coisa, porque tela e
+> push divergindo é pior do que qualquer uma das duas estar errada sozinha.
+> O SQL foi conferido contra o Postgres local com cenário montado à mão —
+> célula sem reunião não gera alerta, célula com menos de 3 reuniões usa as
+> que tem, e presença numa 4ª reunião mais antiga não tira ninguém da lista.
+>
+> O `joined_at` **entrou na mesma rodada**, depois de o dev pedir o ajuste
+> antes de fechar: a janela é por membro, não pela célula — só conta reunião
+> posterior à entrada da pessoa, e presença anterior a ela também não vale.
+> Quem entrou depois das três não aparece no alerta. Mudou o que a rota
+> responde, o que é comportamento em produção; foi decisão declarada, não
+> silêncio. Nasceu como `PEND-06` e fechou no mesmo dia (seção 7).
+>
+> E a paridade entre as duas definições **deixou de depender de disciplina**:
+> `test/integration/small-groups-absence-alerts.spec.ts` monta um cenário só
+> (janela de 3 com uma quarta reunião fora dela, membro que entrou depois,
+> membro que entrou no meio, presença registrada antes da entrada) e exige a
+> mesma resposta da rota (Prisma, sob RLS, via `runAsTenant`) e do job (SQL,
+> cross-tenant, via `absencesByGroup`). Conferido nos dois sentidos: quebrar o
+> `joined_at` só no SQL derruba a suíte, quebrar só no service também.
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com
@@ -815,6 +864,27 @@ bug de produção:
   multiplicar célula e o CRUD de rede (criar/editar rede, vincular/
   desvincular célula) em `apps/web/e2e/`. Há teste de componente
   (`.test.tsx`) para as duas telas, não o fluxo ponta a ponta no browser.
+
+### ~~PEND-06 · Alerta de ausência ignora quem entrou depois~~ · fechado
+
+Nasceu e fechou em 2026-09-16, dentro do `PROD-11`. `checkAbsenceAlerts`
+(rota) e `SmallGroupsAbsenceNotifier` (job semanal) contavam como ausente
+todo membro sem `attendance_records` nas 3 últimas reuniões da célula —
+**inclusive quem entrou depois delas**. Membro adicionado hoje entraria no
+alerta de segunda-feira como se tivesse faltado três vezes.
+
+Apresentado como achado antes de fechar o `PROD-11`, como manda o
+`CLAUDE.md` — muda o que a rota responde, que é comportamento em produção —
+e o dev respondeu ajustar antes. A janela passou a ser **por membro**: só
+reunião com `occurred_at >= group_memberships.joined_at`, e a mesma condição
+no lado da presença, para que presença anterior à entrada não conte como
+presença (nem a falta dela como falta). Membro sem nenhuma reunião aplicável
+sai do alerta.
+
+Mudou nos dois lugares na mesma alteração, que era a exigência: corrigir só
+um lado reintroduziria a divergência que o cabeçalho do notifier proíbe. É
+o que `test/integration/small-groups-absence-alerts.spec.ts` agora mede —
+ver a nota do `PROD-11` na seção 6.
 
 ---
 

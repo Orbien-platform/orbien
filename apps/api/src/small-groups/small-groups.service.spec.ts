@@ -896,6 +896,16 @@ describe('SmallGroupsService', () => {
   });
 
   describe('checkAbsenceAlerts', () => {
+    // m1 é a mais recente — `findMany` já devolve ordenado por `occurred_at`
+    // desc, e o service depende disso.
+    const REUNIOES = [
+      { id: 'm1', occurred_at: new Date('2026-01-22') },
+      { id: 'm2', occurred_at: new Date('2026-01-15') },
+      { id: 'm3', occurred_at: new Date('2026-01-08') },
+    ];
+    const ANTES = new Date('2026-01-01');
+    const DEPOIS = new Date('2026-01-25');
+
     it('retorna vazio quando não há reuniões registradas', async () => {
       const client = clientWith();
       client.groupMembership.findMany.mockResolvedValue([{ person_id: 'p1', person: { id: 'p1' } }]);
@@ -909,16 +919,52 @@ describe('SmallGroupsService', () => {
     it('lista as pessoas que não compareceram nas últimas 3 reuniões', async () => {
       const client = clientWith();
       client.groupMembership.findMany.mockResolvedValue([
-        { person_id: 'p1', person: { id: 'p1', full_name: 'Ana' } },
-        { person_id: 'p2', person: { id: 'p2', full_name: 'Bia' } },
+        { person_id: 'p1', joined_at: ANTES, person: { id: 'p1', full_name: 'Ana' } },
+        { person_id: 'p2', joined_at: ANTES, person: { id: 'p2', full_name: 'Bia' } },
       ]);
-      client.groupMeeting.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }]);
-      client.attendanceRecord.findMany.mockResolvedValue([{ person_id: 'p1' }]);
+      client.groupMeeting.findMany.mockResolvedValue(REUNIOES);
+      client.attendanceRecord.findMany.mockResolvedValue([
+        { person_id: 'p1', group_meeting_id: 'm1' },
+      ]);
       const service = serviceWith(client);
 
       const result = await service.checkAbsenceAlerts('sg1');
 
       expect(result).toEqual([{ id: 'p2', full_name: 'Bia' }]);
+    });
+
+    // PEND-06, fechado em 2026-09-16. A paridade com o SQL do
+    // `SmallGroupsAbsenceNotifier` é medida em
+    // `test/integration/small-groups-absence-alerts.spec.ts`, contra banco
+    // real; aqui só a regra do lado da rota.
+    it('não acusa quem entrou na célula depois das três reuniões (PEND-06)', async () => {
+      const client = clientWith();
+      client.groupMembership.findMany.mockResolvedValue([
+        { person_id: 'p3', joined_at: DEPOIS, person: { id: 'p3', full_name: 'Novato' } },
+      ]);
+      client.groupMeeting.findMany.mockResolvedValue(REUNIOES);
+      client.attendanceRecord.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      expect(await service.checkAbsenceAlerts('sg1')).toEqual([]);
+    });
+
+    it('conta só as reuniões posteriores à entrada de quem chegou no meio da janela', async () => {
+      const client = clientWith();
+      client.groupMembership.findMany.mockResolvedValue([
+        // Entrou depois da m3/m2: só a m1 (a mais recente) lhe cabe.
+        { person_id: 'p4', joined_at: new Date('2026-01-20'), person: { id: 'p4', full_name: 'Meio' } },
+        { person_id: 'p5', joined_at: new Date('2026-01-20'), person: { id: 'p5', full_name: 'Meio OK' } },
+      ]);
+      client.groupMeeting.findMany.mockResolvedValue(REUNIOES);
+      client.attendanceRecord.findMany.mockResolvedValue([
+        // Presença anterior à entrada de p4 não vale como presença dele.
+        { person_id: 'p4', group_meeting_id: 'm3' },
+        { person_id: 'p5', group_meeting_id: 'm1' },
+      ]);
+      const service = serviceWith(client);
+
+      expect(await service.checkAbsenceAlerts('sg1')).toEqual([{ id: 'p4', full_name: 'Meio' }]);
     });
   });
 

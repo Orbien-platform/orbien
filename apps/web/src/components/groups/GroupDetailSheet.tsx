@@ -20,6 +20,7 @@ import { GroupHealthBadge } from "@/components/groups/GroupHealthBadge";
 import { GroupGenealogyTree } from "@/components/groups/GroupGenealogyTree";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
+import { AbsenceAlertsPanel } from "@/components/groups/AbsenceAlertsPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -448,6 +449,12 @@ export function GroupDetailSheet({
   // CEL20-01: admin/pastor (canEdit) OU o cell_leader dono desta célula —
   // nunca cell_leader de outra célula.
   const canMultiply = canEdit || isLeaderOfGroup;
+  // A aba espelha o `ALERT_ROLES` de `GET /small-groups/:id/absence-alerts`:
+  // os papéis de gestão (canEdit) mais `cell_leader`. Note que é o papel, não
+  // "líder desta célula" — a rota é assim, e não faria sentido a aba ser mais
+  // estrita que ela; `isLeaderOfGroup` existe para o multiplicar, que é
+  // escrita.
+  const canSeeAbsences = canEdit || Boolean(isCellLeader);
 
   return (
     <>
@@ -500,6 +507,11 @@ export function GroupDetailSheet({
                       <Tabs.Tab value="meetings" className={tabBtn(activeTab === "meetings")}>
                         Reuniões
                       </Tabs.Tab>
+                      {canSeeAbsences && (
+                        <Tabs.Tab value="absences" className={tabBtn(activeTab === "absences")}>
+                          Ausências
+                        </Tabs.Tab>
+                      )}
                       <Tabs.Tab value="prayer" className={tabBtn(activeTab === "prayer")}>
                         Oração
                       </Tabs.Tab>
@@ -630,6 +642,10 @@ export function GroupDetailSheet({
                 {/* Montado só quando a aba abre: a busca é por grupo e o 403
                     de quem não participa não deve custar uma requisição em
                     toda abertura da gaveta. */}
+                {activeTab === "absences" && canSeeAbsences && (
+                  <AbsenceAlertsPanel groupId={group.id} />
+                )}
+
                 {activeTab === "prayer" && <PrayerRequestsPanel groupId={group.id} />}
 
                 {/* ── Chat tab (PROD-09) ── */}
