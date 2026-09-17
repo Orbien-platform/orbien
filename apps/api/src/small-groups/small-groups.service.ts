@@ -654,6 +654,21 @@ export class SmallGroupsService {
     return { ancestors, tree };
   }
 
+  /**
+   * Alerta de ausência (PROD-11): quem, entre os membros da célula, não tem
+   * presença em nenhuma das 3 reuniões mais recentes (menos, se a célula
+   * tiver menos).
+   *
+   * A janela é **por membro**, não pela célula: só conta reunião que
+   * aconteceu depois de a pessoa entrar (`joined_at`). Quem entrou depois das
+   * três não aparece no alerta — não faltou, não tinha o que faltar. Era o
+   * `PEND-06`, fechado em 2026-09-16.
+   *
+   * `SmallGroupsAbsenceNotifier` repete esta mesma regra em SQL, para varrer
+   * todos os tenants num cron. As duas têm que concordar, e
+   * `test/integration/small-groups-absence-alerts.spec.ts` compara as duas
+   * contra o mesmo cenário justamente para que não divirjam em silêncio.
+   */
   async checkAbsenceAlerts(groupId: string): Promise<Person[]> {
     const [memberships, meetings] = await Promise.all([
       this.prisma.client.groupMembership.findMany({
@@ -664,7 +679,7 @@ export class SmallGroupsService {
         where: { small_group_id: groupId },
         orderBy: { occurred_at: 'desc' },
         take: 3,
-        select: { id: true },
+        select: { id: true, occurred_at: true },
       }),
     ]);
 
@@ -672,16 +687,28 @@ export class SmallGroupsService {
 
     const meetingIds = meetings.map((m) => m.id);
 
+    // Sem `distinct: ['person_id']`: qual reunião a pessoa frequentou importa
+    // agora, porque presença numa reunião anterior à entrada dela na célula
+    // não conta — assim como a falta não contaria.
     const attendances = await this.prisma.client.attendanceRecord.findMany({
       where: { group_meeting_id: { in: meetingIds } },
-      select: { person_id: true },
-      distinct: ['person_id'],
+      select: { person_id: true, group_meeting_id: true },
     });
 
-    const presentIds = new Set(attendances.map((a) => a.person_id));
+    const attendedByPerson = new Map<string, Set<string>>();
+    for (const a of attendances) {
+      const attended = attendedByPerson.get(a.person_id) ?? new Set<string>();
+      attended.add(a.group_meeting_id);
+      attendedByPerson.set(a.person_id, attended);
+    }
 
     return memberships
-      .filter((m) => !presentIds.has(m.person_id))
+      .filter((m) => {
+        const applicable = meetings.filter((mt) => mt.occurred_at >= m.joined_at);
+        if (applicable.length === 0) return false;
+        const attended = attendedByPerson.get(m.person_id);
+        return !applicable.some((mt) => attended?.has(mt.id));
+      })
       .map((m) => m.person);
   }
 
