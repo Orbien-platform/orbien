@@ -60,7 +60,9 @@ export async function writeAuditLog(
     before?: unknown;
     after?: unknown;
   },
-  logger?: Logger,
+  // Obrigatório de propósito: sem um `Logger` do chamador a falha viraria
+  // uma linha sem dono no log, e o ponto deste helper é que a falha PAREÇA.
+  logger: Logger,
 ): Promise<void> {
   const before = entry.before === undefined ? null : JSON.stringify(entry.before);
   const after = entry.after === undefined ? null : JSON.stringify(entry.after);
@@ -80,8 +82,6 @@ export async function writeAuditLog(
       NULL::text
     )
   `.catch((err: unknown) => {
-    (logger ?? new Logger('writeAuditLog')).error(
-      `falha ao registrar ${entry.action} em ${entry.entity}: ${String(err)}`,
-    );
+    logger.error(`falha ao registrar ${entry.action} em ${entry.entity}: ${String(err)}`);
   });
 }
