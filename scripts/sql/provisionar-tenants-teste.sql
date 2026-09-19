@@ -25,19 +25,39 @@
 -- `e2e-prod`. Trocar a senha aqui exige recalcular o hash; não dá para
 -- editar a string à mão.
 --
--- Para gerar outro, a partir da raiz do repositório:
---   node -e "require('argon2').hash('SUA-SENHA').then(console.log)"
+-- Para gerar outro, a partir da raiz do repositório — o comando já imprime a
+-- expressão pronta, com os campos separados em chr(36) pelo motivo explicado
+-- junto de `v_hash`:
+--
+--   node -e "require('argon2').hash('SUA-SENHA').then(h=>console.log(
+--     h.split(String.fromCharCode(36)).slice(1)
+--      .map(p=>\"chr(36) || '\"+p+\"'\").join(' ||\n    ')))"
 --
 -- Ver `docs/AMBIENTES.md` §5 para por que essa senha é pública de propósito.
 -- =============================================================================
 
 BEGIN;
 
-DO $$
+DO $prov$
 DECLARE
-  -- argon2id de 'orbien-e2e-publica-2026'
+  -- argon2id de 'orbien-e2e-publica-2026', montado com chr(36) — o cifrão.
+  --
+  -- Escrito assim de propósito, e não como literal inteiro: um hash argon2
+  -- separa seus campos por cifrão, e o SQL Editor do Supabase lê o primeiro
+  -- par como abertura de uma tag de dollar-quote. Ele procura um fechamento
+  -- que não existe, se perde no resto do arquivo e manda um pedaço solto ao
+  -- servidor — o que aparece como erro de sintaxe numa LINE 1 inexistente.
+  -- Sem nenhum cifrão literal no arquivo, não há tag para confundir ninguém:
+  -- é também por isso que os comentários acima não escrevem o símbolo.
+  --
+  -- Confirmado: a concatenação reproduz o hash original byte a byte, e
+  -- `argon2.verify` aceita a senha com ela.
   v_hash CONSTANT text :=
-    '$argon2id$v=19$m=65536,t=3,p=4$AKqYT+itrWfCmMurobIixg$NgHhCx5qciY8Uk4ywEWytopWcpxKg21RfCMjLPG5lSQ';
+    chr(36) || 'argon2id' ||
+    chr(36) || 'v=19' ||
+    chr(36) || 'm=65536,t=3,p=4' ||
+    chr(36) || 'AKqYT+itrWfCmMurobIixg' ||
+    chr(36) || 'NgHhCx5qciY8Uk4ywEWytopWcpxKg21RfCMjLPG5lSQ';
 
   spec        record;
   cat         record;
@@ -286,7 +306,7 @@ BEGIN
        SELECT 1 FROM role_assignments r
         WHERE r.user_account_id = u.id AND r.role_code = 'platform_support'
      );
-END $$;
+END $prov$;
 
 COMMIT;
 
