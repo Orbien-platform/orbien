@@ -12,9 +12,10 @@
 # Idempotente na prática: tenant que já existe volta 409 e o script segue,
 # dizendo que pulou. Nada é sobrescrito.
 #
-# As senhas das contas de teste são sorteadas pelo script e impressas uma única
-# vez no fim, prontas para colar nos secrets. Passe TESTE1_PASSWORD /
-# TESTE2_PASSWORD só se quiser escolher a sua.
+# As contas de teste nascem com a senha pública `orbien-e2e-publica-2026`, a
+# mesma que o `.github/workflows/ci.yml` manda no login do `e2e-prod`. Passe
+# TESTE1_PASSWORD / TESTE2_PASSWORD só se quiser outra — e então ajuste o
+# workflow junto, senão o job quebra no 401.
 #
 # Uso:
 #   ORBIEN_API_URL=https://orbien-api.onrender.com/api \
@@ -27,14 +28,18 @@ API="${ORBIEN_API_URL:?falta ORBIEN_API_URL}"
 PLATFORM_EMAIL="${PLATFORM_EMAIL:?falta PLATFORM_EMAIL}"
 PLATFORM_PASSWORD="${PLATFORM_PASSWORD:?falta PLATFORM_PASSWORD}"
 
-# Senha não é argumento obrigatório de propósito: quando não vem do ambiente, o
-# script sorteia uma e a imprime no fim. Assim ninguém precisa inventar senha —
-# nem escrevê-la num arquivo, num commit ou numa conversa para depois colar no
-# secret. 32 hex = 128 bits de urandom, bem acima do MinLength(8) do DTO.
-senha_nova() { openssl rand -hex 16; }
+# Senha padrão das contas de teste, em texto claro e igual à do
+# `.github/workflows/ci.yml`. **Os dois têm que casar**: o workflow não
+# consulta nada, ele manda esta string no login — mudar aqui sem mudar lá
+# deixa o `e2e-prod` vermelho com "Login falhou: HTTP 401".
+#
+# Ser pública é a escolha, não um descuido: a conta existe só para o e2e, só
+# no tenant de teste, e não alcança dado de ninguém. O que a protege é o
+# escopo, não o sigilo. Ver docs/AMBIENTES.md §5.
+SENHA_TESTE_PUBLICA='orbien-e2e-publica-2026'
 
-TESTE1_PASSWORD="${TESTE1_PASSWORD:-$(senha_nova)}"
-TESTE2_PASSWORD="${TESTE2_PASSWORD:-$(senha_nova)}"
+TESTE1_PASSWORD="${TESTE1_PASSWORD:-$SENHA_TESTE_PUBLICA}"
+TESTE2_PASSWORD="${TESTE2_PASSWORD:-$SENHA_TESTE_PUBLICA}"
 
 echo "API: $API"
 
@@ -81,21 +86,15 @@ provisionar teste2-church "Teste 2 Church" "Teste 2 - Sede" \
 cat <<FIM
 
 ─────────────────────────────────────────────────────────────
-Pronto. Cadastre estes quatro secrets em
-https://github.com/Orbien-platform/orbien/settings/secrets/actions
-— é o que falta para o job \`e2e-prod\` rodar:
+Pronto. Não há secret a cadastrar: o \`e2e-prod\` já carrega estas mesmas
+credenciais em texto claro no workflow.
 
-  E2E_PROD_EMAIL            fvargaspf+teste1@gmail.com
-  E2E_PROD_PASSWORD         $TESTE1_PASSWORD
-  E2E_PROD_SUPPORT_EMAIL    $PLATFORM_EMAIL
-  E2E_PROD_SUPPORT_PASSWORD (a senha de plataforma que você usou acima)
+  fvargaspf+teste1@gmail.com / $TESTE1_PASSWORD   (teste1-church)
+  fvargaspf+teste2@gmail.com / $TESTE2_PASSWORD   (teste2-church)
 
-Senha do teste2-church (guarde, não vai para secret nenhum hoje):
-  $TESTE2_PASSWORD
-
-Esta é a única vez que as senhas aparecem. Não há como relê-las depois — o
-banco guarda só o hash (argon2). Perdeu? Rode de novo com um slug novo, ou
-troque pela tela de recuperação: os dois e-mails são alias de
-fvargaspf@gmail.com, então a mensagem chega na sua caixa de verdade.
+O \`suporte.spec.ts\` vai se pular no CI, de propósito: ele exige
+E2E_SUPPORT_EMAIL/E2E_SUPPORT_PASSWORD, que são a conta de PLATAFORMA e não
+entram num repositório público. Para rodar esse spec, passe as duas no
+ambiente ao chamar a suíte na mão.
 ─────────────────────────────────────────────────────────────
 FIM

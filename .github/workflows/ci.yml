@@ -3,11 +3,16 @@ name: CI
 # Racional, alternativas consideradas e o que deliberadamente ficou de fora:
 # docs/CI.md
 #
-# Um job precisa de secret: `e2e-prod`, que roda contra o ambiente no ar. Todo
-# o resto é autocontido — o banco é um Postgres descartável provisionado por
-# apps/api/scripts/bootstrap-db.sh, e as credenciais saem do seed do próprio
-# repositório, que por isso não são segredo. PR de fork roda todos os jobs
-# menos `e2e-prod`, que se pula: o GitHub não entrega secret para fork.
+# Nenhum portão de teste precisa de secret — o único do arquivo é o EXPO_TOKEN
+# do build EAS, lá embaixo. O banco dos jobs locais é um Postgres descartável
+# provisionado por apps/api/scripts/bootstrap-db.sh, e as credenciais saem do
+# seed do próprio repositório. O `e2e-prod` roda contra o ambiente no ar, mas
+# com a conta de um tenant que existe só para teste e cuja senha é pública — a
+# proteção ali não é o sigilo da senha, é o fato de a conta não alcançar dado
+# de ninguém.
+#
+# Ainda assim `e2e-prod` se pula em PR de fork: escrever no ambiente real a
+# partir de código que ninguém revisou é outra conversa, independente de secret.
 #
 # Tudo que é teste — aqui, no e2e local e na mão — usa `teste1-church` ou
 # `teste2-church`, nunca o tenant de uma igreja real. Ver docs/AMBIENTES.md.
@@ -385,13 +390,24 @@ jobs:
         env:
           E2E_BASE_URL: https://web.useorbien.com.br
           E2E_API_URL: https://orbien-api.onrender.com/api
-          # Contas reais dos tenants de teste — diferente do job acima, aqui
-          # são credenciais de produção e vivem em secret.
-          E2E_EMAIL: ${{ secrets.E2E_PROD_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PROD_PASSWORD }}
+          # Credencial em texto claro, e de propósito: esta conta existe só
+          # para o e2e, só no `teste1-church`, e a senha é a mesma do
+          # `provisionar-tenants-teste.sh`. Tratá-la como segredo daria a
+          # impressão errada de que há algo a proteger aqui — o que protege é
+          # o fato de a conta não alcançar dado de ninguém.
+          #
+          # O contrato é esse, e só vale enquanto ele for verdade: se um dia
+          # esta conta ganhar acesso a tenant real, a senha sai daqui no mesmo
+          # commit. Ver docs/AMBIENTES.md §5.
+          E2E_EMAIL: fvargaspf+teste1@gmail.com
+          E2E_PASSWORD: orbien-e2e-publica-2026
           E2E_TENANT: teste1-church
-          E2E_SUPPORT_EMAIL: ${{ secrets.E2E_PROD_SUPPORT_EMAIL }}
-          E2E_SUPPORT_PASSWORD: ${{ secrets.E2E_PROD_SUPPORT_PASSWORD }}
+          # `E2E_SUPPORT_*` NÃO entram aqui. Elas são a conta de plataforma —
+          # a que impersona em qualquer tenant — e publicá-las num repositório
+          # público entregaria o produto inteiro, não um tenant de teste. Sem
+          # elas o `suporte.spec.ts` se pula (test.skip), que é o custo
+          # aceito: um spec a menos contra produção. Quem quiser esse spec
+          # aqui cadastra os dois como secret; o resto da suíte não depende.
         run: npm run e2e -w orbien-web
 
       - name: Relatório e traces quando falhar

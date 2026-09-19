@@ -106,17 +106,13 @@ existirem, trocar é um `sed` — e aí o motivo desta escolha some junto.
 
 ### Produção
 
-Mesmos e-mails de plataforma; as contas dos tenants de teste têm **senha
-própria**, sorteada por `scripts/provisionar-tenants-teste.sh` e impressa uma
-única vez, já no formato de colar nos secrets (§5). Ninguém inventa senha, e
-ela não passa por arquivo, commit nem conversa.
+Mesmos e-mails de plataforma. As contas dos tenants de teste usam a senha
+pública `orbien-e2e-publica-2026`, criada por
+`scripts/provisionar-tenants-teste.sh` e repetida no workflow — o raciocínio
+inteiro está no §5.
 
-A senha do seed (`A3dodfemf`) **não serve aqui**, mesmo enquanto produção não
-estiver em uso oficial: ela está em texto claro num repositório público. O
-ambiente sendo novo não é o que a torna segura — é o que torna barato não
-começar errado. Uma senha pública numa conta `tenant_admin` de um domínio no ar
-continua valendo no dia em que houver cliente atrás dela, e ninguém lembra de
-trocá-la nesse dia.
+A senha de plataforma (`fvargaspf@gmail.com` no console) é outra coisa e não
+está em lugar nenhum do repositório.
 
 **Conceder `platform_support` em produção é SQL.** Não há rota para isso — o
 controller de plataforma cria e edita tenant, lê auditoria e transfere conta,
@@ -184,34 +180,53 @@ alguém troca o slug.
 
 ---
 
-## 5. Secrets do GitHub
+## 5. Credenciais do `e2e-prod` — públicas, de propósito
 
-O job `e2e-prod` do CI é o único que precisa de secret.
+**Nenhum portão de teste usa secret** — o único secret do CI é o `EXPO_TOKEN`
+do build EAS do mobile, que não tem nada com isto. As credenciais do `e2e-prod`
+estão em texto claro no workflow:
 
-| Secret | Conteúdo |
+| Variável | Valor |
 |---|---|
-| `E2E_PROD_EMAIL` | `fvargaspf+teste1@gmail.com` |
-| `E2E_PROD_PASSWORD` | a sorteada pelo script de provisionamento (§6) |
-| `E2E_PROD_SUPPORT_EMAIL` | `fvargaspf@gmail.com` (tem `platform_support`) |
-| `E2E_PROD_SUPPORT_PASSWORD` | senha de plataforma dessa conta |
+| `E2E_EMAIL` | `fvargaspf+teste1@gmail.com` |
+| `E2E_PASSWORD` | `orbien-e2e-publica-2026` |
+| `E2E_TENANT` | `teste1-church` |
 
-A conta de `E2E_PROD_EMAIL` **tem que ser a do tenant de teste** — pelo motivo
-do §1: é ela que decide onde a suíte escreve. A de `E2E_PROD_SUPPORT_EMAIL` só
-precisa ter `platform_support`, e aí qualquer conta de plataforma serve, porque
-ela não escreve dado de igreja: entra no console e impersona no tenant que
-`E2E_TENANT` aponta.
+A mesma senha é o padrão de `scripts/provisionar-tenants-teste.sh`. **As duas
+pontas têm que casar**: o workflow não consulta nada, ele manda a string no
+login — mudar uma sem a outra deixa o job vermelho com `Login falhou: HTTP 401`.
 
-Em nenhum dos dois casos a senha pode ser a do seed (`A3dodfemf`): ela está em
-texto claro num repositório público, e é inofensiva só enquanto vale apenas em
-banco descartável.
+### O contrato que torna isso aceitável
 
-**O slug do tenant não é secret** e está em texto claro no workflow: `teste1-church`
-não é credencial, é o nome público do alvo — e mantê-lo visível é o que permite
-ler o YAML e confirmar que o teste não aponta para uma igreja real. Esconder o
-slug esconderia justamente o que precisa ser auditável.
+Não é que a senha seja segura. É que **não há o que proteger atrás dela**: a
+conta existe só para o e2e, só no `teste1-church`, e um tenant de teste não
+guarda dado de ninguém. Quem entrar com ela vê exatamente o que a suíte cria e
+apaga.
 
-Senha e e-mail de produção, ao contrário do seed, **são** credencial: o
-repositório é público e essas contas existem num ambiente real.
+Isso é um contrato, e vale enquanto for verdade. Se algum dia esta conta ganhar
+papel em tenant real, ou o `teste1-church` passar a guardar qualquer coisa que
+não seja descartável, a senha sai do repositório **no mesmo commit** — e volta
+a ser secret, como estava antes de 2026-09-19.
+
+### O que continua fora do repositório
+
+`E2E_SUPPORT_EMAIL` e `E2E_SUPPORT_PASSWORD` **não** estão no workflow, e a
+diferença não é de grau. Aquela é a conta de plataforma: ela entra no console,
+lista todos os tenants e impersona em qualquer um. Publicá-la entregaria o
+produto inteiro a quem lesse o YAML — não um tenant de teste.
+
+Sem as duas, `suporte.spec.ts` se pula (`test.skip`, não falha). O custo é um
+spec a menos contra produção, e é o custo certo. Para rodar esse spec, passe as
+variáveis no ambiente ao chamar a suíte na mão.
+
+**A senha do seed (`A3dodfemf`) também não serve aqui.** Não por sigilo — ela é
+igualmente pública — mas porque é a senha de `fvargaspf@gmail.com`, que em
+produção é `tenant_admin` do `doca-church` **e** `platform_support`. Reusá-la
+nas contas de teste convida ao caminho inverso: alguém provisionar a conta real
+com ela por hábito.
+
+**O slug não é credencial** e está visível de propósito: é o que permite ler o
+YAML e confirmar que o teste não aponta para uma igreja real.
 
 Secret não chega a PR de fork — por isso `e2e-prod` se pula nesse caso em vez de
 falhar vermelho.
@@ -226,10 +241,10 @@ PLATFORM_EMAIL=fvargaspf@gmail.com PLATFORM_PASSWORD=... \
   scripts/provisionar-tenants-teste.sh
 ```
 
-O script **sorteia as senhas** (`openssl rand -hex 16`, 128 bits) e as imprime
-no fim, já rotuladas com o nome do secret correspondente. Passe
-`TESTE1_PASSWORD`/`TESTE2_PASSWORD` só se quiser escolher a sua. É a única vez
-que elas aparecem — o banco guarda só o hash argon2.
+As contas nascem com `orbien-e2e-publica-2026`, a mesma senha que o workflow
+manda no login (§5). Passe `TESTE1_PASSWORD`/`TESTE2_PASSWORD` só se quiser
+outra — e então ajuste o workflow no mesmo commit, senão o `e2e-prod` quebra
+no 401.
 
 Usa `POST /platform/tenants`, a rota de plataforma — que é atômica: tenant,
 plano, branding, congregação e conta admin numa transação só. Não há caminho
