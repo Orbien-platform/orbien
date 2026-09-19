@@ -9,6 +9,7 @@ import { StorageService } from '../../storage/storage.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { ImportConfirmDto } from '../dto/import-confirm.dto';
 import { ImportPreviewDto, SuggestedMapping } from '../dto/import-preview.dto';
+import { writeAuditLog } from '../../common/audit/write-audit-log';
 
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -256,19 +257,18 @@ export class PersonsImportService {
       }
     }
 
-    // Fire-and-forget audit log
-    this.prisma.client.auditLog
-      .create({
-        data: {
-          tenant_id: tenantId,
-          congregation_id: congregationId,
-          actor_user_id: userId,
-          entity: 'person',
-          action: 'persons.batch_import',
-          after: { count: imported } as unknown as Prisma.InputJsonValue,
-        },
-      })
-      .catch(() => void 0);
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        actor_user_id: userId,
+        entity: 'person',
+        action: 'persons.batch_import',
+        after: { count: imported },
+      },
+      this.logger,
+    );
 
     return { imported, skipped, errors };
   }

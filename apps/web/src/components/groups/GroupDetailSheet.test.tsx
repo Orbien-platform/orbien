@@ -1197,4 +1197,75 @@ describe("GroupDetailSheet", () => {
       vi.mocked(api.get).mock.calls.filter((c) => c[0] === "/small-groups/g1/visit-requests")
     ).toHaveLength(1);
   });
+
+  // PROD-11 — a aba espelha o ALERT_ROLES da rota: gestão (canEdit) +
+  // cell_leader. Quem não tem nenhum dos dois não vê a aba.
+  it("mostra a aba Ausências para quem pode editar e carrega o painel ao abrir", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/g1/absence-alerts")
+        return Promise.resolve({ data: [{ id: "p7", full_name: "Carla Dias", phone: null, email: null }] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    // Só busca quando a aba abre — mesmo padrão da aba Conversa.
+    expect(api.get).not.toHaveBeenCalledWith("/small-groups/g1/absence-alerts");
+
+    await user.click(screen.getByRole("tab", { name: "Ausências" }));
+
+    expect(await screen.findByText("Carla Dias")).toBeInTheDocument();
+  });
+
+  it("mostra a aba Ausências para o cell_leader sem canEdit", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/mine") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+        isCellLeader={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Ausências" })).toBeInTheDocument();
+  });
+
+  it("esconde a aba Ausências de quem não é liderança", async () => {
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Ausências" })).not.toBeInTheDocument();
+  });
 });

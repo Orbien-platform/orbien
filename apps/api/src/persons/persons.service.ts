@@ -144,8 +144,15 @@ export class PersonsService {
   // negado com 42501, e como estes dois chamadores estão dentro da transação
   // da requisição, o erro derrubava a operação inteira: a exclusão e a
   // anonimização por Art. 18 faziam rollback e nunca aconteciam. É o mesmo
-  // defeito que o `AuditInterceptor` corrigiu em 2026-09-03 — estes dois call
-  // sites ficaram para trás. Ver a pendência nº 11.
+  // defeito que o `AuditInterceptor` corrigiu em 2026-09-03. Ver a pendência
+  // nº 11.
+  //
+  // Estes dois NÃO eram os últimos call sites, como esta nota chegou a dizer:
+  // em 2026-09-16 apareceram mais dez, em financeiro e importação, e viraram
+  // `src/common/audit/write-audit-log.ts`. O que impede a sexta reincidência
+  // é `test/rls/audit-writes.spec.ts`, que varre `src/` inteiro atrás de
+  // escrita direta em `auditLog` — inclusive na forma encadeada em várias
+  // linhas, que foi como estes dez escaparam do grep por quinze dias.
   //
   // Ao contrário do interceptor, aqui o registro é transacional de propósito:
   // ele descreve a mudança que acabou de acontecer na mesma transação, então

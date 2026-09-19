@@ -6,19 +6,33 @@
 // Visual conforme STYLE-GUIDE.md: `Screen scroll` porque o corpo do post
 // cresce além da altura da tela e antes era cortado sem rolagem; imagem
 // acima do texto, com radius de card (§5).
+//
+// PROD-25 — post de evento ganha aqui o bloco de quando/onde e, quando o
+// organizador ligou inscrição, o `EventRegistrationPanel`. É a tela de
+// member self-service que `POST .../registrations/me` esperava desde o
+// PROD-16: até então a rota existia e nenhum front a chamava, e o QR do PIX
+// que o PROD-24 passou a devolver não tinha onde aparecer.
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
+import { EventRegistrationPanel } from "../../components/EventRegistrationPanel";
 import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { getPost } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
-import { CircleAlert, Newspaper, WifiOff } from "../../lib/theme/icons";
+import { formatDateTime } from "../../lib/format/date";
+import {
+  CalendarDays,
+  CircleAlert,
+  MapPin,
+  Newspaper,
+  WifiOff,
+} from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
-import { radius, spacing, typography } from "../../lib/theme/tokens";
+import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../../lib/theme/tokens";
 
 const NOT_FOUND_MESSAGE = "Post não encontrado.";
 
@@ -87,10 +101,60 @@ export default function PostScreen() {
       <Text testID="post-title" style={[typography.h1, styles.title, { color: colors.textPrimary }]}>
         {post.title}
       </Text>
+      {/* Quando e onde, antes do corpo: num post de evento é a primeira
+          coisa que o membro procura, e vinha da API sem aparecer em tela
+          nenhuma. `event_ends_at` fica de fora — a data de início mais o
+          local respondem a pergunta, e a linha de término só apareceria em
+          parte dos eventos. */}
+      {post.event_starts_at || post.event_location ? (
+        <View testID="post-event" style={styles.event}>
+          {post.event_starts_at ? (
+            <View style={styles.eventLine}>
+              <CalendarDays
+                size={iconSize.inline}
+                color={colors.textSecondary}
+                strokeWidth={ICON_STROKE_WIDTH}
+              />
+              <Text
+                testID="post-event-date"
+                style={[typography.bodyMedium, styles.eventText, { color: colors.textSecondary }]}
+              >
+                {formatDateTime(post.event_starts_at)}
+              </Text>
+            </View>
+          ) : null}
+          {post.event_location ? (
+            <View style={styles.eventLine}>
+              <MapPin
+                size={iconSize.inline}
+                color={colors.textSecondary}
+                strokeWidth={ICON_STROKE_WIDTH}
+              />
+              <Text
+                testID="post-event-location"
+                style={[typography.bodyMedium, styles.eventText, { color: colors.textSecondary }]}
+              >
+                {post.event_location}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       {post.body ? (
         <Text testID="post-body" style={[typography.body, { color: colors.textSecondary }]}>
           {post.body}
         </Text>
+      ) : null}
+      {/* Montado para todo post de evento, não só quando
+          `registration_enabled` está ligado: o organizador pode desligar as
+          inscrições com gente já inscrita, e quem tem vaga (ou um PIX
+          pendente) precisa continuar podendo cancelar. Quem decide não
+          desenhar nada é o painel, que já tem o resumo e a inscrição em
+          mãos. Post comum não paga as chamadas. */}
+      {post.type === "event" ? (
+        <View style={styles.registration}>
+          <EventRegistrationPanel postId={post.id} />
+        </View>
       ) : null}
     </Screen>
   );
@@ -104,4 +168,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   title: { marginBottom: spacing.md },
+  event: { marginBottom: spacing.lg, gap: spacing.sm },
+  eventLine: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  eventText: { flex: 1 },
+  registration: { marginTop: spacing.xl },
 });

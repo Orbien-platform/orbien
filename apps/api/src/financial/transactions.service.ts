@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { FinancialTransaction, Prisma, TransactionSource } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -11,6 +6,7 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { UpdateTransactionStatusDto } from './dto/update-transaction-status.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
+import { writeAuditLog } from '../common/audit/write-audit-log';
 
 type PaginatedTransactions = {
   data: FinancialTransaction[];
@@ -21,6 +17,8 @@ type PaginatedTransactions = {
 
 @Injectable()
 export class TransactionsService {
+  private readonly logger = new Logger(TransactionsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateTransactionDto, user: JwtPayload): Promise<FinancialTransaction> {
@@ -70,18 +68,18 @@ export class TransactionsService {
       },
     });
 
-    this.prisma.client.auditLog
-      .create({
-        data: {
-          tenant_id: user.tenant_id,
-          congregation_id: user.congregation_id,
-          actor_user_id: user.impersonated_by ?? user.sub,
-          entity: 'financial_transaction',
-          action: 'created',
-          after: transaction as unknown as Prisma.InputJsonValue,
-        },
-      })
-      .catch(() => void 0);
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        actor_user_id: user.impersonated_by ?? user.sub,
+        entity: 'financial_transaction',
+        action: 'created',
+        after: transaction,
+      },
+      this.logger,
+    );
 
     return transaction;
   }
@@ -187,19 +185,19 @@ export class TransactionsService {
       },
     });
 
-    this.prisma.client.auditLog
-      .create({
-        data: {
-          tenant_id: user.tenant_id,
-          congregation_id: user.congregation_id,
-          actor_user_id: user.impersonated_by ?? user.sub,
-          entity: 'financial_transaction',
-          action: 'updated',
-          before: existing as unknown as Prisma.InputJsonValue,
-          after: updated as unknown as Prisma.InputJsonValue,
-        },
-      })
-      .catch(() => void 0);
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        actor_user_id: user.impersonated_by ?? user.sub,
+        entity: 'financial_transaction',
+        action: 'updated',
+        before: existing,
+        after: updated,
+      },
+      this.logger,
+    );
 
     return updated;
   }
@@ -217,18 +215,18 @@ export class TransactionsService {
 
     const deleted = await this.prisma.client.financialTransaction.delete({ where: { id } });
 
-    this.prisma.client.auditLog
-      .create({
-        data: {
-          tenant_id: user.tenant_id,
-          congregation_id: user.congregation_id,
-          actor_user_id: user.impersonated_by ?? user.sub,
-          entity: 'financial_transaction',
-          action: 'deleted',
-          before: existing as unknown as Prisma.InputJsonValue,
-        },
-      })
-      .catch(() => void 0);
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        actor_user_id: user.impersonated_by ?? user.sub,
+        entity: 'financial_transaction',
+        action: 'deleted',
+        before: existing,
+      },
+      this.logger,
+    );
 
     return deleted;
   }
@@ -253,19 +251,19 @@ export class TransactionsService {
       data: { status: dto.status },
     });
 
-    this.prisma.client.auditLog
-      .create({
-        data: {
-          tenant_id: user.tenant_id,
-          congregation_id: user.congregation_id,
-          actor_user_id: user.impersonated_by ?? user.sub,
-          entity: 'financial_transaction',
-          action: 'status_updated',
-          before: existing as unknown as Prisma.InputJsonValue,
-          after: updated as unknown as Prisma.InputJsonValue,
-        },
-      })
-      .catch(() => void 0);
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        actor_user_id: user.impersonated_by ?? user.sub,
+        entity: 'financial_transaction',
+        action: 'status_updated',
+        before: existing,
+        after: updated,
+      },
+      this.logger,
+    );
 
     return updated;
   }

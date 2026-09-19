@@ -106,13 +106,6 @@ function harness(opts: {
         return Promise.resolve({ count: opts.deleteManyCount ?? 2 });
       },
     },
-    auditLog: {
-      create: (args: { data: Record<string, unknown> }) => {
-        if (opts.auditThrows) return Promise.reject(new Error('audit fora do ar'));
-        cap.audits.push(args.data);
-        return Promise.resolve({});
-      },
-    },
   };
 
   const prisma = {
@@ -146,6 +139,30 @@ function harness(opts: {
         findFirst: () => Promise.resolve(opts.lastTransaction ?? null),
       },
       $transaction: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    },
+    // A auditoria não passa mais por `auditLog.create()` — `audit_logs` não
+    // tem policy de INSERT para `app_user`. Vai por `audit_insert()`, via
+    // `writeAuditLog`, que usa o client BASE (este `$executeRaw`, não o de
+    // `client`) justamente para não poder abortar a transação do handler.
+    // Ver `src/common/audit/write-audit-log.ts`.
+    $executeRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      if (opts.auditThrows) return Promise.reject(new Error('audit fora do ar'));
+      const [tenant_id, congregation_id, actor_user_id, subject_person_id, entity, action, before, after] =
+        valores as (string | null)[];
+      // Omite o que veio nulo, para o registro capturado ter a mesma forma
+      // que o `data:` do `auditLog.create()` tinha: quem não manda `after`
+      // (uma exclusão, por exemplo) não deve aparecer com `after` presente.
+      cap.audits.push({
+        tenant_id,
+        congregation_id,
+        actor_user_id,
+        ...(subject_person_id === null ? {} : { subject_person_id }),
+        entity,
+        action,
+        ...(before === null ? {} : { before: JSON.parse(before) as unknown }),
+        ...(after === null ? {} : { after: JSON.parse(after) as unknown }),
+      });
+      return Promise.resolve(1);
     },
     runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   } as unknown as PrismaService;

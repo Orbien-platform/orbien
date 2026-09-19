@@ -67,10 +67,19 @@ exatamente como descritos: `CONF-01` (as marcações
 consentimento — os seis de `apps/api/src/persons/` são os mesmos),
 `CONF-03` (`me.controller.ts` segue com `GET /me/permissions` e nada mais),
 `PROD-05` (nenhuma rota de sugestão de escala), `PROD-07` (o OFX de
-`financial/export/` continua sendo só exportação), `PROD-08`, `PROD-11`
-(`checkAbsenceAlerts` segue sem tela e sem job), `PROD-12`, `PROD-17`, `PROD-25` (nenhum arquivo de `apps/web` ou
-`apps/mobile` chama `POST .../registrations/me`), `AJU-05`, `PEND-04` e os
-`DEC-` da seção 9.
+`financial/export/` continua sendo só exportação), `PROD-08`, `PROD-12`,
+`PROD-17`, `AJU-05`, `PEND-04` e os `DEC-` da seção 9.
+
+Em **2026-09-16** fecharam `PROD-11` (alerta de ausência consecutiva, em
+outra branch — ver a nota da seção 6 e o `PEND-06` da seção 7, que nasceu e
+fechou junto) e `PROD-25` (tela de member self-service para inscrição em
+evento), no `apps/mobile`. Com o `PROD-25`,
+`POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
+que o `PROD-24` devolve passa a ter onde aparecer.
+
+Em **2026-09-19** fechou `PROD-23` (tela da liderança para os pedidos de
+visita, `apps/web`) — nota na seção 6 — e nasceu já decidida a `DEC-06`
+(seção 9), que fixa os tenants de teste e o que pode rodar contra produção.
 
 ---
 
@@ -559,10 +568,150 @@ que o `PROD-20` trouxe no mesmo dia).
 | `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
-| `PROD-11` | 3 | Alerta de ausência consecutiva para o líder | Starter | **Metade de trás existe**: `SmallGroupsService.checkAbsenceAlerts` (`GET /small-groups/:id/absence-alerts`, papéis de liderança + `cell_leader`) já calcula quem faltou nas últimas 3 reuniões. Não é "alerta" ainda porque não empurra nada — sem tela que chame a rota e sem job/notificação; hoje só responde se alguém pedir |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
-| `PROD-25` | 4 | Tela de member self-service para inscrição em evento (gratuito e pago) | Starter (gratuito) / Premium (pago) | `POST .../registrations/me` existe desde o `PROD-16` (2026-09-14) e nunca ganhou tela — nem `apps/web` nem `apps/mobile` chamam essa rota hoje, só o painel do organizador. Com o `PROD-24` (2026-09-15) a lacuna cresceu: sem essa tela também não há onde mostrar o QR do PIX dinâmico que `registerSelf` passou a devolver para evento pago. Provavelmente `apps/mobile`, que é onde o membro consome conteúdo — a decidir |
+
+### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
+
+Entregue em 2026-09-16, no `apps/mobile`. Fecha a lacuna que o `PROD-16`
+abriu em 2026-09-14 e que o `PROD-24` agravou em 2026-09-15: `POST
+.../registrations/me` existia desde então sem nenhum consumidor — só o
+painel do organizador chamava a API de inscrição —, e o QR do PIX dinâmico
+que `registerSelf` passou a devolver para evento pago não tinha onde
+aparecer. **Nada de backend nesta entrega**: nenhuma rota, migration ou
+script de RLS novo. É tela sobre API pronta.
+
+**`apps/mobile`, não `apps/web`** — a pergunta que o item deixou em aberto.
+O `apps/web` é só `(admin)` e `(public)`: não tem área de membro nenhuma, e
+criar uma (grupo de rota, layout, nav, guard) seria trabalho maior que a
+tela em si. O mobile já tem `app/post/[id].tsx` e `content-client.ts`, e é
+onde o membro consome conteúdo.
+
+- `app/post/[id].tsx` ganhou o bloco de **quando e onde**
+  (`event_starts_at`/`event_location` — campos que a API já devolvia, porque
+  `findOne` não tem `select`, e que nenhuma tela mostrava) e monta o
+  `EventRegistrationPanel` **só quando `registration_enabled`**: post comum
+  não paga as duas chamadas.
+- `EventRegistrationPanel` é o par que faltava do `EventRegistrationsPanel`
+  do web. Bate em `.../registrations/summary` e `.../registrations/me`, e
+  **em nenhum momento** na raiz `GET .../registrations` — essa é do
+  organizador e responde 403 para `member`. Não há função para ela no
+  `content-client.ts`, de propósito.
+- A tela reflete as regras que o backend já decidiu, sem duplicá-las:
+  lotado **e gratuito** oferece "Entrar na fila de espera" (a API não
+  recusa, entra como `waitlisted`); lotado **e pago** não oferece botão
+  nenhum (a API responde 400 — não há fila quando se cobra); prazo vencido
+  esconde o botão de inscrever mas **mantém o de cancelar**, porque o
+  cancelamento não respeita o prazo.
+- Erro de ação mostra a **mensagem da própria API** quando ela é 4xx
+  ("Vagas esgotadas para este evento"): são escritas para o usuário final.
+  5xx e erro de rede caem no texto genérico — "Serviço PIX indisponível"
+  não ajuda quem está tentando pagar.
+- **Evento pago**: QR como `Image` de `data:image/png;base64,…` (a Asaas
+  devolve `encodedImage` sem o prefixo, quem monta a URI é a tela), payload
+  copia-e-cola em `<Text selectable>` mais botão "Copiar código PIX" com
+  **`expo-clipboard`** — dependência nova do `orbien-mobile`, instalada da
+  raiz, sem config plugin. Falha ao copiar não esconde o código.
+- **Limitação conhecida, declarada em tela**: o QR só existe na resposta do
+  `POST`. `GET .../registrations/me` devolve a inscrição, não o payload do
+  PIX, então quem sai da tela antes de pagar perde o código — a nota abaixo
+  do QR manda cancelar e se inscrever de novo, que gera outro. Resolver
+  isso de verdade seria trabalho de backend (expor o `qr_code` do
+  `PixPayment` ligado à inscrição), fora do escopo desta entrega; nasceu
+  como `PEND-07` na seção 8.
+- `formatBRL` (`src/lib/format/currency.ts`) é manual pelo mesmo motivo que
+  `date.ts` documenta: sem `Intl` completo o Hermes cai em en-US **em
+  silêncio**, e "R$ 1.234,56" viraria "R$1,234.56". O web segue com
+  `toLocaleString`, e está certo lá.
+
+**Correção de bug pré-existente, arrastada por esta entrega.** `ApiClient`
+(`src/lib/api/client.ts`) chamava `response.json()` em toda resposta 2xx que
+não fosse 204. O Nest serializa `null` como **200 com corpo vazio**
+(`isNil(body)` → `response.send()` no `ExpressAdapter`), então `JSON.parse("")`
+jogava. Duas rotas caem nisso: `GET .../registrations/me` (o caminho principal
+desta tela — membro que ainda não se inscreveu) e `GET
+/volunteers/unavailability` num mês sem registro, que **já estava quebrada em
+produção** desde o MOB-08 pelo mesmo motivo, mostrando erro de carga no lugar
+do estado vazio. O client agora lê o corpo como texto e devolve `undefined`
+quando ele é vazio; 204 segue sem ler corpo nenhum.
+
+**Achados de revisão corrigidos antes do PR** (`/code-review` + `pr-review`,
+dimensões B e C — A não se aplica, não há `apps/api/**` no diff): além do bug
+acima, o painel era montado só com `registration_enabled`, e desligar as
+inscrições tirava o botão de cancelar de quem já estava inscrito (agora a tela
+monta o painel para todo post de evento e **o painel** decide não desenhar
+nada); `Promise.all` no carregamento fazia um 5xx em `.../me` apagar preço,
+vagas e prazo já carregados (virou `allSettled`, com as duas metades
+independentes); o erro de carga não usava `describeLoadError` nem oferecia
+retry, divergindo das outras 12 superfícies de carga do app; e
+`numberOfLines={3}` truncava o payload do PIX, justamente o fallback de quem
+não conseguiu copiar.
+
+**Pendência de deploy — não vai por OTA.** `expo-clipboard` é módulo nativo,
+então só entra em binário novo. O `runtimeVersion` é `appVersion` e o
+`autoIncrement` do profile `production` mexe em build number, não em
+`version`: publicar só um update OTA deixaria o app quebrando em
+`Clipboard.setStringAsync` nos binários antigos. Esta entrega **exige build
+nova com bump de `version`** antes de qualquer update no mesmo canal.
+
+Testes: `EventRegistrationPanel.test.tsx` (30 casos — os dois caminhos de
+lotado, prazo, os três status, QR/copiar, as duas metades do carregamento,
+retry, inscrição desligada com e sem inscrito, e a trava de toque duplo, que
+evita duas cobranças de PIX), `currency.test.ts`, os blocos novos de
+`content-client.test.ts`, `client.test.ts` (corpo vazio e 204) e
+`__tests__/app/post/[id].test.tsx`. A suíte do mobile fecha em **313 testes
+em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
+(94,63 / 86,26 / 94,37 / 98,33).
+
+> `PROD-11` (alerta de ausência consecutiva para o líder, Módulo 3, Starter)
+> **fechou em 2026-09-16**. A conta já existia —
+> `SmallGroupsService.checkAbsenceAlerts`, em
+> `GET /small-groups/:id/absence-alerts` — e faltavam as duas pontas que
+> fazem dela um *alerta*: a tela que pergunta e o job que empurra sem que
+> ninguém pergunte. As duas entraram.
+>
+> No `apps/web`, aba "Ausências" na `GroupDetailSheet` (`AbsenceAlertsPanel`),
+> montada só quando a aba abre — mesmo padrão da aba "Conversa" do `PROD-09`.
+> A aba aparece para `canEdit` **ou** `isCellLeader`, que é exatamente o
+> `ALERT_ROLES` da rota: papel, não "líder desta célula". Não é descuido — a
+> rota é assim, e o `isLeaderOfGroup` do `PROD-20` existe para a escrita
+> (multiplicar), não para leitura operacional. O painel distingue 403 de
+> lista vazia pelo motivo da pendência nº 10, o mesmo do
+> `PrayerRequestsPanel`: "sem acesso" e "ninguém faltou" são respostas
+> diferentes.
+>
+> O push é o `SmallGroupsAbsenceNotifier` (`0 9 * * 1`, semanal): varre todos
+> os tenants por `prisma.system` — cron não tem request nem contexto de
+> tenant, mesma razão do `PersonsRetentionNotifier` — e avisa o líder de cada
+> célula que tem ausente. O filtro é `person_id` do
+> `small_groups.leader_person_id`, não a tag `role: cell_leader`: a falta é da
+> célula dele, e a tag pegaria todo líder da congregação. Semanal porque o
+> alerta só muda quando uma reunião é registrada, e célula reúne uma vez por
+> semana; diário repetiria o mesmo aviso sem informação nova.
+>
+> A regra de "ausente" ficou escrita **duas vezes** — em Prisma no service
+> (rota, sob RLS, com contexto do request) e em SQL no notifier (cross-tenant,
+> N queries do Prisma não se pagariam). É duplicação consciente e o cabeçalho
+> do notifier a declara: as duas precisam dizer a mesma coisa, porque tela e
+> push divergindo é pior do que qualquer uma das duas estar errada sozinha.
+> O SQL foi conferido contra o Postgres local com cenário montado à mão —
+> célula sem reunião não gera alerta, célula com menos de 3 reuniões usa as
+> que tem, e presença numa 4ª reunião mais antiga não tira ninguém da lista.
+>
+> O `joined_at` **entrou na mesma rodada**, depois de o dev pedir o ajuste
+> antes de fechar: a janela é por membro, não pela célula — só conta reunião
+> posterior à entrada da pessoa, e presença anterior a ela também não vale.
+> Quem entrou depois das três não aparece no alerta. Mudou o que a rota
+> responde, o que é comportamento em produção; foi decisão declarada, não
+> silêncio. Nasceu como `PEND-06` e fechou no mesmo dia (seção 7).
+>
+> E a paridade entre as duas definições **deixou de depender de disciplina**:
+> `test/integration/small-groups-absence-alerts.spec.ts` monta um cenário só
+> (janela de 3 com uma quarta reunião fora dela, membro que entrou depois,
+> membro que entrou no meio, presença registrada antes da entrada) e exige a
+> mesma resposta da rota (Prisma, sob RLS, via `runAsTenant`) e do job (SQL,
+> cross-tenant, via `absencesByGroup`). Conferido nos dois sentidos: quebrar o
+> `joined_at` só no SQL derruba a suíte, quebrar só no service também.
 
 > `PROD-04` (página pública de doação, Cenário 3) **fechou em 2026-09-12**. A
 > API já existia (`POST /financial/pix/public-donation`, pública, com
@@ -750,11 +899,12 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 
-- **`user_accounts`, `role_assignments` e `audit_logs` seguem com
-  `orbien_app_auth USING (true)`.** Não incomoda nas rotas autenticadas (que
-  rodam como `app_user`), mas qualquer rota pública futura que toque essas
-  tabelas as lê inteiras. Fechar exige mapear o que o login precisa ler antes
-  de existir contexto.
+- **`user_accounts` e `role_assignments` seguem com `orbien_app_auth
+  USING (true)` na LEITURA.** A escrita fechou em 2026-09-16 (ação B) e
+  `audit_logs` saiu da policy (ação A) — ver o registro no fim do item. O que
+  resta é o `USING (true)`: quem lê por esse caminho lê as linhas de todos os
+  tenants. Fechar isso é a ação D, e exige mover as leituras do login para
+  função `SECURITY DEFINER`.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
@@ -801,43 +951,131 @@ enquadramento do ponto acima:
   ponto mais barato de apertar primeiro, possivelmente sem o mapeamento fino
   que as outras duas tabelas exigem.
 
-Proposta que ficou registrada, não aplicada: `GRANT SELECT` restrito às
-colunas que o login de fato consome em `user_accounts`
+Proposta que ficou registrada: `GRANT SELECT` restrito às colunas que o login
+de fato consome em `user_accounts`
 (`id`/`email`/`password_hash`/`is_active`/`tenant_id`/`congregation_id`) e
 `role_assignments` (`role_code`/`congregation_id`/`user_account_id`); trocar
-`FOR ALL` por `FOR SELECT` nas três tabelas fecha a escrita morta sem tocar
-em código; restringir por **linha** (não só coluna) exigiria mover essas
-leituras para uma função `SECURITY DEFINER` — mudança de arquitetura, maior
-que fechar a escrita ou a coluna. Duas pontas não verificadas: escrita via
-`$executeRaw` fora do client base/`.system` que o grep não pega, e se algum
-script numerado recria a policy depois da migration datada com texto
-diferente. Continua em aberto, como pergunta: seguir só documentado, ou
-priorizar uma dessas três ações (fechar a escrita morta, tirar `audit_logs`
-da policy, ou o `SECURITY DEFINER` completo) como trabalho próprio?
+`FOR ALL` por `FOR SELECT` fecha a escrita morta; restringir por **linha**
+(não só coluna) exigiria mover essas leituras para uma função
+`SECURITY DEFINER` — mudança de arquitetura, maior que fechar a escrita ou a
+coluna.
 
-### PEND-05 · Três achados menores de PROD-20, declarados no PR · dívida
+**Ações A e B aplicadas em 2026-09-16** (`017_rls_auth_tables.sql`,
+`test/rls/auth-tables.spec.ts`, passo 7 do `bootstrap-db.sh`). `audit_logs`
+saiu inteira da policy; `user_accounts` e `role_assignments` passaram de
+`FOR ALL` para `FOR SELECT`, sem `WITH CHECK`. As ações C e D seguem abertas,
+com o enquadramento corrigido abaixo. As duas pontas não verificadas
+fecharam, as duas negativas:
+
+- **Nenhum script numerado recria a policy.** `orbien_app_auth` só existia na
+  migration datada; as citações em `001_rls_setup.sql:495` e
+  `013_rls_small_groups_public.sql:37` são comentário. O estado do banco
+  conferia com o texto da migration — oito tabelas, `cmd=ALL`, `qual=true`,
+  `with_check=true`, `relforcerowsecurity=f`.
+- **Nenhuma escrita por `$executeRaw` fora do client base.** O único raw que
+  alcança `audit_logs` é `audit.interceptor.ts:113`, via `audit_insert()`, e
+  o nome do ator por `resolve_actor_name()` — as duas `SECURITY DEFINER`.
+
+Três correções ao mapeamento, achadas ao aplicar:
+
+- **A escrita não era toda morta.** `refresh_tokens` tem INSERT e UPDATE vivos
+  pelo client base (`auth.service.ts:254`, `:283`, `:293`, `:327`, `:478`) —
+  login, refresh e logout. O `FOR SELECT` vale nas três tabelas do texto
+  acima; estendido às sete, derruba a autenticação. O passo 7 do
+  `bootstrap-db.sh` passou a falhar nos **dois** sentidos: se a policy voltar
+  a `FOR ALL` onde foi apertada, e se sumir de `refresh_tokens`.
+- **A ação C (coluna) não é "sem tocar em código".** As quatro consultas do
+  login usam `include:`, não `select:` (`auth.service.ts:110`, `:190`,
+  `:238`, `:371`), e `include` faz o Prisma pedir **todas** as colunas
+  escalares do model — de `user_accounts`, `tenants` e `tenant_plans`. Com a
+  lista de colunas proposta, todo login falharia com 42501. Trocar esses
+  quatro `include` por `select` explícito é **pré-requisito** de C.
+  `role_assignments` e `jwt.strategy.ts:22` já usam `select`.
+- **O alcance já passou de auth, e não é "rota pública futura".**
+  `public-small-groups.service.ts:163` e `:168` leem `tenants` e
+  `branding_configs` pelo client base, sem JWT e sem `SET LOCAL ROLE` — o
+  `runInTx` de lá só fixa `app.tenant_id`. São quatro tabelas com consumidor
+  público hoje (`tenants`, `congregations`, `branding_configs`,
+  `tenant_plans`), e é por isso que nenhuma delas entrou em A/B.
+
+O `017` declara a policy nas **oito** tabelas, não só nas três que muda. Não é
+estilo: a policy nasceu numa migration datada, que `migrate deploy` aplica uma
+vez só — num banco já provisionado o `bootstrap-db.sh` não teria por onde
+recriá-la se fosse derrubada, e o portão do passo 7 falharia sem conserto
+possível a não ser SQL manual. Descoberto ao testar o portão de propósito.
+
+Continua em aberto, como pergunta: priorizar **C** (trocar os `include` por
+`select` e restringir por coluna as quatro tabelas de consumidor público) ou
+**D** (`SECURITY DEFINER`, restrição por linha) como trabalho próprio, ou
+parar aqui — A e B fecharam a permissão sem chamador, e o que sobra é o
+`USING (true)` de leitura, que é o desenho original do item.
+
+### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
 Achados de `/code-review`+`pr-review` na feature `prod-20-multiplicacao-celula`
-que o dev decidiu não bloquear o PR — nenhum é vazamento de isolamento nem
-bug de produção:
+que o dev decidiu não bloquear o PR — nenhum era vazamento de isolamento nem
+bug de produção. **Os três fecharam em 2026-09-16 (`70b62fa`)**, e a
+verificação abaixo é contra a árvore, não contra a mensagem do commit:
 
-- **`bootstrap-db.sh` passo 7 não tem assertiva SQL dedicada para `networks`**
-  como tem para 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
-  FROM qual`). O catch-all genérico (qualquer tabela `public` sem RLS
-  habilitado derruba o passo 7) ainda cobre ausência total de RLS — o que
-  falta é só a checagem de simetria *específica* dessa tabela, que pegaria
-  um `USING`/`WITH CHECK` divergente escrito à mão numa mudança futura no
-  `016_rls_networks.sql`.
-- **`MultiplyGroupModal` e `NetworkFormModal` engolem erro ao carregar
-  pessoas** (`.catch(() => {})` no `GET /persons`) — o select de "novo
-  líder"/"líder de rede" fica vazio sem indicar que a chamada falhou,
-  indistinguível de "não há pessoas cadastradas". Mesmo padrão em
-  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`): falha em
-  `GET /small-groups` vira "nenhuma célula vinculada" em vez de erro.
-- **Sem cobertura E2E** para os dois fluxos de escrita novos — o wizard de
-  multiplicar célula e o CRUD de rede (criar/editar rede, vincular/
-  desvincular célula) em `apps/web/e2e/`. Há teste de componente
-  (`.test.tsx`) para as duas telas, não o fluxo ponta a ponta no browser.
+- **`bootstrap-db.sh` passo 7 sem assertiva SQL dedicada para `networks`.** O
+  catch-all genérico já cobria ausência total de RLS; o que faltava era a
+  checagem de simetria específica, que pega um `USING`/`WITH CHECK` divergente
+  escrito à mão numa mudança futura no `016_rls_networks.sql`. Entrou no mesmo
+  formato das de 007–010/012 (nome da policy + `with_check IS NOT DISTINCT
+  FROM qual`).
+- **`MultiplyGroupModal` e `NetworkFormModal` engoliam erro ao carregar
+  pessoas** (`.catch(() => {})` no `GET /persons`), e
+  `apps/web/src/app/(admin)/redes/page.tsx` (`loadManageGroups`) fazia o mesmo
+  com `GET /small-groups`. Não resta nenhum `.catch(() => {})` nos três
+  arquivos.
+- **Sem cobertura E2E** para os dois fluxos de escrita novos. Existem agora
+  `apps/web/e2e/multiplicar-celula.spec.ts` e `apps/web/e2e/redes.spec.ts` —
+  é o e2e que o item pedia, e que o PR #95 (cobertura de componente) não
+  entregava.
+
+### ~~PEND-06 · Alerta de ausência ignora quem entrou depois~~ · fechado
+
+Nasceu e fechou em 2026-09-16, dentro do `PROD-11`. `checkAbsenceAlerts`
+(rota) e `SmallGroupsAbsenceNotifier` (job semanal) contavam como ausente
+todo membro sem `attendance_records` nas 3 últimas reuniões da célula —
+**inclusive quem entrou depois delas**. Membro adicionado hoje entraria no
+alerta de segunda-feira como se tivesse faltado três vezes.
+
+Apresentado como achado antes de fechar o `PROD-11`, como manda o
+`CLAUDE.md` — muda o que a rota responde, que é comportamento em produção —
+e o dev respondeu ajustar antes. A janela passou a ser **por membro**: só
+reunião com `occurred_at >= group_memberships.joined_at`, e a mesma condição
+no lado da presença, para que presença anterior à entrada não conte como
+presença (nem a falta dela como falta). Membro sem nenhuma reunião aplicável
+sai do alerta.
+
+Mudou nos dois lugares na mesma alteração, que era a exigência: corrigir só
+um lado reintroduziria a divergência que o cabeçalho do notifier proíbe. É
+o que `test/integration/small-groups-absence-alerts.spec.ts` agora mede —
+ver a nota do `PROD-11` na seção 6.
+
+### PEND-07 · O QR do PIX da inscrição só existe na resposta do POST · dívida
+
+Nasceu declarada no `PROD-25` (2026-09-16), com a limitação escrita na
+própria tela — não é achado que sobrou de revisão. Nasceu como `PEND-06`
+e foi renumerada no merge com a `main`: o `PROD-11` fechou um `PEND-06`
+próprio no mesmo dia, em outra branch, e ID não se recicla.
+
+`POST .../registrations/me` devolve `{ registration, payment }` em evento
+pago, e o `payment.qr_code`/`qr_code_image` **só existe ali**: `GET
+.../registrations/me` devolve a linha de `event_registrations`, que guarda
+`pix_payment_id` mas não o payload. Quem gera o QR e sai da tela antes de
+pagar não tem como voltar a ele.
+
+O contorno em produção funciona e está dito em tela ("cancele a inscrição e
+inscreva-se de novo para gerar outro") — cancelar solta o `identity` que
+bloquearia a segunda tentativa, e a nova gera outro QR válido por 24h. O
+custo é uma cobrança órfã na Asaas por tentativa abandonada.
+
+A correção é de backend, não de tela: expor o `qr_code` do `PixPayment`
+ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
+ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
+tela sobre API pronta.
 
 ---
 
@@ -847,27 +1085,28 @@ Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
 árvore mede — exatamente o que a feature `mapa-monorepo-e-portoes` nasceu para
 caçar, e o que sobrou declarado da rodada 3 do Verifier.
 
-Um item pendente: `AJU-07`, abaixo.
+Nenhum item pendente: `AJU-07`, o último em aberto, fechou em 2026-09-16.
 
-### AJU-07 · `scripts/pre-push.sh` imprime "118 testes de RLS" · cosmético
+### ~~AJU-07 · `scripts/pre-push.sh` imprimia "118 testes de RLS"~~ · fechado
 
-Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já fecharam duas
-vezes: `scripts/pre-push.sh:149` imprime `passa "118 testes de RLS"` e a
-suíte fecha hoje em **125 em 7 suítes** — o `016_rls_networks.sql` e o
+Terceira ocorrência da mesma deriva que `AJU-01`/`AJU-02` já tinham fechado
+duas vezes: `scripts/pre-push.sh:149` imprimia `passa "118 testes de RLS"`
+enquanto a suíte fechava em 125 — o `016_rls_networks.sql` e o
 `test/rls/networks.spec.ts` do `PROD-20` (2026-09-15) mudaram o número.
 
-É rótulo, não comportamento: o `passa`/`bloqueia` vem do código de saída do
-Jest, não da contagem, então o portão decide certo e só reporta errado. As
-contagens de `docs/PLANO.md` e `docs/TESTES.md` foram atualizadas na
-varredura de 2026-09-15; esta ficou de fora **de propósito**, porque
-`pre-push.sh` é portão e a regra do `CLAUDE.md` manda apresentar o achado
-antes de mexer.
+Era rótulo, não comportamento: o `passa`/`bloqueia` sempre veio do código de
+saída do Jest, não da contagem, então o portão decidia certo e só reportava
+errado.
 
-A pergunta que o item carrega não é só o número: é se vale continuar
-escrevendo uma contagem literal num portão que a envelhece a cada feature
-com tabela nova. As duas saídas são trocar o literal por uma leitura da
-própria saída do Jest (`Tests: N passed`), ou aceitar a deriva e corrigir a
-cada varredura, como nas três vezes até aqui. Seguir assim, ou ajustar?
+**Fechado em 2026-09-16 (`70b62fa`), pela saída que o item preferia:** o
+literal saiu, e `scripts/pre-push.sh:152` passou a ler `Tests: N passed` da
+própria saída do Jest (`RLS_SUMMARY`), com fallback para "testes de RLS" se o
+`grep` não achar a linha. A pergunta que o item carregava — se valia seguir
+escrevendo contagem literal num portão que a envelhece a cada feature com
+tabela nova — ficou respondida na prática: a quarta deriva não chegou a
+existir. Quando `test/rls/auth-tables.spec.ts` (`PEND-04`, ações A e B) levou
+a suíte de 125 para 133 no mesmo dia, o `pre-push.sh` acompanhou sozinho, e
+só as contagens de `docs/PLANO.md` e `docs/TESTES.md` precisaram de mão.
 
 > `AJU-05` está na seção 5 (mobile), junto do resto do que falta para a loja.
 

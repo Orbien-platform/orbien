@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   FinancialTransaction,
   Prisma,
@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { CreateRecurringRuleDto } from './dto/create-recurring-rule.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
+import { writeAuditLog } from '../../common/audit/write-audit-log';
 
 /**
  * Soma meses **saturando no último dia** do mês de destino.
@@ -47,6 +48,8 @@ export type RecurringScope = 'this' | 'this_and_future';
 
 @Injectable()
 export class RecurringRuleService {
+  private readonly logger = new Logger(RecurringRuleService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateRecurringRuleDto, user: JwtPayload): Promise<RecurringRule> {
@@ -279,19 +282,19 @@ export class RecurringRuleService {
           data: { ...fields, ...(dto.occurred_at && { occurred_at: dto.occurred_at }), recurring_rule_id: null },
         });
 
-        await tx.auditLog
-          .create({
-            data: {
-              tenant_id: user.tenant_id,
-              congregation_id: user.congregation_id,
-              actor_user_id: user.impersonated_by ?? user.sub,
-              entity: 'financial_transaction',
-              action: 'updated',
-              before: transaction as unknown as Prisma.InputJsonValue,
-              after: updated as unknown as Prisma.InputJsonValue,
-            },
-          })
-          .catch(() => void 0);
+        await writeAuditLog(
+          this.prisma,
+          {
+            tenant_id: user.tenant_id,
+            congregation_id: user.congregation_id,
+            actor_user_id: user.impersonated_by ?? user.sub,
+            entity: 'financial_transaction',
+            action: 'updated',
+            before: transaction,
+            after: updated,
+          },
+          this.logger,
+        );
 
         return updated;
       }
@@ -310,19 +313,19 @@ export class RecurringRuleService {
         data: fields,
       });
 
-      await tx.auditLog
-        .create({
-          data: {
-            tenant_id: user.tenant_id,
-            congregation_id: user.congregation_id,
-            actor_user_id: user.impersonated_by ?? user.sub,
-            entity: 'financial_transaction',
-            action: 'updated_this_and_future',
-            before: transaction as unknown as Prisma.InputJsonValue,
-            after: fields as unknown as Prisma.InputJsonValue,
-          },
-        })
-        .catch(() => void 0);
+      await writeAuditLog(
+        this.prisma,
+        {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          actor_user_id: user.impersonated_by ?? user.sub,
+          entity: 'financial_transaction',
+          action: 'updated_this_and_future',
+          before: transaction,
+          after: fields,
+        },
+        this.logger,
+      );
 
       return { updated_count: count };
     });
@@ -340,18 +343,18 @@ export class RecurringRuleService {
       if (scope === 'this') {
         const deleted = await tx.financialTransaction.delete({ where: { id: transaction.id } });
 
-        await tx.auditLog
-          .create({
-            data: {
-              tenant_id: user.tenant_id,
-              congregation_id: user.congregation_id,
-              actor_user_id: user.impersonated_by ?? user.sub,
-              entity: 'financial_transaction',
-              action: 'deleted',
-              before: transaction as unknown as Prisma.InputJsonValue,
-            },
-          })
-          .catch(() => void 0);
+        await writeAuditLog(
+          this.prisma,
+          {
+            tenant_id: user.tenant_id,
+            congregation_id: user.congregation_id,
+            actor_user_id: user.impersonated_by ?? user.sub,
+            entity: 'financial_transaction',
+            action: 'deleted',
+            before: transaction,
+          },
+          this.logger,
+        );
 
         return deleted;
       }
@@ -374,18 +377,18 @@ export class RecurringRuleService {
         data: { is_active: false },
       });
 
-      await tx.auditLog
-        .create({
-          data: {
-            tenant_id: user.tenant_id,
-            congregation_id: user.congregation_id,
-            actor_user_id: user.impersonated_by ?? user.sub,
-            entity: 'financial_transaction',
-            action: 'deleted_this_and_future',
-            before: transaction as unknown as Prisma.InputJsonValue,
-          },
-        })
-        .catch(() => void 0);
+      await writeAuditLog(
+        this.prisma,
+        {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          actor_user_id: user.impersonated_by ?? user.sub,
+          entity: 'financial_transaction',
+          action: 'deleted_this_and_future',
+          before: transaction,
+        },
+        this.logger,
+      );
 
       return { deleted_count: count };
     });

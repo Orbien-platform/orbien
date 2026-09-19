@@ -33,6 +33,7 @@ em 2026-09-02. O `ci.yml` estava entre os commits ainda não enviados para a
 | 9 | Cadastro de visitante por QR nunca conseguiu gravar sob RLS — rota pública sem contexto de tenant | defeito | ✔ fechada — contexto vem do QR token |
 | 10 | Tela sem permissão diz "nada cadastrado" em vez de "sem acesso" — vale para as 8 telas de `(admin)` | UX | ✔ fechada — 403 distinguido de lista vazia, sidebar filtrada por papel |
 | 11 | Exclusão e anonimização de pessoa faziam rollback: auditoria gravada com INSERT direto, negado pelo RLS | defeito (LGPD) | ✔ fechada — as duas passaram a gravar por `audit_insert()` |
+| 12 | O mesmo INSERT direto da nº 11, em mais dez call sites de financeiro e importação — quatro deles descartando a edição do usuário com a rota respondendo 200 | defeito | ✔ fechada — `writeAuditLog()`, e `test/rls/audit-writes.spec.ts` varre `src/` contra a reincidência |
 
 > Em 2026-09-03 as sete foram revistas e as sete fecharam. As nº 4, 5, 6 e 7
 > nasceram no mesmo dia — a nº 4 já estava decidida como aberta e só não tinha
@@ -1611,6 +1612,105 @@ chamadores de auditoria hoje são o `AuditInterceptor`,
 ---
 
 ## Registro
+
+## nº 12 — o INSERT direto de auditoria em mais dez call sites
+
+Achado em 2026-09-16 por `pr-review` (dimensão A) e `/code-review`, durante o
+trabalho das ações A e B do `PEND-04`. Os dois relataram o mesmo ponto; o que
+está abaixo é o que a apuração mediu, e diverge de como o achado foi relatado.
+
+### O que estava errado
+
+`audit_logs` tem **uma** policy: `tenant_read`, `FOR SELECT`, para `app_user`.
+Não há policy de INSERT para esse role, e toda requisição autenticada roda
+como `app_user` — o `TenantContextInterceptor` faz `SET LOCAL ROLE app_user`.
+A escrita é reservada a `audit_insert()`, SECURITY DEFINER.
+
+É o mesmo defeito da nº 6 (interceptor, 2026-09-03) e da nº 11 (`PersonsService`,
+2026-09-15). A nota da nº 11 dizia que aqueles eram os dois call sites que
+haviam ficado para trás. Não eram: sobravam dez.
+
+| arquivo | sites | forma |
+|---|---|---|
+| `financial/transactions.service.ts` | 4 | sem `await`, `.catch(() => void 0)` |
+| `financial/recurring-rules/recurring-rule.service.ts` | 4 | **com `await`**, `.catch(() => void 0)` |
+| `financial/pix.service.ts` | 1 | sem `await` |
+| `persons/import/persons-import.service.ts` | 1 | sem `await` |
+
+### Por que quinze dias não bastaram para notar
+
+Três camadas escondendo a mesma coisa:
+
+1. **O `.catch(() => void 0)`** engolia o 42501 sem logar.
+2. **Os unit tests passavam**, porque mockavam `auditLog.create` — o mock
+   funciona; o banco é que recusa. O teste media a intenção, não o efeito.
+3. **O grep não achava.** A chamada quebra a linha entre `auditLog` e
+   `.create(`, então `grep "auditLog.create"` devolve zero. Foi assim que a
+   apuração quase concluiu que os call sites não existiam.
+
+### Duas severidades, não uma
+
+Medido contra o Postgres local, pelo código de serviço real:
+
+- **Sem `await`** (6 sites): a query corre com o COMMIT e perde. O dado do
+  usuário sobrevive; só a linha de auditoria some. Confirmado: transação
+  financeira gravada = 1, auditoria = 0.
+- **Com `await`** (4 sites, `recurring-rule.service.ts`): o 42501 aborta a
+  transação no Postgres. O `.catch()` engole, o handler retorna normalmente e
+  o COMMIT vira ROLLBACK. **A rota responde 200 e a edição do usuário é
+  descartada.** Confirmado: pedido para mudar `amount` de 100 para 999,
+  resposta sem erro, valor no banco = 100.
+
+O segundo caso é perda silenciosa de dado com resposta de sucesso — editar ou
+excluir uma transação recorrente nunca funcionou desde que o interceptor
+passou a trocar de role (2026-09-07, nº 7).
+
+### O que NÃO era
+
+O relato dizia que `audit_insert()` era chamada com 10 argumentos em
+`persons.service.ts:162`, com risco de ambiguidade por duas assinaturas
+coexistindo. Conferido: a função tem **uma** assinatura, com 11 parâmetros (o
+11º com `DEFAULT NULL`), e o call site passa os 11. Não havia o que corrigir.
+
+Também não foi causado pelo `017_rls_auth_tables.sql` da mesma branch, que
+tira `orbien_app_auth` de `audit_logs`: essa policy é `TO orbien_app`, e
+`app_user` não é membro desse role, então ela nunca se aplicou à requisição
+autenticada. Verificado recriando a policy — o 42501 é o mesmo.
+
+### Decisão — 2026-09-16
+
+Os três serviços têm teste dizendo que falha de auditoria **não** desfaz a
+operação (`transactions`: "best-effort"; `recurring-rule`: "não desfaz a
+edição"). Essa intenção foi preservada, não revista — o que mudou foi o
+mecanismo, que a tornava falsa. `writeAuditLog()`
+(`src/common/audit/write-audit-log.ts`) escreve por `audit_insert()`, **no
+client base**, fora da transação da requisição, e trata a falha logando.
+
+As duas escolhas são o ponto:
+
+- **Fora da transação** é o que impede uma falha da auditoria de abortar o
+  handler. Dentro dela, nenhum `.catch()` salva — o Postgres já abortou.
+- **Com `await`** e tratamento, em vez de disparar e esquecer: sem o `await` a
+  query corre com o fim da requisição e pode nem chegar ao banco.
+
+`PersonsService.writeAuditLog` ficou como está — ali o registro é transacional
+de propósito, para sumir junto se o handler rolar back, e a falha propaga. Os
+dois modos convivem porque respondem a perguntas diferentes.
+
+### O que impede a sexta vez
+
+`test/rls/audit-writes.spec.ts` (5 testes). Os quatro primeiros medem o
+mecanismo cru, sem passar por service nenhum: o INSERT direto é negado com
+42501, o INSERT negado aborta a transação e descarta a escrita do usuário,
+`audit_insert()` grava como `app_user`, e a linha acompanha o rollback do
+handler.
+
+O quinto é o que fecha o ciclo: varre `src/` inteiro atrás de chamada de
+escrita em `auditLog`, normalizando espaço em branco antes de casar —
+exatamente a forma quebrada em várias linhas que escondeu estes dez de todo
+grep. Verificado reintroduzindo o padrão: o teste acusa o arquivo.
+
+---
 
 Pendência nova **não** nasce aqui: nasce em [`PLANO.md`](PLANO.md), com ID.
 Este arquivo só recebe seção quando um item fecha e a história dele vale
