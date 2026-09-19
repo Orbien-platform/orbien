@@ -317,7 +317,7 @@ jobs:
           # descartável. A regra está em `docs/AMBIENTES.md` e vale para todo
           # ambiente — é justamente por ela existir em todo ambiente que ela
           # também vale aqui.
-          E2E_EMAIL: teste1@useorbien.com.br
+          E2E_EMAIL: fvargaspf+teste1@gmail.com
           E2E_PASSWORD: A3dodfemf
           E2E_TENANT: teste1-church
           # A conta de plataforma do seed. `suporte.spec.ts` precisa dela para

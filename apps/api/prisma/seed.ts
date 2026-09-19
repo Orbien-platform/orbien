@@ -99,13 +99,13 @@ const TENANTS: TenantSpec[] = [
     slug: 'teste1-church',
     name: 'Teste 1 Church',
     congregationName: 'Teste 1 - Sede',
-    admin: { email: 'teste1@useorbien.com.br', fullName: 'Conta de Teste 1' },
+    admin: { email: 'fvargaspf+teste1@gmail.com', fullName: 'Conta de Teste 1' },
   },
   {
     slug: 'teste2-church',
     name: 'Teste 2 Church',
     congregationName: 'Teste 2 - Sede',
-    admin: { email: 'teste2@useorbien.com.br', fullName: 'Conta de Teste 2' },
+    admin: { email: 'fvargaspf+teste2@gmail.com', fullName: 'Conta de Teste 2' },
   },
 ];
 

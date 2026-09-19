@@ -87,7 +87,7 @@ capturas em `e2e/screenshots/`:
 A partir da raiz do monorepo:
 
 ```bash
-E2E_EMAIL=teste1@useorbien.com.br E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
+E2E_EMAIL=fvargaspf+teste1@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
   npm run e2e -w orbien-web
 ```
 

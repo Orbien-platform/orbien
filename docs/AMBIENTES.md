@@ -44,7 +44,7 @@ E2E_TENANT=teste1-church E2E_EMAIL=fvargaspf@gmail.com ...   # escreve no doca-c
 
 `fvargaspf@gmail.com` é conta do `doca-church`; a suíte inteira cairia lá. É
 por isso que existem contas próprias nos tenants de teste
-(`teste1@useorbien.com.br`, `teste2@useorbien.com.br`): elas são a única coisa
+(`fvargaspf+teste1@gmail.com`, `fvargaspf+teste2@gmail.com`): elas são a única coisa
 que de fato aponta a escrita para o tenant certo. Ao revisar um workflow ou um
 comando, olhe o **e-mail** — o slug ao lado pode estar certo e mentindo.
 
@@ -79,8 +79,8 @@ está no próprio arquivo versionado.
 | Conta | Tenant | Papéis |
 |---|---|---|
 | `fvargaspf@gmail.com` | `doca-church` | `tenant_admin` + `platform_support` |
-| `teste1@useorbien.com.br` | `teste1-church` | `tenant_admin` |
-| `teste2@useorbien.com.br` | `teste2-church` | `tenant_admin` |
+| `fvargaspf+teste1@gmail.com` | `teste1-church` | `tenant_admin` |
+| `fvargaspf+teste2@gmail.com` | `teste2-church` | `tenant_admin` |
 | `fernando.vargas@fill.tech` | `doca-church` | `platform_support` |
 
 `fvargaspf@gmail.com` acumula os dois papéis de propósito: administra a
@@ -95,10 +95,28 @@ principal cair por engano, o console ainda tem por onde entrar. Ela mora no
 `doca-church` porque `user_accounts.tenant_id` é NOT NULL, mas não é conta
 operacional da igreja.
 
+**Por que `+teste1` e não `teste1@useorbien.com.br`.** Login trata o e-mail como
+identificador, então qualquer string única funcionaria — mas recuperação de
+senha e todo e-mail transacional que um teste dispare precisam **chegar em
+algum lugar**. Não há caixa em `@useorbien.com.br`; o sub-endereçamento do
+Gmail entrega em `fvargaspf@gmail.com`, uma caixa que existe. São contas
+distintas para o banco (`user_accounts.email` é único e `+teste1` ≠ `+teste2` ≠
+sem sufixo) e a mesma caixa para quem precisa ler. Quando as caixas próprias
+existirem, trocar é um `sed` — e aí o motivo desta escolha some junto.
+
 ### Produção
 
 Mesmos e-mails de plataforma; as contas dos tenants de teste têm **senha
-própria**, definida ao provisionar, e vivem em secret do GitHub (§5).
+própria**, sorteada por `scripts/provisionar-tenants-teste.sh` e impressa uma
+única vez, já no formato de colar nos secrets (§5). Ninguém inventa senha, e
+ela não passa por arquivo, commit nem conversa.
+
+A senha do seed (`A3dodfemf`) **não serve aqui**, mesmo enquanto produção não
+estiver em uso oficial: ela está em texto claro num repositório público. O
+ambiente sendo novo não é o que a torna segura — é o que torna barato não
+começar errado. Uma senha pública numa conta `tenant_admin` de um domínio no ar
+continua valendo no dia em que houver cliente atrás dela, e ninguém lembra de
+trocá-la nesse dia.
 
 **Conceder `platform_support` em produção é SQL.** Não há rota para isso — o
 controller de plataforma cria e edita tenant, lê auditoria e transfere conta,
@@ -139,7 +157,7 @@ qualquer uma.
 Contra o ambiente local (banco semeado, web e API de pé):
 
 ```bash
-E2E_EMAIL=teste1@useorbien.com.br E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
+E2E_EMAIL=fvargaspf+teste1@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
   npm run e2e -w orbien-web
 ```
 
@@ -172,10 +190,10 @@ O job `e2e-prod` do CI é o único que precisa de secret.
 
 | Secret | Conteúdo |
 |---|---|
-| `E2E_PROD_EMAIL` | e-mail do `tenant_admin` de `teste1-church` em produção |
-| `E2E_PROD_PASSWORD` | senha dessa conta |
-| `E2E_PROD_SUPPORT_EMAIL` | conta de plataforma usada por `suporte.spec.ts` |
-| `E2E_PROD_SUPPORT_PASSWORD` | senha dessa conta |
+| `E2E_PROD_EMAIL` | `fvargaspf+teste1@gmail.com` |
+| `E2E_PROD_PASSWORD` | a sorteada pelo script de provisionamento (§6) |
+| `E2E_PROD_SUPPORT_EMAIL` | `fvargaspf@gmail.com` (tem `platform_support`) |
+| `E2E_PROD_SUPPORT_PASSWORD` | senha de plataforma dessa conta |
 
 A conta de `E2E_PROD_EMAIL` **tem que ser a do tenant de teste** — pelo motivo
 do §1: é ela que decide onde a suíte escreve. A de `E2E_PROD_SUPPORT_EMAIL` só
@@ -205,9 +223,13 @@ falhar vermelho.
 ```bash
 ORBIEN_API_URL=https://orbien-api.onrender.com/api \
 PLATFORM_EMAIL=fvargaspf@gmail.com PLATFORM_PASSWORD=... \
-TESTE1_PASSWORD=... TESTE2_PASSWORD=... \
   scripts/provisionar-tenants-teste.sh
 ```
+
+O script **sorteia as senhas** (`openssl rand -hex 16`, 128 bits) e as imprime
+no fim, já rotuladas com o nome do secret correspondente. Passe
+`TESTE1_PASSWORD`/`TESTE2_PASSWORD` só se quiser escolher a sua. É a única vez
+que elas aparecem — o banco guarda só o hash argon2.
 
 Usa `POST /platform/tenants`, a rota de plataforma — que é atômica: tenant,
 plano, branding, congregação e conta admin numa transação só. Não há caminho

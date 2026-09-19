@@ -12,10 +12,13 @@
 # Idempotente na prática: tenant que já existe volta 409 e o script segue,
 # dizendo que pulou. Nada é sobrescrito.
 #
+# As senhas das contas de teste são sorteadas pelo script e impressas uma única
+# vez no fim, prontas para colar nos secrets. Passe TESTE1_PASSWORD /
+# TESTE2_PASSWORD só se quiser escolher a sua.
+#
 # Uso:
 #   ORBIEN_API_URL=https://orbien-api.onrender.com/api \
-#   PLATFORM_EMAIL=... PLATFORM_PASSWORD=... \
-#   TESTE1_PASSWORD=... TESTE2_PASSWORD=... \
+#   PLATFORM_EMAIL=fvargaspf@gmail.com PLATFORM_PASSWORD=... \
 #     scripts/provisionar-tenants-teste.sh
 # =============================================================================
 set -euo pipefail
@@ -23,8 +26,15 @@ set -euo pipefail
 API="${ORBIEN_API_URL:?falta ORBIEN_API_URL}"
 PLATFORM_EMAIL="${PLATFORM_EMAIL:?falta PLATFORM_EMAIL}"
 PLATFORM_PASSWORD="${PLATFORM_PASSWORD:?falta PLATFORM_PASSWORD}"
-TESTE1_PASSWORD="${TESTE1_PASSWORD:?falta TESTE1_PASSWORD}"
-TESTE2_PASSWORD="${TESTE2_PASSWORD:?falta TESTE2_PASSWORD}"
+
+# Senha não é argumento obrigatório de propósito: quando não vem do ambiente, o
+# script sorteia uma e a imprime no fim. Assim ninguém precisa inventar senha —
+# nem escrevê-la num arquivo, num commit ou numa conversa para depois colar no
+# secret. 32 hex = 128 bits de urandom, bem acima do MinLength(8) do DTO.
+senha_nova() { openssl rand -hex 16; }
+
+TESTE1_PASSWORD="${TESTE1_PASSWORD:-$(senha_nova)}"
+TESTE2_PASSWORD="${TESTE2_PASSWORD:-$(senha_nova)}"
 
 echo "API: $API"
 
@@ -64,9 +74,28 @@ provisionar() {
 }
 
 provisionar teste1-church "Teste 1 Church" "Teste 1 - Sede" \
-  "Conta de Teste 1" "teste1@useorbien.com.br" "$TESTE1_PASSWORD"
+  "Conta de Teste 1" "fvargaspf+teste1@gmail.com" "$TESTE1_PASSWORD"
 provisionar teste2-church "Teste 2 Church" "Teste 2 - Sede" \
-  "Conta de Teste 2" "teste2@useorbien.com.br" "$TESTE2_PASSWORD"
+  "Conta de Teste 2" "fvargaspf+teste2@gmail.com" "$TESTE2_PASSWORD"
 
-echo
-echo "Pronto. Guarde as senhas nos secrets do GitHub (ver docs/AMBIENTES.md §5)."
+cat <<FIM
+
+─────────────────────────────────────────────────────────────
+Pronto. Cadastre estes quatro secrets em
+https://github.com/Orbien-platform/orbien/settings/secrets/actions
+— é o que falta para o job \`e2e-prod\` rodar:
+
+  E2E_PROD_EMAIL            fvargaspf+teste1@gmail.com
+  E2E_PROD_PASSWORD         $TESTE1_PASSWORD
+  E2E_PROD_SUPPORT_EMAIL    $PLATFORM_EMAIL
+  E2E_PROD_SUPPORT_PASSWORD (a senha de plataforma que você usou acima)
+
+Senha do teste2-church (guarde, não vai para secret nenhum hoje):
+  $TESTE2_PASSWORD
+
+Esta é a única vez que as senhas aparecem. Não há como relê-las depois — o
+banco guarda só o hash (argon2). Perdeu? Rode de novo com um slug novo, ou
+troque pela tela de recuperação: os dois e-mails são alias de
+fvargaspf@gmail.com, então a mensagem chega na sua caixa de verdade.
+─────────────────────────────────────────────────────────────
+FIM
