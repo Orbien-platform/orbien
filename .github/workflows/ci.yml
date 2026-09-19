@@ -3,9 +3,19 @@ name: CI
 # Racional, alternativas consideradas e o que deliberadamente ficou de fora:
 # docs/CI.md
 #
-# Nenhum job precisa de secret. O banco é um Postgres descartável provisionado
-# por apps/api/scripts/bootstrap-db.sh, e as credenciais do e2e saem do seed do
-# próprio repositório. Um PR de fork roda igual.
+# Nenhum portão de teste precisa de secret — o único do arquivo é o EXPO_TOKEN
+# do build EAS, lá embaixo. O banco dos jobs locais é um Postgres descartável
+# provisionado por apps/api/scripts/bootstrap-db.sh, e as credenciais saem do
+# seed do próprio repositório. O `e2e-prod` roda contra o ambiente no ar, mas
+# com a conta de um tenant que existe só para teste e cuja senha é pública — a
+# proteção ali não é o sigilo da senha, é o fato de a conta não alcançar dado
+# de ninguém.
+#
+# Ainda assim `e2e-prod` se pula em PR de fork: escrever no ambiente real a
+# partir de código que ninguém revisou é outra conversa, independente de secret.
+#
+# Tudo que é teste — aqui, no e2e local e na mão — usa `teste1-church` ou
+# `teste2-church`, nunca o tenant de uma igreja real. Ver docs/AMBIENTES.md.
 #
 # `turbo run <task>` sem --filter cobre todos os workspaces: apps novos entram
 # nos portões de build, lint e test sem editar este arquivo. O que precisa ser
@@ -307,9 +317,14 @@ jobs:
         env:
           E2E_BASE_URL: http://localhost:3001
           E2E_API_URL: http://localhost:3000/api
-          E2E_EMAIL: fvargaspf@gmail.com
+          # `teste1-church`, nunca `doca-church`: nenhum teste roda sobre o
+          # tenant de uma igreja de verdade, nem aqui, onde o banco é
+          # descartável. A regra está em `docs/AMBIENTES.md` e vale para todo
+          # ambiente — é justamente por ela existir em todo ambiente que ela
+          # também vale aqui.
+          E2E_EMAIL: fvargaspf+teste1@gmail.com
           E2E_PASSWORD: A3dodfemf
-          E2E_TENANT: doca-church
+          E2E_TENANT: teste1-church
           # A conta de plataforma do seed. `suporte.spec.ts` precisa dela para
           # montar o handoff de verdade (login de plataforma → listar tenants →
           # impersonate); sem estas duas o spec se pula em vez de falhar.
@@ -323,6 +338,83 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            apps/web/e2e/screenshots/
+          retention-days: 7
+
+  # ── Fase 3b — e2e contra PRODUÇÃO ────────────────────────────────────────
+  #
+  # Mesma suíte do job acima, apontada para o ambiente real. Não substitui o
+  # `e2e`: aquele prova a suíte contra um banco limpo e determinístico, este
+  # prova que o que está no ar responde. Por isso os dois rodam.
+  #
+  # **Escreve em produção.** As fixtures criam e removem celebração, instância
+  # e template de verdade via API, e `suporte.spec.ts` faz login de plataforma
+  # e impersonate, o que grava em `audit_logs`. Isso é aceitável porque o alvo
+  # é `teste1-church` — tenant que existe só para isso. Apontar este job para
+  # qualquer outro tenant é o que `docs/AMBIENTES.md` proíbe.
+  #
+  # `needs: [e2e]` é de propósito: se a suíte já falha contra o banco limpo, o
+  # problema é dela, e não vale sujar produção para redescobrir isso.
+  #
+  # O `if` pula PR de fork em vez de falhar vermelho: o GitHub não entrega
+  # secret para fork, e sem as credenciais o job morreria no login com uma
+  # mensagem que não ajuda ninguém.
+  e2e-prod:
+    name: E2E (produção)
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --include=dev
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      # E2E_API_URL vai direto na API, não em `/api-proxy`: as fixtures montam
+      # e desmontam dados com fetch() cru, fora do browser, e anexam o Bearer
+      # na mão. Desde que o proxy virou Route Handler (sessão em cookie
+      # HttpOnly), ele ignora Authorization de entrada e só repassa o token que
+      # lê do cookie — que essas chamadas não têm. Só a fixture `page` precisa
+      # do proxy, porque é ela quem navega pelo browser com o cookie semeado.
+      - name: Suíte de e2e contra produção
+        env:
+          E2E_BASE_URL: https://web.useorbien.com.br
+          E2E_API_URL: https://orbien-api.onrender.com/api
+          # Credencial em texto claro, e de propósito: esta conta existe só
+          # para o e2e, só no `teste1-church`, e a senha é a mesma do
+          # `provisionar-tenants-teste.sh`. Tratá-la como segredo daria a
+          # impressão errada de que há algo a proteger aqui — o que protege é
+          # o fato de a conta não alcançar dado de ninguém.
+          #
+          # O contrato é esse, e só vale enquanto ele for verdade: se um dia
+          # esta conta ganhar acesso a tenant real, a senha sai daqui no mesmo
+          # commit. Ver docs/AMBIENTES.md §5.
+          E2E_EMAIL: fvargaspf+teste1@gmail.com
+          E2E_PASSWORD: orbien-e2e-publica-2026
+          E2E_TENANT: teste1-church
+          # `E2E_SUPPORT_*` NÃO entram aqui. Elas são a conta de plataforma —
+          # a que impersona em qualquer tenant — e publicá-las num repositório
+          # público entregaria o produto inteiro, não um tenant de teste. Sem
+          # elas o `suporte.spec.ts` se pula (test.skip), que é o custo
+          # aceito: um spec a menos contra produção. Quem quiser esse spec
+          # aqui cadastra os dois como secret; o resto da suíte não depende.
+        run: npm run e2e -w orbien-web
+
+      - name: Relatório e traces quando falhar
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-prod
           path: |
             apps/web/playwright-report/
             apps/web/test-results/

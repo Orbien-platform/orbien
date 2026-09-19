@@ -25,6 +25,14 @@ leia o do app antes de mexer nele.
   em português, como o histórico já faz. Se o prompt seguinte continua o
   mesmo trabalho, fique na branch que já existe; branch nova é por unidade
   de trabalho, não por mensagem. Commit e push continuam só quando pedidos.
+- **Teste só em `teste1-church` e `teste2-church`.** São os dois tenants que
+  existem para isso, e os únicos que podem ser usados — em e2e local, no CI, em
+  teste manual, em demonstração, em qualquer ambiente, produção inclusive.
+  `doca-church` é a igreja do cliente zero: dado dela é dado de gente real, e
+  teste que a toca é incidente. O RLS isola tenant de tenant, mas não distingue
+  escrita de teste de escrita de verdade dentro do tenant certo — quem escolhe o
+  tenant é quem escreve o teste. Faltou dado nos de teste? O que falta é seed
+  neles, não permissão para usar outro. Detalhe em `docs/AMBIENTES.md`.
 - **Sempre** instale a partir da raiz (`npm install`). Existe um único
   `package-lock.json`, na raiz. Não crie lockfiles em `apps/*`.
 - Para adicionar dependência a um app:
