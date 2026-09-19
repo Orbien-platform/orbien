@@ -235,11 +235,32 @@ falhar vermelho.
 
 ## 6. Provisionar os tenants de teste em produção
 
+São dois caminhos para o mesmo fim. **O SQL é o mais curto**, e é o que foi
+usado da primeira vez:
+
+**a) SQL, no editor do Supabase** — `scripts/sql/provisionar-tenants-teste.sql`.
+Cole e rode. Idempotente, numa transação só, e já inclui o `platform_support`
+de `fvargaspf@gmail.com`. Roda como superusuário, passando por cima do RLS —
+mesmo caminho do seed.
+
+O `password_hash` é **argon2id** e o Postgres não sabe gerá-lo (o `pgcrypto`
+só tem bcrypt). Por isso o hash está pronto dentro do arquivo, calculado com a
+mesma biblioteca que a API usa para conferir. Trocar a senha exige recalcular:
+
+```bash
+node -e "require('argon2').hash('SUA-SENHA').then(console.log)"
+```
+
+**b) Pela rota de plataforma** — `scripts/provisionar-tenants-teste.sh`:
+
 ```bash
 ORBIEN_API_URL=https://orbien-api.onrender.com/api \
 PLATFORM_EMAIL=fvargaspf@gmail.com PLATFORM_PASSWORD=... \
   scripts/provisionar-tenants-teste.sh
 ```
+
+Exige um token de `platform_support` — que só existe depois que o papel foi
+concedido, o que por sua vez é SQL. Daí o caminho (a) ser o primeiro.
 
 As contas nascem com `orbien-e2e-publica-2026`, a mesma senha que o workflow
 manda no login (§5). Passe `TESTE1_PASSWORD`/`TESTE2_PASSWORD` só se quiser
