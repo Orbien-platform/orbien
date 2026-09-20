@@ -19,6 +19,7 @@ import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CelebrationSchedulerController } from './celebration-scheduler.controller';
 import { CelebrationScheduleController } from './celebration-schedule.controller';
 import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationScheduleSuggestionService } from './celebration-schedule-suggestion.service';
 import { CelebrationAssignmentController } from './celebration-assignment.controller';
 import { ScheduleTemplateController } from './schedule-template.controller';
 import { ScheduleTemplateService } from './schedule-template.service';
@@ -57,6 +58,7 @@ import {
     SetlistSongsService,
     CelebrationSchedulerService,
     CelebrationScheduleService,
+    CelebrationScheduleSuggestionService,
     CelebrationAssignmentService,
     PdfExportService,
   ],
@@ -69,6 +71,7 @@ import {
     SetlistSongsService,
     CelebrationSchedulerService,
     CelebrationScheduleService,
+    CelebrationScheduleSuggestionService,
     CelebrationAssignmentService,
   ],
 })
