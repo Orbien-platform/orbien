@@ -483,6 +483,7 @@ describe("GroupDetailSheet", () => {
       data: { token: "abc123", expires_at: "2026-08-01T16:00:00.000Z" },
     });
     const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
 
     render(
       <GroupDetailSheet
@@ -504,12 +505,17 @@ describe("GroupDetailSheet", () => {
     expect(api.post).toHaveBeenCalledWith("/small-groups/meetings/mtg1/checkin-token");
     expect(await screen.findByText("abc123")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Copiar código de check-in" }));
+    expect(writeText).toHaveBeenCalledWith("abc123");
+
     vi.mocked(api.post).mockResolvedValueOnce({
       data: { token: "def456", expires_at: "2026-08-01T18:00:00.000Z" },
     });
     await user.click(screen.getByRole("button", { name: /Renovar/ }));
     expect(await screen.findByText("def456")).toBeInTheDocument();
     expect(screen.queryByText("abc123")).not.toBeInTheDocument();
+
+    writeText.mockRestore();
   });
 
   it("mostra erro ao falhar a geração do código de check-in, sem travar o resto da tela", async () => {
