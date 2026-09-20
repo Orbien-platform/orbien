@@ -1060,24 +1060,32 @@ importação do mesmo arquivo reconhece cada `FITID` já visto e conta como
   transação do extrato, com o `financial_transaction_id` (nulo = ainda sem
   match) que sustenta a listagem de não-casados.
 - **RLS Padrão B**, o mesmo de `export_jobs`/`import_jobs`
-  (`20260613000000_add_export_import_jobs`): tabela nova, sem policy
-  anterior para o passo 4 do `bootstrap-db.sh` derrubar, então a
-  `ENABLE`/`FORCE ROW LEVEL SECURITY` e a policy nascem dentro da própria
-  migration do Prisma
-  (`20260920022955_add_bank_statement_transactions`) — **sem** entrar em
-  `bootstrap-db.sh`. O passo 7 continua cobrindo isso pelo catch-all
-  genérico (qualquer tabela em `public` sem RLS habilitado derruba o
-  passo), do mesmo jeito que já cobre `export_jobs`/`import_jobs` sem
-  checagem nomeada própria — confirmado rodando `bootstrap-db.sh` do zero
-  depois da migration.
+  (`20260613000000_add_export_import_jobs`) — isolamento simples de
+  tenant + congregação por `current_setting`, sem a exceção de
+  `tenant_admin`. Achado de revisão (#107): a policy nasceu dentro da
+  própria migration do Prisma
+  (`20260920022955_add_bank_statement_transactions`), fora do padrão do
+  resto do produto — mas àquela altura a migration **já tinha sido
+  aplicada em produção** (deploy do Render em `dce2b51`,
+  2026-09-20 12:15 GMT-3), e editar um `migration.sql` já aplicado muda o
+  checksum e derruba `prisma migrate deploy` no próximo deploy (docs/CI.md,
+  "Trunk-based"). Por isso a migration **não foi alterada**: a policy
+  continua nascendo lá. `prisma/migrations/019_rls_bank_statement_transactions.sql`
+  foi adicionado como reafirmação idempotente da mesma policy (mesmo texto,
+  `DROP POLICY IF EXISTS` antes), fora do histórico do Prisma e aplicado
+  pelo `bootstrap-db.sh` (passo 3) — o ganho real é a checagem **nomeada**
+  no passo 7, em vez do catch-all genérico. Confirmado rodando
+  `bootstrap-db.sh` do zero.
 - **Tenant + congregação, sem exceção de `tenant_admin`** — ao contrário de
   `financial_transactions`/`cost_centers` (que usam
   `app_congregation_allowed()`, com a exceção), esta tabela segue o
   isolamento simples de `export_jobs`/`import_jobs`: é artefato de
   importação, não o livro-caixa em si, e nada no produto hoje pede que
   `tenant_admin` veja conciliação de outra congregação sem entrar nela.
-  Sem teste de isolamento dedicado em `test/rls/isolation.spec.ts`, pelo
-  mesmo motivo — `export_jobs`/`import_jobs` também não têm.
+  Ganhou teste de isolamento dedicado depois (achado de revisão #107):
+  `test/rls/bank-statement-transactions.spec.ts`, no molde de
+  `test/rls/meeting-checkin-tokens.spec.ts` — congregação irmã do mesmo
+  tenant não vê, tenant de fora não vê, `WITH CHECK` nega escrita cruzada.
 - **Sem caminho assíncrono**: diferente de `persons/import` (split em 500
   linhas) e `financial/export` (split em 92 dias), a importação de OFX é
   sempre síncrona — extrato bancário mensal não chega a milhares de
@@ -1092,9 +1100,9 @@ linha sem `FITID` vira erro sem contar no total, auditoria que falha não
 desfaz a importação, filtro de não-casados por tenant/congregação e por
 `import_job_id`), `ofx-import.controller.spec.ts` (delega ao service, papel
 e plano exigidos), `financial.module.spec.ts` atualizado com o controller e
-o service novos. `npm run test:rls -w orbien-backend` roda sem alteração —
-138 testes em 9 suítes, sem mudança de número: nenhum arquivo de RLS
-`0NN_*` novo, e a tabela nova não tem suíte própria pela decisão acima.
+o service novos. `test/rls/bank-statement-transactions.spec.ts` fechou a
+lacuna de isolamento (achado de revisão #107) depois — `npm run test:rls -w
+orbien-backend` passou de 138 para 150 testes, 11 suítes.
 
 ### ~~PROD-05 · Sugestão automática de escala por disponibilidade e rodízio~~ · fechado
 
@@ -1590,7 +1598,7 @@ Três consequências que já entraram:
   passa a acumular `tenant_admin` do `doca-church` **e** `platform_support`;
   `fernando.vargas@fill.tech` fica como conta quebra-vidro da plataforma.
 - **O CI ganhou `e2e-prod`**, rodando a mesma suíte contra
-  `web.useorbien.com.br` sobre `teste1-church`. Não substitui o `e2e` local, que
+  `web.useorbien.com` sobre `teste1-church`. Não substitui o `e2e` local, que
   segue provando a suíte contra banco limpo — e `needs: [e2e]` garante que
   produção só é tocada depois que o job determinístico passou. É o primeiro job
   do repositório que precisa de secret, o que quebra o "PR de fork roda igual"

@@ -388,7 +388,7 @@ jobs:
       # do proxy, porque é ela quem navega pelo browser com o cookie semeado.
       - name: Suíte de e2e contra produção
         env:
-          E2E_BASE_URL: https://web.useorbien.com.br
+          E2E_BASE_URL: https://web.useorbien.com
           E2E_API_URL: https://orbien-api.onrender.com/api
           # Credencial em texto claro, e de propósito: esta conta existe só
           # para o e2e, só no `teste1-church`, e a senha é a mesma do

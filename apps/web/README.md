@@ -140,7 +140,7 @@ do Playwright, e não `page.evaluate` no storage.
 Funciona contra qualquer ambiente:
 
 ```bash
-E2E_BASE_URL=https://web.useorbien.com.br \
+E2E_BASE_URL=https://web.useorbien.com \
 E2E_API_URL=https://orbien-api.onrender.com/api \
 E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste1-church npm run e2e -w orbien-web
 ```
