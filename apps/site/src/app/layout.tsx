@@ -17,7 +17,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://useorbien.com.br"),
+  metadataBase: new URL("https://useorbien.com"),
   title: {
     template: "%s — Orbien",
     default: "Orbien — Gestão que serve. Igreja que cresce.",

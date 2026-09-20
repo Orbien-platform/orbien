@@ -777,7 +777,7 @@ describe('AuthService.forgotPassword', () => {
     });
 
     it('usa FRONTEND_URL do ambiente quando definida', async () => {
-      process.env['FRONTEND_URL'] = 'https://web.useorbien.com.br';
+      process.env['FRONTEND_URL'] = 'https://web.useorbien.com';
       const { service, prisma, mail } = serviceWith({});
       (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
         id: 'u1',
@@ -790,7 +790,7 @@ describe('AuthService.forgotPassword', () => {
 
       expect(mail.sendPasswordReset).toHaveBeenCalledWith(
         'a@b.com',
-        expect.stringContaining('https://web.useorbien.com.br/redefinir-senha?token='),
+        expect.stringContaining('https://web.useorbien.com/redefinir-senha?token='),
         'Ana',
       );
     });

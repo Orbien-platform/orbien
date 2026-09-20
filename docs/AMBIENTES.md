@@ -61,10 +61,11 @@ de uma linha. Sem o segundo, esses casos empurrariam alguém para um tenant real
 |---|---|---|---|---|
 | Local | `localhost:3001` | `localhost:3002` | `localhost:3000/api` | Postgres local (`scripts/bootstrap-db.sh`) |
 | CI | sobe no runner | — | sobe no runner | Postgres 17 efêmero do job |
-| Produção | `web.useorbien.com.br` | `admin.useorbien.com.br` | `orbien-api.onrender.com/api` | Supabase |
+| Produção | `web.useorbien.com` | `admin.useorbien.com` | `orbien-api.onrender.com/api` | Supabase |
 
-O domínio é **`.com.br`**. `useorbien.com` (sem `.br`) só aparece no remetente
-de e-mail (`MAIL_FROM`), não é endereço de aplicação.
+O domínio é **`.com`**, sem `.br` — migração feita em 2026-09-18 (ver
+Vercel: `orbien-site`/`orbien-web`/`orbien-admin` têm `useorbien.com` como
+domínio de produção). `useorbien.com.br` não existe mais.
 
 ---
 
@@ -95,10 +96,10 @@ principal cair por engano, o console ainda tem por onde entrar. Ela mora no
 `doca-church` porque `user_accounts.tenant_id` é NOT NULL, mas não é conta
 operacional da igreja.
 
-**Por que `+teste1` e não `teste1@useorbien.com.br`.** Login trata o e-mail como
+**Por que `+teste1` e não `teste1@useorbien.com`.** Login trata o e-mail como
 identificador, então qualquer string única funcionaria — mas recuperação de
 senha e todo e-mail transacional que um teste dispare precisam **chegar em
-algum lugar**. Não há caixa em `@useorbien.com.br`; o sub-endereçamento do
+algum lugar**. Não há caixa em `@useorbien.com`; o sub-endereçamento do
 Gmail entrega em `fvargaspf@gmail.com`, uma caixa que existe. São contas
 distintas para o banco (`user_accounts.email` é único e `+teste1` ≠ `+teste2` ≠
 sem sufixo) e a mesma caixa para quem precisa ler. Quando as caixas próprias
@@ -160,7 +161,7 @@ E2E_EMAIL=fvargaspf+teste1@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-ch
 Contra produção:
 
 ```bash
-E2E_BASE_URL=https://web.useorbien.com.br \
+E2E_BASE_URL=https://web.useorbien.com \
 E2E_API_URL=https://orbien-api.onrender.com/api \
 E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste1-church \
   npm run e2e -w orbien-web
@@ -273,7 +274,7 @@ por SQL aqui de propósito: o seed roda como `postgres` com BYPASSRLS e só serv
 a banco local; em produção o tenant nasce pelo produto, sob RLS, pelo ramo
 `app_platform_access()`.
 
-O mesmo resultado sai pelo console (`admin.useorbien.com.br` → Tenants →
+O mesmo resultado sai pelo console (`admin.useorbien.com` → Tenants →
 "Novo tenant"), que chama exatamente essa rota.
 
 ---

@@ -1619,7 +1619,7 @@ Três consequências que já entraram:
   passa a acumular `tenant_admin` do `doca-church` **e** `platform_support`;
   `fernando.vargas@fill.tech` fica como conta quebra-vidro da plataforma.
 - **O CI ganhou `e2e-prod`**, rodando a mesma suíte contra
-  `web.useorbien.com.br` sobre `teste1-church`. Não substitui o `e2e` local, que
+  `web.useorbien.com` sobre `teste1-church`. Não substitui o `e2e` local, que
   segue provando a suíte contra banco limpo — e `needs: [e2e]` garante que
   produção só é tocada depois que o job determinístico passou. É o primeiro job
   do repositório que precisa de secret, o que quebra o "PR de fork roda igual"
