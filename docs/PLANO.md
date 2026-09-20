@@ -81,6 +81,38 @@ Em **2026-09-19** fechou `PROD-23` (tela da liderança para os pedidos de
 visita, `apps/web`) — nota na seção 6 — e nasceu já decidida a `DEC-06`
 (seção 9), que fixa os tenants de teste e o que pode rodar contra produção.
 
+Em **2026-09-20** fechou `PROD-05` (sugestão automática de escala por
+disponibilidade e rodízio, Módulo 1) — ver a nota da seção 6. Só backend:
+`GET /celebrations/instances/:instanceId/schedule/suggest`, sem tabela nova.
+
+Também em **2026-09-20** fechou `PROD-08` (carnê do dizimista / relatório anual
+para IR) — nota completa na seção 6. `AnnualDonationReportService` novo em
+`apps/api/src/financial/`, registrado em `PixModule` (mesmo módulo de
+`DonationReceiptsController`, não `FinancialModule`); duas rotas Premium em
+`GET /financial/donation-receipts/annual/*`; sem tabela nova, sem migration,
+sem script de RLS — o relatório é recalculado sob demanda a partir de
+`FinancialTransaction`/`Person`, não persiste em R2. Geração em lote (um PDF
+por doador de uma vez) ficou de fora, documentada como próximo passo.
+
+Também em **2026-09-20** fechou `PROD-17` (segmentação avançada de notificações —
+comportamento, engajamento, inatividade — Premium), nota completa na
+seção 6: três critérios novos resolvidos a partir de sinais que já existiam
+no schema (`VisitRecord`, `AttendanceRecord`, `MaterialOpenRecord`), sem
+critério de "abriu/não abriu notificação" (decisão registrada, dado
+inexistente por pessoa). Gate de Premium no service, mesmo princípio do
+`PROD-24`.
+
+Também em **2026-09-20** fechou `PROD-07` (conciliação bancária — importar OFX,
+Premium — ver a nota da seção 6).
+
+Também em **2026-09-20** fechou `PROD-12` (check-in de membros por QR no encontro,
+ver a nota da seção 6): `MeetingCheckinToken` novo, dois endpoints em
+`MeetingsController`, RLS em `018_rls_meeting_checkin_tokens.sql` (Padrão B,
+suíte de RLS agora em 144 testes em 10 suítes) e tela do líder no `apps/web`
+(`GroupDetailSheet`) — a do membro ficou para o `apps/mobile`, à parte, pelo
+mesmo motivo do `PROD-25`. `PEND-08` nasceu na mesma rodada, sobre um alerta
+de `pre-push.sh` aceito sem ajuste.
+
 ---
 
 ## 1. Visão do produto
@@ -109,7 +141,7 @@ foi retomado — cinco no total.
 | Módulo 1 — Membros e Voluntários | Entregue, incluindo escalas, trocas e check-in |
 | Módulo 2 — Financeiro | Entregue — plano de contas, lançamentos, PIX cenários 1–3 com webhook Asaas, DRE, fluxo de caixa, forecast, exportação contábil |
 | Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
-| Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica, métricas da OneSignal |
+| Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
 | Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
@@ -565,11 +597,124 @@ que o `PROD-20` trouxe no mesmo dia).
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
-| `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
-| `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
-| `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
-| `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
+
+### ~~PROD-08 · Carnê do dizimista / relatório anual para IR~~ · fechado
+
+Entregue em 2026-09-20, em `apps/api/src/financial/`. Reaproveita o mesmo
+critério de "identificado" que `DonationReceiptService` (`PROD-03`) já usa —
+receita, `donor_person_id` presente, `is_anonymous` falso — só que somado por
+ano-calendário em vez de por transação, e sem exigir e-mail cadastrado (o
+tesoureiro é quem gera e entrega o documento, não é envio automático).
+
+- `AnnualDonationReportService` novo, com três métodos: `buildReport`
+  (doador + ano → lista de contribuições e total), `listDonorsForYear`
+  (agregação por doador via `groupBy`, para o tesoureiro gerar em lote) e
+  `generatePdf` (monta o "Carnê do Dizimista", mesmo padrão `pdfmake` do
+  `DonationReceiptService`/`DrePdfService`, incluindo o mesmo bloqueio de
+  `setLocalAccessPolicy`/`setUrlAccessPolicy`).
+- Duas rotas em `DonationReceiptsController` (que já mora em `PixModule`,
+  não em `FinancialModule` — decisão de `PROD-24` para não arrastar o
+  `archiver` ESM-only no grafo de DI; `AnnualDonationReportService` foi
+  registrado nesse mesmo módulo, não no `FinancialModule`):
+  `GET /financial/donation-receipts/annual/summary?year=2026` (lista todos
+  os doadores do ano com total e contagem, para o tesoureiro decidir para
+  quem gerar) e `GET /financial/donation-receipts/annual/:personId?year=2026`
+  (PDF do carnê individual, `StreamableFile`). Mesmo trio de guardas do
+  resto do financeiro Premium (`JwtAuthGuard, RolesGuard, PlanGuard` +
+  `@RequiresPlan('premium')`), mesmos papéis de leitura
+  (`PRODUCT_AREA_READ_ROLES.financial`). A rota `annual/summary` é
+  registrada **antes** de `annual/:personId` no controller — de propósito,
+  para o router não tentar casar "summary" como `personId`.
+- **Sem persistência em R2 nem tabela nova** — decisão deliberada, diferente
+  do recibo por doação. O recibo (`PROD-03`) nasce de um pagamento PIX já
+  confirmado e imutável, por isso faz sentido gravá-lo uma vez. O carnê
+  anual é uma soma recalculável a qualquer momento a partir de
+  `FinancialTransaction`; persisti-lo exigiria migration + script de RLS
+  novo (a ordem frágil que o `CLAUDE.md` documenta em `bootstrap-db.sh`) só
+  para guardar um PDF que o tesoureiro pode reemitir com o mesmo resultado
+  a qualquer hora. Gerado sob demanda e devolvido como `StreamableFile`,
+  mesmo padrão de `DrePdfService.generatePdf`/`DreController.exportPdf`
+  (que também não persiste).
+- **Sem filtro de `status`** na soma — mesmo precedente do `DreService`, que
+  também soma o tenant inteiro sem olhar `status` da transação
+  (`pending`/`paid`/`confirmed`).
+- **Sem CPF** — o schema não modela esse campo em `Person`, então o carnê
+  não o traz. Mesmo espírito de `PROD-03`: o PDF não é documento fiscal (não
+  modela CNPJ/razão social da igreja), e o rodapé diz isso explicitamente,
+  porque aqui o documento se apresenta como prova para a declaração de IR do
+  doador — mais motivo para deixar claro o que ele não é.
+- **Escopo do tenant inteiro, não por congregação** — mesmo recorte que
+  `DonationReceiptService.list` já usa; um doador pode ter contribuído em
+  mais de uma congregação do mesmo tenant ao longo do ano.
+- Testes: `annual-donation-report.service.spec.ts` (soma, filtro do
+  período/critério de identificação, agregação e ordenação da listagem,
+  doador de outro tenant vira 404, PDF gerado mesmo sem contribuição no
+  ano) e `donation-receipts.controller.spec.ts` (as duas rotas novas,
+  incluindo os headers de download do PDF). `financial.module.spec.ts`
+  ganhou a instância nova no smoke test de compilação do módulo.
+- **Ficou de fora**: geração em lote de um PDF por doador de uma vez
+  (endpoint dispara N `generatePdf`, um ZIP ou downloads sequenciais). O
+  endpoint de `annual/summary` cobre a decisão de "para quem gerar"; falta
+  a ação de "gerar todos" em si. Não entrou porque o padrão de ZIP do
+  módulo (`ZipExportService`, `archiver`) vive em `FinancialModule`, e
+  `DonationReceiptsController` está em `PixModule` justamente para não
+  arrastar esse pacote ESM-only — misturar os dois exigiria repensar a
+  fronteira entre os dois módulos, não só adicionar uma rota. Sem tela no
+  `apps/web`/`apps/admin` consumindo nenhuma das duas rotas ainda, também de
+  propósito — a tarefa pediu o back-end.
+
+### ~~PROD-17 · Segmentação avançada de notificações (comportamento, engajamento, inativos)~~ · fechado (Premium)
+
+Entregue em 2026-09-20, sobre a segmentação básica já existente
+(`AudienceSegment`/`SegmentCriteriaDto`) — três critérios novos e aditivos em
+`segment-criteria.dto.ts`: `inactive_since` (sem nenhum sinal de engajamento
+há N dias), `group_attendance_gap` (sem presença em `GroupMeeting` — célula —
+há N dias) e `high_engagement` (N ou mais sinais de engajamento numa janela).
+"Sinal de engajamento" é o que o schema já tinha por outro motivo, sem
+tracking novo: `VisitRecord` (visita), `AttendanceRecord` (presença em
+reunião de célula) e `MaterialOpenRecord` (abertura de material de estudo,
+`PROD-10`). **Não existe critério de "abriu/não abriu notificação"** — decisão
+registrada no cabeçalho do DTO: `NotificationDispatch.reached`/`opened` é
+agregado por disparo (quantos no total), não por destinatário, e não dá para
+responder "esta pessoa abriu" sem inventar tracking novo, o que o item
+pediu para evitar.
+
+**Premium via checagem no service, mesmo princípio do `PROD-24`
+(`registration_price`).** `SegmentsService.create`/`.update` chamam
+`assertBehaviorCriteriaPlan(dto.criteria, user.plan)` antes de gravar —
+`ForbiddenException` quando `criteria` usa qualquer um dos três critérios
+avançados e o plano não é Premium. Os critérios básicos (papel, congregação,
+célula, faixa etária) continuam nos dois planos, na mesma rota e no mesmo
+DTO — por isso o gate é no service, não um `@RequiresPlan('premium')` no
+controller, que bloquearia os básicos junto.
+
+**Resolução muda de mecanismo quando o segmento é avançado.** A segmentação
+básica nunca resolveu destinatário nenhum: `NotificationsService.buildFilters`
+monta filtro de **tag** do OneSignal (`tenant_id`/`congregation_id`/`pg_ids`/
+`role`), e quem casa tag com device é o próprio OneSignal — não existe tag de
+"sem presença há N dias". Por isso, quando qualquer segmento de uma chamada
+(`notifyPost`/`sendManualNotification`) tem critério avançado, a chamada
+inteira (todos os segmentos, básicos inclusive) muda para resolução direta:
+consulta os `UserAccount` ativos e com `person_id` do tenant, filtra pelos
+critérios básicos do próprio segmento (congregação/papel/célula) e pelos
+avançados, e envia por `include_external_user_ids` — o mesmo valor que
+`OneSignal.login(payload.sub)` grava como external id do device em
+`onesignal-client.ts` (MOB-07, ou seja, `UserAccount.id`). OR entre segmentos
+vira união com deduplicação das listas de conta. A preferência de categoria
+(`pref_<categoria>`, MOB-10b) continua respeitada, com o mesmo default
+(`NotificationPreference` sem linha = não desativou), só em `notifyPost` —
+`sendManualNotification` já não filtrava por categoria antes (sem
+`ContentPostType`) e continua sem filtrar. Sem destinatário elegível, não
+chama o OneSignal (evita erro da API com lista vazia) e grava o dispatch como
+`sent` sem `onesignal_id` — não é falha do envio.
+
+Testes: `segment-criteria.dto.spec.ts` (validação dos três critérios novos e
+`hasBehaviorCriteria`), `segments.service.spec.ts` (gate de plano em
+`create`/`update`, básico continua liberado no Starter) e
+`notifications.service.spec.ts` (resolução por `external_user_ids`, filtro
+básico dentro da consulta avançada, os três critérios isoladamente, união e
+deduplicação entre segmentos, preferência de categoria e o caminho sem
+destinatário elegível).
 
 ### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
 
@@ -855,6 +1000,236 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 > coisa (ver a nota do `PROD-13`, logo acima). `created_at` é instante, não
 > data civil, então sai por `formatInstant`.
 
+### ~~PROD-07 · Conciliação bancária (importar OFX)~~ · fechado
+
+Entregue em 2026-09-20, só backend. `financial/export/` já gerava OFX
+(`export.service.ts`); faltava o caminho inverso — importar o extrato do
+banco e casar com os `FinancialTransaction` já lançados no Orbien.
+
+**Endpoints**, os dois Premium (`@RequiresPlan('premium')`, mesmo portão do
+resto do financeiro) e com os mesmos papéis de `financial/export`
+(`treasurer`, `admin_congregation`, `tenant_admin` — sem `secretary`,
+porque conciliação é decisão de quem responde pelo caixa, não lançamento):
+
+- `POST /financial/import/ofx` — upload (`multipart/form-data`, campo
+  `file`, `.ofx`/`.qfx`, limite 10 MB, como o de `persons/import`). Faz
+  parse, tenta casar cada transação do extrato e devolve o relatório.
+- `GET /financial/import/ofx/unmatched` — lista as linhas sem match
+  (`?import_job_id=` filtra por importação), paginada.
+
+**Formato aceito**: OFX 1.x (SGML), o mais comum em banco brasileiro —
+tags sem fechamento (`<FITID>ABC123`, sem `</FITID>`), que é como bancos
+exportam de verdade, mas também fecha com o estilo do nosso próprio
+`export.service.ts` (`<FITID>ABC123</FITID>`), já que SGML aceita as duas.
+Lib escolhida: `node-ofx-parser` — não há parser de OFX no `package.json`
+da raiz; entre as duas libs desse nicho no npm (`ofx` e
+`node-ofx-parser`, ambas derivadas do mesmo `chilts/node-ofx` original),
+`node-ofx-parser` depende de `fast-xml-parser` (mantido) em vez de
+`xml2json` (sem release desde 2015) — instalada da raiz,
+`npm install node-ofx-parser -w orbien-backend`, único lockfile.
+
+**Regra de match**: valor exato + `TRNTYPE`/sinal do `TRNAMT` batendo com o
+tipo da categoria (`CREDIT` → `income`, `DEBIT` → `expense`) + `occurred_at`
+dentro de ±3 dias de `DTPOSTED` (compensação bancária) + `status` em
+`paid`/`confirmed`. Mais de um candidato → fica o de menor diferença de
+dias. Uma `FinancialTransaction` casa com **no máximo uma** linha de
+extrato — `bank_statement_transactions.financial_transaction_id` é
+`@unique`, então isso vale mesmo entre importações diferentes, não só
+dentro da mesma. **Não muda `FinancialTransaction.status`** ao casar: o
+match é só o vínculo de conciliação (`bank_statement_transactions`), quem
+fecha o livro-caixa continua sendo a exportação contábil
+(`ExportService.markConfirmed`), que já existia e não foi tocada.
+
+**Reimport do mesmo extrato não duplica**: `FITID` é a chave do banco por
+natureza (todo banco garante unicidade dele dentro da conta), e
+`@@unique([tenant_id, congregation_id, fitid])` em
+`bank_statement_transactions` é o que torna isso verdade aqui — a segunda
+importação do mesmo arquivo reconhece cada `FITID` já visto e conta como
+`duplicates`, sem criar linha nem tentar casar de novo.
+
+**Decisões de escopo**:
+
+- **Sem tabela de job própria** — `OfxImportService` reaproveita
+  `ImportJob` (`type: 'financial_ofx'`), o mesmo modelo genérico que
+  `PersonsImportService` usa. O relatório (`{ job_id, total, matched,
+  unmatched, duplicates, errors }`) é montado a partir dele mais a
+  contagem de `bank_statement_transactions`, sem tabela nova só para
+  progresso de import.
+- **Tabela nova, só uma**: `bank_statement_transactions` — uma linha por
+  transação do extrato, com o `financial_transaction_id` (nulo = ainda sem
+  match) que sustenta a listagem de não-casados.
+- **RLS Padrão B**, o mesmo de `export_jobs`/`import_jobs`
+  (`20260613000000_add_export_import_jobs`): tabela nova, sem policy
+  anterior para o passo 4 do `bootstrap-db.sh` derrubar, então a
+  `ENABLE`/`FORCE ROW LEVEL SECURITY` e a policy nascem dentro da própria
+  migration do Prisma
+  (`20260920022955_add_bank_statement_transactions`) — **sem** entrar em
+  `bootstrap-db.sh`. O passo 7 continua cobrindo isso pelo catch-all
+  genérico (qualquer tabela em `public` sem RLS habilitado derruba o
+  passo), do mesmo jeito que já cobre `export_jobs`/`import_jobs` sem
+  checagem nomeada própria — confirmado rodando `bootstrap-db.sh` do zero
+  depois da migration.
+- **Tenant + congregação, sem exceção de `tenant_admin`** — ao contrário de
+  `financial_transactions`/`cost_centers` (que usam
+  `app_congregation_allowed()`, com a exceção), esta tabela segue o
+  isolamento simples de `export_jobs`/`import_jobs`: é artefato de
+  importação, não o livro-caixa em si, e nada no produto hoje pede que
+  `tenant_admin` veja conciliação de outra congregação sem entrar nela.
+  Sem teste de isolamento dedicado em `test/rls/isolation.spec.ts`, pelo
+  mesmo motivo — `export_jobs`/`import_jobs` também não têm.
+- **Sem caminho assíncrono**: diferente de `persons/import` (split em 500
+  linhas) e `financial/export` (split em 92 dias), a importação de OFX é
+  sempre síncrona — extrato bancário mensal não chega a milhares de
+  linhas. Limite de sanidade: 5000 transações por arquivo (mesma ordem de
+  grandeza do `MAX_IMPORT_ROWS` de `persons/import`), acima disso é 400.
+- **Tela de conciliação manual não entra nesta entrega** — só a rota de
+  listagem dos não-casados (`GET .../unmatched`), como o prompt permitia.
+
+Testes: `ofx-import.service.spec.ts` (extensão/tamanho inválidos, OFX sem
+transação, match por valor+data, sem candidato, reimport não duplica,
+linha sem `FITID` vira erro sem contar no total, auditoria que falha não
+desfaz a importação, filtro de não-casados por tenant/congregação e por
+`import_job_id`), `ofx-import.controller.spec.ts` (delega ao service, papel
+e plano exigidos), `financial.module.spec.ts` atualizado com o controller e
+o service novos. `npm run test:rls -w orbien-backend` roda sem alteração —
+138 testes em 9 suítes, sem mudança de número: nenhum arquivo de RLS
+`0NN_*` novo, e a tabela nova não tem suíte própria pela decisão acima.
+
+### ~~PROD-05 · Sugestão automática de escala por disponibilidade e rodízio~~ · fechado
+
+Entregue em 2026-09-20: `GET /celebrations/instances/:instanceId/schedule/suggest`,
+no mesmo `CelebrationScheduleController` (herda `@RequiresPlan('premium')` de
+classe — o módulo inteiro já é Premium, não precisou de decorator próprio) e
+os mesmos `MANAGE_ROLES` de `getSchedule`/`addMinistry`. Serviço novo,
+`CelebrationScheduleSuggestionService`, sem tabela nova — cruza dado que já
+existia:
+
+- **Funções a preencher são as já vinculadas à escala** (`CelebrationMinistry`
+  criado por `addMinistry`/`applyTemplate`), não um formulário à parte — a
+  sugestão preenche, não decide, quais funções a celebração precisa.
+- **Disponibilidade declarada** (`VolunteerProfile.availability`, Json
+  `{dia: slot[]}`) é checada contra o dia da semana de `scheduled_date` e um
+  balde de horário derivado de `Celebration.start_time`
+  (`<12h` manhã, `12–18h` tarde, `≥18h` noite — mesmos três rótulos que o
+  cadastro já usa). Quem não declarou o dia/horário não é sugerido: não dá
+  para confirmar disponibilidade a partir do silêncio.
+- **Indisponibilidade pontual** (`VolunteerUnavailabilityDate`) exclui pela
+  data exata da instância, mesma consulta de
+  `CelebrationAssignmentService.checkUnavailability`.
+- **Rodízio**: ordena por menos vezes atribuído à mesma função primeiro e,
+  empatado, por quem serviu há mais tempo (nunca serviu conta como "há mais
+  tempo" possível). Histórico conta `pending`/`confirmed`; `declined` e
+  `swapped` não contam — o voluntário não chegou a servir naquele slot.
+  Sem corte por janela de tempo (ex. "últimos 6 meses"): um número mágico
+  sem evidência de que o rodízio real do cliente zero precisa disso, e é
+  mais fácil apertar depois do que adivinhar agora.
+- **Não filtra por dupla escalação na mesma celebração** (mesma pessoa em
+  duas funções do mesmo culto): igreja pequena escala a mesma pessoa em som
+  e recepção com frequência, e o próprio schema não impede isso hoje
+  (`@@unique` de `CelebrationAssignment` é por função, não por instância).
+- **Teto de 10 sugestões por função** (`MAX_SUGGESTIONS_PER_MINISTRY`),
+  com `eligible_count` informando o total elegível — evita payload grande
+  em ministério com dezenas de voluntários; quem decide de fato escalar usa
+  o `POST .../assignments` que já existia, então o teto não bloqueia nada.
+- **Sem tela no `apps/web`**: o padrão de UI de escala
+  (`AssignmentsPanel`/equivalente) já existe, mas encaixar "sugerir e um
+  clique aplica" nele é decisão de fluxo (lista simples? um botão por
+  função? aplica direto ou só preenche o formulário?) que vale ficar para
+  quem for desenhar a tela, não decidida aqui às pressas. Fica como API
+  pronta, mesmo padrão do `PROD-23`.
+
+Testes: `celebration-schedule-suggestion.service.spec.ts` (instância
+inexistente, sem escala, sem ministério, já atribuído, sem disponibilidade
+declarada, indisponibilidade pontual, ordenação de rodízio, `declined`/
+`swapped` fora da contagem, `availability` em formato inesperado tratado
+como indisponível em vez de lançar) e o `controller.spec.ts`/
+`module.spec.ts` do módulo atualizados para o provider novo. RLS: nenhum
+script novo — só leitura de tabelas que já existiam sob RLS
+(`volunteer_ministries`, `volunteer_unavailability_dates`,
+`celebration_assignments`), mesmas policies que `celebration-assignment.service.ts`
+já usa.
+
+### ~~PROD-12 · Check-in de membros por QR no encontro~~ · fechado
+
+Entregue em 2026-09-20. `QrToken` (schema) continua exclusivo do cadastro de
+visitante (`apps/api/src/visitor/`) — não foi tocado. Este item é caminho
+novo, sob o próprio modelo: `MeetingCheckinToken`
+(`20260920022631_add_meeting_checkin_tokens`), um por `GroupMeeting`.
+
+- **Dois endpoints em `MeetingsController`**, mesmo prefixo `small-groups/`:
+  `POST /small-groups/meetings/:meetingId/checkin-token` (líder gera/renova,
+  `MEETING_WRITE_ROLES` — os mesmos que já escrevem presença manual em
+  `recordAttendance`) e `POST /small-groups/meetings/checkin` (membro usa o
+  token, `MEETING_LIST_READ_ROLES`, o mesmo conjunto de `findByGroup`). O
+  segundo não leva `:meetingId` no path — o token já identifica o encontro,
+  então quem escaneia não precisa saber o id da reunião de antemão.
+- **Expiração em duas camadas, com papéis diferentes.** `expires_at` no
+  token (`CHECKIN_TOKEN_TTL_MINUTES = 240`, 4h) é o que barra check-in tarde
+  demais depois que o QR já foi mostrado; gerar de novo rotaciona o token no
+  mesmo `upsert` (chave única em `group_meeting_id`), o que revoga o QR
+  anterior sem precisar de um `is_active` — quem escaneou o antigo cai no
+  mesmo "inválido ou expirado". Já `CHECKIN_MAX_MEETING_AGE_HOURS = 24` roda
+  na **geração**, não no check-in: barra o líder de abrir check-in por QR
+  para um `GroupMeeting` lançado tarde, de forma manual, com `occurred_at` de
+  mais de um dia atrás — o resto do módulo permite `occurred_at` livre na
+  criação, então sem este limite "encontro que já fechou" só seria barrado
+  por coincidência, se sobrasse um token velho ainda dentro da janela de 4h.
+  Os dois números são escolha desta entrega, sem pedido explícito de
+  produto — documentados aqui por serem decisão, não os únicos valores
+  possíveis.
+- **Participação, não papel — mesmo princípio de `PEND-01`/`PROD-01`, sem
+  exceção para liderança.** `resolveParticipantPersonId` (refatorado de
+  `assertParticipant`, que passa a chamá-lo) exige `GroupMembership` real na
+  célula do encontro para *qualquer* papel, inclusive `cell_leader` — ao
+  contrário de `findByGroup`, aqui não há bypass por
+  `MEETING_PRIVILEGED_ROLES`. Um `cell_leader` só se auto-marca presente na
+  própria célula porque também tem uma linha de `GroupMembership`
+  (`role: leader`) nela; de qualquer outra, cai no mesmo 403 que um `member`
+  qualquer.
+- **Sem duplicar presença**: `checkin` confere `AttendanceRecord` existente
+  (chave `group_meeting_id`+`person_id`) antes de criar e devolve
+  `already_checked_in` em vez de tentar de novo — o `unique` da tabela já
+  garantia a integridade, isto evita o 500 de violação de constraint.
+- **RLS**: tabela nova, `018_rls_meeting_checkin_tokens.sql`, Padrão B — o
+  mesmo de `012_rls_group_messages.sql`, já usado no módulo (congregação, sem
+  `app_current_user() IS NOT NULL`, porque quem decide validade e
+  participação é o `MeetingsService`, não a policy). Ligado no
+  `bootstrap-db.sh` no mesmo lugar de 012/014/015/016 (nasce certa, sem
+  `tenant_isolation` de 001 para o passo 4 derrubar) e com verificação
+  própria no passo 7. `test/rls/meeting-checkin-tokens.spec.ts` (6 casos,
+  mesmo roteiro de `networks.spec.ts`) prova o isolamento por congregação —
+  a suíte de RLS fecha em **144 testes em 10 suítes** (a última contagem
+  registrada aqui, 125 em 7, já estava desatualizada por `audit-writes.spec.ts`
+  e `auth-tables.spec.ts`, que a varredura de 2026-09-15 não tinha contado;
+  ficam registrados agora que apareceram). `PEND-08` (seção 7) documenta um
+  alerta de portão que este arquivo dispara, deliberadamente aceito.
+- **Tela**: só o lado do líder, no `apps/web`. `GroupDetailSheet`, aba
+  "Reuniões", ganhou "Gerar código de check-in" dentro do encontro expandido
+  (mesmo `canEdit` que já libera "Registrar reunião") — mostra o código e a
+  validade, com botão de copiar e "Renovar". **É código em texto, não uma
+  imagem de QR**: nenhuma das duas apps tem hoje um consumidor que escaneie
+  algo (nenhuma biblioteca de QR no `apps/web`, nenhuma câmera integrada em
+  lugar nenhum da base) — a especificação do item permite "QR (ou código)",
+  e gerar uma imagem sem quem a leia seria trabalho sem uso imediato. **O
+  lado do membro (escanear/informar o código) não entrou nesta sessão.**
+  Mesma pergunta que o `PROD-25` já respondeu para inscrição em evento: o
+  `apps/web` é `(admin)`/`(public)`, sem área de membro — não caberia lá — e
+  o `apps/mobile` é onde o membro já consome conteúdo. Diferente do
+  `PROD-25`, aqui a tela do membro não é só consumir uma API pronta: exigiria
+  decidir entre digitar o código à mão ou apontar a câmera (novo pacote,
+  `expo-camera` ou `expo-barcode-scanner`, com o mesmo custo de build nova —
+  não OTA — que o `expo-clipboard` do `PROD-25` documentou), o que é escopo
+  maior que "tela sobre API pronta". Fica para trabalho à parte; a API está
+  pronta e testada para consumir de lá quando entrar.
+
+Testes: `meetings.service.spec.ts` (`createCheckinToken` e `checkin` — 8
+casos novos, incluindo o encontro velho demais para gerar QR, token expirado,
+não-membro com token válido e não-duplicação) e `meetings.controller.spec.ts`
+(papéis dos dois endpoints novos e delegação), além de
+`meeting-checkin.dto.spec.ts`. `GroupDetailSheet.test.tsx` ganhou 3 casos
+(gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
+Nenhuma suíte existente mudou de comportamento.
+
 ---
 
 ## 7. Pendências de código
@@ -1076,6 +1451,37 @@ A correção é de backend, não de tela: expor o `qr_code` do `PixPayment`
 ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
 ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
 tela sobre API pronta.
+
+### PEND-08 · `pre-push.sh` só reconhece `test/rls/isolation.spec.ts` · dívida
+
+Achado do próprio portão ao fechar `PROD-12` (2026-09-20), aceito sem ajuste
+— registrado por escrito em vez de corrigido por conta própria, como o
+`CLAUDE.md` pede para alerta de portão.
+
+O passo "tabela nova exige RLS e teste de isolamento"
+(`scripts/pre-push.sh:93-105`) confere ENABLE ROW LEVEL SECURITY em qualquer
+script `0NN_rls_*.sql` — isso funciona —, mas o caso de teste só procura o
+nome da tabela (ou seu delegate Prisma) dentro de **um arquivo fixo**,
+`test/rls/isolation.spec.ts`. Desde que o módulo passou a preferir um arquivo
+dedicado por tabela nova (`networks.spec.ts`, `event-registrations.spec.ts`,
+agora `meeting-checkin-tokens.spec.ts`), esse caminho ficou incompleto: o
+alerta dispara mesmo com isolamento provado, só que no arquivo errado.
+
+Evidência: `networks` (`PROD-20`, 2026-09-15) já dispara o mesmo alerta hoje
+— zero ocorrências de `network` em `isolation.spec.ts` — e nunca foi
+registrado como pendência; `event_registrations` (`PROD-16`) tem os dois,
+arquivo dedicado **e** um caso em `isolation.spec.ts`, então não dispara.
+`meeting_checkin_tokens` (`PROD-12`) segue o padrão de `networks`: só arquivo
+dedicado, então também dispara.
+
+Decisão desta sessão: não editar `pre-push.sh` fora do que foi pedido. É
+alerta, não bloqueio (`alerta`, não `bloqueia`), e a suíte dedicada prova o
+isolamento de verdade — o portão está incompleto, não errado. Corrigir
+precisaria decidir entre estender a lista de arquivos que o `grep` varre ou
+aceitar duplicar o caso em `isolation.spec.ts` como `event_registrations`
+faz; as duas têm custo (a primeira mexe num script comum a todo o time, a
+segunda é o retrabalho que motivou ter arquivo dedicado). Fica para quem
+decidir se vale ajustar o script ou vale mais duplicar o caso.
 
 ---
 

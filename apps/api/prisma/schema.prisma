@@ -30,56 +30,58 @@ model Tenant {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  congregations           Congregation[]
-  brandingConfig          BrandingConfig?
-  tenantPlan              TenantPlan?
-  userAccounts            UserAccount[]
-  roleAssignments         RoleAssignment[]
-  persons                 Person[]
-  households              Household[]
-  classificationHistories ClassificationHistory[]
-  visitRecords            VisitRecord[]
-  consentRecords          ConsentRecord[]
-  personTags              PersonTag[]
-  smallGroups             SmallGroup[]
-  networks                Network[]
-  groupTypes              GroupType[]
-  groupMemberships        GroupMembership[]
-  groupMeetings           GroupMeeting[]
-  attendanceRecords       AttendanceRecord[]
-  prayerRequests          PrayerRequest[]
-  groupMessages           GroupMessage[]
-  studyMaterials          StudyMaterial[]
-  studyMaterialVersions   StudyMaterialVersion[]
-  materialOpenRecords     MaterialOpenRecord[]
-  groupMeetingMaterials   GroupMeetingMaterial[]
-  financialCategories     FinancialCategory[]
-  costCenters             CostCenter[]
-  financialTransactions   FinancialTransaction[]
-  transactionAttachments  TransactionAttachment[]
-  recurringRules          RecurringRule[]
-  pixPayments             PixPayment[]
-  donationReceipts        DonationReceipt[]
-  contentPosts            ContentPost[]
-  eventRegistrations      EventRegistration[]
-  audienceSegments        AudienceSegment[]
-  notificationDispatches  NotificationDispatch[]
-  ministries              Ministry[]
-  volunteerProfiles       VolunteerProfile[]
-  volunteerMinistries     VolunteerMinistry[]
-  celebrations            Celebration[]
-  celebrationInstances    CelebrationInstance[]
-  serviceOrders           ServiceOrder[]
-  serviceOrderItems       ServiceOrderItem[]
-  setlists                Setlist[]
-  setlistSongs            SetlistSong[]
-  songs                   Song[]
-  auditLogs               AuditLog[]
-  qrTokens                QrToken[]
-  exportJobs              ExportJob[]
-  importJobs              ImportJob[]
-  notificationPreferences NotificationPreference[]
-  smallGroupVisitRequests SmallGroupVisitRequest[]
+  congregations             Congregation[]
+  brandingConfig            BrandingConfig?
+  tenantPlan                TenantPlan?
+  userAccounts              UserAccount[]
+  roleAssignments           RoleAssignment[]
+  persons                   Person[]
+  households                Household[]
+  classificationHistories   ClassificationHistory[]
+  visitRecords              VisitRecord[]
+  consentRecords            ConsentRecord[]
+  personTags                PersonTag[]
+  smallGroups               SmallGroup[]
+  networks                  Network[]
+  groupTypes                GroupType[]
+  groupMemberships          GroupMembership[]
+  groupMeetings             GroupMeeting[]
+  attendanceRecords         AttendanceRecord[]
+  meetingCheckinTokens      MeetingCheckinToken[]
+  prayerRequests            PrayerRequest[]
+  groupMessages             GroupMessage[]
+  studyMaterials            StudyMaterial[]
+  studyMaterialVersions     StudyMaterialVersion[]
+  materialOpenRecords       MaterialOpenRecord[]
+  groupMeetingMaterials     GroupMeetingMaterial[]
+  financialCategories       FinancialCategory[]
+  costCenters               CostCenter[]
+  financialTransactions     FinancialTransaction[]
+  transactionAttachments    TransactionAttachment[]
+  recurringRules            RecurringRule[]
+  pixPayments               PixPayment[]
+  donationReceipts          DonationReceipt[]
+  contentPosts              ContentPost[]
+  eventRegistrations        EventRegistration[]
+  audienceSegments          AudienceSegment[]
+  notificationDispatches    NotificationDispatch[]
+  ministries                Ministry[]
+  volunteerProfiles         VolunteerProfile[]
+  volunteerMinistries       VolunteerMinistry[]
+  celebrations              Celebration[]
+  celebrationInstances      CelebrationInstance[]
+  serviceOrders             ServiceOrder[]
+  serviceOrderItems         ServiceOrderItem[]
+  setlists                  Setlist[]
+  setlistSongs              SetlistSong[]
+  songs                     Song[]
+  auditLogs                 AuditLog[]
+  qrTokens                  QrToken[]
+  exportJobs                ExportJob[]
+  importJobs                ImportJob[]
+  bankStatementTransactions BankStatementTransaction[]
+  notificationPreferences   NotificationPreference[]
+  smallGroupVisitRequests   SmallGroupVisitRequest[]
 
   @@index([id])
   @@map("tenants")
@@ -105,50 +107,52 @@ model Congregation {
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
-  userAccounts            UserAccount[]
-  roleAssignments         RoleAssignment[]
-  persons                 Person[]
-  households              Household[]
-  classificationHistories ClassificationHistory[]
-  visitRecords            VisitRecord[]
-  consentRecords          ConsentRecord[]
-  personTags              PersonTag[]
-  smallGroups             SmallGroup[]
-  networks                Network[]
-  groupTypes              GroupType[]
-  groupMemberships        GroupMembership[]
-  groupMeetings           GroupMeeting[]
-  attendanceRecords       AttendanceRecord[]
-  prayerRequests          PrayerRequest[]
-  groupMessages           GroupMessage[]
-  studyMaterials          StudyMaterial[]
-  financialCategories     FinancialCategory[]
-  costCenters             CostCenter[]
-  financialTransactions   FinancialTransaction[]
-  recurringRules          RecurringRule[]
-  pixPayments             PixPayment[]
-  contentPosts            ContentPost[]
-  eventRegistrations      EventRegistration[]
-  audienceSegments        AudienceSegment[]
-  notificationDispatches  NotificationDispatch[]
-  ministries              Ministry[]
-  volunteerProfiles       VolunteerProfile[]
-  volunteerMinistries     VolunteerMinistry[]
-  celebrations            Celebration[]
-  celebrationInstances    CelebrationInstance[]
-  serviceOrders           ServiceOrder[]
-  serviceOrderItems       ServiceOrderItem[]
-  setlists                Setlist[]
-  setlistSongs            SetlistSong[]
-  songs                   Song[]
-  materialOpenRecords     MaterialOpenRecord[]
-  groupMeetingMaterials   GroupMeetingMaterial[]
-  studyMaterialVersions   StudyMaterialVersion[]
-  qrTokens                QrToken[]
-  exportJobs              ExportJob[]
-  importJobs              ImportJob[]
-  notificationPreferences NotificationPreference[]
-  smallGroupVisitRequests SmallGroupVisitRequest[]
+  userAccounts              UserAccount[]
+  roleAssignments           RoleAssignment[]
+  persons                   Person[]
+  households                Household[]
+  classificationHistories   ClassificationHistory[]
+  visitRecords              VisitRecord[]
+  consentRecords            ConsentRecord[]
+  personTags                PersonTag[]
+  smallGroups               SmallGroup[]
+  networks                  Network[]
+  groupTypes                GroupType[]
+  groupMemberships          GroupMembership[]
+  groupMeetings             GroupMeeting[]
+  attendanceRecords         AttendanceRecord[]
+  meetingCheckinTokens      MeetingCheckinToken[]
+  prayerRequests            PrayerRequest[]
+  groupMessages             GroupMessage[]
+  studyMaterials            StudyMaterial[]
+  financialCategories       FinancialCategory[]
+  costCenters               CostCenter[]
+  financialTransactions     FinancialTransaction[]
+  recurringRules            RecurringRule[]
+  pixPayments               PixPayment[]
+  contentPosts              ContentPost[]
+  eventRegistrations        EventRegistration[]
+  audienceSegments          AudienceSegment[]
+  notificationDispatches    NotificationDispatch[]
+  ministries                Ministry[]
+  volunteerProfiles         VolunteerProfile[]
+  volunteerMinistries       VolunteerMinistry[]
+  celebrations              Celebration[]
+  celebrationInstances      CelebrationInstance[]
+  serviceOrders             ServiceOrder[]
+  serviceOrderItems         ServiceOrderItem[]
+  setlists                  Setlist[]
+  setlistSongs              SetlistSong[]
+  songs                     Song[]
+  materialOpenRecords       MaterialOpenRecord[]
+  groupMeetingMaterials     GroupMeetingMaterial[]
+  studyMaterialVersions     StudyMaterialVersion[]
+  qrTokens                  QrToken[]
+  exportJobs                ExportJob[]
+  importJobs                ImportJob[]
+  bankStatementTransactions BankStatementTransaction[]
+  notificationPreferences   NotificationPreference[]
+  smallGroupVisitRequests   SmallGroupVisitRequest[]
 
   @@index([tenant_id, id])
   @@map("congregations")
@@ -562,14 +566,14 @@ model SmallGroup {
 }
 
 model Network {
-  id                String   @id @default(uuid())
-  tenant_id         String
-  congregation_id   String
-  name              String
-  leader_person_id  String?
-  health_goal_pct   Int?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
+  id               String   @id @default(uuid())
+  tenant_id        String
+  congregation_id  String
+  name             String
+  leader_person_id String?
+  health_goal_pct  Int?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -665,6 +669,7 @@ model GroupMeeting {
 
   attendanceRecords AttendanceRecord[]
   materials         GroupMeetingMaterial[]
+  checkinToken      MeetingCheckinToken?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -692,6 +697,32 @@ model AttendanceRecord {
   @@index([tenant_id, congregation_id])
   @@index([group_meeting_id])
   @@map("attendance_records")
+}
+
+/// Check-in de presença por QR (PROD-12). Um token por `GroupMeeting`: o
+/// líder gera (ou regenera) na hora do encontro, o membro escaneia e a
+/// presença é gravada sozinha em `AttendanceRecord`. Não é o mesmo caso de uso
+/// de `QrToken` — aquele é do cadastro público de visitante, sem tenant
+/// autenticado; este exige `GroupMembership` real e expira em janela curta
+/// (`MeetingsService.CHECKIN_TOKEN_TTL_MINUTES`).
+model MeetingCheckinToken {
+  id               String   @id @default(uuid())
+  tenant_id        String
+  congregation_id  String
+  group_meeting_id String   @unique
+  token            String   @unique @default(uuid())
+  expires_at       DateTime
+  created_by       String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  groupMeeting GroupMeeting @relation(fields: [group_meeting_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  @@map("meeting_checkin_tokens")
 }
 
 model PrayerRequest {
@@ -943,9 +974,10 @@ model FinancialTransaction {
   recurringRule RecurringRule?    @relation(fields: [recurring_rule_id], references: [id], onDelete: SetNull)
   createdBy     UserAccount       @relation(fields: [created_by_user_id], references: [id], onDelete: Restrict)
 
-  attachments      TransactionAttachment[]
-  donationReceipts DonationReceipt[]
-  pixPayment       PixPayment?
+  attachments              TransactionAttachment[]
+  donationReceipts         DonationReceipt[]
+  pixPayment               PixPayment?
+  bankStatementTransaction BankStatementTransaction?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1978,7 +2010,38 @@ model ImportJob {
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
 
+  bankStatementTransactions BankStatementTransaction[]
+
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, created_at(sort: Desc)])
   @@map("import_jobs")
+}
+
+// PROD-07: conciliação bancária — cada linha do extrato OFX importado, e o
+// FinancialTransaction com que ela casou (se casou). O job em si é um
+// ImportJob comum, type = 'financial_ofx' — reaproveita o mesmo modelo de
+// PersonsImportService em vez de nascer uma tabela de job paralela.
+model BankStatementTransaction {
+  id                       String   @id @default(uuid())
+  tenant_id                String
+  congregation_id          String
+  import_job_id            String
+  fitid                    String
+  posted_at                DateTime
+  amount                   Decimal  @db.Decimal(12, 2)
+  is_credit                Boolean
+  description              String?
+  financial_transaction_id String?  @unique
+  created_at               DateTime @default(now())
+
+  tenant               Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation         Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  importJob            ImportJob             @relation(fields: [import_job_id], references: [id], onDelete: Cascade)
+  financialTransaction FinancialTransaction? @relation(fields: [financial_transaction_id], references: [id], onDelete: SetNull)
+
+  // FITID é a chave de dedup do banco — reimportar o mesmo extrato não cria
+  // linha duplicada (ver OfxImportService.importOfx).
+  @@unique([tenant_id, congregation_id, fitid])
+  @@index([tenant_id, congregation_id, import_job_id])
+  @@map("bank_statement_transactions")
 }

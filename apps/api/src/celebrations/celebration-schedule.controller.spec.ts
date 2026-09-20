@@ -1,6 +1,7 @@
 import { Reflector } from '@nestjs/core';
 import { CelebrationScheduleController } from './celebration-schedule.controller';
 import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationScheduleSuggestionService } from './celebration-schedule-suggestion.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -25,6 +26,7 @@ function rolesFor(methodName: keyof CelebrationScheduleController): string[] | u
 
 describe('CelebrationScheduleController', () => {
   let scheduleService: jest.Mocked<CelebrationScheduleService>;
+  let suggestionService: jest.Mocked<CelebrationScheduleSuggestionService>;
   let controller: CelebrationScheduleController;
 
   beforeEach(() => {
@@ -37,7 +39,11 @@ describe('CelebrationScheduleController', () => {
       applyTemplate: jest.fn(),
     } as unknown as jest.Mocked<CelebrationScheduleService>;
 
-    controller = new CelebrationScheduleController(scheduleService);
+    suggestionService = {
+      suggest: jest.fn(),
+    } as unknown as jest.Mocked<CelebrationScheduleSuggestionService>;
+
+    controller = new CelebrationScheduleController(scheduleService, suggestionService);
   });
 
   it('createOrGet delega ao service e exige papel de gestão', async () => {
@@ -103,5 +109,15 @@ describe('CelebrationScheduleController', () => {
     });
     expect(result).toEqual({ id: 's1' });
     expect(rolesFor('applyTemplate')).toEqual(MANAGE_ROLES);
+  });
+
+  it('suggest delega ao service de sugestão e exige papel de gestão', async () => {
+    suggestionService.suggest.mockResolvedValue([{ celebration_ministry_id: 'cm1' }] as never);
+
+    const result = await controller.suggest('i1', user);
+
+    expect(suggestionService.suggest).toHaveBeenCalledWith('tenant-1', 'cong-1', 'i1');
+    expect(result).toEqual([{ celebration_ministry_id: 'cm1' }]);
+    expect(rolesFor('suggest')).toEqual(MANAGE_ROLES);
   });
 });

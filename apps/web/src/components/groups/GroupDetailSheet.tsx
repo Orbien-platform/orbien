@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2, History } from "lucide-react";
+import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileText, Link2, Trash2, History, QrCode, Copy } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Dialog } from "@base-ui/react/dialog";
 import {
@@ -40,6 +40,12 @@ interface Meeting {
   occurred_at: string;
   topic?: string;
   _count?: { attendanceRecords: number };
+}
+
+// PROD-12
+interface CheckinToken {
+  token: string;
+  expires_at: string;
 }
 
 type MaterialVisibility = "all" | "leaders_only";
@@ -304,6 +310,12 @@ export function GroupDetailSheet({
   const [loadingVersionsId, setLoadingVersionsId] = useState<string | null>(null);
   const [versionsErrorId, setVersionsErrorId] = useState<string | null>(null);
   const [isRemovingMaterial, setIsRemovingMaterial] = useState(false);
+  // PROD-12: código de check-in por encontro. Guardado por meetingId — não
+  // existe endpoint de leitura (o token não é exposto por GET, só devolvido
+  // na resposta de geração), então só mostra o que foi gerado NESTA sessão.
+  const [checkinTokens, setCheckinTokens] = useState<Record<string, CheckinToken>>({});
+  const [generatingCheckinId, setGeneratingCheckinId] = useState<string | null>(null);
+  const [checkinErrorId, setCheckinErrorId] = useState<string | null>(null);
   // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
   // cada recarga disparada por um evento (registrar encontro). Evita setState
   // síncrono dentro do effect, que dispara renders em cascata.
@@ -376,6 +388,8 @@ export function GroupDetailSheet({
       setMeetingMaterials({});
       setLoadedKey(null);
       setIsLeaderOfGroup(false);
+      setCheckinTokens({});
+      setCheckinErrorId(null);
     }
     onOpenChange(next);
   }
@@ -427,6 +441,24 @@ export function GroupDetailSheet({
       setVersionsErrorId(materialId);
     } finally {
       setLoadingVersionsId(null);
+    }
+  }
+
+  // PROD-12: gera (ou renova) o código de check-in do encontro. Chamar de
+  // novo é o jeito de revogar o anterior — o backend rotaciona o token no
+  // mesmo `upsert`.
+  async function generateCheckinToken(meetingId: string) {
+    setGeneratingCheckinId(meetingId);
+    setCheckinErrorId(null);
+    try {
+      const { data } = await api.post<CheckinToken>(
+        `/small-groups/meetings/${meetingId}/checkin-token`,
+      );
+      setCheckinTokens((prev) => ({ ...prev, [meetingId]: data }));
+    } catch {
+      setCheckinErrorId(meetingId);
+    } finally {
+      setGeneratingCheckinId(null);
     }
   }
 
@@ -726,6 +758,71 @@ export function GroupDetailSheet({
 
                             {isExpanded && (
                               <div className="px-4 pb-3 pl-4">
+                                {canEdit && (
+                                  <div className="mb-3 flex flex-col gap-1.5 rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2">
+                                    {checkinTokens[mtg.id] ? (
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex flex-col">
+                                          <span className="font-mono text-sm font-medium text-ink dark:text-white">
+                                            {checkinTokens[mtg.id].token}
+                                          </span>
+                                          <span className="text-xs text-stone">
+                                            Válido até{" "}
+                                            {formatInstant(checkinTokens[mtg.id].expires_at, {
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                            })}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              navigator.clipboard?.writeText(checkinTokens[mtg.id].token)
+                                            }
+                                            className="text-stone hover:text-ink dark:hover:text-white"
+                                            aria-label="Copiar código de check-in"
+                                          >
+                                            <Copy size={14} strokeWidth={1.5} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => generateCheckinToken(mtg.id)}
+                                            disabled={generatingCheckinId === mtg.id}
+                                            className="inline-flex items-center gap-1 rounded-[8px] border border-[var(--border-default)] px-2 py-1 text-xs font-medium text-ink hover:bg-white disabled:opacity-50 dark:text-white"
+                                          >
+                                            {generatingCheckinId === mtg.id ? (
+                                              <Loader2 size={12} className="animate-spin" />
+                                            ) : (
+                                              <QrCode size={12} strokeWidth={1.5} />
+                                            )}
+                                            Renovar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => generateCheckinToken(mtg.id)}
+                                        disabled={generatingCheckinId === mtg.id}
+                                        className="inline-flex items-center gap-1.5 self-start rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-white disabled:opacity-50 dark:text-white"
+                                      >
+                                        {generatingCheckinId === mtg.id ? (
+                                          <Loader2 size={14} className="animate-spin" />
+                                        ) : (
+                                          <QrCode size={14} strokeWidth={1.5} />
+                                        )}
+                                        Gerar código de check-in
+                                      </button>
+                                    )}
+                                    {checkinErrorId === mtg.id && (
+                                      <span className="text-xs text-crimson">
+                                        Não deu para gerar o código. Tente de novo.
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
                                 {loadingMaterialsId === mtg.id ? (
                                   <div className="flex items-center justify-center py-3">
                                     <Loader2 size={16} className="animate-spin text-stone" />

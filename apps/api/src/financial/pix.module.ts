@@ -7,6 +7,7 @@ import { PixController } from './pix.controller';
 import { PixService } from './pix.service';
 import { DonationReceiptsController } from './donation-receipts.controller';
 import { DonationReceiptService } from './donation-receipts.service';
+import { AnnualDonationReportService } from './annual-donation-report.service';
 
 /**
  * Módulo próprio, separado do resto de `FinancialModule` (`PROD-24`):
@@ -20,7 +21,7 @@ import { DonationReceiptService } from './donation-receipts.service';
 @Module({
   imports: [PrismaModule, HttpModule, StorageModule, MailModule],
   controllers: [PixController, DonationReceiptsController],
-  providers: [PixService, DonationReceiptService],
+  providers: [PixService, DonationReceiptService, AnnualDonationReportService],
   exports: [PixService],
 })
 export class PixModule {}
