@@ -47,6 +47,7 @@ model Tenant {
   groupMemberships        GroupMembership[]
   groupMeetings           GroupMeeting[]
   attendanceRecords       AttendanceRecord[]
+  meetingCheckinTokens    MeetingCheckinToken[]
   prayerRequests          PrayerRequest[]
   groupMessages           GroupMessage[]
   studyMaterials          StudyMaterial[]
@@ -119,6 +120,7 @@ model Congregation {
   groupMemberships        GroupMembership[]
   groupMeetings           GroupMeeting[]
   attendanceRecords       AttendanceRecord[]
+  meetingCheckinTokens    MeetingCheckinToken[]
   prayerRequests          PrayerRequest[]
   groupMessages           GroupMessage[]
   studyMaterials          StudyMaterial[]
@@ -665,6 +667,7 @@ model GroupMeeting {
 
   attendanceRecords AttendanceRecord[]
   materials         GroupMeetingMaterial[]
+  checkinToken      MeetingCheckinToken?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -692,6 +695,32 @@ model AttendanceRecord {
   @@index([tenant_id, congregation_id])
   @@index([group_meeting_id])
   @@map("attendance_records")
+}
+
+/// Check-in de presença por QR (PROD-12). Um token por `GroupMeeting`: o
+/// líder gera (ou regenera) na hora do encontro, o membro escaneia e a
+/// presença é gravada sozinha em `AttendanceRecord`. Não é o mesmo caso de uso
+/// de `QrToken` — aquele é do cadastro público de visitante, sem tenant
+/// autenticado; este exige `GroupMembership` real e expira em janela curta
+/// (`MeetingsService.CHECKIN_TOKEN_TTL_MINUTES`).
+model MeetingCheckinToken {
+  id               String   @id @default(uuid())
+  tenant_id        String
+  congregation_id  String
+  group_meeting_id String   @unique
+  token            String   @unique @default(uuid())
+  expires_at       DateTime
+  created_by       String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  groupMeeting GroupMeeting @relation(fields: [group_meeting_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  @@map("meeting_checkin_tokens")
 }
 
 model PrayerRequest {

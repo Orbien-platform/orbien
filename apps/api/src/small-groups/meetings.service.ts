@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,11 +7,35 @@ import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { RecordAttendanceDto } from './dto/record-attendance.dto';
 import { CreateMeetingMaterialDto } from './dto/create-meeting-material.dto';
+import { MeetingCheckinDto } from './dto/meeting-checkin.dto';
 
 type CreateMeetingResult = {
   meeting: GroupMeeting;
   attendance_count: number;
 };
+
+type CheckinTokenResult = {
+  token: string;
+  expires_at: Date;
+};
+
+type CheckinResult = {
+  status: 'checked_in' | 'already_checked_in';
+  group_meeting_id: string;
+};
+
+// PROD-12: janela de validade do QR de check-in. Curta de propósito — o QR
+// vale para a reunião em curso, não é um link permanente como `QrToken` do
+// cadastro de visitante. O líder regenera (mesma rota, `upsert`) se precisar
+// de mais tempo.
+const CHECKIN_TOKEN_TTL_MINUTES = 240;
+
+// Não é a mesma checagem que a expiração do token faz — esta impede GERAR um
+// QR novo para um encontro que já passou há muito tempo (lançado tarde, de
+// forma manual, como o restante do módulo permite via `occurred_at` livre).
+// Sem isto, "encontro que já fechou" só seria barrado se alguém tivesse
+// deixado um token antigo ainda válido por acaso.
+const CHECKIN_MAX_MEETING_AGE_HOURS = 24;
 
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
 
@@ -103,6 +128,18 @@ export class MeetingsService {
    * real no grupo pedido.
    */
   private async assertParticipant(groupId: string, userId: string): Promise<void> {
+    await this.resolveParticipantPersonId(groupId, userId);
+  }
+
+  /**
+   * Mesma checagem de `assertParticipant`, mas devolvendo o `person_id` —
+   * o check-in por QR (PROD-12) precisa dele para gravar o `AttendanceRecord`.
+   * Participação, não papel (mesmo princípio de `PEND-01`/`PROD-01`): quem não
+   * tem `GroupMembership` real na célula do encontro não se auto-marca
+   * presente, papel de liderança incluído — diferente de `findByGroup`, aqui
+   * não existe bypass para `MEETING_PRIVILEGED_ROLES`.
+   */
+  private async resolveParticipantPersonId(groupId: string, userId: string): Promise<string> {
     const account = await this.prisma.client.userAccount.findUnique({
       where: { id: userId },
       select: { person_id: true },
@@ -120,9 +157,11 @@ export class MeetingsService {
         })
       : null;
 
-    if (!membership) {
+    if (!membership || !account?.person_id) {
       throw new ForbiddenException('Você não participa deste grupo');
     }
+
+    return account.person_id;
   }
 
   async findOne(meetingId: string) {
@@ -283,5 +322,100 @@ export class MeetingsService {
     });
     if (!link) throw new NotFoundException('Material não está vinculado a esta reunião');
     return this.prisma.client.groupMeetingMaterial.delete({ where: { id: link.id } });
+  }
+
+  /**
+   * PROD-12: o líder gera (ou regenera) o QR de check-in do encontro. Um
+   * token por `GroupMeeting` — chamar de novo rotaciona o valor e estende
+   * `expires_at`, o que também serve para revogar o QR anterior (quem
+   * escaneou o antigo recebe "inválido ou expirado" no próximo check-in).
+   */
+  async createCheckinToken(meetingId: string, user: JwtPayload): Promise<CheckinTokenResult> {
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, tenant_id: true, congregation_id: true, occurred_at: true },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
+    const cutoff = new Date(Date.now() - CHECKIN_MAX_MEETING_AGE_HOURS * 60 * 60 * 1000);
+    if (meeting.occurred_at < cutoff) {
+      throw new ConflictException('Este encontro já foi encerrado; não é possível gerar check-in por QR');
+    }
+
+    const token = randomUUID();
+    const expires_at = new Date(Date.now() + CHECKIN_TOKEN_TTL_MINUTES * 60 * 1000);
+
+    const checkinToken = await this.prisma.client.meetingCheckinToken.upsert({
+      where: { group_meeting_id: meetingId },
+      create: {
+        tenant_id: meeting.tenant_id,
+        congregation_id: meeting.congregation_id,
+        group_meeting_id: meetingId,
+        token,
+        expires_at,
+        created_by: user.sub,
+      },
+      update: {
+        token,
+        expires_at,
+        created_by: user.sub,
+      },
+    });
+
+    return { token: checkinToken.token, expires_at: checkinToken.expires_at };
+  }
+
+  /**
+   * PROD-12: o membro escaneia o QR e a presença é gravada sozinha —
+   * substitui a marcação manual só para quem participa de fato da célula.
+   * `GroupMembership` real é obrigatório mesmo para papel de liderança (ver
+   * `resolveParticipantPersonId`): o QR não é um atalho de `@Roles`, é prova
+   * de presença de quem está na célula.
+   */
+  async checkin(dto: MeetingCheckinDto, user: JwtPayload): Promise<CheckinResult> {
+    const checkinToken = await this.prisma.client.meetingCheckinToken.findUnique({
+      where: { token: dto.token },
+      select: {
+        group_meeting_id: true,
+        expires_at: true,
+        tenant_id: true,
+        congregation_id: true,
+        groupMeeting: { select: { small_group_id: true } },
+      },
+    });
+
+    if (!checkinToken || checkinToken.expires_at <= new Date()) {
+      throw new NotFoundException('QR code inválido ou expirado');
+    }
+
+    const personId = await this.resolveParticipantPersonId(
+      checkinToken.groupMeeting.small_group_id,
+      user.sub,
+    );
+
+    const existing = await this.prisma.client.attendanceRecord.findUnique({
+      where: {
+        group_meeting_id_person_id: {
+          group_meeting_id: checkinToken.group_meeting_id,
+          person_id: personId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return { status: 'already_checked_in', group_meeting_id: checkinToken.group_meeting_id };
+    }
+
+    await this.prisma.client.attendanceRecord.create({
+      data: {
+        tenant_id: checkinToken.tenant_id,
+        congregation_id: checkinToken.congregation_id,
+        group_meeting_id: checkinToken.group_meeting_id,
+        person_id: personId,
+      },
+    });
+
+    return { status: 'checked_in', group_meeting_id: checkinToken.group_meeting_id };
   }
 }

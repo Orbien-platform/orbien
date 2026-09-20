@@ -39,6 +39,8 @@ describe('MeetingsController', () => {
       addMaterial: jest.fn(),
       listMaterials: jest.fn(),
       removeMaterial: jest.fn(),
+      createCheckinToken: jest.fn(),
+      checkin: jest.fn(),
     } as unknown as jest.Mocked<MeetingsService>;
 
     controller = new MeetingsController(service);
@@ -151,5 +153,31 @@ describe('MeetingsController', () => {
 
     expect(service.removeMaterial).toHaveBeenCalledWith('meet1', 'mat1');
     expect(result).toEqual({ id: 'link1' });
+  });
+
+  it('createCheckinToken exige papel de escrita de reunião, igual recordAttendance (PROD-12)', () => {
+    expect(rolesFor('createCheckinToken')).toEqual(MEETING_WRITE_ROLES);
+  });
+
+  it('checkin aceita member além dos papéis de leitura, igual findByGroup (PROD-12)', () => {
+    expect(rolesFor('checkin')).toEqual(MEETING_LIST_READ_ROLES);
+  });
+
+  it('createCheckinToken delega ao service', async () => {
+    service.createCheckinToken.mockResolvedValue({ token: 'tok-1', expires_at: new Date() } as never);
+
+    const result = await controller.createCheckinToken('meet1', USER);
+
+    expect(service.createCheckinToken).toHaveBeenCalledWith('meet1', USER);
+    expect(result).toEqual(expect.objectContaining({ token: 'tok-1' }));
+  });
+
+  it('checkin delega ao service com o usuário atual', async () => {
+    service.checkin.mockResolvedValue({ status: 'checked_in', group_meeting_id: 'meet1' });
+
+    const result = await controller.checkin({ token: 'tok-1' } as never, USER);
+
+    expect(service.checkin).toHaveBeenCalledWith({ token: 'tok-1' }, USER);
+    expect(result).toEqual({ status: 'checked_in', group_meeting_id: 'meet1' });
   });
 });
