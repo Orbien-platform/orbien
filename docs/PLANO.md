@@ -68,9 +68,7 @@ consentimento — os seis de `apps/api/src/persons/` são os mesmos),
 `CONF-03` (`me.controller.ts` segue com `GET /me/permissions` e nada mais),
 `PROD-05` (nenhuma rota de sugestão de escala), `PROD-07` (o OFX de
 `financial/export/` continua sendo só exportação), `PROD-08`, `PROD-12`,
-`PROD-17`,
-`PROD-23` (`GET /small-groups/:id/visit-requests` existe; nenhuma tela do
-`apps/web` a chama), `AJU-05`, `PEND-04` e os `DEC-` da seção 9.
+`PROD-17`, `AJU-05`, `PEND-04` e os `DEC-` da seção 9.
 
 Em **2026-09-16** fecharam `PROD-11` (alerta de ausência consecutiva, em
 outra branch — ver a nota da seção 6 e o `PEND-06` da seção 7, que nasceu e
@@ -78,6 +76,10 @@ fechou junto) e `PROD-25` (tela de member self-service para inscrição em
 evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
+
+Em **2026-09-19** fechou `PROD-23` (tela da liderança para os pedidos de
+visita, `apps/web`) — nota na seção 6 — e nasceu já decidida a `DEC-06`
+(seção 9), que fixa os tenants de teste e o que pode rodar contra produção.
 
 Em **2026-09-20** fechou `PROD-05` (sugestão automática de escala por
 disponibilidade e rodízio, Módulo 1) — ver a nota da seção 6. Só backend:
@@ -595,7 +597,6 @@ que o `PROD-20` trouxe no mesmo dia).
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 
 ### ~~PROD-08 · Carnê do dizimista / relatório anual para IR~~ · fechado
 
@@ -967,11 +968,37 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 >   `$executeRaw`, e não `create` do Prisma, que usa RETURNING. Provas em
 >   `apps/api/test/rls/small-groups-public.spec.ts`.
 >
-> Falta a tela do outro lado: a rota autenticada
-> `GET /small-groups/:id/visit-requests` existe (papéis de liderança, mesma
-> lista de `:id/absence-alerts`), mas nenhuma tela do `apps/web` a chama
-> ainda — hoje o pedido chega ao banco e só aparece para quem consultar a
-> API. Ver `PROD-23` na tabela acima.
+> A tela do outro lado veio depois, no `PROD-23` (2026-09-16) — a nota está
+> logo abaixo.
+
+> `PROD-23` (tela da liderança para os pedidos de visita) **fechou em
+> 2026-09-16**. Não houve mudança em `apps/api`: a rota
+> `GET /small-groups/:id/visit-requests` já existia desde o `PROD-13`, com
+> `ALERT_ROLES` (`tenant_admin`, `admin_congregation`, `pastor`,
+> `cell_leader`) — o trabalho inteiro foi no `apps/web`, e nenhum script de
+> RLS foi tocado (`014_rls_small_group_visit_requests.sql` já cobre a
+> leitura autenticada).
+>
+> Ficou como aba **"Visitas"** da `GroupDetailSheet`
+> (`apps/web/src/components/groups/VisitRequestsPanel.tsx`), e não como tela
+> própria: o pedido é de uma célula, e quem vai responder já está com a
+> gaveta daquela célula aberta. Montada só quando a aba abre, pelo mesmo
+> motivo de "Oração", "Conversa" e "Genealogia" — aqui com um peso a mais,
+> porque a requisição responde 403 para quem abre a gaveta sem papel de
+> liderança, e esse custo não deve existir em toda abertura.
+>
+> O 403 vira `NoAccessState`, não lista vazia. É a mesma regra do
+> `PrayerRequestsPanel`, por outro motivo: lá a API exige participação no
+> grupo, aqui exige papel. "Nenhum pedido de visita recebido" e "você não
+> tem acesso" são leituras opostas, e a primeira, dita no lugar da segunda,
+> faz o líder concluir que ninguém se interessou pela célula dele.
+>
+> **O painel só lê.** Não há rota de escrita e não deveria haver: a
+> liderança responde por telefone ou e-mail — daí os contatos saírem como
+> link `tel:`/`mailto:`, que é a única ação que existe ali — e o registro da
+> visita que de fato aconteceu continua sendo `VisitRecord`, que é outra
+> coisa (ver a nota do `PROD-13`, logo acima). `created_at` é instante, não
+> data civil, então sai por `formatInstant`.
 
 ### ~~PROD-07 · Conciliação bancária (importar OFX)~~ · fechado
 
@@ -1573,6 +1600,36 @@ das três contradições de `docs/TESTES.md`.
 
 Estes dependem de uma decisão explícita antes de virar trabalho. Não são
 compromissos: são o que o material de produto deixa em aberto.
+
+### ~~DEC-06 · Onde os testes rodam e sobre qual tenant~~ · decidido e executado
+
+Decidido em 2026-09-17, junto com o `PROD-23`: **só `teste1-church` e
+`teste2-church` podem ser usados para teste**, em qualquer ambiente, produção
+inclusive. Nenhum outro tenant — `doca-church` é a igreja do cliente zero, e
+teste que a toca é incidente, não teste. A regra está em `/CLAUDE.md` e
+detalhada em `docs/AMBIENTES.md`, que passa a ser a fonte única sobre
+ambientes, contas e credenciais.
+
+Três consequências que já entraram:
+
+- **`apps/api/prisma/seed.ts` cria os três tenants**, não mais um só. A criação
+  virou `seedTenant(spec)` sobre uma lista — os de teste nascem com celebração,
+  ministério e voluntários, o mesmo mínimo que a suíte de e2e precisa, para que
+  nenhum spec tenha motivo de procurar dado noutro tenant. `fvargaspf@gmail.com`
+  passa a acumular `tenant_admin` do `doca-church` **e** `platform_support`;
+  `fernando.vargas@fill.tech` fica como conta quebra-vidro da plataforma.
+- **O CI ganhou `e2e-prod`**, rodando a mesma suíte contra
+  `web.useorbien.com.br` sobre `teste1-church`. Não substitui o `e2e` local, que
+  segue provando a suíte contra banco limpo — e `needs: [e2e]` garante que
+  produção só é tocada depois que o job determinístico passou. É o primeiro job
+  do repositório que precisa de secret, o que quebra o "PR de fork roda igual"
+  do cabeçalho do workflow: `e2e-prod` se pula em fork, porque secret não chega lá.
+- **Dois scripts novos**: `scripts/provisionar-tenants-teste.sh` (cria os dois
+  em produção por `POST /platform/tenants`, a rota atômica — não por SQL) e
+  `scripts/limpar-tenant.sh` (esvazia um tenant preservando plano, branding,
+  congregações, plano de contas de sistema e as contas indicadas, com a mesma
+  senha). O segundo descobre as tabelas do catálogo, não de lista escrita à
+  mão: são 66 tabelas com `tenant_id` hoje e a lista cresce a cada migration.
 
 ### ~~DEC-01 · Gating por plano~~ · decidido e executado
 

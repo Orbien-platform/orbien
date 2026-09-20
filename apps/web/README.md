@@ -87,9 +87,13 @@ capturas em `e2e/screenshots/`:
 A partir da raiz do monorepo:
 
 ```bash
-E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=doca-church \
+E2E_EMAIL=fvargaspf+teste1@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
   npm run e2e -w orbien-web
 ```
+
+O tenant é `teste1-church` (ou `teste2-church`), **nunca** `doca-church` nem
+qualquer outro: teste não roda sobre dado de igreja real. A regra e os dois
+slugs estão em [`docs/AMBIENTES.md`](../../docs/AMBIENTES.md).
 
 `suporte.spec.ts` precisa de duas variáveis a mais, porque monta o handoff de
 verdade — login de plataforma, listar tenants, `impersonate` — em vez de
@@ -137,9 +141,19 @@ Funciona contra qualquer ambiente:
 
 ```bash
 E2E_BASE_URL=https://web.useorbien.com.br \
-E2E_API_URL=https://web.useorbien.com.br/api-proxy \
-E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=... npm run e2e -w orbien-web
+E2E_API_URL=https://orbien-api.onrender.com/api \
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste1-church npm run e2e -w orbien-web
 ```
+
+`E2E_API_URL` vai **direto na API**, não em `/api-proxy`: as fixtures montam e
+desmontam dados com `fetch()` cru e anexam o Bearer na mão, e o proxy — que
+virou Route Handler quando a sessão foi para cookie `HttpOnly` — ignora
+`Authorization` de entrada, devolvendo 401 em qualquer chamada de apoio. Só a
+fixture `page` passa pelo proxy, porque é ela que navega pelo browser com o
+cookie semeado.
+
+Rodar assim **escreve em produção** — por isso o tenant tem que ser um dos de
+teste.
 
 Os dados de apoio são criados e removidos pelas fixtures, com teardown
 garantido mesmo se o teste estourar — e **só o que elas criaram**: a aba
