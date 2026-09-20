@@ -36,22 +36,6 @@ ALTER TABLE "bank_statement_transactions" ADD CONSTRAINT "bank_statement_transac
 -- AddForeignKey
 ALTER TABLE "bank_statement_transactions" ADD CONSTRAINT "bank_statement_transactions_financial_transaction_id_fkey" FOREIGN KEY ("financial_transaction_id") REFERENCES "financial_transactions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- RLS — Padrão B (mesmo caso de 20260613000000_add_export_import_jobs):
--- tabela nova, sem policy anterior para derrubar, então não depende da ordem
--- do bootstrap-db.sh (passos 3-6) nem de app_congregation_allowed(), que só
--- existe depois de 003_rls_admin_write.sql (fora do histórico do Prisma).
--- O passo 7 do bootstrap confere de forma genérica que toda tabela em
--- public tem RLS habilitado — não precisa de checagem nomeada própria, como
--- export_jobs/import_jobs também não têm.
-ALTER TABLE "bank_statement_transactions" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "bank_statement_transactions" FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY "bank_statement_transactions_tenant_isolation" ON "bank_statement_transactions"
-  USING (
-    tenant_id       = current_setting('app.tenant_id', true)
-    AND congregation_id = current_setting('app.congregation_id', true)
-  )
-  WITH CHECK (
-    tenant_id       = current_setting('app.tenant_id', true)
-    AND congregation_id = current_setting('app.congregation_id', true)
-  );
+-- RLS: ver prisma/migrations/019_rls_bank_statement_transactions.sql, fora do
+-- histórico do Prisma e aplicado pelo bootstrap-db.sh — padrão do resto do
+-- produto, em vez de policy definida junto com esta migration.

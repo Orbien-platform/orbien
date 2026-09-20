@@ -1059,16 +1059,15 @@ importação do mesmo arquivo reconhece cada `FITID` já visto e conta como
   transação do extrato, com o `financial_transaction_id` (nulo = ainda sem
   match) que sustenta a listagem de não-casados.
 - **RLS Padrão B**, o mesmo de `export_jobs`/`import_jobs`
-  (`20260613000000_add_export_import_jobs`): tabela nova, sem policy
-  anterior para o passo 4 do `bootstrap-db.sh` derrubar, então a
-  `ENABLE`/`FORCE ROW LEVEL SECURITY` e a policy nascem dentro da própria
-  migration do Prisma
-  (`20260920022955_add_bank_statement_transactions`) — **sem** entrar em
-  `bootstrap-db.sh`. O passo 7 continua cobrindo isso pelo catch-all
-  genérico (qualquer tabela em `public` sem RLS habilitado derruba o
-  passo), do mesmo jeito que já cobre `export_jobs`/`import_jobs` sem
-  checagem nomeada própria — confirmado rodando `bootstrap-db.sh` do zero
-  depois da migration.
+  (`20260613000000_add_export_import_jobs`) — isolamento simples de
+  tenant + congregação por `current_setting`, sem a exceção de
+  `tenant_admin`. Diferente de `export_jobs`/`import_jobs`, porém, a
+  policy **não** nasce dentro da migration do Prisma: por revisão
+  (achado #107), foi movida para o padrão do resto do produto —
+  `prisma/migrations/019_rls_bank_statement_transactions.sql`, fora do
+  histórico do Prisma, aplicado pelo `bootstrap-db.sh` (passo 3) e com
+  checagem nomeada própria no passo 7 (não o catch-all genérico) —
+  confirmado rodando `bootstrap-db.sh` do zero depois da migration.
 - **Tenant + congregação, sem exceção de `tenant_admin`** — ao contrário de
   `financial_transactions`/`cost_centers` (que usam
   `app_congregation_allowed()`, com a exceção), esta tabela segue o
