@@ -1081,8 +1081,10 @@ importação do mesmo arquivo reconhece cada `FITID` já visto e conta como
   isolamento simples de `export_jobs`/`import_jobs`: é artefato de
   importação, não o livro-caixa em si, e nada no produto hoje pede que
   `tenant_admin` veja conciliação de outra congregação sem entrar nela.
-  Sem teste de isolamento dedicado em `test/rls/isolation.spec.ts`, pelo
-  mesmo motivo — `export_jobs`/`import_jobs` também não têm.
+  Ganhou teste de isolamento dedicado depois (achado de revisão #107):
+  `test/rls/bank-statement-transactions.spec.ts`, no molde de
+  `test/rls/meeting-checkin-tokens.spec.ts` — congregação irmã do mesmo
+  tenant não vê, tenant de fora não vê, `WITH CHECK` nega escrita cruzada.
 - **Sem caminho assíncrono**: diferente de `persons/import` (split em 500
   linhas) e `financial/export` (split em 92 dias), a importação de OFX é
   sempre síncrona — extrato bancário mensal não chega a milhares de
@@ -1097,9 +1099,9 @@ linha sem `FITID` vira erro sem contar no total, auditoria que falha não
 desfaz a importação, filtro de não-casados por tenant/congregação e por
 `import_job_id`), `ofx-import.controller.spec.ts` (delega ao service, papel
 e plano exigidos), `financial.module.spec.ts` atualizado com o controller e
-o service novos. `npm run test:rls -w orbien-backend` roda sem alteração —
-138 testes em 9 suítes, sem mudança de número: nenhum arquivo de RLS
-`0NN_*` novo, e a tabela nova não tem suíte própria pela decisão acima.
+o service novos. `test/rls/bank-statement-transactions.spec.ts` fechou a
+lacuna de isolamento (achado de revisão #107) depois — `npm run test:rls -w
+orbien-backend` passou de 138 para 150 testes, 11 suítes.
 
 ### ~~PROD-05 · Sugestão automática de escala por disponibilidade e rodízio~~ · fechado
 
