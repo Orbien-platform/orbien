@@ -79,6 +79,9 @@ evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
 
+Em **2026-09-20** fechou `PROD-07` (conciliação bancária — importar OFX,
+Premium — ver a nota da seção 6).
+
 ---
 
 ## 1. Visão do produto
@@ -564,7 +567,6 @@ que o `PROD-20` trouxe no mesmo dia).
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
 | `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
-| `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
@@ -827,6 +829,101 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 > lista de `:id/absence-alerts`), mas nenhuma tela do `apps/web` a chama
 > ainda — hoje o pedido chega ao banco e só aparece para quem consultar a
 > API. Ver `PROD-23` na tabela acima.
+
+### ~~PROD-07 · Conciliação bancária (importar OFX)~~ · fechado
+
+Entregue em 2026-09-20, só backend. `financial/export/` já gerava OFX
+(`export.service.ts`); faltava o caminho inverso — importar o extrato do
+banco e casar com os `FinancialTransaction` já lançados no Orbien.
+
+**Endpoints**, os dois Premium (`@RequiresPlan('premium')`, mesmo portão do
+resto do financeiro) e com os mesmos papéis de `financial/export`
+(`treasurer`, `admin_congregation`, `tenant_admin` — sem `secretary`,
+porque conciliação é decisão de quem responde pelo caixa, não lançamento):
+
+- `POST /financial/import/ofx` — upload (`multipart/form-data`, campo
+  `file`, `.ofx`/`.qfx`, limite 10 MB, como o de `persons/import`). Faz
+  parse, tenta casar cada transação do extrato e devolve o relatório.
+- `GET /financial/import/ofx/unmatched` — lista as linhas sem match
+  (`?import_job_id=` filtra por importação), paginada.
+
+**Formato aceito**: OFX 1.x (SGML), o mais comum em banco brasileiro —
+tags sem fechamento (`<FITID>ABC123`, sem `</FITID>`), que é como bancos
+exportam de verdade, mas também fecha com o estilo do nosso próprio
+`export.service.ts` (`<FITID>ABC123</FITID>`), já que SGML aceita as duas.
+Lib escolhida: `node-ofx-parser` — não há parser de OFX no `package.json`
+da raiz; entre as duas libs desse nicho no npm (`ofx` e
+`node-ofx-parser`, ambas derivadas do mesmo `chilts/node-ofx` original),
+`node-ofx-parser` depende de `fast-xml-parser` (mantido) em vez de
+`xml2json` (sem release desde 2015) — instalada da raiz,
+`npm install node-ofx-parser -w orbien-backend`, único lockfile.
+
+**Regra de match**: valor exato + `TRNTYPE`/sinal do `TRNAMT` batendo com o
+tipo da categoria (`CREDIT` → `income`, `DEBIT` → `expense`) + `occurred_at`
+dentro de ±3 dias de `DTPOSTED` (compensação bancária) + `status` em
+`paid`/`confirmed`. Mais de um candidato → fica o de menor diferença de
+dias. Uma `FinancialTransaction` casa com **no máximo uma** linha de
+extrato — `bank_statement_transactions.financial_transaction_id` é
+`@unique`, então isso vale mesmo entre importações diferentes, não só
+dentro da mesma. **Não muda `FinancialTransaction.status`** ao casar: o
+match é só o vínculo de conciliação (`bank_statement_transactions`), quem
+fecha o livro-caixa continua sendo a exportação contábil
+(`ExportService.markConfirmed`), que já existia e não foi tocada.
+
+**Reimport do mesmo extrato não duplica**: `FITID` é a chave do banco por
+natureza (todo banco garante unicidade dele dentro da conta), e
+`@@unique([tenant_id, congregation_id, fitid])` em
+`bank_statement_transactions` é o que torna isso verdade aqui — a segunda
+importação do mesmo arquivo reconhece cada `FITID` já visto e conta como
+`duplicates`, sem criar linha nem tentar casar de novo.
+
+**Decisões de escopo**:
+
+- **Sem tabela de job própria** — `OfxImportService` reaproveita
+  `ImportJob` (`type: 'financial_ofx'`), o mesmo modelo genérico que
+  `PersonsImportService` usa. O relatório (`{ job_id, total, matched,
+  unmatched, duplicates, errors }`) é montado a partir dele mais a
+  contagem de `bank_statement_transactions`, sem tabela nova só para
+  progresso de import.
+- **Tabela nova, só uma**: `bank_statement_transactions` — uma linha por
+  transação do extrato, com o `financial_transaction_id` (nulo = ainda sem
+  match) que sustenta a listagem de não-casados.
+- **RLS Padrão B**, o mesmo de `export_jobs`/`import_jobs`
+  (`20260613000000_add_export_import_jobs`): tabela nova, sem policy
+  anterior para o passo 4 do `bootstrap-db.sh` derrubar, então a
+  `ENABLE`/`FORCE ROW LEVEL SECURITY` e a policy nascem dentro da própria
+  migration do Prisma
+  (`20260920022955_add_bank_statement_transactions`) — **sem** entrar em
+  `bootstrap-db.sh`. O passo 7 continua cobrindo isso pelo catch-all
+  genérico (qualquer tabela em `public` sem RLS habilitado derruba o
+  passo), do mesmo jeito que já cobre `export_jobs`/`import_jobs` sem
+  checagem nomeada própria — confirmado rodando `bootstrap-db.sh` do zero
+  depois da migration.
+- **Tenant + congregação, sem exceção de `tenant_admin`** — ao contrário de
+  `financial_transactions`/`cost_centers` (que usam
+  `app_congregation_allowed()`, com a exceção), esta tabela segue o
+  isolamento simples de `export_jobs`/`import_jobs`: é artefato de
+  importação, não o livro-caixa em si, e nada no produto hoje pede que
+  `tenant_admin` veja conciliação de outra congregação sem entrar nela.
+  Sem teste de isolamento dedicado em `test/rls/isolation.spec.ts`, pelo
+  mesmo motivo — `export_jobs`/`import_jobs` também não têm.
+- **Sem caminho assíncrono**: diferente de `persons/import` (split em 500
+  linhas) e `financial/export` (split em 92 dias), a importação de OFX é
+  sempre síncrona — extrato bancário mensal não chega a milhares de
+  linhas. Limite de sanidade: 5000 transações por arquivo (mesma ordem de
+  grandeza do `MAX_IMPORT_ROWS` de `persons/import`), acima disso é 400.
+- **Tela de conciliação manual não entra nesta entrega** — só a rota de
+  listagem dos não-casados (`GET .../unmatched`), como o prompt permitia.
+
+Testes: `ofx-import.service.spec.ts` (extensão/tamanho inválidos, OFX sem
+transação, match por valor+data, sem candidato, reimport não duplica,
+linha sem `FITID` vira erro sem contar no total, auditoria que falha não
+desfaz a importação, filtro de não-casados por tenant/congregação e por
+`import_job_id`), `ofx-import.controller.spec.ts` (delega ao service, papel
+e plano exigidos), `financial.module.spec.ts` atualizado com o controller e
+o service novos. `npm run test:rls -w orbien-backend` roda sem alteração —
+138 testes em 9 suítes, sem mudança de número: nenhum arquivo de RLS
+`0NN_*` novo, e a tabela nova não tem suíte própria pela decisão acima.
 
 ---
 
