@@ -600,6 +600,26 @@ describe('NotificationsService', () => {
       expect(payload.include_external_user_ids).toEqual(['acc-alto']);
     });
 
+    it('high_engagement exclui quem não tem nenhum sinal de engajamento no período (sem entrada no mapa de contagem)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { high_engagement: { days: 30, min_events: 1 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([
+        { id: 'acc-alto', person_id: 'p-alto' },
+        { id: 'acc-zero', person_id: 'p-zero' },
+      ]);
+      system.visitRecord.findMany.mockResolvedValue([{ person_id: 'p-alto' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids).toEqual(['acc-alto']);
+    });
+
     it('faz OR (união) entre um segmento avançado e um básico na mesma chamada', async () => {
       process.env['ONESIGNAL_APP_ID'] = 'app1';
       const { prisma, system } = prismaWith();
@@ -617,6 +637,25 @@ describe('NotificationsService', () => {
 
       const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
       expect(payload.include_external_user_ids.sort()).toEqual(['acc-inativo', 'acc-pastor']);
+    });
+
+    it('trata criteria nulo (JSON null) como sem filtro extra, sem quebrar a resolução avançada', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+        { criteria: null },
+      ]);
+      system.userAccount.findMany
+        .mockResolvedValueOnce([{ id: 'acc-inativo', person_id: 'p-inativo' }])
+        .mockResolvedValueOnce([{ id: 'acc-sem-criteria', person_id: 'p-sem-criteria' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1', 's2'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids.sort()).toEqual(['acc-inativo', 'acc-sem-criteria']);
     });
 
     it('deduplica quando a mesma conta é elegível por mais de um segmento', async () => {
