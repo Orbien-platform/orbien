@@ -15,7 +15,12 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     smallGroup: { findUnique: jest.fn() },
     groupMeeting: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
-    attendanceRecord: { createMany: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+    attendanceRecord: {
+      createMany: jest.fn(),
+      findUnique: jest.fn(),
+      delete: jest.fn(),
+      create: jest.fn(),
+    },
     studyMaterial: { findUnique: jest.fn() },
     groupMeetingMaterial: {
       findUnique: jest.fn(),
@@ -25,6 +30,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     },
     userAccount: { findUnique: jest.fn() },
     groupMembership: { findUnique: jest.fn() },
+    meetingCheckinToken: { upsert: jest.fn(), findUnique: jest.fn() },
     ...overrides,
   };
 }
@@ -424,6 +430,192 @@ describe('MeetingsService', () => {
       const service = serviceWith(client);
 
       expect(await service.removeMaterial('meet1', 'mat1')).toEqual({ id: 'link1' });
+    });
+  });
+
+  describe('createCheckinToken', () => {
+    it('lança NotFoundException quando a reunião não existe', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(service.createCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('lança ConflictException quando o encontro já passou há mais de 24h', async () => {
+      const client = clientWith();
+      const occurred_at = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        occurred_at,
+      });
+      const service = serviceWith(client);
+
+      await expect(service.createCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(client.meetingCheckinToken.upsert).not.toHaveBeenCalled();
+    });
+
+    it('gera (upsert) o token de check-in para um encontro recente', async () => {
+      const client = clientWith();
+      const occurred_at = new Date();
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        occurred_at,
+      });
+      client.meetingCheckinToken.upsert.mockResolvedValue({
+        token: 'tok-123',
+        expires_at: new Date(Date.now() + 60_000),
+      });
+      const service = serviceWith(client);
+
+      const result = await service.createCheckinToken('meet1', USER);
+
+      expect(client.meetingCheckinToken.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { group_meeting_id: 'meet1' },
+          create: expect.objectContaining({
+            tenant_id: 't1',
+            congregation_id: 'g1',
+            group_meeting_id: 'meet1',
+            created_by: 'u1',
+          }),
+          update: expect.objectContaining({ created_by: 'u1' }),
+        }),
+      );
+      expect(result).toEqual({ token: 'tok-123', expires_at: expect.any(Date) });
+    });
+  });
+
+  describe('checkin', () => {
+    it('lança NotFoundException quando o token não existe', async () => {
+      const client = clientWith();
+      client.meetingCheckinToken.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.checkin({ token: 'nope' } as never, { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('lança NotFoundException quando o token está expirado', async () => {
+      const client = clientWith();
+      client.meetingCheckinToken.findUnique.mockResolvedValue({
+        group_meeting_id: 'meet1',
+        expires_at: new Date(Date.now() - 1000),
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        groupMeeting: { small_group_id: 'sg1' },
+      });
+      const service = serviceWith(client);
+
+      await expect(
+        service.checkin({ token: 'expired' } as never, { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('lança ForbiddenException quando quem escaneia não é membro real da célula do encontro', async () => {
+      const client = clientWith();
+      client.meetingCheckinToken.findUnique.mockResolvedValue({
+        group_meeting_id: 'meet1',
+        expires_at: new Date(Date.now() + 60_000),
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        groupMeeting: { small_group_id: 'sg1' },
+      });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.checkin({ token: 'tok' } as never, { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.attendanceRecord.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('não duplica presença de quem já fez check-in neste encontro', async () => {
+      const client = clientWith();
+      client.meetingCheckinToken.findUnique.mockResolvedValue({
+        group_meeting_id: 'meet1',
+        expires_at: new Date(Date.now() + 60_000),
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        groupMeeting: { small_group_id: 'sg1' },
+      });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue({ id: 'mem1' });
+      client.attendanceRecord.findUnique.mockResolvedValue({ id: 'rec1' });
+      const service = serviceWith(client);
+
+      const result = await service.checkin({ token: 'tok' } as never, {
+        ...USER,
+        roles: ['member'],
+      });
+
+      expect(result).toEqual({ status: 'already_checked_in', group_meeting_id: 'meet1' });
+      expect(client.attendanceRecord.create).not.toHaveBeenCalled();
+    });
+
+    it('registra a presença do membro real e devolve checked_in', async () => {
+      const client = clientWith();
+      client.meetingCheckinToken.findUnique.mockResolvedValue({
+        group_meeting_id: 'meet1',
+        expires_at: new Date(Date.now() + 60_000),
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        groupMeeting: { small_group_id: 'sg1' },
+      });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue({ id: 'mem1' });
+      client.attendanceRecord.findUnique.mockResolvedValue(null);
+      client.attendanceRecord.create.mockResolvedValue({ id: 'rec1' });
+      const service = serviceWith(client);
+
+      const result = await service.checkin({ token: 'tok' } as never, {
+        ...USER,
+        roles: ['member'],
+      });
+
+      expect(client.attendanceRecord.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          group_meeting_id: 'meet1',
+          person_id: 'p1',
+        },
+      });
+      expect(result).toEqual({ status: 'checked_in', group_meeting_id: 'meet1' });
+    });
+
+    it('membro de OUTRA célula não se auto-marca presente, mesmo com token válido', async () => {
+      const client = clientWith();
+      client.meetingCheckinToken.findUnique.mockResolvedValue({
+        group_meeting_id: 'meet1',
+        expires_at: new Date(Date.now() + 60_000),
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        groupMeeting: { small_group_id: 'sg1' },
+      });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p2' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.checkin({ token: 'tok' } as never, { ...USER, sub: 'u2', roles: ['cell_leader'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.groupMembership.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { small_group_id_person_id: { small_group_id: 'sg1', person_id: 'p2' } },
+        }),
+      );
     });
   });
 });

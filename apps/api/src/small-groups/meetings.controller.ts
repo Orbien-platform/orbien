@@ -21,6 +21,7 @@ import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { RecordAttendanceDto } from './dto/record-attendance.dto';
 import { CreateMeetingMaterialDto } from './dto/create-meeting-material.dto';
+import { MeetingCheckinDto } from './dto/meeting-checkin.dto';
 
 const MEETING_WRITE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'cell_leader'];
 const MEETING_READ_ROLES = [...MEETING_WRITE_ROLES, 'treasurer'];
@@ -95,6 +96,27 @@ export class MeetingsController {
     @Param('personId', ParseUUIDPipe) personId: string,
   ) {
     return this.meetingsService.removeAttendance(meetingId, personId);
+  }
+
+  // PROD-12: o líder gera/regenera o QR deste encontro — mesmos papéis que já
+  // escrevem presença manualmente em recordAttendance.
+  @Post('meetings/:meetingId/checkin-token')
+  @Roles(...MEETING_WRITE_ROLES)
+  createCheckinToken(
+    @Param('meetingId', ParseUUIDPipe) meetingId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.createCheckinToken(meetingId, user);
+  }
+
+  // PROD-12: o membro escaneia o QR. Sem :meetingId no path — o token já
+  // identifica o encontro —, e sem bypass de papel: MeetingsService exige
+  // GroupMembership real mesmo para quem está em MEETING_LIST_READ_ROLES por
+  // liderar outras células.
+  @Post('meetings/checkin')
+  @Roles(...MEETING_LIST_READ_ROLES)
+  checkin(@Body() dto: MeetingCheckinDto, @CurrentUser() user: JwtPayload) {
+    return this.meetingsService.checkin(dto, user);
   }
 
   @Post('meetings/:meetingId/materials')

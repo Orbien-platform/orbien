@@ -103,6 +103,14 @@ inexistente por pessoa). Gate de Premium no service, mesmo princípio do
 Também em **2026-09-20** fechou `PROD-07` (conciliação bancária — importar OFX,
 Premium — ver a nota da seção 6).
 
+Também em **2026-09-20** fechou `PROD-12` (check-in de membros por QR no encontro,
+ver a nota da seção 6): `MeetingCheckinToken` novo, dois endpoints em
+`MeetingsController`, RLS em `018_rls_meeting_checkin_tokens.sql` (Padrão B,
+suíte de RLS agora em 144 testes em 10 suítes) e tela do líder no `apps/web`
+(`GroupDetailSheet`) — a do membro ficou para o `apps/mobile`, à parte, pelo
+mesmo motivo do `PROD-25`. `PEND-08` nasceu na mesma rodada, sobre um alerta
+de `pre-push.sh` aceito sem ajuste.
+
 ---
 
 ## 1. Visão do produto
@@ -587,7 +595,6 @@ que o `PROD-20` trouxe no mesmo dia).
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 
 ### ~~PROD-08 · Carnê do dizimista / relatório anual para IR~~ · fechado
@@ -1115,6 +1122,87 @@ script novo — só leitura de tabelas que já existiam sob RLS
 `celebration_assignments`), mesmas policies que `celebration-assignment.service.ts`
 já usa.
 
+### ~~PROD-12 · Check-in de membros por QR no encontro~~ · fechado
+
+Entregue em 2026-09-20. `QrToken` (schema) continua exclusivo do cadastro de
+visitante (`apps/api/src/visitor/`) — não foi tocado. Este item é caminho
+novo, sob o próprio modelo: `MeetingCheckinToken`
+(`20260920022631_add_meeting_checkin_tokens`), um por `GroupMeeting`.
+
+- **Dois endpoints em `MeetingsController`**, mesmo prefixo `small-groups/`:
+  `POST /small-groups/meetings/:meetingId/checkin-token` (líder gera/renova,
+  `MEETING_WRITE_ROLES` — os mesmos que já escrevem presença manual em
+  `recordAttendance`) e `POST /small-groups/meetings/checkin` (membro usa o
+  token, `MEETING_LIST_READ_ROLES`, o mesmo conjunto de `findByGroup`). O
+  segundo não leva `:meetingId` no path — o token já identifica o encontro,
+  então quem escaneia não precisa saber o id da reunião de antemão.
+- **Expiração em duas camadas, com papéis diferentes.** `expires_at` no
+  token (`CHECKIN_TOKEN_TTL_MINUTES = 240`, 4h) é o que barra check-in tarde
+  demais depois que o QR já foi mostrado; gerar de novo rotaciona o token no
+  mesmo `upsert` (chave única em `group_meeting_id`), o que revoga o QR
+  anterior sem precisar de um `is_active` — quem escaneou o antigo cai no
+  mesmo "inválido ou expirado". Já `CHECKIN_MAX_MEETING_AGE_HOURS = 24` roda
+  na **geração**, não no check-in: barra o líder de abrir check-in por QR
+  para um `GroupMeeting` lançado tarde, de forma manual, com `occurred_at` de
+  mais de um dia atrás — o resto do módulo permite `occurred_at` livre na
+  criação, então sem este limite "encontro que já fechou" só seria barrado
+  por coincidência, se sobrasse um token velho ainda dentro da janela de 4h.
+  Os dois números são escolha desta entrega, sem pedido explícito de
+  produto — documentados aqui por serem decisão, não os únicos valores
+  possíveis.
+- **Participação, não papel — mesmo princípio de `PEND-01`/`PROD-01`, sem
+  exceção para liderança.** `resolveParticipantPersonId` (refatorado de
+  `assertParticipant`, que passa a chamá-lo) exige `GroupMembership` real na
+  célula do encontro para *qualquer* papel, inclusive `cell_leader` — ao
+  contrário de `findByGroup`, aqui não há bypass por
+  `MEETING_PRIVILEGED_ROLES`. Um `cell_leader` só se auto-marca presente na
+  própria célula porque também tem uma linha de `GroupMembership`
+  (`role: leader`) nela; de qualquer outra, cai no mesmo 403 que um `member`
+  qualquer.
+- **Sem duplicar presença**: `checkin` confere `AttendanceRecord` existente
+  (chave `group_meeting_id`+`person_id`) antes de criar e devolve
+  `already_checked_in` em vez de tentar de novo — o `unique` da tabela já
+  garantia a integridade, isto evita o 500 de violação de constraint.
+- **RLS**: tabela nova, `018_rls_meeting_checkin_tokens.sql`, Padrão B — o
+  mesmo de `012_rls_group_messages.sql`, já usado no módulo (congregação, sem
+  `app_current_user() IS NOT NULL`, porque quem decide validade e
+  participação é o `MeetingsService`, não a policy). Ligado no
+  `bootstrap-db.sh` no mesmo lugar de 012/014/015/016 (nasce certa, sem
+  `tenant_isolation` de 001 para o passo 4 derrubar) e com verificação
+  própria no passo 7. `test/rls/meeting-checkin-tokens.spec.ts` (6 casos,
+  mesmo roteiro de `networks.spec.ts`) prova o isolamento por congregação —
+  a suíte de RLS fecha em **144 testes em 10 suítes** (a última contagem
+  registrada aqui, 125 em 7, já estava desatualizada por `audit-writes.spec.ts`
+  e `auth-tables.spec.ts`, que a varredura de 2026-09-15 não tinha contado;
+  ficam registrados agora que apareceram). `PEND-08` (seção 7) documenta um
+  alerta de portão que este arquivo dispara, deliberadamente aceito.
+- **Tela**: só o lado do líder, no `apps/web`. `GroupDetailSheet`, aba
+  "Reuniões", ganhou "Gerar código de check-in" dentro do encontro expandido
+  (mesmo `canEdit` que já libera "Registrar reunião") — mostra o código e a
+  validade, com botão de copiar e "Renovar". **É código em texto, não uma
+  imagem de QR**: nenhuma das duas apps tem hoje um consumidor que escaneie
+  algo (nenhuma biblioteca de QR no `apps/web`, nenhuma câmera integrada em
+  lugar nenhum da base) — a especificação do item permite "QR (ou código)",
+  e gerar uma imagem sem quem a leia seria trabalho sem uso imediato. **O
+  lado do membro (escanear/informar o código) não entrou nesta sessão.**
+  Mesma pergunta que o `PROD-25` já respondeu para inscrição em evento: o
+  `apps/web` é `(admin)`/`(public)`, sem área de membro — não caberia lá — e
+  o `apps/mobile` é onde o membro já consome conteúdo. Diferente do
+  `PROD-25`, aqui a tela do membro não é só consumir uma API pronta: exigiria
+  decidir entre digitar o código à mão ou apontar a câmera (novo pacote,
+  `expo-camera` ou `expo-barcode-scanner`, com o mesmo custo de build nova —
+  não OTA — que o `expo-clipboard` do `PROD-25` documentou), o que é escopo
+  maior que "tela sobre API pronta". Fica para trabalho à parte; a API está
+  pronta e testada para consumir de lá quando entrar.
+
+Testes: `meetings.service.spec.ts` (`createCheckinToken` e `checkin` — 8
+casos novos, incluindo o encontro velho demais para gerar QR, token expirado,
+não-membro com token válido e não-duplicação) e `meetings.controller.spec.ts`
+(papéis dos dois endpoints novos e delegação), além de
+`meeting-checkin.dto.spec.ts`. `GroupDetailSheet.test.tsx` ganhou 3 casos
+(gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
+Nenhuma suíte existente mudou de comportamento.
+
 ---
 
 ## 7. Pendências de código
@@ -1336,6 +1424,37 @@ A correção é de backend, não de tela: expor o `qr_code` do `PixPayment`
 ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
 ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
 tela sobre API pronta.
+
+### PEND-08 · `pre-push.sh` só reconhece `test/rls/isolation.spec.ts` · dívida
+
+Achado do próprio portão ao fechar `PROD-12` (2026-09-20), aceito sem ajuste
+— registrado por escrito em vez de corrigido por conta própria, como o
+`CLAUDE.md` pede para alerta de portão.
+
+O passo "tabela nova exige RLS e teste de isolamento"
+(`scripts/pre-push.sh:93-105`) confere ENABLE ROW LEVEL SECURITY em qualquer
+script `0NN_rls_*.sql` — isso funciona —, mas o caso de teste só procura o
+nome da tabela (ou seu delegate Prisma) dentro de **um arquivo fixo**,
+`test/rls/isolation.spec.ts`. Desde que o módulo passou a preferir um arquivo
+dedicado por tabela nova (`networks.spec.ts`, `event-registrations.spec.ts`,
+agora `meeting-checkin-tokens.spec.ts`), esse caminho ficou incompleto: o
+alerta dispara mesmo com isolamento provado, só que no arquivo errado.
+
+Evidência: `networks` (`PROD-20`, 2026-09-15) já dispara o mesmo alerta hoje
+— zero ocorrências de `network` em `isolation.spec.ts` — e nunca foi
+registrado como pendência; `event_registrations` (`PROD-16`) tem os dois,
+arquivo dedicado **e** um caso em `isolation.spec.ts`, então não dispara.
+`meeting_checkin_tokens` (`PROD-12`) segue o padrão de `networks`: só arquivo
+dedicado, então também dispara.
+
+Decisão desta sessão: não editar `pre-push.sh` fora do que foi pedido. É
+alerta, não bloqueio (`alerta`, não `bloqueia`), e a suíte dedicada prova o
+isolamento de verdade — o portão está incompleto, não errado. Corrigir
+precisaria decidir entre estender a lista de arquivos que o `grep` varre ou
+aceitar duplicar o caso em `isolation.spec.ts` como `event_registrations`
+faz; as duas têm custo (a primeira mexe num script comum a todo o time, a
+segunda é o retrabalho que motivou ter arquivo dedicado). Fica para quem
+decidir se vale ajustar o script ou vale mais duplicar o caso.
 
 ---
 
