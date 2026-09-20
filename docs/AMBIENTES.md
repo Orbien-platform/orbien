@@ -292,3 +292,24 @@ senha**. Apaga o resto de tudo que tem `tenant_id`, descoberto do catálogo e
 não de lista escrita à mão.
 
 Não tem desfazer. Dry-run primeiro, backup antes do `--aplicar`.
+
+---
+
+## 8. Remover tenants fora da lista permitida
+
+Limpeza pré-go-live: tenant de teste antigo que sobrou fora de
+`doca-church`/`teste1-church`/`teste2-church` não serve mais para nada — era
+só teste, mesmo com módulos e dado filho aninhado embaixo dele.
+
+```bash
+DIRECT_URL=... scripts/remover-tenants-nao-permitidos.sh              # dry-run
+DIRECT_URL=... scripts/remover-tenants-nao-permitidos.sh --aplicar
+```
+
+Diferença para o §7: aquele esvazia um tenant e o mantém utilizável; este
+apaga o tenant inteiro — a linha de `tenants` incluída — para quem está fora
+da lista permitida. Não preserva nada do tenant removido. A lista de quem
+fica é a mesma do §1 e vem fixa no script; `--manter` existe para o caso
+excepcional, e desviar da lista padrão imprime aviso.
+
+Não tem desfazer. Dry-run primeiro, backup antes do `--aplicar`.
