@@ -25,6 +25,8 @@ import { ZipExportService } from './export/zip-export.service';
 import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
 import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
+import { OfxImportController } from './import/ofx-import.controller';
+import { OfxImportService } from './import/ofx-import.service';
 
 @Module({
   imports: [PrismaModule, HttpModule, StorageModule, MailModule, RecurringRuleModule, PixModule],
@@ -36,6 +38,7 @@ import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
     DashboardController,
     DreController,
     ExportController,
+    OfxImportController,
   ],
   providers: [
     CategoriesService,
@@ -51,6 +54,7 @@ import { RecurringRuleModule } from './recurring-rules/recurring-rule.module';
     ZipExportService,
     SpedExportService,
     JobsService,
+    OfxImportService,
   ],
 })
 export class FinancialModule {}
