@@ -79,6 +79,10 @@ evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
 
+Em **2026-09-20** fechou `PROD-05` (sugestão automática de escala por
+disponibilidade e rodízio, Módulo 1) — ver a nota da seção 6. Só backend:
+`GET /celebrations/instances/:instanceId/schedule/suggest`, sem tabela nova.
+
 ---
 
 ## 1. Visão do produto
@@ -563,7 +567,6 @@ que o `PROD-20` trouxe no mesmo dia).
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
@@ -827,6 +830,60 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 > lista de `:id/absence-alerts`), mas nenhuma tela do `apps/web` a chama
 > ainda — hoje o pedido chega ao banco e só aparece para quem consultar a
 > API. Ver `PROD-23` na tabela acima.
+
+### ~~PROD-05 · Sugestão automática de escala por disponibilidade e rodízio~~ · fechado
+
+Entregue em 2026-09-20: `GET /celebrations/instances/:instanceId/schedule/suggest`,
+no mesmo `CelebrationScheduleController` (herda `@RequiresPlan('premium')` de
+classe — o módulo inteiro já é Premium, não precisou de decorator próprio) e
+os mesmos `MANAGE_ROLES` de `getSchedule`/`addMinistry`. Serviço novo,
+`CelebrationScheduleSuggestionService`, sem tabela nova — cruza dado que já
+existia:
+
+- **Funções a preencher são as já vinculadas à escala** (`CelebrationMinistry`
+  criado por `addMinistry`/`applyTemplate`), não um formulário à parte — a
+  sugestão preenche, não decide, quais funções a celebração precisa.
+- **Disponibilidade declarada** (`VolunteerProfile.availability`, Json
+  `{dia: slot[]}`) é checada contra o dia da semana de `scheduled_date` e um
+  balde de horário derivado de `Celebration.start_time`
+  (`<12h` manhã, `12–18h` tarde, `≥18h` noite — mesmos três rótulos que o
+  cadastro já usa). Quem não declarou o dia/horário não é sugerido: não dá
+  para confirmar disponibilidade a partir do silêncio.
+- **Indisponibilidade pontual** (`VolunteerUnavailabilityDate`) exclui pela
+  data exata da instância, mesma consulta de
+  `CelebrationAssignmentService.checkUnavailability`.
+- **Rodízio**: ordena por menos vezes atribuído à mesma função primeiro e,
+  empatado, por quem serviu há mais tempo (nunca serviu conta como "há mais
+  tempo" possível). Histórico conta `pending`/`confirmed`; `declined` e
+  `swapped` não contam — o voluntário não chegou a servir naquele slot.
+  Sem corte por janela de tempo (ex. "últimos 6 meses"): um número mágico
+  sem evidência de que o rodízio real do cliente zero precisa disso, e é
+  mais fácil apertar depois do que adivinhar agora.
+- **Não filtra por dupla escalação na mesma celebração** (mesma pessoa em
+  duas funções do mesmo culto): igreja pequena escala a mesma pessoa em som
+  e recepção com frequência, e o próprio schema não impede isso hoje
+  (`@@unique` de `CelebrationAssignment` é por função, não por instância).
+- **Teto de 10 sugestões por função** (`MAX_SUGGESTIONS_PER_MINISTRY`),
+  com `eligible_count` informando o total elegível — evita payload grande
+  em ministério com dezenas de voluntários; quem decide de fato escalar usa
+  o `POST .../assignments` que já existia, então o teto não bloqueia nada.
+- **Sem tela no `apps/web`**: o padrão de UI de escala
+  (`AssignmentsPanel`/equivalente) já existe, mas encaixar "sugerir e um
+  clique aplica" nele é decisão de fluxo (lista simples? um botão por
+  função? aplica direto ou só preenche o formulário?) que vale ficar para
+  quem for desenhar a tela, não decidida aqui às pressas. Fica como API
+  pronta, mesmo padrão do `PROD-23`.
+
+Testes: `celebration-schedule-suggestion.service.spec.ts` (instância
+inexistente, sem escala, sem ministério, já atribuído, sem disponibilidade
+declarada, indisponibilidade pontual, ordenação de rodízio, `declined`/
+`swapped` fora da contagem, `availability` em formato inesperado tratado
+como indisponível em vez de lançar) e o `controller.spec.ts`/
+`module.spec.ts` do módulo atualizados para o provider novo. RLS: nenhum
+script novo — só leitura de tabelas que já existiam sob RLS
+(`volunteer_ministries`, `volunteer_unavailability_dates`,
+`celebration_assignments`), mesmas policies que `celebration-assignment.service.ts`
+já usa.
 
 ---
 
