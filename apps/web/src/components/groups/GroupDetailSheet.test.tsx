@@ -470,6 +470,101 @@ describe("GroupDetailSheet", () => {
     ).toBe(materialsCallCount);
   });
 
+  it("gera e renova o código de check-in do encontro (PROD-12)", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/meetings/mtg1/materials")
+        return Promise.resolve({ data: { data: [] } });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { token: "abc123", expires_at: "2026-08-01T16:00:00.000Z" },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Reuniões" }));
+    expect(await screen.findByText("Estudo")).toBeInTheDocument();
+    await user.click(screen.getByText("Estudo"));
+
+    await user.click(screen.getByRole("button", { name: /Gerar código de check-in/ }));
+
+    expect(api.post).toHaveBeenCalledWith("/small-groups/meetings/mtg1/checkin-token");
+    expect(await screen.findByText("abc123")).toBeInTheDocument();
+
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { token: "def456", expires_at: "2026-08-01T18:00:00.000Z" },
+    });
+    await user.click(screen.getByRole("button", { name: /Renovar/ }));
+    expect(await screen.findByText("def456")).toBeInTheDocument();
+    expect(screen.queryByText("abc123")).not.toBeInTheDocument();
+  });
+
+  it("mostra erro ao falhar a geração do código de check-in, sem travar o resto da tela", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/meetings/mtg1/materials")
+        return Promise.resolve({ data: { data: [] } });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.post).mockRejectedValueOnce(new Error("network"));
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Reuniões" }));
+    expect(await screen.findByText("Estudo")).toBeInTheDocument();
+    await user.click(screen.getByText("Estudo"));
+
+    await user.click(screen.getByRole("button", { name: /Gerar código de check-in/ }));
+
+    expect(await screen.findByText("Não deu para gerar o código. Tente de novo.")).toBeInTheDocument();
+  });
+
+  it("não mostra o botão de check-in por QR para quem não pode editar", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={false}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Reuniões" }));
+    expect(await screen.findByText("Estudo")).toBeInTheDocument();
+    await user.click(screen.getByText("Estudo"));
+
+    expect(screen.queryByRole("button", { name: /Gerar código de check-in/ })).not.toBeInTheDocument();
+  });
+
   it("expands a material's version history, caches it, and collapses it again", async () => {
     const materials = [
       {
