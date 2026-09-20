@@ -205,4 +205,108 @@ describe('CelebrationScheduleSuggestionService', () => {
 
     expect(result!.eligible_count).toBe(0);
   });
+
+  it('resolve o balde afternoon para celebração à tarde', async () => {
+    const client = clientWith();
+    client.celebrationInstance.findFirst.mockResolvedValue({
+      ...instanceWith([
+        { id: 'cm1', ministry_id: 'min1', slots: 1, ministry: { name: 'Louvor' }, assignments: [] },
+      ]),
+      celebration: { start_time: '14:30' },
+    });
+    client.volunteerMinistry.findMany.mockResolvedValue([
+      profile('v1', 'Ana', { sunday: ['afternoon'] }),
+      profile('v2', 'Bia', { sunday: ['morning'] }),
+    ]);
+    const service = serviceWith(client);
+
+    const [result] = await service.suggest('t1', 'g1', 'i1');
+
+    expect(result!.suggestions.map((s) => s.volunteer_profile_id)).toEqual(['v1']);
+  });
+
+  it('resolve o balde evening para celebração à noite', async () => {
+    const client = clientWith();
+    client.celebrationInstance.findFirst.mockResolvedValue({
+      ...instanceWith([
+        { id: 'cm1', ministry_id: 'min1', slots: 1, ministry: { name: 'Louvor' }, assignments: [] },
+      ]),
+      celebration: { start_time: '19:15' },
+    });
+    client.volunteerMinistry.findMany.mockResolvedValue([
+      profile('v1', 'Ana', { sunday: ['evening'] }),
+      profile('v2', 'Bia', { sunday: ['afternoon'] }),
+    ]);
+    const service = serviceWith(client);
+
+    const [result] = await service.suggest('t1', 'g1', 'i1');
+
+    expect(result!.suggestions.map((s) => s.volunteer_profile_id)).toEqual(['v1']);
+  });
+
+  it('não atualiza last_served_at quando um registro de histórico mais antigo chega depois de um mais novo', async () => {
+    const client = clientWith();
+    client.celebrationInstance.findFirst.mockResolvedValue(
+      instanceWith([
+        { id: 'cm1', ministry_id: 'min1', slots: 1, ministry: { name: 'Louvor' }, assignments: [] },
+      ]),
+    );
+    client.volunteerMinistry.findMany.mockResolvedValue([profile('v1', 'Ana')]);
+    client.celebrationAssignment.findMany.mockResolvedValue([
+      {
+        volunteer_profile_id: 'v1',
+        celebrationMinistry: {
+          schedule: { celebrationInstance: { scheduled_date: new Date('2026-09-01') } },
+        },
+      },
+      {
+        volunteer_profile_id: 'v1',
+        celebrationMinistry: {
+          schedule: { celebrationInstance: { scheduled_date: new Date('2026-07-01') } },
+        },
+      },
+    ]);
+    const service = serviceWith(client);
+
+    const [result] = await service.suggest('t1', 'g1', 'i1');
+
+    expect(result!.suggestions[0]).toMatchObject({
+      times_served: 2,
+      last_served_at: new Date('2026-09-01'),
+    });
+  });
+
+  it('desempata por nome quando tempo servido e última vez servida são iguais', async () => {
+    const client = clientWith();
+    client.celebrationInstance.findFirst.mockResolvedValue(
+      instanceWith([
+        { id: 'cm1', ministry_id: 'min1', slots: 4, ministry: { name: 'Louvor' }, assignments: [] },
+      ]),
+    );
+    client.volunteerMinistry.findMany.mockResolvedValue([
+      profile('v1', 'Ana'), // nunca serviu
+      profile('v2', 'Bia'), // nunca serviu — empata com Ana em times_served e last_served_at (ambos null)
+      profile('v3', 'Caio'), // serviu 1x, há mais tempo
+      profile('v4', 'Duda'), // serviu 1x, mais recentemente
+    ]);
+    client.celebrationAssignment.findMany.mockResolvedValue([
+      {
+        volunteer_profile_id: 'v3',
+        celebrationMinistry: {
+          schedule: { celebrationInstance: { scheduled_date: new Date('2026-01-01') } },
+        },
+      },
+      {
+        volunteer_profile_id: 'v4',
+        celebrationMinistry: {
+          schedule: { celebrationInstance: { scheduled_date: new Date('2026-02-01') } },
+        },
+      },
+    ]);
+    const service = serviceWith(client);
+
+    const [result] = await service.suggest('t1', 'g1', 'i1');
+
+    expect(result!.suggestions.map((s) => s.volunteer_profile_id)).toEqual(['v1', 'v2', 'v3', 'v4']);
+  });
 });
