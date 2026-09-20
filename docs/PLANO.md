@@ -79,6 +79,33 @@ evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
 
+Varredura de **2026-09-20**, contra a `main` em `5f03d69` (inclui os merges
+dos PR #99, #100 e #101, todos de 2026-09-17 e já refletidos neste
+documento antes desta rodada; `a72f311`, no mesmo dia, foi só cobertura de
+branch no CI, sem tocar produto). `npm run test:rls -w orbien-backend`
+fecha em **138 testes em 9 suítes** — bate com o que `docs/TESTES.md` já
+registrava, nenhuma contagem para corrigir aqui desta vez.
+
+Conferidos um a um e **sem mudança de código**, exatamente como descritos:
+`PROD-05` (nenhuma rota de sugestão de escala), `PROD-07` (`OFX` em
+`financial/export/` continua só exportação, nenhuma importação/conciliação),
+`PROD-08`, `PROD-12` (presença de encontro segue `createMany` manual,
+`QrToken` continua exclusivo do cadastro de visitante), `PROD-17` (só a
+segmentação básica por critério estático), `PROD-23` (a rota de pedidos de
+visita existe, nenhuma tela do `apps/web` a chama), `PEND-04` (ações C e D —
+`include:` ainda em `auth.service.ts:112,192,240,373`; `tenants`,
+`congregations`, `branding_configs`, `tenant_plans` e `refresh_tokens`
+seguem com `USING (true)` em `017_rls_auth_tables.sql`), `PEND-07` (`GET
+.../registrations/me` segue sem `qr_code`, que só sai no `POST`), `CONF-01`
+(as marcações `[REVISÃO JURÍDICA OBRIGATÓRIA]` seguem nos dois documentos),
+`CONF-02` (os quatro crons de `persons-retention.scheduler.ts` continuam
+cobrindo só as categorias de pessoa; nenhum cron novo de retenção de log de
+acesso ou de consentimento), `CONF-03` (`me.controller.ts` segue com `GET
+/me/permissions` e nada mais), `AJU-05` (`DEPLOY.md` sem seção de mobile) e
+`DEC-02`/`DEC-05` (nenhum profile por tenant em `apps/mobile/eas.json`).
+Nenhum `TODO`/`FIXME` novo fora deste documento encontrado no código dos
+cinco apps.
+
 ---
 
 ## 1. Visão do produto
