@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SegmentsService } from './segments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -10,6 +10,8 @@ const USER: JwtPayload = {
   roles: ['admin_congregation'],
   plan: 'premium',
 };
+
+const STARTER_USER: JwtPayload = { ...USER, plan: 'starter' };
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -47,6 +49,66 @@ describe('SegmentsService', () => {
         },
       });
       expect(result).toEqual({ id: 'seg1' });
+    });
+
+    it('permite critério avançado no plano Premium', async () => {
+      const client = clientWith();
+      client.audienceSegment.create.mockResolvedValue({ id: 'seg1' });
+      const service = serviceWith(client);
+
+      await service.create(
+        { name: 'Inativos', criteria: { inactive_since: { days: 30 } } } as never,
+        USER,
+      );
+
+      expect(client.audienceSegment.create).toHaveBeenCalled();
+    });
+
+    it('rejeita critério avançado (inactive_since) fora do plano Premium', async () => {
+      const client = clientWith();
+      const service = serviceWith(client);
+
+      await expect(
+        service.create(
+          { name: 'Inativos', criteria: { inactive_since: { days: 30 } } } as never,
+          STARTER_USER,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.audienceSegment.create).not.toHaveBeenCalled();
+    });
+
+    it('rejeita critério avançado (group_attendance_gap) fora do plano Premium', async () => {
+      const client = clientWith();
+      const service = serviceWith(client);
+
+      await expect(
+        service.create(
+          { name: 'Sem célula', criteria: { group_attendance_gap: { days: 60 } } } as never,
+          STARTER_USER,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejeita critério avançado (high_engagement) fora do plano Premium', async () => {
+      const client = clientWith();
+      const service = serviceWith(client);
+
+      await expect(
+        service.create(
+          { name: 'Engajados', criteria: { high_engagement: { days: 30, min_events: 3 } } } as never,
+          STARTER_USER,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('permite critério básico fora do plano Premium', async () => {
+      const client = clientWith();
+      client.audienceSegment.create.mockResolvedValue({ id: 'seg1' });
+      const service = serviceWith(client);
+
+      await service.create({ name: 'Jovens', criteria: { roles: ['member'] } } as never, STARTER_USER);
+
+      expect(client.audienceSegment.create).toHaveBeenCalled();
     });
   });
 
@@ -119,6 +181,28 @@ describe('SegmentsService', () => {
       const service = serviceWith(client);
 
       await expect(service.update('seg1', {} as never, USER)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('rejeita atualizar para critério avançado fora do plano Premium', async () => {
+      const client = clientWith();
+      client.audienceSegment.findFirst.mockResolvedValue({ id: 'seg1' });
+      const service = serviceWith(client);
+
+      await expect(
+        service.update('seg1', { criteria: { inactive_since: { days: 30 } } } as never, STARTER_USER),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.audienceSegment.update).not.toHaveBeenCalled();
+    });
+
+    it('não exige Premium quando criteria não é alterado', async () => {
+      const client = clientWith();
+      client.audienceSegment.findFirst.mockResolvedValue({ id: 'seg1' });
+      client.audienceSegment.update.mockResolvedValue({ id: 'seg1', name: 'Novo' });
+      const service = serviceWith(client);
+
+      await service.update('seg1', { name: 'Novo' } as never, STARTER_USER);
+
+      expect(client.audienceSegment.update).toHaveBeenCalled();
     });
   });
 

@@ -79,7 +79,28 @@ evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
 
-Em **2026-09-20** fechou `PROD-07` (conciliação bancária — importar OFX,
+Em **2026-09-20** fechou `PROD-05` (sugestão automática de escala por
+disponibilidade e rodízio, Módulo 1) — ver a nota da seção 6. Só backend:
+`GET /celebrations/instances/:instanceId/schedule/suggest`, sem tabela nova.
+
+Também em **2026-09-20** fechou `PROD-08` (carnê do dizimista / relatório anual
+para IR) — nota completa na seção 6. `AnnualDonationReportService` novo em
+`apps/api/src/financial/`, registrado em `PixModule` (mesmo módulo de
+`DonationReceiptsController`, não `FinancialModule`); duas rotas Premium em
+`GET /financial/donation-receipts/annual/*`; sem tabela nova, sem migration,
+sem script de RLS — o relatório é recalculado sob demanda a partir de
+`FinancialTransaction`/`Person`, não persiste em R2. Geração em lote (um PDF
+por doador de uma vez) ficou de fora, documentada como próximo passo.
+
+Também em **2026-09-20** fechou `PROD-17` (segmentação avançada de notificações —
+comportamento, engajamento, inatividade — Premium), nota completa na
+seção 6: três critérios novos resolvidos a partir de sinais que já existiam
+no schema (`VisitRecord`, `AttendanceRecord`, `MaterialOpenRecord`), sem
+critério de "abriu/não abriu notificação" (decisão registrada, dado
+inexistente por pessoa). Gate de Premium no service, mesmo princípio do
+`PROD-24`.
+
+Também em **2026-09-20** fechou `PROD-07` (conciliação bancária — importar OFX,
 Premium — ver a nota da seção 6).
 
 ---
@@ -110,7 +131,7 @@ foi retomado — cinco no total.
 | Módulo 1 — Membros e Voluntários | Entregue, incluindo escalas, trocas e check-in |
 | Módulo 2 — Financeiro | Entregue — plano de contas, lançamentos, PIX cenários 1–3 com webhook Asaas, DRE, fluxo de caixa, forecast, exportação contábil |
 | Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
-| Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica, métricas da OneSignal |
+| Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
 | Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
@@ -566,11 +587,126 @@ que o `PROD-20` trouxe no mesmo dia).
 
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
-| `PROD-05` | 1 | Sugestão automática de escala por disponibilidade e rodízio | Premium | Existia no sistema antigo (`/volunteers/schedules/.../suggest`) e saiu junto com ele; `CelebrationSchedule` nunca teve |
-| `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
-| `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
+
+### ~~PROD-08 · Carnê do dizimista / relatório anual para IR~~ · fechado
+
+Entregue em 2026-09-20, em `apps/api/src/financial/`. Reaproveita o mesmo
+critério de "identificado" que `DonationReceiptService` (`PROD-03`) já usa —
+receita, `donor_person_id` presente, `is_anonymous` falso — só que somado por
+ano-calendário em vez de por transação, e sem exigir e-mail cadastrado (o
+tesoureiro é quem gera e entrega o documento, não é envio automático).
+
+- `AnnualDonationReportService` novo, com três métodos: `buildReport`
+  (doador + ano → lista de contribuições e total), `listDonorsForYear`
+  (agregação por doador via `groupBy`, para o tesoureiro gerar em lote) e
+  `generatePdf` (monta o "Carnê do Dizimista", mesmo padrão `pdfmake` do
+  `DonationReceiptService`/`DrePdfService`, incluindo o mesmo bloqueio de
+  `setLocalAccessPolicy`/`setUrlAccessPolicy`).
+- Duas rotas em `DonationReceiptsController` (que já mora em `PixModule`,
+  não em `FinancialModule` — decisão de `PROD-24` para não arrastar o
+  `archiver` ESM-only no grafo de DI; `AnnualDonationReportService` foi
+  registrado nesse mesmo módulo, não no `FinancialModule`):
+  `GET /financial/donation-receipts/annual/summary?year=2026` (lista todos
+  os doadores do ano com total e contagem, para o tesoureiro decidir para
+  quem gerar) e `GET /financial/donation-receipts/annual/:personId?year=2026`
+  (PDF do carnê individual, `StreamableFile`). Mesmo trio de guardas do
+  resto do financeiro Premium (`JwtAuthGuard, RolesGuard, PlanGuard` +
+  `@RequiresPlan('premium')`), mesmos papéis de leitura
+  (`PRODUCT_AREA_READ_ROLES.financial`). A rota `annual/summary` é
+  registrada **antes** de `annual/:personId` no controller — de propósito,
+  para o router não tentar casar "summary" como `personId`.
+- **Sem persistência em R2 nem tabela nova** — decisão deliberada, diferente
+  do recibo por doação. O recibo (`PROD-03`) nasce de um pagamento PIX já
+  confirmado e imutável, por isso faz sentido gravá-lo uma vez. O carnê
+  anual é uma soma recalculável a qualquer momento a partir de
+  `FinancialTransaction`; persisti-lo exigiria migration + script de RLS
+  novo (a ordem frágil que o `CLAUDE.md` documenta em `bootstrap-db.sh`) só
+  para guardar um PDF que o tesoureiro pode reemitir com o mesmo resultado
+  a qualquer hora. Gerado sob demanda e devolvido como `StreamableFile`,
+  mesmo padrão de `DrePdfService.generatePdf`/`DreController.exportPdf`
+  (que também não persiste).
+- **Sem filtro de `status`** na soma — mesmo precedente do `DreService`, que
+  também soma o tenant inteiro sem olhar `status` da transação
+  (`pending`/`paid`/`confirmed`).
+- **Sem CPF** — o schema não modela esse campo em `Person`, então o carnê
+  não o traz. Mesmo espírito de `PROD-03`: o PDF não é documento fiscal (não
+  modela CNPJ/razão social da igreja), e o rodapé diz isso explicitamente,
+  porque aqui o documento se apresenta como prova para a declaração de IR do
+  doador — mais motivo para deixar claro o que ele não é.
+- **Escopo do tenant inteiro, não por congregação** — mesmo recorte que
+  `DonationReceiptService.list` já usa; um doador pode ter contribuído em
+  mais de uma congregação do mesmo tenant ao longo do ano.
+- Testes: `annual-donation-report.service.spec.ts` (soma, filtro do
+  período/critério de identificação, agregação e ordenação da listagem,
+  doador de outro tenant vira 404, PDF gerado mesmo sem contribuição no
+  ano) e `donation-receipts.controller.spec.ts` (as duas rotas novas,
+  incluindo os headers de download do PDF). `financial.module.spec.ts`
+  ganhou a instância nova no smoke test de compilação do módulo.
+- **Ficou de fora**: geração em lote de um PDF por doador de uma vez
+  (endpoint dispara N `generatePdf`, um ZIP ou downloads sequenciais). O
+  endpoint de `annual/summary` cobre a decisão de "para quem gerar"; falta
+  a ação de "gerar todos" em si. Não entrou porque o padrão de ZIP do
+  módulo (`ZipExportService`, `archiver`) vive em `FinancialModule`, e
+  `DonationReceiptsController` está em `PixModule` justamente para não
+  arrastar esse pacote ESM-only — misturar os dois exigiria repensar a
+  fronteira entre os dois módulos, não só adicionar uma rota. Sem tela no
+  `apps/web`/`apps/admin` consumindo nenhuma das duas rotas ainda, também de
+  propósito — a tarefa pediu o back-end.
+
+### ~~PROD-17 · Segmentação avançada de notificações (comportamento, engajamento, inativos)~~ · fechado (Premium)
+
+Entregue em 2026-09-20, sobre a segmentação básica já existente
+(`AudienceSegment`/`SegmentCriteriaDto`) — três critérios novos e aditivos em
+`segment-criteria.dto.ts`: `inactive_since` (sem nenhum sinal de engajamento
+há N dias), `group_attendance_gap` (sem presença em `GroupMeeting` — célula —
+há N dias) e `high_engagement` (N ou mais sinais de engajamento numa janela).
+"Sinal de engajamento" é o que o schema já tinha por outro motivo, sem
+tracking novo: `VisitRecord` (visita), `AttendanceRecord` (presença em
+reunião de célula) e `MaterialOpenRecord` (abertura de material de estudo,
+`PROD-10`). **Não existe critério de "abriu/não abriu notificação"** — decisão
+registrada no cabeçalho do DTO: `NotificationDispatch.reached`/`opened` é
+agregado por disparo (quantos no total), não por destinatário, e não dá para
+responder "esta pessoa abriu" sem inventar tracking novo, o que o item
+pediu para evitar.
+
+**Premium via checagem no service, mesmo princípio do `PROD-24`
+(`registration_price`).** `SegmentsService.create`/`.update` chamam
+`assertBehaviorCriteriaPlan(dto.criteria, user.plan)` antes de gravar —
+`ForbiddenException` quando `criteria` usa qualquer um dos três critérios
+avançados e o plano não é Premium. Os critérios básicos (papel, congregação,
+célula, faixa etária) continuam nos dois planos, na mesma rota e no mesmo
+DTO — por isso o gate é no service, não um `@RequiresPlan('premium')` no
+controller, que bloquearia os básicos junto.
+
+**Resolução muda de mecanismo quando o segmento é avançado.** A segmentação
+básica nunca resolveu destinatário nenhum: `NotificationsService.buildFilters`
+monta filtro de **tag** do OneSignal (`tenant_id`/`congregation_id`/`pg_ids`/
+`role`), e quem casa tag com device é o próprio OneSignal — não existe tag de
+"sem presença há N dias". Por isso, quando qualquer segmento de uma chamada
+(`notifyPost`/`sendManualNotification`) tem critério avançado, a chamada
+inteira (todos os segmentos, básicos inclusive) muda para resolução direta:
+consulta os `UserAccount` ativos e com `person_id` do tenant, filtra pelos
+critérios básicos do próprio segmento (congregação/papel/célula) e pelos
+avançados, e envia por `include_external_user_ids` — o mesmo valor que
+`OneSignal.login(payload.sub)` grava como external id do device em
+`onesignal-client.ts` (MOB-07, ou seja, `UserAccount.id`). OR entre segmentos
+vira união com deduplicação das listas de conta. A preferência de categoria
+(`pref_<categoria>`, MOB-10b) continua respeitada, com o mesmo default
+(`NotificationPreference` sem linha = não desativou), só em `notifyPost` —
+`sendManualNotification` já não filtrava por categoria antes (sem
+`ContentPostType`) e continua sem filtrar. Sem destinatário elegível, não
+chama o OneSignal (evita erro da API com lista vazia) e grava o dispatch como
+`sent` sem `onesignal_id` — não é falha do envio.
+
+Testes: `segment-criteria.dto.spec.ts` (validação dos três critérios novos e
+`hasBehaviorCriteria`), `segments.service.spec.ts` (gate de plano em
+`create`/`update`, básico continua liberado no Starter) e
+`notifications.service.spec.ts` (resolução por `external_user_ids`, filtro
+básico dentro da consulta avançada, os três critérios isoladamente, união e
+deduplicação entre segmentos, preferência de categoria e o caminho sem
+destinatário elegível).
 
 ### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
 
@@ -924,6 +1060,60 @@ e plano exigidos), `financial.module.spec.ts` atualizado com o controller e
 o service novos. `npm run test:rls -w orbien-backend` roda sem alteração —
 138 testes em 9 suítes, sem mudança de número: nenhum arquivo de RLS
 `0NN_*` novo, e a tabela nova não tem suíte própria pela decisão acima.
+
+### ~~PROD-05 · Sugestão automática de escala por disponibilidade e rodízio~~ · fechado
+
+Entregue em 2026-09-20: `GET /celebrations/instances/:instanceId/schedule/suggest`,
+no mesmo `CelebrationScheduleController` (herda `@RequiresPlan('premium')` de
+classe — o módulo inteiro já é Premium, não precisou de decorator próprio) e
+os mesmos `MANAGE_ROLES` de `getSchedule`/`addMinistry`. Serviço novo,
+`CelebrationScheduleSuggestionService`, sem tabela nova — cruza dado que já
+existia:
+
+- **Funções a preencher são as já vinculadas à escala** (`CelebrationMinistry`
+  criado por `addMinistry`/`applyTemplate`), não um formulário à parte — a
+  sugestão preenche, não decide, quais funções a celebração precisa.
+- **Disponibilidade declarada** (`VolunteerProfile.availability`, Json
+  `{dia: slot[]}`) é checada contra o dia da semana de `scheduled_date` e um
+  balde de horário derivado de `Celebration.start_time`
+  (`<12h` manhã, `12–18h` tarde, `≥18h` noite — mesmos três rótulos que o
+  cadastro já usa). Quem não declarou o dia/horário não é sugerido: não dá
+  para confirmar disponibilidade a partir do silêncio.
+- **Indisponibilidade pontual** (`VolunteerUnavailabilityDate`) exclui pela
+  data exata da instância, mesma consulta de
+  `CelebrationAssignmentService.checkUnavailability`.
+- **Rodízio**: ordena por menos vezes atribuído à mesma função primeiro e,
+  empatado, por quem serviu há mais tempo (nunca serviu conta como "há mais
+  tempo" possível). Histórico conta `pending`/`confirmed`; `declined` e
+  `swapped` não contam — o voluntário não chegou a servir naquele slot.
+  Sem corte por janela de tempo (ex. "últimos 6 meses"): um número mágico
+  sem evidência de que o rodízio real do cliente zero precisa disso, e é
+  mais fácil apertar depois do que adivinhar agora.
+- **Não filtra por dupla escalação na mesma celebração** (mesma pessoa em
+  duas funções do mesmo culto): igreja pequena escala a mesma pessoa em som
+  e recepção com frequência, e o próprio schema não impede isso hoje
+  (`@@unique` de `CelebrationAssignment` é por função, não por instância).
+- **Teto de 10 sugestões por função** (`MAX_SUGGESTIONS_PER_MINISTRY`),
+  com `eligible_count` informando o total elegível — evita payload grande
+  em ministério com dezenas de voluntários; quem decide de fato escalar usa
+  o `POST .../assignments` que já existia, então o teto não bloqueia nada.
+- **Sem tela no `apps/web`**: o padrão de UI de escala
+  (`AssignmentsPanel`/equivalente) já existe, mas encaixar "sugerir e um
+  clique aplica" nele é decisão de fluxo (lista simples? um botão por
+  função? aplica direto ou só preenche o formulário?) que vale ficar para
+  quem for desenhar a tela, não decidida aqui às pressas. Fica como API
+  pronta, mesmo padrão do `PROD-23`.
+
+Testes: `celebration-schedule-suggestion.service.spec.ts` (instância
+inexistente, sem escala, sem ministério, já atribuído, sem disponibilidade
+declarada, indisponibilidade pontual, ordenação de rodízio, `declined`/
+`swapped` fora da contagem, `availability` em formato inesperado tratado
+como indisponível em vez de lançar) e o `controller.spec.ts`/
+`module.spec.ts` do módulo atualizados para o provider novo. RLS: nenhum
+script novo — só leitura de tabelas que já existiam sob RLS
+(`volunteer_ministries`, `volunteer_unavailability_dates`,
+`celebration_assignments`), mesmas policies que `celebration-assignment.service.ts`
+já usa.
 
 ---
 
