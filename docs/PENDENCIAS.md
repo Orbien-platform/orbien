@@ -1420,6 +1420,57 @@ tocar a consulta de encontros/materiais.
 
 ---
 
+## PEND-08 · `pre-push.sh` só reconhecia `test/rls/isolation.spec.ts` — fechada em 2026-09-20
+
+Achado do próprio portão ao fechar `PROD-12` (2026-09-20): o PR do check-in
+por QR (#108) adicionou `test/rls/meeting-checkin-tokens.spec.ts` cobrindo
+`meeting_checkin_tokens`, mas `pre-push.sh` continuou acusando ausência de
+teste de RLS para essa tabela mesmo com a suíte presente e passando.
+
+### Causa raiz
+
+O passo "tabela nova exige RLS e teste de isolamento"
+(`scripts/pre-push.sh:93-105`) confere `ENABLE ROW LEVEL SECURITY` em
+qualquer script `0NN_rls_*.sql` — isso funcionava —, mas o caso de teste só
+procurava o nome da tabela (ou seu delegate Prisma) dentro de **um arquivo
+fixo**, `test/rls/isolation.spec.ts`. Desde que o módulo passou a preferir um
+arquivo dedicado por tabela nova (`networks.spec.ts`,
+`event-registrations.spec.ts`, agora `meeting-checkin-tokens.spec.ts`), esse
+caminho ficou incompleto: o alerta disparava mesmo com isolamento provado, só
+que no arquivo errado.
+
+Evidência levantada na sessão que abriu esta pendência: `networks`
+(`PROD-20`, 2026-09-15) já disparava o mesmo alerta e nunca tinha sido
+registrado; `event_registrations` (`PROD-16`) tinha os dois — arquivo
+dedicado **e** um caso em `isolation.spec.ts` — então não disparava.
+`small_group_visit_requests` e `waitlist_subscribers` também disparavam pelo
+mesmo motivo, sem nunca terem sido registrados.
+
+### Correção
+
+`scripts/pre-push.sh:101` trocou o alvo fixo `isolation.spec.ts` por
+`apps/api/test/rls/*.spec.ts` — o `grep` agora varre todo arquivo dedicado da
+pasta, não só o histórico. Mensagem do alerta ajustada de acordo
+("nenhum spec de `test/rls/`", em vez de citar um arquivo específico).
+
+### Verificação
+
+Rodado à parte dos 8 apps (o diff desta correção não toca
+`apps/api/prisma/migrations/`, então o passo não é exercitado pelo próprio
+diff): para cada tabela com `ENABLE ROW LEVEL SECURITY` em algum
+`0NN_rls_*.sql`, o novo padrão reconhece cobertura em `test/rls/*.spec.ts`
+para as onze tabelas verificadas — nenhuma delas fica sem cobertura por
+engano. Contra o padrão antigo (só `isolation.spec.ts`), quatro dessas
+onze davam falso alerta: `meeting_checkin_tokens`, `networks`,
+`small_group_visit_requests` e `waitlist_subscribers` — todas com suíte
+dedicada, nenhuma com caso em `isolation.spec.ts`. `bash scripts/pre-push.sh`
+completo (build, tipos, lint, skills) rodado depois da correção, sem essa
+etapa acusando falta de cobertura.
+
+### Nada em aberto nesta pendência
+
+---
+
 ## DEC-01 · Gating por plano — decidido e executado em 2026-09-12
 
 `TenantPlan` existia no schema e era gravado no provisionamento desde a

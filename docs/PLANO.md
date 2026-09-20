@@ -111,7 +111,8 @@ ver a nota da seção 6): `MeetingCheckinToken` novo, dois endpoints em
 suíte de RLS agora em 144 testes em 10 suítes) e tela do líder no `apps/web`
 (`GroupDetailSheet`) — a do membro ficou para o `apps/mobile`, à parte, pelo
 mesmo motivo do `PROD-25`. `PEND-08` nasceu na mesma rodada, sobre um alerta
-de `pre-push.sh` aceito sem ajuste.
+de `pre-push.sh` que não reconhecia arquivo dedicado — fechada no mesmo dia,
+ver `PENDENCIAS.md`.
 
 ---
 
@@ -1201,8 +1202,9 @@ novo, sob o próprio modelo: `MeetingCheckinToken`
   a suíte de RLS fecha em **144 testes em 10 suítes** (a última contagem
   registrada aqui, 125 em 7, já estava desatualizada por `audit-writes.spec.ts`
   e `auth-tables.spec.ts`, que a varredura de 2026-09-15 não tinha contado;
-  ficam registrados agora que apareceram). `PEND-08` (seção 7) documenta um
-  alerta de portão que este arquivo dispara, deliberadamente aceito.
+  ficam registrados agora que apareceram). `PEND-08` documentou um alerta de
+  portão que este arquivo disparava por engano — fechada em `PENDENCIAS.md`,
+  o alerta agora varre todo `test/rls/*.spec.ts`.
 - **Tela**: só o lado do líder, no `apps/web`. `GroupDetailSheet`, aba
   "Reuniões", ganhou "Gerar código de check-in" dentro do encontro expandido
   (mesmo `canEdit` que já libera "Registrar reunião") — mostra o código e a
@@ -1451,37 +1453,6 @@ A correção é de backend, não de tela: expor o `qr_code` do `PixPayment`
 ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
 ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
 tela sobre API pronta.
-
-### PEND-08 · `pre-push.sh` só reconhece `test/rls/isolation.spec.ts` · dívida
-
-Achado do próprio portão ao fechar `PROD-12` (2026-09-20), aceito sem ajuste
-— registrado por escrito em vez de corrigido por conta própria, como o
-`CLAUDE.md` pede para alerta de portão.
-
-O passo "tabela nova exige RLS e teste de isolamento"
-(`scripts/pre-push.sh:93-105`) confere ENABLE ROW LEVEL SECURITY em qualquer
-script `0NN_rls_*.sql` — isso funciona —, mas o caso de teste só procura o
-nome da tabela (ou seu delegate Prisma) dentro de **um arquivo fixo**,
-`test/rls/isolation.spec.ts`. Desde que o módulo passou a preferir um arquivo
-dedicado por tabela nova (`networks.spec.ts`, `event-registrations.spec.ts`,
-agora `meeting-checkin-tokens.spec.ts`), esse caminho ficou incompleto: o
-alerta dispara mesmo com isolamento provado, só que no arquivo errado.
-
-Evidência: `networks` (`PROD-20`, 2026-09-15) já dispara o mesmo alerta hoje
-— zero ocorrências de `network` em `isolation.spec.ts` — e nunca foi
-registrado como pendência; `event_registrations` (`PROD-16`) tem os dois,
-arquivo dedicado **e** um caso em `isolation.spec.ts`, então não dispara.
-`meeting_checkin_tokens` (`PROD-12`) segue o padrão de `networks`: só arquivo
-dedicado, então também dispara.
-
-Decisão desta sessão: não editar `pre-push.sh` fora do que foi pedido. É
-alerta, não bloqueio (`alerta`, não `bloqueia`), e a suíte dedicada prova o
-isolamento de verdade — o portão está incompleto, não errado. Corrigir
-precisaria decidir entre estender a lista de arquivos que o `grep` varre ou
-aceitar duplicar o caso em `isolation.spec.ts` como `event_registrations`
-faz; as duas têm custo (a primeira mexe num script comum a todo o time, a
-segunda é o retrabalho que motivou ter arquivo dedicado). Fica para quem
-decidir se vale ajustar o script ou vale mais duplicar o caso.
 
 ---
 
