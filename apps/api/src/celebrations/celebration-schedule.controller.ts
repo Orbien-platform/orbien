@@ -8,6 +8,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationScheduleSuggestionService } from './celebration-schedule-suggestion.service';
 import { AddScheduleMinistryDto } from './dto/add-schedule-ministry.dto';
 import { ApplyTemplateDto } from './dto/apply-template.dto';
 
@@ -21,7 +22,10 @@ const DELETE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
 @UseInterceptors(TenantContextInterceptor)
 @RequiresPlan('premium')
 export class CelebrationScheduleController {
-  constructor(private readonly scheduleService: CelebrationScheduleService) {}
+  constructor(
+    private readonly scheduleService: CelebrationScheduleService,
+    private readonly suggestionService: CelebrationScheduleSuggestionService,
+  ) {}
 
   @Post(':instanceId/schedule')
   @Roles(...MANAGE_ROLES)
@@ -69,5 +73,14 @@ export class CelebrationScheduleController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.scheduleService.applyTemplate(user.tenant_id, user.congregation_id, instanceId, dto);
+  }
+
+  // GET, não POST: sugestão é leitura pura, não cria nem altera nada (mesmo
+  // princípio de getSchedule/getMinistryAvailability) — quem decide escalar de
+  // fato usa o POST de assignments já existente.
+  @Get(':instanceId/schedule/suggest')
+  @Roles(...MANAGE_ROLES)
+  suggest(@Param('instanceId') instanceId: string, @CurrentUser() user: JwtPayload) {
+    return this.suggestionService.suggest(user.tenant_id, user.congregation_id, instanceId);
   }
 }
