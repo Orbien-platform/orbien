@@ -9,6 +9,11 @@ function prismaWith(overrides: {
   const system = {
     audienceSegment: { findMany: jest.fn() },
     notificationDispatch: { findMany: jest.fn(), update: jest.fn(), create: jest.fn() },
+    userAccount: { findMany: jest.fn().mockResolvedValue([]) },
+    visitRecord: { findMany: jest.fn().mockResolvedValue([]) },
+    attendanceRecord: { findMany: jest.fn().mockResolvedValue([]) },
+    materialOpenRecord: { findMany: jest.fn().mockResolvedValue([]) },
+    notificationPreference: { findMany: jest.fn().mockResolvedValue([]) },
     ...overrides.system,
   };
   const client = {
@@ -449,6 +454,257 @@ describe('NotificationsService', () => {
 
       expect(system.notificationDispatch.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: 'failed', onesignal_id: null }) }),
+      );
+    });
+  });
+
+  describe('segmentação avançada (PROD-17) — resolução por external_user_ids', () => {
+    it('sendManualNotification resolve por UserAccount.id e envia include_external_user_ids', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([
+        { id: 'acc1', person_id: 'p1' },
+        { id: 'acc2', person_id: 'p2' },
+      ]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', {
+        title: 'T',
+        body: 'B',
+        segment_ids: ['s1'],
+      } as never);
+
+      expect(system.audienceSegment.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['s1'] }, tenant_id: 't1' },
+      });
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.filters).toBeUndefined();
+      expect(payload.channel_for_external_user_ids).toBe('push');
+      expect(payload.include_external_user_ids.sort()).toEqual(['acc1', 'acc2']);
+    });
+
+    it('não chama a rota de tag quando o segmento é avançado (buildFilters não roda)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { group_attendance_gap: { days: 60 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([{ id: 'acc1', person_id: 'p1' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', {
+        title: 'T',
+        body: 'B',
+        segment_ids: ['s1'],
+      } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect('filters' in payload).toBe(false);
+    });
+
+    it('filtra a base de contas por congregation_ids/roles/group_ids (básicos) antes do critério avançado', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        {
+          criteria: {
+            congregation_ids: ['g1'],
+            roles: ['member'],
+            group_ids: ['grp1'],
+            inactive_since: { days: 30 },
+          },
+        },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([{ id: 'acc1', person_id: 'p1' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      expect(system.userAccount.findMany).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 't1',
+          is_active: true,
+          person_id: { not: null },
+          congregation_id: { in: ['g1'] },
+          roleAssignments: { some: { role_code: { in: ['member'] } } },
+          person: { groupMemberships: { some: { small_group_id: { in: ['grp1'] } } } },
+        },
+        select: { id: true, person_id: true },
+      });
+    });
+
+    it('inactive_since exclui quem teve visita/presença/abertura de material recente', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([
+        { id: 'acc-engajado', person_id: 'p-engajado' },
+        { id: 'acc-inativo', person_id: 'p-inativo' },
+      ]);
+      system.attendanceRecord.findMany.mockResolvedValue([{ person_id: 'p-engajado' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids).toEqual(['acc-inativo']);
+    });
+
+    it('group_attendance_gap exclui quem teve presença em GroupMeeting no período', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { group_attendance_gap: { days: 60 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([
+        { id: 'acc-frequente', person_id: 'p-frequente' },
+        { id: 'acc-sumido', person_id: 'p-sumido' },
+      ]);
+      system.attendanceRecord.findMany.mockResolvedValue([{ person_id: 'p-frequente' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids).toEqual(['acc-sumido']);
+    });
+
+    it('high_engagement mantém só quem atinge min_events no período (soma visita+presença+abertura)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { high_engagement: { days: 30, min_events: 2 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([
+        { id: 'acc-alto', person_id: 'p-alto' },
+        { id: 'acc-baixo', person_id: 'p-baixo' },
+      ]);
+      system.visitRecord.findMany.mockResolvedValue([{ person_id: 'p-alto' }]);
+      system.attendanceRecord.findMany.mockResolvedValue([{ person_id: 'p-alto' }, { person_id: 'p-baixo' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids).toEqual(['acc-alto']);
+    });
+
+    it('faz OR (união) entre um segmento avançado e um básico na mesma chamada', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+        { criteria: { roles: ['pastor'] } },
+      ]);
+      system.userAccount.findMany
+        .mockResolvedValueOnce([{ id: 'acc-inativo', person_id: 'p-inativo' }])
+        .mockResolvedValueOnce([{ id: 'acc-pastor', person_id: 'p-pastor' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1', 's2'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids.sort()).toEqual(['acc-inativo', 'acc-pastor']);
+    });
+
+    it('deduplica quando a mesma conta é elegível por mais de um segmento', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+        { criteria: { roles: ['pastor'] } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([{ id: 'acc1', person_id: 'p1' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1', 's2'] } as never);
+
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids).toEqual(['acc1']);
+    });
+
+    it('sem nenhum destinatário elegível: não chama o OneSignal e grava dispatch sent', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([]);
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(system.notificationDispatch.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'sent', onesignal_id: null }) }),
+      );
+    });
+
+    it('notifyPost exclui quem desativou a categoria da preferência (paridade com pref_<categoria>)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.userAccount.findMany.mockResolvedValue([
+        { id: 'acc-quer', person_id: 'p1' },
+        { id: 'acc-optou-fora', person_id: 'p2' },
+      ]);
+      system.notificationPreference.findMany.mockResolvedValue([{ user_account_id: 'acc-optou-fora' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      const segment = { criteria: { inactive_since: { days: 30 } } } as never;
+      await service.notifyPost(
+        { id: 'p1', tenant_id: 't1', congregation_id: 'g1', title: 'T', body: 'B', type: 'notice' } as never,
+        [segment],
+      );
+
+      expect(system.notificationPreference.findMany).toHaveBeenCalledWith({
+        where: { tenant_id: 't1', user_account_id: { in: ['acc-quer', 'acc-optou-fora'] }, avisos: false },
+        select: { user_account_id: true },
+      });
+      const payload = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      expect(payload.include_external_user_ids).toEqual(['acc-quer']);
+    });
+
+    it('sendManualNotification não filtra por preferência de categoria (sem ContentPostType)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+      ]);
+      system.userAccount.findMany.mockResolvedValue([{ id: 'acc1', person_id: 'p1' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      expect(system.notificationPreference.findMany).not.toHaveBeenCalled();
+    });
+
+    it('ignora contas sem person_id vinculado na base (não elegíveis a critério de comportamento)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.audienceSegment.findMany.mockResolvedValue([
+        { criteria: { inactive_since: { days: 30 } } },
+      ]);
+      const service = new NotificationsService(prisma);
+
+      await service.sendManualNotification('t1', 'g1', { title: 'T', body: 'B', segment_ids: ['s1'] } as never);
+
+      expect(system.userAccount.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ person_id: { not: null } }) }),
       );
     });
   });
