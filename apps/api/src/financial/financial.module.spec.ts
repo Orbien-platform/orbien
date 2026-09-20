@@ -40,6 +40,7 @@ import { SpedExportService } from './export/sped-export.service';
 import { JobsService } from './export/jobs.service';
 import { DonationReceiptsController } from './donation-receipts.controller';
 import { DonationReceiptService } from './donation-receipts.service';
+import { AnnualDonationReportService } from './annual-donation-report.service';
 
 describe('FinancialModule', () => {
   it('compila e registra todos os controllers e providers', async () => {
@@ -81,6 +82,7 @@ describe('FinancialModule', () => {
     expect(moduleRef.get(JobsService)).toBeInstanceOf(JobsService);
     expect(moduleRef.get(DonationReceiptsController)).toBeInstanceOf(DonationReceiptsController);
     expect(moduleRef.get(DonationReceiptService)).toBeInstanceOf(DonationReceiptService);
+    expect(moduleRef.get(AnnualDonationReportService)).toBeInstanceOf(AnnualDonationReportService);
 
     await moduleRef.close();
   });
