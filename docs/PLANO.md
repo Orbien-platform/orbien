@@ -92,6 +92,14 @@ sem script de RLS — o relatório é recalculado sob demanda a partir de
 `FinancialTransaction`/`Person`, não persiste em R2. Geração em lote (um PDF
 por doador de uma vez) ficou de fora, documentada como próximo passo.
 
+Também em **2026-09-20** fechou `PROD-17` (segmentação avançada de notificações —
+comportamento, engajamento, inatividade — Premium), nota completa na
+seção 6: três critérios novos resolvidos a partir de sinais que já existiam
+no schema (`VisitRecord`, `AttendanceRecord`, `MaterialOpenRecord`), sem
+critério de "abriu/não abriu notificação" (decisão registrada, dado
+inexistente por pessoa). Gate de Premium no service, mesmo princípio do
+`PROD-24`.
+
 Também em **2026-09-20** fechou `PROD-12` (check-in de membros por QR no encontro,
 ver a nota da seção 6): `MeetingCheckinToken` novo, dois endpoints em
 `MeetingsController`, RLS em `018_rls_meeting_checkin_tokens.sql` (Padrão B,
@@ -128,7 +136,7 @@ foi retomado — cinco no total.
 | Módulo 1 — Membros e Voluntários | Entregue, incluindo escalas, trocas e check-in |
 | Módulo 2 — Financeiro | Entregue — plano de contas, lançamentos, PIX cenários 1–3 com webhook Asaas, DRE, fluxo de caixa, forecast, exportação contábil |
 | Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
-| Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica, métricas da OneSignal |
+| Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
 | Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
@@ -585,7 +593,6 @@ que o `PROD-20` trouxe no mesmo dia).
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
-| `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 
 ### ~~PROD-08 · Carnê do dizimista / relatório anual para IR~~ · fechado
@@ -652,6 +659,59 @@ tesoureiro é quem gera e entrega o documento, não é envio automático).
   fronteira entre os dois módulos, não só adicionar uma rota. Sem tela no
   `apps/web`/`apps/admin` consumindo nenhuma das duas rotas ainda, também de
   propósito — a tarefa pediu o back-end.
+
+### ~~PROD-17 · Segmentação avançada de notificações (comportamento, engajamento, inativos)~~ · fechado (Premium)
+
+Entregue em 2026-09-20, sobre a segmentação básica já existente
+(`AudienceSegment`/`SegmentCriteriaDto`) — três critérios novos e aditivos em
+`segment-criteria.dto.ts`: `inactive_since` (sem nenhum sinal de engajamento
+há N dias), `group_attendance_gap` (sem presença em `GroupMeeting` — célula —
+há N dias) e `high_engagement` (N ou mais sinais de engajamento numa janela).
+"Sinal de engajamento" é o que o schema já tinha por outro motivo, sem
+tracking novo: `VisitRecord` (visita), `AttendanceRecord` (presença em
+reunião de célula) e `MaterialOpenRecord` (abertura de material de estudo,
+`PROD-10`). **Não existe critério de "abriu/não abriu notificação"** — decisão
+registrada no cabeçalho do DTO: `NotificationDispatch.reached`/`opened` é
+agregado por disparo (quantos no total), não por destinatário, e não dá para
+responder "esta pessoa abriu" sem inventar tracking novo, o que o item
+pediu para evitar.
+
+**Premium via checagem no service, mesmo princípio do `PROD-24`
+(`registration_price`).** `SegmentsService.create`/`.update` chamam
+`assertBehaviorCriteriaPlan(dto.criteria, user.plan)` antes de gravar —
+`ForbiddenException` quando `criteria` usa qualquer um dos três critérios
+avançados e o plano não é Premium. Os critérios básicos (papel, congregação,
+célula, faixa etária) continuam nos dois planos, na mesma rota e no mesmo
+DTO — por isso o gate é no service, não um `@RequiresPlan('premium')` no
+controller, que bloquearia os básicos junto.
+
+**Resolução muda de mecanismo quando o segmento é avançado.** A segmentação
+básica nunca resolveu destinatário nenhum: `NotificationsService.buildFilters`
+monta filtro de **tag** do OneSignal (`tenant_id`/`congregation_id`/`pg_ids`/
+`role`), e quem casa tag com device é o próprio OneSignal — não existe tag de
+"sem presença há N dias". Por isso, quando qualquer segmento de uma chamada
+(`notifyPost`/`sendManualNotification`) tem critério avançado, a chamada
+inteira (todos os segmentos, básicos inclusive) muda para resolução direta:
+consulta os `UserAccount` ativos e com `person_id` do tenant, filtra pelos
+critérios básicos do próprio segmento (congregação/papel/célula) e pelos
+avançados, e envia por `include_external_user_ids` — o mesmo valor que
+`OneSignal.login(payload.sub)` grava como external id do device em
+`onesignal-client.ts` (MOB-07, ou seja, `UserAccount.id`). OR entre segmentos
+vira união com deduplicação das listas de conta. A preferência de categoria
+(`pref_<categoria>`, MOB-10b) continua respeitada, com o mesmo default
+(`NotificationPreference` sem linha = não desativou), só em `notifyPost` —
+`sendManualNotification` já não filtrava por categoria antes (sem
+`ContentPostType`) e continua sem filtrar. Sem destinatário elegível, não
+chama o OneSignal (evita erro da API com lista vazia) e grava o dispatch como
+`sent` sem `onesignal_id` — não é falha do envio.
+
+Testes: `segment-criteria.dto.spec.ts` (validação dos três critérios novos e
+`hasBehaviorCriteria`), `segments.service.spec.ts` (gate de plano em
+`create`/`update`, básico continua liberado no Starter) e
+`notifications.service.spec.ts` (resolução por `external_user_ids`, filtro
+básico dentro da consulta avançada, os três critérios isoladamente, união e
+deduplicação entre segmentos, preferência de categoria e o caminho sem
+destinatário elegível).
 
 ### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
 

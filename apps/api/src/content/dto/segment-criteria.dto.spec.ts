@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { SegmentCriteriaDto } from './segment-criteria.dto';
+import { SegmentCriteriaDto, hasBehaviorCriteria } from './segment-criteria.dto';
 
 async function errorsFor(payload: Record<string, unknown>) {
   const dto = plainToInstance(SegmentCriteriaDto, payload);
@@ -47,5 +47,52 @@ describe('SegmentCriteriaDto', () => {
   it('rejeita age_range com min negativo', async () => {
     const errors = await errorsFor({ age_range: { min: -1, max: 10 } });
     expect(errors.some((e) => e.property === 'age_range')).toBe(true);
+  });
+
+  describe('critérios de comportamento/engajamento/inatividade (PROD-17)', () => {
+    it('aceita inactive_since válido', async () => {
+      expect(await errorsFor({ inactive_since: { days: 30 } })).toHaveLength(0);
+    });
+
+    it('rejeita inactive_since.days zero ou negativo', async () => {
+      const errors = await errorsFor({ inactive_since: { days: 0 } });
+      expect(errors.some((e) => e.property === 'inactive_since')).toBe(true);
+    });
+
+    it('aceita group_attendance_gap válido', async () => {
+      expect(await errorsFor({ group_attendance_gap: { days: 60 } })).toHaveLength(0);
+    });
+
+    it('rejeita group_attendance_gap.days negativo', async () => {
+      const errors = await errorsFor({ group_attendance_gap: { days: -5 } });
+      expect(errors.some((e) => e.property === 'group_attendance_gap')).toBe(true);
+    });
+
+    it('aceita high_engagement válido', async () => {
+      expect(await errorsFor({ high_engagement: { days: 30, min_events: 3 } })).toHaveLength(0);
+    });
+
+    it('rejeita high_engagement.min_events zero ou negativo', async () => {
+      const errors = await errorsFor({ high_engagement: { days: 30, min_events: 0 } });
+      expect(errors.some((e) => e.property === 'high_engagement')).toBe(true);
+    });
+
+    it('rejeita high_engagement sem days', async () => {
+      const errors = await errorsFor({ high_engagement: { min_events: 3 } });
+      expect(errors.some((e) => e.property === 'high_engagement')).toBe(true);
+    });
+  });
+});
+
+describe('hasBehaviorCriteria', () => {
+  it('é falso para critérios só básicos', () => {
+    expect(hasBehaviorCriteria({ roles: ['member'] } as never)).toBe(false);
+    expect(hasBehaviorCriteria({})).toBe(false);
+  });
+
+  it('é verdadeiro quando qualquer critério avançado está presente', () => {
+    expect(hasBehaviorCriteria({ inactive_since: { days: 30 } })).toBe(true);
+    expect(hasBehaviorCriteria({ group_attendance_gap: { days: 30 } })).toBe(true);
+    expect(hasBehaviorCriteria({ high_engagement: { days: 30, min_events: 2 } })).toBe(true);
   });
 });
