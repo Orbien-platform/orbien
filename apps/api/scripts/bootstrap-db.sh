@@ -139,12 +139,16 @@ fi
 if [ -f prisma/migrations/018_rls_meeting_checkin_tokens.sql ]; then
   run_sql_file prisma/migrations/018_rls_meeting_checkin_tokens.sql
 fi
-# `bank_statement_transactions` (PROD-07, conciliação bancária OFX) é tabela
-# nova e nasce com isolamento simples de tenant + congregação — mesmo caso de
-# `export_jobs`/`import_jobs` (20260613000000_add_export_import_jobs), sem a
-# exceção de tenant_admin de app_congregation_allowed(). Não depende de 003,
-# só dos roles base (passo 1) e de current_setting já estar em uso desde 001;
-# entra aqui, depois de 018, só para manter a ordem numérica dos arquivos.
+# `bank_statement_transactions` (PROD-07, conciliação bancária OFX): a
+# migration do Prisma que criou a tabela já foi aplicada em produção com a
+# policy embutida (achado de revisão #107) — editar aquele migration.sql
+# quebraria o checksum do `prisma migrate deploy`, então ele continua como
+# está. Este arquivo é uma reafirmação idempotente da mesma policy (isolamento
+# simples de tenant + congregação, mesmo caso de `export_jobs`/`import_jobs`,
+# sem a exceção de tenant_admin de app_congregation_allowed()), só para ganhar
+# checagem nomeada no passo 7 em vez do catch-all genérico. Não depende de
+# 003, só dos roles base (passo 1); entra aqui, depois de 018, para manter a
+# ordem numérica dos arquivos.
 if [ -f prisma/migrations/019_rls_bank_statement_transactions.sql ]; then
   run_sql_file prisma/migrations/019_rls_bank_statement_transactions.sql
 fi

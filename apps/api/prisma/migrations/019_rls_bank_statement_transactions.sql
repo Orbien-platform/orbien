@@ -1,9 +1,18 @@
 -- =============================================================================
 -- 019_rls_bank_statement_transactions.sql — RLS da conciliação bancária OFX (PROD-07)
 --
--- Fora do histórico do Prisma, como os dezoito anteriores. Tabela nova
--- (migration `add_bank_statement_transactions`), então não há
--- `tenant_isolation` de 001 para o passo 4 do bootstrap derrubar.
+-- Achado de revisão #107: a policy de bank_statement_transactions nasceu
+-- dentro da própria migration do Prisma
+-- (20260920022955_add_bank_statement_transactions), em vez de em script
+-- numerado fora do histórico do Prisma como o resto do produto. A migration
+-- JÁ FOI APLICADA em produção antes desse achado (deploy do Render em
+-- dce2b51, 2026-09-20 12:15 GMT-3) — editar o `migration.sql` agora mudaria o
+-- checksum e derrubaria `prisma migrate deploy` no próximo deploy (docs/CI.md,
+-- seção "Trunk-based"). Por isso o `migration.sql` NÃO foi tocado: a policy
+-- continua nascendo lá, e este arquivo é uma reafirmação idempotente por
+-- cima — mesmo texto de policy, com `DROP POLICY IF EXISTS` antes. O ganho
+-- real de tê-lo aqui é a checagem NOMEADA no passo 7 do bootstrap, em vez de
+-- depender só do catch-all genérico de "toda tabela tem RLS habilitado".
 --
 -- Padrão B, o mesmo de `export_jobs`/`import_jobs`
 -- (20260613000000_add_export_import_jobs): isolamento simples de

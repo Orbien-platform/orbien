@@ -1061,13 +1061,20 @@ importação do mesmo arquivo reconhece cada `FITID` já visto e conta como
 - **RLS Padrão B**, o mesmo de `export_jobs`/`import_jobs`
   (`20260613000000_add_export_import_jobs`) — isolamento simples de
   tenant + congregação por `current_setting`, sem a exceção de
-  `tenant_admin`. Diferente de `export_jobs`/`import_jobs`, porém, a
-  policy **não** nasce dentro da migration do Prisma: por revisão
-  (achado #107), foi movida para o padrão do resto do produto —
-  `prisma/migrations/019_rls_bank_statement_transactions.sql`, fora do
-  histórico do Prisma, aplicado pelo `bootstrap-db.sh` (passo 3) e com
-  checagem nomeada própria no passo 7 (não o catch-all genérico) —
-  confirmado rodando `bootstrap-db.sh` do zero depois da migration.
+  `tenant_admin`. Achado de revisão (#107): a policy nasceu dentro da
+  própria migration do Prisma
+  (`20260920022955_add_bank_statement_transactions`), fora do padrão do
+  resto do produto — mas àquela altura a migration **já tinha sido
+  aplicada em produção** (deploy do Render em `dce2b51`,
+  2026-09-20 12:15 GMT-3), e editar um `migration.sql` já aplicado muda o
+  checksum e derruba `prisma migrate deploy` no próximo deploy (docs/CI.md,
+  "Trunk-based"). Por isso a migration **não foi alterada**: a policy
+  continua nascendo lá. `prisma/migrations/019_rls_bank_statement_transactions.sql`
+  foi adicionado como reafirmação idempotente da mesma policy (mesmo texto,
+  `DROP POLICY IF EXISTS` antes), fora do histórico do Prisma e aplicado
+  pelo `bootstrap-db.sh` (passo 3) — o ganho real é a checagem **nomeada**
+  no passo 7, em vez do catch-all genérico. Confirmado rodando
+  `bootstrap-db.sh` do zero.
 - **Tenant + congregação, sem exceção de `tenant_admin`** — ao contrário de
   `financial_transactions`/`cost_centers` (que usam
   `app_congregation_allowed()`, com a exceção), esta tabela segue o
