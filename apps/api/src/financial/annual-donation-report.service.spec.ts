@@ -140,6 +140,17 @@ describe('AnnualDonationReportService.listDonorsForYear', () => {
     expect(result).toEqual([]);
     expect(client.person.findMany).not.toHaveBeenCalled();
   });
+
+  it('doador sem pessoa correspondente usa o id como nome, e soma nula vira zero', async () => {
+    const { service } = harness({
+      groupByRows: [{ donor_person_id: 'pessoa-orfa', _sum: { amount: null }, _count: { _all: 2 } }],
+      people: [],
+    });
+
+    const result = await service.listDonorsForYear('t1', 2026);
+
+    expect(result).toEqual([{ person_id: 'pessoa-orfa', person_name: 'pessoa-orfa', total: 0, count: 2 }]);
+  });
 });
 
 describe('AnnualDonationReportService.generatePdf', () => {
