@@ -250,7 +250,7 @@ disso leva 30–50s. Para manter acordado, pingar `/api/health` a cada 14min
 E a cadeia inteira, que é o que realmente importa:
 
 ```bash
-curl -X POST https://web.useorbien.com.br/api-proxy/auth/login \
+curl -X POST https://web.useorbien.com/api-proxy/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"...","password":"...","tenant_slug":"doca-church"}'
 ```
@@ -544,8 +544,8 @@ no servidor da Vercel — não há requisição cross-origin para o browser barr
 
 ## Depois que os quatro estiverem verdes
 
-1. Confirmar que os domínios customizados (`web.useorbien.com.br`,
-   `admin.useorbien.com.br` e `useorbien.com.br`) apontam para os projetos
+1. Confirmar que os domínios customizados (`web.useorbien.com`,
+   `admin.useorbien.com` e `useorbien.com`) apontam para os projetos
    novos.
 2. Arquivar no GitHub: `orbien-api`, `orbien-site`, `orbien-web`
    (Settings → Archive this repository). O histórico deles está inteiro aqui,

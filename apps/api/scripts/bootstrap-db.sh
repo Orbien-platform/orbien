@@ -139,6 +139,19 @@ fi
 if [ -f prisma/migrations/018_rls_meeting_checkin_tokens.sql ]; then
   run_sql_file prisma/migrations/018_rls_meeting_checkin_tokens.sql
 fi
+# `bank_statement_transactions` (PROD-07, conciliação bancária OFX): a
+# migration do Prisma que criou a tabela já foi aplicada em produção com a
+# policy embutida (achado de revisão #107) — editar aquele migration.sql
+# quebraria o checksum do `prisma migrate deploy`, então ele continua como
+# está. Este arquivo é uma reafirmação idempotente da mesma policy (isolamento
+# simples de tenant + congregação, mesmo caso de `export_jobs`/`import_jobs`,
+# sem a exceção de tenant_admin de app_congregation_allowed()), só para ganhar
+# checagem nomeada no passo 7 em vez do catch-all genérico. Não depende de
+# 003, só dos roles base (passo 1); entra aqui, depois de 018, para manter a
+# ordem numérica dos arquivos.
+if [ -f prisma/migrations/019_rls_bank_statement_transactions.sql ]; then
+  run_sql_file prisma/migrations/019_rls_bank_statement_transactions.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -494,6 +507,19 @@ BEGIN
   RAISE NOTICE 'meeting_checkin_tokens com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em meeting_checkin_tokens, encontrei % — 018_rls_meeting_checkin_tokens.sql rodou?', n;
+  END IF;
+
+  -- 019: bank_statement_transactions (PROD-07, conciliação bancária OFX) —
+  -- isolamento simples de tenant + congregação, mesmo caso de
+  -- export_jobs/import_jobs, sem a exceção de app_congregation_allowed().
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'bank_statement_transactions_tenant_isolation'
+     AND tablename  = 'bank_statement_transactions'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'bank_statement_transactions com policy simetrica: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy bank_statement_transactions_tenant_isolation simétrica em bank_statement_transactions, encontrei % — 019_rls_bank_statement_transactions.sql rodou?', n;
   END IF;
 
   -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu
