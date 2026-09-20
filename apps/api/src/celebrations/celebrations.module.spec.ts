@@ -13,6 +13,7 @@ import { SetlistsService } from './setlists.service';
 import { SetlistSongsService } from './setlist-songs.service';
 import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationScheduleSuggestionService } from './celebration-schedule-suggestion.service';
 import { CelebrationAssignmentService } from './celebration-assignment.service';
 import { ScheduleTemplateService } from './schedule-template.service';
 import { PdfExportService } from './pdf-export.service';
@@ -40,6 +41,9 @@ describe('CelebrationsModule', () => {
     expect(moduleRef.get(SetlistSongsService)).toBeInstanceOf(SetlistSongsService);
     expect(moduleRef.get(CelebrationSchedulerService)).toBeInstanceOf(CelebrationSchedulerService);
     expect(moduleRef.get(CelebrationScheduleService)).toBeInstanceOf(CelebrationScheduleService);
+    expect(moduleRef.get(CelebrationScheduleSuggestionService)).toBeInstanceOf(
+      CelebrationScheduleSuggestionService,
+    );
     expect(moduleRef.get(CelebrationAssignmentService)).toBeInstanceOf(CelebrationAssignmentService);
     expect(moduleRef.get(ScheduleTemplateService)).toBeInstanceOf(ScheduleTemplateService);
     expect(moduleRef.get(PdfExportService)).toBeInstanceOf(PdfExportService);
