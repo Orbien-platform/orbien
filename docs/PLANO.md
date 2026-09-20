@@ -568,7 +568,6 @@ que o `PROD-20` trouxe no mesmo dia).
 | `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
-| `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
 
 ### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
 
@@ -661,6 +660,29 @@ evita duas cobranças de PIX), `currency.test.ts`, os blocos novos de
 `__tests__/app/post/[id].test.tsx`. A suíte do mobile fecha em **313 testes
 em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
 (94,63 / 86,26 / 94,37 / 98,33).
+
+> `PROD-23` (tela da liderança para os pedidos de visita vindos do "Encontre
+> uma célula", Módulo 3, Starter) **fechou em 2026-09-20**. Item só de
+> front, como o texto já indicava ao nascer: a rota `GET
+> /small-groups/:id/visit-requests` já existia desde o `PROD-13` (mesmos
+> `ALERT_ROLES` de `:id/absence-alerts`) e `small_group_visit_requests` já
+> guardava nome, contato e mensagem de quem pedia para visitar pela página
+> pública — faltava só a tela que mostrasse isso à liderança. Nenhuma
+> mudança em `apps/api`, migration ou script de RLS.
+>
+> No `apps/web`, aba "Pedidos de visita" na `GroupDetailSheet`
+> (`VisitRequestsPanel`), montada só quando a aba abre — mesmo padrão da aba
+> "Ausências" do `PROD-11` e "Conversa" do `PROD-09`. A aba aparece para
+> `canEdit` **ou** `isCellLeader` (`canSeeVisitRequests`, que reaproveita a
+> mesma condição de `canSeeAbsences`, porque `:id/visit-requests` usa os
+> mesmos papéis de `:id/absence-alerts`). O painel distingue 403 de lista
+> vazia, o mesmo cuidado do `AbsenceAlertsPanel` e do `PrayerRequestsPanel`:
+> "sem acesso" e "ninguém pediu para visitar" são respostas diferentes.
+>
+> Testes em `VisitRequestsPanel.test.tsx` (lista com telefone/e-mail/
+> mensagem, contato ausente, lista vazia, 403 distinto de vazio, erro
+> genérico de carga) — `npx vitest run` fecha em **1268 testes em 107
+> suítes** no `apps/web`.
 
 > `PROD-11` (alerta de ausência consecutiva para o líder, Módulo 3, Starter)
 > **fechou em 2026-09-16**. A conta já existia —
@@ -822,11 +844,9 @@ membro (histórico de versões é `PROD-10` acima, já fechado).
 >   `$executeRaw`, e não `create` do Prisma, que usa RETURNING. Provas em
 >   `apps/api/test/rls/small-groups-public.spec.ts`.
 >
-> Falta a tela do outro lado: a rota autenticada
-> `GET /small-groups/:id/visit-requests` existe (papéis de liderança, mesma
-> lista de `:id/absence-alerts`), mas nenhuma tela do `apps/web` a chama
-> ainda — hoje o pedido chega ao banco e só aparece para quem consultar a
-> API. Ver `PROD-23` na tabela acima.
+> A tela do outro lado — `VisitRequestsPanel`, aba "Pedidos de visita" na
+> `GroupDetailSheet` — fechou em 2026-09-20, como `PROD-23` (nota acima
+> nesta seção).
 
 ---
 

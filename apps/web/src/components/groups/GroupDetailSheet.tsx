@@ -21,6 +21,7 @@ import { GroupGenealogyTree } from "@/components/groups/GroupGenealogyTree";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { AbsenceAlertsPanel } from "@/components/groups/AbsenceAlertsPanel";
+import { VisitRequestsPanel } from "@/components/groups/VisitRequestsPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -453,8 +454,10 @@ export function GroupDetailSheet({
   // os papéis de gestão (canEdit) mais `cell_leader`. Note que é o papel, não
   // "líder desta célula" — a rota é assim, e não faria sentido a aba ser mais
   // estrita que ela; `isLeaderOfGroup` existe para o multiplicar, que é
-  // escrita.
+  // escrita. `:id/visit-requests` (PROD-23) usa a mesma lista de papéis, daí
+  // reaproveitar a mesma condição para a aba "Pedidos de visita".
   const canSeeAbsences = canEdit || Boolean(isCellLeader);
+  const canSeeVisitRequests = canSeeAbsences;
 
   return (
     <>
@@ -510,6 +513,11 @@ export function GroupDetailSheet({
                       {canSeeAbsences && (
                         <Tabs.Tab value="absences" className={tabBtn(activeTab === "absences")}>
                           Ausências
+                        </Tabs.Tab>
+                      )}
+                      {canSeeVisitRequests && (
+                        <Tabs.Tab value="visit-requests" className={tabBtn(activeTab === "visit-requests")}>
+                          Pedidos de visita
                         </Tabs.Tab>
                       )}
                       <Tabs.Tab value="prayer" className={tabBtn(activeTab === "prayer")}>
@@ -644,6 +652,10 @@ export function GroupDetailSheet({
                     toda abertura da gaveta. */}
                 {activeTab === "absences" && canSeeAbsences && (
                   <AbsenceAlertsPanel groupId={group.id} />
+                )}
+
+                {activeTab === "visit-requests" && canSeeVisitRequests && (
+                  <VisitRequestsPanel groupId={group.id} />
                 )}
 
                 {activeTab === "prayer" && <PrayerRequestsPanel groupId={group.id} />}
