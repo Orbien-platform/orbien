@@ -83,6 +83,15 @@ Em **2026-09-20** fechou `PROD-05` (sugestão automática de escala por
 disponibilidade e rodízio, Módulo 1) — ver a nota da seção 6. Só backend:
 `GET /celebrations/instances/:instanceId/schedule/suggest`, sem tabela nova.
 
+Também em **2026-09-20** fechou `PROD-08` (carnê do dizimista / relatório anual
+para IR) — nota completa na seção 6. `AnnualDonationReportService` novo em
+`apps/api/src/financial/`, registrado em `PixModule` (mesmo módulo de
+`DonationReceiptsController`, não `FinancialModule`); duas rotas Premium em
+`GET /financial/donation-receipts/annual/*`; sem tabela nova, sem migration,
+sem script de RLS — o relatório é recalculado sob demanda a partir de
+`FinancialTransaction`/`Person`, não persiste em R2. Geração em lote (um PDF
+por doador de uma vez) ficou de fora, documentada como próximo passo.
+
 ---
 
 ## 1. Visão do produto
@@ -568,10 +577,74 @@ que o `PROD-20` trouxe no mesmo dia).
 | ID | Módulo | Funcionalidade | Plano | Nota |
 |---|---|---|---|---|
 | `PROD-07` | 2 | Conciliação bancária (importar OFX) | Premium | O OFX que existe é de **exportação** contábil |
-| `PROD-08` | 2 | Carnê do dizimista / relatório anual para IR | Premium | — |
 | `PROD-12` | 3 | Check-in de membros por QR no encontro | Starter | `QrToken` é do cadastro de visitante; presença de encontro é lista manual (`createMany`) |
 | `PROD-17` | 4 | Segmentação avançada (comportamento, engajamento, inativos) | Premium | A básica existe (`AudienceSegment`) |
 | `PROD-23` | 3 | Tela da liderança para os pedidos de visita vindos do "Encontre uma célula" | Starter | Nasceu junto com `PROD-13`, em 2026-09-14. A rota existe — `GET /small-groups/:id/visit-requests`, papéis de liderança — e `small_group_visit_requests` já guarda nome, contato e mensagem; falta a tela no `apps/web` que mostre isso ao líder da célula |
+
+### ~~PROD-08 · Carnê do dizimista / relatório anual para IR~~ · fechado
+
+Entregue em 2026-09-20, em `apps/api/src/financial/`. Reaproveita o mesmo
+critério de "identificado" que `DonationReceiptService` (`PROD-03`) já usa —
+receita, `donor_person_id` presente, `is_anonymous` falso — só que somado por
+ano-calendário em vez de por transação, e sem exigir e-mail cadastrado (o
+tesoureiro é quem gera e entrega o documento, não é envio automático).
+
+- `AnnualDonationReportService` novo, com três métodos: `buildReport`
+  (doador + ano → lista de contribuições e total), `listDonorsForYear`
+  (agregação por doador via `groupBy`, para o tesoureiro gerar em lote) e
+  `generatePdf` (monta o "Carnê do Dizimista", mesmo padrão `pdfmake` do
+  `DonationReceiptService`/`DrePdfService`, incluindo o mesmo bloqueio de
+  `setLocalAccessPolicy`/`setUrlAccessPolicy`).
+- Duas rotas em `DonationReceiptsController` (que já mora em `PixModule`,
+  não em `FinancialModule` — decisão de `PROD-24` para não arrastar o
+  `archiver` ESM-only no grafo de DI; `AnnualDonationReportService` foi
+  registrado nesse mesmo módulo, não no `FinancialModule`):
+  `GET /financial/donation-receipts/annual/summary?year=2026` (lista todos
+  os doadores do ano com total e contagem, para o tesoureiro decidir para
+  quem gerar) e `GET /financial/donation-receipts/annual/:personId?year=2026`
+  (PDF do carnê individual, `StreamableFile`). Mesmo trio de guardas do
+  resto do financeiro Premium (`JwtAuthGuard, RolesGuard, PlanGuard` +
+  `@RequiresPlan('premium')`), mesmos papéis de leitura
+  (`PRODUCT_AREA_READ_ROLES.financial`). A rota `annual/summary` é
+  registrada **antes** de `annual/:personId` no controller — de propósito,
+  para o router não tentar casar "summary" como `personId`.
+- **Sem persistência em R2 nem tabela nova** — decisão deliberada, diferente
+  do recibo por doação. O recibo (`PROD-03`) nasce de um pagamento PIX já
+  confirmado e imutável, por isso faz sentido gravá-lo uma vez. O carnê
+  anual é uma soma recalculável a qualquer momento a partir de
+  `FinancialTransaction`; persisti-lo exigiria migration + script de RLS
+  novo (a ordem frágil que o `CLAUDE.md` documenta em `bootstrap-db.sh`) só
+  para guardar um PDF que o tesoureiro pode reemitir com o mesmo resultado
+  a qualquer hora. Gerado sob demanda e devolvido como `StreamableFile`,
+  mesmo padrão de `DrePdfService.generatePdf`/`DreController.exportPdf`
+  (que também não persiste).
+- **Sem filtro de `status`** na soma — mesmo precedente do `DreService`, que
+  também soma o tenant inteiro sem olhar `status` da transação
+  (`pending`/`paid`/`confirmed`).
+- **Sem CPF** — o schema não modela esse campo em `Person`, então o carnê
+  não o traz. Mesmo espírito de `PROD-03`: o PDF não é documento fiscal (não
+  modela CNPJ/razão social da igreja), e o rodapé diz isso explicitamente,
+  porque aqui o documento se apresenta como prova para a declaração de IR do
+  doador — mais motivo para deixar claro o que ele não é.
+- **Escopo do tenant inteiro, não por congregação** — mesmo recorte que
+  `DonationReceiptService.list` já usa; um doador pode ter contribuído em
+  mais de uma congregação do mesmo tenant ao longo do ano.
+- Testes: `annual-donation-report.service.spec.ts` (soma, filtro do
+  período/critério de identificação, agregação e ordenação da listagem,
+  doador de outro tenant vira 404, PDF gerado mesmo sem contribuição no
+  ano) e `donation-receipts.controller.spec.ts` (as duas rotas novas,
+  incluindo os headers de download do PDF). `financial.module.spec.ts`
+  ganhou a instância nova no smoke test de compilação do módulo.
+- **Ficou de fora**: geração em lote de um PDF por doador de uma vez
+  (endpoint dispara N `generatePdf`, um ZIP ou downloads sequenciais). O
+  endpoint de `annual/summary` cobre a decisão de "para quem gerar"; falta
+  a ação de "gerar todos" em si. Não entrou porque o padrão de ZIP do
+  módulo (`ZipExportService`, `archiver`) vive em `FinancialModule`, e
+  `DonationReceiptsController` está em `PixModule` justamente para não
+  arrastar esse pacote ESM-only — misturar os dois exigiria repensar a
+  fronteira entre os dois módulos, não só adicionar uma rota. Sem tela no
+  `apps/web`/`apps/admin` consumindo nenhuma das duas rotas ainda, também de
+  propósito — a tarefa pediu o back-end.
 
 ### ~~PROD-25 · Tela de member self-service para inscrição em evento~~ · fechado
 

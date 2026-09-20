@@ -1,6 +1,9 @@
+import { StreamableFile } from '@nestjs/common';
 import { DonationReceiptsController } from './donation-receipts.controller';
 import { DonationReceiptService } from './donation-receipts.service';
+import { AnnualDonationReportService } from './annual-donation-report.service';
 import { ListDonationReceiptsQueryDto } from './dto/list-donation-receipts-query.dto';
+import { AnnualDonationReportQueryDto } from './dto/annual-donation-report-query.dto';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 const user: JwtPayload = {
@@ -17,7 +20,19 @@ function harness() {
     getDownloadUrl: jest.fn().mockResolvedValue({ download_url: 'https://cdn.test/signed', expires_in: 3600 }),
   } as unknown as DonationReceiptService;
 
-  return { controller: new DonationReceiptsController(donationReceiptService), donationReceiptService };
+  const annualDonationReportService = {
+    listDonorsForYear: jest.fn().mockResolvedValue([{ person_id: 'pessoa-1', person_name: 'Maria', total: 300, count: 3 }]),
+    generatePdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 fake')),
+  } as unknown as AnnualDonationReportService;
+
+  const res = { set: jest.fn() };
+
+  return {
+    controller: new DonationReceiptsController(donationReceiptService, annualDonationReportService),
+    donationReceiptService,
+    annualDonationReportService,
+    res,
+  };
 }
 
 describe('DonationReceiptsController', () => {
@@ -46,5 +61,29 @@ describe('DonationReceiptsController', () => {
 
     expect(donationReceiptService.getDownloadUrl).toHaveBeenCalledWith('t1', 'receipt-1');
     expect(result).toEqual({ download_url: 'https://cdn.test/signed', expires_in: 3600 });
+  });
+
+  it('annualSummary delega ao service com o tenant do usuário e o ano da query', async () => {
+    const { controller, annualDonationReportService } = harness();
+    const query = Object.assign(new AnnualDonationReportQueryDto(), { year: 2026 });
+
+    const result = await controller.annualSummary(query, user);
+
+    expect(annualDonationReportService.listDonorsForYear).toHaveBeenCalledWith('t1', 2026);
+    expect(result).toEqual([{ person_id: 'pessoa-1', person_name: 'Maria', total: 300, count: 3 }]);
+  });
+
+  it('annualReport gera o PDF, seta os headers de download e devolve um StreamableFile', async () => {
+    const { controller, annualDonationReportService, res } = harness();
+    const query = Object.assign(new AnnualDonationReportQueryDto(), { year: 2026 });
+
+    const result = await controller.annualReport('pessoa-1', query, user, res as never);
+
+    expect(annualDonationReportService.generatePdf).toHaveBeenCalledWith('t1', 'pessoa-1', 2026);
+    expect(res.set).toHaveBeenCalledWith({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'attachment; filename="carne-dizimista-2026.pdf"',
+    });
+    expect(result).toBeInstanceOf(StreamableFile);
   });
 });
