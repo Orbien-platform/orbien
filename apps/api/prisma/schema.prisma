@@ -50,6 +50,7 @@ model Tenant {
   meetingCheckinTokens      MeetingCheckinToken[]
   prayerRequests            PrayerRequest[]
   groupMessages             GroupMessage[]
+  bibleVerseMarks           BibleVerseMark[]
   studyMaterials            StudyMaterial[]
   studyMaterialVersions     StudyMaterialVersion[]
   materialOpenRecords       MaterialOpenRecord[]
@@ -124,6 +125,7 @@ model Congregation {
   meetingCheckinTokens      MeetingCheckinToken[]
   prayerRequests            PrayerRequest[]
   groupMessages             GroupMessage[]
+  bibleVerseMarks           BibleVerseMark[]
   studyMaterials            StudyMaterial[]
   financialCategories       FinancialCategory[]
   costCenters               CostCenter[]
@@ -372,6 +374,7 @@ model Person {
   attendanceRecords       AttendanceRecord[]
   prayerRequests          PrayerRequest[]
   groupMessages           GroupMessage[]
+  bibleVerseMarks         BibleVerseMark[]
   materialOpenRecords     MaterialOpenRecord[]
   ledSmallGroups          SmallGroup[]            @relation("GroupLeader")
   ledNetworks             Network[]               @relation("NetworkLeader")
@@ -778,6 +781,54 @@ model GroupMessage {
   // created_at desc — o índice composto é o que evita varrer o grupo inteiro.
   @@index([small_group_id, created_at])
   @@map("group_messages")
+}
+
+/// Marcação de um ou mais versículos da NVI com comentário, publicada no feed
+/// da congregação (biblia-nvi-marcacoes-mobile). Isolada por
+/// tenant_id+congregation_id (AD-001, RLS em 020_rls_bible_verse_marks.sql).
+/// `verse_start..verse_end` é um intervalo contíguo dentro de um único
+/// capítulo — não uma lista arbitrária nem um range cross-capítulo (spec.md,
+/// Assumptions).
+model BibleVerseMark {
+  id                    String    @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  person_id             String
+  version               String    @default("NVI")
+  book_code             String
+  chapter               Int
+  verse_start           Int
+  verse_end             Int
+  comment               String
+  deleted_at            DateTime?
+  deleted_by_person_id  String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id, created_at])
+  @@map("bible_verse_marks")
+}
+
+/// Cache do texto de um capítulo da NVI, buscado da API bíblica externa na
+/// primeira vez e reaproveitado depois (AD-005, .specs/STATE.md). Tabela
+/// GLOBAL de propósito — sem tenant_id/congregation_id: o texto bíblico é o
+/// mesmo para toda igreja, RLS habilitada com `USING (true)` explícito em vez
+/// de isolamento por tenant (que não teria dono nenhum aqui).
+model BibleChapterCache {
+  id         String   @id @default(uuid())
+  version    String
+  book_code  String
+  chapter    Int
+  verses     Json
+  fetched_at DateTime @default(now())
+
+  @@unique([version, book_code, chapter])
+  @@map("bible_chapter_cache")
 }
 
 model StudyMaterial {
