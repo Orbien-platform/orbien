@@ -1,9 +1,10 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { JobStatus } from '@prisma/client';
+import { JobStatus, Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { ImportResult, PersonsImportService } from './persons-import.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
+import { MailService } from '../../mail/mail.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { ImportConfirmDto } from '../dto/import-confirm.dto';
 
@@ -41,25 +42,56 @@ function serviceWith() {
     findFirst: jest.fn(),
     update: jest.fn().mockResolvedValue({}),
   };
+  // Escritas de conta de acesso (grant de acesso no import) só passam por
+  // `prisma.system`, igual `UsersService.create` — ver comentário no service.
+  const userAccountClient = {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn(async ({ data }: { data: { email: string } }) => ({
+      id: `account-${data.email}`,
+      email: data.email,
+    })),
+  };
+  const roleAssignmentClient = { create: jest.fn().mockResolvedValue({}) };
+  const passwordResetTokenClient = { create: jest.fn().mockResolvedValue({}) };
 
   const client = {
     person: personClient,
     consentRecord: consentRecordClient,
     importJob: importJobClient,
   };
-  const system = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const system: any = {
     person: personClient,
     consentRecord: consentRecordClient,
     importJob: { ...importJobClient, update: jest.fn().mockResolvedValue({}) },
+    userAccount: userAccountClient,
+    roleAssignment: roleAssignmentClient,
+    passwordResetToken: passwordResetTokenClient,
   };
+  // `sysTx` recebe o mesmo objeto mockado — os testes chamam os métodos
+  // diretamente em `system.*`, tanto dentro quanto fora da transação.
+  system['$transaction'] = jest.fn((cb: (tx: unknown) => unknown) => cb(system));
 
   const prisma = { client, system, $executeRaw: auditRaw } as unknown as PrismaService;
   const storage = {
     upload: jest.fn().mockResolvedValue('https://cdn.test/file'),
     downloadBuffer: jest.fn(),
   } as unknown as jest.Mocked<StorageService>;
+  const mail = {
+    sendInvite: jest.fn().mockResolvedValue(undefined),
+  } as unknown as jest.Mocked<MailService>;
 
-  return { service: new PersonsImportService(prisma, storage), storage, client, system, auditRaw };
+  return {
+    service: new PersonsImportService(prisma, storage, mail),
+    storage,
+    client,
+    system,
+    auditRaw,
+    mail,
+    userAccountClient,
+    roleAssignmentClient,
+    passwordResetTokenClient,
+  };
 }
 
 const VALID_CSV = [
@@ -218,6 +250,122 @@ describe('PersonsImportService', () => {
         select: { id: true },
       });
       expect(client.consentRecord.create).toHaveBeenCalled();
+    });
+
+    it('linha com e-mail válido e ainda não usado ganha acesso ao app (conta + papel member + convite)', async () => {
+      const { service, storage, system, mail, userAccountClient, roleAssignmentClient, passwordResetTokenClient } =
+        serviceWith();
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(VALID_CSV, 'utf-8'));
+
+      const result = await service.confirm({ file_id: 'arquivo.csv', mapping: MAPPING }, user);
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(system.$transaction).toHaveBeenCalled();
+      expect(userAccountClient.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenant_id: 'tenant-1',
+          congregation_id: 'cong-1',
+          email: 'ana@test.com',
+        }),
+      });
+      expect(roleAssignmentClient.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ role_code: 'member' }),
+      });
+      expect(passwordResetTokenClient.create).toHaveBeenCalled();
+      expect(mail.sendInvite).toHaveBeenCalledWith(
+        'ana@test.com',
+        expect.stringContaining('/redefinir-senha?token='),
+      );
+    });
+
+    it('linha sem e-mail não ganha conta', async () => {
+      const { service, storage, client, userAccountClient } = serviceWith();
+      const csv = ['nome,telefone', 'Sem Email,11988887777'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone' } },
+        user,
+      );
+
+      expect((result as ImportResult).imported).toBe(1);
+      expect(client.person.create).toHaveBeenCalled();
+      expect(userAccountClient.create).not.toHaveBeenCalled();
+    });
+
+    it('linha com e-mail em formato inválido não ganha conta, mas a pessoa é importada', async () => {
+      const { service, storage, client, userAccountClient, mail } = serviceWith();
+      const csv = ['nome,telefone,email', 'Email Ruim,11988887777,não-é-email'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect((result as ImportResult).imported).toBe(1);
+      expect(client.person.create).toHaveBeenCalled();
+      expect(userAccountClient.create).not.toHaveBeenCalled();
+      expect(mail.sendInvite).not.toHaveBeenCalled();
+    });
+
+    it('e-mail já usado por outra conta pula a criação de conta e segue o import só com o cadastro', async () => {
+      const { service, storage, client, userAccountClient, mail } = serviceWith();
+      userAccountClient.findFirst.mockResolvedValue({ id: 'existing-account' });
+      const csv = ['nome,telefone,email', 'Ja Tem Conta,11988887777,ja@existe.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect((result as ImportResult).imported).toBe(1);
+      expect(client.person.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ email: 'ja@existe.com' }) }),
+      );
+      expect(userAccountClient.create).not.toHaveBeenCalled();
+      expect(mail.sendInvite).not.toHaveBeenCalled();
+    });
+
+    it('duas linhas do mesmo arquivo com o mesmo e-mail: só a primeira ganha conta', async () => {
+      const { service, storage, userAccountClient } = serviceWith();
+      const csv = [
+        'nome,telefone,email',
+        'Primeira,11988880001,repetido@test.com',
+        'Segunda,11988880002,repetido@test.com',
+      ].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect((result as ImportResult).imported).toBe(2);
+      expect(userAccountClient.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('corrida no e-mail (P2002 na escrita da conta) segue o import só com o cadastro, sem contar como erro', async () => {
+      const { service, storage, userAccountClient, client } = serviceWith();
+      userAccountClient.create.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('e-mail duplicado', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      const csv = ['nome,telefone,email', 'Corrida,11988887777,corrida@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(client.person.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ email: 'corrida@test.com' }) }),
+      );
     });
 
     it('reporta linha com coluna de nome faltando', async () => {
