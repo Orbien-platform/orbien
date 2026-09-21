@@ -80,12 +80,3 @@ services:
         value: "Orbien <naoresponda@useorbien.com>"
       - key: FRONTEND_URL
         value: "https://web.useorbien.com"
-
-      # Bíblia (leitor NVI, biblia-nvi-marcacoes-mobile) — provedor público,
-      # sem token, desde a migração de abibliadigital.com.br para
-      # abibliadigital.api.br em 2026-09-21 (ver DEPLOY.md, seção 1.4, e
-      # PEND-09 em docs/PLANO.md).
-      - key: BIBLE_API_BASE_URL
-        value: "https://abibliadigital.api.br/api"
-      - key: BIBLE_API_VERSION_ID
-        value: "nvi"
