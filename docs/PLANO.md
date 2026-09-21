@@ -1462,6 +1462,22 @@ ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
 ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
 tela sobre API pronta.
 
+### PEND-09 · Token de produção do abibliadigital.com.br não configurado · dívida
+
+`ApiBibleTextProvider` (`apps/api/src/bible/api-bible-text.provider.ts`,
+`biblia-nvi-marcacoes-mobile`) está implementado e configurado só por env
+(`BIBLE_API_BASE_URL`, `BIBLE_API_VERSION_ID`, `BIBLE_API_KEY`), com os três
+valores de exemplo já em `apps/api/.env.example`. O que falta é humano: criar
+a conta gratuita no provedor e colar o token real no Render — não há como
+este código fazer isso sozinho.
+
+Sem o token, a leitura da Bíblia funciona, só que sob o limite público do
+provedor (20 requisições/hora/IP), que o cache-first do `BibleReaderService`
+reduz mas não elimina. Checklist de configuração em `DEPLOY.md`, seção 1.4.
+Fechar antes de abrir a feature para usuário de verdade — hoje ela ainda não
+está exposta a tráfego real, então não é um incidente em produção, é uma
+pendência conhecida de pré-lançamento.
+
 ---
 
 ## 8. Ajustes — documento, rótulo e portão

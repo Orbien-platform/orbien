@@ -158,6 +158,36 @@ Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
 domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
 browser bloqueia as chamadas.
 
+**Pendente de configurar — Bíblia NVI (`biblia-nvi-marcacoes-mobile`, `PEND-09`
+em `docs/PLANO.md`).** `ApiBibleTextProvider`
+(`apps/api/src/bible/api-bible-text.provider.ts`) já está no código, mas o
+token de produção do provedor ainda não foi criado. Checklist para fechar
+antes de abrir a leitura da Bíblia para usuário de verdade:
+
+1. Criar uma conta gratuita em https://www.abibliadigital.com.br/.
+2. Pegar o token da conta — a documentação do provedor chama esse valor de
+   "user token". Não confirmamos em qual tela exata ele aparece depois do
+   cadastro (a doc oficial deles muda com frequência), então vale conferir lá
+   na hora em vez de seguir um passo específico daqui.
+3. Configurar no Render as três variáveis abaixo (mesmos valores já
+   documentados em `apps/api/.env.example`, para desenvolvimento local):
+
+   | Variável | Valor | Segredo? |
+   |---|---|---|
+   | `BIBLE_API_BASE_URL` | `https://www.abibliadigital.com.br/api` | não |
+   | `BIBLE_API_VERSION_ID` | `nvi` | não |
+   | `BIBLE_API_KEY` | token do passo 2 | **sim** |
+
+   Só `BIBLE_API_KEY` é segredo — as outras duas são config pública, no
+   mesmo espírito de `ALLOWED_ORIGINS`/`MAIL_FROM` acima.
+
+Sem `BIBLE_API_KEY`, a integração **funciona mesmo assim**:
+`ApiBibleTextProvider` manda a requisição sem `Authorization` quando a
+variável está vazia, e cai no limite público do provedor — 20
+requisições/hora/IP. O cache-first do `BibleReaderService` (uma chamada por
+capítulo servida do banco depois da primeira leitura) reduz bastante esse
+uso, mas não o elimina — vale configurar o token antes do tráfego real.
+
 ### 1.5 Provisionar o banco do zero
 
 Necessário quando não existe banco (projeto Supabase novo, ou ambiente novo).

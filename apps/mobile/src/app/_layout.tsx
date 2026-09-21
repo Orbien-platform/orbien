@@ -109,6 +109,9 @@ function ThemedShell() {
           {/* As abas não têm header: a tab bar já identifica a tela, e a
               barra só tiraria espaço útil. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="biblia/index" options={{ title: "Bíblia" }} />
+          <Stack.Screen name="biblia/[book]/[chapter]" options={{ title: "Bíblia" }} />
+          <Stack.Screen name="biblia/feed" options={{ title: "Feed da Bíblia" }} />
           <Stack.Screen name="indisponibilidade" options={{ title: "Indisponibilidade" }} />
           <Stack.Screen name="notificacoes" options={{ title: "Notificações" }} />
           <Stack.Screen name="post/[id]" options={{ title: "Publicação" }} />

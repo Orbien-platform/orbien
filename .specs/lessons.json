@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 18,
+  "next_id": 20,
   "lessons": [
     {
       "id": "L-001",
@@ -310,6 +310,42 @@
       ],
       "created": "2026-09-15T02:10:01Z",
       "last_seen": "2026-09-15T02:10:01Z"
+    },
+    {
+      "id": "L-018",
+      "key": "surviving_mutant::ao testar valida o de intervalo verse end verse start ou similar inclua sempre o caso limite igual verse start verse end n o s valores distintos",
+      "text": "Ao testar validação de intervalo (verse_end < verse_start ou similar), inclua sempre o caso-limite igual (verse_start === verse_end) — não só valores distintos.",
+      "signal": "surviving_mutant",
+      "scope": "apps/api/src/bible",
+      "status": "candidate",
+      "features": [
+        "biblia-nvi-marcacoes-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/bible/bible-verse-marks.service.ts:70 (apps/api/src/bible)"
+      ],
+      "created": "2026-09-21T11:57:47Z",
+      "last_seen": "2026-09-21T11:57:47Z"
+    },
+    {
+      "id": "L-019",
+      "key": "ac_gap::campo de texto livre validado s por minlength maxlength aceita string whitespace only some transform trim antes do minlength quando a spec disser tratar espa os em branco como vazio",
+      "text": "Campo de texto livre validado só por MinLength/MaxLength aceita string whitespace-only — some @Transform(trim) antes do MinLength quando a spec disser 'tratar espaços em branco como vazio'.",
+      "signal": "ac_gap",
+      "scope": "apps/api/src/bible/dto",
+      "status": "candidate",
+      "features": [
+        "biblia-nvi-marcacoes-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/bible/dto/create-bible-verse-mark.dto.ts:comment (apps/api/src/bible/dto)"
+      ],
+      "created": "2026-09-21T11:57:47Z",
+      "last_seen": "2026-09-21T11:57:47Z"
     }
   ]
 }
