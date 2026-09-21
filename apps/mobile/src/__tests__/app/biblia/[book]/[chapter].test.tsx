@@ -1,7 +1,9 @@
-// Testes derivados do Done-when de T19 (tasks.md, biblia-nvi-marcacoes-mobile,
-// BIB-01/BIB-02/BIB-03/BIB-04): sucesso (versículos numerados), erro de
-// rede com retry, seleção de intervalo tocando no 1º e no último versículo,
-// CTA "Comentar" habilita só com intervalo completo.
+// Testes derivados do Done-when de T19 e T21 (tasks.md,
+// biblia-nvi-marcacoes-mobile, BIB-01/BIB-02/BIB-03/BIB-04/BIB-05): sucesso
+// (versículos numerados), erro de rede com retry, seleção de intervalo
+// tocando no 1º e no último versículo, CTA "Comentar" habilita só com
+// intervalo completo, submissão válida chama `createMark`, comentário curto
+// demais bloqueia o submit, erro do backend aparece via `Alert`.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 let mockSearchParams: { book: string; chapter: string } = { book: "JHN", chapter: "3" };
@@ -10,11 +12,13 @@ jest.mock("expo-router", () => ({
 }));
 
 const mockGetChapter = jest.fn();
+const mockCreateMark = jest.fn();
 jest.mock("../../../../lib/bible/bible-client", () => ({
   getChapter: (...args: unknown[]) => mockGetChapter(...args),
+  createMark: (...args: unknown[]) => mockCreateMark(...args),
 }));
 
-import { NetworkError } from "../../../../lib/api/errors";
+import { HttpError, NetworkError } from "../../../../lib/api/errors";
 import BibliaChapterScreen from "../../../../app/biblia/[book]/[chapter]";
 
 const CHAPTER = {
@@ -27,10 +31,29 @@ const CHAPTER = {
   ],
 };
 
+async function selectRangeAndOpenComposer() {
+  await act(async () => {
+    render(<BibliaChapterScreen />);
+  });
+  await waitFor(() => screen.getByTestId("biblia-verse-1"));
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("biblia-verse-1"));
+  });
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("biblia-verse-3"));
+  });
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("biblia-comment-cta"));
+  });
+}
+
 describe("BibliaChapterScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSearchParams = { book: "JHN", chapter: "3" };
+    mockGetChapter.mockReset();
+    mockCreateMark.mockReset();
   });
 
   it("busca o capítulo pelos parâmetros da rota e renderiza os versículos numerados", async () => {
@@ -118,5 +141,128 @@ describe("BibliaChapterScreen", () => {
       fireEvent.press(screen.getByTestId("biblia-verse-3"));
     });
     expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
+  });
+
+  it("submissão válida chama createMark com o intervalo e o comentário, e confirma visualmente (BIB-04)", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+    mockCreateMark.mockResolvedValue({
+      id: "mark-1",
+      book_code: "JHN",
+      chapter: 3,
+      verse_start: 1,
+      verse_end: 3,
+      comment: "Reflexão sobre o novo nascimento.",
+      created_at: "2026-09-21T10:00:00Z",
+      updated_at: "2026-09-21T10:00:00Z",
+      person: { id: "p1", full_name: "Fulano" },
+      is_mine: true,
+      can_delete: true,
+    });
+
+    await selectRangeAndOpenComposer();
+
+    await act(async () => {
+      fireEvent.changeText(
+        screen.getByTestId("biblia-comment-input"),
+        "Reflexão sobre o novo nascimento.",
+      );
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-submit"));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateMark).toHaveBeenCalledWith({
+        book_code: "JHN",
+        chapter: 3,
+        verse_start: 1,
+        verse_end: 3,
+        comment: "Reflexão sobre o novo nascimento.",
+      });
+    });
+    // Sucesso fecha o composer e confirma visualmente (Done-when de T21).
+    await waitFor(() => {
+      expect(screen.getByTestId("biblia-comment-saved")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("biblia-comment-composer")).toBeNull();
+  });
+
+  it("comentário com menos de 3 caracteres bloqueia o submit, sem chamar a API (BIB-05)", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await selectRangeAndOpenComposer();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-comment-input"), "ab");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-submit"));
+    });
+
+    expect(mockCreateMark).not.toHaveBeenCalled();
+    expect(screen.getByTestId("biblia-comment-validation-error")).toHaveTextContent(
+      "O comentário precisa ter entre 3 e 2000 caracteres.",
+    );
+    // Composer continua aberto — nada foi submetido.
+    expect(screen.getByTestId("biblia-comment-composer")).toBeTruthy();
+  });
+
+  it("comentário só com espaços em branco é tratado como vazio e bloqueia o submit (edge case da spec)", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await selectRangeAndOpenComposer();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-comment-input"), "   ");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-submit"));
+    });
+
+    expect(mockCreateMark).not.toHaveBeenCalled();
+    expect(screen.getByTestId("biblia-comment-validation-error")).toBeTruthy();
+  });
+
+  it("erro 403 do backend aparece via Alert, com a mensagem da API, sem confirmar sucesso", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+    mockCreateMark.mockRejectedValue(new HttpError(403, { message: "Sem permissão para marcar." }));
+
+    await selectRangeAndOpenComposer();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-comment-input"), "Comentário válido.");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-submit"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("biblia-comment-submit-error")).toHaveTextContent(
+        "Sem permissão para marcar.",
+      );
+    });
+    expect(screen.queryByTestId("biblia-comment-saved")).toBeNull();
+    // Composer continua aberto, comentário não se perde.
+    expect(screen.getByTestId("biblia-comment-composer")).toBeTruthy();
+  });
+
+  it("erro 502 (falha do provedor externo) aparece via Alert com mensagem genérica", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+    mockCreateMark.mockRejectedValue(new HttpError(502, { message: "Bad Gateway" }));
+
+    await selectRangeAndOpenComposer();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-comment-input"), "Comentário válido.");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-submit"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("biblia-comment-submit-error")).toHaveTextContent(
+        "Não foi possível salvar a marcação. Tente novamente.",
+      );
+    });
   });
 });
