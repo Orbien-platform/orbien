@@ -86,6 +86,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Resposta de login inválida." }, { status: 502 });
   }
 
+  // `web.useorbien.com` é ferramenta de gestão — quem tem só o papel `member`
+  // (o piso, hoje concedido automaticamente na importação de pessoas) não
+  // deve conseguir abrir sessão aqui. O mobile chama o mesmo `POST
+  // /auth/login` e não passa por este arquivo, então o bloqueio não o afeta.
+  // Lista vazia de papéis também bloqueia — não sobra nenhum papel "além de
+  // member" pra liberar.
+  const hasNonMemberRole = payload.roles.some((role) => role !== "member");
+  if (!hasNonMemberRole) {
+    await revokeRefreshToken(pair.refresh_token);
+    return NextResponse.json(
+      {
+        code: "WEB_ACCESS_DENIED",
+        message: "Este acesso é apenas pelo aplicativo Orbien.",
+      },
+      { status: 403 }
+    );
+  }
+
   const identity = { email: body.email };
   const areas = await fetchAreas(pair.access_token);
   const response = NextResponse.json({

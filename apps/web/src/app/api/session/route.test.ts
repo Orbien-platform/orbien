@@ -197,6 +197,104 @@ describe("POST /api/session (login)", () => {
     // volta ao servidor para saber o que desenhar.
     expect(user.areas).toEqual(["content"]);
   });
+
+  it("recusa login de conta cujo único papel é member, sem gravar cookie", async () => {
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: token, refresh_token: "r1" }),
+      })
+      .mockResolvedValueOnce({ ok: true }); // POST /auth/logout (revogação)
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await POST(req({ method: "POST", body: { email: "visitante@igreja.com" } }));
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      code: "WEB_ACCESS_DENIED",
+      message: "Este acesso é apenas pelo aplicativo Orbien.",
+    });
+    expect(res.cookies.get(ACCESS_COOKIE)).toBeUndefined();
+    expect(res.cookies.get(REFRESH_COOKIE)).toBeUndefined();
+    expect(res.cookies.get(IDENTITY_COOKIE)).toBeUndefined();
+    // Revoga o refresh token recém-emitido — não deixa um token vivo sem
+    // cookie nenhum apontando pra ele.
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/auth/logout"),
+      expect.objectContaining({ body: JSON.stringify({ refresh_token: "r1" }) })
+    );
+  });
+
+  it("recusa login quando a conta não tem papel nenhum (lista vazia)", async () => {
+    const token = makeToken({ sub: "u1", roles: [], exp: Math.floor(Date.now() / 1000) + 3600 });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true })
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "sem-papel@igreja.com" } }));
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("WEB_ACCESS_DENIED");
+  });
+
+  it("libera login de conta com member e outro papel", async () => {
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member", "volunteer"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ areas: ["volunteers"] }) })
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "voluntario@igreja.com" } }));
+
+    expect(res.status).toBe(200);
+    expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe(token);
+  });
+
+  it("responde o bloqueio mesmo quando a revogação do refresh token falha", async () => {
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "visitante@igreja.com" } }));
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("WEB_ACCESS_DENIED");
+  });
 });
 
 describe("DELETE /api/session (logout)", () => {
