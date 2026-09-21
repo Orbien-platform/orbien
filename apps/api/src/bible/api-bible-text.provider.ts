@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { BibleTextProvider, VerseText } from './bible-text-provider.interface';
+import { ABIBLIADIGITAL_BOOK_ABBREV } from './abibliadigital-book-abbrev.constant';
 
 /**
  * Erro tratável de falha do provedor bíblico externo — rede, timeout, 4xx ou
@@ -26,6 +27,17 @@ export class BibleProviderError extends Error {
  * (design.md, Approach A) para que `BibleReaderService` nunca conheça o
  * provedor real. Configurada só por env — nenhuma chave fica hardcoded nem
  * chega ao bundle do mobile (o app nunca fala com esta classe diretamente).
+ *
+ * Provedor configurado: abibliadigital.com.br (gratuito, `nvi` entre as ~26
+ * versões que expõe). `BIBLE_API_VERSION_ID` é o slug de versão do provedor
+ * (`nvi`), não um ID opaco — nome mantido genérico para não amarrar o
+ * contrato de env a este provedor específico. Formato de resposta e path
+ * conforme `DOCUMENTATION.md` do repositório omarciovsena/abibliadigital:
+ * `GET {baseUrl}/verses/{version}/{abbrev}/{chapter}` → `{ book, chapter,
+ * verses: [{ number, text }] }`, autenticação `Authorization: Bearer
+ * {token}` (token de conta gratuita, para não cair no limite de 20
+ * req/hora sem auth — o cache-first do `BibleReaderService` já reduz isso a
+ * uma chamada por capítulo, para sempre).
  */
 @Injectable()
 export class ApiBibleTextProvider implements BibleTextProvider {
@@ -46,12 +58,18 @@ export class ApiBibleTextProvider implements BibleTextProvider {
   }
 
   async getChapter(bookCode: string, chapter: number): Promise<VerseText[]> {
-    const url = `${this.baseUrl}/bibles/${this.versionId}/books/${bookCode}/chapters/${chapter}/verses`;
+    const abbrev = ABIBLIADIGITAL_BOOK_ABBREV[bookCode];
+    if (!abbrev) {
+      this.logger.warn(`book_code '${bookCode}' sem abreviação mapeada para o provedor externo`);
+      throw new BibleProviderError(`book_code '${bookCode}' não mapeado para o provedor externo`);
+    }
+
+    const url = `${this.baseUrl}/verses/${this.versionId}/${abbrev}/${chapter}`;
 
     try {
       const { data } = await firstValueFrom(
         this.http.get<{ verses: VerseText[] }>(url, {
-          headers: this.apiKey ? { 'api-key': this.apiKey } : {},
+          headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
           timeout: 10_000,
         }),
       );

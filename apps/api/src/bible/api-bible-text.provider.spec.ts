@@ -56,16 +56,24 @@ describe('ApiBibleTextProvider', () => {
     expect(result).toEqual(verses);
   });
 
-  it('chama a URL e os headers configurados por env — base URL, versão e api-key', async () => {
+  it('chama a URL e os headers configurados por env — base URL, versão (path) e Bearer token, traduzindo o book_code USFM para a abreviação pt do provedor', async () => {
     const httpGet = jest.fn().mockReturnValue(of({ data: { verses: [] } }));
     const provider = providerWith(httpGet);
 
     await provider.getChapter('JHN', 3);
 
     expect(httpGet).toHaveBeenCalledWith(
-      'https://bible.example.com/v1/bibles/nvi-ptbr/books/JHN/chapters/3/verses',
-      expect.objectContaining({ headers: { 'api-key': 'secret-key' } }),
+      'https://bible.example.com/v1/verses/nvi-ptbr/jo/3',
+      expect.objectContaining({ headers: { Authorization: 'Bearer secret-key' } }),
     );
+  });
+
+  it('book_code sem abreviação mapeada vira BibleProviderError, sem chamar a rede', async () => {
+    const httpGet = jest.fn();
+    const provider = providerWith(httpGet);
+
+    await expect(provider.getChapter('XXX', 1)).rejects.toBeInstanceOf(BibleProviderError);
+    expect(httpGet).not.toHaveBeenCalled();
   });
 
   it('404 do provedor (livro/capítulo inexistente nele) vira BibleProviderError', async () => {
