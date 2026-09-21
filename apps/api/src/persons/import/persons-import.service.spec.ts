@@ -406,6 +406,135 @@ describe('PersonsImportService', () => {
       );
     });
 
+    it('erro não-P2002 na transação de conta é erro da linha (não vira "sem conta, segue o import")', async () => {
+      const { service, storage, userAccountClient, system } = serviceWith();
+      userAccountClient.create.mockRejectedValueOnce(new Error('conexão caiu no meio da transação'));
+      const csv = ['nome,telefone,email', 'Falha Real,11988887777,falha@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({
+        imported: 0,
+        skipped: 0,
+        errors: [{ row: 2, reason: 'conexão caiu no meio da transação' }],
+      });
+      // Nem o fallback de "só cadastro" roda — o erro não é de e-mail
+      // duplicado, então a linha inteira falha.
+      expect(system.roleAssignment.create).not.toHaveBeenCalled();
+    });
+
+    it('erro não-P2002 e que não é instância de Error ainda vira mensagem de texto', async () => {
+      const { service, storage, userAccountClient } = serviceWith();
+      userAccountClient.create.mockRejectedValueOnce('motivo em string, não Error');
+      const csv = ['nome,telefone,email', 'Falha String,11988887777,falhastring@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({
+        imported: 0,
+        skipped: 0,
+        errors: [{ row: 2, reason: 'motivo em string, não Error' }],
+      });
+    });
+
+    it('falha no envio do convite é logada e não impede a linha de contar como importada', async () => {
+      const { service, storage, mail } = serviceWith();
+      mail.sendInvite.mockRejectedValueOnce(new Error('Resend fora do ar'));
+      const loggerErrorSpy = jest.spyOn(
+        (service as unknown as { logger: { error: (msg: string) => void } }).logger,
+        'error',
+      );
+      const csv = ['nome,telefone,email', 'Convite Falho,11988887777,convitefalho@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Falha ao enviar convite de acesso para convitefalho@test.com'),
+      );
+    });
+
+    it('falha no envio do convite que não é instância de Error ainda é logada como texto', async () => {
+      const { service, storage, mail } = serviceWith();
+      mail.sendInvite.mockRejectedValueOnce('motivo em string, não Error');
+      const loggerErrorSpy = jest.spyOn(
+        (service as unknown as { logger: { error: (msg: string) => void } }).logger,
+        'error',
+      );
+      const csv = ['nome,telefone,email', 'Convite String,11988887777,convitestring@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Falha ao enviar convite de acesso para convitestring@test.com (linha 2): motivo em string, não Error',
+        ),
+      );
+    });
+
+    it('cai no default de localhost quando FRONTEND_URL não está definida', async () => {
+      const original = process.env['FRONTEND_URL'];
+      delete process.env['FRONTEND_URL'];
+      try {
+        const { service, storage, mail } = serviceWith();
+        const csv = ['nome,telefone,email', 'Ana Local,11988887777,analocal@test.com'].join('\n');
+        storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+        await service.confirm(
+          { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+          user,
+        );
+
+        expect(mail.sendInvite).toHaveBeenCalledWith(
+          'analocal@test.com',
+          expect.stringContaining('http://localhost:3001/redefinir-senha?token='),
+        );
+      } finally {
+        if (original === undefined) delete process.env['FRONTEND_URL'];
+        else process.env['FRONTEND_URL'] = original;
+      }
+    });
+
+    it('usa FRONTEND_URL do ambiente no link do convite, em vez do default de localhost', async () => {
+      const original = process.env['FRONTEND_URL'];
+      process.env['FRONTEND_URL'] = 'https://app.orbien.com.br';
+      try {
+        const { service, storage, mail } = serviceWith();
+        const csv = ['nome,telefone,email', 'Ana Prod,11988887777,anaprod@test.com'].join('\n');
+        storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+        await service.confirm(
+          { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+          user,
+        );
+
+        expect(mail.sendInvite).toHaveBeenCalledWith(
+          'anaprod@test.com',
+          expect.stringContaining('https://app.orbien.com.br/redefinir-senha?token='),
+        );
+      } finally {
+        if (original === undefined) delete process.env['FRONTEND_URL'];
+        else process.env['FRONTEND_URL'] = original;
+      }
+    });
+
     it('reporta linha com coluna de nome faltando', async () => {
       const { service, storage } = serviceWith();
       const csv = ['nome,telefone', ',11999998888'].join('\n');

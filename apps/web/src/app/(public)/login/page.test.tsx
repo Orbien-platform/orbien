@@ -106,6 +106,20 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("bloqueio WEB_ACCESS_DENIED sem message no corpo cai na mensagem padrão fixa", async () => {
+    const err = {
+      isAxiosError: true,
+      response: { status: 403, data: { code: "WEB_ACCESS_DENIED" } },
+    };
+    vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
+    setup(vi.fn().mockRejectedValue(err));
+    render(<LoginPage />);
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
+    expect(
+      await screen.findByText("Este acesso é apenas pelo aplicativo Orbien.")
+    ).toBeInTheDocument();
+  });
+
   it("403 sem o código WEB_ACCESS_DENIED cai na mensagem genérica", async () => {
     const err = { isAxiosError: true, response: { status: 403, data: {} } };
     vi.spyOn(axios, "isAxiosError").mockReturnValue(true);

@@ -278,8 +278,6 @@ export class PersonsImportService {
         if (existingAccount) grantAccess = false;
       }
 
-      let personId: string | undefined;
-
       if (grantAccess) {
         try {
           const created = await this.prisma.system.$transaction(async (sysTx) => {
@@ -328,7 +326,6 @@ export class PersonsImportService {
             return { personId: person.id, rawToken };
           });
 
-          personId = created.personId;
           accountsCreated++;
           emailsGrantedThisRun.add(email!.toLowerCase());
 
@@ -377,7 +374,6 @@ export class PersonsImportService {
               consented_at: new Date(),
             },
           });
-          personId = person.id;
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           errors.push({ row: rowNum, reason: msg.slice(0, 120) });
@@ -385,7 +381,7 @@ export class PersonsImportService {
         }
       }
 
-      if (personId) imported++;
+      imported++;
     }
 
     await Promise.allSettled(pendingInvites);
