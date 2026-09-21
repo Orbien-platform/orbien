@@ -132,7 +132,7 @@ export const fontFamily = {
  * é a tela, porque a cor depende do modo claro/escuro ativo. Mínimo
  * absoluto de 11px — não baixar nem em caption. */
 export const typography = {
-  display: { fontFamily: fontFamily.light, fontSize: 32, lineHeight: 38 },
+  display: { fontFamily: fontFamily.regular, fontSize: 32, lineHeight: 38 },
   h1: { fontFamily: fontFamily.medium, fontSize: 24, lineHeight: 30 },
   h2: { fontFamily: fontFamily.medium, fontSize: 20, lineHeight: 26 },
   h3: { fontFamily: fontFamily.medium, fontSize: 16, lineHeight: 22 },

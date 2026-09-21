@@ -56,7 +56,7 @@ Mesma lógica de peso do web (contraste 300/500 é a ferramenta expressiva), com
 
 | Token | Peso | Tamanho | Line height | Uso |
 |---|---|---|---|---|
-| `display` | 300 | 32px | 38px | Título de tela cheia (splash, onboarding) |
+| `display` | 400 | 32px | 38px | Título de tela cheia (splash, onboarding) — peso 300 tornava o "n" de nomes de app ambíguo com "r" nesse tamanho |
 | `h1` | 500 | 24px | 30px | Título de tela (header de stack) |
 | `h2` | 500 | 20px | 26px | Título de seção / card grande |
 | `h3` | 500 | 16px | 22px | Subtítulo, título de list item |
