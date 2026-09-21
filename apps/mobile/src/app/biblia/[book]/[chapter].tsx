@@ -51,13 +51,31 @@ function describeSubmitError(err: unknown): string {
 
 export default function BibliaChapterScreen() {
   const { colors, primaryColor } = useTheme();
-  const { book, chapter: chapterParam } = useLocalSearchParams<{ book: string; chapter: string }>();
+  const { book, chapter: chapterParam, verse_start, verse_end } = useLocalSearchParams<{
+    book: string;
+    chapter: string;
+    verse_start?: string;
+    verse_end?: string;
+  }>();
   const chapter = Number(chapterParam);
 
   const [data, setData] = useState<BibleChapter | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [range, setRange] = useState<VerseRange | null>(null);
+  // Vindo do feed (BIB-06 AC4, "abrir a leitura completa... com o intervalo
+  // em destaque"): a rota chega com `verse_start`/`verse_end` na query e o
+  // capítulo já abre com esse intervalo destacado, reaproveitando
+  // `isSelected`/o mesmo highlight visual da seleção manual. Só lido na
+  // montagem (lazy initializer) — depois disso o intervalo é o que o
+  // próprio usuário tocar.
+  const [range, setRange] = useState<VerseRange | null>(() => {
+    const start = Number(verse_start);
+    const end = Number(verse_end);
+    if (Number.isInteger(start) && Number.isInteger(end) && start > 0 && end >= start) {
+      return { start, end };
+    }
+    return null;
+  });
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [comment, setComment] = useState("");

@@ -1,12 +1,17 @@
-// Testes derivados do Done-when de T19 e T21 (tasks.md,
-// biblia-nvi-marcacoes-mobile, BIB-01/BIB-02/BIB-03/BIB-04/BIB-05): sucesso
-// (versículos numerados), erro de rede com retry, seleção de intervalo
-// tocando no 1º e no último versículo, CTA "Comentar" habilita só com
-// intervalo completo, submissão válida chama `createMark`, comentário curto
-// demais bloqueia o submit, erro do backend aparece via `Alert`.
+// Testes derivados do Done-when de T19, T21 e T22 (tasks.md,
+// biblia-nvi-marcacoes-mobile, BIB-01/BIB-02/BIB-03/BIB-04/BIB-05/BIB-06):
+// sucesso (versículos numerados), erro de rede com retry, seleção de
+// intervalo tocando no 1º e no último versículo, CTA "Comentar" habilita só
+// com intervalo completo, submissão válida chama `createMark`, comentário
+// curto demais bloqueia o submit, erro do backend aparece via `Alert`,
+// intervalo vindo da query (`verse_start`/`verse_end`, navegação do feed)
+// já chega destacado.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-let mockSearchParams: { book: string; chapter: string } = { book: "JHN", chapter: "3" };
+let mockSearchParams: { book: string; chapter: string; verse_start?: string; verse_end?: string } = {
+  book: "JHN",
+  chapter: "3",
+};
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockSearchParams,
 }));
@@ -264,5 +269,22 @@ describe("BibliaChapterScreen", () => {
         "Não foi possível salvar a marcação. Tente novamente.",
       );
     });
+  });
+
+  it("chega com verse_start/verse_end na query (navegação do feed) e já abre com o intervalo em destaque (BIB-06)", async () => {
+    mockSearchParams = { book: "JHN", chapter: "3", verse_start: "1", verse_end: "3" };
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await act(async () => {
+      render(<BibliaChapterScreen />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(true);
+    });
+    expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(true);
+    // CTA "Comentar" já habilita — o intervalo chegou completo.
+    expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
   });
 });
