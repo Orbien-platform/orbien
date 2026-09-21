@@ -229,9 +229,13 @@ describe("AuthProvider", () => {
     mockFetchAreas.mockResolvedValue(["volunteers"]);
     let capturedLogin: ((email: string, password: string) => Promise<void>) | undefined;
 
-    function LoginProbe() {
+    function LoginProbe({
+      onLoginCaptured,
+    }: {
+      onLoginCaptured: (login: (email: string, password: string) => Promise<void>) => void;
+    }) {
       const { status, areas, login } = useAuth();
-      capturedLogin = login;
+      onLoginCaptured(login);
       return (
         <>
           <Text testID="status">{status}</Text>
@@ -242,7 +246,11 @@ describe("AuthProvider", () => {
 
     await render(
       <AuthProvider>
-        <LoginProbe />
+        <LoginProbe
+          onLoginCaptured={(login) => {
+            capturedLogin = login;
+          }}
+        />
       </AuthProvider>,
     );
     await waitFor(() => {
@@ -265,9 +273,13 @@ describe("AuthProvider", () => {
     mockFetchAreas.mockResolvedValue(["volunteers"]);
     let capturedLogout: (() => Promise<void>) | undefined;
 
-    function LogoutProbe() {
+    function LogoutProbe({
+      onLogoutCaptured,
+    }: {
+      onLogoutCaptured: (logout: () => Promise<void>) => void;
+    }) {
       const { status, areas, logout } = useAuth();
-      capturedLogout = logout;
+      onLogoutCaptured(logout);
       return (
         <>
           <Text testID="status">{status}</Text>
@@ -278,7 +290,11 @@ describe("AuthProvider", () => {
 
     await render(
       <AuthProvider>
-        <LogoutProbe />
+        <LogoutProbe
+          onLogoutCaptured={(logout) => {
+            capturedLogout = logout;
+          }}
+        />
       </AuthProvider>,
     );
     await waitFor(() => {

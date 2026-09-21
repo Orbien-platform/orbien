@@ -46,10 +46,16 @@ jest.mock("react-native-onesignal", () => ({
   },
 }));
 
+const mockFetchAreas = jest.fn();
+jest.mock("../../lib/permissions/permissions-client", () => ({
+  fetchAreas: () => mockFetchAreas(),
+}));
+
 describe("boot do app (router real, rotas de src/app)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetItemAsync.mockResolvedValue(null);
+    mockFetchAreas.mockResolvedValue(null);
   });
 
   it("sem sessão salva: sai do splash e chega na tela de login", async () => {
@@ -76,5 +82,27 @@ describe("boot do app (router real, rotas de src/app)", () => {
     expect(await app.findByTestId("escala-error")).toBeTruthy();
     expect(app.queryByTestId("splash")).toBeNull();
     expect(app.queryByTestId("email-input")).toBeNull();
+  });
+
+  it("sessão member-only (sem volunteers): shell autenticado monta sem a aba Escala na tab bar", async () => {
+    mockGetItemAsync.mockResolvedValue(
+      JSON.stringify({
+        accessToken: "token",
+        refreshToken: "refresh",
+        accessTokenExpiresAt: Date.now() + 900_000,
+      }),
+    );
+    mockFetchAreas.mockResolvedValue(["content"]);
+
+    const app = await renderRouter("src/app", { initialUrl: "/" });
+
+    // Mesmo shell autenticado do teste acima — o conteúdo da rota index
+    // (Escala) não muda, só a aba some da tab bar.
+    expect(await app.findByTestId("escala-error")).toBeTruthy();
+    expect(app.queryByTestId("splash")).toBeNull();
+
+    expect(app.queryByText("Escala")).toBeNull();
+    // As demais abas continuam normais.
+    expect(app.queryByText("Grupos")).toBeTruthy();
   });
 });
