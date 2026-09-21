@@ -36,4 +36,9 @@ describe('UpdateBibleVerseMarkDto', () => {
     const errors = await errorsFor({ comment: 123 });
     expect(errors.some((e) => e.property === 'comment')).toBe(true);
   });
+
+  it('rejeita comentário só com espaço em branco — trim reduz a menos de 3 caracteres (spec.md, Edge Cases)', async () => {
+    const errors = await errorsFor({ comment: '     ' });
+    expect(errors.some((e) => e.property === 'comment')).toBe(true);
+  });
 });

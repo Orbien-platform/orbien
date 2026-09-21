@@ -86,4 +86,13 @@ describe('CreateBibleVerseMarkDto', () => {
     expect(await errorsFor({ ...VALID, comment: 'abc' })).toHaveLength(0);
     expect(await errorsFor({ ...VALID, comment: 'a'.repeat(2000) })).toHaveLength(0);
   });
+
+  it('rejeita comentário só com espaço em branco — trim reduz a menos de 3 caracteres (spec.md, Edge Cases)', async () => {
+    const errors = await errorsFor({ ...VALID, comment: '     ' });
+    expect(errors.some((e) => e.property === 'comment')).toBe(true);
+  });
+
+  it('aparara espaço nas bordas antes de validar — "  abc  " sobra "abc", válido', async () => {
+    expect(await errorsFor({ ...VALID, comment: '  abc  ' })).toHaveLength(0);
+  });
 });

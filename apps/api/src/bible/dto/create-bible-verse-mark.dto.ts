@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { IsInt, IsString, Min, MaxLength, MinLength } from 'class-validator';
 
 /**
@@ -25,6 +26,10 @@ export class CreateBibleVerseMarkDto {
   @Min(1)
   verse_end!: number;
 
+  // Espaço em branco puro não conta como conteúdo (spec.md, Edge Cases) — o
+  // trim roda antes do MinLength, então '   ' vira '' e cai na mesma
+  // rejeição de comentário ausente/curto demais.
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(3, { message: 'O comentário precisa ter ao menos 3 caracteres' })
   @MaxLength(2000, { message: 'O comentário não pode passar de 2000 caracteres' })
