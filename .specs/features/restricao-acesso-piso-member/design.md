@@ -174,6 +174,15 @@ Nenhum. Sem migration, sem tabela nova — a feature inteira lê dado que já ex
 > fronteira de dado sensível — quem protege dado continua sendo `@Roles`/RLS na API, que não
 > muda nesta feature.
 
+**Sessão de suporte não cruza com o bloqueio.** `apps/web/src/app/api/session/route.ts` `POST`
+só chama `${BACKEND_URL}/auth/login` (linha fixa, nunca `/auth/impersonate`) — uma sessão de
+suporte nasce só em `POST /auth/impersonate`, um fluxo à parte que não passa por este handler.
+A checagem nova olha só o array `payload.roles`, nunca `payload.support_session`; se algum dia
+o handler passasse a aceitar token de `/auth/impersonate`, o bloqueio ainda não dispararia por
+engano, porque `AuthService.impersonate` sempre inclui `platform_support` nos papéis do token
+(`rolesForToken()`, CLAUDE.md raiz) — nunca `['member']` sozinho. Ver teste de regressão em
+`route.test.ts` (T2) que documenta esse raciocínio.
+
 ---
 
 ## Tech Decisions

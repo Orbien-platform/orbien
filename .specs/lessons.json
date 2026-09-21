@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 20,
+  "next_id": 22,
   "lessons": [
     {
       "id": "L-001",
@@ -346,6 +346,42 @@
       ],
       "created": "2026-09-21T11:57:47Z",
       "last_seen": "2026-09-21T11:57:47Z"
+    },
+    {
+      "id": "L-020",
+      "key": "ac_gap::when an ac says another entry point mobile a different route must keep working unaffected by a change confined to one file add a test that exercises that other entry point directly not just a comment noting the code path is separate",
+      "text": "When an AC says another entry point (mobile, a different route) must keep working unaffected by a change confined to one file, add a test that exercises that other entry point directly, not just a comment noting the code path is separate.",
+      "signal": "ac_gap",
+      "scope": "testing",
+      "status": "candidate",
+      "features": [
+        "restricao-acesso-piso-member"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ACC-02 spec.md (testing)"
+      ],
+      "created": "2026-09-21T22:54:57Z",
+      "last_seen": "2026-09-21T22:54:57Z"
+    },
+    {
+      "id": "L-021",
+      "key": "ac_gap::when spec md asks design md to explicitly confirm two flows never cross add that confirmation as a written section in design md and a dedicated test do not let it stay an implicit assumption",
+      "text": "When spec.md asks design.md to explicitly confirm two flows never cross, add that confirmation as a written section in design.md and a dedicated test — do not let it stay an implicit assumption.",
+      "signal": "ac_gap",
+      "scope": "auth",
+      "status": "candidate",
+      "features": [
+        "restricao-acesso-piso-member"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md Edge Cases (support_session) / design.md missing confirmation (auth)"
+      ],
+      "created": "2026-09-21T22:54:57Z",
+      "last_seen": "2026-09-21T22:54:57Z"
     }
   ]
 }

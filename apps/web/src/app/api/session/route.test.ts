@@ -273,6 +273,36 @@ describe("POST /api/session (login)", () => {
     expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe(token);
   });
 
+  it("sessão de suporte nunca teria só member: rolesForToken sempre inclui platform_support, então o bloqueio não dispara", async () => {
+    // Documenta o raciocínio do design.md (Risks & Concerns): uma sessão de
+    // suporte nasce só em POST /auth/impersonate, que nunca passa por este
+    // handler (ele só chama /auth/login) — e mesmo que passasse, o token de
+    // impersonate sempre carrega platform_support junto (rolesForToken()),
+    // nunca `member` sozinho. Este teste fixa esse invariante: um token com
+    // support_session:true e papéis além de member sempre libera o login.
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member", "platform_support"],
+      support_session: true,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ areas: [] }) })
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "suporte@orbien.com" } }));
+
+    expect(res.status).toBe(200);
+    expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe(token);
+  });
+
   it("responde o bloqueio mesmo quando a revogação do refresh token falha", async () => {
     const token = makeToken({
       sub: "u1",
