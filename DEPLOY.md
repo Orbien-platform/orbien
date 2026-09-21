@@ -160,33 +160,29 @@ browser bloqueia as chamadas.
 
 **Pendente de configurar — Bíblia NVI (`biblia-nvi-marcacoes-mobile`, `PEND-09`
 em `docs/PLANO.md`).** `ApiBibleTextProvider`
-(`apps/api/src/bible/api-bible-text.provider.ts`) já está no código, mas o
-token de produção do provedor ainda não foi criado. Checklist para fechar
-antes de abrir a leitura da Bíblia para usuário de verdade:
+(`apps/api/src/bible/api-bible-text.provider.ts`) já está no código. O
+provedor (abibliadigital.api.br) mudou de domínio e de modelo de acesso em
+2026-09-21 — API pública, sem token, com WAF e rate limit via Cloudflare —
+então não há conta para criar nem chave para gerar. Falta só configurar no
+Render as duas variáveis abaixo (mesmos valores já documentados em
+`apps/api/.env.example`, para desenvolvimento local):
 
-1. Criar uma conta gratuita em https://www.abibliadigital.com.br/.
-2. Pegar o token da conta — a documentação do provedor chama esse valor de
-   "user token". Não confirmamos em qual tela exata ele aparece depois do
-   cadastro (a doc oficial deles muda com frequência), então vale conferir lá
-   na hora em vez de seguir um passo específico daqui.
-3. Configurar no Render as três variáveis abaixo (mesmos valores já
-   documentados em `apps/api/.env.example`, para desenvolvimento local):
+| Variável | Valor | Segredo? |
+|---|---|---|
+| `BIBLE_API_BASE_URL` | `https://abibliadigital.api.br/api` | não |
+| `BIBLE_API_VERSION_ID` | `nvi` | não |
 
-   | Variável | Valor | Segredo? |
-   |---|---|---|
-   | `BIBLE_API_BASE_URL` | `https://www.abibliadigital.com.br/api` | não |
-   | `BIBLE_API_VERSION_ID` | `nvi` | não |
-   | `BIBLE_API_KEY` | token do passo 2 | **sim** |
+Nenhuma das duas é segredo — mesmo espírito de `ALLOWED_ORIGINS`/`MAIL_FROM`
+acima, dá para colocar direto no `render.yaml` em vez do Environment Group,
+se for feita essa faxina depois.
 
-   Só `BIBLE_API_KEY` é segredo — as outras duas são config pública, no
-   mesmo espírito de `ALLOWED_ORIGINS`/`MAIL_FROM` acima.
-
-Sem `BIBLE_API_KEY`, a integração **funciona mesmo assim**:
-`ApiBibleTextProvider` manda a requisição sem `Authorization` quando a
-variável está vazia, e cai no limite público do provedor — 20
-requisições/hora/IP. O cache-first do `BibleReaderService` (uma chamada por
-capítulo servida do banco depois da primeira leitura) reduz bastante esse
-uso, mas não o elimina — vale configurar o token antes do tráfego real.
+O time do provedor não informou um número de rate limit para o modelo novo
+(o antigo, com o domínio `abibliadigital.com.br`, era 20 requisições/hora/IP
+sem token). O cache-first do `BibleReaderService` (uma chamada por capítulo,
+servida do banco depois da primeira leitura) mantém o volume baixo de
+qualquer forma, mas vale acompanhar os logs do provedor externo
+(`Falha ao buscar ... na API bíblica externa`, em `ApiBibleTextProvider`)
+depois do primeiro tráfego real, caso o WAF passe a bloquear picos.
 
 ### 1.5 Provisionar o banco do zero
 

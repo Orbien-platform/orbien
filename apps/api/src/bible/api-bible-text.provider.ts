@@ -25,19 +25,22 @@ export class BibleProviderError extends Error {
 /**
  * Implementação HTTP concreta de `BibleTextProvider`, atrás da interface
  * (design.md, Approach A) para que `BibleReaderService` nunca conheça o
- * provedor real. Configurada só por env — nenhuma chave fica hardcoded nem
+ * provedor real. Configurada só por env — nenhuma URL fica hardcoded nem
  * chega ao bundle do mobile (o app nunca fala com esta classe diretamente).
  *
- * Provedor configurado: abibliadigital.com.br (gratuito, `nvi` entre as ~26
- * versões que expõe). `BIBLE_API_VERSION_ID` é o slug de versão do provedor
- * (`nvi`), não um ID opaco — nome mantido genérico para não amarrar o
- * contrato de env a este provedor específico. Formato de resposta e path
- * conforme `DOCUMENTATION.md` do repositório omarciovsena/abibliadigital:
+ * Provedor configurado: abibliadigital.api.br (`nvi` entre as ~26 versões
+ * que expõe). Mesmo projeto/dataset de quando o domínio era
+ * abibliadigital.com.br — só o domínio e o modelo de acesso mudaram
+ * (comunicado do time do provedor, 2026-09-21): a API agora é pública sem
+ * autenticação, com WAF e rate limit via Cloudflare no lugar do token por
+ * conta. `BIBLE_API_VERSION_ID` é o slug de versão do provedor (`nvi`), não
+ * um ID opaco — nome mantido genérico para não amarrar o contrato de env a
+ * este provedor específico. Path conforme a doc do provedor:
  * `GET {baseUrl}/verses/{version}/{abbrev}/{chapter}` → `{ book, chapter,
- * verses: [{ number, text }] }`, autenticação `Authorization: Bearer
- * {token}` (token de conta gratuita, para não cair no limite de 20
- * req/hora sem auth — o cache-first do `BibleReaderService` já reduz isso a
- * uma chamada por capítulo, para sempre).
+ * verses: [{ number, text }] }`. Sem token e sem `Authorization`, de
+ * propósito — o cache-first do `BibleReaderService` (uma chamada por
+ * capítulo, para sempre) é o que mantém o volume de requisições baixo
+ * contra o rate limit do WAF.
  */
 @Injectable()
 export class ApiBibleTextProvider implements BibleTextProvider {
@@ -47,10 +50,6 @@ export class ApiBibleTextProvider implements BibleTextProvider {
 
   private get baseUrl(): string {
     return process.env['BIBLE_API_BASE_URL'] ?? '';
-  }
-
-  private get apiKey(): string | undefined {
-    return process.env['BIBLE_API_KEY'];
   }
 
   private get versionId(): string | undefined {
@@ -68,10 +67,7 @@ export class ApiBibleTextProvider implements BibleTextProvider {
 
     try {
       const { data } = await firstValueFrom(
-        this.http.get<{ verses: VerseText[] }>(url, {
-          headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
-          timeout: 10_000,
-        }),
+        this.http.get<{ verses: VerseText[] }>(url, { timeout: 10_000 }),
       );
       return data.verses;
     } catch (err) {

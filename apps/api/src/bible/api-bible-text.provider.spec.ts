@@ -35,7 +35,6 @@ describe('ApiBibleTextProvider', () => {
 
   beforeEach(() => {
     process.env['BIBLE_API_BASE_URL'] = 'https://bible.example.com/v1';
-    process.env['BIBLE_API_KEY'] = 'secret-key';
     process.env['BIBLE_API_VERSION_ID'] = 'nvi-ptbr';
   });
 
@@ -56,16 +55,15 @@ describe('ApiBibleTextProvider', () => {
     expect(result).toEqual(verses);
   });
 
-  it('chama a URL e os headers configurados por env — base URL, versão (path) e Bearer token, traduzindo o book_code USFM para a abreviação pt do provedor', async () => {
+  it('chama a URL montada por env — base URL e versão (path), traduzindo o book_code USFM para a abreviação pt do provedor, sem Authorization (API pública, sem token)', async () => {
     const httpGet = jest.fn().mockReturnValue(of({ data: { verses: [] } }));
     const provider = providerWith(httpGet);
 
     await provider.getChapter('JHN', 3);
 
-    expect(httpGet).toHaveBeenCalledWith(
-      'https://bible.example.com/v1/verses/nvi-ptbr/jo/3',
-      expect.objectContaining({ headers: { Authorization: 'Bearer secret-key' } }),
-    );
+    expect(httpGet).toHaveBeenCalledWith('https://bible.example.com/v1/verses/nvi-ptbr/jo/3', {
+      timeout: 10_000,
+    });
   });
 
   it('book_code sem abreviação mapeada vira BibleProviderError, sem chamar a rede', async () => {
