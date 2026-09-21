@@ -142,6 +142,19 @@ describe('BibleVerseMarksService', () => {
       ).resolves.toBeDefined();
     });
 
+    it('aceita marcação de um único versículo (verse_start === verse_end) — spec.md permite "um só, ou vários consecutivos"', async () => {
+      const client = clientWith();
+      client.bibleVerseMark.create.mockResolvedValue({ id: 'm1' });
+      const reader = readerMock();
+      const service = serviceWith(client, reader);
+
+      await service.create({ ...CREATE_DTO, verse_start: 16, verse_end: 16 }, USER);
+
+      expect(client.bibleVerseMark.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ verse_start: 16, verse_end: 16 }) }),
+      );
+    });
+
     it('propaga o 400/502 que o BibleReaderService lançar (livro/capítulo inválido ou provedor fora do ar)', async () => {
       const client = clientWith();
       const reader = readerMock();
