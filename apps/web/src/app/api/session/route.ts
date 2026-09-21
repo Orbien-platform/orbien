@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
   const pair = (await upstream.json()) as TokenPair;
   const payload = decodeJwtPayload(pair.access_token);
-  if (!payload || !body.email) {
+  if (!payload || !body.email || !Array.isArray(payload.roles)) {
     return NextResponse.json({ message: "Resposta de login inválida." }, { status: 502 });
   }
 

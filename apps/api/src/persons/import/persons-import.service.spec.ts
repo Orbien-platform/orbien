@@ -278,6 +278,44 @@ describe('PersonsImportService', () => {
       );
     });
 
+    it('não serializa o loop atrás do envio do convite — a linha seguinte não espera o e-mail da anterior', async () => {
+      const { service, storage, mail, userAccountClient } = serviceWith();
+      let resolveFirstInvite: () => void = () => {};
+      (mail.sendInvite as jest.Mock)
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveFirstInvite = resolve;
+            }),
+        )
+        .mockResolvedValue(undefined);
+      const csv = [
+        'nome,telefone,email',
+        'Primeira,11988880001,primeira@test.com',
+        'Segunda,11988880002,segunda@test.com',
+      ].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const confirmPromise = service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      // O convite da primeira linha ainda está pendente (nunca resolvido),
+      // mas a segunda linha já deve ter sido processada — sem isso, o loop
+      // estaria serializado atrás do `await` do envio de e-mail. Espera em
+      // pequenos passos até a condição bater, sem depender de um número
+      // fixo de voltas da fila de eventos.
+      for (let i = 0; i < 300 && userAccountClient.create.mock.calls.length < 2; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      expect(userAccountClient.create).toHaveBeenCalledTimes(2);
+
+      resolveFirstInvite();
+      const result = await confirmPromise;
+      expect(result).toEqual({ imported: 2, skipped: 0, errors: [] });
+    }, 15000);
+
     it('linha sem e-mail não ganha conta', async () => {
       const { service, storage, client, userAccountClient } = serviceWith();
       const csv = ['nome,telefone', 'Sem Email,11988887777'].join('\n');

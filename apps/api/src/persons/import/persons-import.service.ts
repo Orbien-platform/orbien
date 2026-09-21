@@ -206,6 +206,13 @@ export class PersonsImportService {
     // de duas linhas do mesmo arquivo com o mesmo e-mail, que o unique
     // constraint de user_accounts.email só pegaria na segunda escrita.
     const emailsGrantedThisRun = new Set<string>();
+    // Convites disparados sem `await` por linha (ver abaixo) — coletados
+    // aqui para dar a eles uma chance de terminar antes da função retornar,
+    // sem serializar o loop atrás de cada envio. No caminho síncrono
+    // (≤500 linhas), isso é o que evita uma importação com muitos e-mails
+    // novos estourar o timeout da requisição HTTP esperando o Resend linha
+    // a linha.
+    const pendingInvites: Promise<unknown>[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2; // 1-indexed, header = row 1
@@ -326,18 +333,23 @@ export class PersonsImportService {
           emailsGrantedThisRun.add(email!.toLowerCase());
 
           // Fora da transação, como em `UsersService.create`: envio de e-mail
-          // não deve segurar conexão de banco. Falha no envio não desfaz a
-          // conta já criada — só fica registrada no log, sem contar como erro
-          // da linha (a pessoa já foi importada com sucesso).
+          // não deve segurar conexão de banco. Sem `await` aqui de propósito
+          // — a conta já foi criada com sucesso, então nem uma falha nem a
+          // latência do envio podem travar a linha seguinte do import; a
+          // promise entra em `pendingInvites` só para ganhar uma chance de
+          // terminar antes da função retornar (ver o `Promise.allSettled`
+          // depois do loop).
           const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
           const inviteUrl = `${frontendUrl}/redefinir-senha?token=${created.rawToken}`;
-          await this.mail.sendInvite(email!, inviteUrl).catch((err: unknown) => {
-            this.logger.error(
-              `Falha ao enviar convite de acesso para ${email} (linha ${rowNum}): ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-          });
+          pendingInvites.push(
+            this.mail.sendInvite(email!, inviteUrl).catch((err: unknown) => {
+              this.logger.error(
+                `Falha ao enviar convite de acesso para ${email} (linha ${rowNum}): ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            }),
+          );
         } catch (err: unknown) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
             // Corrida entre o pre-check e a escrita: outra conta ficou com
@@ -375,6 +387,8 @@ export class PersonsImportService {
 
       if (personId) imported++;
     }
+
+    await Promise.allSettled(pendingInvites);
 
     await writeAuditLog(
       this.prisma,

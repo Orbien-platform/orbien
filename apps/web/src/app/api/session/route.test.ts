@@ -166,6 +166,23 @@ describe("POST /api/session (login)", () => {
     expect(res.status).toBe(502);
   });
 
+  it("responde 502 quando o token decodifica mas roles não é um array (payload malformado)", async () => {
+    // Guarda a mesma checagem contra um payload cujo `roles` sumiu ou veio
+    // num formato inesperado — sem isso, `payload.roles.some(...)` no
+    // bloqueio de WEB_ACCESS_DENIED lançaria TypeError (500 não tratado)
+    // em vez do 502 limpo que este arquivo já dá para resposta inválida.
+    const token = makeToken({ sub: "u1", exp: Math.floor(Date.now() / 1000) + 3600 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: token, refresh_token: "r" }),
+      })
+    );
+    const res = await POST(req({ method: "POST", body: { email: "a@b.com" } }));
+    expect(res.status).toBe(502);
+  });
+
   it("grava os três cookies de sessão em um login bem-sucedido", async () => {
     const token = makeToken({
       sub: "u1",

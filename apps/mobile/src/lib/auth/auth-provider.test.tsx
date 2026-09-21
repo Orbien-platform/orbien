@@ -308,4 +308,72 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
     expect(screen.getByTestId("areas").props.children).toBe("null");
   });
+
+  it("resposta atrasada de fetchAreas do login() não repopula areas depois de um logout() no meio do caminho", async () => {
+    (getSession as jest.Mock).mockResolvedValue(null);
+    (authLogin as jest.Mock).mockResolvedValue(VALID_SESSION);
+    (authLogout as jest.Mock).mockResolvedValue(undefined);
+    let resolveAreas: (value: string[] | null) => void = () => {};
+    mockFetchAreas.mockReturnValue(
+      new Promise<string[] | null>((resolve) => {
+        resolveAreas = resolve;
+      }),
+    );
+    let capturedLogin: ((email: string, password: string) => Promise<void>) | undefined;
+    let capturedLogout: (() => Promise<void>) | undefined;
+
+    function Probe({
+      onCaptured,
+    }: {
+      onCaptured: (fns: {
+        login: (email: string, password: string) => Promise<void>;
+        logout: () => Promise<void>;
+      }) => void;
+    }) {
+      const { status, areas, login, logout } = useAuth();
+      onCaptured({ login, logout });
+      return (
+        <>
+          <Text testID="status">{status}</Text>
+          <Text testID="areas">{areas === null ? "null" : areas.join(",")}</Text>
+        </>
+      );
+    }
+
+    await render(
+      <AuthProvider>
+        <Probe
+          onCaptured={({ login, logout }) => {
+            capturedLogin = login;
+            capturedLogout = logout;
+          }}
+        />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    });
+
+    // login() dispara fetchAreas() sem esperar — a resposta fica pendente.
+    await act(async () => {
+      await capturedLogin?.("ana@igreja.com", "123456");
+    });
+    expect(screen.getByTestId("status").props.children).toBe("authenticated");
+
+    // logout() acontece ANTES da resposta de fetchAreas chegar.
+    await act(async () => {
+      await capturedLogout?.();
+    });
+    expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    expect(screen.getByTestId("areas").props.children).toBe("null");
+
+    // A resposta atrasada do login() chega só agora — não pode repopular
+    // `areas` de uma sessão que já foi encerrada.
+    await act(async () => {
+      resolveAreas(["volunteers"]);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    expect(screen.getByTestId("areas").props.children).toBe("null");
+  });
 });
