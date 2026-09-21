@@ -8,6 +8,7 @@ import {
   readIdentity,
   REFRESH_COOKIE,
   REFRESH_MAX_AGE,
+  revokeRefreshToken,
   rotate,
   setAccessCookie,
   setIdentityCookie,
@@ -136,6 +137,34 @@ describe("buildSessionUser", () => {
     const user = buildSessionUser(payload, { email: "ana@example.com" });
     expect(user.support_session).toBe(false);
     expect(user.support_tenant_name).toBeNull();
+  });
+});
+
+describe("revokeRefreshToken", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("chama POST /auth/logout com o refresh token", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+
+    await revokeRefreshToken("refresh-token");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/auth/logout"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ refresh_token: "refresh-token" }),
+      })
+    );
+  });
+
+  it("nunca lança quando a API está fora", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
+
+    await expect(revokeRefreshToken("refresh-token")).resolves.toBeUndefined();
   });
 });
 

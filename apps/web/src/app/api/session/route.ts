@@ -20,6 +20,7 @@ import {
   clearSessionCookies,
   fetchAreas,
   readIdentity,
+  revokeRefreshToken,
   setAccessCookie,
   setIdentityCookie,
   setRefreshCookie,
@@ -101,15 +102,7 @@ export async function DELETE(request: NextRequest) {
   const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
 
   if (refresh) {
-    try {
-      await fetch(`${BACKEND_URL}/auth/logout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refresh }),
-      });
-    } catch {
-      // A API pode estar fora; apagar o cookie local não pode depender disso.
-    }
+    await revokeRefreshToken(refresh);
   }
 
   const response = new NextResponse(null, { status: 204 });
