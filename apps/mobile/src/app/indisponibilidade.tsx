@@ -12,6 +12,7 @@
 // o leitor de tela entende.
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { Alert } from "../components/Alert";
 import { AppButton } from "../components/AppButton";
@@ -20,6 +21,7 @@ import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
 import { SectionLabel } from "../components/SectionLabel";
 import { describeLoadError } from "../lib/api/load-error";
+import { useAuth } from "../lib/auth/auth-provider";
 import { getUnavailability, saveUnavailability } from "../lib/escala/escala-client";
 import { formatMonthYear } from "../lib/format/date";
 import { ChevronRight, Check } from "../lib/theme/icons";
@@ -53,6 +55,11 @@ const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";
 
 export default function IndisponibilidadeScreen() {
   const { primaryColor, colors } = useTheme();
+  const router = useRouter();
+  const { areas } = useAuth();
+  // Fail-open: sem resposta ainda (`null`) libera a tela — quem nega acesso
+  // de verdade é a API na rota de indisponibilidade, não este gate de UX.
+  const hasAccess = areas === null || areas.includes("volunteers");
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -64,6 +71,9 @@ export default function IndisponibilidadeScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Sem `volunteers`, a tela não busca dado nenhum — só o guard abaixo
+    // renderiza (ACC-08, restricao-acesso-piso-member).
+    if (!hasAccess) return;
     // Cancelamento evita que a resposta de um mês antigo (fora de ordem)
     // sobrescreva o mês selecionado por último.
     const signal = { cancelled: false };
@@ -86,7 +96,21 @@ export default function IndisponibilidadeScreen() {
     return () => {
       signal.cancelled = true;
     };
-  }, [month, year]);
+  }, [month, year, hasAccess]);
+
+  if (!hasAccess) {
+    return (
+      <Screen center>
+        <Text
+          testID="sem-acesso"
+          style={[typography.bodyMedium, styles.semAcessoText, { color: colors.textSecondary }]}
+        >
+          Você não tem acesso a esta tela.
+        </Text>
+        <AppButton testID="back-button" title="Voltar" onPress={() => router.back()} />
+      </Screen>
+    );
+  }
 
   function toggleDay(day: number) {
     const key = dayKey(year, month, day);
@@ -306,4 +330,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   notesSection: { marginTop: spacing.lg },
+  semAcessoText: {
+    textAlign: "center",
+    marginBottom: spacing.lg,
+  },
 });
