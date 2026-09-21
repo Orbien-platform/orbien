@@ -8,6 +8,7 @@ import {
   logout as authLogout,
   onSessionExpired,
 } from "./auth-client";
+import { fetchAreas } from "../permissions/permissions-client";
 import type { Session } from "./types";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -15,6 +16,13 @@ export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 export interface AuthContextValue {
   session: Session | null;
   status: AuthStatus;
+  /**
+   * As áreas do produto que esta sessão lê, segundo `GET /me/permissions`.
+   * `null` até a primeira resposta chegar (login ou boot) ou se a chamada
+   * falhar — fail-open, quem nega acesso de verdade é a API. Nunca
+   * persistida: buscada de novo a cada login/boot, nunca em SecureStore.
+   */
+  areas: string[] | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -24,6 +32,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
+  const [areas, setAreas] = useState<string[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setSession(storedSession);
         setStatus(storedSession ? "authenticated" : "unauthenticated");
+        // Não bloqueia a transição de status: a tela já sobe com `areas:
+        // null` (fail-open) e atualiza quando a resposta chegar.
+        if (storedSession) {
+          fetchAreas().then((result) => {
+            if (!cancelled) setAreas(result);
+          });
+        }
       })
       .catch(() => {
         // Leitura do SecureStore falhou (ex.: JSON corrompido) — sem sessão
@@ -55,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return onSessionExpired(() => {
       setSession(null);
       setStatus("unauthenticated");
+      setAreas(null);
     });
   }, []);
 
@@ -62,16 +79,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newSession = await authLogin(email, password);
     setSession(newSession);
     setStatus("authenticated");
+    // Sem `await`, de propósito: não atrasa a transição de tela por causa de
+    // uma chamada cujo pior caso já é fail-open (ver `areas` na interface).
+    fetchAreas().then(setAreas);
   }, []);
 
   const logout = useCallback(async () => {
     await authLogout();
     setSession(null);
     setStatus("unauthenticated");
+    setAreas(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, status, login, logout }}>
+    <AuthContext.Provider value={{ session, status, areas, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

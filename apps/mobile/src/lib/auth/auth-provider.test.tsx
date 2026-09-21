@@ -14,7 +14,12 @@ jest.mock("./auth-client", () => ({
   onSessionExpired: (listener: () => void) => mockOnSessionExpired(listener),
 }));
 
-import { getSession, logout as authLogout } from "./auth-client";
+const mockFetchAreas = jest.fn();
+jest.mock("../permissions/permissions-client", () => ({
+  fetchAreas: (...args: unknown[]) => mockFetchAreas(...args),
+}));
+
+import { getSession, login as authLogin, logout as authLogout } from "./auth-client";
 import { AuthProvider, useAuth } from "./auth-provider";
 
 const VALID_SESSION = {
@@ -26,6 +31,16 @@ const VALID_SESSION = {
 function StatusProbe() {
   const { status } = useAuth();
   return <Text testID="status">{status}</Text>;
+}
+
+function StatusAndAreasProbe() {
+  const { status, areas } = useAuth();
+  return (
+    <>
+      <Text testID="status">{status}</Text>
+      <Text testID="areas">{areas === null ? "null" : areas.join(",")}</Text>
+    </>
+  );
 }
 
 // Captura `logout` do contexto sem depender de simulação de toque nativa
@@ -48,6 +63,7 @@ describe("AuthProvider", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockOnSessionExpired.mockReturnValue(() => {});
+    mockFetchAreas.mockResolvedValue(null);
   });
 
   it("sem sessão salva: status resolve para unauthenticated", async () => {
@@ -145,5 +161,135 @@ describe("AuthProvider", () => {
     // SecureStore já foi limpo por auth-client antes de notificar — o
     // AuthProvider só precisa refletir o status, não chamar logout() de novo.
     expect(authLogout).not.toHaveBeenCalled();
+  });
+
+  it("boot com sessão salva busca as áreas e as reflete no contexto", async () => {
+    (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
+    mockFetchAreas.mockResolvedValue(["volunteers", "content"]);
+
+    await render(
+      <AuthProvider>
+        <StatusAndAreasProbe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("areas").props.children).toBe("volunteers,content");
+    });
+    expect(mockFetchAreas).toHaveBeenCalledTimes(1);
+  });
+
+  it("boot sem sessão salva não busca áreas", async () => {
+    (getSession as jest.Mock).mockResolvedValue(null);
+
+    await render(
+      <AuthProvider>
+        <StatusAndAreasProbe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    });
+    expect(mockFetchAreas).not.toHaveBeenCalled();
+  });
+
+  it("status vira authenticated sem esperar a resposta de áreas (fail-open enquanto pendente)", async () => {
+    (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
+    let resolveAreas: (value: string[] | null) => void = () => {};
+    mockFetchAreas.mockReturnValue(
+      new Promise<string[] | null>((resolve) => {
+        resolveAreas = resolve;
+      }),
+    );
+
+    await render(
+      <AuthProvider>
+        <StatusAndAreasProbe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").props.children).toBe("authenticated");
+    });
+    // `fetchAreas` ainda não respondeu — o contexto não travou esperando.
+    expect(screen.getByTestId("areas").props.children).toBe("null");
+
+    await act(async () => {
+      resolveAreas(["volunteers"]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("areas").props.children).toBe("volunteers");
+  });
+
+  it("login() busca as áreas depois de autenticar, sem atrasar a transição de status", async () => {
+    (getSession as jest.Mock).mockResolvedValue(null);
+    (authLogin as jest.Mock).mockResolvedValue(VALID_SESSION);
+    mockFetchAreas.mockResolvedValue(["volunteers"]);
+    let capturedLogin: ((email: string, password: string) => Promise<void>) | undefined;
+
+    function LoginProbe() {
+      const { status, areas, login } = useAuth();
+      capturedLogin = login;
+      return (
+        <>
+          <Text testID="status">{status}</Text>
+          <Text testID="areas">{areas === null ? "null" : areas.join(",")}</Text>
+        </>
+      );
+    }
+
+    await render(
+      <AuthProvider>
+        <LoginProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    });
+
+    await act(async () => {
+      await capturedLogin?.("ana@igreja.com", "123456");
+    });
+
+    expect(screen.getByTestId("status").props.children).toBe("authenticated");
+    await waitFor(() => {
+      expect(screen.getByTestId("areas").props.children).toBe("volunteers");
+    });
+  });
+
+  it("logout() limpa as áreas junto do status", async () => {
+    (getSession as jest.Mock).mockResolvedValue(VALID_SESSION);
+    (authLogout as jest.Mock).mockResolvedValue(undefined);
+    mockFetchAreas.mockResolvedValue(["volunteers"]);
+    let capturedLogout: (() => Promise<void>) | undefined;
+
+    function LogoutProbe() {
+      const { status, areas, logout } = useAuth();
+      capturedLogout = logout;
+      return (
+        <>
+          <Text testID="status">{status}</Text>
+          <Text testID="areas">{areas === null ? "null" : areas.join(",")}</Text>
+        </>
+      );
+    }
+
+    await render(
+      <AuthProvider>
+        <LogoutProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("areas").props.children).toBe("volunteers");
+    });
+
+    await act(async () => {
+      await capturedLogout?.();
+    });
+
+    expect(screen.getByTestId("status").props.children).toBe("unauthenticated");
+    expect(screen.getByTestId("areas").props.children).toBe("null");
   });
 });
