@@ -282,4 +282,28 @@ describe("BibliaFeedScreen", () => {
     expect(mockUpdateMark).not.toHaveBeenCalled();
     expect(screen.getByTestId("biblia-feed-edit-validation-error-mark-1")).toBeTruthy();
   });
+
+  it('"Cancelar" fecha o formulário de edição sem chamar updateMark, texto original preservado', async () => {
+    const own = mark({ id: "mark-1", is_mine: true, can_delete: true, comment: "Original." });
+    mockGetFeed.mockResolvedValue({ items: [own], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-edit-mark-1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-mark-1"));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-feed-edit-input-mark-1"), "rascunho descartado");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-cancel-mark-1"));
+    });
+
+    expect(mockUpdateMark).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("biblia-feed-edit-form-mark-1")).toBeNull();
+    expect(screen.getByText("Original.")).toBeTruthy();
+  });
 });

@@ -271,6 +271,22 @@ describe("BibliaChapterScreen", () => {
     });
   });
 
+  it('"Cancelar" fecha o composer e limpa comentário/erros — reabrir começa do zero', async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await selectRangeAndOpenComposer();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-comment-input"), "rascunho que será descartado");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-cancel"));
+    });
+
+    expect(screen.queryByTestId("biblia-comment-composer")).toBeNull();
+    expect(mockCreateMark).not.toHaveBeenCalled();
+  });
+
   it("chega com verse_start/verse_end na query (navegação do feed) e já abre com o intervalo em destaque (BIB-06)", async () => {
     mockSearchParams = { book: "JHN", chapter: "3", verse_start: "1", verse_end: "3" };
     mockGetChapter.mockResolvedValue(CHAPTER);
