@@ -15,12 +15,23 @@ jest.mock("../../lib/escala/escala-client", () => ({
   saveUnavailability: (...args: unknown[]) => mockSaveUnavailability(...args),
 }));
 
+const mockBack = jest.fn();
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ back: mockBack }),
+}));
+
+const mockUseAuth = jest.fn();
+jest.mock("../../lib/auth/auth-provider", () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
 import IndisponibilidadeScreen from "../../app/indisponibilidade";
 
 describe("IndisponibilidadeScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers().setSystemTime(new Date("2026-09-08T12:00:00Z"));
+    mockUseAuth.mockReturnValue({ areas: null });
   });
 
   afterEach(() => {
@@ -130,5 +141,58 @@ describe("IndisponibilidadeScreen", () => {
       expect(screen.getByTestId("save-error")).toBeTruthy();
     });
     expect(screen.queryByTestId("saved-message")).toBeNull();
+  });
+
+  it("sem a área volunteers: mostra tela sem acesso e não busca indisponibilidade (ACC-08)", async () => {
+    mockUseAuth.mockReturnValue({ areas: ["content"] });
+
+    await act(async () => {
+      render(<IndisponibilidadeScreen />);
+    });
+
+    expect(screen.getByTestId("sem-acesso")).toBeTruthy();
+    expect(screen.queryByTestId("days-grid")).toBeNull();
+    expect(mockGetUnavailability).not.toHaveBeenCalled();
+  });
+
+  it("na tela sem acesso, o botão Voltar chama router.back()", async () => {
+    mockUseAuth.mockReturnValue({ areas: ["content"] });
+
+    await act(async () => {
+      render(<IndisponibilidadeScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("back-button"));
+    });
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("com a área volunteers: carrega a tela normal, sem o guard de sem acesso", async () => {
+    mockUseAuth.mockReturnValue({ areas: ["volunteers"] });
+    mockGetUnavailability.mockResolvedValue({ dates: [] });
+
+    await act(async () => {
+      render(<IndisponibilidadeScreen />);
+    });
+
+    await waitFor(() => {
+      expect(mockGetUnavailability).toHaveBeenCalledWith(9, 2026);
+    });
+    expect(screen.queryByTestId("sem-acesso")).toBeNull();
+  });
+
+  it("areas null (fail-open): carrega a tela normal, igual a ter acesso", async () => {
+    mockUseAuth.mockReturnValue({ areas: null });
+    mockGetUnavailability.mockResolvedValue({ dates: [] });
+
+    await act(async () => {
+      render(<IndisponibilidadeScreen />);
+    });
+
+    await waitFor(() => {
+      expect(mockGetUnavailability).toHaveBeenCalledWith(9, 2026);
+    });
+    expect(screen.queryByTestId("sem-acesso")).toBeNull();
   });
 });

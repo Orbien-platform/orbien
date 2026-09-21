@@ -29,6 +29,7 @@ import {
   Users,
   type IconProps,
 } from "../../lib/theme/icons";
+import { useAuth } from "../../lib/auth/auth-provider";
 import { useTheme } from "../../lib/theme/theme-provider";
 import {
   ICON_STROKE_WIDTH,
@@ -66,6 +67,10 @@ function tabIcon(Icon: ComponentType<IconProps>) {
 export default function TabsLayout() {
   const { accentReadable, colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { areas } = useAuth();
+  // Fail-open: sem resposta ainda (`null`) mostra a aba — quem nega acesso
+  // de verdade é a API nas rotas de voluntariado, não este gate de UX.
+  const showEscala = areas === null || areas.includes("volunteers");
 
   return (
     // As abas rodam sem o header do Stack (src/app/_layout.tsx), então não
@@ -98,7 +103,14 @@ export default function TabsLayout() {
       >
         <Tabs.Screen
           name="index"
-          options={{ title: "Escala", tabBarIcon: tabIcon(CalendarCheck) }}
+          options={{
+            title: "Escala",
+            tabBarIcon: tabIcon(CalendarCheck),
+            // `href: null` tira a aba da tab bar sem remover a rota do
+            // navigator (quem não tem `volunteers` não vê Escala, mas
+            // `indisponibilidade.tsx` segue guardado por si mesmo).
+            href: showEscala ? undefined : null,
+          }}
         />
         <Tabs.Screen
           name="celebracoes"

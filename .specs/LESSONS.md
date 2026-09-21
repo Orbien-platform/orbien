@@ -128,6 +128,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: apps/api/src/bible/dto/create-bible-verse-mark.dto.ts:comment (apps/api/src/bible/dto)
 - last seen: 2026-09-21T11:57:47Z
 
+### L-020 — When an AC says another entry point (mobile, a different route) must keep working unaffected by a change confined to one file, add a test that exercises that other entry point directly, not just a comment noting the code path is separate.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `testing` · harmful: 0
+- features: restricao-acesso-piso-member
+- evidence: ACC-02 spec.md (testing)
+- last seen: 2026-09-21T22:54:57Z
+
+### L-021 — When spec.md asks design.md to explicitly confirm two flows never cross, add that confirmation as a written section in design.md and a dedicated test — do not let it stay an implicit assumption.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `auth` · harmful: 0
+- features: restricao-acesso-piso-member
+- evidence: spec.md Edge Cases (support_session) / design.md missing confirmation (auth)
+- last seen: 2026-09-21T22:54:57Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

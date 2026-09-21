@@ -23,6 +23,15 @@ jest.mock("../api/client", () => ({
 import { HttpError } from "../api/errors";
 import { login, logout, getSession } from "./auth-client";
 
+// Mesmo helper de jwt.test.ts — o token aqui não é decodificado por
+// AuthClient.login, só guardado como string, mas encoder um payload
+// plausível deixa o teste do ACC-02 (restricao-acesso-piso-member) legível.
+function makeToken(payload: object): string {
+  const base64url = (obj: object) =>
+    btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${base64url({ alg: "HS256" })}.${base64url(payload)}.signature`;
+}
+
 describe("AuthClient", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -62,6 +71,33 @@ describe("AuthClient", () => {
       await expect(login("a@b.com", "errada")).rejects.toBe(genericError);
       // AuthClient não deve gravar sessão nenhuma quando o login falha.
       expect(mockSetItemAsync).not.toHaveBeenCalled();
+    });
+
+    it("ACC-02 (restricao-acesso-piso-member): conta com só o papel member autentica normalmente pelo mobile — o bloqueio é exclusivo do broker de sessão do apps/web, este client não inspeciona papel nenhum", async () => {
+      const nowSpy = jest.spyOn(Date, "now").mockReturnValue(2_000_000);
+      const memberOnlyToken = makeToken({ sub: "u1", roles: ["member"] });
+      mockPost.mockResolvedValue({
+        access_token: memberOnlyToken,
+        refresh_token: "refresh-member",
+        expires_in: 900,
+      });
+
+      const session = await login("visitante@igreja.com", "senha123");
+
+      expect(mockPost).toHaveBeenCalledWith("/auth/login", {
+        body: { email: "visitante@igreja.com", password: "senha123" },
+      });
+      expect(session).toEqual({
+        accessToken: memberOnlyToken,
+        refreshToken: "refresh-member",
+        accessTokenExpiresAt: 2_000_000 + 900 * 1000,
+      });
+      expect(mockSetItemAsync).toHaveBeenCalledWith(
+        "orbien.session",
+        JSON.stringify(session),
+      );
+
+      nowSpy.mockRestore();
     });
   });
 

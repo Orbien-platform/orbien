@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Gender, ImportJob, JobStatus, PersonClassification, Prisma } from '@prisma/client';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
+import * as argon2 from 'argon2';
+import { isEmail } from 'class-validator';
 import { parse as csvParse } from 'csv-parse/sync';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
+import { MailService } from '../../mail/mail.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { ImportConfirmDto } from '../dto/import-confirm.dto';
 import { ImportPreviewDto, SuggestedMapping } from '../dto/import-preview.dto';
@@ -16,6 +19,19 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const SYNC_ROW_LIMIT = 500;
 const MAX_IMPORT_ROWS = 5000;
 const PREVIEW_ROWS = 5;
+
+// Mesmo TTL de `UsersService.create` (`users.service.ts`) — o convite de
+// importação usa o mesmo mecanismo (password_reset_tokens), só a origem
+// muda.
+const INVITE_TOKEN_TTL_DAYS = 7;
+
+// Toda pessoa importada com e-mail válido e ainda não usado por outra conta
+// ganha acesso básico ao app (PROD: convite automático no import). O papel
+// de sistema é sempre `member` — piso comum a todo mundo autenticado — e não
+// tem relação com `PersonClassification` (visitante/frequentador/membro),
+// que é classificação pastoral, não permissão. Ver `UsersService.create`
+// para o mesmo padrão em criação individual.
+const IMPORT_ROLE_CODE = 'member';
 
 // Canonical field names for suggested mapping
 const COLUMN_ALIASES: Record<string, keyof SuggestedMapping> = {
@@ -43,6 +59,7 @@ export class PersonsImportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly mail: MailService,
   ) {}
 
   // ── Preview ───────────────────────────────────────────────────────────────
@@ -183,7 +200,19 @@ export class PersonsImportService {
   ): Promise<ImportResult> {
     let imported = 0;
     let skipped = 0;
+    let accountsCreated = 0;
     const errors: { row: number; reason: string }[] = [];
+    // E-mails já usados nesta importação para conceder acesso — pega o caso
+    // de duas linhas do mesmo arquivo com o mesmo e-mail, que o unique
+    // constraint de user_accounts.email só pegaria na segunda escrita.
+    const emailsGrantedThisRun = new Set<string>();
+    // Convites disparados sem `await` por linha (ver abaixo) — coletados
+    // aqui para dar a eles uma chance de terminar antes da função retornar,
+    // sem serializar o loop atrás de cada envio. No caminho síncrono
+    // (≤500 linhas), isso é o que evita uma importação com muitos e-mails
+    // novos estourar o timeout da requisição HTTP esperando o Resend linha
+    // a linha.
+    const pendingInvites: Promise<unknown>[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2; // 1-indexed, header = row 1
@@ -224,38 +253,138 @@ export class PersonsImportService {
       const birth_date = rawBirth ? this.parseDate(rawBirth) : undefined;
       const classification = this.mapClassification(rawClass);
 
-      try {
-        const person = await db.person.create({
-          data: {
-            tenant_id: tenantId,
-            congregation_id: congregationId,
-            full_name: fullName,
-            phone,
-            email,
-            gender,
-            birth_date,
-            classification,
-          },
+      const personData = {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        full_name: fullName,
+        phone,
+        email,
+        gender,
+        birth_date,
+        classification,
+      };
+
+      // Toda linha com e-mail válido, ainda não usado por outra conta (nem
+      // por outra linha deste mesmo arquivo), ganha acesso ao app. Não olha
+      // `classification` — visitante, frequentador ou membro entram pela
+      // mesma porta; ver IMPORT_ROLE_CODE acima.
+      let grantAccess =
+        !!email && isEmail(email) && !emailsGrantedThisRun.has(email.toLowerCase());
+      if (grantAccess) {
+        const existingAccount = await this.prisma.system.userAccount.findFirst({
+          where: { email },
           select: { id: true },
         });
-
-        await db.consentRecord.create({
-          data: {
-            tenant_id: tenantId,
-            congregation_id: congregationId,
-            person_id: person.id,
-            version: 'import-v1',
-            origin: 'import',
-            consented_at: new Date(),
-          },
-        });
-
-        imported++;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        errors.push({ row: rowNum, reason: msg.slice(0, 120) });
+        if (existingAccount) grantAccess = false;
       }
+
+      if (grantAccess) {
+        try {
+          const created = await this.prisma.system.$transaction(async (sysTx) => {
+            const person = await sysTx.person.create({ data: personData, select: { id: true } });
+            await sysTx.consentRecord.create({
+              data: {
+                tenant_id: tenantId,
+                congregation_id: congregationId,
+                person_id: person.id,
+                version: 'import-v1',
+                origin: 'import',
+                consented_at: new Date(),
+              },
+            });
+
+            // Senha aleatória e inutilizável + token de convite: mesmo padrão
+            // de `UsersService.create` — quem importa nunca define a senha de
+            // terceiros, só o link de convite destrava a conta.
+            const passwordHash = await argon2.hash(randomBytes(32).toString('hex'));
+            const rawToken = randomBytes(32).toString('hex');
+            const expiresAt = new Date(Date.now() + INVITE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+            const account = await sysTx.userAccount.create({
+              data: {
+                tenant_id: tenantId,
+                congregation_id: congregationId,
+                person_id: person.id,
+                email: email!,
+                password_hash: passwordHash,
+              },
+            });
+
+            await sysTx.roleAssignment.create({
+              data: {
+                tenant_id: tenantId,
+                congregation_id: congregationId,
+                user_account_id: account.id,
+                role_code: IMPORT_ROLE_CODE,
+              },
+            });
+
+            await sysTx.passwordResetToken.create({
+              data: { user_id: account.id, token: rawToken, expires_at: expiresAt },
+            });
+
+            return { personId: person.id, rawToken };
+          });
+
+          accountsCreated++;
+          emailsGrantedThisRun.add(email!.toLowerCase());
+
+          // Fora da transação, como em `UsersService.create`: envio de e-mail
+          // não deve segurar conexão de banco. Sem `await` aqui de propósito
+          // — a conta já foi criada com sucesso, então nem uma falha nem a
+          // latência do envio podem travar a linha seguinte do import; a
+          // promise entra em `pendingInvites` só para ganhar uma chance de
+          // terminar antes da função retornar (ver o `Promise.allSettled`
+          // depois do loop).
+          const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
+          const inviteUrl = `${frontendUrl}/redefinir-senha?token=${created.rawToken}`;
+          pendingInvites.push(
+            this.mail.sendInvite(email!, inviteUrl).catch((err: unknown) => {
+              this.logger.error(
+                `Falha ao enviar convite de acesso para ${email} (linha ${rowNum}): ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            }),
+          );
+        } catch (err: unknown) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            // Corrida entre o pre-check e a escrita: outra conta ficou com
+            // este e-mail no meio do caminho. Decisão de produto: segue o
+            // import só com o cadastro, sem conta — não é erro da linha.
+            grantAccess = false;
+          } else {
+            const msg = err instanceof Error ? err.message : String(err);
+            errors.push({ row: rowNum, reason: msg.slice(0, 120) });
+            continue;
+          }
+        }
+      }
+
+      if (!grantAccess) {
+        try {
+          const person = await db.person.create({ data: personData, select: { id: true } });
+          await db.consentRecord.create({
+            data: {
+              tenant_id: tenantId,
+              congregation_id: congregationId,
+              person_id: person.id,
+              version: 'import-v1',
+              origin: 'import',
+              consented_at: new Date(),
+            },
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ row: rowNum, reason: msg.slice(0, 120) });
+          continue;
+        }
+      }
+
+      imported++;
     }
+
+    await Promise.allSettled(pendingInvites);
 
     await writeAuditLog(
       this.prisma,
@@ -265,7 +394,7 @@ export class PersonsImportService {
         actor_user_id: userId,
         entity: 'person',
         action: 'persons.batch_import',
-        after: { count: imported },
+        after: { count: imported, accounts_created: accountsCreated },
       },
       this.logger,
     );
