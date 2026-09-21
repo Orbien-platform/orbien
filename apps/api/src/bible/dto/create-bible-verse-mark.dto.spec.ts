@@ -95,4 +95,9 @@ describe('CreateBibleVerseMarkDto', () => {
   it('aparara espaço nas bordas antes de validar — "  abc  " sobra "abc", válido', async () => {
     expect(await errorsFor({ ...VALID, comment: '  abc  ' })).toHaveLength(0);
   });
+
+  it('rejeita comentário que não é string — o @Transform de trim não mexe em valor não-string', async () => {
+    const errors = await errorsFor({ ...VALID, comment: 123 });
+    expect(errors.some((e) => e.property === 'comment')).toBe(true);
+  });
 });

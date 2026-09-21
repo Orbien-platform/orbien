@@ -104,4 +104,35 @@ describe('ApiBibleTextProvider', () => {
 
     await expect(provider.getChapter('GEN', 1)).rejects.toMatchObject({ cause_: original });
   });
+
+  it('sem BIBLE_API_BASE_URL configurada, monta a URL com base vazia em vez de "undefined"', async () => {
+    delete process.env['BIBLE_API_BASE_URL'];
+    const httpGet = jest.fn().mockReturnValue(of({ data: { verses: [] } }));
+    const provider = providerWith(httpGet);
+
+    await provider.getChapter('GEN', 1);
+
+    expect(httpGet).toHaveBeenCalledWith('/verses/nvi-ptbr/gn/1', expect.anything());
+  });
+
+  it('sem BIBLE_API_KEY configurada, chama sem header Authorization', async () => {
+    delete process.env['BIBLE_API_KEY'];
+    const httpGet = jest.fn().mockReturnValue(of({ data: { verses: [] } }));
+    const provider = providerWith(httpGet);
+
+    await provider.getChapter('JHN', 3);
+
+    expect(httpGet).toHaveBeenCalledWith(
+      'https://bible.example.com/v1/verses/nvi-ptbr/jo/3',
+      expect.objectContaining({ headers: {} }),
+    );
+  });
+
+  it('erro sem status e sem code (nem AxiosError reconhecível) ainda vira BibleProviderError, com mensagem "erro desconhecido"', async () => {
+    const bareError = new Error('algo estranho');
+    const httpGet = jest.fn().mockReturnValue(throwError(() => bareError));
+    const provider = providerWith(httpGet);
+
+    await expect(provider.getChapter('GEN', 1)).rejects.toBeInstanceOf(BibleProviderError);
+  });
 });

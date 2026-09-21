@@ -117,6 +117,21 @@ describe('BibleReaderService', () => {
       expect(result.verses).toEqual(jaGravadoPorOutraRequisicao);
       expect(client.$executeRaw).toHaveBeenCalledTimes(1);
     });
+
+    it('leitura pós-upsert não encontra a linha (caso extremo) — cai de volta na resposta do próprio provider', async () => {
+      const versesFromProvider = [{ number: 1, text: 'resposta do provider' }];
+      const client = clientWith();
+      client.bibleChapterCache.findUnique
+        .mockResolvedValueOnce(null) // leitura inicial: cache vazio
+        .mockResolvedValueOnce(null); // leitura pós-upsert: ainda nada (não deveria acontecer, mas o código não deve quebrar)
+      const provider = providerMock();
+      provider.getChapter.mockResolvedValue(versesFromProvider);
+      const service = serviceWith(client, provider);
+
+      const result = await service.getChapter('JHN', 1);
+
+      expect(result.verses).toEqual(versesFromProvider);
+    });
   });
 
   describe('falha do provider', () => {

@@ -247,6 +247,32 @@ describe('BibleVerseMarksService', () => {
       expect(result.nextCursor).toBe('m2');
     });
 
+    it('cursor `before` que resolve: filtra findMany por "mais antigo que o cursor" (created_at, id)', async () => {
+      const client = clientWith();
+      const cursorRow = { id: 'm1', created_at: new Date('2026-09-12') };
+      client.bibleVerseMark.findFirst.mockResolvedValue(cursorRow);
+      client.bibleVerseMark.findMany.mockResolvedValue([]);
+      const reader = readerMock();
+      const service = serviceWith(client, reader);
+
+      await service.findFeed({ before: 'm1', limit: 50 }, USER);
+
+      expect(client.bibleVerseMark.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'm1' } }),
+      );
+      expect(client.bibleVerseMark.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            deleted_at: null,
+            OR: [
+              { created_at: { lt: cursorRow.created_at } },
+              { created_at: cursorRow.created_at, id: { lt: cursorRow.id } },
+            ],
+          },
+        }),
+      );
+    });
+
     it('resolve o cursor `before` antes de listar, e rejeita cursor inexistente com 404', async () => {
       const client = clientWith();
       client.bibleVerseMark.findFirst.mockResolvedValue(null);
