@@ -176,13 +176,14 @@ Nenhuma das duas é segredo — mesmo espírito de `ALLOWED_ORIGINS`/`MAIL_FROM`
 acima, dá para colocar direto no `render.yaml` em vez do Environment Group,
 se for feita essa faxina depois.
 
-O time do provedor não informou um número de rate limit para o modelo novo
-(o antigo, com o domínio `abibliadigital.com.br`, era 20 requisições/hora/IP
-sem token). O cache-first do `BibleReaderService` (uma chamada por capítulo,
-servida do banco depois da primeira leitura) mantém o volume baixo de
-qualquer forma, mas vale acompanhar os logs do provedor externo
-(`Falha ao buscar ... na API bíblica externa`, em `ApiBibleTextProvider`)
-depois do primeiro tráfego real, caso o WAF passe a bloquear picos.
+Rate limit do WAF, confirmado pelo time do provedor em 2026-09-21: **100
+requisições/minuto/IP** (6.000/hora — bem acima do antigo 20/hora sem token).
+Com o cache-first do `BibleReaderService` (uma chamada por capítulo, servida
+do banco depois da primeira leitura), o volume real fica muito abaixo disso
+mesmo num pico de lançamento. O provedor disse que pode ajustar o limite se
+virar problema — não é o caso hoje, mas vale lembrar que a via existe se um
+dia o tráfego justificar. Sinal de que o limite foi atingido: `Falha ao
+buscar ... na API bíblica externa: 429`, no log do `ApiBibleTextProvider`.
 
 ### 1.5 Provisionar o banco do zero
 

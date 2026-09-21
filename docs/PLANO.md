@@ -1481,11 +1481,10 @@ variáveis de config pública para o Render". Checklist em `DEPLOY.md`, seção
 ainda não está exposta a tráfego real, então não é um incidente em
 produção, é uma pendência conhecida de pré-lançamento.
 
-O time do provedor não informou o número do rate limit do WAF novo (o
-antigo, sem token, era 20 req/hora/IP) — perguntado, sem resposta ainda.
-Não bloqueia fechar este item: o cache-first do `BibleReaderService` mantém
-o volume baixo de qualquer forma, e não há nada de configuração adicional
-a fazer enquanto o número não vier.
+Rate limit do WAF novo, confirmado em 2026-09-21: **100 requisições/minuto/IP**
+(o antigo, sem token, era 20/hora) — o time do provedor disse que ajusta se
+virar problema. Com o cache-first do `BibleReaderService`, folga suficiente;
+não é mais uma incerteza deste item.
 
 ---
 
