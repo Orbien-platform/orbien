@@ -89,6 +89,32 @@ describe("LoginPage", () => {
     expect(await screen.findByText("E-mail ou senha incorretos.")).toBeInTheDocument();
   });
 
+  it("mostra a mensagem específica para bloqueio de conta só-member (403 WEB_ACCESS_DENIED)", async () => {
+    const err = {
+      isAxiosError: true,
+      response: {
+        status: 403,
+        data: { code: "WEB_ACCESS_DENIED", message: "Este acesso é apenas pelo aplicativo Orbien." },
+      },
+    };
+    vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
+    setup(vi.fn().mockRejectedValue(err));
+    render(<LoginPage />);
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
+    expect(
+      await screen.findByText("Este acesso é apenas pelo aplicativo Orbien.")
+    ).toBeInTheDocument();
+  });
+
+  it("403 sem o código WEB_ACCESS_DENIED cai na mensagem genérica", async () => {
+    const err = { isAxiosError: true, response: { status: 403, data: {} } };
+    vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
+    setup(vi.fn().mockRejectedValue(err));
+    render(<LoginPage />);
+    await fillAndSubmit({ email: "a@b.com", password: "123456" });
+    expect(await screen.findByText("Erro ao entrar. Tente novamente.")).toBeInTheDocument();
+  });
+
   it("mostra mensagem genérica para outros status de erro", async () => {
     const err = { isAxiosError: true, response: { status: 418, data: {} } };
     vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
