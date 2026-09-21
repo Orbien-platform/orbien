@@ -138,26 +138,26 @@ aparece normalmente, tela funciona.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| ACC-01 | P1: Bloquear login web do piso | Design | Pending |
-| ACC-02 | P1: Bloquear login web do piso | Design | Pending |
-| ACC-03 | P1: Bloquear login web do piso | Design | Pending |
-| ACC-04 | P1: Bloquear login web do piso | Design | Pending |
-| ACC-05 | P1: Bloquear login web do piso | Design | Pending |
-| ACC-06 | P1: Esconder Escala/Indisponibilidade | Design | Pending |
-| ACC-07 | P1: Esconder Escala/Indisponibilidade | Design | Pending |
-| ACC-08 | P1: Esconder Escala/Indisponibilidade | Design | Pending |
-| ACC-09 | P1: Esconder Escala/Indisponibilidade | Design | Pending |
+| ACC-01 | P1: Bloquear login web do piso | T2 | Verified |
+| ACC-02 | P1: Bloquear login web do piso | T2 | Verified |
+| ACC-03 | P1: Bloquear login web do piso | T2 | Verified |
+| ACC-04 | P1: Bloquear login web do piso | T1, T2 | Verified |
+| ACC-05 | P1: Bloquear login web do piso | T3 | Verified |
+| ACC-06 | P1: Esconder Escala/Indisponibilidade | T4, T5, T8 | Verified |
+| ACC-07 | P1: Esconder Escala/Indisponibilidade | T6, T8 | Verified |
+| ACC-08 | P1: Esconder Escala/Indisponibilidade | T7 | Verified |
+| ACC-09 | P1: Esconder Escala/Indisponibilidade | T8 | Verified |
 
-**Coverage:** 9 total, 0 mapeados a tasks ainda, 9 não mapeados ⚠️ (normal antes do Design)
+**Coverage:** 9 total, 9 mapeados a tasks, 0 não mapeados
 
 ---
 
 ## Success Criteria
 
-- [ ] Conta só-`member` recebe 403 claro ao tentar logar em `web.useorbien.com`, sem cookie
+- [x] Conta só-`member` recebe 403 claro ao tentar logar em `web.useorbien.com`, sem cookie
       gravado.
-- [ ] A mesma conta loga normalmente no mobile.
-- [ ] Nenhum dos outros 9 papéis perde acesso a nada que tinha antes (suite de testes
+- [x] A mesma conta loga normalmente no mobile.
+- [x] Nenhum dos outros 9 papéis perde acesso a nada que tinha antes (suite de testes
       existente de `auth`, `users`, `persons-import` continua verde).
-- [ ] Aba Escala e tela Indisponibilidade somem no mobile para quem não tem `volunteers`, e
+- [x] Aba Escala e tela Indisponibilidade somem no mobile para quem não tem `volunteers`, e
       continuam normais para quem tem.

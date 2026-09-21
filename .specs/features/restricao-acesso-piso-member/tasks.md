@@ -12,7 +12,7 @@ Verifier, discrimination sensor).
 ---
 
 **Design**: `.specs/features/restricao-acesso-piso-member/design.md`
-**Status**: Draft
+**Status**: Done — todas as 8 tasks implementadas e commitadas; aguardando Verifier.
 
 ---
 
@@ -66,7 +66,7 @@ T4 → T5 → T6 → T7 → T8
 
 ## Task Breakdown
 
-### T1: Extrair `revokeRefreshToken` em `lib/session.ts`
+### T1: Extrair `revokeRefreshToken` em `lib/session.ts` ✅ (commit `388cdab`)
 
 **What**: Nova função `revokeRefreshToken(token: string): Promise<void>` que chama
 `POST /auth/logout` com `try/catch` silencioso (mesmo padrão inline que já existe no
@@ -93,7 +93,7 @@ T4 → T5 → T6 → T7 → T8
 
 ---
 
-### T2: Bloquear login web de conta só-`member` em `route.ts`
+### T2: Bloquear login web de conta só-`member` em `route.ts` ✅ (commit `e0613c5`)
 
 **What**: No `POST` de `route.ts`, depois de `decodeJwtPayload` e da guarda existente
 (`!payload || !body.email`), checar `payload.roles.some((r) => r !== 'member')`; se falso,
@@ -123,7 +123,7 @@ status 403, sem gravar nenhum cookie.
 
 ---
 
-### T3: Mensagem específica na tela de login pro bloqueio
+### T3: Mensagem específica na tela de login pro bloqueio ✅ (commit `cea5892`)
 
 **What**: No `catch` de `handleSubmit`, adicionar um ramo pra
 `err.response.status === 403 && err.response.data?.code === 'WEB_ACCESS_DENIED'`, usando a
@@ -150,7 +150,7 @@ status 403, sem gravar nenhum cookie.
 
 ---
 
-### T4: `permissions-client.ts` no mobile
+### T4: `permissions-client.ts` no mobile ✅ (commit `03503aa`)
 
 **What**: Novo arquivo com `fetchAreas(): Promise<string[] | null>`, chamando
 `authenticatedRequest('get', '/me/permissions')`, `try/catch` externo devolvendo `null` em
@@ -174,7 +174,7 @@ qualquer falha — mesmo contrato do `fetchAreas` do web.
 
 ---
 
-### T5: `auth-provider.tsx` busca e guarda `areas`
+### T5: `auth-provider.tsx` busca e guarda `areas` ✅ (commit `bf9d1b3`)
 
 **What**: Estender o estado do contexto (`Session`/estado interno) com
 `areas: string[] | null`, disparando `fetchAreas()` (T4) depois que `login()` resolve e
@@ -203,7 +203,7 @@ o caso)
 
 ---
 
-### T6: Esconder aba Escala em `(tabs)/_layout.tsx`
+### T6: Esconder aba Escala em `(tabs)/_layout.tsx` ✅ (commit `7474b22`)
 
 **What**: Calcular `showEscala = session?.areas == null || session.areas.includes('volunteers')`
 e aplicar `options={{ href: showEscala ? undefined : null }}` no `<Tabs.Screen name="index">`
@@ -231,7 +231,7 @@ existente.
 
 ---
 
-### T7: Guard "sem acesso" em `indisponibilidade.tsx`
+### T7: Guard "sem acesso" em `indisponibilidade.tsx` ✅ (commit `a16fffe`)
 
 **What**: No topo do componente, antes do `useEffect` de `getUnavailability`, checar
 `session?.areas && !session.areas.includes('volunteers')` e retornar um componente
@@ -256,7 +256,7 @@ existente.
 
 ---
 
-### T8: Teste e2e de boot — member-only não vê Escala
+### T8: Teste e2e de boot — member-only não vê Escala ✅ (commit `2791cf8`)
 
 **What**: Estender `navigation-boot.test.tsx` com um cenário: sessão restaurada com
 `roles: ['member']` (e `areas` mockada sem `volunteers`) → tab bar sem a aba Escala visível,
