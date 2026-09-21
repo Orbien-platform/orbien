@@ -26,7 +26,7 @@ import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { useAuth } from "../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../lib/auth/jwt";
-import { Bell, CircleUser, LogOut, Moon, Smartphone, Sun } from "../../lib/theme/icons";
+import { Bell, BookOpen, CircleUser, LogOut, Moon, Smartphone, Sun } from "../../lib/theme/icons";
 import { useTheme, type ThemePreference } from "../../lib/theme/theme-provider";
 import { radius, spacing, touchTarget, typography } from "../../lib/theme/tokens";
 
@@ -132,6 +132,14 @@ export default function PerfilScreen() {
             icon={Bell}
             variant="ghost"
             onPress={() => router.push("/notificacoes")}
+            style={styles.navRow}
+          />
+          <AppButton
+            testID="biblia-button"
+            title="Bíblia"
+            icon={BookOpen}
+            variant="ghost"
+            onPress={() => router.push("/biblia")}
             style={styles.navRow}
           />
           <AppButton

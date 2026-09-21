@@ -124,6 +124,18 @@ describe("PerfilScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/notificacoes");
   });
 
+  it("tocar 'Bíblia' navega para /biblia (T23, biblia-nvi-marcacoes-mobile, BIB-01)", async () => {
+    await act(async () => {
+      render(<PerfilScreen />);
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/biblia");
+  });
+
   it("sair da conta chama logout", async () => {
     await act(async () => {
       render(<PerfilScreen />);
