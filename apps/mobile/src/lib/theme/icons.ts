@@ -31,12 +31,14 @@ export { default as Eye } from "lucide-react-native/icons/eye";
 export { default as EyeOff } from "lucide-react-native/icons/eye-off";
 export { default as FileText } from "lucide-react-native/icons/file-text";
 export { default as HandHeart } from "lucide-react-native/icons/hand-heart";
+export { default as Highlighter } from "lucide-react-native/icons/highlighter";
 export { default as Inbox } from "lucide-react-native/icons/inbox";
 export { default as ListMusic } from "lucide-react-native/icons/list-music";
 export { default as Lock } from "lucide-react-native/icons/lock";
 export { default as LogOut } from "lucide-react-native/icons/log-out";
 export { default as Mail } from "lucide-react-native/icons/mail";
 export { default as MapPin } from "lucide-react-native/icons/map-pin";
+export { default as MessageSquare } from "lucide-react-native/icons/message-square";
 export { default as Moon } from "lucide-react-native/icons/moon";
 export { default as Music } from "lucide-react-native/icons/music";
 export { default as Newspaper } from "lucide-react-native/icons/newspaper";
@@ -49,6 +51,7 @@ export { default as Ticket } from "lucide-react-native/icons/ticket";
 export { default as UserCheck } from "lucide-react-native/icons/user-check";
 export { default as Users } from "lucide-react-native/icons/users";
 export { default as WifiOff } from "lucide-react-native/icons/wifi-off";
+export { default as X } from "lucide-react-native/icons/x";
 
 /** Forma mínima que os componentes do app esperam de um ícone lucide —
  * evita cada componente redeclarar as três props que usa. */
