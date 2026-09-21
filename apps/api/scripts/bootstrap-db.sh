@@ -159,6 +159,14 @@ fi
 if [ -f prisma/migrations/020_rls_bible_verse_marks.sql ]; then
   run_sql_file prisma/migrations/020_rls_bible_verse_marks.sql
 fi
+# `bible_chapter_cache` (biblia-nvi-marcacoes-mobile, AD-005): tabela nova,
+# mas SEM isolamento por tenant/congregação de propósito — texto da NVI é o
+# mesmo para toda igreja. RLS habilitada com policy explícita
+# `USING (true)/WITH CHECK (true)`, não ausência de RLS. Depende só dos roles
+# base (passo 1), mas entra aqui, depois de 020, para manter a ordem numérica.
+if [ -f prisma/migrations/021_rls_bible_chapter_cache.sql ]; then
+  run_sql_file prisma/migrations/021_rls_bible_chapter_cache.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -541,6 +549,20 @@ BEGIN
   RAISE NOTICE 'bible_verse_marks com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em bible_verse_marks, encontrei % — 020_rls_bible_verse_marks.sql rodou?', n;
+  END IF;
+
+  -- 021: bible_chapter_cache (AD-005) — o caso OPOSTO aos anteriores: RLS
+  -- habilitada, mas com visibilidade compartilhada (USING(true)/WITH
+  -- CHECK(true)) de propósito, não isolada por tenant/congregação.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'shared_read_write'
+     AND tablename  = 'bible_chapter_cache'
+     AND qual = 'true'
+     AND with_check = 'true';
+  RAISE NOTICE 'bible_chapter_cache com USING(true)/WITH CHECK(true): %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy shared_read_write com USING(true)/WITH CHECK(true) em bible_chapter_cache, encontrei % — 021_rls_bible_chapter_cache.sql rodou?', n;
   END IF;
 
   -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu
