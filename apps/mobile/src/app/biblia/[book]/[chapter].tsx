@@ -24,7 +24,7 @@ import { getChapter } from "../../../lib/bible/bible-client";
 import type { BibleChapter } from "../../../lib/bible/types";
 import { CircleAlert, Highlighter, MessageSquare, RefreshCw, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
-import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../../../lib/theme/tokens";
+import { radius, spacing, typography } from "../../../lib/theme/tokens";
 
 type VerseRange = { start: number; end: number | null };
 
@@ -40,9 +40,6 @@ export default function BibliaChapterScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    setData(null);
-    setError(null);
-    setRange(null);
 
     getChapter(book, chapter)
       .then((result) => {
