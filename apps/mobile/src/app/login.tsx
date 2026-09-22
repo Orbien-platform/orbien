@@ -68,7 +68,10 @@ export default function LoginScreen() {
         <View style={styles.logo}>
           <BrandLogo size={LOGO_SIZE} color={isDark ? colors.textPrimary : primaryColor} />
         </View>
-        <Text style={[typography.display, styles.appName, { color: colors.textPrimary }]}>
+        <Text
+          style={[typography.display, styles.appName, { color: colors.textPrimary }]}
+          numberOfLines={2}
+        >
           {appName}
         </Text>
         <Text style={[typography.body, styles.tagline, { color: colors.textSecondary }]}>
@@ -132,9 +135,10 @@ const styles = StyleSheet.create({
   brand: {
     alignItems: "center",
     marginBottom: spacing.xxxl,
+    paddingHorizontal: spacing.xs,
   },
   logo: { marginBottom: spacing.lg },
-  appName: { textAlign: "center" },
+  appName: { textAlign: "center", flexShrink: 1 },
   tagline: {
     textAlign: "center",
     marginTop: spacing.xs,
