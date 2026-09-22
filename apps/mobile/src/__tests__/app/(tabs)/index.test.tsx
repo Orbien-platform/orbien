@@ -51,9 +51,9 @@ jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
 }));
 
-// getPosts alimenta tanto "Avisos recentes" (limit 3, HOME-03) quanto o
-// hero (limit 5, MHR-05) — o mock distingue pelo `limit` recebido, para os
-// dois poderem ter conteúdo diferente no mesmo teste.
+// getPosts(1, 5) alimenta tanto o hero (MHR-05, todos os itens) quanto
+// "Avisos recentes" (HOME-03, os 3 primeiros do mesmo resultado) — uma
+// chamada só, ver nota em (tabs)/index.tsx.
 const mockGetPosts = jest.fn();
 jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
@@ -75,17 +75,8 @@ function makePost(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function mockPosts({
-  home = [],
-  hero = [],
-}: {
-  home?: ReturnType<typeof makePost>[];
-  hero?: ReturnType<typeof makePost>[];
-} = {}) {
-  mockGetPosts.mockImplementation((_page?: number, limit?: number) => {
-    if (limit === 5) return Promise.resolve({ data: hero, total: hero.length });
-    return Promise.resolve({ data: home, total: home.length });
-  });
+function mockPosts(posts: ReturnType<typeof makePost>[] = []) {
+  mockGetPosts.mockResolvedValue({ data: posts, total: posts.length });
 }
 
 function themeValue(overrides: Record<string, unknown> = {}) {
@@ -131,7 +122,7 @@ describe("HomeScreen", () => {
 
   // MHR-05: hero dinâmico com os últimos conteúdos.
   it("hero presente: mostra um slide por post retornado por getPosts(1, 5) (MHR-05)", async () => {
-    mockPosts({ hero: [makePost({ id: "hero-1", title: "Conteúdo em destaque" })] });
+    mockPosts([makePost({ id: "hero-1", title: "Conteúdo em destaque" })]);
 
     await renderHome();
 
@@ -140,7 +131,7 @@ describe("HomeScreen", () => {
   });
 
   it("toque num item do hero navega para /post/[id] (MHR-05)", async () => {
-    mockPosts({ hero: [makePost({ id: "hero-1" })] });
+    mockPosts([makePost({ id: "hero-1" })]);
 
     await renderHome();
     await waitFor(() => screen.getByTestId("hero-slide-hero-1"));
@@ -152,7 +143,7 @@ describe("HomeScreen", () => {
 
   // MHR-06: degradação silenciosa do hero.
   it("hero ausente quando getPosts(1,5) retorna lista vazia, sem travar a Home (MHR-06)", async () => {
-    mockPosts({ hero: [] });
+    mockPosts([]);
 
     await renderHome();
 
@@ -161,10 +152,7 @@ describe("HomeScreen", () => {
   });
 
   it("hero ausente quando getPosts(1,5) falha, sem erro bloqueante (MHR-06)", async () => {
-    mockGetPosts.mockImplementation((_page?: number, limit?: number) => {
-      if (limit === 5) return Promise.reject(new Error("falha de rede"));
-      return Promise.resolve({ data: [], total: 0 });
-    });
+    mockGetPosts.mockRejectedValue(new Error("falha de rede"));
 
     await renderHome();
 
@@ -295,19 +283,20 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/grupo/g1");
   });
 
-  // HOME-03 (herdado, MHR-10): destaque "Avisos recentes".
-  it("mostra os posts recentes retornados por getPosts(1, 3) (HOME-03/MHR-10)", async () => {
-    mockPosts({ home: [makePost({ id: "p1", title: "Aviso 1" })] });
+  // HOME-03 (herdado, MHR-10): destaque "Avisos recentes", recortado do
+  // mesmo getPosts(1, 5) que alimenta o hero (MHR-05/06).
+  it("mostra os posts recentes recortados de getPosts(1, 5) (HOME-03/MHR-10)", async () => {
+    mockPosts([makePost({ id: "p1", title: "Aviso 1" })]);
 
     await renderHome();
 
     await waitFor(() => screen.getByTestId("home-posts-section"));
     expect(screen.getByTestId("home-post-p1")).toBeTruthy();
-    expect(mockGetPosts).toHaveBeenCalledWith(1, 3);
+    expect(mockGetPosts).toHaveBeenCalledWith(1, 5);
   });
 
   it("sem post recente, a seção não aparece (HOME-03/MHR-10)", async () => {
-    mockPosts({ home: [] });
+    mockPosts([]);
 
     await renderHome();
 
@@ -316,10 +305,7 @@ describe("HomeScreen", () => {
   });
 
   it("erro ao carregar posts recentes não derruba a tela (HOME-03/MHR-10)", async () => {
-    mockGetPosts.mockImplementation((_page?: number, limit?: number) => {
-      if (limit === 5) return Promise.resolve({ data: [], total: 0 });
-      return Promise.reject(new Error("falha de rede"));
-    });
+    mockGetPosts.mockRejectedValue(new Error("falha de rede"));
 
     await renderHome();
 
@@ -328,7 +314,7 @@ describe("HomeScreen", () => {
   });
 
   it("toque num post recente navega para /post/[id] (HOME-03/MHR-10)", async () => {
-    mockPosts({ home: [makePost({ id: "p1", published_at: null })] });
+    mockPosts([makePost({ id: "p1", published_at: null })]);
 
     await renderHome();
     await waitFor(() => screen.getByTestId("home-post-p1"));

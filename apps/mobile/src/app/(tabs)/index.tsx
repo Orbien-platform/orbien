@@ -51,8 +51,9 @@ export default function HomeScreen() {
   // chegou (não desenha nada); erro cai no `catch` sem `setError` — a
   // seção some, a tela não trava por isso.
   const [groups, setGroups] = useState<SmallGroupMine[] | null>(null);
+  // MAX_HERO_POSTS (5) já cobre MAX_HOME_POSTS (3): uma chamada só, "Avisos
+  // recentes" recorta os 3 primeiros do mesmo resultado.
   const [posts, setPosts] = useState<Post[] | null>(null);
-  const [heroPosts, setHeroPosts] = useState<Post[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,17 +65,10 @@ export default function HomeScreen() {
       })
       .catch(() => undefined);
 
-    getPosts(1, MAX_HOME_POSTS)
-      .then((result) => {
-        if (cancelled) return;
-        setPosts(result.data);
-      })
-      .catch(() => undefined);
-
     getPosts(1, MAX_HERO_POSTS)
       .then((result) => {
         if (cancelled) return;
-        setHeroPosts(result.data);
+        setPosts(result.data);
       })
       .catch(() => undefined);
 
@@ -140,8 +134,8 @@ export default function HomeScreen() {
         {greeting}
       </Text>
 
-      {heroPosts && heroPosts.length > 0 ? (
-        <HeroSlider posts={heroPosts} onPressPost={(id) => router.push(`/post/${id}`)} />
+      {posts && posts.length > 0 ? (
+        <HeroSlider posts={posts} onPressPost={(id) => router.push(`/post/${id}`)} />
       ) : null}
 
       <HomeQuickActions items={quickActions} />

@@ -144,10 +144,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(BRANDING_STORAGE_KEY).then((raw) => {
       if (cancelled || !raw) return;
       try {
-        const cached = JSON.parse(raw) as CachedBranding;
-        setCachedLayer(brandingLayer(cached.branding, cached.tenantSlug));
+        const parsed = JSON.parse(raw) as Partial<CachedBranding> | null;
+        // Formato anterior a `tenantSlug` gravava `Branding` direto nesta
+        // chave (sem o envelope `{branding, tenantSlug}`) — um cache assim
+        // não tem `.branding`, e sem esta checagem cairia num layer vazio
+        // em silêncio (branding cacheado do tenant sumindo por um boot,
+        // até o `GET /settings` desta sessão responder). Trata como
+        // inválido, mesmo caminho do `catch` abaixo.
+        if (!parsed || typeof parsed.branding !== "object" || parsed.branding === null) {
+          throw new Error("formato de cache desatualizado ou inválido");
+        }
+        setCachedLayer(brandingLayer(parsed.branding, parsed.tenantSlug ?? null));
       } catch {
-        // cache corrompido: ignora, segue com o default até a rede resolver.
+        // cache corrompido ou formato antigo: ignora, segue com o default
+        // até a rede resolver.
       }
     });
 
