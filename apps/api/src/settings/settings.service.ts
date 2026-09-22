@@ -12,7 +12,7 @@ import { UpdateSettingsDto } from './dto/update-settings.dto';
 const ALLOWED_LOGO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
 
 export interface ResolvedSettings {
-  tenant: { name: string; email: string | null; phone: string | null };
+  tenant: { name: string; email: string | null; phone: string | null; slug: string };
   branding: {
     app_name: string | null;
     primary_color: string | null;
@@ -60,7 +60,7 @@ export class SettingsService {
     if (!congregation) throw new NotFoundException('Congregação não encontrada');
 
     return {
-      tenant: { name: tenant.name, email: tenant.email, phone: tenant.phone },
+      tenant: { name: tenant.name, email: tenant.email, phone: tenant.phone, slug: tenant.slug },
       branding: {
         app_name: congregation.app_name ?? branding?.app_name ?? null,
         primary_color: congregation.primary_color ?? branding?.primary_color ?? null,

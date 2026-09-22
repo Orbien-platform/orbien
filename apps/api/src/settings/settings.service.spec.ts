@@ -26,7 +26,7 @@ function serviceWith(client: ReturnType<typeof clientWith>, storage?: Partial<St
   return { service: new SettingsService(prisma, storageService), storageService };
 }
 
-const TENANT = { name: 'Igreja', email: 't@x.com', phone: '111' };
+const TENANT = { name: 'Igreja', email: 't@x.com', phone: '111', slug: 'igreja-teste' };
 const CONGREGATION = {
   name: 'Sede',
   address: 'Rua 1',
@@ -62,6 +62,12 @@ describe('SettingsService', () => {
 
       const result = await service.getSettings('t1', 'g1');
 
+      expect(result.tenant).toEqual({
+        name: 'Igreja',
+        email: 't@x.com',
+        phone: '111',
+        slug: 'igreja-teste',
+      });
       expect(result.branding).toEqual({
         app_name: 'App da Congregação',
         primary_color: '#111',
