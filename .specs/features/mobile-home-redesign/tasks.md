@@ -323,6 +323,8 @@ T12
 
 ### T9: Componente `HeroSlider`
 
+**Status**: ✅ Concluído (commit `dd9053c`)
+
 **What**: carrossel horizontal (`FlatList horizontal pagingEnabled`) dos últimos conteúdos, com indicador de página e navegação ao toque.
 **Where**: `apps/mobile/src/components/HeroSlider.tsx`
 **Depends on**: None
@@ -336,11 +338,11 @@ T12
 
 **Done when**:
 
-- [ ] `HeroSlider({ posts, onPressPost })` renderiza um card por post, paginação por swipe.
-- [ ] Lista vazia → componente não renderiza nada (retorna `null`), consistente com MHR-06 (degradação silenciosa é responsabilidade de quem chama, mas o componente não deve quebrar com array vazio).
-- [ ] Toque em um item chama `onPressPost(id)` com o id certo.
-- [ ] `HeroSlider.test.tsx`: casos com 0, 1 e N posts; toque dispara o callback.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `HeroSlider({ posts, onPressPost })` renderiza um card por post, paginação por swipe.
+- [x] Lista vazia → componente não renderiza nada (retorna `null`), consistente com MHR-06 (degradação silenciosa é responsabilidade de quem chama, mas o componente não deve quebrar com array vazio).
+- [x] Toque em um item chama `onPressPost(id)` com o id certo.
+- [x] `HeroSlider.test.tsx`: casos com 0, 1 e N posts; toque dispara o callback.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component)
 **Gate**: quick (mobile)
@@ -350,6 +352,8 @@ T12
 ---
 
 ### T10: Componente `HomeQuickActions`
+
+**Status**: ✅ Concluído (commit `38d21ef`)
 
 **What**: grade de CTAs/ícones (Bíblia, Contribuição, Ver todos os conteúdos, Escala [gated], Celebrações), tocáveis com 48px mínimo.
 **Where**: `apps/mobile/src/components/HomeQuickActions.tsx`
@@ -364,9 +368,9 @@ T12
 
 **Done when**:
 
-- [ ] `HomeQuickActions({ items })` renderiza um item tocável por `QuickAction`, respeitando `disabled` (sem `onPress` funcional quando `true`, estilo visualmente inativo).
-- [ ] `HomeQuickActions.test.tsx`: renderiza N items; toque em item habilitado chama `onPress`; toque em item `disabled` não chama.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `HomeQuickActions({ items })` renderiza um item tocável por `QuickAction`, respeitando `disabled` (sem `onPress` funcional quando `true`, estilo visualmente inativo).
+- [x] `HomeQuickActions.test.tsx`: renderiza N items; toque em item habilitado chama `onPress`; toque em item `disabled` não chama.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component)
 **Gate**: quick (mobile)
@@ -376,6 +380,8 @@ T12
 ---
 
 ### T11: Reescrever `(tabs)/index.tsx` como Home
+
+**Status**: ✅ Concluído (commit `84f71db`)
 
 **What**: compõe `BrandHeader`, saudação (HOME-01, preservada), `HeroSlider` (T9) com `getPosts(1, 5)`, `HomeQuickActions` (T10) com os 5 CTAs (Bíblia → `/biblia`; Contribuição → `expo-web-browser` com `${extra.webUrl}/doar/${tenantSlug}`, `disabled` quando `tenantSlug` é `null`; Ver todos os conteúdos → aba `/conteudo`; Escala → `/escala`, visível quando `areas === null || areas.includes("volunteers")`; Celebrações → `/celebracoes`, sempre visível), "Meus grupos" (HOME-02, preservada) e "Avisos recentes" (HOME-03, preservada).
 **Where**: `apps/mobile/src/app/(tabs)/index.tsx`
@@ -390,10 +396,10 @@ T12
 
 **Done when**:
 
-- [ ] `npx expo install expo-web-browser` executado a partir da raiz do monorepo (workspace `orbien-mobile`), dependência aparece em `apps/mobile/package.json`.
-- [ ] Todos os ACs de MHR-05 a MHR-11 (spec.md, história "Nova Home com hero dinâmico e CTAs") têm teste correspondente em `src/__tests__/app/(tabs)/index.test.tsx` (reescrito): hero presente/ausente, os 3 CTAs sempre visíveis navegando/abrindo certo, atalho de Escala com/sem `volunteers` em `areas` (incluindo `areas === null` → visível), cartão de Celebrações sempre presente, CTA de Contribuição desabilitado quando `tenantSlug` é `null`, saudação/Meus grupos/Avisos recentes preservados com as mesmas regras de degradação de hoje.
-- [ ] Suíte antiga de `index.test.tsx` que cobria escala foi removida daqui (já migrou para `escala.test.tsx` em T5) — nenhuma duplicata, nenhuma perda.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `npx expo install expo-web-browser` executado a partir da raiz do monorepo (workspace `orbien-mobile`), dependência aparece em `apps/mobile/package.json`. **Desvio**: o comando `expo install` foi bloqueado pela política de rede da sessão (proxy 403 no endpoint de compatibilidade da Expo, "Fetching bundled native modules from the server") — não é um 404/timeout transitório, é uma negação de política de organização, que a instrução de ambiente manda não contornar por retry. Instalado via `npm install expo-web-browser@~57.0.3 -w orbien-mobile` a partir da raiz, na mesma faixa `~57.0.x` que todos os outros pacotes `expo-*` já fixam em `apps/mobile/package.json` (`expo-clipboard`, `expo-font`, `expo-secure-store`, `expo-status-bar`) — não é uma versão escolhida à mão fora de padrão, é o mesmo padrão do arquivo.
+- [x] Todos os ACs de MHR-05 a MHR-11 (spec.md, história "Nova Home com hero dinâmico e CTAs") têm teste correspondente em `src/__tests__/app/(tabs)/index.test.tsx` (reescrito): hero presente/ausente, os 3 CTAs sempre visíveis navegando/abrindo certo, atalho de Escala com/sem `volunteers` em `areas` (incluindo `areas === null` → visível), cartão de Celebrações sempre presente, CTA de Contribuição desabilitado quando `tenantSlug` é `null`, saudação/Meus grupos/Avisos recentes preservados com as mesmas regras de degradação de hoje.
+- [x] Suíte antiga de `index.test.tsx` que cobria escala foi removida daqui (já migrou para `escala.test.tsx` em T5) — nenhuma duplicata, nenhuma perda.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component, RTL)
 **Gate**: full (mexe em vários componentes já testados isoladamente; roda a suíte mobile inteira para pegar interação)
