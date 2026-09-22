@@ -92,7 +92,16 @@ export interface ThemeValue extends ThemeBranding {
 }
 
 interface ResolvedSettings {
+  tenant: { slug: string };
   branding: Branding;
+}
+
+/** Formato gravado em `BRANDING_STORAGE_KEY` — carrega o `tenantSlug` junto
+ * do branding para o CTA de Contribuição já funcionar mesmo antes de o
+ * `GET /settings` desta sessão responder de novo. */
+interface CachedBranding {
+  branding: Branding;
+  tenantSlug: string | null;
 }
 
 const FALLBACK: ThemeValue = {
@@ -135,8 +144,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(BRANDING_STORAGE_KEY).then((raw) => {
       if (cancelled || !raw) return;
       try {
-        const cachedBranding = JSON.parse(raw) as Branding;
-        setCachedLayer(brandingLayer(cachedBranding));
+        const cached = JSON.parse(raw) as CachedBranding;
+        setCachedLayer(brandingLayer(cached.branding, cached.tenantSlug));
       } catch {
         // cache corrompido: ignora, segue com o default até a rede resolver.
       }
@@ -152,8 +161,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     authenticatedRequest<ResolvedSettings>("get", "/settings")
       .then((resolved) => {
         if (cancelled) return;
-        setRuntime({ token: session.accessToken, layer: brandingLayer(resolved.branding) });
-        AsyncStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(resolved.branding)).catch(() => {
+        setRuntime({
+          token: session.accessToken,
+          layer: brandingLayer(resolved.branding, resolved.tenant.slug),
+        });
+        const toCache: CachedBranding = { branding: resolved.branding, tenantSlug: resolved.tenant.slug };
+        AsyncStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(toCache)).catch(() => {
           // falha ao gravar cache não é visível ao usuário — próxima
           // resposta bem-sucedida tenta gravar de novo.
         });

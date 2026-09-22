@@ -102,6 +102,7 @@ describe("RootLayout — guarda de navegação", () => {
     mockGetItem.mockResolvedValue(null);
     mockSetItem.mockResolvedValue(undefined);
     mockAuthenticatedRequest.mockResolvedValue({
+      tenant: { slug: "tenant-default" },
       branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
     });
   });
@@ -175,6 +176,7 @@ describe("RootLayout — guarda de navegação", () => {
         session: { accessToken: "token-a", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
       mockAuthenticatedRequest.mockResolvedValue({
+        tenant: { slug: "igreja-a" },
         branding: {
           app_name: "Igreja A",
           primary_color: "#111111",
@@ -199,6 +201,7 @@ describe("RootLayout — guarda de navegação", () => {
         session: { accessToken: "token-b", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
       mockAuthenticatedRequest.mockResolvedValue({
+        tenant: { slug: "igreja-b" },
         branding: {
           app_name: "Igreja B",
           primary_color: "#222222",
@@ -223,6 +226,7 @@ describe("RootLayout — guarda de navegação", () => {
         session: { accessToken: "token-c", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
       mockAuthenticatedRequest.mockResolvedValue({
+        tenant: { slug: "igreja-c" },
         branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
       });
 
