@@ -2,10 +2,16 @@
 // bundle pelo `require.context` do expo-router e arrasta o
 // @testing-library/react-native, que não resolve no Metro. Ver README,
 // "Portão de bundle no `build`".
-// Testes derivados do Done-when de T7 (tasks.md, Rodada 2): lista
-// renderiza (AC 1), confirmar/recusar atualiza sem refetch (AC 2),
-// check-in some após sucesso (AC 3), erro de rede mostra estado
-// explícito (Edge Case da spec).
+//
+// Testes derivados dos ACs de MHR-05 a MHR-11 (spec.md, história "P1: Nova
+// Home com hero dinâmico e CTAs") e T11 (tasks.md, Done-when). A lista de
+// "Próximas escalas" (MOB-04) migrou para `src/app/escala.tsx` — suíte
+// própria em `src/__tests__/app/escala.test.tsx` (T5). Este arquivo cobre
+// a Home reescrita: hero dinâmico (MHR-05/06), os 3 CTAs sempre presentes
+// (MHR-07), o atalho de Escala gated (MHR-08), o cartão de Celebrações
+// (MHR-09), a saudação/"Meus grupos"/"Avisos recentes" preservados
+// (MHR-10, herdados de HOME-01/02/03) e o CTA de Contribuição desabilitado
+// sem tenant_slug (MHR-11).
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
@@ -13,276 +19,232 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-const mockGetMyAssignments = jest.fn();
-const mockRespondToAssignment = jest.fn();
-const mockCheckIn = jest.fn();
-jest.mock("../../../lib/escala/escala-client", () => ({
-  getMyAssignments: (...args: unknown[]) => mockGetMyAssignments(...args),
-  respondToAssignment: (...args: unknown[]) => mockRespondToAssignment(...args),
-  checkIn: (...args: unknown[]) => mockCheckIn(...args),
+jest.mock("expo-constants", () => ({
+  __esModule: true,
+  default: {
+    expoConfig: {
+      extra: { webUrl: "https://web.exemplo.test" },
+    },
+  },
+}));
+
+const mockOpenBrowserAsync = jest.fn();
+jest.mock("expo-web-browser", () => ({
+  openBrowserAsync: (...args: unknown[]) => mockOpenBrowserAsync(...args),
+}));
+
+const mockUseAuth = jest.fn();
+jest.mock("../../../lib/auth/auth-provider", () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+const mockUseTheme = jest.fn();
+jest.mock("../../../lib/theme/theme-provider", () => ({
+  useTheme: () => mockUseTheme(),
 }));
 
 // Destaques da home (HOME-02/03) — mockados com resolução vazia por padrão
-// (`beforeEach` abaixo), para os testes de MOB-04 que não os mencionam não
+// (`beforeEach` abaixo), para os testes que não os mencionam não
 // dependerem de setup próprio.
 const mockListMyGroups = jest.fn();
 jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
 }));
 
+// getPosts(1, 5) alimenta tanto o hero (MHR-05, todos os itens) quanto
+// "Avisos recentes" (HOME-03, os 3 primeiros do mesmo resultado) — uma
+// chamada só, ver nota em (tabs)/index.tsx.
 const mockGetPosts = jest.fn();
 jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
 }));
 
-import { HttpError } from "../../../lib/api/errors";
-import EscalaScreen from "../../../app/(tabs)/index";
+import { palettes } from "../../../lib/theme/tokens";
+import HomeScreen from "../../../app/(tabs)/index";
 
-const PENDING_ASSIGNMENT = {
-  id: "a1",
-  status: "pending",
-  notified_at: null,
-  responded_at: null,
-  checked_in_at: null,
-  celebration: { id: "c1", name: "Culto de domingo" },
-  ministry: { id: "m1", name: "Louvor" },
-  scheduled_date: "2026-09-13T13:00:00.000Z",
-  setlist: null,
-};
+function makePost(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "p1",
+    type: "announcement",
+    title: "Aviso 1",
+    body: null,
+    media_url: null,
+    published_at: "2026-09-10T10:00:00.000Z",
+    created_at: "2026-09-10T10:00:00.000Z",
+    ...overrides,
+  };
+}
 
-const CONFIRMED_ASSIGNMENT = {
-  ...PENDING_ASSIGNMENT,
-  id: "a2",
-  status: "confirmed",
-};
+function mockPosts(posts: ReturnType<typeof makePost>[] = []) {
+  mockGetPosts.mockResolvedValue({ data: posts, total: posts.length });
+}
 
-describe("EscalaScreen", () => {
+function themeValue(overrides: Record<string, unknown> = {}) {
+  return {
+    primaryColor: "#1E3A7B",
+    accentColor: "#00B8A2",
+    accentReadable: "#1E3A7B",
+    logoUrl: null,
+    appName: "Igreja Teste",
+    tenantSlug: "igreja-teste",
+    scheme: "light" as const,
+    isDark: false,
+    preference: "system" as const,
+    setPreference: jest.fn(),
+    colors: palettes.light,
+    shadow: { sm: {}, md: {}, lg: {} },
+    ...overrides,
+  };
+}
+
+async function renderHome() {
+  await act(async () => {
+    render(<HomeScreen />);
+  });
+}
+
+describe("HomeScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockListMyGroups.mockResolvedValue([]);
-    mockGetPosts.mockResolvedValue({ data: [], total: 0 });
+    mockPosts();
+    mockUseAuth.mockReturnValue({ areas: null });
+    mockUseTheme.mockReturnValue(themeValue());
+    mockOpenBrowserAsync.mockResolvedValue({ type: "dismiss" });
   });
 
-  it("carrega e lista os assignments retornados por getMyAssignments (AC 1)", async () => {
-    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("assignment-a1")).toBeTruthy();
-    });
-    expect(mockGetMyAssignments).toHaveBeenCalledTimes(1);
-  });
-
-  it("confirmar um slot pendente chama respondToAssignment e atualiza a lista sem refetch (AC 2)", async () => {
-    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
-    mockRespondToAssignment.mockResolvedValue({ ...PENDING_ASSIGNMENT, status: "confirmed" });
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("confirm-a1"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("confirm-a1"));
-    });
-
-    await waitFor(() => {
-      expect(mockRespondToAssignment).toHaveBeenCalledWith("a1", "confirmed");
-    });
-    // sem refetch: getMyAssignments chamado só uma vez (no mount).
-    expect(mockGetMyAssignments).toHaveBeenCalledTimes(1);
-    // botões de confirmar/recusar somem (status não é mais pending).
-    expect(screen.queryByTestId("confirm-a1")).toBeNull();
-  });
-
-  it("recusar um slot pendente segue o mesmo padrão para declined (AC 2)", async () => {
-    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
-    mockRespondToAssignment.mockResolvedValue({ ...PENDING_ASSIGNMENT, status: "declined" });
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("decline-a1"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("decline-a1"));
-    });
-
-    await waitFor(() => {
-      expect(mockRespondToAssignment).toHaveBeenCalledWith("a1", "declined");
-    });
-    expect(screen.queryByTestId("decline-a1")).toBeNull();
-  });
-
-  it("check-in em slot confirmado chama checkIn e o botão desaparece após sucesso (AC 3)", async () => {
-    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
-    mockCheckIn.mockResolvedValue({ ...CONFIRMED_ASSIGNMENT, checked_in_at: "2026-09-13T13:05:00.000Z" });
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("check-in-a2"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("check-in-a2"));
-    });
-
-    await waitFor(() => {
-      expect(mockCheckIn).toHaveBeenCalledWith("a2");
-    });
-    expect(screen.queryByTestId("check-in-a2")).toBeNull();
-  });
-
-  it("erro ao confirmar/recusar mostra mensagem de erro visível, sem crash silencioso (Fix 1)", async () => {
-    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
-    mockRespondToAssignment.mockRejectedValue(new Error("falha de rede"));
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("confirm-a1"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("confirm-a1"));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("escala-action-error")).toBeTruthy();
-    });
-    // slot continua pending — nenhuma atualização otimista foi aplicada.
-    expect(screen.getByTestId("confirm-a1")).toBeTruthy();
-  });
-
-  it("erro ao fazer check-in mostra mensagem de erro visível (Fix 1)", async () => {
-    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
-    mockCheckIn.mockRejectedValue(new Error("falha de rede"));
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("check-in-a2"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("check-in-a2"));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("escala-action-error")).toBeTruthy();
-    });
-  });
-
-  it("check-in duplicado (409) é no-op silencioso, sem mensagem de erro (design.md)", async () => {
-    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
-    mockCheckIn.mockRejectedValue(new HttpError(409, { message: "já feito" }));
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("check-in-a2"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("check-in-a2"));
-    });
-
-    await waitFor(() => {
-      expect(mockCheckIn).toHaveBeenCalledWith("a2");
-    });
-    expect(screen.queryByTestId("escala-action-error")).toBeNull();
-  });
-
-  it("erro de rede ao carregar mostra estado de erro explícito, não lista vazia", async () => {
-    mockGetMyAssignments.mockRejectedValue(new Error("falha de rede"));
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("escala-error")).toBeTruthy();
-    });
-    expect(screen.queryByTestId("escala-list")).toBeNull();
-  });
-
-  it("botão de indisponibilidade navega para /indisponibilidade", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("indisponibilidade-link"));
-
-    fireEvent.press(screen.getByTestId("indisponibilidade-link"));
-
-    expect(mockPush).toHaveBeenCalledWith("/indisponibilidade");
-  });
-
-  it("duplo toque em Confirmar antes da resposta dispara só uma chamada (guard de duplo toque)", async () => {
-    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
-    mockRespondToAssignment.mockResolvedValue({ ...PENDING_ASSIGNMENT, status: "confirmed" });
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("confirm-a1"));
-
-    // dois toques síncronos, um logo após o outro: o guard (checado antes
-    // do primeiro `await` de handleRespond) bloqueia o segundo mesmo que a
-    // resposta do primeiro já esteja resolvida — `await` sempre adia a
-    // continuação para um microtask, então o segundo toque, ainda síncrono,
-    // encontra o id já marcado como pendente.
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("confirm-a1"));
-      fireEvent.press(screen.getByTestId("confirm-a1"));
-    });
-
-    expect(mockRespondToAssignment).toHaveBeenCalledTimes(1);
-  });
-
-  it("duplo toque em Fazer check-in antes da resposta dispara só uma chamada (guard de duplo toque)", async () => {
-    mockGetMyAssignments.mockResolvedValue([CONFIRMED_ASSIGNMENT]);
-    mockCheckIn.mockResolvedValue({ ...CONFIRMED_ASSIGNMENT, checked_in_at: "2026-09-13T13:05:00.000Z" });
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
-    await waitFor(() => screen.getByTestId("check-in-a2"));
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("check-in-a2"));
-      fireEvent.press(screen.getByTestId("check-in-a2"));
-    });
-
-    expect(mockCheckIn).toHaveBeenCalledTimes(1);
-  });
-
-  // HOME-01: saudação sempre aparece — a data real decide o texto
-  // (getGreeting tem cobertura própria em date.test.ts), aqui só confirma
-  // que a tela a desenha.
-  it("mostra a saudação da home (HOME-01)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
-
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+  // HOME-01 (herdado, MHR-10): saudação sempre aparece.
+  it("mostra a saudação da home (HOME-01/MHR-10)", async () => {
+    await renderHome();
 
     expect(screen.getByTestId("home-greeting")).toBeTruthy();
   });
 
-  // HOME-02: destaque "Meus grupos".
-  it("mostra até 2 grupos, mesmo com mais retornados pela API (HOME-02)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
+  // MHR-05: hero dinâmico com os últimos conteúdos.
+  it("hero presente: mostra um slide por post retornado por getPosts(1, 5) (MHR-05)", async () => {
+    mockPosts([makePost({ id: "hero-1", title: "Conteúdo em destaque" })]);
+
+    await renderHome();
+
+    await waitFor(() => screen.getByTestId("hero-slider"));
+    expect(screen.getByTestId("hero-slide-hero-1")).toBeTruthy();
+  });
+
+  it("toque num item do hero navega para /post/[id] (MHR-05)", async () => {
+    mockPosts([makePost({ id: "hero-1" })]);
+
+    await renderHome();
+    await waitFor(() => screen.getByTestId("hero-slide-hero-1"));
+
+    fireEvent.press(screen.getByTestId("hero-slide-hero-1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/post/hero-1");
+  });
+
+  // MHR-06: degradação silenciosa do hero.
+  it("hero ausente quando getPosts(1,5) retorna lista vazia, sem travar a Home (MHR-06)", async () => {
+    mockPosts([]);
+
+    await renderHome();
+
+    await waitFor(() => screen.getByTestId("home-greeting"));
+    expect(screen.queryByTestId("hero-slider")).toBeNull();
+  });
+
+  it("hero ausente quando getPosts(1,5) falha, sem erro bloqueante (MHR-06)", async () => {
+    mockGetPosts.mockRejectedValue(new Error("falha de rede"));
+
+    await renderHome();
+
+    await waitFor(() => screen.getByTestId("home-greeting"));
+    expect(screen.queryByTestId("hero-slider")).toBeNull();
+  });
+
+  // MHR-07: CTAs Bíblia / Contribuição / Todos os conteúdos sempre presentes.
+  it("mostra o CTA de Bíblia e navega para /biblia ao tocar (MHR-07)", async () => {
+    await renderHome();
+
+    expect(screen.getByTestId("quick-action-biblia")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("quick-action-biblia"));
+    expect(mockPush).toHaveBeenCalledWith("/biblia");
+  });
+
+  it("mostra o CTA de 'Ver todos os conteúdos' e navega para a aba /conteudo ao tocar (MHR-07)", async () => {
+    await renderHome();
+
+    expect(screen.getByTestId("quick-action-conteudo")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("quick-action-conteudo"));
+    expect(mockPush).toHaveBeenCalledWith("/conteudo");
+  });
+
+  it("CTA de Contribuição habilitado abre WEB_URL/doar/{tenant_slug} em browser in-app (MHR-07)", async () => {
+    mockUseTheme.mockReturnValue(themeValue({ tenantSlug: "igreja-teste" }));
+
+    await renderHome();
+    fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
+
+    expect(mockOpenBrowserAsync).toHaveBeenCalledWith(
+      "https://web.exemplo.test/doar/igreja-teste",
+    );
+  });
+
+  // MHR-11: CTA de Contribuição desabilitado sem tenant_slug.
+  it("CTA de Contribuição fica disabled quando tenantSlug é null e o toque não abre nada (MHR-11)", async () => {
+    mockUseTheme.mockReturnValue(themeValue({ tenantSlug: null }));
+
+    await renderHome();
+    fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
+
+    expect(mockOpenBrowserAsync).not.toHaveBeenCalled();
+  });
+
+  // MHR-08: atalho de Escala com gate de permissão.
+  it("mostra o atalho de Escala quando areas inclui volunteers, navegando para /escala (MHR-08)", async () => {
+    mockUseAuth.mockReturnValue({ areas: ["volunteers"] });
+
+    await renderHome();
+
+    expect(screen.getByTestId("quick-action-escala")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("quick-action-escala"));
+    expect(mockPush).toHaveBeenCalledWith("/escala");
+  });
+
+  it("mostra o atalho de Escala quando areas ainda é null (fail-open, mesma regra da tab bar) (MHR-08)", async () => {
+    mockUseAuth.mockReturnValue({ areas: null });
+
+    await renderHome();
+
+    expect(screen.getByTestId("quick-action-escala")).toBeTruthy();
+  });
+
+  it("não mostra o atalho de Escala quando areas não inclui volunteers (MHR-08)", async () => {
+    mockUseAuth.mockReturnValue({ areas: ["other_area"] });
+
+    await renderHome();
+
+    expect(screen.queryByTestId("quick-action-escala")).toBeNull();
+  });
+
+  // MHR-09: cartão de Celebrações e eventos, sem gate de papel.
+  it("mostra o cartão de Celebrações sempre, mesmo sem a área volunteers, navegando para /celebracoes (MHR-09)", async () => {
+    mockUseAuth.mockReturnValue({ areas: ["other_area"] });
+
+    await renderHome();
+
+    expect(screen.getByTestId("quick-action-celebracoes")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("quick-action-celebracoes"));
+    expect(mockPush).toHaveBeenCalledWith("/celebracoes");
+  });
+
+  // HOME-02 (herdado, MHR-10): destaque "Meus grupos".
+  it("mostra até 2 grupos, mesmo com mais retornados pela API (HOME-02/MHR-10)", async () => {
     mockListMyGroups.mockResolvedValue([
       { id: "g1", name: "Célula Central", meeting_time: "Quintas, 19h30", recurrence: "weekly", role: "member" },
       { id: "g2", name: "Célula Norte", meeting_time: null, recurrence: null, role: "leader" },
       { id: "g3", name: "Célula Sul", meeting_time: null, recurrence: null, role: "member" },
     ]);
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
 
     await waitFor(() => screen.getByTestId("home-groups-section"));
     expect(screen.getByTestId("home-group-g1")).toBeTruthy();
@@ -290,40 +252,30 @@ describe("EscalaScreen", () => {
     expect(screen.queryByTestId("home-group-g3")).toBeNull();
   });
 
-  it("sem grupo, a seção não aparece (HOME-02)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
+  it("sem grupo, a seção não aparece (HOME-02/MHR-10)", async () => {
     mockListMyGroups.mockResolvedValue([]);
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
 
     await waitFor(() => screen.getByTestId("home-greeting"));
     expect(screen.queryByTestId("home-groups-section")).toBeNull();
   });
 
-  it("erro ao carregar grupos não derruba a tela nem mostra escala-error (HOME-02)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
+  it("erro ao carregar grupos não derruba a tela (HOME-02/MHR-10)", async () => {
     mockListMyGroups.mockRejectedValue(new Error("falha de rede"));
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
 
     await waitFor(() => screen.getByTestId("home-greeting"));
     expect(screen.queryByTestId("home-groups-section")).toBeNull();
-    expect(screen.queryByTestId("escala-error")).toBeNull();
   });
 
-  it("toque num grupo navega para /grupo/[id] (HOME-02)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
+  it("toque num grupo navega para /grupo/[id] (HOME-02/MHR-10)", async () => {
     mockListMyGroups.mockResolvedValue([
       { id: "g1", name: "Célula Central", meeting_time: null, recurrence: null, role: "member" },
     ]);
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
     await waitFor(() => screen.getByTestId("home-group-g1"));
 
     fireEvent.press(screen.getByTestId("home-group-g1"));
@@ -331,62 +283,40 @@ describe("EscalaScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/grupo/g1");
   });
 
-  // HOME-03: destaque "Avisos recentes".
-  it("mostra os posts recentes retornados por getPosts (HOME-03)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
-    mockGetPosts.mockResolvedValue({
-      data: [
-        { id: "p1", type: "announcement", title: "Aviso 1", body: null, media_url: null, published_at: "2026-09-10T10:00:00.000Z", created_at: "2026-09-10T10:00:00.000Z" },
-      ],
-      total: 1,
-    });
+  // HOME-03 (herdado, MHR-10): destaque "Avisos recentes", recortado do
+  // mesmo getPosts(1, 5) que alimenta o hero (MHR-05/06).
+  it("mostra os posts recentes recortados de getPosts(1, 5) (HOME-03/MHR-10)", async () => {
+    mockPosts([makePost({ id: "p1", title: "Aviso 1" })]);
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
 
     await waitFor(() => screen.getByTestId("home-posts-section"));
     expect(screen.getByTestId("home-post-p1")).toBeTruthy();
-    expect(mockGetPosts).toHaveBeenCalledWith(1, 3);
+    expect(mockGetPosts).toHaveBeenCalledWith(1, 5);
   });
 
-  it("sem post recente, a seção não aparece (HOME-03)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
-    mockGetPosts.mockResolvedValue({ data: [], total: 0 });
+  it("sem post recente, a seção não aparece (HOME-03/MHR-10)", async () => {
+    mockPosts([]);
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
 
     await waitFor(() => screen.getByTestId("home-greeting"));
     expect(screen.queryByTestId("home-posts-section")).toBeNull();
   });
 
-  it("erro ao carregar posts não derruba a tela nem mostra escala-error (HOME-03)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
+  it("erro ao carregar posts recentes não derruba a tela (HOME-03/MHR-10)", async () => {
     mockGetPosts.mockRejectedValue(new Error("falha de rede"));
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
 
     await waitFor(() => screen.getByTestId("home-greeting"));
     expect(screen.queryByTestId("home-posts-section")).toBeNull();
-    expect(screen.queryByTestId("escala-error")).toBeNull();
   });
 
-  it("toque num post navega para /post/[id] (HOME-03)", async () => {
-    mockGetMyAssignments.mockResolvedValue([]);
-    mockGetPosts.mockResolvedValue({
-      data: [
-        { id: "p1", type: "announcement", title: "Aviso 1", body: null, media_url: null, published_at: null, created_at: "2026-09-10T10:00:00.000Z" },
-      ],
-      total: 1,
-    });
+  it("toque num post recente navega para /post/[id] (HOME-03/MHR-10)", async () => {
+    mockPosts([makePost({ id: "p1", published_at: null })]);
 
-    await act(async () => {
-      render(<EscalaScreen />);
-    });
+    await renderHome();
     await waitFor(() => screen.getByTestId("home-post-p1"));
 
     fireEvent.press(screen.getByTestId("home-post-p1"));

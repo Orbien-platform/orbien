@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 22,
+  "next_id": 23,
   "lessons": [
     {
       "id": "L-001",
@@ -382,6 +382,24 @@
       ],
       "created": "2026-09-21T22:54:57Z",
       "last_seen": "2026-09-21T22:54:57Z"
+    },
+    {
+      "id": "L-022",
+      "key": "spec_precision_gap::a visual pixel level acceptance criterion e g text clipping cannot be closed by jest rtl in this mobile app spec such acs explicitly as manual uat and require the implementer to record how closure was verified screenshot or documented layout reasoning when no device simulator is available",
+      "text": "A visual/pixel-level acceptance criterion (e.g. text clipping) cannot be closed by Jest/RTL in this mobile app — spec such ACs explicitly as manual UAT and require the implementer to record how closure was verified (screenshot, or documented layout reasoning) when no device/simulator is available.",
+      "signal": "spec_precision_gap",
+      "scope": "mobile",
+      "status": "candidate",
+      "features": [
+        "mobile-home-redesign"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MHR-12 / .specs/features/mobile-home-redesign/validation.md (mobile)"
+      ],
+      "created": "2026-09-22T01:07:01Z",
+      "last_seen": "2026-09-22T01:07:01Z"
     }
   ]
 }

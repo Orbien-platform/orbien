@@ -76,10 +76,11 @@ describe("boot do app (router real, rotas de src/app)", () => {
 
     const app = await renderRouter("src/app", { initialUrl: "/" });
 
-    // A tela de Escala é a rota inicial das tabs; o `escala-error` aparece
-    // porque não há API neste ambiente — o que importa aqui é que o shell
-    // autenticado montou, em vez de ficar preso no splash.
-    expect(await app.findByTestId("escala-error")).toBeTruthy();
+    // A Home é a rota inicial das tabs (T5,
+    // .specs/features/mobile-home-redesign/); `home-greeting` aparece
+    // porque a saudação (HOME-01) não depende de rede — o que importa aqui
+    // é que o shell autenticado montou, em vez de ficar preso no splash.
+    expect(await app.findByTestId("home-greeting")).toBeTruthy();
     expect(app.queryByTestId("splash")).toBeNull();
     expect(app.queryByTestId("email-input")).toBeNull();
   });
@@ -97,8 +98,8 @@ describe("boot do app (router real, rotas de src/app)", () => {
     const app = await renderRouter("src/app", { initialUrl: "/" });
 
     // Mesmo shell autenticado do teste acima — o conteúdo da rota index
-    // (Escala) não muda, só a aba some da tab bar.
-    expect(await app.findByTestId("escala-error")).toBeTruthy();
+    // (Home) não muda, só a aba Escala some da tab bar.
+    expect(await app.findByTestId("home-greeting")).toBeTruthy();
     expect(app.queryByTestId("splash")).toBeNull();
 
     expect(app.queryByText("Escala")).toBeNull();
