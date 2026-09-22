@@ -140,6 +140,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md Edge Cases (support_session) / design.md missing confirmation (auth)
 - last seen: 2026-09-21T22:54:57Z
 
+### L-022 — A visual/pixel-level acceptance criterion (e.g. text clipping) cannot be closed by Jest/RTL in this mobile app — spec such ACs explicitly as manual UAT and require the implementer to record how closure was verified (screenshot, or documented layout reasoning) when no device/simulator is available.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `mobile` · harmful: 0
+- features: mobile-home-redesign
+- evidence: MHR-12 / .specs/features/mobile-home-redesign/validation.md (mobile)
+- last seen: 2026-09-22T01:07:01Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
