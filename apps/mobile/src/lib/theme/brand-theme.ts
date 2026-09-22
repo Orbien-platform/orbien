@@ -38,6 +38,11 @@ export interface BrandTheme {
   accentColor: string;
   logoUrl: string | null;
   appName: string;
+  /** Slug do tenant (`Tenant.slug`), usado para montar a URL do CTA de
+   * Contribuição (`${webUrl}/doar/{tenantSlug}`). Só existe a partir do
+   * runtime (`GET /settings`) — `null` até o login resolver, mesma
+   * justificativa de `logoUrl`/`appName` na camada de build. */
+  tenantSlug: string | null;
 }
 
 /** Camada parcial da cadeia. `undefined` significa "não opina"; para
@@ -53,6 +58,7 @@ export const PLATFORM_THEME: BrandTheme = {
   accentColor: brand.teal,
   logoUrl: null,
   appName: Constants.expoConfig?.name ?? "",
+  tenantSlug: null,
 };
 
 /** Camada 2: a paleta embutida na build. Numa build genérica isto devolve
@@ -86,9 +92,17 @@ export function buildTimeLayer(): BrandThemeLayer {
  * mal cadastrada degrade para a camada de baixo em vez de virar uma tela
  * com CTA ilegível. A validação de verdade é no cadastro, na API
  * (`IsAccessibleBrandColor`).
+ *
+ * `tenantSlug` é um segundo parâmetro opcional — não faz parte de
+ * `Branding` (que espelha `ResolvedSettings.branding`), vem de
+ * `ResolvedSettings.tenant.slug` — mantendo compatível quem já chama
+ * `brandingLayer(branding)` sem o segundo argumento.
  */
-export function brandingLayer(branding: Branding | null | undefined): BrandThemeLayer {
-  if (!branding) return {};
+export function brandingLayer(
+  branding: Branding | null | undefined,
+  tenantSlug?: string | null,
+): BrandThemeLayer {
+  if (!branding) return { tenantSlug: tenantSlug ?? undefined };
 
   return {
     primaryColor: isValidHexColor(branding.primary_color)
@@ -99,6 +113,7 @@ export function brandingLayer(branding: Branding | null | undefined): BrandTheme
       : undefined,
     logoUrl: branding.logo_url ?? undefined,
     appName: branding.app_name ?? undefined,
+    tenantSlug: tenantSlug ?? undefined,
   };
 }
 
@@ -126,6 +141,7 @@ export function resolveBrandTheme(...layers: BrandThemeLayer[]): BrandTheme {
       accentColor: layer.accentColor ?? resolved.accentColor,
       logoUrl: layer.logoUrl ?? resolved.logoUrl,
       appName: layer.appName ?? resolved.appName,
+      tenantSlug: layer.tenantSlug ?? resolved.tenantSlug,
     };
   }, PLATFORM_THEME);
 }
