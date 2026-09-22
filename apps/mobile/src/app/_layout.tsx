@@ -109,6 +109,15 @@ function ThemedShell() {
           {/* As abas não têm header: a tab bar já identifica a tela, e a
               barra só tiraria espaço útil. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {/* SPEC_DEVIATION (T5 do batch mobile-home-redesign): T7 é quem
+              formalmente registra `escala`/`celebracoes`, mas sem isto aqui
+              a rota fica alcançável por deep link sem guarda de sessão
+              assim que `escala.tsx` existe — o teste
+              `protected-routes.test.ts` existe para pegar exatamente esse
+              buraco. Registrado já em T5 para o gate de cada tarefa
+              intermediária continuar verde; T6/T7 completam com
+              `celebracoes`. */}
+          <Stack.Screen name="escala" options={{ title: "Escala" }} />
           <Stack.Screen name="biblia/index" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/[book]/[chapter]" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/feed" options={{ title: "Feed da Bíblia" }} />
