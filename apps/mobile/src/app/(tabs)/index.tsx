@@ -1,25 +1,36 @@
-// Home (HOME-01..03, .specs/features/home-dashboard-mobile/) — estado
-// intermediário do redesenho (T5 de
-// .specs/features/mobile-home-redesign/tasks.md): a lista de "Próximas
-// escalas" (MOB-04) saiu daqui para `src/app/escala.tsx`; o hero e os CTAs
-// novos (MHR-05..11) entram em T11, que recompõe esta tela como a Home
-// definitiva. Por ora este arquivo só mantém o que HOME-01/02/03 já
-// preservavam: saudação por horário, "Meus grupos" e "Avisos recentes".
+// Home (MHR-05..11, .specs/features/mobile-home-redesign/) — recomposta
+// por T11 a partir do estado reduzido deixado por T5: BrandHeader,
+// saudação, hero dinâmico de conteúdos (HeroSlider, T9), grade de CTAs
+// (HomeQuickActions, T10), "Meus grupos" (HOME-02) e "Avisos recentes"
+// (HOME-03) — as duas últimas preservadas sem mudança de comportamento.
 import { useRouter } from "expo-router";
+import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Avatar } from "../../components/Avatar";
 import { BrandHeader } from "../../components/BrandHeader";
 import { Card } from "../../components/Card";
+import { HeroSlider } from "../../components/HeroSlider";
+import { HomeQuickActions, type QuickAction } from "../../components/HomeQuickActions";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
+import { useAuth } from "../../lib/auth/auth-provider";
 import { getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
 import { formatDateTime, getGreeting } from "../../lib/format/date";
 import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
-import { ChevronRight, Clock, Newspaper } from "../../lib/theme/icons";
+import {
+  BookOpen,
+  CalendarCheck,
+  Church,
+  ChevronRight,
+  Clock,
+  HandHeart,
+  Newspaper,
+} from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
@@ -28,15 +39,20 @@ const MAX_HOME_GROUPS = 2;
 // HOME-03: mesmo limite já pedido à API — evita truncar client-side algo
 // que o backend já poderia ter paginado menor.
 const MAX_HOME_POSTS = 3;
+// MHR-05: hero mostra os últimos 5 conteúdos publicados (design.md,
+// HeroSlider).
+const MAX_HERO_POSTS = 5;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
-  // Destaques secundários da home (HOME-02/03): `null` = ainda não
+  const { colors, tenantSlug } = useTheme();
+  const { areas } = useAuth();
+  // Destaques da home (HOME-02/03) e hero (MHR-05/06): `null` = ainda não
   // chegou (não desenha nada); erro cai no `catch` sem `setError` — a
   // seção some, a tela não trava por isso.
   const [groups, setGroups] = useState<SmallGroupMine[] | null>(null);
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [heroPosts, setHeroPosts] = useState<Post[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,14 +71,67 @@ export default function HomeScreen() {
       })
       .catch(() => undefined);
 
+    getPosts(1, MAX_HERO_POSTS)
+      .then((result) => {
+        if (cancelled) return;
+        setHeroPosts(result.data);
+      })
+      .catch(() => undefined);
+
     return () => {
       cancelled = true;
     };
   }, []);
   const greeting = getGreeting(new Date());
 
+  const webUrl = Constants.expoConfig?.extra?.webUrl as string | undefined;
+
+  const quickActions: QuickAction[] = [
+    {
+      key: "biblia",
+      label: "Bíblia",
+      icon: BookOpen,
+      onPress: () => router.push("/biblia"),
+    },
+    {
+      key: "contribuicao",
+      label: "Contribuição",
+      icon: HandHeart,
+      disabled: !tenantSlug,
+      onPress: () => {
+        if (!tenantSlug || !webUrl) return;
+        WebBrowser.openBrowserAsync(`${webUrl}/doar/${tenantSlug}`).catch(() => {
+          // sem navegador disponível: nenhuma tela de erro bloqueante,
+          // mesmo padrão de Linking.openURL em grupo/encontro/[id].tsx.
+        });
+      },
+    },
+    {
+      key: "conteudo",
+      label: "Ver todos os conteúdos",
+      icon: Newspaper,
+      onPress: () => router.push("/conteudo"),
+    },
+    ...(areas === null || areas.includes("volunteers")
+      ? [
+          {
+            key: "escala",
+            label: "Escala",
+            icon: CalendarCheck,
+            onPress: () => router.push("/escala"),
+          } satisfies QuickAction,
+        ]
+      : []),
+    {
+      key: "celebracoes",
+      label: "Celebrações e eventos",
+      icon: Church,
+      onPress: () => router.push("/celebracoes"),
+    },
+  ];
+
   return (
-    <Screen>
+    <Screen scroll>
       <BrandHeader />
       <Text
         testID="home-greeting"
@@ -70,6 +139,12 @@ export default function HomeScreen() {
       >
         {greeting}
       </Text>
+
+      {heroPosts && heroPosts.length > 0 ? (
+        <HeroSlider posts={heroPosts} onPressPost={(id) => router.push(`/post/${id}`)} />
+      ) : null}
+
+      <HomeQuickActions items={quickActions} />
 
       {groups && groups.length > 0 ? (
         <View testID="home-groups-section" style={styles.section}>
