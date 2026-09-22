@@ -93,6 +93,8 @@ T12
 
 ### T1: Expor `tenant.slug` em `GET /settings`
 
+**Status**: ✅ Concluído (commit `f2312db`)
+
 **What**: `ResolvedSettings.tenant` ganha o campo `slug: string`, resolvido de `tenant.slug` (já buscado no `findUnique`, sem query nova).
 **Where**: `apps/api/src/settings/settings.service.ts`
 **Depends on**: None
@@ -106,10 +108,10 @@ T12
 
 **Done when**:
 
-- [ ] `ResolvedSettings.tenant` inclui `slug: string`.
-- [ ] `getSettings` retorna `tenant.slug` no objeto de resposta.
-- [ ] `settings.service.spec.ts` tem o mock de `tenant` com `slug` e uma asserção que falha se o campo sumir.
-- [ ] Gate: `npm run test -w orbien-backend`
+- [x] `ResolvedSettings.tenant` inclui `slug: string`.
+- [x] `getSettings` retorna `tenant.slug` no objeto de resposta.
+- [x] `settings.service.spec.ts` tem o mock de `tenant` com `slug` e uma asserção que falha se o campo sumir.
+- [x] Gate: `npm run test -w orbien-backend`
 
 **Tests**: unit
 **Gate**: quick (API)
@@ -119,6 +121,8 @@ T12
 ---
 
 ### T2: `ORBIEN_WEB_URL` em `app.config.js`
+
+**Status**: ✅ Concluído (commit `b3f89db`)
 
 **What**: novo env `ORBIEN_WEB_URL` (com default local/staging, mesmo padrão de `ORBIEN_API_URL`), exposto como `extra.webUrl`.
 **Where**: `apps/mobile/app.config.js`
@@ -133,9 +137,9 @@ T12
 
 **Done when**:
 
-- [ ] `extra.webUrl` presente na config resolvida, lendo `process.env.ORBIEN_WEB_URL` com fallback para um default (mesmo padrão de `apiUrl`).
-- [ ] `app.config.test.js` (se existir teste de snapshot da config) continua passando, ou é atualizado para o novo campo.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `extra.webUrl` presente na config resolvida, lendo `process.env.ORBIEN_WEB_URL` com fallback para um default (mesmo padrão de `apiUrl`).
+- [x] `app.config.test.js` (se existir teste de snapshot da config) continua passando, ou é atualizado para o novo campo.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: none (config — build gate only, mas roda a suíte mobile para não quebrar snapshot existente)
 **Gate**: quick (mobile)
@@ -145,6 +149,8 @@ T12
 ---
 
 ### T3: `tenantSlug` na cadeia de tema (`brand-theme.ts`)
+
+**Status**: ✅ Concluído (commit `5387ef5`)
 
 **What**: `BrandTheme.tenantSlug: string | null`; `brandingLayer()` (camada 3/4, `GET /settings`+cache) passa a preencher `tenantSlug` a partir de `tenant.slug`; `PLATFORM_THEME`/`buildTimeLayer()` não opinam (permanece `null` até o login resolver `/settings`).
 **Where**: `apps/mobile/src/lib/theme/brand-theme.ts`
@@ -159,11 +165,11 @@ T12
 
 **Done when**:
 
-- [ ] `BrandTheme` e `BrandThemeLayer` incluem `tenantSlug`.
-- [ ] `brandingLayer(branding)` preenche `tenantSlug` quando a resposta de `/settings` trouxer `tenant.slug` (a função recebe `branding`, mas o design prevê o tipo `Branding`/parâmetro carregando o `tenant.slug` também — ajustar a assinatura/tipo de entrada da função para aceitar o `slug`, mantendo compatibilidade com quem já chama `brandingLayer(branding)` hoje).
-- [ ] `PLATFORM_THEME.tenantSlug` é `null` (piso da cadeia).
-- [ ] `brand-theme.test.ts`: casos novos para `tenantSlug` presente, ausente e mesclagem de camada (o mesmo padrão dos testes de `appName` hoje).
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `BrandTheme` e `BrandThemeLayer` incluem `tenantSlug`.
+- [x] `brandingLayer(branding)` preenche `tenantSlug` quando a resposta de `/settings` trouxer `tenant.slug` (a função recebe `branding`, mas o design prevê o tipo `Branding`/parâmetro carregando o `tenant.slug` também — ajustar a assinatura/tipo de entrada da função para aceitar o `slug`, mantendo compatibilidade com quem já chama `brandingLayer(branding)` hoje).
+- [x] `PLATFORM_THEME.tenantSlug` é `null` (piso da cadeia).
+- [x] `brand-theme.test.ts`: casos novos para `tenantSlug` presente, ausente e mesclagem de camada (o mesmo padrão dos testes de `appName` hoje).
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit
 **Gate**: quick (mobile)
@@ -173,6 +179,8 @@ T12
 ---
 
 ### T4: `tenantSlug` em `useTheme()` (`theme-provider.tsx`)
+
+**Status**: ✅ Concluído (commit `0b7ad91`)
 
 **What**: o contexto de tema (`ThemeProvider`/`useTheme()`) passa a expor `tenantSlug`, lido da resposta de `GET /settings` da sessão e do cache (mesmo mecanismo de `appName`/`logoUrl`).
 **Where**: `apps/mobile/src/lib/theme/theme-provider.tsx`
@@ -187,9 +195,9 @@ T12
 
 **Done when**:
 
-- [ ] `useTheme()` retorna `tenantSlug: string | null`.
-- [ ] `theme-provider.test.tsx`: caso novo cobrindo `tenantSlug` vindo do runtime e do cache (mesmo padrão dos testes de `appName` já existentes no arquivo, linhas ~73-218 conforme a exploração inicial).
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `useTheme()` retorna `tenantSlug: string | null`.
+- [x] `theme-provider.test.tsx`: caso novo cobrindo `tenantSlug` vindo do runtime e do cache (mesmo padrão dos testes de `appName` já existentes no arquivo, linhas ~73-218 conforme a exploração inicial).
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit
 **Gate**: quick (mobile)
@@ -199,6 +207,8 @@ T12
 ---
 
 ### T5: Mover a tela de Escala para `src/app/escala.tsx`
+
+**Status**: ✅ Concluído (commit `ea242d3`)
 
 **What**: cria `src/app/escala.tsx` com o conteúdo de "Próximas escalas" (fetch, `FlatList`, ações confirmar/recusar/check-in) copiado 1:1 de `(tabs)/index.tsx` — sem `BrandHeader`, saudação, "Meus grupos" ou "Avisos recentes" (isso fica na Home, T11). Remove esse conteúdo de `(tabs)/index.tsx` nesta mesma tarefa (o arquivo fica temporariamente reduzido até T11 recompô-lo).
 **Where**: `apps/mobile/src/app/escala.tsx` (novo), `apps/mobile/src/app/(tabs)/index.tsx` (reduzido)
@@ -213,10 +223,10 @@ T12
 
 **Done when**:
 
-- [ ] `src/app/escala.tsx` reproduz exatamente o comportamento de hoje: mesmos testIDs (`escala-list`, `escala-error`, `escala-empty`, `assignment-*`, `confirm-*`, `decline-*`, `check-in-*`, `indisponibilidade-link`, `escala-action-error`).
-- [ ] `src/__tests__/app/escala.test.tsx` (novo) = a suíte de `src/__tests__/app/(tabs)/index.test.tsx` de hoje que cobre escala (os 12 casos), com os imports ajustados para o novo arquivo — nenhuma asserção enfraquecida.
-- [ ] `(tabs)/index.tsx` compila mesmo reduzido (estado intermediário; T11 o recompõe como Home).
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `src/app/escala.tsx` reproduz exatamente o comportamento de hoje: mesmos testIDs (`escala-list`, `escala-error`, `escala-empty`, `assignment-*`, `confirm-*`, `decline-*`, `check-in-*`, `indisponibilidade-link`, `escala-action-error`).
+- [x] `src/__tests__/app/escala.test.tsx` (novo) = a suíte de `src/__tests__/app/(tabs)/index.test.tsx` de hoje que cobre escala (os 12 casos), com os imports ajustados para o novo arquivo — nenhuma asserção enfraquecida.
+- [x] `(tabs)/index.tsx` compila mesmo reduzido (estado intermediário; T11 o recompõe como Home).
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component, RTL)
 **Gate**: quick (mobile)
@@ -226,6 +236,8 @@ T12
 ---
 
 ### T6: Mover a tela de Celebrações para `src/app/celebracoes.tsx`
+
+**Status**: ✅ Concluído (commit `0044541`)
 
 **What**: cria `src/app/celebracoes.tsx` com o conteúdo de `(tabs)/celebracoes.tsx` copiado 1:1 (fetch por papel, lista, navegação para `/celebracao/[id]`). Remove `(tabs)/celebracoes.tsx`.
 **Where**: `apps/mobile/src/app/celebracoes.tsx` (novo), remove `apps/mobile/src/app/(tabs)/celebracoes.tsx`
@@ -240,10 +252,10 @@ T12
 
 **Done when**:
 
-- [ ] `src/app/celebracoes.tsx` reproduz exatamente o comportamento de hoje (fonte de dados por papel, navegação para `/celebracao/[id]`).
-- [ ] `src/__tests__/app/celebracoes.test.tsx` (novo) = a suíte de `src/__tests__/app/(tabs)/celebracoes.test.tsx` migrada, sem perder caso.
-- [ ] `apps/mobile/src/app/(tabs)/celebracoes.tsx` e seu teste antigo removidos.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] `src/app/celebracoes.tsx` reproduz exatamente o comportamento de hoje (fonte de dados por papel, navegação para `/celebracao/[id]`).
+- [x] `src/__tests__/app/celebracoes.test.tsx` (novo) = a suíte de `src/__tests__/app/(tabs)/celebracoes.test.tsx` migrada, sem perder caso.
+- [x] `apps/mobile/src/app/(tabs)/celebracoes.tsx` e seu teste antigo removidos.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component, RTL)
 **Gate**: quick (mobile)
@@ -253,6 +265,8 @@ T12
 ---
 
 ### T7: Registrar `/escala` e `/celebracoes` no Stack raiz
+
+**Status**: ✅ Concluído (commit `999c8f2`)
 
 **What**: adiciona `<Stack.Screen name="escala" options={{ title: "Escala" }} />` e `<Stack.Screen name="celebracoes" options={{ title: "Celebrações" }} />` dentro do `Stack.Protected guard={isAuthenticated}`.
 **Where**: `apps/mobile/src/app/_layout.tsx`
@@ -267,9 +281,9 @@ T12
 
 **Done when**:
 
-- [ ] As duas rotas aparecem no `Stack.Protected`, com `title` certo.
-- [ ] `src/__tests__/app/_layout.test.tsx` (ou o teste de boot de navegação existente) cobre que as rotas estão listadas — atualizar o teste existente se ele enumera as rotas registradas.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] As duas rotas aparecem no `Stack.Protected`, com `title` certo.
+- [x] `src/__tests__/app/_layout.test.tsx` (ou o teste de boot de navegação existente) cobre que as rotas estão listadas — atualizar o teste existente se ele enumera as rotas registradas.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component)
 **Gate**: quick (mobile)
@@ -279,6 +293,8 @@ T12
 ---
 
 ### T8: Atualizar `(tabs)/_layout.tsx` — 4 abas, sem gate de `showEscala`
+
+**Status**: ✅ Concluído (commit `4d52b88`)
 
 **What**: remove `Tabs.Screen name="celebracoes"`; renomeia a entrada `index` (`title: "Home"`, ícone `Home` do `lucide-react-native` via `src/lib/theme/icons.ts`); remove a lógica `showEscala`/`href` condicional (o gate de permissão passa a viver na Home, T11).
 **Where**: `apps/mobile/src/app/(tabs)/_layout.tsx`, `apps/mobile/src/lib/theme/icons.ts` (adiciona o ícone `Home` por subpath, se ainda não estiver na lista)
@@ -293,10 +309,10 @@ T12
 
 **Done when**:
 
-- [ ] 4 abas declaradas, nesta ordem: `index` (Home), `grupos`, `conteudo`, `perfil`.
-- [ ] Nenhuma aba de `celebracoes`; nenhuma lógica `showEscala`/`areas` no arquivo.
-- [ ] `src/__tests__/app/(tabs)/_layout.test.tsx` atualizado: espera exatamente 4 `tab-*`, nenhum `celebracoes`, nenhum `hidden-tab-index` condicional — as asserções de `showEscala` (mock de `useAuth`) são removidas junto, já que a lógica saiu do arquivo.
-- [ ] Gate: `npm run test -w orbien-mobile`
+- [x] 4 abas declaradas, nesta ordem: `index` (Home), `grupos`, `conteudo`, `perfil`.
+- [x] Nenhuma aba de `celebracoes`; nenhuma lógica `showEscala`/`areas` no arquivo.
+- [x] `src/__tests__/app/(tabs)/_layout.test.tsx` atualizado: espera exatamente 4 `tab-*`, nenhum `celebracoes`, nenhum `hidden-tab-index` condicional — as asserções de `showEscala` (mock de `useAuth`) são removidas junto, já que a lógica saiu do arquivo.
+- [x] Gate: `npm run test -w orbien-mobile`
 
 **Tests**: unit (component)
 **Gate**: quick (mobile)
