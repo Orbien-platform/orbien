@@ -14,26 +14,26 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, StyleSheet, Pressable, Text, View } from "react-native";
 
-import { Card } from "../../components/Card";
-import { DateBlock } from "../../components/DateBlock";
-import { Screen } from "../../components/Screen";
-import { SectionLabel } from "../../components/SectionLabel";
-import { StatusMessage } from "../../components/StatusMessage";
-import { decodeJwtPayload } from "../../lib/auth/jwt";
-import { useAuth } from "../../lib/auth/auth-provider";
-import { getMyAssignments } from "../../lib/escala/escala-client";
-import { listUpcomingInstances } from "../../lib/celebracoes/celebracoes-client";
-import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
-import { formatDateTime } from "../../lib/format/date";
-import { ChevronRight, Church, CircleAlert, ListMusic, WifiOff } from "../../lib/theme/icons";
-import { useTheme } from "../../lib/theme/theme-provider";
+import { Card } from "../components/Card";
+import { DateBlock } from "../components/DateBlock";
+import { Screen } from "../components/Screen";
+import { SectionLabel } from "../components/SectionLabel";
+import { StatusMessage } from "../components/StatusMessage";
+import { decodeJwtPayload } from "../lib/auth/jwt";
+import { useAuth } from "../lib/auth/auth-provider";
+import { getMyAssignments } from "../lib/escala/escala-client";
+import { listUpcomingInstances } from "../lib/celebracoes/celebracoes-client";
+import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { formatDateTime } from "../lib/format/date";
+import { ChevronRight, Church, CircleAlert, ListMusic, WifiOff } from "../lib/theme/icons";
+import { useTheme } from "../lib/theme/theme-provider";
 import {
   ICON_STROKE_WIDTH,
   iconSize,
   spacing,
   touchTarget,
   typography,
-} from "../../lib/theme/tokens";
+} from "../lib/theme/tokens";
 
 const LEADER_ROLES = [
   "ministry_leader",

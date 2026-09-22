@@ -3,8 +3,12 @@
 // ministry_leader+ (AC1/AC6); item sem OC não tem link; toque num item com
 // OC navega para /celebracao/[id] com os params certos; estado vazio
 // distinto por papel; erro de rede.
+//
+// Migrado 1:1 de src/__tests__/app/(tabs)/celebracoes.test.tsx — mesma
+// suíte, só o import do componente mudou de `(tabs)/celebracoes` para
+// `celebracoes` (T6, .specs/features/mobile-home-redesign/tasks.md).
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
-import { NetworkError } from "../../../lib/api/errors";
+import { NetworkError } from "../../lib/api/errors";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -12,21 +16,21 @@ jest.mock("expo-router", () => ({
 }));
 
 const mockUseAuth = jest.fn();
-jest.mock("../../../lib/auth/auth-provider", () => ({
+jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
 const mockGetMyAssignments = jest.fn();
-jest.mock("../../../lib/escala/escala-client", () => ({
+jest.mock("../../lib/escala/escala-client", () => ({
   getMyAssignments: (...args: unknown[]) => mockGetMyAssignments(...args),
 }));
 
 const mockListUpcomingInstances = jest.fn();
-jest.mock("../../../lib/celebracoes/celebracoes-client", () => ({
+jest.mock("../../lib/celebracoes/celebracoes-client", () => ({
   listUpcomingInstances: (...args: unknown[]) => mockListUpcomingInstances(...args),
 }));
 
-import CelebracoesScreen from "../../../app/(tabs)/celebracoes";
+import CelebracoesScreen from "../../app/celebracoes";
 
 function makeToken(payload: object): string {
   const base64url = (obj: object) =>

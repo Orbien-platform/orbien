@@ -118,6 +118,7 @@ function ThemedShell() {
               intermediária continuar verde; T6/T7 completam com
               `celebracoes`. */}
           <Stack.Screen name="escala" options={{ title: "Escala" }} />
+          <Stack.Screen name="celebracoes" options={{ title: "Celebrações" }} />
           <Stack.Screen name="biblia/index" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/[book]/[chapter]" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/feed" options={{ title: "Feed da Bíblia" }} />
