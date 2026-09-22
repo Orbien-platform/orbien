@@ -71,6 +71,8 @@ export default function LoginScreen() {
         <Text
           style={[typography.display, styles.appName, { color: colors.textPrimary }]}
           numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
         >
           {appName}
         </Text>
