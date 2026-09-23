@@ -116,6 +116,8 @@ export class LoginRateLimitService {
   /** Igual a `check`, mas lança o 429 que as rotas de login devolvem. */
   async assert(key: string, policy: RateLimitPolicy): Promise<void> {
     if (await this.check(key, policy)) return;
+    // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
+    this.logger.warn(`login bloqueado por rate limit [${key}]`);
     throw new HttpException(
       {
         message: 'Muitas tentativas. Tente novamente em alguns minutos.',
