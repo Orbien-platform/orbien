@@ -531,9 +531,20 @@ jobs:
       # ao channel "preview" uma vez (`eas channel:edit preview --branch
       # preview`, fora do CI) — sem esse vínculo o update sobe mas nenhum
       # app instalado o recebe.
+      #
+      # ORBIEN_API_URL/ORBIEN_WEB_URL têm que ser os MESMOS valores dos
+      # profiles `preview`/`preview-ios-simulator` em eas.json: `eas update`
+      # reavalia app.config.js com o ambiente deste job, não com o `env` do
+      # profile de build — sem essas duas linhas, extra.apiUrl cai no
+      # default de app.config.js (http://localhost:3000) e todo app no
+      # channel preview passa a tentar falar com localhost depois do OTA
+      # (achado de 2026-09-23: login não batia na API, sem log nenhuma
+      # tentativa, porque a requisição nem saía do device).
       - name: Publicar update OTA (Android + iOS, branch preview)
         if: steps.filter.outputs.changed == 'true' && steps.native.outputs.native == 'false'
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ORBIEN_API_URL: https://orbien-api.onrender.com/api
+          ORBIEN_WEB_URL: https://web.useorbien.com
         run: npx eas-cli update --branch preview --message "${{ github.sha }}" --non-interactive
