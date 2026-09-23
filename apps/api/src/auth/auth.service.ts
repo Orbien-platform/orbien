@@ -121,15 +121,24 @@ export class AuthService {
     // requisição — não só aqui — é o `JwtStrategy.validate`; este é o caminho
     // que evita emitir um token que já nasceria inútil.
     if (!user || !user.is_active || !user.tenant.is_active) {
+      // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
+      this.logger.warn(
+        `login falhou [${dto.email}]: ${!user ? 'conta não encontrada' : !user.is_active ? 'conta inativa' : 'tenant inativo'}`,
+      );
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
 
     const valid = await argon2.verify(user.password_hash, dto.password);
     if (!valid) {
+      // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
+      this.logger.warn(`login falhou [${dto.email}]: senha não confere`);
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
+
+    // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
+    this.logger.warn(`login ok [${dto.email}]`);
 
     // Credencial certa zera a janela: quem sabe a senha nunca esbarra no limite.
     await this.rateLimit.clear(limitKey);
