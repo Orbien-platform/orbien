@@ -11,6 +11,11 @@ jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => ({ login: mockLogin }),
 }));
 
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 import LoginScreen from "../../app/login";
 
 describe("LoginScreen", () => {
@@ -58,4 +63,11 @@ describe("LoginScreen", () => {
       });
     },
   );
+
+  it("link de esqueci minha senha navega para /esqueci-senha", async () => {
+    await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId("forgot-password-link"));
+
+    expect(mockPush).toHaveBeenCalledWith("/esqueci-senha");
+  });
 });

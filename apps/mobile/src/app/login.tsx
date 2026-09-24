@@ -9,12 +9,14 @@
 // §7), erro como alerta com ícone em vez de linha de texto solta, e botão
 // primário em estado `loading` — antes o botão só ficava apagado, sem dizer
 // que a requisição estava em curso.
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../components/Alert";
 import { AppButton } from "../components/AppButton";
+import { AppLink } from "../components/AppLink";
 import { BrandLogo } from "../components/BrandLogo";
 import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
@@ -34,6 +36,7 @@ const LOGO_SIZE = 72;
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const router = useRouter();
   const { appName, colors, shadow, isDark, primaryColor } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -128,6 +131,12 @@ export default function LoginScreen() {
           loading={submitting}
           style={styles.submit}
         />
+
+        <View style={styles.forgotPassword}>
+          <AppLink testID="forgot-password-link" onPress={() => router.push("/esqueci-senha")}>
+            Esqueci minha senha
+          </AppLink>
+        </View>
       </View>
     </Screen>
   );
@@ -154,4 +163,5 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
   },
   submit: { marginTop: spacing.xs },
+  forgotPassword: { alignItems: "center" },
 });

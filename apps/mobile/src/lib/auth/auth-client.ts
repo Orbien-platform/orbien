@@ -105,6 +105,18 @@ export async function login(email: string, password: string): Promise<Session> {
 }
 
 /**
+ * `POST /auth/forgot-password`. Rota pública — não toca em sessão nem em
+ * SecureStore. A API sempre responde de forma genérica, tenha o e-mail
+ * conta ou não (mesmo princípio de `login`: não vazar quais e-mails têm
+ * cadastro), então quem chama aqui não precisa — nem deve — distinguir o
+ * corpo da resposta; erro de rede é tratado como "mesma coisa" pela tela,
+ * mesmo padrão de `apps/web/src/app/(public)/esqueci-senha/page.tsx`.
+ */
+export async function forgotPassword(email: string): Promise<void> {
+  await apiClient.post("/auth/forgot-password", { body: { email } });
+}
+
+/**
  * Lê a sessão do SecureStore, sem chamada de rede. `null` se não houver —
  * inclusive quando o valor salvo está corrompido (JSON inválido de uma
  * versão anterior, por exemplo): trata como "sem sessão" e limpa a chave, em
