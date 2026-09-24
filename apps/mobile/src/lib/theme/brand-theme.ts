@@ -37,6 +37,9 @@ export interface BrandTheme {
   primaryColor: string;
   accentColor: string;
   logoUrl: string | null;
+  /** Variante para modo escuro — par de `logoUrl`. Nulo cai em `logoUrl`
+   * nos dois modos (quem resolve isso é `BrandLogo`, não esta cadeia). */
+  logoUrlDark: string | null;
   appName: string;
   /** Slug do tenant (`Tenant.slug`), usado para montar a URL do CTA de
    * Contribuição (`${webUrl}/doar/{tenantSlug}`). Só existe a partir do
@@ -57,6 +60,7 @@ export const PLATFORM_THEME: BrandTheme = {
   primaryColor: brand.navy,
   accentColor: brand.teal,
   logoUrl: null,
+  logoUrlDark: null,
   appName: Constants.expoConfig?.name ?? "",
   tenantSlug: null,
 };
@@ -112,24 +116,30 @@ export function brandingLayer(
       ? branding.accent_color.trim()
       : undefined,
     logoUrl: branding.logo_url ?? undefined,
+    logoUrlDark: branding.logo_url_dark ?? undefined,
     appName: branding.app_name ?? undefined,
     tenantSlug: tenantSlug ?? undefined,
   };
 }
 
 /**
- * Só as cores de uma camada — o que continua valendo quando não há sessão.
+ * Cor e logo de uma camada — o que continua valendo quando não há sessão.
  *
  * O cache de branding sobrevive ao logout de propósito (é o que faz o
- * segundo login abrir na cor da igreja), mas identidade não é cor: com o
- * cache inteiro aplicado, a tela de login de uma build genérica abria com
- * o NOME e o LOGO do último tenant — dizendo "Doca Church" para quem ainda
- * não disse em que igreja vai entrar. Cor da igreja antes do login é
- * continuidade; nome da igreja antes do login é mentira. Sem sessão, a
- * identidade vem da build (versão personalizada) ou da plataforma.
+ * segundo login abrir na cor e no logo da igreja). O NOME do tenant fica de
+ * fora: "Doca Church" escrito na tela antes de dizer em que igreja vai
+ * entrar seria a identidade errada, mesmo com o logo visível — mas o logo
+ * sozinho é o mesmo tipo de continuidade visual que a cor já era, não uma
+ * alegação por extenso. Sem sessão, o nome vem da build (versão
+ * personalizada) ou da plataforma.
  */
 export function colorsOnly(layer: BrandThemeLayer): BrandThemeLayer {
-  return { primaryColor: layer.primaryColor, accentColor: layer.accentColor };
+  return {
+    primaryColor: layer.primaryColor,
+    accentColor: layer.accentColor,
+    logoUrl: layer.logoUrl,
+    logoUrlDark: layer.logoUrlDark,
+  };
 }
 
 /** Aplica as camadas na ordem recebida — a última que opinar sobre um
@@ -140,6 +150,7 @@ export function resolveBrandTheme(...layers: BrandThemeLayer[]): BrandTheme {
       primaryColor: layer.primaryColor ?? resolved.primaryColor,
       accentColor: layer.accentColor ?? resolved.accentColor,
       logoUrl: layer.logoUrl ?? resolved.logoUrl,
+      logoUrlDark: layer.logoUrlDark ?? resolved.logoUrlDark,
       appName: layer.appName ?? resolved.appName,
       tenantSlug: layer.tenantSlug ?? resolved.tenantSlug,
     };

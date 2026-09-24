@@ -28,6 +28,9 @@ export interface ResolvedSettings {
      */
     accent_color: string | null;
     logo_url: string | null;
+    /** Variante para modo escuro — nulo quando o tenant/congregação só
+     * cadastrou o logo claro; quem consome cai em `logo_url` nesse caso. */
+    logo_url_dark: string | null;
     splash_url: string | null;
     /** PROD-19 (Premium) — nulo em Starter e quando não configurado. */
     custom_domain: string | null;
@@ -66,6 +69,8 @@ export class SettingsService {
         primary_color: congregation.primary_color ?? branding?.primary_color ?? null,
         accent_color: congregation.accent_color ?? branding?.secondary_color ?? null,
         logo_url: congregation.logo_url ?? branding?.logo_url ?? null,
+        logo_url_dark:
+          congregation.logo_url_dark ?? branding?.logo_url_dark ?? null,
         splash_url: branding?.splash_url ?? null,
         custom_domain: branding?.custom_domain ?? null,
         terms_url: branding?.terms_url ?? null,
@@ -142,28 +147,33 @@ export class SettingsService {
     tenantId: string,
     congregationId: string,
     file: Express.Multer.File | undefined,
-  ): Promise<{ logo_url: string }> {
+    variant: 'light' | 'dark',
+  ): Promise<{ logo_url: string | null; logo_url_dark: string | null }> {
     if (!file) throw new BadRequestException('Arquivo obrigatório.');
     if (!ALLOWED_LOGO_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException('Tipo de arquivo não suportado.');
     }
 
+    const field = variant === 'dark' ? 'logo_url_dark' : 'logo_url';
+
     const congregation = await this.prisma.client.congregation.findUnique({
       where: { id: congregationId },
-      select: { logo_url: true },
+      select: { logo_url: true, logo_url_dark: true },
     });
     if (!congregation) throw new NotFoundException('Congregação não encontrada');
 
-    await this.storageService.deleteByUrl(congregation.logo_url);
+    await this.storageService.deleteByUrl(congregation[field]);
 
-    const key = `branding/${tenantId}/${congregationId}/logo-${Date.now()}`;
-    const logo_url = await this.storageService.upload(file.buffer, key, file.mimetype);
+    const key = `branding/${tenantId}/${congregationId}/logo-${variant}-${Date.now()}`;
+    const uploadedUrl = await this.storageService.upload(file.buffer, key, file.mimetype);
 
     await this.prisma.client.congregation.update({
       where: { id: congregationId },
-      data: { logo_url },
+      data: { [field]: uploadedUrl },
     });
 
-    return { logo_url };
+    return variant === 'dark'
+      ? { logo_url: congregation.logo_url, logo_url_dark: uploadedUrl }
+      : { logo_url: uploadedUrl, logo_url_dark: congregation.logo_url_dark };
   }
 }

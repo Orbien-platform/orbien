@@ -62,13 +62,29 @@ describe('SettingsController', () => {
     expect(result).toEqual({ tenant: {} });
   });
 
-  it('uploadLogo delega ao service', async () => {
-    service.uploadLogo.mockResolvedValue({ logo_url: 'https://cdn/a.png' });
+  it('uploadLogo delega ao service com variant "light" por padrão', async () => {
+    service.uploadLogo.mockResolvedValue({ logo_url: 'https://cdn/a.png', logo_url_dark: null });
     const file = { mimetype: 'image/png' } as Express.Multer.File;
 
     const result = await controller.uploadLogo(file, USER);
 
-    expect(service.uploadLogo).toHaveBeenCalledWith('t1', 'g1', file);
-    expect(result).toEqual({ logo_url: 'https://cdn/a.png' });
+    expect(service.uploadLogo).toHaveBeenCalledWith('t1', 'g1', file, 'light');
+    expect(result).toEqual({ logo_url: 'https://cdn/a.png', logo_url_dark: null });
+  });
+
+  it('uploadLogo repassa variant "dark" quando pedido', async () => {
+    service.uploadLogo.mockResolvedValue({ logo_url: 'https://cdn/a.png', logo_url_dark: 'https://cdn/a-dark.png' });
+    const file = { mimetype: 'image/png' } as Express.Multer.File;
+
+    const result = await controller.uploadLogo(file, USER, 'dark');
+
+    expect(service.uploadLogo).toHaveBeenCalledWith('t1', 'g1', file, 'dark');
+    expect(result).toEqual({ logo_url: 'https://cdn/a.png', logo_url_dark: 'https://cdn/a-dark.png' });
+  });
+
+  it('uploadLogo rejeita variant desconhecida', () => {
+    const file = { mimetype: 'image/png' } as Express.Multer.File;
+
+    expect(() => controller.uploadLogo(file, USER, 'sepia')).toThrow();
   });
 });

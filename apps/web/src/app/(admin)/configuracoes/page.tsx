@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useTheme } from "next-themes";
 import { Building2, Image as ImageIcon, Loader2, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ interface Settings {
     primary_color: string | null;
     accent_color: string | null;
     logo_url: string | null;
+    logo_url_dark: string | null;
     splash_url: string | null;
   };
   congregation: {
@@ -133,6 +135,11 @@ export default function ConfiguracoesPage() {
   const canEditCongregation =
     canEditTenant || (user?.roles?.includes("admin_congregation") ?? false);
 
+  // Mesmo padrão do Header (sem guard de hidratação): `next-themes` já
+  // injeta o script que aplica a classe antes do primeiro paint.
+  const { resolvedTheme } = useTheme();
+  const isDarkPreview = resolvedTheme === "dark";
+
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const hasFetched = useRef(false);
@@ -152,6 +159,11 @@ export default function ConfiguracoesPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const [logoUrlDark, setLogoUrlDark] = useState<string | null>(null);
+  const [logoFileDark, setLogoFileDark] = useState<File | null>(null);
+  const [logoPreviewDark, setLogoPreviewDark] = useState<string | null>(null);
+  const logoInputRefDark = useRef<HTMLInputElement>(null);
 
   // Organização (tenant)
   const [tenantName, setTenantName] = useState("");
@@ -178,6 +190,7 @@ export default function ConfiguracoesPage() {
     setPrimaryColor(data.branding.primary_color ?? "");
     setAccentColor(data.branding.accent_color ?? "");
     setLogoUrl(data.branding.logo_url ?? null);
+    setLogoUrlDark(data.branding.logo_url_dark ?? null);
 
     setTenantName(data.tenant.name ?? "");
     setTenantEmail(data.tenant.email ?? "");
@@ -206,7 +219,16 @@ export default function ConfiguracoesPage() {
     };
   }, [logoPreview]);
 
-  function onLogoSelected(e: ChangeEvent<HTMLInputElement>) {
+  useEffect(() => {
+    return () => {
+      if (logoPreviewDark) URL.revokeObjectURL(logoPreviewDark);
+    };
+  }, [logoPreviewDark]);
+
+  function onLogoSelected(
+    e: ChangeEvent<HTMLInputElement>,
+    variant: "light" | "dark",
+  ) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
@@ -217,9 +239,15 @@ export default function ConfiguracoesPage() {
       showToast("Arquivo muito grande. Máximo: 5MB.");
       return;
     }
-    if (logoPreview) URL.revokeObjectURL(logoPreview);
-    setLogoFile(file);
-    setLogoPreview(URL.createObjectURL(file));
+    if (variant === "dark") {
+      if (logoPreviewDark) URL.revokeObjectURL(logoPreviewDark);
+      setLogoFileDark(file);
+      setLogoPreviewDark(URL.createObjectURL(file));
+    } else {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
   }
 
   async function handleSave() {
@@ -290,8 +318,8 @@ export default function ConfiguracoesPage() {
       if (logoFile) {
         const formData = new FormData();
         formData.append("file", logoFile);
-        const { data: logoRes } = await api.post<{ logo_url: string }>(
-          "/settings/logo",
+        const { data: logoRes } = await api.post<{ logo_url: string | null }>(
+          "/settings/logo?variant=light",
           formData
         );
         setLogoUrl(logoRes.logo_url);
@@ -304,6 +332,20 @@ export default function ConfiguracoesPage() {
         setLogoFile(null);
         setLogoPreview(null);
         logoInputRef.current!.value = "";
+      }
+
+      if (logoFileDark) {
+        const formData = new FormData();
+        formData.append("file", logoFileDark);
+        const { data: logoRes } = await api.post<{ logo_url_dark: string | null }>(
+          "/settings/logo?variant=dark",
+          formData
+        );
+        setLogoUrlDark(logoRes.logo_url_dark);
+        URL.revokeObjectURL(logoPreviewDark as string);
+        setLogoFileDark(null);
+        setLogoPreviewDark(null);
+        logoInputRefDark.current!.value = "";
       }
 
       showToast("Configurações salvas com sucesso.");
@@ -406,46 +448,120 @@ export default function ConfiguracoesPage() {
             </div>
 
             <div className="flex flex-col gap-4">
+              {/* Preview no tema ativo do navegador agora — é o que confirma
+                  que a variante certa está sendo escolhida, sem precisar
+                  trocar de tema manualmente para conferir. */}
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                  {logoPreview || logoUrl ? (
-                    // O `<img>` só renderiza quando um dos dois é truthy (condição
-                    // acima), então "os dois nulos" nunca acontece aqui — um
-                    // terceiro fallback (`?? ""`) era branch morto, removido ao
-                    // fechar a Fase 10 (docs/TESTES.md tem o registro).
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={logoPreview ?? (logoUrl as string)}
-                      alt="Logotipo"
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <ImageIcon size={22} strokeWidth={1.5} className="text-stone" />
+                <div
+                  className={cn(
+                    "flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--border-default)]",
+                    isDarkPreview ? "bg-ink" : "bg-[var(--surface-subtle)]",
+                  )}
+                >
+                  {(() => {
+                    const lightSrc = logoPreview ?? logoUrl;
+                    const darkSrc = logoPreviewDark ?? logoUrlDark;
+                    const effectiveSrc = isDarkPreview ? (darkSrc ?? lightSrc) : lightSrc;
+                    return effectiveSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={effectiveSrc}
+                        alt="Logotipo"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={22} strokeWidth={1.5} className="text-stone" />
+                    );
+                  })()}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-sm text-ink dark:text-white">
+                    Prévia no tema {isDarkPreview ? "escuro" : "claro"} do navegador
+                  </p>
+                  <p className="text-xs text-stone">
+                    Sem logo para o modo escuro cadastrado, o claro é usado nos dois.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)]">
+                    {logoPreview || logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={logoPreview ?? (logoUrl as string)}
+                        alt="Logotipo (modo claro)"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={18} strokeWidth={1.5} className="text-stone" />
+                    )}
+                  </div>
+                  {canEditCongregation && (
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        onChange={(e) => onLogoSelected(e, "light")}
+                        disabled={isSaving}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-[8px]"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isSaving}
+                      >
+                        Logotipo (modo claro)
+                      </Button>
+                      <p className="text-xs text-stone">JPG, PNG, WEBP ou SVG · máx. 5MB</p>
+                    </div>
                   )}
                 </div>
-                {canEditCongregation && (
-                  <div className="flex flex-col gap-1.5">
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                      onChange={onLogoSelected}
-                      disabled={isSaving}
-                      className="hidden"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-[8px]"
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={isSaving}
-                    >
-                      Alterar logotipo
-                    </Button>
-                    <p className="text-xs text-stone">JPG, PNG, WEBP ou SVG · máx. 5MB</p>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-ink">
+                    {logoPreviewDark || logoUrlDark ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={logoPreviewDark ?? (logoUrlDark as string)}
+                        alt="Logotipo (modo escuro)"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={18} strokeWidth={1.5} className="text-white/60" />
+                    )}
                   </div>
-                )}
+                  {canEditCongregation && (
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        ref={logoInputRefDark}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        onChange={(e) => onLogoSelected(e, "dark")}
+                        disabled={isSaving}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-[8px]"
+                        onClick={() => logoInputRefDark.current?.click()}
+                        disabled={isSaving}
+                      >
+                        Logotipo (modo escuro)
+                      </Button>
+                      <p className="text-xs text-stone">
+                        Opcional · JPG, PNG, WEBP ou SVG · máx. 5MB
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

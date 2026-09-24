@@ -45,11 +45,12 @@ describe("ThemeProvider", () => {
     });
   });
 
-  it("sem sessão: o cache empresta a COR do último tenant, nunca o nome nem o logo", async () => {
-    // A tela de login de uma build genérica abria como "Doca Church", com o
-    // logo da igreja, só porque o cache de branding sobrevive ao logout. A
-    // cor é continuidade legítima; nome e logo antes de o usuário dizer em
-    // que igreja entra são identidade errada.
+  it("sem sessão: o cache empresta COR e LOGO do último tenant, nunca o nome", async () => {
+    // A tela de login de uma build genérica reaproveita cor e logo do
+    // último tenant — continuidade visual legítima, é o pedido de "logo do
+    // último login em vez do logo da Orbien" na tela de login. O NOME
+    // continua de fora: dizer "Doca Church" antes de o usuário dizer em que
+    // igreja entra é que seria identidade errada.
     mockUseAuth.mockReturnValue({ session: null });
     mockGetItem.mockResolvedValue(
       JSON.stringify({
@@ -75,8 +76,8 @@ describe("ThemeProvider", () => {
       expect(screen.getByTestId("primaryColor").props.children).toBe("#00ff00");
     });
     expect(screen.getByTestId("appName").props.children).toBe(DEFAULT_THEME.appName);
-    expect(screen.getByTestId("logoUrl").props.children).toBe("sem-logo");
-    // tenantSlug é identidade, igual a nome/logo — não vaza sem sessão.
+    expect(screen.getByTestId("logoUrl").props.children).toBe("https://cache.example/logo.png");
+    // tenantSlug continua identidade textual, igual ao nome — não vaza sem sessão.
     expect(screen.getByTestId("tenantSlug").props.children).toBe("sem-tenant-slug");
     expect(mockAuthenticatedRequest).not.toHaveBeenCalled();
   });
