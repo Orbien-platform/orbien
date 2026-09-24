@@ -315,40 +315,61 @@ export default function ConfiguracoesPage() {
       const { data } = await api.patch<Settings>("/settings", payload);
       applySettings(data);
 
+      // Os dois uploads são independentes: a falha de um não pode impedir
+      // a tentativa do outro (cada `try` próprio, não `Promise.all`), e o
+      // que já salvou fica salvo — por isso o erro nomeia a variante que
+      // falhou, em vez de uma mensagem genérica que deixaria ambíguo o que
+      // precisa ser tentado de novo.
+      const uploadErrors: string[] = [];
+
       if (logoFile) {
-        const formData = new FormData();
-        formData.append("file", logoFile);
-        const { data: logoRes } = await api.post<{ logo_url: string | null }>(
-          "/settings/logo?variant=light",
-          formData
-        );
-        setLogoUrl(logoRes.logo_url);
-        // `logoPreview` e a ref do `<input type="file">` são sempre setados
-        // juntos com `logoFile` em `onLogoSelected`, e o input só desmonta se
-        // `canEditCongregation` virar false — o que não acontece enquanto
-        // este handler roda (mesmo raciocínio do payload acima). As duas
-        // guardas eram branch morto; removidas ao fechar a Fase 10.
-        URL.revokeObjectURL(logoPreview as string);
-        setLogoFile(null);
-        setLogoPreview(null);
-        logoInputRef.current!.value = "";
+        try {
+          const formData = new FormData();
+          formData.append("file", logoFile);
+          const { data: logoRes } = await api.post<{ logo_url: string | null }>(
+            "/settings/logo?variant=light",
+            formData
+          );
+          setLogoUrl(logoRes.logo_url);
+          // `logoPreview` e a ref do `<input type="file">` são sempre setados
+          // juntos com `logoFile` em `onLogoSelected`, e o input só desmonta se
+          // `canEditCongregation` virar false — o que não acontece enquanto
+          // este handler roda (mesmo raciocínio do payload acima). As duas
+          // guardas eram branch morto; removidas ao fechar a Fase 10.
+          URL.revokeObjectURL(logoPreview as string);
+          setLogoFile(null);
+          setLogoPreview(null);
+          logoInputRef.current!.value = "";
+        } catch {
+          uploadErrors.push("logotipo claro");
+        }
       }
 
       if (logoFileDark) {
-        const formData = new FormData();
-        formData.append("file", logoFileDark);
-        const { data: logoRes } = await api.post<{ logo_url_dark: string | null }>(
-          "/settings/logo?variant=dark",
-          formData
-        );
-        setLogoUrlDark(logoRes.logo_url_dark);
-        URL.revokeObjectURL(logoPreviewDark as string);
-        setLogoFileDark(null);
-        setLogoPreviewDark(null);
-        logoInputRefDark.current!.value = "";
+        try {
+          const formData = new FormData();
+          formData.append("file", logoFileDark);
+          const { data: logoRes } = await api.post<{ logo_url_dark: string | null }>(
+            "/settings/logo?variant=dark",
+            formData
+          );
+          setLogoUrlDark(logoRes.logo_url_dark);
+          URL.revokeObjectURL(logoPreviewDark as string);
+          setLogoFileDark(null);
+          setLogoPreviewDark(null);
+          logoInputRefDark.current!.value = "";
+        } catch {
+          uploadErrors.push("logotipo escuro");
+        }
       }
 
-      showToast("Configurações salvas com sucesso.");
+      if (uploadErrors.length > 0) {
+        setSaveError(
+          `Configurações salvas, mas o upload do ${uploadErrors.join(" e do ")} falhou. Tente novamente.`
+        );
+      } else {
+        showToast("Configurações salvas com sucesso.");
+      }
     } catch {
       setSaveError("Erro ao salvar configurações. Tente novamente.");
     } finally {

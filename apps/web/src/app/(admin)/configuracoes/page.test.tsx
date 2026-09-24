@@ -213,6 +213,53 @@ describe("ConfiguracoesPage", () => {
     );
   });
 
+  it("nomeia o logotipo claro no erro quando só o upload claro falha", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.post.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const file = new File(["conteudo"], "logo.png", { type: "image/png" });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(
+      await screen.findByText(
+        "Configurações salvas, mas o upload do logotipo claro falhou. Tente novamente."
+      )
+    ).toBeInTheDocument();
+    // Configurações continuam salvas mesmo com o upload falhando — não é
+    // rollback do PATCH, só o upload em si que não completou.
+    expect(mockedApi.patch).toHaveBeenCalled();
+  });
+
+  it("nomeia os dois logotipos no erro quando claro e escuro falham juntos", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.post.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const lightInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(lightInput, new File(["a"], "logo.png", { type: "image/png" }));
+    const darkInput = screen.getByRole("button", { name: "Logotipo (modo escuro)" })
+      .previousElementSibling as HTMLInputElement;
+    await user.upload(darkInput, new File(["b"], "logo-dark.png", { type: "image/png" }));
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(
+      await screen.findByText(
+        "Configurações salvas, mas o upload do logotipo claro e do logotipo escuro falhou. Tente novamente."
+      )
+    ).toBeInTheDocument();
+  });
+
   it("usa o logo escuro na prévia quando o tema do navegador é escuro", async () => {
     setup();
     mockedUseTheme.mockReturnValue({
