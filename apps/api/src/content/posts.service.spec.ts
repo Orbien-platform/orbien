@@ -154,6 +154,23 @@ describe('PostsService', () => {
       );
     });
 
+    it('highlighted=true lista só o que está no carrossel, rascunho incluído', async () => {
+      const client = clientWith();
+      client.contentPost.findMany.mockResolvedValue([]);
+      client.contentPost.count.mockResolvedValue(0);
+      const { service } = serviceWith(client);
+
+      await service.findAll('t1', 'g1', ['tenant_admin'], {
+        page: 1,
+        limit: 20,
+        highlighted: true,
+      } as never);
+
+      const where = client.contentPost.findMany.mock.calls[0]![0].where;
+      expect(where.app_highlight_position).toEqual({ not: null });
+      expect(where).not.toHaveProperty('is_draft');
+    });
+
     it('sem published, admin continua vendo rascunho (tela do web)', async () => {
       const client = clientWith();
       client.contentPost.findMany.mockResolvedValue([]);

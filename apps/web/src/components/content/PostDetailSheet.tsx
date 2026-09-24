@@ -403,7 +403,7 @@ export function PostDetailSheet({
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="pd-body" className="text-sm font-medium text-ink dark:text-white">Corpo</Label>
-                    <RichTextEditor id="pd-body" value={editBody} onChange={setEditBody} disabled={isSaving} />
+                    <RichTextEditor id="pd-body" label="Corpo" value={editBody} onChange={setEditBody} disabled={isSaving} />
                   </div>
                   <MediaUploadField
                     mode={editMediaMode}

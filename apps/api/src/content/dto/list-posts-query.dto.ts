@@ -24,6 +24,17 @@ export class ListPostsQueryDto {
   @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
   published?: boolean;
 
+  /**
+   * Só os que estão no carrossel do app, rascunho incluído. É o que a aba
+   * "Destaques no app" do web usa para montar a lista escolhida — sem isto
+   * ela dependia de o destaque estar entre os 100 posts mais recentes, e
+   * salvar tirava do carrossel quem tivesse ficado de fora.
+   */
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
+  highlighted?: boolean;
+
   @IsOptional() @IsInt() @Min(1) @Type(() => Number) page: number = 1;
 
   @IsOptional() @IsInt() @Min(1) @Max(100) @Type(() => Number) limit: number = 20;

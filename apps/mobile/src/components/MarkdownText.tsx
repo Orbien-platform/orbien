@@ -2,11 +2,16 @@
 // parser é `lib/content/markdown.ts`; aqui só vira <Text>. Tipografia e cor
 // saem dos tokens e do tema, como no resto do app — o corpo continua no
 // `typography.body`/`textSecondary` que já tinha quando era texto cru.
+//
+// Exceção declarada ao alvo de toque de 48 (§3): o link aqui é um <Text
+// onPress> aninhado, com a altura da linha. Link no meio de texto corrido não
+// tem como ganhar padding sem quebrar o parágrafo — o `AppLink` resolve o
+// caso de ação isolada, não este.
 import { Linking, StyleSheet, Text, View } from "react-native";
 
 import { parseMarkdown, type InlineSpan } from "../lib/content/markdown";
 import { useTheme } from "../lib/theme/theme-provider";
-import { fontFamily, spacing, typography } from "../lib/theme/tokens";
+import { fontFamily, quoteRuleWidth, spacing, typography } from "../lib/theme/tokens";
 
 interface MarkdownTextProps {
   testID?: string;
@@ -98,5 +103,5 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: "row", gap: spacing.sm },
   marker: { minWidth: spacing.lg },
   flex: { flex: 1 },
-  quote: { borderLeftWidth: 3, paddingLeft: spacing.md },
+  quote: { borderLeftWidth: quoteRuleWidth, paddingLeft: spacing.md },
 });

@@ -34,13 +34,19 @@ import { cn } from "@/lib/utils";
  */
 interface RichTextEditorProps {
   id?: string;
+  /**
+   * Nome acessível do campo. Precisa ir como `aria-label`: `<label for>` só
+   * associa a elemento rotulável (input, textarea…), e o editor é um `div`
+   * contenteditable. É por este nome que leitor de tela e e2e o encontram.
+   */
+  label: string;
   value: string;
   onChange: (markdown: string) => void;
   placeholder?: string;
   disabled?: boolean;
 }
 
-export function RichTextEditor({ id, value, onChange, placeholder, disabled }: RichTextEditorProps) {
+export function RichTextEditor({ id, label, value, onChange, placeholder, disabled }: RichTextEditorProps) {
   const editor = useEditor({
     // Next renderiza no servidor primeiro; sem isto o Tiptap acusa
     // hydration mismatch.
@@ -64,6 +70,7 @@ export function RichTextEditor({ id, value, onChange, placeholder, disabled }: R
       attributes: {
         ...(id ? { id } : {}),
         role: "textbox",
+        "aria-label": label,
         "aria-multiline": "true",
         class:
           "rich-text min-h-[140px] max-h-[360px] overflow-y-auto px-3 py-2 text-sm text-ink dark:text-white focus:outline-none",

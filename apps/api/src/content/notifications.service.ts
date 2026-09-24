@@ -58,7 +58,9 @@ export function markdownToPlainText(markdown: string): string {
     .replace(/^\s*([-*+]|\d+[.)])\s+/gm, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/(\*\*|__|~~)(.+?)\1/g, '$2')
-    .replace(/(\*|_)(.+?)\1/g, '$2')
+    // Itálico só quando o marcador não está colado em letra ou número:
+    // `nome_do_arquivo` e `2 * 3 * 4` não são ênfase.
+    .replace(/(^|[^\p{L}\p{N}\\])([*_])(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}])/gu, '$1$3')
     .replace(/\\([\\`*_{}[\]()#+\-.!~>])/g, '$1')
     .replace(/\n{2,}/g, '\n')
     .trim();

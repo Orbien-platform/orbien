@@ -28,7 +28,7 @@ import {
 import { isImageUrl } from "../lib/content/media";
 import type { Post } from "../lib/content/types";
 import { useTheme } from "../lib/theme/theme-provider";
-import { radius, scrim, spacing, typography } from "../lib/theme/tokens";
+import { pagerDot, pressedImageOpacity, radius, scrim, spacing, typography } from "../lib/theme/tokens";
 import { useScreenPadding } from "./Screen";
 
 /** 16:9 — o formato de banner que a igreja já produz para telão e redes. */
@@ -72,7 +72,7 @@ export function HeroSlider({ posts, onPressPost }: HeroSliderProps) {
             width: slideWidth,
             height: slideHeight,
             backgroundColor: hasImage ? colors.bgSubtle : primaryColor,
-            opacity: pressed ? 0.9 : 1,
+            opacity: pressed ? pressedImageOpacity : 1,
           },
         ]}
       >
@@ -143,6 +143,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.sm,
   },
-  dot: { width: 6, height: 6, borderRadius: radius.pill },
-  dotActive: { width: 16 },
+  dot: { width: pagerDot.size, height: pagerDot.size, borderRadius: radius.pill },
+  dotActive: { width: pagerDot.activeWidth },
 });

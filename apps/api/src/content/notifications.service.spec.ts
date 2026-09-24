@@ -758,6 +758,12 @@ describe('markdownToPlainText', () => {
     ).toBe('Culto\nOi forte ital risc site 2*3\na\nb\ncit');
   });
 
+  it('sublinhado e asterisco no meio do texto não são itálico', () => {
+    expect(markdownToPlainText('veja nome_do_arquivo e 2 * 3 * 4, _isto_ sim')).toBe(
+      'veja nome_do_arquivo e 2 * 3 * 4, isto sim',
+    );
+  });
+
   it('texto puro passa igual', () => {
     expect(markdownToPlainText('Culto domingo às 19h.')).toBe('Culto domingo às 19h.');
   });

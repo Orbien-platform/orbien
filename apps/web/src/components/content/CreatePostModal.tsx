@@ -388,6 +388,7 @@ export function CreatePostModal({
             </Label>
             <RichTextEditor
               id="cp-body"
+              label="Corpo"
               placeholder="Conteúdo do post…"
               value={body}
               onChange={setBody}

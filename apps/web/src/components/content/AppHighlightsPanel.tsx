@@ -37,27 +37,37 @@ export function AppHighlightsPanel({ canEdit }: { canEdit: boolean }) {
   const [saved, setSaved] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
-  // Carrega uma vez: o painel é montado ao abrir a aba. Todo setState fica
-  // depois do `await`, que é o que `react-hooks/set-state-in-effect` cobra.
+  // Duas listas: os escolhidos (`highlighted=true`, rascunho incluído, sem
+  // depender de estarem entre os mais recentes) e o acervo para escolher.
+  // `Promise.all` e não `allSettled` de propósito: com só uma das duas, o
+  // painel mostraria uma lista incompleta, e salvar a partir dela tiraria do
+  // carrossel quem faltou. Falhou uma, falha o painel, e sem botão de salvar.
+  // Carrega uma vez; todo setState fica depois do `await`, que é o que
+  // `react-hooks/set-state-in-effect` cobra.
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<{ data: HighlightPost[] }>("/content/posts", { params: { limit: 100 } })
-      .then(({ data }) => {
+    Promise.all([
+      api.get<{ data: HighlightPost[] }>("/content/posts", {
+        params: { highlighted: true, limit: MAX_APP_HIGHLIGHTS },
+      }),
+      api.get<{ data: HighlightPost[] }>("/content/posts", { params: { limit: 100 } }),
+    ])
+      .then(([chosen, pool]) => {
         if (cancelled) return;
-        const list = data.data ?? [];
-        const ids = list
-          .filter((p) => p.app_highlight_position != null)
-          .sort((a, b) => (a.app_highlight_position ?? 0) - (b.app_highlight_position ?? 0))
-          .map((p) => p.id);
-        setPosts(list);
+        const picked = [...(chosen.data.data ?? [])].sort(
+          (a, b) => (a.app_highlight_position ?? 0) - (b.app_highlight_position ?? 0),
+        );
+        const ids = picked.map((p) => p.id);
+        const rest = (pool.data.data ?? []).filter((p) => !ids.includes(p.id));
+        setPosts([...picked, ...rest]);
         setSelected(ids);
         setSaved(ids);
       })
       .catch(() => {
-        if (!cancelled) setMessage({ tone: "error", text: "Não foi possível carregar os posts." });
+        if (!cancelled) setLoadFailed(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -101,6 +111,16 @@ export function AppHighlightsPanel({ canEdit }: { canEdit: boolean }) {
       <div className="flex items-center gap-2 py-8 text-sm text-stone">
         <Loader2 size={15} className="animate-spin" /> Carregando…
       </div>
+    );
+  }
+
+  // Erro de carga não pode parecer "nenhum destaque": para quem só lê, é a
+  // diferença entre "ninguém escolheu" e "não deu para saber".
+  if (loadFailed) {
+    return (
+      <p role="alert" className="py-8 text-sm text-crimson">
+        Não foi possível carregar os destaques. Recarregue a página para tentar de novo.
+      </p>
     );
   }
 
@@ -174,7 +194,7 @@ export function AppHighlightsPanel({ canEdit }: { canEdit: boolean }) {
             {message && (
               <span
                 role="status"
-                className={cn("text-sm", message.tone === "ok" ? "text-teal" : "text-red-600")}
+                className={cn("text-sm", message.tone === "ok" ? "text-teal" : "text-crimson")}
               >
                 {message.text}
               </span>

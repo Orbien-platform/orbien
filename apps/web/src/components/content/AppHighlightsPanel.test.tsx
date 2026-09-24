@@ -17,7 +17,15 @@ const posts = [
 describe("AppHighlightsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.get).mockResolvedValue({ data: { data: posts } });
+    vi.mocked(api.get).mockImplementation((_url: string, config?: { params?: unknown }) =>
+      Promise.resolve({
+        data: {
+          data: (config?.params as { highlighted?: boolean } | undefined)?.highlighted
+            ? posts.filter((p) => p.app_highlight_position != null)
+            : posts,
+        },
+      }) as never,
+    );
     vi.mocked(api.put).mockResolvedValue({ data: [] });
   });
 
@@ -60,5 +68,29 @@ describe("AppHighlightsPanel", () => {
     await screen.findByTestId("highlight-b");
     expect(screen.queryByRole("button", { name: "Salvar destaques" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Subir" })).not.toBeInTheDocument();
+  });
+
+  it("destaque fora dos 100 mais recentes continua na lista (vem de highlighted=true)", async () => {
+    const antigo = { ...posts[0]!, id: "velho", title: "Destaque antigo", app_highlight_position: 2 };
+    vi.mocked(api.get).mockImplementation((_url: string, config?: { params?: unknown }) =>
+      Promise.resolve({
+        data: { data: (config?.params as { highlighted?: boolean } | undefined)?.highlighted ? [antigo] : posts.filter((p) => p.id === "c") },
+      }) as never,
+    );
+
+    render(<AppHighlightsPanel canEdit />);
+
+    expect(await screen.findByTestId("highlight-velho")).toBeInTheDocument();
+    expect(screen.getByText("Rascunho novo")).toBeInTheDocument();
+  });
+
+  it("falha ao carregar mostra erro — não 'nenhum destaque' — e não deixa salvar", async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error("boom"));
+
+    render(<AppHighlightsPanel canEdit={false} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar");
+    expect(screen.queryByText("Nenhum post em destaque.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar destaques" })).not.toBeInTheDocument();
   });
 });

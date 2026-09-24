@@ -627,6 +627,26 @@ No Render, o filtro é o `buildFilter` do `render.yaml`. Na Vercel, é o
 `turbo-ignore`. Mudança na raiz reconstrói tudo — o que é o comportamento
 correto, já que o lockfile é compartilhado.
 
+**Mobile novo contra API velha.** O OTA do mobile (`eas update` no job
+`mobile-eas-build` da CI) sai no mesmo merge em que o Render começa a buildar a
+API, e não espera por ele. A API recusa parâmetro que não conhece
+(`forbidNonWhitelisted`), então um app que passa a mandar um parâmetro novo
+recebe 400 até a API nova subir — foi o caso do `?published=true` em
+`GET /content/posts`, que deixa o feed, os avisos e o carrossel vazios nesse
+intervalo. Some sozinho quando o deploy termina, mas é visível. Quando a
+mudança do mobile depende de rota ou parâmetro novo da API, prefira mergear a
+API primeiro e o mobile num PR seguinte; ou, no mesmo PR, confira depois do
+merge que a API nova está no ar antes de dar o assunto por encerrado:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer <token>" \
+  'https://orbien-api.onrender.com/api/content/posts?published=true&limit=1'   # 200, não 400
+```
+
+O caminho inverso — API nova, app antigo — é compatível: parâmetro novo é
+sempre opcional.
+
 ---
 
 ## Problemas comuns

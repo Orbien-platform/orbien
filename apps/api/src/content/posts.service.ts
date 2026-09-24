@@ -106,6 +106,7 @@ export class PostsService {
       congregation_id: congregationId,
       ...(onlyLive ? LIVE_POST_FILTER : {}),
       ...(query.type ? { type: query.type } : {}),
+      ...(query.highlighted ? { app_highlight_position: { not: null } } : {}),
       ...(query.is_draft !== undefined && !onlyLive ? { is_draft: query.is_draft } : {}),
       ...(query.since
         ? { published_at: { not: null, gte: new Date(query.since) } }
