@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
@@ -26,6 +27,7 @@ import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { SetHighlightsDto } from './dto/set-highlights.dto';
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
 // Leitura da área vem da lista canônica (`auth/product-areas.ts`), que é a
@@ -56,6 +58,20 @@ export class PostsController {
   @Roles(...ALL_ROLES)
   findAll(@Query() query: ListPostsQueryDto, @CurrentUser() user: JwtPayload) {
     return this.postsService.findAll(user.tenant_id, user.congregation_id, user.roles, query);
+  }
+
+  // Antes de `:id`: o Express casa na ordem de declaração, e `highlights`
+  // cairia no `ParseUUIDPipe` como id inválido.
+  @Get('highlights')
+  @Roles(...ALL_ROLES)
+  listHighlights(@CurrentUser() user: JwtPayload) {
+    return this.postsService.listHighlights(user.tenant_id, user.congregation_id);
+  }
+
+  @Put('highlights')
+  @Roles(...WRITE_ROLES)
+  setHighlights(@Body() dto: SetHighlightsDto, @CurrentUser() user: JwtPayload) {
+    return this.postsService.setHighlights(user.tenant_id, user.congregation_id, dto.post_ids);
   }
 
   @Get(':id')

@@ -1174,6 +1174,13 @@ model ContentPost {
   // bloco (`PROD-24`).
   registration_price    Decimal?  @db.Decimal(12, 2)
 
+  // --- Destaque no app ---
+  // Posição no carrossel da home do mobile, escolhida no web. NULL é "não
+  // está em destaque"; o carrossel lista os não nulos em ordem crescente.
+  // `PUT /content/posts/highlights` regrava a lista inteira de uma vez, então
+  // não há dois posts disputando a mesma posição.
+  app_highlight_position Int?
+
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   createdBy    UserAccount  @relation(fields: [created_by_user_id], references: [id], onDelete: Restrict)
@@ -1186,6 +1193,7 @@ model ContentPost {
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, published_at])
+  @@index([tenant_id, congregation_id, app_highlight_position])
   @@map("content_posts")
 }
 

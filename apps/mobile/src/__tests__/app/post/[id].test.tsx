@@ -47,7 +47,47 @@ describe("PostScreen", () => {
     await waitFor(() => {
       expect(screen.getByTestId("post-title").props.children).toBe("Culto especial");
     });
-    expect(screen.getByTestId("post-body").props.children).toBe("Não perca o culto de domingo.");
+    expect(screen.getByText("Não perca o culto de domingo.")).toBeTruthy();
+  });
+
+  it("corpo em Markdown sai formatado, sem os símbolos crus", async () => {
+    mockGetPost.mockResolvedValue({
+      id: "post-1",
+      type: "announcement",
+      title: "Culto especial",
+      body: "## Programação\n\n- **Louvor** às 19h\n- Palavra",
+      media_url: null,
+      published_at: "2026-09-01T00:00:00.000Z",
+      created_at: "2026-08-30T00:00:00.000Z",
+    });
+
+    await act(async () => {
+      render(<PostScreen />);
+    });
+
+    await waitFor(() => screen.getByText("Programação"));
+    expect(screen.getByText("Louvor")).toBeTruthy();
+    expect(screen.queryByText(/\*\*/)).toBeNull();
+    expect(screen.queryByText(/##/)).toBeNull();
+  });
+
+  it("imagem vira capa; PDF vira link 'Abrir anexo' em vez de imagem quebrada", async () => {
+    mockGetPost.mockResolvedValue({
+      id: "post-1",
+      type: "announcement",
+      title: "Boletim",
+      body: null,
+      media_url: "https://cdn/x/boletim.pdf",
+      published_at: "2026-09-01T00:00:00.000Z",
+      created_at: "2026-08-30T00:00:00.000Z",
+    });
+
+    await act(async () => {
+      render(<PostScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("post-attachment"));
+    expect(screen.queryByTestId("post-media")).toBeNull();
   });
 
   it("404: mostra 'Post não encontrado', sem travar", async () => {

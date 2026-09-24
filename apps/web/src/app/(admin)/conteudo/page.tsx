@@ -8,6 +8,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { CreatePostModal, POST_TYPE_LABELS, type PostType } from "@/components/content/CreatePostModal";
 import { PostDetailSheet } from "@/components/content/PostDetailSheet";
+import { AppHighlightsPanel } from "@/components/content/AppHighlightsPanel";
 import { CreateSegmentModal } from "@/components/content/CreateSegmentModal";
 import { SendNotificationModal } from "@/components/content/SendNotificationModal";
 import { useAuth } from "@/hooks/useAuth";
@@ -297,6 +298,7 @@ export default function ConteudoPage() {
       <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
         <Tabs.List className="flex border-b border-[var(--border-default)]">
           <Tabs.Tab value="posts" className={tabBtn(activeTab === "posts")}>Posts</Tabs.Tab>
+          <Tabs.Tab value="destaques" className={tabBtn(activeTab === "destaques")}>Destaques no app</Tabs.Tab>
           <Tabs.Tab value="segmentos" className={tabBtn(activeTab === "segmentos")}>Segmentos</Tabs.Tab>
           <Tabs.Tab value="notificacoes" className={tabBtn(activeTab === "notificacoes")}>Notificações</Tabs.Tab>
         </Tabs.List>
@@ -355,6 +357,11 @@ export default function ConteudoPage() {
               )
             }
           />
+        </Tabs.Panel>
+
+        {/* ── Tab: Destaques no app ── */}
+        <Tabs.Panel value="destaques" className="pt-5">
+          {activeTab === "destaques" && <AppHighlightsPanel canEdit={canEdit} />}
         </Tabs.Panel>
 
         {/* ── Tab: Segmentos ── */}

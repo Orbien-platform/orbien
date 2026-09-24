@@ -20,10 +20,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { POST_TYPE_LABELS, type PostType } from "@/components/content/CreatePostModal";
+import { MarkdownView } from "@/components/content/MarkdownView";
+import { RichTextEditor } from "@/components/content/RichTextEditor";
 import { MediaUploadField, iconForFile } from "@/components/content/MediaUploadField";
 import { EventRegistrationsPanel } from "@/components/content/EventRegistrationsPanel";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
+import { isImageUrl } from "@/lib/media";
 import api from "@/lib/api";
 import { formatInstant } from "@/lib/datetime";
 
@@ -399,14 +402,8 @@ export function PostDetailSheet({
                     <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} disabled={isSaving} className="rounded-[8px]" />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-sm font-medium text-ink dark:text-white">Corpo</Label>
-                    <textarea
-                      rows={6}
-                      value={editBody}
-                      onChange={(e) => setEditBody(e.target.value)}
-                      disabled={isSaving}
-                      className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink focus:outline-none dark:text-white resize-none font-mono"
-                    />
+                    <Label htmlFor="pd-body" className="text-sm font-medium text-ink dark:text-white">Corpo</Label>
+                    <RichTextEditor id="pd-body" label="Corpo" value={editBody} onChange={setEditBody} disabled={isSaving} />
                   </div>
                   <MediaUploadField
                     mode={editMediaMode}
@@ -452,11 +449,25 @@ export function PostDetailSheet({
               ) : (
                 /* ── View mode ── */
                 <div className="flex flex-col gap-4">
+                  {/* Imagem de capa: é o que o app mostra no topo do post e
+                      no carrossel da home, então aparece aqui do mesmo jeito
+                      em vez de virar só um link com o nome do arquivo. */}
+                  {isImageUrl(post.media_url) && (
+                    // eslint-disable-next-line @next/next/no-img-element -- URL externa (R2), sem otimização
+                    <img
+                      src={post.media_url!}
+                      alt=""
+                      data-testid="post-detail-image"
+                      className="w-full max-h-72 rounded-[8px] object-cover bg-[var(--surface-subtle)]"
+                    />
+                  )}
+
                   {/* Body text */}
                   {post.body ? (
-                    <div className="text-sm text-ink dark:text-white leading-relaxed whitespace-pre-wrap">
-                      {post.body}
-                    </div>
+                    <MarkdownView
+                      markdown={post.body}
+                      className="text-sm text-ink dark:text-white leading-relaxed"
+                    />
                   ) : (
                     <p className="text-sm text-stone italic">Sem conteúdo.</p>
                   )}

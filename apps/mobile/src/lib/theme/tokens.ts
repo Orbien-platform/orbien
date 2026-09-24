@@ -179,6 +179,21 @@ export const touchTarget = 48;
  * escolhe por largura real é `Screen` (src/components/Screen.tsx). */
 export const screenPadding = { compact: 16, regular: 20 } as const;
 
+/** Véu sobre foto para texto claro por cima (carrossel da home). É `ink` a
+ * 55%: escurece o bastante para o título ler em qualquer foto, nos dois
+ * modos, sem apagar a imagem. */
+export const scrim = "rgba(15, 17, 23, 0.55)";
+
+/** Toque em superfície de foto: escurece levemente. O `bg-subtle` que o Card
+ * usa no pressed (§8) não aparece por baixo de uma imagem. */
+export const pressedImageOpacity = 0.9;
+
+/** Indicador de página do carrossel: ponto inativo e o ativo, esticado. */
+export const pagerDot = { size: 6, activeWidth: 16 } as const;
+
+/** Filete à esquerda de citação no corpo do post. */
+export const quoteRuleWidth = 3;
+
 /** Tamanhos de ícone (§5). Stroke 1.5, sempre outline. */
 export const iconSize = {
   /** Inline com texto. */
