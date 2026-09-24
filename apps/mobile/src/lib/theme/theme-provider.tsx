@@ -30,8 +30,8 @@ import { useAuth } from "../auth/auth-provider";
 import {
   brandingLayer,
   buildTimeLayer,
-  colorsOnly,
   PLATFORM_THEME,
+  preLoginLayer,
   resolveBrandTheme,
   type BrandTheme,
   type BrandThemeLayer,
@@ -225,12 +225,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // `PLATFORM_THEME` é a semente do reduce; daqui para a direita, quem
     // opina depois ganha.
     //
-    // Sem sessão, do cache só entram cor e logo (`colorsOnly`): o NOME do
-    // último tenant na tela de login seria identidade errada — ver o
-    // comentário da função em ./brand-theme.ts.
+    // Sem sessão, do cache entram cor, logo e nome (`preLoginLayer`), mas
+    // não o `tenantSlug` — ver o comentário da função em ./brand-theme.ts.
     const branding = resolveBrandTheme(
       buildTimeLayer(),
-      session ? cachedLayer : colorsOnly(cachedLayer),
+      session ? cachedLayer : preLoginLayer(cachedLayer),
       runtimeLayer,
     );
 
