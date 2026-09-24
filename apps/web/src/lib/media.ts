@@ -6,6 +6,5 @@
  */
 export function isImageUrl(url?: string | null): boolean {
   if (!url) return false;
-  const path = url.split(/[?#]/)[0] ?? "";
-  return /\.(jpe?g|png|webp|gif)$/i.test(path);
+  return /\.(jpe?g|png|webp|gif)$/i.test(url.replace(/[?#].*$/, ""));
 }

@@ -76,7 +76,7 @@ export function RichTextEditor({ id, label, value, onChange, placeholder, disabl
           "rich-text min-h-[140px] max-h-[360px] overflow-y-auto px-3 py-2 text-sm text-ink dark:text-white focus:outline-none",
       },
     },
-    onUpdate: ({ editor: e }) => onChange(e.getMarkdown()),
+    onUpdate: ({ editor: e }) => onChange(markdownOf(e)),
   });
 
   // O valor pode mudar por fora (o modal zera o formulário ao fechar; a folha
@@ -84,13 +84,15 @@ export function RichTextEditor({ id, label, value, onChange, placeholder, disabl
   // diverge, senão cada tecla voltaria o cursor para o início.
   useEffect(() => {
     if (!editor) return;
-    if (value !== editor.getMarkdown()) {
+    if (value.trimEnd() !== markdownOf(editor)) {
       editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false });
     }
   }, [editor, value]);
 
+  // `false`: sem ele `setEditable` emite um update, e o `onChange` disparava
+  // ao montar, sem ninguém ter digitado nada.
   useEffect(() => {
-    editor?.setEditable(!disabled);
+    editor?.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   return (
@@ -104,6 +106,16 @@ export function RichTextEditor({ id, label, value, onChange, placeholder, disabl
       <EditorContent editor={editor} />
     </div>
   );
+}
+
+/**
+ * O Markdown do editor sem as quebras de linha que o Tiptap deixa no fim
+ * (`"## texto\n\n"`). As duas pontas — o que sai em `onChange` e o que se
+ * compara com o `value` de fora — têm que usar a mesma forma, senão a
+ * comparação vê diferença onde não há e reescreve o conteúdo à toa.
+ */
+function markdownOf(editor: Editor): string {
+  return editor.getMarkdown().trimEnd();
 }
 
 function Toolbar({ editor, disabled }: { editor: Editor; disabled?: boolean }) {

@@ -24,6 +24,20 @@ test.describe("destaques no app", () => {
     errorLog,
     api,
   }) => {
+    // O job "E2E (produção)" roda as specs do PR contra o que está no ar, e
+    // esta funcionalidade só vai ao ar no merge do PR que a traz. Contra uma
+    // API que ainda não a tem (400 em `highlighted`), pula com o motivo à
+    // vista em vez de falhar. Só vale quando o alvo não é local: contra a API
+    // em localhost (o job "E2E" do CI e a máquina do dev), que roda o código
+    // da própria branch, a ausência é regressão e o teste tem que falhar.
+    const alvoRemoto = !/\/\/(localhost|127\.0\.0\.1)[:/]/.test(
+      process.env.E2E_API_URL ?? "http://localhost:3000/api",
+    );
+    test.skip(
+      alvoRemoto && !(await api.probe("/content/posts?highlighted=true&limit=1")),
+      "a API deste ambiente ainda não tem destaques no app — entra no deploy do PR que a traz",
+    );
+
     const stamp = Date.now();
     const tituloA = `Destaque A E2E ${stamp}`;
     const tituloB = `Destaque B E2E ${stamp}`;

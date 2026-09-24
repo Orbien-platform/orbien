@@ -57,8 +57,9 @@ export function AppHighlightsPanel({ canEdit }: { canEdit: boolean }) {
     ])
       .then(([chosen, pool]) => {
         if (cancelled) return;
+        // `highlighted=true` só devolve quem tem posição.
         const picked = [...(chosen.data.data ?? [])].sort(
-          (a, b) => (a.app_highlight_position ?? 0) - (b.app_highlight_position ?? 0),
+          (a, b) => a.app_highlight_position! - b.app_highlight_position!,
         );
         const ids = picked.map((p) => p.id);
         const rest = (pool.data.data ?? []).filter((p) => !ids.includes(p.id));
@@ -84,9 +85,9 @@ export function AppHighlightsPanel({ canEdit }: { canEdit: boolean }) {
 
   function move(index: number, delta: -1 | 1) {
     setSelected((cur) => {
+      // Sem checar os limites: nas pontas o botão já está desabilitado.
       const next = [...cur];
       const target = index + delta;
-      if (target < 0 || target >= next.length) return cur;
       [next[index], next[target]] = [next[target]!, next[index]!];
       return next;
     });
@@ -143,8 +144,8 @@ export function AppHighlightsPanel({ canEdit }: { canEdit: boolean }) {
         ) : (
           <ol className="flex flex-col gap-2">
             {selected.map((id, index) => {
-              const post = byId.get(id);
-              if (!post) return null;
+              // `selected` só recebe id que veio de `posts`.
+              const post = byId.get(id)!;
               return (
                 <li
                   key={id}

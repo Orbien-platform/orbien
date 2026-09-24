@@ -35,6 +35,8 @@ describe('PostsController', () => {
       remove: jest.fn(),
       publish: jest.fn(),
       uploadMedia: jest.fn(),
+      listHighlights: jest.fn(),
+      setHighlights: jest.fn(),
     } as unknown as jest.Mocked<PostsService>;
 
     jwtService = { sign: jest.fn().mockReturnValue('token') } as unknown as jest.Mocked<JwtService>;
@@ -66,6 +68,28 @@ describe('PostsController', () => {
 
   it('uploadTicket exige papel de escrita', () => {
     expect(rolesFor('uploadTicket')).toEqual(WRITE_ROLES);
+  });
+
+  it('destaques: leitura para todos os papéis, gravação só para escrita', () => {
+    expect(rolesFor('listHighlights')).toEqual(ALL_ROLES);
+    expect(rolesFor('setHighlights')).toEqual(WRITE_ROLES);
+  });
+
+  it('listHighlights delega ao service com tenant/congregação', async () => {
+    service.listHighlights.mockResolvedValue([{ id: 'p1' }] as never);
+
+    const result = await controller.listHighlights(USER);
+
+    expect(service.listHighlights).toHaveBeenCalledWith('t1', 'g1');
+    expect(result).toEqual([{ id: 'p1' }]);
+  });
+
+  it('setHighlights delega a lista na ordem recebida', async () => {
+    service.setHighlights.mockResolvedValue([] as never);
+
+    await controller.setHighlights({ post_ids: ['b', 'a'] }, USER);
+
+    expect(service.setHighlights).toHaveBeenCalledWith('t1', 'g1', ['b', 'a']);
   });
 
   it('create delega ao service com tenant/congregação/usuário', async () => {

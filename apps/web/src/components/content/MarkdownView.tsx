@@ -27,7 +27,7 @@ export function MarkdownView({ markdown, className }: { markdown: string; classN
   });
 
   useEffect(() => {
-    if (editor && markdown !== editor.getMarkdown()) {
+    if (editor && markdown.trimEnd() !== editor.getMarkdown().trimEnd()) {
       editor.commands.setContent(markdown, { contentType: "markdown", emitUpdate: false });
     }
   }, [editor, markdown]);
