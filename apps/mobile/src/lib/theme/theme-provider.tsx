@@ -225,8 +225,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // `PLATFORM_THEME` é a semente do reduce; daqui para a direita, quem
     // opina depois ganha.
     //
-    // Sem sessão, do cache só entram as cores (`colorsOnly`): nome e logo
-    // do último tenant na tela de login seriam identidade errada — ver o
+    // Sem sessão, do cache só entram cor e logo (`colorsOnly`): o NOME do
+    // último tenant na tela de login seria identidade errada — ver o
     // comentário da função em ./brand-theme.ts.
     const branding = resolveBrandTheme(
       buildTimeLayer(),

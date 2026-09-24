@@ -37,6 +37,7 @@ const CONGREGATION = {
   primary_color: null,
   accent_color: null,
   logo_url: null,
+  logo_url_dark: null,
 };
 
 describe('SettingsService', () => {
@@ -50,12 +51,14 @@ describe('SettingsService', () => {
         primary_color: '#111',
         accent_color: '#333',
         logo_url: 'https://cdn/logo-congregacao.png',
+        logo_url_dark: 'https://cdn/logo-congregacao-dark.png',
       });
       client.brandingConfig.findUnique.mockResolvedValue({
         app_name: 'App do Tenant',
         primary_color: '#222',
         secondary_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
+        logo_url_dark: 'https://cdn/logo-tenant-dark.png',
         splash_url: 'https://cdn/splash.png',
       });
       const { service } = serviceWith(client);
@@ -73,6 +76,7 @@ describe('SettingsService', () => {
         primary_color: '#111',
         accent_color: '#333',
         logo_url: 'https://cdn/logo-congregacao.png',
+        logo_url_dark: 'https://cdn/logo-congregacao-dark.png',
         splash_url: 'https://cdn/splash.png',
         custom_domain: null,
         terms_url: null,
@@ -90,6 +94,7 @@ describe('SettingsService', () => {
         // `accent_color` (ver ResolvedSettings em settings.service.ts)
         secondary_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
+        logo_url_dark: 'https://cdn/logo-tenant-dark.png',
         splash_url: null,
         custom_domain: 'doar.suaigreja.com.br',
         terms_url: 'https://suaigreja.com.br/termos',
@@ -103,6 +108,7 @@ describe('SettingsService', () => {
         primary_color: '#222',
         accent_color: '#444',
         logo_url: 'https://cdn/logo-tenant.png',
+        logo_url_dark: 'https://cdn/logo-tenant-dark.png',
         splash_url: null,
         custom_domain: 'doar.suaigreja.com.br',
         terms_url: 'https://suaigreja.com.br/termos',
@@ -123,6 +129,7 @@ describe('SettingsService', () => {
         primary_color: null,
         accent_color: null,
         logo_url: null,
+        logo_url_dark: null,
         splash_url: null,
         custom_domain: null,
         terms_url: null,
@@ -316,7 +323,9 @@ describe('SettingsService', () => {
       const client = clientWith();
       const { service } = serviceWith(client);
 
-      await expect(service.uploadLogo('t1', 'g1', undefined)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.uploadLogo('t1', 'g1', undefined, 'light')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it('lança BadRequestException quando o mimetype não é suportado', async () => {
@@ -324,7 +333,9 @@ describe('SettingsService', () => {
       const { service } = serviceWith(client);
       const file = { mimetype: 'text/plain', buffer: Buffer.from(''), originalname: 'a.txt' } as Express.Multer.File;
 
-      await expect(service.uploadLogo('t1', 'g1', file)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.uploadLogo('t1', 'g1', file, 'light')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it('lança NotFoundException quando a congregação não existe', async () => {
@@ -333,29 +344,61 @@ describe('SettingsService', () => {
       const { service } = serviceWith(client);
       const file = { mimetype: 'image/png', buffer: Buffer.from(''), originalname: 'a.png' } as Express.Multer.File;
 
-      await expect(service.uploadLogo('t1', 'g1', file)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.uploadLogo('t1', 'g1', file, 'light')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
-    it('remove o logo anterior e salva a nova URL', async () => {
+    it('remove o logo claro anterior e salva a nova URL no campo claro', async () => {
       const client = clientWith();
-      client.congregation.findUnique.mockResolvedValue({ logo_url: 'https://cdn/old-logo.png' });
+      client.congregation.findUnique.mockResolvedValue({
+        logo_url: 'https://cdn/old-logo.png',
+        logo_url_dark: 'https://cdn/old-logo-dark.png',
+      });
       client.congregation.update.mockResolvedValue({});
       const { service, storageService } = serviceWith(client);
       const file = { mimetype: 'image/webp', buffer: Buffer.from('img'), originalname: 'logo.webp' } as Express.Multer.File;
 
-      const result = await service.uploadLogo('t1', 'g1', file);
+      const result = await service.uploadLogo('t1', 'g1', file, 'light');
 
       expect(storageService.deleteByUrl).toHaveBeenCalledWith('https://cdn/old-logo.png');
       expect(storageService.upload).toHaveBeenCalledWith(
         file.buffer,
-        expect.stringContaining('branding/t1/g1/logo-'),
+        expect.stringContaining('branding/t1/g1/logo-light-'),
         'image/webp',
       );
       expect(client.congregation.update).toHaveBeenCalledWith({
         where: { id: 'g1' },
         data: { logo_url: 'https://cdn/logo.png' },
       });
-      expect(result).toEqual({ logo_url: 'https://cdn/logo.png' });
+      expect(result).toEqual({ logo_url: 'https://cdn/logo.png', logo_url_dark: 'https://cdn/old-logo-dark.png' });
+    });
+
+    it('remove o logo escuro anterior e salva a nova URL no campo escuro, sem tocar no claro', async () => {
+      const client = clientWith();
+      client.congregation.findUnique.mockResolvedValue({
+        logo_url: 'https://cdn/logo.png',
+        logo_url_dark: 'https://cdn/old-logo-dark.png',
+      });
+      client.congregation.update.mockResolvedValue({});
+      const { service, storageService } = serviceWith(client, {
+        upload: jest.fn().mockResolvedValue('https://cdn/logo-dark.png'),
+      });
+      const file = { mimetype: 'image/webp', buffer: Buffer.from('img'), originalname: 'logo.webp' } as Express.Multer.File;
+
+      const result = await service.uploadLogo('t1', 'g1', file, 'dark');
+
+      expect(storageService.deleteByUrl).toHaveBeenCalledWith('https://cdn/old-logo-dark.png');
+      expect(storageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringContaining('branding/t1/g1/logo-dark-'),
+        'image/webp',
+      );
+      expect(client.congregation.update).toHaveBeenCalledWith({
+        where: { id: 'g1' },
+        data: { logo_url_dark: 'https://cdn/logo-dark.png' },
+      });
+      expect(result).toEqual({ logo_url: 'https://cdn/logo.png', logo_url_dark: 'https://cdn/logo-dark.png' });
     });
   });
 });

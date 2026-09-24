@@ -27,6 +27,12 @@ describe("AnimatedSplash", () => {
     expect(screen.getByTestId("splash-logo")).toBeTruthy();
     expect(screen.getByTestId("splash-satellite")).toBeTruthy();
     expect(screen.getByTestId("splash")).toHaveStyle({ backgroundColor: "#1E3A7B" });
+    // `splash-icon.png` já traz o satélite assado (posição de repouso); a
+    // máscara na cor do fundo o apaga assim que o JS monta, para o satélite
+    // animado (acima dela) ser o único visível — sem "fantasma" parado.
+    expect(screen.getByTestId("splash-satellite-mask")).toHaveStyle({
+      backgroundColor: "#1E3A7B",
+    });
     // Sem "reduzir movimento" a opacidade do satélite é interpolada pela
     // órbita — nunca o `1` fixo do caminho reduzido (é o que faz o teste de
     // baixo distinguir os dois casos).

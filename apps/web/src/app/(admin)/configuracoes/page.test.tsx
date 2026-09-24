@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useTheme } from "next-themes";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
@@ -13,9 +14,11 @@ vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
+vi.mock("next-themes", () => ({ useTheme: vi.fn() }));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
+const mockedUseTheme = vi.mocked(useTheme);
 
 function setup(roles: string[] = ["tenant_admin"]) {
   mockedUseAuth.mockReturnValue({
@@ -58,6 +61,12 @@ beforeEach(() => {
   // jsdom não implementa createObjectURL/revokeObjectURL.
   global.URL.createObjectURL = vi.fn(() => "blob:preview");
   global.URL.revokeObjectURL = vi.fn();
+  mockedUseTheme.mockReturnValue({
+    resolvedTheme: "light",
+    theme: "light",
+    setTheme: vi.fn(),
+    themes: [],
+  } as unknown as ReturnType<typeof useTheme>);
 });
 
 describe("ConfiguracoesPage", () => {
@@ -89,35 +98,45 @@ describe("ConfiguracoesPage", () => {
     expect(mockedApi.patch).not.toHaveBeenCalled();
   });
 
-  it("valida e-mail de congregação e de organização inválidos, e cor inválida", async () => {
-    setup();
-    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
-    const user = userEvent.setup();
-    render(<ConfiguracoesPage />);
-    const congEmail = await screen.findByDisplayValue("cong@doca.com");
-    await user.clear(congEmail);
-    await user.type(congEmail, "invalido");
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    expect(await screen.findByText("E-mail da congregação inválido.")).toBeInTheDocument();
+  it(
+    "valida e-mail de congregação e de organização inválidos, e cor inválida",
+    async () => {
+      setup();
+      mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+      const user = userEvent.setup();
+      render(<ConfiguracoesPage />);
+      const congEmail = await screen.findByDisplayValue("cong@doca.com");
+      await user.clear(congEmail);
+      await user.type(congEmail, "invalido");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+      expect(await screen.findByText("E-mail da congregação inválido.")).toBeInTheDocument();
 
-    await user.clear(congEmail);
-    await user.type(congEmail, "cong@doca.com");
-    const orgEmail = screen.getByDisplayValue("org@doca.com");
-    await user.clear(orgEmail);
-    await user.type(orgEmail, "invalido");
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    expect(await screen.findByText("E-mail da organização inválido.")).toBeInTheDocument();
+      await user.clear(congEmail);
+      await user.type(congEmail, "cong@doca.com");
+      const orgEmail = screen.getByDisplayValue("org@doca.com");
+      await user.clear(orgEmail);
+      await user.type(orgEmail, "invalido");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+      expect(await screen.findByText("E-mail da organização inválido.")).toBeInTheDocument();
 
-    await user.clear(orgEmail);
-    await user.type(orgEmail, "org@doca.com");
-    const colorInput = screen.getByPlaceholderText("#1C3D5A");
-    await user.clear(colorInput);
-    await user.type(colorInput, "not-a-color");
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    expect(
-      await screen.findByText("Cor principal deve ser um código hexadecimal válido (ex: #1C3D5A).")
-    ).toBeInTheDocument();
-  });
+      await user.clear(orgEmail);
+      await user.type(orgEmail, "org@doca.com");
+      const colorInput = screen.getByPlaceholderText("#1C3D5A");
+      await user.clear(colorInput);
+      await user.type(colorInput, "not-a-color");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+      expect(
+        await screen.findByText("Cor principal deve ser um código hexadecimal válido (ex: #1C3D5A).")
+      ).toBeInTheDocument();
+    },
+    // Três ciclos de clear/type/click sequenciais (userEvent digita
+    // caractere a caractere) já perto do timeout default de 5000ms sob
+    // carga normal; em CI mais lento (visto no PR #121: essa suíte rodou
+    // ~3x mais devagar que local) ele estourava sem nenhum bug de lógica —
+    // só faltava orçamento. Mesmo padrão de
+    // ServiceOrderView.test.tsx/SongCatalogPanel.test.tsx.
+    10000
+  );
 
   it("salva com sucesso, reaplica os dados retornados e mostra o toast", async () => {
     setup();
@@ -164,8 +183,155 @@ describe("ConfiguracoesPage", () => {
     await user.upload(fileInput, file);
 
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    await waitFor(() => expect(mockedApi.post).toHaveBeenCalledWith("/settings/logo", expect.any(FormData)));
+    await waitFor(() =>
+      expect(mockedApi.post).toHaveBeenCalledWith("/settings/logo?variant=light", expect.any(FormData))
+    );
     expect(await screen.findByAltText("Logotipo")).toHaveAttribute("src", "https://cdn/logo.png");
+  });
+
+  it("clica no botão do logotipo escuro sem lançar erro (abre o seletor de arquivo)", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    await user.click(screen.getByRole("button", { name: "Logotipo (modo escuro)" }));
+  });
+
+  it("faz upload do logotipo escuro para a variante dark, sem afetar o claro", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.post.mockResolvedValue({ data: { logo_url_dark: "https://cdn/logo-dark.png" } });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const file = new File(["conteudo"], "logo-dark.png", { type: "image/png" });
+    const fileInput = screen.getByRole("button", { name: "Logotipo (modo escuro)" })
+      .previousElementSibling as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() =>
+      expect(mockedApi.post).toHaveBeenCalledWith("/settings/logo?variant=dark", expect.any(FormData))
+    );
+    expect(await screen.findByAltText("Logotipo (modo escuro)")).toHaveAttribute(
+      "src",
+      "https://cdn/logo-dark.png"
+    );
+  });
+
+  it("nomeia o logotipo claro no erro quando só o upload claro falha", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.post.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const file = new File(["conteudo"], "logo.png", { type: "image/png" });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(
+      await screen.findByText(
+        "Configurações salvas, mas o upload do logotipo claro falhou. Tente novamente."
+      )
+    ).toBeInTheDocument();
+    // Configurações continuam salvas mesmo com o upload falhando — não é
+    // rollback do PATCH, só o upload em si que não completou.
+    expect(mockedApi.patch).toHaveBeenCalled();
+  });
+
+  it("nomeia os dois logotipos no erro quando claro e escuro falham juntos", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.post.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    const lightInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(lightInput, new File(["a"], "logo.png", { type: "image/png" }));
+    const darkInput = screen.getByRole("button", { name: "Logotipo (modo escuro)" })
+      .previousElementSibling as HTMLInputElement;
+    await user.upload(darkInput, new File(["b"], "logo-dark.png", { type: "image/png" }));
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(
+      await screen.findByText(
+        "Configurações salvas, mas o upload do logotipo claro e do logotipo escuro falhou. Tente novamente."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("usa o logo escuro na prévia quando o tema do navegador é escuro", async () => {
+    setup();
+    mockedUseTheme.mockReturnValue({
+      resolvedTheme: "dark",
+      theme: "dark",
+      setTheme: vi.fn(),
+      themes: [],
+    } as unknown as ReturnType<typeof useTheme>);
+    mockedApi.get.mockResolvedValue({
+      data: settingsPayload({
+        branding: {
+          app_name: "X",
+          primary_color: "#111",
+          logo_url: "https://cdn/light.png",
+          logo_url_dark: "https://cdn/dark.png",
+          splash_url: null,
+        },
+      }),
+    });
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    expect(await screen.findByAltText("Logotipo")).toHaveAttribute("src", "https://cdn/dark.png");
+  });
+
+  it("cai no logo claro na prévia em tema escuro quando não há logo escuro cadastrado", async () => {
+    setup();
+    mockedUseTheme.mockReturnValue({
+      resolvedTheme: "dark",
+      theme: "dark",
+      setTheme: vi.fn(),
+      themes: [],
+    } as unknown as ReturnType<typeof useTheme>);
+    mockedApi.get.mockResolvedValue({
+      data: settingsPayload({
+        branding: {
+          app_name: "X",
+          primary_color: "#111",
+          logo_url: "https://cdn/light.png",
+          logo_url_dark: null,
+          splash_url: null,
+        },
+      }),
+    });
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+
+    expect(await screen.findByAltText("Logotipo")).toHaveAttribute("src", "https://cdn/light.png");
+  });
+
+  it("troca o logotipo escuro escolhido antes de salvar (revoga a preview anterior)", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    const fileInput = screen.getByRole("button", { name: "Logotipo (modo escuro)" })
+      .previousElementSibling as HTMLInputElement;
+
+    await user.upload(fileInput, new File(["a"], "um.png", { type: "image/png" }));
+    await user.upload(fileInput, new File(["b"], "dois.png", { type: "image/png" }));
+    expect(global.URL.revokeObjectURL).toHaveBeenCalled();
   });
 
   it("rejeita arquivo de logotipo com formato ou tamanho inválidos", async () => {
@@ -304,7 +470,7 @@ describe("ConfiguracoesPage", () => {
       }
     }
 
-    await user.click(screen.getByRole("button", { name: "Alterar logotipo" }));
+    await user.click(screen.getByRole("button", { name: "Logotipo (modo claro)" }));
 
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());

@@ -49,6 +49,38 @@ describe("BrandLogo", () => {
     );
   });
 
+  it("tema escuro com logo escuro cadastrado: usa a variante escura", async () => {
+    mockUseTheme.mockReturnValue(
+      theme({
+        logoUrl: "https://igreja.example/logo.png",
+        logoUrlDark: "https://igreja.example/logo-dark.png",
+        isDark: true,
+      }),
+    );
+
+    await act(async () => {
+      render(<BrandLogo />);
+    });
+
+    expect(screen.getByTestId("brand-logo").props.source.uri).toBe(
+      "https://igreja.example/logo-dark.png",
+    );
+  });
+
+  it("tema escuro sem logo escuro cadastrado: cai no logo claro", async () => {
+    mockUseTheme.mockReturnValue(
+      theme({ logoUrl: "https://igreja.example/logo.png", logoUrlDark: null, isDark: true }),
+    );
+
+    await act(async () => {
+      render(<BrandLogo />);
+    });
+
+    expect(screen.getByTestId("brand-logo").props.source.uri).toBe(
+      "https://igreja.example/logo.png",
+    );
+  });
+
   it("logo do tenant que não carrega: cai na marca, não deixa buraco", async () => {
     mockUseTheme.mockReturnValue(theme({ logoUrl: "https://igreja.example/quebrado.png" }));
 

@@ -2,16 +2,26 @@
 // (expo-splash-screen, configurada em app.config.js) enquanto a sessão
 // hidrata.
 //
-// A splash nativa mostra só o anel e o núcleo da marca; aqui o mesmo PNG é
-// desenhado no mesmo tamanho (`splashIconWidth`, vindo de
-// `Constants.expoConfig.extra`) e o satélite entra por cima, percorrendo a
-// órbita. Como a imagem não muda de tamanho nem de posição, a troca do
-// nativo para o JS não "pula" — o que aparece é o satélite começando a
-// girar.
+// `splash-icon.png` traz a marca completa — anel, núcleo E satélite na
+// posição de repouso (θ = 0, mesmo lugar do ícone do app) — para a splash
+// nativa nunca mostrar um desenho incompleto. Só que essa mesma imagem
+// também é a base daqui: sem tratamento, o satélite assado no PNG ficaria
+// parado no repouso enquanto a `View` animada abaixo desenha um segundo
+// satélite orbitando por cima — dois pontos na tela sempre que o animado
+// se afasta do repouso.
 //
-// Sem `react-native-svg`: o anel e o núcleo já vêm rasterizados no PNG, e o
-// satélite é uma `View` circular posicionada pela mesma equação da elipse
-// que gerou o asset. Uma dependência a menos por um `<Circle>`.
+// `satelliteMask` resolve isso: um círculo na cor do fundo, do mesmo
+// tamanho e posição do satélite assado, sempre visível enquanto este
+// componente está montado — apaga o satélite do PNG assim que o JS assume,
+// e a `View` animada (por cima do mask) redesenha o satélite de verdade,
+// parado ou em órbita. O que a splash nativa mostra (satélite assado, sem
+// JS nenhum) e o que o primeiro frame do JS mostra (satélite "de verdade"
+// no mesmo lugar) são visualmente idênticos — é isso que faz a troca não
+// "pular".
+//
+// Sem `react-native-svg` para o satélite animado: ele é uma `View` circular
+// posicionada pela mesma equação da elipse que gerou o asset. Uma
+// dependência a menos por um `<Circle>`.
 import Constants from "expo-constants";
 import { useEffect, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from "react-native";
@@ -128,6 +138,10 @@ export function AnimatedSplash({ onReady }: { onReady?: () => void }) {
           style={styles.logo}
           resizeMode="contain"
         />
+        <View
+          testID="splash-satellite-mask"
+          style={[styles.satelliteMask, { backgroundColor: BACKGROUND }]}
+        />
         <Animated.View
           testID="splash-satellite"
           style={[
@@ -173,5 +187,17 @@ const styles = StyleSheet.create({
     height: satelliteRadius * 2,
     borderRadius: satelliteRadius,
     backgroundColor: SATELLITE_COLOR,
+  },
+  // Mesma posição e tamanho do satélite assado em `splash-icon.png` — que é
+  // a posição de repouso (θ = 0) da órbita, `orbitCenterX + orbitRadiusX`.
+  // Apaga esse satélite assado enquanto o JS está montado; ver comentário
+  // do módulo.
+  satelliteMask: {
+    position: "absolute",
+    left: orbitCenterX + orbitRadiusX - satelliteRadius,
+    top: orbitCenterY - satelliteRadius,
+    width: satelliteRadius * 2,
+    height: satelliteRadius * 2,
+    borderRadius: satelliteRadius,
   },
 });

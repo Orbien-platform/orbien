@@ -97,6 +97,10 @@ model Congregation {
   email         String?
   phone         String?
   logo_url      String?
+  /// Logotipo em variante para modo escuro — par de `logo_url` (o claro).
+  /// Nulo cai para `logo_url` nos dois modos, mesma lógica de degradação
+  /// de `BrandingConfig.logo_url_dark`.
+  logo_url_dark String?
   primary_color String?
   /// Cor de destaque (accent) da congregação — o par de `primary_color`,
   /// com a mesma semântica de override: se nula, cai na do tenant, que é
@@ -170,6 +174,11 @@ model BrandingConfig {
   /// conhece. Renomear a coluna é migration própria; não misturar.
   secondary_color String?
   logo_url        String?
+  /// Logotipo em variante para modo escuro — par de `logo_url` (o claro).
+  /// Nulo cai para `logo_url` nos dois modos: um tenant que só cadastrou um
+  /// logo continua vendo-o em qualquer tema, em vez de ficar sem logo no
+  /// escuro.
+  logo_url_dark   String?
   app_name        String?
   splash_url      String?
   pix_key         String?
