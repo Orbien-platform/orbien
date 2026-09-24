@@ -77,7 +77,7 @@ export default function LoginScreen() {
           {appName}
         </Text>
         <Text style={[typography.body, styles.tagline, { color: colors.textSecondary }]}>
-          Entre com os dados da sua igreja
+          Tão somente creia
         </Text>
       </View>
 
