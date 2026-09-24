@@ -98,35 +98,45 @@ describe("ConfiguracoesPage", () => {
     expect(mockedApi.patch).not.toHaveBeenCalled();
   });
 
-  it("valida e-mail de congregação e de organização inválidos, e cor inválida", async () => {
-    setup();
-    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
-    const user = userEvent.setup();
-    render(<ConfiguracoesPage />);
-    const congEmail = await screen.findByDisplayValue("cong@doca.com");
-    await user.clear(congEmail);
-    await user.type(congEmail, "invalido");
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    expect(await screen.findByText("E-mail da congregação inválido.")).toBeInTheDocument();
+  it(
+    "valida e-mail de congregação e de organização inválidos, e cor inválida",
+    async () => {
+      setup();
+      mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+      const user = userEvent.setup();
+      render(<ConfiguracoesPage />);
+      const congEmail = await screen.findByDisplayValue("cong@doca.com");
+      await user.clear(congEmail);
+      await user.type(congEmail, "invalido");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+      expect(await screen.findByText("E-mail da congregação inválido.")).toBeInTheDocument();
 
-    await user.clear(congEmail);
-    await user.type(congEmail, "cong@doca.com");
-    const orgEmail = screen.getByDisplayValue("org@doca.com");
-    await user.clear(orgEmail);
-    await user.type(orgEmail, "invalido");
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    expect(await screen.findByText("E-mail da organização inválido.")).toBeInTheDocument();
+      await user.clear(congEmail);
+      await user.type(congEmail, "cong@doca.com");
+      const orgEmail = screen.getByDisplayValue("org@doca.com");
+      await user.clear(orgEmail);
+      await user.type(orgEmail, "invalido");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+      expect(await screen.findByText("E-mail da organização inválido.")).toBeInTheDocument();
 
-    await user.clear(orgEmail);
-    await user.type(orgEmail, "org@doca.com");
-    const colorInput = screen.getByPlaceholderText("#1C3D5A");
-    await user.clear(colorInput);
-    await user.type(colorInput, "not-a-color");
-    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
-    expect(
-      await screen.findByText("Cor principal deve ser um código hexadecimal válido (ex: #1C3D5A).")
-    ).toBeInTheDocument();
-  });
+      await user.clear(orgEmail);
+      await user.type(orgEmail, "org@doca.com");
+      const colorInput = screen.getByPlaceholderText("#1C3D5A");
+      await user.clear(colorInput);
+      await user.type(colorInput, "not-a-color");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+      expect(
+        await screen.findByText("Cor principal deve ser um código hexadecimal válido (ex: #1C3D5A).")
+      ).toBeInTheDocument();
+    },
+    // Três ciclos de clear/type/click sequenciais (userEvent digita
+    // caractere a caractere) já perto do timeout default de 5000ms sob
+    // carga normal; em CI mais lento (visto no PR #121: essa suíte rodou
+    // ~3x mais devagar que local) ele estourava sem nenhum bug de lógica —
+    // só faltava orçamento. Mesmo padrão de
+    // ServiceOrderView.test.tsx/SongCatalogPanel.test.tsx.
+    10000
+  );
 
   it("salva com sucesso, reaplica os dados retornados e mostra o toast", async () => {
     setup();
