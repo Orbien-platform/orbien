@@ -1478,6 +1478,31 @@ Fechar antes de abrir a feature para usuário de verdade — hoje ela ainda não
 está exposta a tráfego real, então não é um incidente em produção, é uma
 pendência conhecida de pré-lançamento.
 
+### PEND-10 · Upload de mídia do web bloqueado por CORS em produção · aberto
+
+Sintoma (2026-09-24): no cadastro de notícia, `POST /api/content/posts/:id/upload`
+direto para `orbien-api.onrender.com` falha no navegador como erro de CORS; o
+`upload-ticket`, que passa pelo `/api-proxy`, responde normalmente. O upload é
+a **única** chamada cross-origin do `web` (ver `useFileUpload.ts`), então é o
+único lugar onde uma `ALLOWED_ORIGINS` errada aparece.
+
+Causa mais provável: a variável no painel do Render ainda com o domínio antigo
+`web.useorbien.com.br`. O `render.yaml` foi corrigido para `.com` em 2026-09-20
+(`0d04119`), mas `value:` do blueprint só chega ao serviço num sync do
+Blueprint — editar o arquivo não reescreve a variável que já existe no painel.
+
+Para fechar: no Render → `orbien-api` → Environment, conferir que
+`ALLOWED_ORIGINS` contém `https://web.useorbien.com` e redeployar. O código
+passou a normalizar a lista (espaço e barra final), o que cobre erro de
+digitação mas não domínio errado. Confirmar com o preflight:
+
+```bash
+curl -si -X OPTIONS https://orbien-api.onrender.com/api/content/posts/x/upload \
+  -H 'Origin: https://web.useorbien.com' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization' | grep -i access-control-allow-origin
+```
+
 ---
 
 ## 8. Ajustes — documento, rótulo e portão

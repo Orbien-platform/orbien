@@ -4,6 +4,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CreatePostModal } from "./CreatePostModal";
 import api from "@/lib/api";
 
+// O Tiptap precisa de layout e seleção reais, que o jsdom não tem; aqui o
+// que se testa é o formulário, então o editor vira um textarea que fala o
+// mesmo contrato (`value` em Markdown, `onChange` com a string).
+vi.mock("@/components/content/RichTextEditor", () => ({
+  RichTextEditor: ({ id, value, onChange, placeholder, disabled }: {
+    id?: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean;
+  }) => (
+    <textarea id={id} value={value} placeholder={placeholder} disabled={disabled}
+      onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+vi.mock("@/components/content/MarkdownView", () => ({
+  MarkdownView: ({ markdown }: { markdown: string }) => <div>{markdown}</div>,
+}));
+
 vi.mock("@/lib/api", () => ({
   default: {
     get: vi.fn(),

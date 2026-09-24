@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MediaUploadField } from "@/components/content/MediaUploadField";
+import { RichTextEditor } from "@/components/content/RichTextEditor";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -383,16 +384,14 @@ export function CreatePostModal({
           {/* Corpo */}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cp-body" className="text-sm font-medium text-ink dark:text-white">
-              Corpo <span className="text-xs font-normal text-stone">(suporta Markdown)</span>
+              Corpo
             </Label>
-            <textarea
+            <RichTextEditor
               id="cp-body"
-              rows={5}
               placeholder="Conteúdo do post…"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={setBody}
               disabled={isSubmitting}
-              className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white resize-none font-mono"
             />
           </div>
 

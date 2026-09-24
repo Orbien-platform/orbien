@@ -66,3 +66,21 @@ describe("HeroSlider", () => {
     expect(onPressPost).toHaveBeenCalledWith("post-2");
   });
 });
+
+describe("HeroSlider — imagem", () => {
+  it("post com imagem mostra a foto; sem imagem (ou com PDF) fica só o título", async () => {
+    const posts = [
+      makePost({ id: "com-foto", media_url: "https://cdn/x/banner.jpg" }),
+      makePost({ id: "com-pdf", media_url: "https://cdn/x/boletim.pdf" }),
+      makePost({ id: "sem-midia" }),
+    ];
+    await act(async () => {
+      render(<HeroSlider posts={posts} onPressPost={jest.fn()} />);
+    });
+
+    expect(screen.getByTestId("hero-slide-image-com-foto")).toBeTruthy();
+    expect(screen.queryByTestId("hero-slide-image-com-pdf")).toBeNull();
+    expect(screen.queryByTestId("hero-slide-image-sem-midia")).toBeNull();
+    expect(screen.getAllByText("Título do post")).toHaveLength(3);
+  });
+});

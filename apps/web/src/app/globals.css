@@ -166,3 +166,23 @@
     @apply font-sans;
   }
 }
+
+/* Corpo de post: o editor (`RichTextEditor`) e a leitura (`MarkdownView`)
+   usam a mesma classe, para o que se escreve ser o que se vê. O preflight do
+   Tailwind zera margem, tamanho de título e marcador de lista — sem isto a
+   formatação existiria no texto e sumiria na tela. */
+.rich-text > * + * { margin-top: 0.5em; }
+.rich-text h2 { font-size: 1.125rem; font-weight: 600; line-height: 1.4; }
+.rich-text h3 { font-size: 1rem; font-weight: 600; line-height: 1.4; }
+.rich-text ul { list-style: disc; padding-left: 1.25rem; }
+.rich-text ol { list-style: decimal; padding-left: 1.25rem; }
+.rich-text li > p { margin: 0; }
+.rich-text blockquote { border-left: 3px solid var(--border-default); padding-left: 0.75rem; font-style: italic; }
+.rich-text a { text-decoration: underline; text-underline-offset: 2px; }
+.rich-text p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-stone, #8a8a8a);
+}

@@ -16,6 +16,19 @@ const ALLOWED_MEDIA_MIME_TYPES = [
   'image/webp',
 ];
 
+/**
+ * O que está "no ar". Olha as duas colunas porque uma não basta: um post
+ * publicado e depois devolvido a rascunho mantém o `published_at` antigo, e
+ * um rascunho agendado tem `publish_at` mas ainda não `published_at`.
+ */
+const LIVE_POST_FILTER = {
+  is_draft: false,
+  published_at: { not: null },
+} satisfies Prisma.ContentPostWhereInput;
+
+/** Teto do carrossel da home do app. Mais que isso ninguém desliza. */
+export const MAX_APP_HIGHLIGHTS = 10;
+
 @Injectable()
 export class PostsService {
   constructor(
@@ -86,12 +99,14 @@ export class PostsService {
     const isMember = roles.length === 1 && roles[0] === 'member';
     const skip = (query.page - 1) * query.limit;
 
+    const onlyLive = isMember || query.published === true;
+
     const where: Prisma.ContentPostWhereInput = {
       tenant_id: tenantId,
       congregation_id: congregationId,
-      ...(isMember ? { published_at: { not: null } } : {}),
+      ...(onlyLive ? LIVE_POST_FILTER : {}),
       ...(query.type ? { type: query.type } : {}),
-      ...(query.is_draft !== undefined && !isMember ? { is_draft: query.is_draft } : {}),
+      ...(query.is_draft !== undefined && !onlyLive ? { is_draft: query.is_draft } : {}),
       ...(query.since
         ? { published_at: { not: null, gte: new Date(query.since) } }
         : {}),
@@ -131,7 +146,7 @@ export class PostsService {
         id,
         tenant_id: tenantId,
         congregation_id: congregationId,
-        ...(isMember ? { published_at: { not: null } } : {}),
+        ...(isMember ? LIVE_POST_FILTER : {}),
       },
       include: {
         postSegments: {
@@ -212,6 +227,68 @@ export class PostsService {
       void err;
     });
     return post;
+  }
+
+  /**
+   * Destaques do app, na ordem escolhida. Só o que está no ar, para qualquer
+   * papel: o carrossel é vitrine, e um destaque que voltou a rascunho some
+   * dele sem ninguém precisar tirá-lo da lista.
+   */
+  async listHighlights(tenantId: string, congregationId: string): Promise<ContentPost[]> {
+    return this.prisma.client.contentPost.findMany({
+      where: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        app_highlight_position: { not: null },
+        ...LIVE_POST_FILTER,
+      },
+      orderBy: { app_highlight_position: 'asc' },
+      take: MAX_APP_HIGHLIGHTS,
+    });
+  }
+
+  /**
+   * Regrava a lista inteira: a ordem de `postIds` é a ordem no app, e quem
+   * não está nela sai do destaque. Lista inteira em vez de "move este para
+   * a posição N" porque a tela do web já tem a lista na mão, e assim não há
+   * estado intermediário com duas linhas na mesma posição.
+   *
+   * Rascunho pode entrar — o organizador monta o carrossel antes de publicar
+   * — e `listHighlights` só o mostra quando for ao ar.
+   */
+  async setHighlights(
+    tenantId: string,
+    congregationId: string,
+    postIds: string[],
+  ): Promise<ContentPost[]> {
+    const unique = [...new Set(postIds)];
+    if (unique.length !== postIds.length) {
+      throw new BadRequestException('A lista de destaques tem post repetido.');
+    }
+
+    return this.prisma.runInTx(async (tx) => {
+      const found = await tx.contentPost.count({
+        where: { id: { in: unique }, tenant_id: tenantId, congregation_id: congregationId },
+      });
+      if (found !== unique.length) throw new NotFoundException('Post não encontrado');
+
+      await tx.contentPost.updateMany({
+        where: {
+          tenant_id: tenantId,
+          congregation_id: congregationId,
+          app_highlight_position: { not: null },
+        },
+        data: { app_highlight_position: null },
+      });
+      for (const [index, id] of unique.entries()) {
+        await tx.contentPost.update({ where: { id }, data: { app_highlight_position: index } });
+      }
+
+      return tx.contentPost.findMany({
+        where: { tenant_id: tenantId, congregation_id: congregationId, app_highlight_position: { not: null } },
+        orderBy: { app_highlight_position: 'asc' },
+      });
+    });
   }
 
   async remove(tenantId: string, congregationId: string, id: string): Promise<ContentPost> {

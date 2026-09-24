@@ -156,7 +156,9 @@ Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
 
 `ALLOWED_ORIGINS` é a lista de origens do CORS, separada por vírgula. Se o
 domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
-browser bloqueia as chamadas.
+browser bloqueia as chamadas. Mudar o `value:` no `render.yaml` não basta se o
+serviço não for sincronizado pelo Blueprint: confira a variável no painel. Hoje
+só o upload de mídia do `web` depende dela (`PEND-10` em `docs/PLANO.md`).
 
 **Pendente de configurar — Bíblia NVI (`biblia-nvi-marcacoes-mobile`, `PEND-09`
 em `docs/PLANO.md`).** `ApiBibleTextProvider`

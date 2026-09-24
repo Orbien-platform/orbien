@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, markdownToPlainText } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 function prismaWith(overrides: {
@@ -746,5 +746,19 @@ describe('NotificationsService', () => {
         expect.objectContaining({ where: expect.objectContaining({ person_id: { not: null } }) }),
       );
     });
+  });
+});
+
+describe('markdownToPlainText', () => {
+  it('tira a marcação que o editor do web produz', () => {
+    expect(
+      markdownToPlainText(
+        '## Culto\n\nOi **forte** *ital* ~~risc~~ [site](https://x.org) 2\\*3\n\n- a\n1. b\n\n> cit',
+      ),
+    ).toBe('Culto\nOi forte ital risc site 2*3\na\nb\ncit');
+  });
+
+  it('texto puro passa igual', () => {
+    expect(markdownToPlainText('Culto domingo às 19h.')).toBe('Culto domingo às 19h.');
   });
 });
