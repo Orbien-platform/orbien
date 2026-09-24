@@ -45,22 +45,22 @@ describe("ThemeProvider", () => {
     });
   });
 
-  it("sem sessão: o cache empresta COR e LOGO do último tenant, nunca o nome", async () => {
-    // A tela de login de uma build genérica reaproveita cor e logo do
-    // último tenant — continuidade visual legítima, é o pedido de "logo do
-    // último login em vez do logo da Orbien" na tela de login. O NOME
-    // continua de fora: dizer "Doca Church" antes de o usuário dizer em que
-    // igreja entra é que seria identidade errada.
+  it("sem sessão: o cache empresta COR, LOGO e NOME do último tenant, nunca o tenantSlug", async () => {
+    // A tela de login de uma build genérica reaproveita cor, logo e nome do
+    // último tenant — continuidade visual e textual legítima, é o pedido de
+    // "logo e nome do último login em vez dos da Orbien" na tela de login.
+    // O tenantSlug continua de fora: não é exibido ali, só monta a URL do
+    // CTA de Contribuição, que não existe na tela de login.
     mockUseAuth.mockReturnValue({ session: null });
     mockGetItem.mockResolvedValue(
       JSON.stringify({
         branding: {
-          app_name: "Doca Church",
+          app_name: "Igreja Cache",
           primary_color: "#00ff00",
           logo_url: "https://cache.example/logo.png",
           splash_url: null,
         },
-        tenantSlug: "doca-church",
+        tenantSlug: "igreja-cache",
       }),
     );
 
@@ -75,9 +75,9 @@ describe("ThemeProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("primaryColor").props.children).toBe("#00ff00");
     });
-    expect(screen.getByTestId("appName").props.children).toBe(DEFAULT_THEME.appName);
+    expect(screen.getByTestId("appName").props.children).toBe("Igreja Cache");
     expect(screen.getByTestId("logoUrl").props.children).toBe("https://cache.example/logo.png");
-    // tenantSlug continua identidade textual, igual ao nome — não vaza sem sessão.
+    // tenantSlug não é exibido na tela de login — não vaza sem sessão.
     expect(screen.getByTestId("tenantSlug").props.children).toBe("sem-tenant-slug");
     expect(mockAuthenticatedRequest).not.toHaveBeenCalled();
   });

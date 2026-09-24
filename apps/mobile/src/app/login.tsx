@@ -62,9 +62,9 @@ export default function LoginScreen() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <View style={styles.brand}>
         {/* Antes do login não há tenant resolvido: numa build genérica esta
-            é a marca da Orbien, e numa build personalizada o logo do tenant
-            só aparece a partir do segundo login (cache). Ver `colorsOnly`
-            em src/lib/theme/brand-theme.ts. */}
+            é a marca da Orbien, e numa build personalizada o logo e o nome
+            do tenant só aparecem a partir do segundo login (cache). Ver
+            `preLoginLayer` em src/lib/theme/brand-theme.ts. */}
         <View style={styles.logo}>
           <BrandLogo size={LOGO_SIZE} color={isDark ? colors.textPrimary : primaryColor} />
         </View>

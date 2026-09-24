@@ -1478,23 +1478,25 @@ Fechar antes de abrir a feature para usuário de verdade — hoje ela ainda não
 está exposta a tráfego real, então não é um incidente em produção, é uma
 pendência conhecida de pré-lançamento.
 
-### PEND-10 · Upload de mídia do web bloqueado por CORS em produção · aberto
+### ~~PEND-10 · Upload de mídia do web bloqueado por CORS em produção~~ · fechado
 
 Sintoma (2026-09-24): no cadastro de notícia, `POST /api/content/posts/:id/upload`
-direto para `orbien-api.onrender.com` falha no navegador como erro de CORS; o
-`upload-ticket`, que passa pelo `/api-proxy`, responde normalmente. O upload é
-a **única** chamada cross-origin do `web` (ver `useFileUpload.ts`), então é o
-único lugar onde uma `ALLOWED_ORIGINS` errada aparece.
+direto para `orbien-api.onrender.com` falhava no navegador como erro de CORS; o
+`upload-ticket`, que passa pelo `/api-proxy`, respondia normalmente. O upload é
+a **única** chamada cross-origin do `web` (ver `useFileUpload.ts`), então era o
+único lugar onde uma `ALLOWED_ORIGINS` errada aparecia.
 
-Causa mais provável: a variável no painel do Render ainda com o domínio antigo
+Causa: a variável no painel do Render ainda com o domínio antigo
 `web.useorbien.com.br`. O `render.yaml` foi corrigido para `.com` em 2026-09-20
-(`0d04119`), mas `value:` do blueprint só chega ao serviço num sync do
-Blueprint — editar o arquivo não reescreve a variável que já existe no painel.
+(`0d04119`), mas o serviço `orbien-api` não é gerenciado por Blueprint — foi
+criado pelo dashboard (ver `DEPLOY.md`, seção 1.1) — então `value:` do arquivo
+nunca chega ao serviço sozinho; a variável do painel só muda por edição manual.
 
-Para fechar: no Render → `orbien-api` → Environment, conferir que
-`ALLOWED_ORIGINS` contém `https://web.useorbien.com` e redeployar. O código
-passou a normalizar a lista (espaço e barra final), o que cobre erro de
-digitação mas não domínio errado. Confirmar com o preflight:
+**Fechado em 2026-09-24, por ação no painel do Render (fora do repo, sem
+commit associado):** `ALLOWED_ORIGINS` corrigida para `https://web.useorbien.com`
+em `orbien-api` → Environment, com redeploy em seguida. Confirmado pelo dev
+(não houve como esta sessão rodar o preflight abaixo — egress deste ambiente
+para `onrender.com` bloqueado por política da organização):
 
 ```bash
 curl -si -X OPTIONS https://orbien-api.onrender.com/api/content/posts/x/upload \

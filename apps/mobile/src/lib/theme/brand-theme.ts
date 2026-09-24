@@ -123,22 +123,23 @@ export function brandingLayer(
 }
 
 /**
- * Cor e logo de uma camada — o que continua valendo quando não há sessão.
+ * Cor, logo e nome de uma camada — o que continua valendo quando não há
+ * sessão.
  *
  * O cache de branding sobrevive ao logout de propósito (é o que faz o
- * segundo login abrir na cor e no logo da igreja). O NOME do tenant fica de
- * fora: "Doca Church" escrito na tela antes de dizer em que igreja vai
- * entrar seria a identidade errada, mesmo com o logo visível — mas o logo
- * sozinho é o mesmo tipo de continuidade visual que a cor já era, não uma
- * alegação por extenso. Sem sessão, o nome vem da build (versão
+ * segundo login abrir na cor, no logo e no nome da igreja). `tenantSlug`
+ * fica de fora: não é exibido na tela de login (só monta a URL do CTA de
+ * Contribuição, que não existe ali), então preservar esse resíduo não tem
+ * propósito. Sem sessão e sem cache, o nome vem da build (versão
  * personalizada) ou da plataforma.
  */
-export function colorsOnly(layer: BrandThemeLayer): BrandThemeLayer {
+export function preLoginLayer(layer: BrandThemeLayer): BrandThemeLayer {
   return {
     primaryColor: layer.primaryColor,
     accentColor: layer.accentColor,
     logoUrl: layer.logoUrl,
     logoUrlDark: layer.logoUrlDark,
+    appName: layer.appName,
   };
 }
 
