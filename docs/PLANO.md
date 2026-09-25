@@ -117,6 +117,53 @@ ver `PENDENCIAS.md`.
 Em **2026-09-24** fechou `PROD-26` (recuperação de senha por e-mail no app
 mobile) — nota completa na seção 5.
 
+Em **2026-09-25** fechou a lacuna que o próprio `PROD-19` (2026-09-13) tinha
+declarado em aberto — "apontar o domínio de fato... é passo de infra que
+este PR não faz". Domínio próprio virou provisionamento de verdade, dois
+caminhos:
+
+- **Manual** — `GET /settings/branding/domain` devolve o registro DNS
+  (CNAME para `cname.vercel-dns.com`, com a alternativa A para domínio raiz)
+  e `POST .../verify` confere contra a API da Vercel.
+- **Cloudflare, por OAuth** — sem colar API token: `GET
+  .../cloudflare/authorize-url` manda o tenant para
+  `dash.cloudflare.com/oauth2/auth`, ele aprova, `GET
+  .../cloudflare/callback` (rota pública, autenticada só pelo `state`
+  assinado — `SignedState`, HMAC-SHA256) troca o código por
+  access/refresh token, cifrados em repouso (`SecretCipher`, AES-256-GCM) e
+  usados para achar a zona certa (tentando o hostname inteiro e cortando um
+  rótulo por vez, sem lista de sufixo público) e criar o CNAME com
+  `proxied: false` — com o proxy laranja ligado a Vercel não emite
+  certificado.
+
+Módulo novo, `apps/api/src/domain-provisioning/`, no mesmo padrão de módulo
+próprio do `PixModule`. `BrandingConfig` ganhou `custom_domain_status`
+(`pending`/`verified`/`failed`) e os campos da conexão Cloudflare —
+migration comum, sem RLS novo: a tabela já tinha `tenant_isolation` (001) e
+`orbien_app_auth ... USING (true)` (017) para o login, e é essa segunda
+policy — a mesma que já deixava `resolveTenant(slug)` do `PixService` ler
+`branding_configs` sem contexto — que também cobre a leitura pública por
+`custom_domain` em `resolveTenantSlugByHost`, sem policy adicional.
+
+**O roteamento por host, que não existia em lugar nenhum, entrou junto.**
+`apps/web/src/middleware.ts` é novo: fora dos hosts conhecidos
+(`NEXT_PUBLIC_WEB_HOST`, `localhost`, `*.vercel.app`), chama `GET
+/public/domains/resolve?host=` e reescreve para a rota `[tenant_slug]`
+existente — só `/` → `/doar/{slug}` e `/celulas` → `/celulas/{slug}`,
+decisão de escopo declarada (são as duas páginas públicas que hoje existem;
+qualquer outro caminho cai no 404 normal). `resolveTenantSlugByHost` só
+resolve domínio `custom_domain_status = 'verified'` — um `pending` não serve
+tenant nenhum, para não expor conteúdo antes do dono confirmar o domínio.
+
+**Decisão que ficou de fora, registrada, não esquecida**: o app OAuth em
+`dash.cloudflare.com/oauth2` precisa ser cadastrado manualmente pela
+operação (gera `CLOUDFLARE_OAUTH_CLIENT_ID`/`_SECRET`) — nenhuma sessão de
+código cadastra isso sozinha, é o mesmo tipo de passo de infra que
+`VERCEL_API_TOKEN`/`VERCEL_WEB_PROJECT_ID` já eram. Os nomes exatos dos
+escopos OAuth (`CLOUDFLARE_OAUTH_SCOPES`) também dependem do catálogo atual
+da Cloudflare no momento do cadastro — configurável por env de propósito,
+não hardcoded.
+
 ---
 
 ## 1. Visão do produto

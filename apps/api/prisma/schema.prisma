@@ -186,10 +186,27 @@ model BrandingConfig {
   app_name        String?
   splash_url      String?
   pix_key         String?
-  /// PROD-19 — domínio próprio do tenant (Premium). Só o registro; apontar o
-  /// domínio de fato (DNS/CNAME, certificado) é passo de infra fora deste
-  /// schema — ver docs/PLANO.md.
+  /// PROD-19 — domínio próprio do tenant (Premium).
   custom_domain   String?  @unique
+  /// Provisionamento de fato do `custom_domain` (ver `docs/PLANO.md`):
+  /// "pending" enquanto o DNS não aponta/o cert não saiu, "verified" quando
+  /// a Vercel confirma o domínio, "failed" quando a última tentativa de
+  /// verificação não achou o registro esperado. Sem `custom_domain`, o
+  /// valor fica em "pending" e não significa nada — não há coluna própria
+  /// para "sem domínio configurado" porque o próprio `custom_domain IS NULL`
+  /// já diz isso.
+  custom_domain_status String @default("pending")
+  /// Access/refresh token da conexão OAuth com a conta Cloudflare do tenant,
+  /// cifrados com `SecretCipher` (AES-256-GCM, `DOMAIN_SECRETS_ENCRYPTION_KEY`)
+  /// — nunca em texto claro, porque dão acesso de edição de DNS na zona do
+  /// tenant. Nulos = tenant não conectou Cloudflare (caminho manual).
+  cloudflare_access_token_encrypted  String?
+  cloudflare_refresh_token_encrypted String?
+  cloudflare_token_expires_at        DateTime?
+  /// Zona Cloudflare onde o registro de `custom_domain` foi criado —
+  /// guardada para não precisar redescobrir a zona a cada verificação.
+  cloudflare_zone_id                 String?
+  cloudflare_connected_at            DateTime?
   /// PROD-19 — termos de uso próprios do tenant (Premium), como URL para o
   /// documento (mesmo padrão de `logo_url`/`splash_url`: link, não conteúdo
   /// inline).

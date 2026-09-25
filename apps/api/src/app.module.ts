@@ -25,6 +25,7 @@ import { SettingsModule } from './settings/settings.module';
 import { PlatformModule } from './platform/platform.module';
 import { AuditModule } from './audit/audit.module';
 import { BibleModule } from './bible/bible.module';
+import { DomainProvisioningModule } from './domain-provisioning/domain-provisioning.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -62,6 +63,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PlatformModule,
     AuditModule,
     BibleModule,
+    DomainProvisioningModule,
   ],
   providers: [
     // Global de propósito: é o rastro das sessões de suporte, que satisfazem
