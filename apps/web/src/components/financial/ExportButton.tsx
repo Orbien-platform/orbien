@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import { pollExportJob } from "@/lib/exportJobPolling";
 
 interface ExportButtonProps {
   periodStart: string;
@@ -15,8 +16,15 @@ type PdfType = "razao" | "diario";
 export function ExportButton({ periodStart, periodEnd }: ExportButtonProps) {
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingOfx, setIsExportingOfx] = useState(false);
+  const [isExportingSped, setIsExportingSped] = useState(false);
   const [pdfType, setPdfType] = useState<PdfType>("razao");
   const [error, setError] = useState("");
+  const spedAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => spedAbortRef.current?.abort();
+  }, []);
 
   async function downloadBlob(endpoint: string, body: object, filename: string) {
     const res = await api.post(endpoint, body, { responseType: "blob" });
@@ -29,6 +37,15 @@ export function ExportButton({ periodStart, periodEnd }: ExportButtonProps) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadFromUrl(url: string, filename: string) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   async function handleCsv() {
@@ -65,7 +82,48 @@ export function ExportButton({ periodStart, periodEnd }: ExportButtonProps) {
     }
   }
 
-  const busy = isExportingCsv || isExportingPdf;
+  async function handleOfx() {
+    if (!periodStart || !periodEnd) { setError("Selecione o período antes de exportar."); return; }
+    setError("");
+    setIsExportingOfx(true);
+    try {
+      await downloadBlob(
+        "/financial/export/ofx",
+        { period_start: periodStart, period_end: periodEnd },
+        `extrato-${periodStart}-${periodEnd}.ofx`
+      );
+    } catch {
+      setError("Erro ao exportar OFX.");
+    } finally {
+      setIsExportingOfx(false);
+    }
+  }
+
+  async function handleSped() {
+    if (!periodStart || !periodEnd) { setError("Selecione o período antes de exportar."); return; }
+    setError("");
+    setIsExportingSped(true);
+    try {
+      const res = await api.post<{ job_id: string; status: string }>("/financial/export/sped", {
+        period_start: periodStart,
+        period_end: periodEnd,
+      });
+      const controller = new AbortController();
+      spedAbortRef.current = controller;
+      const result = await pollExportJob(res.data.job_id, { signal: controller.signal });
+      if (result.status === "error") {
+        setError(result.errorMessage);
+        return;
+      }
+      downloadFromUrl(result.downloadUrl, `sped-${periodStart}-${periodEnd}.txt`);
+    } catch {
+      setError("Erro ao exportar SPED.");
+    } finally {
+      setIsExportingSped(false);
+    }
+  }
+
+  const busy = isExportingCsv || isExportingPdf || isExportingOfx || isExportingSped;
 
   return (
     <div className="flex flex-col items-end gap-1.5">
@@ -107,6 +165,32 @@ export function ExportButton({ periodStart, periodEnd }: ExportButtonProps) {
             PDF
           </Button>
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 rounded-[8px]"
+          onClick={handleOfx}
+          disabled={busy}
+        >
+          {isExportingOfx
+            ? <Loader2 size={13} className="animate-spin" />
+            : <Download size={13} strokeWidth={1.5} />}
+          OFX
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 rounded-[8px]"
+          onClick={handleSped}
+          disabled={busy}
+        >
+          {isExportingSped
+            ? <Loader2 size={13} className="animate-spin" />
+            : <Download size={13} strokeWidth={1.5} />}
+          SPED
+        </Button>
       </div>
     </div>
   );
