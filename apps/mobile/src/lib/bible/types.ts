@@ -36,6 +36,25 @@ export interface BibleVerseMark {
   person: { id: string; full_name: string } | null;
   is_mine: boolean;
   can_delete: boolean;
+  like_count: number;
+  liked_by_me: boolean;
+  reply_count: number;
+}
+
+export interface BibleMarkLikeState {
+  liked: boolean;
+  like_count: number;
+}
+
+/** Resposta a uma marcação — lista simples, sem edição. */
+export interface BibleMarkReply {
+  id: string;
+  mark_id: string;
+  comment: string;
+  created_at: string;
+  person: { id: string; full_name: string } | null;
+  is_mine: boolean;
+  can_delete: boolean;
 }
 
 export interface BibleFeedPage {

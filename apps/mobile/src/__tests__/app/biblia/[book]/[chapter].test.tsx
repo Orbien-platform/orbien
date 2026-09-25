@@ -1,19 +1,21 @@
 // Testes derivados do Done-when de T19, T21 e T22 (tasks.md,
 // biblia-nvi-marcacoes-mobile, BIB-01/BIB-02/BIB-03/BIB-04/BIB-05/BIB-06):
-// sucesso (versículos numerados), erro de rede com retry, seleção de
-// intervalo tocando no 1º e no último versículo, CTA "Comentar" habilita só
-// com intervalo completo, submissão válida chama `createMark`, comentário
-// curto demais bloqueia o submit, erro do backend aparece via `Alert`,
-// intervalo vindo da query (`verse_start`/`verse_end`, navegação do feed)
-// já chega destacado.
+// sucesso (versículos numerados), erro de rede com retry, regra do toque
+// (um toque marca um versículo, outro estende o trecho, tocar no único
+// desmarca), barra de marcação com a referência e o "Comentar", submissão
+// válida chama `createMark` e oferece o feed, comentário curto demais
+// bloqueia o submit, erro do backend aparece via `Alert`, intervalo vindo da
+// query (`verse_start`/`verse_end`, navegação do feed) já chega destacado.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 let mockSearchParams: { book: string; chapter: string; verse_start?: string; verse_end?: string } = {
   book: "JHN",
   chapter: "3",
 };
+const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockSearchParams,
+  useRouter: () => ({ push: mockPush }),
 }));
 
 const mockGetChapter = jest.fn();
@@ -21,6 +23,8 @@ const mockCreateMark = jest.fn();
 jest.mock("../../../../lib/bible/bible-client", () => ({
   getChapter: (...args: unknown[]) => mockGetChapter(...args),
   createMark: (...args: unknown[]) => mockCreateMark(...args),
+  getBooks: () =>
+    Promise.resolve([{ code: "JHN", name: "João", testament: "NT", chapters: 21 }]),
 }));
 
 import { HttpError, NetworkError } from "../../../../lib/api/errors";
@@ -102,7 +106,7 @@ describe("BibliaChapterScreen", () => {
     expect(mockGetChapter).toHaveBeenCalledTimes(2);
   });
 
-  it("toque no 1º e no último versículo define o intervalo, com destaque visual nos dois", async () => {
+  it("um toque já marca o versículo e mostra o Comentar logo abaixo dele, com a referência", async () => {
     mockGetChapter.mockResolvedValue(CHAPTER);
 
     await act(async () => {
@@ -110,42 +114,72 @@ describe("BibliaChapterScreen", () => {
     });
     await waitFor(() => screen.getByTestId("biblia-verse-1"));
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("biblia-verse-1"));
-    });
-    // Só o 1º toque — 1 selecionado, 3 ainda não.
-    expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(true);
-    expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(false);
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("biblia-verse-3"));
-    });
-    // Intervalo fechado 1..3 — os três versículos ficam destacados.
-    expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(true);
-    expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
-    expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(true);
-  });
-
-  it('CTA "Comentar" só habilita depois de um intervalo completo (1º e último tocados)', async () => {
-    mockGetChapter.mockResolvedValue(CHAPTER);
-
-    await act(async () => {
-      render(<BibliaChapterScreen />);
-    });
-    await waitFor(() => screen.getByTestId("biblia-verse-1"));
-
-    expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(true);
+    // Sem nada marcado: a dica explica o gesto e não há ação.
+    expect(screen.getByTestId("biblia-chapter-hint")).toBeTruthy();
+    expect(screen.queryByTestId("biblia-selection-actions")).toBeNull();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("biblia-verse-2"));
     });
-    // Só o primeiro toque — intervalo ainda incompleto, CTA continua desabilitado.
-    expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(true);
+
+    expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(false);
+    expect(await screen.findByText("Comentar João 3:2")).toBeTruthy();
+    expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
+  });
+
+  it("toque em outro versículo estende o trecho, em qualquer ordem, e o seguinte recomeça", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await act(async () => {
+      render(<BibliaChapterScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-verse-1"));
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("biblia-verse-3"));
     });
-    expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-1"));
+    });
+    expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(true);
+    expect(await screen.findByText("Comentar João 3:1-3")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-2"));
+    });
+    expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(false);
+  });
+
+  it("tocar no único versículo marcado, ou em Desmarcar, tira a marcação e a ação", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await act(async () => {
+      render(<BibliaChapterScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-verse-1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-2"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-2"));
+    });
+    expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(false);
+    expect(screen.queryByTestId("biblia-selection-actions")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-1"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-selection-clear"));
+    });
+    expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(false);
+    expect(screen.queryByTestId("biblia-selection-actions")).toBeNull();
   });
 
   it("submissão válida chama createMark com o intervalo e o comentário, e confirma visualmente (BIB-04)", async () => {
@@ -166,6 +200,10 @@ describe("BibliaChapterScreen", () => {
 
     await selectRangeAndOpenComposer();
 
+    // A folha cita o trecho que vai para o feed.
+    expect(screen.getByTestId("biblia-comment-quote")).toHaveTextContent(/Havia um fariseu/);
+    expect(screen.getByTestId("biblia-comment-quote")).toHaveTextContent(/Jesus lhe respondeu/);
+
     await act(async () => {
       fireEvent.changeText(
         screen.getByTestId("biblia-comment-input"),
@@ -185,11 +223,19 @@ describe("BibliaChapterScreen", () => {
         comment: "Reflexão sobre o novo nascimento.",
       });
     });
-    // Sucesso fecha o composer e confirma visualmente (Done-when de T21).
+    // Sucesso fecha o composer, confirma com a referência e oferece o feed.
     await waitFor(() => {
-      expect(screen.getByTestId("biblia-comment-saved")).toBeTruthy();
+      expect(screen.getByTestId("biblia-comment-saved")).toHaveTextContent(
+        "João 3:1-3 publicado no feed da congregação.",
+      );
     });
     expect(screen.queryByTestId("biblia-comment-composer")).toBeNull();
+    expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(false);
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-open-feed"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/biblia/feed");
   });
 
   it("comentário com menos de 3 caracteres bloqueia o submit, sem chamar a API (BIB-05)", async () => {
@@ -266,7 +312,7 @@ describe("BibliaChapterScreen", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("biblia-comment-submit-error")).toHaveTextContent(
-        "Não foi possível salvar a marcação. Tente novamente.",
+        "Não foi possível publicar o comentário. Tente novamente.",
       );
     });
   });
@@ -300,7 +346,7 @@ describe("BibliaChapterScreen", () => {
     });
     expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
     expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(true);
-    // CTA "Comentar" já habilita — o intervalo chegou completo.
+    // A barra já oferece o "Comentar" — o intervalo chegou completo.
     expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
   });
 });

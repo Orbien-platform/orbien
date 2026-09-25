@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ContentModule } from '../content/content.module';
 import { BibleReaderController } from './bible-reader.controller';
 import { BibleReaderService } from './bible-reader.service';
 import { BibleVerseMarksController } from './bible-verse-marks.controller';
 import { BibleVerseMarksService } from './bible-verse-marks.service';
+import { BibleMarkInteractionsService } from './bible-mark-interactions.service';
 import { ApiBibleTextProvider } from './api-bible-text.provider';
 import { BIBLE_TEXT_PROVIDER } from './bible-text-provider.interface';
 
@@ -18,11 +20,14 @@ import { BIBLE_TEXT_PROVIDER } from './bible-text-provider.interface';
  * `overrideProvider`.
  */
 @Module({
-  imports: [PrismaModule, HttpModule],
+  // ContentModule pelo `NotificationsService` (push de resposta). Sem ciclo:
+  // ContentModule não importa BibleModule.
+  imports: [PrismaModule, HttpModule, ContentModule],
   controllers: [BibleReaderController, BibleVerseMarksController],
   providers: [
     BibleReaderService,
     BibleVerseMarksService,
+    BibleMarkInteractionsService,
     { provide: BIBLE_TEXT_PROVIDER, useClass: ApiBibleTextProvider },
   ],
 })

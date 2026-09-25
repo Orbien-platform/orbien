@@ -163,7 +163,7 @@ describe("NotificationsProvider", () => {
     expect(mockUnregisterDevice).toHaveBeenCalled();
   });
 
-  it("clique em push com post_id navega para /post/:id", async () => {
+  it("clique em push navega para a rota que o cliente resolveu", async () => {
     mockUseAuth.mockReturnValue({ session: null });
 
     await act(async () => {
@@ -175,7 +175,7 @@ describe("NotificationsProvider", () => {
     });
 
     const clickHandler = mockOnNotificationClick.mock.calls[0]![0];
-    clickHandler("post-1");
+    clickHandler("/post/post-1");
 
     expect(mockPush).toHaveBeenCalledWith("/post/post-1");
   });

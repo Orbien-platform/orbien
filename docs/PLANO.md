@@ -1600,6 +1600,21 @@ para plano pago ou ganhar gatilho externo.
 
 ---
 
+### PEND-12 · Push de resposta na Bíblia sem opção de desligar · dívida
+
+Responder a uma marcação do feed da Bíblia avisa o autor por push
+(`BibleMarkInteractionsService.createReply`, filtro pela tag `person_id`, o
+mesmo do aviso de escala). As preferências de notificação do app têm quatro
+categorias (`avisos`, `oracao`, `eventos`, `devocional`) e nenhuma cobre
+esse aviso, então quem não quiser recebê-lo não tem como desligar. Fechar
+com uma categoria nova (tag `pref_*` + coluna em `NotificationPreference` +
+filtro `!= false` no envio), ou encaixar numa das existentes por decisão de
+produto. Curtida não gera push, de propósito.
+
+Junto, e menor: o feed carrega uma vez ao abrir. Quem responde ou curte na
+tela da marcação (`biblia/marcacao/[id]`) e volta vê a contagem antiga no
+item até reabrir o feed.
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
