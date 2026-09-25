@@ -183,4 +183,12 @@ describe("PerfilScreen", () => {
     expect(screen.getByTestId("powered-by")).toBeTruthy();
     expect(screen.queryByTestId("perfil-roles")).toBeNull();
   });
+  it("sem sessão não tenta decodificar token e ainda mostra a atribuição", async () => {
+    mockUseAuth.mockReturnValue({ session: null, logout: mockLogout });
+
+    await render(<PerfilScreen />);
+
+    expect(mockDecodeJwtPayload).not.toHaveBeenCalled();
+    expect(screen.getByText(/Powered by Orbien/)).toBeTruthy();
+  });
 });

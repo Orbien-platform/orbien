@@ -3,9 +3,11 @@
 Meta declarada quando este plano foi escrito: **100% de cobertura nos quatro
 apps de então** (`statements`, `branches`, `functions`, `lines`), travada no
 CI. Hoje são cinco apps e a meta não é mais uniforme — api e site fecham em
-`global: 100`; admin e mobile travam **piso medido**, com justificativa por
-métrica (Fases 14 e 15); o web segue em aberto. O que é uniforme é o portão:
-todo app tem `test:cov` no `ci.yml`, e nenhum piso desce. Ver "Estado", logo
+`global: 100`; admin, mobile e web travam **piso medido**, com justificativa
+por métrica (Fases 14 e 15, e a rodada de 2026-09-25). Desde 2026-09-25 há
+um mínimo comum: **nenhum app abaixo de 96%** em nenhuma das quatro métricas,
+cobrado por um `global` em cada config. O que é uniforme é o portão: todo app
+tem `test:cov` no `ci.yml`, e nenhum piso desce. Ver "Estado", logo
 abaixo, e a Fase 13.
 
 O plano é dividido em fases que podem ser executadas **uma por sessão de
@@ -75,6 +77,25 @@ E o mobile, **medido em 2026-09-10** (não existia na medição acima):
 | App | Statements | Branches | Functions | Lines | Suítes |
 |---|---|---|---|---|---|
 | mobile | 94,51% | 84,69% | 93,81% | 97,94% | 39 (239 testes) |
+
+E os cinco, **medidos em 2026-09-25**, quando a meta de 96% em todas as
+métricas passou a valer para todos os apps:
+
+| App | Statements | Branches | Functions | Lines | Suítes | Piso travado |
+|---|---|---|---|---|---|---|
+| api | 100% | 100% | 100% | 100% | 302 (2951 testes) | 100/100/100/100 |
+| web | 99,40% | 97,02% | 99,81% | 99,93% | 115 (1344 testes) | 99/97/99/99 global + por caminho |
+| site | 100% | 100% | 100% | 100% | 76 (281 testes) | 100/100/100/100 |
+| admin | 99,66% | 98,50% | 100% | 100% | 27 (221 testes) | 99/98/100/100 |
+| mobile | 99,18% | 97,04% | 98,69% | 99,86% | 56 (522 testes) | 99/97/98/99 |
+
+O mobile era o único abaixo de 96% (branches 85,85%, functions 93,89%). Os
+testes novos cobrem o que as suítes das telas não exercitavam: resposta ou
+falha que chega depois de a tela desmontar, erro offline × erro genérico,
+modo escuro, variantes de dado (sem data, sem responsável, versículo único) e
+os componentes base que não tinham suíte própria
+(`src/__tests__/components/primitives.test.tsx`). O web já passava de 96%,
+mas o `global` estava em 0 — agora é o piso medido.
 
 Dois números aí não estão no quadro de fases, e é isso que eles dizem:
 
@@ -968,7 +989,7 @@ os dois com piso medido travado. Ver "1. Thresholds", abaixo.
 | 1. `global: 100` no site | ☑ travado — destravado pelas Fases 11 e 12 |
 | 1. `global: 100` no admin | ☑ **não será** — a Fase 14 travou piso medido (99/98/100/100, medido na própria Fase 14), e é o suficiente |
 | 1. `global: 100` no web | ☐ **em aberto** — a Fase 10 fechou, o bloqueio caiu; o que falta agora são os ramos defensivos, ver abaixo |
-| 1. Piso travado no mobile | ☑ Fase 15 (94/84/93/97), 2026-09-10 |
+| 1. Piso travado no mobile | ☑ Fase 15 (94/84/93/97), 2026-09-10; subido para 99/97/98/99 em 2026-09-25 |
 | 2. e2e de financeiro (transação → DRE) | ☑ `apps/web/e2e/financeiro.spec.ts` |
 | 2. e2e de pessoas (cadastro e importação) | ◐ cadastro já existia; importação **bloqueada por R2 no CI** |
 | 2. e2e de login / redefinir senha | ☑ `apps/web/e2e/login.spec.ts` |
@@ -1148,7 +1169,7 @@ npx turbo run lint                   # 0 errors
 npm run test:cov -w orbien-backend   # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-site      # 100% nas 4 métricas, com global travado
 npm run test:cov -w orbien-admin     # piso 99/98/100/100 travado (Fase 14)
-npm run test:cov -w orbien-mobile    # piso 94/84/93/97 travado (Fase 15)
+npm run test:cov -w orbien-mobile    # piso 99/97/98/99 travado (2026-09-25)
 npm run test:rls -w orbien-backend   # 138 testes verdes
 node scripts/check-skills.mjs
 
@@ -1187,7 +1208,8 @@ nenhum deles é "ainda não chegamos lá":
 - **admin**: a Fase 14 cobriu o console e travou piso medido
   (99/98/100/100). A redação anterior dizia "1,5% — não há fase que o cubra",
   o que deixou de ser verdade quando a Fase 14 foi feita.
-- **mobile**: a Fase 15 travou piso medido (94/84/93/97) em 2026-09-10.
+- **mobile**: a Fase 15 travou piso medido (94/84/93/97) em 2026-09-10, e a
+  rodada de 2026-09-25 o subiu para 99/97/98/99, acima da meta de 96%.
 
 Piso medido com justificativa por métrica conta como fechado nesta checklist.
 Foi decisão consciente nos dois casos, não dívida — o critério é o portão

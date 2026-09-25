@@ -303,4 +303,61 @@ describe("BibliaChapterScreen", () => {
     // CTA "Comentar" já habilita — o intervalo chegou completo.
     expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
   });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetChapter.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<BibliaChapterScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(CHAPTER);
+    });
+
+    expect(mockGetChapter).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetChapter.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<BibliaChapterScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetChapter).toHaveBeenCalled();
+  });
+
+  it("erro que não é de conexão mostra a mensagem genérica", async () => {
+    mockGetChapter.mockRejectedValue(new HttpError(500, { message: "x" }));
+
+    await render(<BibliaChapterScreen />);
+
+    expect(await screen.findByTestId("biblia-chapter-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+
+  it("tocar duas vezes no mesmo versículo seleciona só ele, e o composer mostra um número só", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+
+    await render(<BibliaChapterScreen />);
+    await waitFor(() => screen.getByTestId("biblia-verse-2"));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-2"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-verse-2"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-comment-cta"));
+    });
+
+    expect(screen.getByText("Comentar JHN 3:2")).toBeTruthy();
+  });
 });

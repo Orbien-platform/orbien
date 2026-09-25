@@ -20,7 +20,7 @@ jest.mock("../../../lib/bible/bible-client", () => ({
   deleteMark: (...args: unknown[]) => mockDeleteMark(...args),
 }));
 
-import { HttpError } from "../../../lib/api/errors";
+import { HttpError, NetworkError } from "../../../lib/api/errors";
 import BibliaFeedScreen from "../../../app/biblia/feed";
 import type { BibleVerseMark } from "../../../lib/bible/types";
 
@@ -305,5 +305,128 @@ describe("BibliaFeedScreen", () => {
     expect(mockUpdateMark).not.toHaveBeenCalled();
     expect(screen.queryByTestId("biblia-feed-edit-form-mark-1")).toBeNull();
     expect(screen.getByText("Original.")).toBeTruthy();
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetFeed.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<BibliaFeedScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve({ items: [mark()], nextCursor: null });
+    });
+
+    expect(mockGetFeed).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetFeed.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<BibliaFeedScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetFeed).toHaveBeenCalled();
+  });
+
+  it("sem conexão, o erro de carga diz para verificar a conexão", async () => {
+    mockGetFeed.mockRejectedValue(new NetworkError());
+
+    await render(<BibliaFeedScreen />);
+
+    expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
+  });
+
+  it("versículo único não repete o número; autor sem nome vira 'Alguém'; data ilegível some", async () => {
+    mockGetFeed.mockResolvedValue({
+      items: [mark({ verse_start: 16, verse_end: 16, person: null, created_at: "sem data" })],
+      nextCursor: null,
+    });
+
+    await render(<BibliaFeedScreen />);
+
+    expect(await screen.findByText("JHN 3:16")).toBeTruthy();
+    expect(screen.getByText("Alguém")).toBeTruthy();
+  });
+
+  it("duplo toque em 'Carregar mais' busca a próxima página uma vez só", async () => {
+    mockGetFeed
+      .mockResolvedValueOnce({ items: [mark()], nextCursor: "cursor-1" })
+      .mockResolvedValueOnce({ items: [mark({ id: "mark-2" })], nextCursor: null });
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-load-more"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-load-more"));
+      fireEvent.press(screen.getByTestId("biblia-feed-load-more"));
+    });
+
+    expect(mockGetFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it("editar só troca o item editado; falha 5xx na edição mostra a mensagem genérica", async () => {
+    const own = mark({ id: "mark-1", is_mine: true, can_delete: false, comment: "Original." });
+    const other = mark({ id: "mark-2", comment: "De outra pessoa." });
+    mockGetFeed.mockResolvedValue({ items: [own, other], nextCursor: null });
+    mockUpdateMark
+      .mockRejectedValueOnce(new HttpError(500, { message: "detalhe interno" }))
+      .mockResolvedValueOnce({ ...own, comment: "Editado." });
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-edit-mark-1"));
+    expect(screen.queryByTestId("biblia-feed-delete-mark-1")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-mark-1"));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-feed-edit-input-mark-1"), "Editado.");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-save-mark-1"));
+    });
+    expect(screen.getByTestId("biblia-feed-edit-error-mark-1").props.children).toBe(
+      "Não foi possível salvar a edição. Tente novamente.",
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-save-mark-1"));
+    });
+    await waitFor(() => expect(screen.getByText("Editado.")).toBeTruthy());
+    expect(screen.getByText("De outra pessoa.")).toBeTruthy();
+  });
+
+  it("apagar outro item enquanto um apagamento está em andamento não dispara segunda chamada", async () => {
+    const first = mark({ id: "mark-1", can_delete: true });
+    const second = mark({ id: "mark-2", can_delete: true, comment: "Outro." });
+    mockGetFeed.mockResolvedValue({ items: [first, second], nextCursor: null });
+    let resolveDelete!: () => void;
+    mockDeleteMark.mockReturnValue(new Promise<void>((r) => (resolveDelete = r)));
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-delete-mark-2"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-delete-mark-1"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-delete-mark-2"));
+    });
+    await act(async () => {
+      resolveDelete();
+    });
+
+    expect(mockDeleteMark).toHaveBeenCalledTimes(1);
+    expect(mockDeleteMark).toHaveBeenCalledWith("mark-1");
+    expect(screen.getByTestId("biblia-feed-item-mark-2")).toBeTruthy();
   });
 });

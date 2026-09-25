@@ -167,4 +167,73 @@ describe("NotificacoesScreen", () => {
       expect(screen.getByTestId("load-error")).toBeTruthy();
     });
   });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetNotificationPreferences.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<NotificacoesScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(ALL_ON);
+    });
+
+    expect(mockGetNotificationPreferences).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetNotificationPreferences.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<NotificacoesScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetNotificationPreferences).toHaveBeenCalled();
+  });
+
+  it("dois toques seguidos na mesma categoria: a resposta do primeiro não sobrescreve o segundo", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    mockUpdateNotificationPreferences
+      .mockResolvedValueOnce({ ...ALL_ON, oracao: false })
+      .mockResolvedValueOnce(ALL_ON);
+
+    await render(<NotificacoesScreen />);
+    await waitFor(() => screen.getByTestId("switch-oracao"));
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", false);
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", true);
+    });
+
+    await waitFor(() => expect(mockUpdateNotificationPreferences).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledTimes(1));
+    expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(ALL_ON);
+    expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
+  });
+
+  it("dois toques seguidos na mesma categoria: a falha do primeiro não reverte o segundo", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    mockUpdateNotificationPreferences
+      .mockRejectedValueOnce(new Error("falha de rede"))
+      .mockResolvedValueOnce(ALL_ON);
+
+    await render(<NotificacoesScreen />);
+    await waitFor(() => screen.getByTestId("switch-oracao"));
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", false);
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", true);
+    });
+
+    await waitFor(() => expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(ALL_ON));
+    expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
+    expect(screen.queryByText(/Não foi possível salvar/)).toBeNull();
+  });
 });

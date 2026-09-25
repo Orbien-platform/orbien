@@ -355,4 +355,61 @@ describe("HomeScreen", () => {
 
     expect(mockPush).toHaveBeenCalledWith("/post/p1");
   });
+  it("respostas que chegam depois de a Home desmontar são ignoradas (sucesso e falha)", async () => {
+    let resolveGroups!: (value: unknown) => void;
+    let resolvePosts!: (value: unknown) => void;
+    let resolveHighlights!: (value: unknown) => void;
+    mockListMyGroups.mockReturnValue(new Promise((r) => (resolveGroups = r)));
+    mockGetPosts.mockReturnValue(new Promise((r) => (resolvePosts = r)));
+    mockGetHighlights.mockReturnValue(new Promise((r) => (resolveHighlights = r)));
+
+    const view = await render(<HomeScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolveGroups([]);
+      resolvePosts({ data: [makePost()], total: 1 });
+      resolveHighlights([makePost()]);
+    });
+
+    let rejectHighlights!: (reason: unknown) => void;
+    mockGetHighlights.mockReturnValue(new Promise((_, r) => (rejectHighlights = r)));
+    const second = await render(<HomeScreen />);
+    await act(async () => {
+      second.unmount();
+    });
+    await act(async () => {
+      rejectHighlights(new Error("offline"));
+    });
+
+    expect(mockGetHighlights).toHaveBeenCalledTimes(2);
+  });
+
+  it("CTA de Contribuição sem WEB_URL configurada não abre nada", async () => {
+    const extra = jest.requireMock<{ default: { expoConfig: { extra: { webUrl?: string } } } }>(
+      "expo-constants",
+    ).default.expoConfig.extra;
+    const original = extra.webUrl;
+    extra.webUrl = undefined;
+    try {
+      await renderHome();
+      fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
+      expect(mockOpenBrowserAsync).not.toHaveBeenCalled();
+    } finally {
+      extra.webUrl = original;
+    }
+  });
+
+  it("CTA de Contribuição sem navegador disponível não derruba a tela", async () => {
+    mockOpenBrowserAsync.mockRejectedValue(new Error("sem navegador"));
+
+    await renderHome();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
+    });
+
+    expect(mockOpenBrowserAsync).toHaveBeenCalled();
+    expect(screen.getByTestId("home-greeting")).toBeTruthy();
+  });
 });

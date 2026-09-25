@@ -175,4 +175,94 @@ describe("CelebracoesScreen", () => {
       screen.getByText("Não foi possível carregar as celebrações. Verifique sua conexão."),
     ).toBeTruthy();
   });
+  describe("sem sessão legível", () => {
+    beforeEach(() => {
+      mockGetMyAssignments.mockResolvedValue([]);
+    });
+
+    it("sem sessão usa a agenda de membro", async () => {
+      mockUseAuth.mockReturnValue({ session: null });
+      mockListAgenda.mockResolvedValue([agendaDomingo]);
+
+      await renderScreen();
+
+      expect(mockListAgenda).toHaveBeenCalled();
+      expect(mockListUpcomingInstances).not.toHaveBeenCalled();
+    });
+
+    it("token ilegível também cai na agenda de membro", async () => {
+      mockUseAuth.mockReturnValue({
+        session: { accessToken: "não-é-jwt", refreshToken: "r", accessTokenExpiresAt: 0 },
+      });
+      mockListAgenda.mockResolvedValue([agendaDomingo]);
+
+      await renderScreen();
+
+      expect(mockListAgenda).toHaveBeenCalled();
+    });
+  });
+
+  describe("desmontada antes da resposta", () => {
+    beforeEach(() => {
+      mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+      mockGetMyAssignments.mockResolvedValue([]);
+    });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockListAgenda.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<CelebracoesScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve([agendaDomingo]);
+    });
+
+    expect(mockListAgenda).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockListAgenda.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<CelebracoesScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockListAgenda).toHaveBeenCalled();
+  });
+
+  });
+
+  it("erro que não é de conexão mostra a mensagem genérica", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockListAgenda.mockRejectedValue(new Error("500"));
+
+    await renderScreen();
+
+    expect(screen.getByTestId("celebracoes-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+
+  it("ordena por data e omite a linha de horário quando a data não é legível", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockListAgenda.mockResolvedValue([
+      { ...agendaDomingo, id: "i2", scheduled_date: "2026-10-04T00:00:00.000Z" },
+      agendaDomingo,
+      { ...agendaDomingo, id: "i3", scheduled_date: "sem data" },
+    ]);
+
+    await renderScreen();
+
+    expect(screen.getByText("dom, 27 set · 19:00")).toBeTruthy();
+    expect(screen.getAllByText("Celebração de domingo")).toHaveLength(3);
+  });
 });

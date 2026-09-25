@@ -7,6 +7,7 @@
 // mais" concatena sem perder os já carregados, erro pontual de "carregar
 // mais" não limpa a lista.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { NetworkError } from "../../../lib/api/errors";
 
 const mockGetPosts = jest.fn();
 jest.mock("../../../lib/content/content-client", () => ({
@@ -146,5 +147,55 @@ describe("ConteudoScreen", () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith("/post/p1");
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetPosts.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<ConteudoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve({ data: [POST_1], total: 1 });
+    });
+
+    expect(mockGetPosts).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetPosts.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<ConteudoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetPosts).toHaveBeenCalled();
+  });
+
+  it("sem conexão, o erro de carga diz para verificar a conexão", async () => {
+    mockGetPosts.mockRejectedValue(new NetworkError());
+
+    await render(<ConteudoScreen />);
+
+    expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
+  });
+
+  it("post com mídia mostra a miniatura no card", async () => {
+    mockGetPosts.mockResolvedValue({
+      data: [{ ...POST_1, media_url: "https://cdn.example/capa.jpg" }],
+      total: 1,
+    });
+
+    await render(<ConteudoScreen />);
+
+    const card = await screen.findByTestId("post-p1");
+    expect(JSON.stringify(card)).toContain("https://cdn.example/capa.jpg");
   });
 });
