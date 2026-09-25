@@ -788,7 +788,10 @@ describe("ConfiguracoesPage", () => {
     render(<ConfiguracoesPage />);
     await screen.findByDisplayValue("Doca Sede");
     const pixInput = screen.getByPlaceholderText("CPF, CNPJ, e-mail, telefone ou chave aleatória");
-    await user.type(pixInput, "a".repeat(141));
+    // `fireEvent.change`, não `user.type`: 141 caracteres digitados um a um
+    // estoura o timeout default de 5000ms sob carga do CI (mesmo padrão do
+    // comentário lá em cima, sobre a suíte de e-mail/cor).
+    fireEvent.change(pixInput, { target: { value: "a".repeat(141) } });
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
     expect(
       await screen.findByText("Chave PIX muito longa (máximo 140 caracteres).")
