@@ -13,6 +13,7 @@ import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { ImportConfirmDto } from '../dto/import-confirm.dto';
 import { ImportPreviewDto, SuggestedMapping } from '../dto/import-preview.dto';
 import { writeAuditLog } from '../../common/audit/write-audit-log';
+import { frontendUrl } from '../../common/urls/frontend-url';
 
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -336,8 +337,7 @@ export class PersonsImportService {
           // promise entra em `pendingInvites` só para ganhar uma chance de
           // terminar antes da função retornar (ver o `Promise.allSettled`
           // depois do loop).
-          const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
-          const inviteUrl = `${frontendUrl}/redefinir-senha?token=${created.rawToken}`;
+          const inviteUrl = `${frontendUrl()}/redefinir-senha?token=${created.rawToken}`;
           pendingInvites.push(
             this.mail.sendInvite(email!, inviteUrl).catch((err: unknown) => {
               this.logger.error(

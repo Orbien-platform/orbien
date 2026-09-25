@@ -160,6 +160,13 @@ browser bloqueia as chamadas. Mudar o `value:` no `render.yaml` não basta se o
 serviço não for sincronizado pelo Blueprint: confira a variável no painel. Hoje
 só o upload de mídia do `web` depende dela (`PEND-10` em `docs/PLANO.md`).
 
+`FRONTEND_URL` é a base dos links que a API manda por e-mail (redefinição de
+senha, convite). Em produção só vale host em `useorbien.com`: se o painel tiver
+outro valor (um `*.vercel.app`, por exemplo) ou nada, `frontendUrl()`
+(`apps/api/src/common/urls/frontend-url.ts`) usa `https://web.useorbien.com` e
+registra um `WARN [FrontendUrl]` no log — sinal de que o painel precisa ser
+corrigido.
+
 **Pendente de configurar — Bíblia NVI (`biblia-nvi-marcacoes-mobile`, `PEND-09`
 em `docs/PLANO.md`).** `ApiBibleTextProvider`
 (`apps/api/src/bible/api-bible-text.provider.ts`) já está no código, mas o
@@ -548,12 +555,15 @@ para reconectar, como nos outros dois.
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
-| `NEXT_PUBLIC_WEB_URL` | `https://<domínio do web>` | browser |
+| `NEXT_PUBLIC_WEB_URL` | `https://web.useorbien.com` | browser |
 
 As duas primeiras são iguais às do `web`, e pelo mesmo motivo: o browser nunca
 chama a API direto. `NEXT_PUBLIC_WEB_URL` é para onde a sessão de suporte é
 aberta — sem ela, o botão da lista de tenants falha com mensagem explícita em
-vez de abrir uma aba em branco.
+vez de abrir uma aba em branco. Em produção, valor fora de `useorbien.com`
+(ou ausente) é trocado por `https://web.useorbien.com` — o token da sessão
+viaja nessa URL e não deve sair do domínio (`resolveWebUrl()` em
+`apps/admin/src/lib/support-session.ts`).
 
 O domínio do `admin` precisa entrar em `ALLOWED_ORIGINS` no Render? **Não.**
 (O do `web` precisa, por causa do upload — ver Parte 2.)
