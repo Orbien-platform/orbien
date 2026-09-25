@@ -7,8 +7,9 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
 }));
 
 const mockGetFeed = jest.fn();
@@ -18,6 +19,8 @@ jest.mock("../../../lib/bible/bible-client", () => ({
   getFeed: (...args: unknown[]) => mockGetFeed(...args),
   updateMark: (...args: unknown[]) => mockUpdateMark(...args),
   deleteMark: (...args: unknown[]) => mockDeleteMark(...args),
+  getBooks: () =>
+    Promise.resolve([{ code: "JHN", name: "João", testament: "NT", chapters: 21 }]),
 }));
 
 import { HttpError } from "../../../lib/api/errors";
@@ -59,7 +62,7 @@ describe("BibliaFeedScreen", () => {
     });
     expect(mockGetFeed).toHaveBeenCalledWith();
     expect(screen.getByText("Deus amou o mundo.")).toBeTruthy();
-    expect(screen.getByText("JHN 3:16-18")).toBeTruthy();
+    expect(await screen.findByText("João 3:16-18")).toBeTruthy();
   });
 
   it("feed vazio mostra estado vazio explícito, não erro (BIB-06 AC5)", async () => {
@@ -73,6 +76,12 @@ describe("BibliaFeedScreen", () => {
       expect(screen.getByTestId("biblia-feed-empty")).toBeTruthy();
     });
     expect(screen.queryByTestId("biblia-feed-error")).toBeNull();
+
+    // O vazio aponta o caminho: é lendo um capítulo que se comenta.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-empty-open-bible"));
+    });
+    expect(mockNavigate).toHaveBeenCalledWith("/biblia");
   });
 
   it("erro de rede no load inicial mostra estado de erro visível, não lista vazia", async () => {

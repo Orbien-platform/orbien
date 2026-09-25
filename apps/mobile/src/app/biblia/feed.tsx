@@ -24,9 +24,10 @@ import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { deleteMark, getFeed, updateMark } from "../../lib/bible/bible-client";
+import { formatVerseReference, useBookNames } from "../../lib/bible/book-names";
 import type { BibleVerseMark } from "../../lib/bible/types";
 import { formatDateTime } from "../../lib/format/date";
-import { CircleAlert, MessageSquare, Pencil, Trash, WifiOff } from "../../lib/theme/icons";
+import { BookOpen, CircleAlert, MessageSquare, Pencil, Trash, WifiOff } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { spacing, typography } from "../../lib/theme/tokens";
 
@@ -43,14 +44,14 @@ function describeActionError(err: unknown, fallback: string): string {
   return err instanceof HttpError && err.status < 500 ? err.message : fallback;
 }
 
-function verseRangeLabel(item: BibleVerseMark): string {
-  const range = item.verse_start === item.verse_end ? `${item.verse_start}` : `${item.verse_start}-${item.verse_end}`;
-  return `${item.book_code} ${item.chapter}:${range}`;
+function verseRangeLabel(names: Map<string, string> | null, item: BibleVerseMark): string {
+  return formatVerseReference(names, item.book_code, item.chapter, item.verse_start, item.verse_end);
 }
 
 export default function BibliaFeedScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const bookNames = useBookNames();
 
   const [items, setItems] = useState<BibleVerseMark[] | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -181,8 +182,16 @@ export default function BibliaFeedScreen() {
         testID="biblia-feed-empty"
         icon={MessageSquare}
         message="Nenhuma marcação ainda."
-        description="As reflexões da sua congregação sobre a Bíblia aparecem aqui."
-      />
+        description="Abra um capítulo e toque em um versículo para comentar — o comentário aparece aqui para a congregação."
+      >
+        <AppButton
+          testID="biblia-feed-empty-open-bible"
+          title="Abrir a Bíblia"
+          icon={BookOpen}
+          variant="secondary"
+          onPress={() => router.navigate("/biblia")}
+        />
+      </StatusMessage>
     );
   }
 
@@ -201,7 +210,7 @@ export default function BibliaFeedScreen() {
               {isEditing ? (
                 <View testID={`biblia-feed-edit-form-${item.id}`}>
                   <Text style={[typography.h3, { color: colors.textPrimary }]}>
-                    {verseRangeLabel(item)}
+                    {verseRangeLabel(bookNames, item)}
                   </Text>
                   <Input
                     testID={`biblia-feed-edit-input-${item.id}`}
@@ -246,10 +255,10 @@ export default function BibliaFeedScreen() {
                     testID={`biblia-feed-item-open-${item.id}`}
                     onPress={() => handleOpenChapter(item)}
                     accessibilityRole="button"
-                    accessibilityLabel={verseRangeLabel(item)}
+                    accessibilityLabel={verseRangeLabel(bookNames, item)}
                   >
                     <Text style={[typography.h3, { color: colors.textPrimary }]}>
-                      {verseRangeLabel(item)}
+                      {verseRangeLabel(bookNames, item)}
                     </Text>
                     <Text style={[typography.body, styles.comment, { color: colors.textPrimary }]}>
                       {item.comment}
