@@ -1,4 +1,4 @@
-import { PLATFORM_MAIL_BRAND, readableTextOn, tenantMailBrand } from './mail-brand';
+import { mailFrom, PLATFORM_MAIL_BRAND, readableTextOn, tenantMailBrand } from './mail-brand';
 
 describe('tenantMailBrand', () => {
   it('usa o nome, as cores e o logo do tenant', () => {
@@ -41,6 +41,14 @@ describe('tenantMailBrand', () => {
     }
   });
 
+  it('descarta logo que nem é URL', () => {
+    const brand = tenantMailBrand({
+      name: 'Igreja Teste 2',
+      brandingConfig: { primary_color: null, secondary_color: null, logo_url: 'logo sem protocolo' },
+    });
+    expect(brand.logoUrl).toBeNull();
+  });
+
   it('sem tenant, cai na marca da plataforma', () => {
     expect(tenantMailBrand(null)).toBe(PLATFORM_MAIL_BRAND);
   });
@@ -55,5 +63,25 @@ describe('readableTextOn', () => {
     expect(readableTextOn('#1E3A7B')).toBe('#FFFFFF');
     expect(readableTextOn('#F2B705')).toBe('#1A1A1A');
     expect(readableTextOn('#fff')).toBe('#1A1A1A');
+  });
+});
+
+describe('mailFrom', () => {
+  const original = process.env['MAIL_FROM'];
+
+  afterEach(() => {
+    if (original === undefined) delete process.env['MAIL_FROM'];
+    else process.env['MAIL_FROM'] = original;
+  });
+
+  it('aceita MAIL_FROM só com o endereço, sem nome', () => {
+    process.env['MAIL_FROM'] = ' naoresponda@useorbien.com ';
+    expect(mailFrom(PLATFORM_MAIL_BRAND)).toBe('"Orbien" <naoresponda@useorbien.com>');
+  });
+
+  it('nome que some inteiro na limpeza cai em Orbien', () => {
+    process.env['MAIL_FROM'] = 'Orbien <naoresponda@useorbien.com>';
+    const brand = tenantMailBrand({ name: '<"">', brandingConfig: null });
+    expect(mailFrom(brand)).toBe('"Orbien" <naoresponda@useorbien.com>');
   });
 });

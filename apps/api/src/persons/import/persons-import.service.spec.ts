@@ -474,6 +474,25 @@ describe('PersonsImportService', () => {
       );
     });
 
+    it('falha ao ler a marca do tenant não derruba a linha: o convite sai com a marca padrão', async () => {
+      const { service, storage, mail, client } = serviceWith();
+      client.tenant.findUnique.mockRejectedValueOnce(new Error('banco fora do ar'));
+      const csv = ['nome,telefone,email', 'Sem Marca,11988887777,semmarca@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(mail.sendInvite).toHaveBeenCalledWith(
+        'semmarca@test.com',
+        expect.any(String),
+        expect.objectContaining({ kind: 'platform' }),
+      );
+    });
+
     it('falha no envio do convite que não é instância de Error ainda é logada como texto', async () => {
       const { service, storage, mail } = serviceWith();
       mail.sendInvite.mockRejectedValueOnce('motivo em string, não Error');

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -71,5 +71,48 @@ describe("RedefinirSenhaPage do console", () => {
 
     expect(screen.queryByLabelText("Nova senha")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pedir novo link" })).toBeInTheDocument();
+  });
+
+  it("erro que não é 400 pede para tentar de novo", async () => {
+    postMock.mockRejectedValue(new Error("rede"));
+    await fillAndSubmit();
+
+    expect(await screen.findByText(/não foi possível redefinir/i)).toBeInTheDocument();
+  });
+
+  it("mostra quanto falta para o mínimo e confirma quando chega lá", async () => {
+    const user = userEvent.setup();
+    render(<RedefinirSenhaPage />);
+    const input = screen.getByLabelText("Nova senha");
+
+    await user.type(input, "abc");
+    expect(screen.getByText("Faltam 5 caractere(s)")).toBeInTheDocument();
+
+    await user.type(input, "defgh");
+    expect(screen.getByText("Tem 8 caracteres ou mais")).toBeInTheDocument();
+  });
+
+  it("os olhos alternam entre mostrar e ocultar cada campo", async () => {
+    const user = userEvent.setup();
+    render(<RedefinirSenhaPage />);
+    const password = screen.getByLabelText("Nova senha");
+    const confirm = screen.getByLabelText("Confirmar senha");
+
+    await user.click(screen.getByRole("button", { name: "Mostrar senha" }));
+    expect(password).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Ocultar senha" }));
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.click(screen.getByRole("button", { name: "Mostrar confirmação" }));
+    expect(confirm).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Ocultar confirmação" }));
+    expect(confirm).toHaveAttribute("type", "password");
+  });
+
+  it("não chama a API se o formulário for enviado com a senha inválida", () => {
+    const { container } = render(<RedefinirSenhaPage />);
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(postMock).not.toHaveBeenCalled();
   });
 });
