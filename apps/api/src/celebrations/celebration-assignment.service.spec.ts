@@ -715,7 +715,7 @@ describe('CelebrationAssignmentService', () => {
             schedule: {
               celebrationInstance: {
                 scheduled_date: new Date('2026-09-20'),
-                celebration: { id: 'c1', name: 'Culto Noite' },
+                celebration: { id: 'c1', name: 'Culto Noite', start_time: '19:00' },
               },
             },
           },
@@ -753,6 +753,8 @@ describe('CelebrationAssignmentService', () => {
         }),
       );
       expect(result.map((r) => r.id)).toEqual(['a1', 'a2']); // ordenado asc por scheduled_date
+      // O horário do culto vai junto: `scheduled_date` sozinho é só o dia.
+      expect(result[1]!.celebration).toEqual({ id: 'c1', name: 'Culto Noite', start_time: '19:00' });
     });
 
     it('não filtra por data quando includePast=true', async () => {

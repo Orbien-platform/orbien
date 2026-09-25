@@ -93,7 +93,7 @@ function mergeAgenda(agenda: AgendaEntry[], assignments: Assignment[]): Celebrac
     items.push({
       id: a.id,
       celebrationName: a.celebration.name,
-      when: localWhen(a.scheduled_date),
+      when: localWhen(a.scheduled_date, a.celebration.start_time),
       serviceOrderId: a.service_order_id,
       ministry: a.ministry,
     });

@@ -1566,14 +1566,17 @@ Junto, e da mesma revisão: as miniaturas dos heros não levam `aria-hidden`,
 então leitor de tela lê "Olá, Pastor André" e "R$ 2.840" como conteúdo da
 página.
 
-### PEND-12 · A Escala do mobile mostra o culto um dia antes · dívida
+### ~~PEND-12 · A Escala do mobile mostra o culto um dia antes~~ · fechado
 
 `scheduled_date` é data sem hora, gravada como meia-noite UTC. `escala.tsx`
-passa o valor cru para `DateBlock` e `formatDateTime`, que leem em hora local
-— em Brasília, o culto de domingo aparece como "sáb, 26 set · 21:00". A tela
-Celebrações já corrige com `localWhen` (`apps/mobile/src/lib/format/date.ts`);
-a Escala precisa da mesma troca nas linhas 209 e 214. Vale conferir também o
-`CelebrationDetailSheet` do web, que exibe a mesma coluna.
+passava o valor cru para `DateBlock` e `formatDateTime`, que leem em hora
+local — em Brasília, o culto de domingo aparecia como "sáb, 26 set · 21:00".
+
+Fechado com `localWhen` (`apps/mobile/src/lib/format/date.ts`), o mesmo da
+tela Celebrações: o dia volta a ser só o dia e ganha o horário da celebração.
+Para isso `GET /volunteers/my-celebration-assignments` passou a trazer
+`celebration.start_time`. O `CelebrationDetailSheet` do web não tinha o
+problema — já formata com `formatCivilDate`.
 
 ### PEND-13 · Os outros `@Cron` da API não rodam com o serviço dormindo · dívida
 

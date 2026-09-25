@@ -59,6 +59,23 @@ describe("EscalaScreen", () => {
     expect(mockGetMyAssignments).toHaveBeenCalledTimes(1);
   });
 
+  it("mostra o dia do culto com o horário da celebração, não a véspera em UTC-3 (PEND-12)", async () => {
+    mockGetMyAssignments.mockResolvedValue([
+      {
+        ...PENDING_ASSIGNMENT,
+        scheduled_date: "2026-09-27T00:00:00.000Z",
+        celebration: { ...PENDING_ASSIGNMENT.celebration, start_time: "19:00" },
+      },
+    ]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    expect(screen.getByText("dom, 27 set · 19:00")).toBeTruthy();
+    expect(screen.getByText("27")).toBeTruthy();
+  });
+
   it("confirmar um slot pendente chama respondToAssignment e atualiza a lista sem refetch (AC 2)", async () => {
     mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
     mockRespondToAssignment.mockResolvedValue({ ...PENDING_ASSIGNMENT, status: "confirmed" });
