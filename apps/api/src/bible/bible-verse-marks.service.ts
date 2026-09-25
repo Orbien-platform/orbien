@@ -34,7 +34,7 @@ import { ListBibleFeedQueryDto } from './dto/list-bible-feed-query.dto';
  * "o autor tirou o próprio post" de "a liderança removeu".
  */
 
-const MODERATOR_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
+export const MODERATOR_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
 
 export type BibleVerseMarkView = {
   id: string;
@@ -48,6 +48,9 @@ export type BibleVerseMarkView = {
   person: { id: string; full_name: string };
   is_mine: boolean;
   can_delete: boolean;
+  like_count: number;
+  liked_by_me: boolean;
+  reply_count: number;
 };
 
 export type BibleFeedPage = {
@@ -55,7 +58,24 @@ export type BibleFeedPage = {
   nextCursor: string | null;
 };
 
-type MarkRow = BibleVerseMark & { person: { id: string; full_name: string } };
+type MarkRow = BibleVerseMark & {
+  person: { id: string; full_name: string };
+  likes?: { id: string }[];
+  _count?: { likes: number; replies: number };
+};
+
+/**
+ * O que toda leitura de marcação traz junto: autor, contagem de curtidas e de
+ * respostas vivas, e se quem pede já curtiu (`likes` filtrado pela própria
+ * pessoa — no máximo uma linha, pelo `@@unique([mark_id, person_id])`).
+ */
+function markInclude(personId: string) {
+  return {
+    person: { select: { id: true, full_name: true } },
+    likes: { where: { person_id: personId }, select: { id: true } },
+    _count: { select: { likes: true, replies: { where: { deleted_at: null } } } },
+  } as const;
+}
 
 @Injectable()
 export class BibleVerseMarksService {
@@ -95,7 +115,7 @@ export class BibleVerseMarksService {
         verse_end: dto.verse_end,
         comment: dto.comment,
       },
-      include: { person: { select: { id: true, full_name: true } } },
+      include: markInclude(personId),
     });
 
     return this.toView(mark as MarkRow, personId, this.isModerator(user));
@@ -115,7 +135,7 @@ export class BibleVerseMarksService {
       },
       orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
       take: limit + 1,
-      include: { person: { select: { id: true, full_name: true } } },
+      include: markInclude(personId),
     });
 
     const has_more = rows.length > limit;
@@ -125,6 +145,19 @@ export class BibleVerseMarksService {
       items: page.map((r) => this.toView(r as MarkRow, personId, isModerator)),
       nextCursor: has_more ? page[page.length - 1]!.id : null,
     };
+  }
+
+  /** Uma marcação só — é o que a tela de respostas e o push de resposta abrem. */
+  async findOne(id: string, user: JwtPayload): Promise<BibleVerseMarkView> {
+    const personId = await this.requirePerson(user);
+
+    const mark = await this.prisma.client.bibleVerseMark.findFirst({
+      where: { id, deleted_at: null },
+      include: markInclude(personId),
+    });
+    if (!mark) throw new NotFoundException('Marcação não encontrada');
+
+    return this.toView(mark as MarkRow, personId, this.isModerator(user));
   }
 
   async update(
@@ -147,7 +180,7 @@ export class BibleVerseMarksService {
     const updated = await this.prisma.client.bibleVerseMark.update({
       where: { id },
       data: { comment: dto.comment },
-      include: { person: { select: { id: true, full_name: true } } },
+      include: markInclude(personId),
     });
 
     return this.toView(updated as MarkRow, personId, this.isModerator(user));
@@ -188,7 +221,7 @@ export class BibleVerseMarksService {
    * não de célula. A única porta é ter `congregation_id` resolvido no JWT: é
    * o que falta numa conta `platform_support` pura (spec.md, edge case).
    */
-  private async requirePerson(user: JwtPayload): Promise<string> {
+  async requirePerson(user: JwtPayload): Promise<string> {
     if (!user.congregation_id) {
       throw new ForbiddenException('Usuário sem congregação — recurso exclusivo de conta de igreja');
     }
@@ -202,7 +235,7 @@ export class BibleVerseMarksService {
     return account.person_id;
   }
 
-  private isModerator(user: JwtPayload): boolean {
+  isModerator(user: JwtPayload): boolean {
     return user.roles.some((role) => MODERATOR_ROLES.includes(role));
   }
 
@@ -238,6 +271,9 @@ export class BibleVerseMarksService {
       person: row.person,
       is_mine,
       can_delete: is_mine || isModerator,
+      like_count: row._count?.likes ?? 0,
+      liked_by_me: (row.likes?.length ?? 0) > 0,
+      reply_count: row._count?.replies ?? 0,
     };
   }
 }

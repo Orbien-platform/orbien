@@ -83,11 +83,11 @@ métricas passou a valer para todos os apps:
 
 | App | Statements | Branches | Functions | Lines | Suítes | Piso travado |
 |---|---|---|---|---|---|---|
-| api | 100% | 100% | 100% | 100% | 302 (2951 testes) | 100/100/100/100 |
+| api | 100% | 100% | 100% | 100% | 304 (2981 testes) | 100/100/100/100 |
 | web | 99,40% | 97,02% | 99,81% | 99,93% | 115 (1344 testes) | 99/97/99/99 global + por caminho |
 | site | 100% | 100% | 100% | 100% | 76 (281 testes) | 100/100/100/100 |
 | admin | 99,66% | 98,50% | 100% | 100% | 27 (221 testes) | 99/98/100/100 |
-| mobile | 99,18% | 97,04% | 98,69% | 99,86% | 56 (522 testes) | 99/97/98/99 |
+| mobile | 99,25% | 97,02% | 98,83% | 99,87% | 59 (562 testes) | 99/97/98/99 |
 
 O mobile era o único abaixo de 96% (branches 85,85%, functions 93,89%). Os
 testes novos cobrem o que as suítes das telas não exercitavam: resposta ou

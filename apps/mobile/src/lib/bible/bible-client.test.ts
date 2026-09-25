@@ -6,7 +6,20 @@ jest.mock("../auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
-import { createMark, deleteMark, getBooks, getChapter, getFeed, updateMark } from "./bible-client";
+import {
+  createMark,
+  createReply,
+  deleteMark,
+  deleteReply,
+  getBooks,
+  getChapter,
+  getFeed,
+  getMark,
+  getReplies,
+  likeMark,
+  unlikeMark,
+  updateMark,
+} from "./bible-client";
 
 describe("BibleClient", () => {
   beforeEach(() => {
@@ -114,6 +127,32 @@ describe("BibleClient", () => {
         "get",
         "/bible/feed?before=m1&limit=20",
       );
+    });
+  });
+
+  describe("curtidas e respostas", () => {
+    it.each([
+      ["getMark", () => getMark("m1"), ["get", "/bible/marks/m1"]],
+      ["likeMark", () => likeMark("m1"), ["post", "/bible/marks/m1/like"]],
+      ["unlikeMark", () => unlikeMark("m1"), ["delete", "/bible/marks/m1/like"]],
+      ["getReplies", () => getReplies("m1"), ["get", "/bible/marks/m1/replies"]],
+      ["deleteReply", () => deleteReply("m1", "r1"), ["delete", "/bible/marks/m1/replies/r1"]],
+    ] as const)("%s chama o endpoint certo", async (_name, call, expected) => {
+      mockAuthenticatedRequest.mockResolvedValue({});
+
+      await call();
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(...expected);
+    });
+
+    it("createReply manda o comentário no corpo", async () => {
+      mockAuthenticatedRequest.mockResolvedValue({ id: "r1" });
+
+      await createReply("m1", "Amém!");
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/bible/marks/m1/replies", {
+        body: { comment: "Amém!" },
+      });
     });
   });
 });

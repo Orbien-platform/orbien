@@ -38,9 +38,9 @@ module.exports = {
   coverageDirectory: "coverage",
   coverageReporters: ["text-summary", "lcov"],
 
-  // Piso medido em 2026-09-25 sobre `collectCoverageFrom` acima: 99,18
-  // statements / 97,04 branches / 98,69 functions / 99,86 lines, com 56
-  // suítes e 522 testes. O threshold é o inteiro para baixo de cada um —
+  // Piso medido em 2026-09-25 sobre `collectCoverageFrom` acima: 99,25
+  // statements / 97,02 branches / 98,83 functions / 99,87 lines, com 59
+  // suítes e 562 testes (já com curtir/responder da Bíblia, PR #132). O threshold é o inteiro para baixo de cada um —
   // margem para variação de instrumentação sem afrouxar o portão. Mesmo
   // mecanismo do `apps/admin/vitest.config.ts`.
   //
