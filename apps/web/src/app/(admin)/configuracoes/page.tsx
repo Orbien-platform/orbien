@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useTheme } from "next-themes";
-import { Building2, Image as ImageIcon, Loader2, Palette } from "lucide-react";
+import { Building2, Image as ImageIcon, Loader2, Palette, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ interface Settings {
     logo_url: string | null;
     logo_url_dark: string | null;
     splash_url: string | null;
+    pix_key: string | null;
   };
   congregation: {
     name: string;
@@ -45,6 +46,7 @@ interface UpdateSettingsPayload {
     primary_color?: string;
     accent_color?: string;
   };
+  branding?: { pix_key?: string };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -170,6 +172,9 @@ export default function ConfiguracoesPage() {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
 
+  // Financeiro
+  const [pixKey, setPixKey] = useState("");
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [toastMsg, setToastMsg] = useState("");
@@ -195,6 +200,8 @@ export default function ConfiguracoesPage() {
     setTenantName(data.tenant.name ?? "");
     setTenantEmail(data.tenant.email ?? "");
     setTenantPhone(initPhone(data.tenant.phone ?? undefined));
+
+    setPixKey(data.branding.pix_key ?? "");
   }
 
   const load = useCallback(() => {
@@ -282,6 +289,10 @@ export default function ConfiguracoesPage() {
       setSaveError("Cor de destaque deve ser um código hexadecimal válido (ex: #00B8A2).");
       return;
     }
+    if (pixKey.trim().length > 140) {
+      setSaveError("Chave PIX muito longa (máximo 140 caracteres).");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -310,6 +321,9 @@ export default function ConfiguracoesPage() {
           email: tenantEmail.trim() || undefined,
           phone: stripPhone(tenantPhone) || undefined,
         };
+        if (pixKey.trim()) {
+          payload.branding = { pix_key: pixKey.trim() };
+        }
       }
 
       const { data } = await api.patch<Settings>("/settings", payload);
@@ -684,6 +698,29 @@ export default function ConfiguracoesPage() {
               </Field>
             </div>
           </section>
+
+          {/* ── Financeiro ── */}
+          {canEditTenant && (
+            <section className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Wallet size={16} strokeWidth={1.5} className="text-navy" />
+                <h2 className="text-sm font-medium text-ink dark:text-white">Financeiro</h2>
+              </div>
+              <Field label="Chave PIX" full>
+                <Input
+                  value={pixKey}
+                  onChange={(e) => setPixKey(e.target.value)}
+                  placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                  disabled={isSaving}
+                  className="rounded-[8px]"
+                />
+              </Field>
+              <p className="mt-1.5 text-xs text-stone">
+                Mostrada para quem doa pela página pública da igreja, para copiar e pagar
+                por PIX.
+              </p>
+            </section>
+          )}
 
           {saveError && (
             <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">{saveError}</p>
