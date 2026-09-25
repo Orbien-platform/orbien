@@ -19,7 +19,10 @@ export default function EsqueciSenhaPage() {
 
     setIsSubmitting(true);
     try {
-      await api.post("/auth/forgot-password", {
+      // Rota do console, separada da do web: só conta de plataforma recebe o
+      // e-mail, com a marca da Orbien e o link para o `/redefinir-senha`
+      // deste app.
+      await api.post("/auth/platform/forgot-password", {
         email: email.trim().toLowerCase(),
       });
     } catch {

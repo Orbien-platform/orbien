@@ -152,7 +152,7 @@ Serviço novo significa URL nova até o domínio ser reapontado.
 | `RESEND_API_KEY` | API key do Resend | Dashboard Resend |
 
 Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
-`ALLOWED_ORIGINS`, `MAIL_FROM`, `FRONTEND_URL`.
+`ALLOWED_ORIGINS`, `MAIL_FROM`, `FRONTEND_URL`, `ADMIN_URL`.
 
 `ALLOWED_ORIGINS` é a lista de origens do CORS, separada por vírgula. Se o
 domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
@@ -166,6 +166,11 @@ outro valor (um `*.vercel.app`, por exemplo) ou nada, `frontendUrl()`
 (`apps/api/src/common/urls/frontend-url.ts`) usa `https://web.useorbien.com` e
 registra um `WARN [FrontendUrl]` no log — sinal de que o painel precisa ser
 corrigido.
+
+`ADMIN_URL` é o mesmo papel para o console: base do link de redefinição de
+senha de conta de plataforma (`POST /auth/platform/forgot-password`, que abre o
+`/redefinir-senha` do `apps/admin`). Mesma regra de domínio — fora de
+`useorbien.com` em produção, `adminUrl()` usa `https://admin.useorbien.com`.
 
 **Pendente de configurar — Bíblia NVI (`biblia-nvi-marcacoes-mobile`, `PEND-09`
 em `docs/PLANO.md`).** `ApiBibleTextProvider`

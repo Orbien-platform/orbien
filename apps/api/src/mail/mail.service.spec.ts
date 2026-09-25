@@ -11,6 +11,16 @@ jest.mock('resend', () => ({
 // Importado depois do mock para garantir que MailService receba o construtor mockado.
 import { Resend } from 'resend';
 import { MailService } from './mail.service';
+import { PLATFORM_MAIL_BRAND, tenantMailBrand } from './mail-brand';
+
+const TENANT = tenantMailBrand({
+  name: 'Igreja Teste 1',
+  brandingConfig: {
+    primary_color: '#7A1F2B',
+    secondary_color: '#F2B705',
+    logo_url: 'https://cdn.example.com/teste1/logo.png',
+  },
+});
 
 const ORIGINAL_ENV = process.env;
 
@@ -57,7 +67,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana'),
+        service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', PLATFORM_MAIL_BRAND),
       ).resolves.toBeUndefined();
       expect(sendMock).not.toHaveBeenCalled();
     });
@@ -68,7 +78,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana'),
+        service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', PLATFORM_MAIL_BRAND),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
 
@@ -78,11 +88,11 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana');
+      await service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', PLATFORM_MAIL_BRAND);
 
       expect(sendMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Orbien <naoresponda@useorbien.com>',
+          from: '"Orbien" <naoresponda@useorbien.com>',
           to: 'user@x.com',
           subject: 'Redefinição de senha — Orbien',
           html: expect.stringContaining('Olá, Ana'),
@@ -95,7 +105,7 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendPasswordReset('user@x.com', 'https://x/reset', '');
+      await service.sendPasswordReset('user@x.com', 'https://x/reset', '', PLATFORM_MAIL_BRAND);
 
       expect(sendMock).toHaveBeenCalledWith(
         expect.objectContaining({ html: expect.stringContaining('Olá,<') }),
@@ -108,10 +118,10 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana');
+      await service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', PLATFORM_MAIL_BRAND);
 
       expect(sendMock).toHaveBeenCalledWith(
-        expect.objectContaining({ from: 'Orbien <naoresponda@useorbien.com>' }),
+        expect.objectContaining({ from: '"Orbien" <naoresponda@useorbien.com>' }),
       );
     });
 
@@ -121,7 +131,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana'),
+        service.sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', PLATFORM_MAIL_BRAND),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
@@ -133,7 +143,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc'),
+        service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc', PLATFORM_MAIL_BRAND),
       ).resolves.toBeUndefined();
       expect(sendMock).not.toHaveBeenCalled();
     });
@@ -144,7 +154,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc'),
+        service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc', PLATFORM_MAIL_BRAND),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
 
@@ -154,13 +164,13 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc');
+      await service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc', PLATFORM_MAIL_BRAND);
 
       expect(sendMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Orbien <naoresponda@useorbien.com>',
+          from: '"Orbien" <naoresponda@useorbien.com>',
           to: 'user@x.com',
-          subject: 'Você foi convidado para o Orbien',
+          subject: 'Você foi convidado para Orbien',
           html: expect.stringContaining('https://x/redefinir-senha?token=abc'),
         }),
       );
@@ -172,10 +182,10 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc');
+      await service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc', PLATFORM_MAIL_BRAND);
 
       expect(sendMock).toHaveBeenCalledWith(
-        expect.objectContaining({ from: 'Orbien <naoresponda@useorbien.com>' }),
+        expect.objectContaining({ from: '"Orbien" <naoresponda@useorbien.com>' }),
       );
     });
 
@@ -185,7 +195,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc'),
+        service.sendInvite('user@x.com', 'https://x/redefinir-senha?token=abc', PLATFORM_MAIL_BRAND),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
@@ -197,7 +207,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf'),
+        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf', TENANT),
       ).resolves.toBeUndefined();
       expect(sendMock).not.toHaveBeenCalled();
     });
@@ -208,7 +218,7 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf'),
+        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf', TENANT),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
 
@@ -218,13 +228,13 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendDonationReceipt('user@x.com', 'Ana', 1234.5, 'https://cdn/recibo.pdf');
+      await service.sendDonationReceipt('user@x.com', 'Ana', 1234.5, 'https://cdn/recibo.pdf', TENANT);
 
       expect(sendMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Orbien <naoresponda@useorbien.com>',
+          from: '"Igreja Teste 1" <naoresponda@useorbien.com>',
           to: 'user@x.com',
-          subject: 'Recibo de doação — Orbien',
+          subject: 'Recibo de doação — Igreja Teste 1',
           html: expect.stringContaining('Olá, Ana'),
         }),
       );
@@ -239,10 +249,10 @@ describe('MailService', () => {
       sendMock.mockResolvedValue({ error: null });
       const service = new MailService();
 
-      await service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf');
+      await service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf', TENANT);
 
       expect(sendMock).toHaveBeenCalledWith(
-        expect.objectContaining({ from: 'Orbien <naoresponda@useorbien.com>' }),
+        expect.objectContaining({ from: '"Igreja Teste 1" <naoresponda@useorbien.com>' }),
       );
     });
 
@@ -252,8 +262,48 @@ describe('MailService', () => {
       const service = new MailService();
 
       await expect(
-        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf'),
+        service.sendDonationReceipt('user@x.com', 'Ana', 100, 'https://cdn/recibo.pdf', TENANT),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+  });
+
+  describe('marca do tenant', () => {
+    beforeEach(() => {
+      process.env['RESEND_API_KEY'] = 'key-123';
+      process.env['MAIL_FROM'] = 'Orbien <naoresponda@useorbien.com>';
+      sendMock.mockResolvedValue({ error: null });
+    });
+
+    it('a redefinição de senha leva nome, cores e logo do tenant, sem citar a Orbien', async () => {
+      await new MailService().sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', TENANT);
+
+      const call = sendMock.mock.calls[0][0];
+      expect(call.from).toBe('"Igreja Teste 1" <naoresponda@useorbien.com>');
+      expect(call.subject).toBe('Redefinição de senha — Igreja Teste 1');
+      expect(call.html).toContain('src="https://cdn.example.com/teste1/logo.png"');
+      expect(call.html).toContain('background: #7A1F2B');
+      expect(call.html).toContain('background: #F2B705');
+      expect(call.html).not.toMatch(/orbien/i);
+    });
+
+    it('a redefinição de senha no contexto da plataforma assina como Orbien', async () => {
+      await new MailService().sendPasswordReset('user@x.com', 'https://x/reset', 'Ana', PLATFORM_MAIL_BRAND);
+
+      const call = sendMock.mock.calls[0][0];
+      expect(call.subject).toBe('Redefinição de senha — Orbien');
+      expect(call.html).toContain('background: #1E3A7B');
+      expect(call.html).toContain('Orbien — Gestão inteligente para igrejas');
+    });
+
+    it('escapa o nome do tenant no HTML e o limpa no remetente', async () => {
+      const brand = tenantMailBrand({ name: 'Igreja <b>"X"</b>', brandingConfig: null });
+      await new MailService().sendInvite('user@x.com', 'https://x/r?token=a&b=1', brand);
+
+      const call = sendMock.mock.calls[0][0];
+      expect(call.html).toContain('Igreja &lt;b&gt;&quot;X&quot;&lt;/b&gt;');
+      expect(call.html).not.toContain('<b>');
+      expect(call.html).toContain('href="https://x/r?token=a&amp;b=1"');
+      expect(call.from).toBe('"Igreja bX/b" <naoresponda@useorbien.com>');
     });
   });
 });
