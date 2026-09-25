@@ -3,24 +3,33 @@
 // no backend), exibe os versículos numerados e deixa marcar um trecho com
 // comentário, que vai para o feed da congregação (`createMark`).
 //
-// O fluxo cabe em três toques e nunca sai do lugar onde a pessoa está lendo:
+// O fluxo cabe em três toques e acontece onde a pessoa está lendo:
 //
-// 1. Tocar num versículo já o marca (um versículo é o caso comum — não pede
-//    segundo toque). Tocar em outro estende a marcação até ele; tocar de
+// 1. Tocar num versículo já o marca — um versículo basta, não há segundo
+//    toque obrigatório. Tocar em outro estende a marcação até ele; tocar de
 //    novo depois disso recomeça. Tocar no único marcado desmarca.
-// 2. Com algo marcado, a barra fixa no rodapé mostra a referência ("João
-//    3:16") e o botão "Comentar". Ela fica fora do scroll de propósito: num
-//    capítulo de 50 versículos o botão no fim da lista era invisível para
-//    quem marcou o versículo 3.
-// 3. O comentário é escrito na própria barra e "Publicar no feed" grava. A
-//    confirmação oferece o caminho até o feed.
+// 2. Logo abaixo do último versículo marcado aparece "Comentar João 3:16".
+//    Fica ali, e não num rodapé ou no fim da lista, porque num capítulo
+//    longo o fim fica longe e o rodapé fica longe do olho de quem tocou.
+// 3. O comentário é escrito numa folha própria (Modal), que cita o texto do
+//    trecho — é isso que vai para o feed. "Publicar no feed" grava; a
+//    confirmação aparece no mesmo lugar e oferece o caminho até o feed.
 //
 // Padrão de erro/retry: mesmo de celebracao/[id].tsx (`retryCount` força o
 // efeito a rodar de novo, StatusMessage com botão só quando a falha não é
 // definitiva).
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Alert } from "../../../components/Alert";
@@ -45,6 +54,7 @@ import { useTheme } from "../../../lib/theme/theme-provider";
 import {
   ICON_STROKE_WIDTH,
   iconSize,
+  quoteRuleWidth,
   radius,
   spacing,
   touchTarget,
@@ -52,6 +62,10 @@ import {
 } from "../../../lib/theme/tokens";
 
 type VerseRange = { start: number; end: number };
+
+// Coluna do número do versículo. A ação inline usa o mesmo recuo para ficar
+// alinhada ao texto, lida como parte do trecho recém-marcado.
+const VERSE_NUMBER_WIDTH = 20;
 
 // Espelha `CreateBibleVerseMarkDto` (backend): 3–2000 caracteres, mesmo
 // limite de `CreatePrayerRequestDto` (spec.md, Assumptions).
@@ -85,7 +99,7 @@ function nextRange(current: VerseRange | null, verseNumber: number): VerseRange 
 
 export default function BibliaChapterScreen() {
   const router = useRouter();
-  const { colors, primaryColor, shadow } = useTheme();
+  const { colors, primaryColor } = useTheme();
   const insets = useSafeAreaInsets();
   const horizontalPadding = useScreenPadding();
   const bookNames = useBookNames();
@@ -118,7 +132,9 @@ export default function BibliaChapterScreen() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [published, setPublished] = useState<string | null>(null);
+  // A confirmação fica ancorada no versículo onde a marcação terminava — é
+  // onde a pessoa está olhando quando a folha fecha.
+  const [published, setPublished] = useState<{ afterVerse: number; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,19 +156,7 @@ export default function BibliaChapterScreen() {
 
   function handleVersePress(verseNumber: number) {
     setPublished(null);
-    const next = nextRange(range, verseNumber);
-    setRange(next);
-    // Com o composer aberto, tocar em outro versículo só ajusta o trecho —
-    // o rascunho continua. Desmarcar tudo fecha o composer: não há mais o
-    // que comentar.
-    if (!next) setComposerOpen(false);
-  }
-
-  function handleClearSelection() {
-    setRange(null);
-    setComposerOpen(false);
-    setValidationError(null);
-    setSubmitError(null);
+    setRange(nextRange(range, verseNumber));
   }
 
   function handleCancelComposer() {
@@ -184,9 +188,10 @@ export default function BibliaChapterScreen() {
       setComposerOpen(false);
       setComment("");
       setRange(null);
-      setPublished(
-        `${formatVerseReference(bookNames, data.book_code, data.chapter, range.start, range.end)} publicado no feed da congregação.`,
-      );
+      setPublished({
+        afterVerse: range.end,
+        message: `${formatVerseReference(bookNames, data.book_code, data.chapter, range.start, range.end)} publicado no feed da congregação.`,
+      });
     } catch (err) {
       setSubmitError(describeSubmitError(err));
     } finally {
@@ -230,13 +235,12 @@ export default function BibliaChapterScreen() {
   const reference = range
     ? formatVerseReference(bookNames, data.book_code, data.chapter, range.start, range.end)
     : null;
-  const showPanel = range !== null || published !== null;
+  const quotedVerses = range
+    ? data.verses.filter((v) => v.number >= range.start && v.number <= range.end)
+    : [];
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.bgBase }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <>
       <Screen scroll testID="biblia-chapter-screen">
         <Text style={[typography.h1, { color: colors.textPrimary }]}>
           {formatVerseReference(bookNames, data.book_code, data.chapter)}
@@ -245,137 +249,165 @@ export default function BibliaChapterScreen() {
           testID="biblia-chapter-hint"
           style={[typography.bodyMedium, styles.hint, { color: colors.textSecondary }]}
         >
-          Toque em um versículo para comentar no feed da congregação.
+          Toque em um versículo para comentar. Para vários, toque no primeiro e no último.
         </Text>
 
         {data.verses.map((verse) => {
           const selected = isSelected(verse.number);
           return (
-            <Pressable
-              key={verse.number}
-              testID={`biblia-verse-${verse.number}`}
-              onPress={() => handleVersePress(verse.number)}
-              accessibilityRole="button"
-              accessibilityLabel={`Versículo ${verse.number}`}
-              accessibilityState={{ selected }}
-              style={[
-                styles.verseRow,
-                selected && { backgroundColor: colors.bgSubtle, borderColor: primaryColor },
-              ]}
-            >
-              <Text style={[typography.caption, styles.verseNumber, { color: colors.textTertiary }]}>
-                {verse.number}
-              </Text>
-              <Text style={[typography.body, styles.verseText, { color: colors.textPrimary }]}>
-                {verse.text}
-              </Text>
-            </Pressable>
+            <View key={verse.number}>
+              <Pressable
+                testID={`biblia-verse-${verse.number}`}
+                onPress={() => handleVersePress(verse.number)}
+                accessibilityRole="button"
+                accessibilityLabel={`Versículo ${verse.number}`}
+                accessibilityState={{ selected }}
+                style={[
+                  styles.verseRow,
+                  selected && { backgroundColor: colors.bgSubtle, borderColor: primaryColor },
+                ]}
+              >
+                <Text style={[typography.caption, styles.verseNumber, { color: colors.textTertiary }]}>
+                  {verse.number}
+                </Text>
+                <Text style={[typography.body, styles.verseText, { color: colors.textPrimary }]}>
+                  {verse.text}
+                </Text>
+              </Pressable>
+
+              {range && reference && verse.number === range.end ? (
+                <View testID="biblia-selection-actions" style={styles.inlineActions}>
+                  <AppButton
+                    testID="biblia-comment-cta"
+                    title={`Comentar ${reference}`}
+                    icon={MessageSquare}
+                    onPress={() => setComposerOpen(true)}
+                    style={styles.inlinePrimary}
+                  />
+                  <Pressable
+                    testID="biblia-selection-clear"
+                    onPress={() => setRange(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Desmarcar"
+                    style={[styles.iconButton, { borderColor: colors.border }]}
+                  >
+                    <X size={iconSize.action} color={colors.textSecondary} strokeWidth={ICON_STROKE_WIDTH} />
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {published && published.afterVerse === verse.number ? (
+                <View style={styles.inlineActions}>
+                  <View style={styles.inlinePrimary}>
+                    <Alert messageTestID="biblia-comment-saved" tone="success" message={published.message} />
+                  </View>
+                  <AppButton
+                    testID="biblia-open-feed"
+                    title="Ver no feed"
+                    variant="secondary"
+                    onPress={() => router.push("/biblia/feed")}
+                  />
+                </View>
+              ) : null}
+            </View>
           );
         })}
       </Screen>
 
-      {showPanel ? (
-        <View
-          testID="biblia-selection-bar"
-          style={[
-            styles.panel,
-            shadow.md,
-            {
-              backgroundColor: colors.bgSurface,
-              borderTopColor: colors.border,
-              paddingHorizontal: horizontalPadding,
-              paddingBottom: insets.bottom + spacing.sm,
-            },
-          ]}
+      <Modal
+        visible={composerOpen && range !== null}
+        animationType="slide"
+        onRequestClose={handleCancelComposer}
+        testID="biblia-comment-sheet"
+      >
+        <KeyboardAvoidingView
+          style={[styles.flex, { backgroundColor: colors.bgBase }]}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          {range && reference ? (
-            <>
-              <View style={styles.panelHeader}>
-                <View style={styles.panelHeaderText}>
-                  <Text
-                    testID="biblia-selection-reference"
-                    style={[typography.h3, { color: colors.textPrimary }]}
-                  >
-                    {reference}
+          <View
+            testID="biblia-comment-composer"
+            style={[
+              styles.sheet,
+              {
+                paddingHorizontal: horizontalPadding,
+                paddingTop: insets.top + spacing.lg,
+                paddingBottom: insets.bottom + spacing.sm,
+              },
+            ]}
+          >
+            <View style={styles.sheetHeader}>
+              <Text style={[typography.h2, styles.flex, { color: colors.textPrimary }]}>
+                {reference}
+              </Text>
+              <Pressable
+                testID="biblia-comment-close"
+                onPress={handleCancelComposer}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                style={styles.iconButton}
+              >
+                <X size={iconSize.action} color={colors.textSecondary} strokeWidth={ICON_STROKE_WIDTH} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.flex}
+              contentContainerStyle={styles.sheetBody}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View
+                testID="biblia-comment-quote"
+                style={[styles.quote, { borderLeftColor: primaryColor }]}
+              >
+                {quotedVerses.map((v) => (
+                  <Text key={v.number} style={[typography.body, { color: colors.textSecondary }]}>
+                    <Text style={[typography.caption, { color: colors.textTertiary }]}>{`${v.number} `}</Text>
+                    {v.text}
                   </Text>
-                  {range.start === range.end ? (
-                    <Text style={[typography.caption, { color: colors.textTertiary }]}>
-                      Para um trecho, toque também no último versículo.
-                    </Text>
-                  ) : null}
-                </View>
-                <Pressable
-                  testID="biblia-selection-clear"
-                  onPress={handleClearSelection}
-                  accessibilityRole="button"
-                  accessibilityLabel="Desmarcar"
-                  style={styles.clearButton}
-                >
-                  <X size={iconSize.action} color={colors.textSecondary} strokeWidth={ICON_STROKE_WIDTH} />
-                </Pressable>
+                ))}
               </View>
 
-              {composerOpen ? (
-                <View testID="biblia-comment-composer">
-                  <Input
-                    testID="biblia-comment-input"
-                    label="Comentário"
-                    placeholder="O que esse trecho falou com você?"
-                    value={comment}
-                    onChangeText={(text) => {
-                      setComment(text);
-                      setValidationError(null);
-                    }}
-                    multiline
-                    numberOfLines={4}
-                    autoFocus
-                  />
-                  {validationError ? (
-                    <Alert messageTestID="biblia-comment-validation-error" message={validationError} />
-                  ) : null}
-                  {submitError ? (
-                    <Alert messageTestID="biblia-comment-submit-error" message={submitError} />
-                  ) : null}
-                  <View style={styles.actions}>
-                    <AppButton
-                      testID="biblia-comment-cancel"
-                      title="Cancelar"
-                      variant="secondary"
-                      onPress={handleCancelComposer}
-                      style={styles.actionButton}
-                    />
-                    <AppButton
-                      testID="biblia-comment-submit"
-                      title="Publicar no feed"
-                      loading={submitting}
-                      onPress={handleSubmitComment}
-                      style={styles.actionButton}
-                    />
-                  </View>
-                </View>
-              ) : (
-                <AppButton
-                  testID="biblia-comment-cta"
-                  title="Comentar"
-                  icon={MessageSquare}
-                  onPress={() => setComposerOpen(true)}
-                />
-              )}
-            </>
-          ) : published ? (
-            <>
-              <Alert messageTestID="biblia-comment-saved" tone="success" message={published} />
-              <AppButton
-                testID="biblia-open-feed"
-                title="Ver no feed"
-                variant="secondary"
-                onPress={() => router.push("/biblia/feed")}
+              <Input
+                testID="biblia-comment-input"
+                label="Seu comentário"
+                placeholder="O que esse trecho falou com você?"
+                value={comment}
+                onChangeText={(text) => {
+                  setComment(text);
+                  setValidationError(null);
+                }}
+                multiline
+                numberOfLines={4}
+                autoFocus
               />
-            </>
-          ) : null}
-        </View>
-      ) : null}
-    </KeyboardAvoidingView>
+              {validationError ? (
+                <Alert messageTestID="biblia-comment-validation-error" message={validationError} />
+              ) : null}
+              {submitError ? (
+                <Alert messageTestID="biblia-comment-submit-error" message={submitError} />
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.sheetActions}>
+              <AppButton
+                testID="biblia-comment-cancel"
+                title="Cancelar"
+                variant="secondary"
+                onPress={handleCancelComposer}
+                style={styles.actionButton}
+              />
+              <AppButton
+                testID="biblia-comment-submit"
+                title="Publicar no feed"
+                loading={submitting}
+                onPress={handleSubmitComment}
+                style={styles.actionButton}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 }
 
@@ -392,21 +424,30 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.xs,
   },
-  verseNumber: { width: 20, marginTop: 2, textAlign: "right" },
+  verseNumber: { width: VERSE_NUMBER_WIDTH, marginTop: 2, textAlign: "right" },
   verseText: { flex: 1 },
-  panel: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.md,
+  inlineActions: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    marginLeft: VERSE_NUMBER_WIDTH + spacing.sm + spacing.xs,
   },
-  panelHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  panelHeaderText: { flex: 1 },
-  clearButton: {
+  inlinePrimary: { flex: 1 },
+  iconButton: {
     width: touchTarget,
     height: touchTarget,
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
-  actions: { flexDirection: "row", gap: spacing.sm },
+  sheet: { flex: 1 },
+  sheetHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  sheetBody: { paddingTop: spacing.lg, gap: spacing.lg },
+  quote: { borderLeftWidth: quoteRuleWidth, paddingLeft: spacing.md, gap: spacing.xs },
+  sheetActions: { flexDirection: "row", gap: spacing.sm, paddingTop: spacing.sm },
   actionButton: { flex: 1 },
 });

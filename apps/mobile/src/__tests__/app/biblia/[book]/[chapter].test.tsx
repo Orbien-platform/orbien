@@ -106,7 +106,7 @@ describe("BibliaChapterScreen", () => {
     expect(mockGetChapter).toHaveBeenCalledTimes(2);
   });
 
-  it("um toque já marca o versículo e mostra a barra com a referência e o Comentar", async () => {
+  it("um toque já marca o versículo e mostra o Comentar logo abaixo dele, com a referência", async () => {
     mockGetChapter.mockResolvedValue(CHAPTER);
 
     await act(async () => {
@@ -114,9 +114,9 @@ describe("BibliaChapterScreen", () => {
     });
     await waitFor(() => screen.getByTestId("biblia-verse-1"));
 
-    // Sem nada marcado: a dica explica o gesto e a barra não aparece.
+    // Sem nada marcado: a dica explica o gesto e não há ação.
     expect(screen.getByTestId("biblia-chapter-hint")).toBeTruthy();
-    expect(screen.queryByTestId("biblia-selection-bar")).toBeNull();
+    expect(screen.queryByTestId("biblia-selection-actions")).toBeNull();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("biblia-verse-2"));
@@ -124,7 +124,7 @@ describe("BibliaChapterScreen", () => {
 
     expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
     expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(false);
-    expect(await screen.findByText("João 3:2")).toBeTruthy();
+    expect(await screen.findByText("Comentar João 3:2")).toBeTruthy();
     expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
   });
 
@@ -145,7 +145,7 @@ describe("BibliaChapterScreen", () => {
     expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(true);
     expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(true);
     expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(true);
-    expect(await screen.findByText("João 3:1-3")).toBeTruthy();
+    expect(await screen.findByText("Comentar João 3:1-3")).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("biblia-verse-2"));
@@ -155,7 +155,7 @@ describe("BibliaChapterScreen", () => {
     expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(false);
   });
 
-  it("tocar no único versículo marcado, ou em Desmarcar, tira a marcação e a barra", async () => {
+  it("tocar no único versículo marcado, ou em Desmarcar, tira a marcação e a ação", async () => {
     mockGetChapter.mockResolvedValue(CHAPTER);
 
     await act(async () => {
@@ -170,7 +170,7 @@ describe("BibliaChapterScreen", () => {
       fireEvent.press(screen.getByTestId("biblia-verse-2"));
     });
     expect(screen.getByTestId("biblia-verse-2").props.accessibilityState.selected).toBe(false);
-    expect(screen.queryByTestId("biblia-selection-bar")).toBeNull();
+    expect(screen.queryByTestId("biblia-selection-actions")).toBeNull();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("biblia-verse-1"));
@@ -179,7 +179,7 @@ describe("BibliaChapterScreen", () => {
       fireEvent.press(screen.getByTestId("biblia-selection-clear"));
     });
     expect(screen.getByTestId("biblia-verse-1").props.accessibilityState.selected).toBe(false);
-    expect(screen.queryByTestId("biblia-selection-bar")).toBeNull();
+    expect(screen.queryByTestId("biblia-selection-actions")).toBeNull();
   });
 
   it("submissão válida chama createMark com o intervalo e o comentário, e confirma visualmente (BIB-04)", async () => {
@@ -199,6 +199,10 @@ describe("BibliaChapterScreen", () => {
     });
 
     await selectRangeAndOpenComposer();
+
+    // A folha cita o trecho que vai para o feed.
+    expect(screen.getByTestId("biblia-comment-quote")).toHaveTextContent(/Havia um fariseu/);
+    expect(screen.getByTestId("biblia-comment-quote")).toHaveTextContent(/Jesus lhe respondeu/);
 
     await act(async () => {
       fireEvent.changeText(
