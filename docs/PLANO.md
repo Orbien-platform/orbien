@@ -1546,6 +1546,26 @@ curl -si -X OPTIONS https://orbien-api.onrender.com/api/content/posts/x/upload \
   -H 'Access-Control-Request-Headers: authorization' | grep -i access-control-allow-origin
 ```
 
+### PEND-11 · Site ainda fora de duas regras novas do guia de marca · dívida
+
+O §3.3 de `apps/site/design-reference/orbien-brand-guidelines.md` ganhou, em
+2026-09-25, três regras: rótulo sem caixa alta, mono só para dado, mínimo de
+11px. A de caixa alta foi aplicada nos quatro fronts no mesmo PR. As outras
+duas ficaram de fora no `apps/site`, porque ali não é classe trocada, é
+decisão caso a caso:
+
+- **Mono em rótulo.** Sobram ~77 `font-mono` no site. A maioria é dado nas
+  miniaturas de tela (valor, horário, contagem), que a regra permite; uma
+  parte é rótulo ("Exportar", "Ver todos →", "Esta semana", dias da semana).
+- **Abaixo de 11px fora das miniaturas.** ~10 textos, entre eles os selos em
+  mono de 9px de `precos/TierTable.tsx` e legendas de 10px em `PixFlow`,
+  `EstagioAtual`, `ConteudosCapabilities`, `TiposConteudo`, `MemberLifecycle`
+  e `PGCapabilities`. As miniaturas de tela estão dispensadas pelo próprio guia.
+
+Junto, e da mesma revisão: as miniaturas dos heros não levam `aria-hidden`,
+então leitor de tela lê "Olá, Pastor André" e "R$ 2.840" como conteúdo da
+página.
+
 ---
 
 ## 8. Ajustes — documento, rótulo e portão

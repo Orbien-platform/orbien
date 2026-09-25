@@ -18,7 +18,9 @@ import { readFileSync, existsSync } from "node:fs";
 import { relative, isAbsolute, resolve } from "node:path";
 
 const SKILL = "frontend-design";
-const FRONT = /^apps\/(web|site|admin|mobile)\//;
+// Em qualquer ponto do caminho, não só na raiz: uma worktree
+// (`.claude/worktrees/<nome>/apps/web/...`) é o mesmo front.
+const FRONT = /(^|\/)apps\/(web|site|admin|mobile)\//;
 
 let input;
 try {
