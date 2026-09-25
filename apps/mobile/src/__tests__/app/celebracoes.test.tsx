@@ -1,12 +1,7 @@
-// Testes derivados do Done-when de T5 (tasks.md, MOB-08): lista vem de
-// getMyAssignments para member/volunteer e de listUpcomingInstances para
-// ministry_leader+ (AC1/AC6); item sem OC não tem link; toque num item com
-// OC navega para /celebracao/[id] com os params certos; estado vazio
-// distinto por papel; erro de rede.
-//
-// Migrado 1:1 de src/__tests__/app/(tabs)/celebracoes.test.tsx — mesma
-// suíte, só o import do componente mudou de `(tabs)/celebracoes` para
-// `celebracoes` (T6, .specs/features/mobile-home-redesign/tasks.md).
+// Tela Celebrações: a agenda aparece para todo membro (listAgenda), e
+// ministry_leader+ usa listUpcomingInstances, que traz a OC. A escala
+// (getMyAssignments) só marca os cultos em que a pessoa serve e abre a OC
+// para ela. Quem não está escalado nem é líder vê o culto e a data, sem OC.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { NetworkError } from "../../lib/api/errors";
 
@@ -26,8 +21,10 @@ jest.mock("../../lib/escala/escala-client", () => ({
 }));
 
 const mockListUpcomingInstances = jest.fn();
+const mockListAgenda = jest.fn();
 jest.mock("../../lib/celebracoes/celebracoes-client", () => ({
   listUpcomingInstances: (...args: unknown[]) => mockListUpcomingInstances(...args),
+  listAgenda: (...args: unknown[]) => mockListAgenda(...args),
 }));
 
 import CelebracoesScreen from "../../app/celebracoes";
@@ -48,156 +45,130 @@ function sessionWithRoles(roles: string[]) {
   };
 }
 
+const agendaDomingo = {
+  id: "i1",
+  scheduled_date: "2026-09-27T00:00:00.000Z",
+  celebration: { id: "c1", name: "Celebração de domingo", type: "sunday", start_time: "19:00" },
+};
+
+function assignment(overrides: object = {}) {
+  return {
+    id: "a1",
+    celebration: { id: "c1", name: "Celebração de domingo" },
+    ministry: { id: "min1", name: "Louvor" },
+    scheduled_date: "2026-09-27T00:00:00.000Z",
+    service_order_id: "ord1",
+    status: "confirmed",
+    notified_at: null,
+    responded_at: null,
+    checked_in_at: null,
+    setlist: null,
+    ...overrides,
+  };
+}
+
+async function renderScreen() {
+  await act(async () => {
+    render(<CelebracoesScreen />);
+  });
+}
+
 describe("CelebracoesScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetMyAssignments.mockResolvedValue([]);
   });
 
-  it("member/volunteer: lista vem de getMyAssignments (AC1)", async () => {
-    mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
-    mockGetMyAssignments.mockResolvedValue([
-      {
-        id: "a1",
-        celebration: { id: "c1", name: "Culto de Domingo" },
-        ministry: { id: "min1", name: "Louvor" },
-        scheduled_date: "2026-09-13T13:00:00.000Z",
-        service_order_id: "ord1",
-        status: "confirmed",
-        notified_at: null,
-        responded_at: null,
-        checked_in_at: null,
-        setlist: null,
-      },
-    ]);
+  it("membro sem escala vê o culto, o dia e o horário — sem OC", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+    mockListAgenda.mockResolvedValue([agendaDomingo]);
 
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
+    await renderScreen();
 
-    expect(mockGetMyAssignments).toHaveBeenCalledTimes(1);
+    expect(mockListAgenda).toHaveBeenCalledTimes(1);
     expect(mockListUpcomingInstances).not.toHaveBeenCalled();
-    expect(screen.getByTestId("celebracao-a1")).toBeTruthy();
-    expect(screen.getByText("Culto de Domingo")).toBeTruthy();
+    expect(screen.getByText("Celebração de domingo")).toBeTruthy();
+    // Domingo às 19:00 — não a véspera às 21:00, que é o que a meia-noite
+    // UTC vira em Brasília.
+    expect(screen.getByText("dom, 27 set · 19:00")).toBeTruthy();
+    expect(screen.queryByTestId("celebracao-escalado-i1")).toBeNull();
+    expect(screen.queryByTestId("celebracao-abrir-i1")).toBeNull();
+    expect(screen.queryByText("Ordem de Culto ainda não publicada")).toBeNull();
   });
 
-  it("ministry_leader: lista vem de listUpcomingInstances, não de getMyAssignments (AC6)", async () => {
-    mockUseAuth.mockReturnValue(sessionWithRoles(["ministry_leader"]));
-    mockListUpcomingInstances.mockResolvedValue([
-      {
-        id: "i1",
-        celebration: { id: "c1", name: "Culto da Congregação", type: "sunday" },
-        scheduled_date: "2026-09-13T13:00:00.000Z",
-        serviceOrder: { id: "ord2", title: "OC", published_at: null },
-      },
-    ]);
-
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
-
-    expect(mockListUpcomingInstances).toHaveBeenCalledTimes(1);
-    expect(mockGetMyAssignments).not.toHaveBeenCalled();
-    expect(screen.getByTestId("celebracao-i1")).toBeTruthy();
-    expect(screen.getByText("Culto da Congregação")).toBeTruthy();
-  });
-
-  it("item sem service_order_id não mostra o link de abrir a OC", async () => {
+  it("membro escalado vê a marca do ministério e abre a OC com ministryId", async () => {
     mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
-    mockGetMyAssignments.mockResolvedValue([
-      {
-        id: "a1",
-        celebration: { id: "c1", name: "Culto sem OC" },
-        ministry: { id: "min1", name: "Louvor" },
-        scheduled_date: "2026-09-13T13:00:00.000Z",
-        service_order_id: null,
-        status: "pending",
-        notified_at: null,
-        responded_at: null,
-        checked_in_at: null,
-        setlist: null,
-      },
-    ]);
+    mockListAgenda.mockResolvedValue([agendaDomingo]);
+    mockGetMyAssignments.mockResolvedValue([assignment()]);
 
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
+    await renderScreen();
 
-    expect(screen.queryByTestId("celebracao-abrir-a1")).toBeNull();
-  });
-
-  it("toque num item vindo de assignment navega para /celebracao/[id] com id e ministryId", async () => {
-    mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
-    mockGetMyAssignments.mockResolvedValue([
-      {
-        id: "a1",
-        celebration: { id: "c1", name: "Culto de Domingo" },
-        ministry: { id: "min1", name: "Louvor" },
-        scheduled_date: "2026-09-13T13:00:00.000Z",
-        service_order_id: "ord1",
-        status: "confirmed",
-        notified_at: null,
-        responded_at: null,
-        checked_in_at: null,
-        setlist: null,
-      },
-    ]);
-
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
-    fireEvent.press(screen.getByTestId("celebracao-abrir-a1"));
-
+    expect(screen.getByText("Você serve em Louvor")).toBeTruthy();
+    // Um card só: a escala casa com a agenda pelo culto e pelo dia.
+    expect(screen.queryByTestId("celebracao-a1")).toBeNull();
+    fireEvent.press(screen.getByTestId("celebracao-abrir-i1"));
     expect(mockPush).toHaveBeenCalledWith("/celebracao/ord1?ministryId=min1");
   });
 
-  it("toque num item vindo da lista do líder navega sem ministryId", async () => {
+  it("escalado sem OC ainda vê o aviso de OC não publicada, sem link", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
+    mockListAgenda.mockResolvedValue([agendaDomingo]);
+    mockGetMyAssignments.mockResolvedValue([assignment({ service_order_id: null })]);
+
+    await renderScreen();
+
+    expect(screen.getByText("Ordem de Culto ainda não publicada")).toBeTruthy();
+    expect(screen.queryByTestId("celebracao-abrir-i1")).toBeNull();
+  });
+
+  it("escala sem par na agenda continua aparecendo", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
+    mockListAgenda.mockResolvedValue([]);
+    mockGetMyAssignments.mockResolvedValue([assignment()]);
+
+    await renderScreen();
+
+    expect(screen.getByTestId("celebracao-a1")).toBeTruthy();
+    expect(screen.getByText("Você serve em Louvor")).toBeTruthy();
+  });
+
+  it("ministry_leader: lista vem de listUpcomingInstances e abre a OC sem ministryId", async () => {
     mockUseAuth.mockReturnValue(sessionWithRoles(["ministry_leader"]));
     mockListUpcomingInstances.mockResolvedValue([
-      {
-        id: "i1",
-        celebration: { id: "c1", name: "Culto da Congregação", type: "sunday" },
-        scheduled_date: "2026-09-13T13:00:00.000Z",
-        serviceOrder: { id: "ord2", title: "OC", published_at: null },
-      },
+      { ...agendaDomingo, serviceOrder: { id: "ord2", title: "OC", published_at: null } },
     ]);
 
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
-    fireEvent.press(screen.getByTestId("celebracao-abrir-i1"));
+    await renderScreen();
 
+    expect(mockListAgenda).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId("celebracao-abrir-i1"));
     expect(mockPush).toHaveBeenCalledWith("/celebracao/ord2");
   });
 
-  it("lista vazia para volunteer mostra a mensagem específica de voluntário", async () => {
-    mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
-    mockGetMyAssignments.mockResolvedValue([]);
+  it("papel sem rota de escala (secretary) ainda vê a agenda", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["secretary"]));
+    mockListUpcomingInstances.mockResolvedValue([{ ...agendaDomingo, serviceOrder: null }]);
+    mockGetMyAssignments.mockRejectedValue(new Error("403"));
 
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
+    await renderScreen();
 
-    expect(screen.getByText("Você não tem celebrações próximas.")).toBeTruthy();
+    expect(screen.getByText("Celebração de domingo")).toBeTruthy();
   });
 
-  it("lista vazia para ministry_leader mostra a mensagem específica de líder", async () => {
-    mockUseAuth.mockReturnValue(sessionWithRoles(["ministry_leader"]));
-    mockListUpcomingInstances.mockResolvedValue([]);
+  it("agenda vazia mostra a mensagem de nenhuma celebração", async () => {
+    mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+    mockListAgenda.mockResolvedValue([]);
 
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
+    await renderScreen();
 
     expect(screen.getByText("Nenhuma celebração agendada.")).toBeTruthy();
   });
 
   it("erro de rede mostra estado de erro explícito, não lista vazia", async () => {
     mockUseAuth.mockReturnValue(sessionWithRoles(["volunteer"]));
-    mockGetMyAssignments.mockRejectedValue(new NetworkError());
+    mockListAgenda.mockRejectedValue(new NetworkError());
 
-    await act(async () => {
-      render(<CelebracoesScreen />);
-    });
+    await renderScreen();
 
     expect(screen.getByTestId("celebracoes-error")).toBeTruthy();
     expect(

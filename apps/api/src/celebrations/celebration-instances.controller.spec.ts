@@ -32,6 +32,7 @@ describe('CelebrationInstancesController', () => {
     instancesService = {
       create: jest.fn(),
       findAll: jest.fn(),
+      findUpcoming: jest.fn(),
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
@@ -58,6 +59,19 @@ describe('CelebrationInstancesController', () => {
     expect(instancesService.findAll).toHaveBeenCalledWith('tenant-1', { status: 'draft' });
     expect(result).toEqual([{ id: 'i1' }]);
     expect(rolesFor('findAll')).toEqual(READ_ROLES);
+  });
+
+  it('findUpcoming usa a congregação do token e abre para todo papel de igreja, sem platform_support', async () => {
+    instancesService.findUpcoming.mockResolvedValue([] as never);
+
+    await controller.findUpcoming({ ...user, roles: ['member'] });
+
+    expect(instancesService.findUpcoming).toHaveBeenCalledWith('tenant-1', 'cong-1');
+    const roles = rolesFor('findUpcoming') ?? [];
+    for (const role of [...READ_ROLES, 'member', 'volunteer', 'cell_leader', 'treasurer']) {
+      expect(roles).toContain(role);
+    }
+    expect(roles).not.toContain('platform_support');
   });
 
   it('findOne delega ao service e exige papel de leitura', async () => {

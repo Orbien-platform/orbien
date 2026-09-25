@@ -400,6 +400,8 @@ export class CelebrationAssignmentService {
       celebration: {
         id: a.celebrationMinistry.schedule.celebrationInstance.celebration.id,
         name: a.celebrationMinistry.schedule.celebrationInstance.celebration.name,
+        // `scheduled_date` é só o dia; o horário do culto mora na celebração.
+        start_time: a.celebrationMinistry.schedule.celebrationInstance.celebration.start_time,
       },
       ministry: {
         id: a.celebrationMinistry.ministry.id,

@@ -1566,6 +1566,38 @@ Junto, e da mesma revisão: as miniaturas dos heros não levam `aria-hidden`,
 então leitor de tela lê "Olá, Pastor André" e "R$ 2.840" como conteúdo da
 página.
 
+### ~~PEND-12 · A Escala do mobile mostra o culto um dia antes~~ · fechado
+
+`scheduled_date` é data sem hora, gravada como meia-noite UTC. `escala.tsx`
+passava o valor cru para `DateBlock` e `formatDateTime`, que leem em hora
+local — em Brasília, o culto de domingo aparecia como "sáb, 26 set · 21:00".
+
+Fechado com `localWhen` (`apps/mobile/src/lib/format/date.ts`), o mesmo da
+tela Celebrações: o dia volta a ser só o dia e ganha o horário da celebração.
+Para isso `GET /volunteers/my-celebration-assignments` passou a trazer
+`celebration.start_time`. O `CelebrationDetailSheet` do web não tinha o
+problema — já formata com `formatCivilDate`.
+
+### PEND-13 · Os outros `@Cron` da API não rodam com o serviço dormindo · dívida
+
+A API está no plano free do Render, que dorme após 15 min sem tráfego, e
+`@nestjs/schedule` só dispara com o processo acordado. A geração de
+instâncias de celebração foi contornada rodando também na subida do processo
+(`CelebrationSchedulerService.onApplicationBootstrap`). Os demais seguem
+expostos a perder execução em silêncio: expurgos de retenção
+(`persons-retention.scheduler.ts`, 3h–6h UTC — obrigação da seção 5 do
+`CONF-02`), lembrete de anfitrião às 8h UTC, recorrências financeiras à
+meia-noite, alerta de ausência de célula, publicação agendada de conteúdo.
+Saídas: plano pago no Render (processo sempre ativo) ou gatilho externo
+(Render Cron Job / GitHub Actions) chamando rotas internas — esta exige
+credencial de serviço guardada no agendador, decisão que ainda não foi tomada.
+
+**Mitigado em 2026-09-25:** um monitor do UptimeRobot bate em `/api/health` a
+cada 5 minutos e mantém o serviço acordado, então os `@Cron` voltam a rodar no
+horário. Detalhes e limites (cota de 750 h do free tier, execução perdida em
+reinício ou deploy) em `DEPLOY.md`, seção 1.6. Segue como dívida até a API ir
+para plano pago ou ganhar gatilho externo.
+
 ---
 
 ## 8. Ajustes — documento, rótulo e portão

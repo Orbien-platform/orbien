@@ -3,6 +3,7 @@ import { CelebrationsController } from './celebrations.controller';
 import { CelebrationsService } from './celebrations.service';
 import { CelebrationInstancesService } from './celebration-instances.service';
 import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -28,6 +29,7 @@ describe('CelebrationsController', () => {
   let celebrationsService: jest.Mocked<CelebrationsService>;
   let instancesService: jest.Mocked<CelebrationInstancesService>;
   let scheduleService: jest.Mocked<CelebrationScheduleService>;
+  let schedulerService: jest.Mocked<CelebrationSchedulerService>;
   let controller: CelebrationsController;
 
   beforeEach(() => {
@@ -47,7 +49,16 @@ describe('CelebrationsController', () => {
       materializePeriodWithStatus: jest.fn(),
     } as unknown as jest.Mocked<CelebrationScheduleService>;
 
-    controller = new CelebrationsController(celebrationsService, instancesService, scheduleService);
+    schedulerService = {
+      generateUpcomingFor: jest.fn().mockResolvedValue(0),
+    } as unknown as jest.Mocked<CelebrationSchedulerService>;
+
+    controller = new CelebrationsController(
+      celebrationsService,
+      instancesService,
+      scheduleService,
+      schedulerService,
+    );
   });
 
   it('create delega ao service e exige papel de gestão', async () => {
@@ -56,6 +67,7 @@ describe('CelebrationsController', () => {
     const result = await controller.create({ name: 'Culto' } as never, user);
 
     expect(celebrationsService.create).toHaveBeenCalledWith('tenant-1', 'cong-1', { name: 'Culto' });
+    expect(schedulerService.generateUpcomingFor).toHaveBeenCalledWith('tenant-1', 'c1');
     expect(result).toEqual({ id: 'c1' });
     expect(rolesFor('create')).toEqual(MANAGE_ROLES);
   });
@@ -88,6 +100,7 @@ describe('CelebrationsController', () => {
     expect(celebrationsService.update).toHaveBeenCalledWith('tenant-1', 'cong-1', 'c1', {
       name: 'Novo',
     });
+    expect(schedulerService.generateUpcomingFor).toHaveBeenCalledWith('tenant-1', 'c1');
     expect(result).toEqual({ id: 'c1' });
     expect(rolesFor('update')).toEqual(MANAGE_ROLES);
   });

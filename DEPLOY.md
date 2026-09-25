@@ -288,8 +288,23 @@ curl https://orbien-api.onrender.com/api/health
 ```
 
 No free tier o serviço dorme após 15min sem tráfego; o primeiro request depois
-disso leva 30–50s. Para manter acordado, pingar `/api/health` a cada 14min
-(UptimeRobot resolve).
+disso leva 30–50s — e, dormindo, nenhum `@Cron` da API dispara (ver `PEND-13`
+em `docs/PLANO.md`).
+
+**Em produção, desde 2026-09-25:** um monitor do UptimeRobot (plano gratuito,
+tipo HTTP(s)) faz `GET https://orbien-api.onrender.com/api/health` a cada
+**5 minutos** para o serviço não dormir. É contorno, não solução: se alguém
+estranhar esse tráfego no log, é ele. Pontos a saber:
+
+- 5 min, e não 14: com folga, uma checagem atrasada ou falha não deixa o
+  serviço chegar aos 15 min parado.
+- `/api/health` não toca no banco nem grava auditoria — o ping custa quase nada.
+- O free tier dá 750 h de instância por mês por workspace; um serviço acordado
+  o mês inteiro usa até 744 h. Cabe enquanto a API for o **único** serviço free
+  do workspace — um segundo esgotaria a cota antes do fim do mês.
+- Reinício ou deploy no horário de um cron ainda perde aquela execução.
+- Ao migrar para plano pago (processo sempre ativo), o monitor pode continuar
+  só como alerta de indisponibilidade.
 
 E a cadeia inteira, que é o que realmente importa:
 

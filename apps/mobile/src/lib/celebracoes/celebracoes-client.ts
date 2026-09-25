@@ -3,7 +3,7 @@
 // separação `*-client.ts` (lógica) vs. tela (UI) que `escala-client.ts`/
 // `content-client.ts` já seguem — não duplica validação, só chama a rota.
 import { authenticatedRequest } from "../auth/auth-client";
-import type { CelebrationInstanceSummary, ServiceOrder } from "./types";
+import type { AgendaInstance, CelebrationInstanceSummary, ServiceOrder } from "./types";
 
 /**
  * `GET /celebrations/instances?date_from=hoje` (MOB-08-06) — só para
@@ -17,6 +17,15 @@ export async function listUpcomingInstances(): Promise<CelebrationInstanceSummar
     "get",
     `/celebrations/instances?date_from=${todayIso}`,
   );
+}
+
+/**
+ * `GET /celebrations/instances/upcoming` — a agenda da congregação, aberta a
+ * qualquer papel de igreja. Só nome, data e horário: OC e escala chegam a
+ * quem está escalado pela própria escala (`getMyAssignments`).
+ */
+export async function listAgenda(): Promise<AgendaInstance[]> {
+  return authenticatedRequest<AgendaInstance[]>("get", "/celebrations/instances/upcoming");
 }
 
 /** `GET /celebrations/orders/:id` (MOB-08-02) — OC + itens + setlist aninhados. */

@@ -29,7 +29,7 @@ import { HttpError } from "../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
 import { checkIn, getMyAssignments, respondToAssignment } from "../lib/escala/escala-client";
 import type { Assignment, AssignmentStatus } from "../lib/escala/types";
-import { formatDateTime } from "../lib/format/date";
+import { formatDateTime, localWhen } from "../lib/format/date";
 import {
   CalendarCheck,
   CalendarOff,
@@ -206,12 +206,15 @@ export default function EscalaScreen() {
         renderItem={({ item }) => {
           const isPending = pendingIds.has(item.id);
           const badge = STATUS_BADGE[item.status];
-          const when = formatDateTime(item.scheduled_date);
+          // `scheduled_date` é meia-noite UTC: cru, virava a véspera às
+          // 21:00 em Brasília. `localWhen` devolve o dia com o horário do culto.
+          const localIso = localWhen(item.scheduled_date, item.celebration.start_time);
+          const when = formatDateTime(localIso);
 
           return (
             <Card testID={`assignment-${item.id}`}>
               <View style={styles.cardRow}>
-                <DateBlock iso={item.scheduled_date} />
+                <DateBlock iso={localIso} />
                 <View style={styles.cardBody}>
                   <Text style={[typography.h3, { color: colors.textPrimary }]}>
                     {item.celebration.name}
