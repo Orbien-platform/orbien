@@ -7,8 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/hooks/useAuth";
 import { Header } from "./header";
 
+const push = vi.fn();
+
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
+  useRouter: () => ({ push }),
 }));
 
 vi.mock("next-themes", () => ({
@@ -115,10 +118,22 @@ describe("Header", () => {
     render(<Header />);
     await userEvent.click(screen.getByRole("button", { name: "Menu do usuário" }));
     expect(await screen.findByText("Ana Beatriz")).toBeInTheDocument();
-    expect(screen.getByText("tenant_admin")).toBeInTheDocument();
+    expect(screen.getByText("Admin do tenant")).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("Sair"));
     expect(logout).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Perfil", "/perfil"],
+    ["Configurações", "/configuracoes"],
+  ])("o item %s do menu do usuário leva a %s", async (label, href) => {
+    push.mockClear();
+    setup();
+    render(<Header />);
+    await userEvent.click(screen.getByRole("button", { name: "Menu do usuário" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: label }));
+    expect(push).toHaveBeenCalledWith(href);
   });
 
   it("abre a gaveta lateral pelo botão de menu mobile", async () => {
