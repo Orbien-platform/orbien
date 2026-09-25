@@ -15,6 +15,18 @@ import { ListCelebrationInstancesQueryDto } from './dto/list-celebration-instanc
 const WRITE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'secretary'];
 const READ_ROLES = [...WRITE_ROLES, 'ministry_leader'];
 const DELETE_ROLES = ['admin_congregation', 'pastor', 'tenant_admin'];
+// A agenda — "tem culto tal dia" — é de toda a igreja, não só de quem
+// monta a escala. Todos os papéis de igreja, e nenhum de plataforma: fora
+// `platform_support`, que chega aqui só por sessão de suporte (satisfaz
+// qualquer `@Roles` em GET). Lista explícita, e não rota sem `@Roles`, porque
+// sem `@Roles` o guard deixa passar até ticket de upload.
+const AGENDA_ROLES = [
+  ...READ_ROLES,
+  'member',
+  'volunteer',
+  'cell_leader',
+  'treasurer',
+];
 
 @Controller('celebrations/instances')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
@@ -33,6 +45,13 @@ export class CelebrationInstancesController {
   @Roles(...READ_ROLES)
   findAll(@Query() query: ListCelebrationInstancesQueryDto, @CurrentUser() user: JwtPayload) {
     return this.instancesService.findAll(user.tenant_id, query);
+  }
+
+  // Antes de `:id`, senão "upcoming" casa como id.
+  @Get('upcoming')
+  @Roles(...AGENDA_ROLES)
+  findUpcoming(@CurrentUser() user: JwtPayload) {
+    return this.instancesService.findUpcoming(user.tenant_id, user.congregation_id);
   }
 
   @Get(':id')

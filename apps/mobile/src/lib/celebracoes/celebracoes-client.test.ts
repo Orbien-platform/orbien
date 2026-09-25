@@ -5,7 +5,7 @@ jest.mock("../auth/auth-client", () => ({
   authenticatedRequest: (...args: unknown[]) => mockAuthenticatedRequest(...args),
 }));
 
-import { getServiceOrder, listUpcomingInstances } from "./celebracoes-client";
+import { getServiceOrder, listAgenda, listUpcomingInstances } from "./celebracoes-client";
 
 describe("CelebracoesClient", () => {
   beforeEach(() => {
@@ -33,6 +33,19 @@ describe("CelebracoesClient", () => {
       const result = await listUpcomingInstances();
 
       expect(result).toEqual(instances);
+    });
+  });
+
+  describe("listAgenda", () => {
+    it("chama GET /celebrations/instances/upcoming", async () => {
+      mockAuthenticatedRequest.mockResolvedValue([]);
+
+      await listAgenda();
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
+        "get",
+        "/celebrations/instances/upcoming",
+      );
     });
   });
 

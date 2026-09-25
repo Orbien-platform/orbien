@@ -48,6 +48,13 @@ export interface ServiceOrder {
 export interface CelebrationInstanceSummary {
   id: string;
   scheduled_date: string;
-  celebration: { id: string; name: string; type: string };
+  celebration: { id: string; name: string; type: string; start_time?: string };
   serviceOrder: { id: string; title: string; published_at: string | null } | null;
+}
+
+/** Item da agenda aberta a todo membro (`GET /celebrations/instances/upcoming`). */
+export interface AgendaInstance {
+  id: string;
+  scheduled_date: string;
+  celebration: { id: string; name: string; type: string; start_time: string };
 }
