@@ -497,7 +497,7 @@ export function PostDetailSheet({
                   {/* Segments */}
                   {(post.segments?.length ?? 0) > 0 && (
                     <div className="flex flex-col gap-1.5">
-                      <p className="text-xs font-medium text-stone uppercase tracking-wide">Segmentos</p>
+                      <p className="text-sm font-medium text-stone">Segmentos</p>
                       <div className="flex flex-wrap gap-1.5">
                         {post.segments!.map((s) => (
                           <span
@@ -514,7 +514,7 @@ export function PostDetailSheet({
                   {/* Evento: quando e onde (PROD-16) */}
                   {post.type === "event" && (post.event_starts_at || post.event_location) && (
                     <div className="flex flex-col gap-1 border-t border-[var(--border-default)] pt-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-stone">Evento</p>
+                      <p className="text-sm font-medium text-stone">Evento</p>
                       {post.event_starts_at && (
                         <p className="flex items-center gap-1.5 text-sm text-ink dark:text-white">
                           <CalendarDays size={13} strokeWidth={1.5} className="text-stone" />

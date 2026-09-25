@@ -118,7 +118,7 @@ function Field({
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", full && "sm:col-span-2")}>
-      <Label className="text-xs font-medium text-stone uppercase tracking-wide">{label}</Label>
+      <Label className="text-xs font-medium text-stone">{label}</Label>
       {children}
     </div>
   );

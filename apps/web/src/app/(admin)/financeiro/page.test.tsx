@@ -866,7 +866,7 @@ describe("FinanceiroPage — aba DRE", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "DRE" }));
-    await screen.findByText("RECEITAS");
+    await screen.findByRole("cell", { name: "Receitas" });
     const callsBefore = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length;
 
     const dateInputs = document.querySelectorAll('input[type="date"]');
@@ -914,7 +914,7 @@ describe("FinanceiroPage — aba DRE", () => {
     expect(screen.getByText("Aluguel")).toBeInTheDocument();
     expect(screen.getByText("100.0%")).toBeInTheDocument(); // receita subiu 100% vs 500
     expect(screen.getByText("50.0%")).toBeInTheDocument(); // despesa caiu 50% vs 800
-    expect(screen.getByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Resultado líquido" })).toBeInTheDocument();
   });
 
   it("mostra 'sem lançamentos' quando uma categoria não tem entradas, e '—' quando não há período anterior para o delta", async () => {
@@ -923,7 +923,7 @@ describe("FinanceiroPage — aba DRE", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "DRE" }));
-    await screen.findByText("RECEITAS");
+    await screen.findByRole("cell", { name: "Receitas" });
     expect(screen.getAllByText("Sem lançamentos").length).toBe(2);
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
   });
@@ -958,7 +958,7 @@ describe("FinanceiroPage — aba DRE", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "DRE" }));
-    expect(await screen.findByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "Resultado líquido" })).toBeInTheDocument();
     expect(screen.getByText("-R$ 50,00")).toBeInTheDocument();
   });
 });
@@ -1049,7 +1049,7 @@ describe("FinanceiroPage — aba Balancete", () => {
     await user.click(screen.getByRole("tab", { name: "Balancete" }));
     expect(await screen.findByText("Missões")).toBeInTheDocument();
     expect(screen.getByText("Sem centro de custo")).toBeInTheDocument();
-    expect(screen.getByText("TOTAL")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Total" })).toBeInTheDocument();
     expect(screen.getByText("-R$ 150,00")).toBeInTheDocument();
     expect(screen.getByText("R$ 650,00")).toBeInTheDocument();
   });
@@ -1067,7 +1067,7 @@ describe("FinanceiroPage — aba Balancete", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Balancete" }));
-    const totalCell = (await screen.findByText("TOTAL")).closest("tr")!;
+    const totalCell = (await screen.findByRole("cell", { name: "Total" })).closest("tr")!;
     expect(totalCell).toHaveTextContent("-R$ 200,00");
   });
 

@@ -47,7 +47,7 @@ export function DataTable<T>({
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
-                className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-stone"
+                className="px-4 py-2.5 text-left text-xs font-medium text-stone"
               >
                 {col.header}
               </th>

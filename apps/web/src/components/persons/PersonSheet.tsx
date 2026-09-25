@@ -282,7 +282,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                 /* ── Edit Form ── */
                 <form onSubmit={handleSave} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">Nome *</Label>
+                    <Label className="text-xs font-medium text-stone">Nome *</Label>
                     <Input
                       value={editForm.full_name ?? ""}
                       onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
@@ -292,7 +292,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">Telefone</Label>
+                    <Label className="text-xs font-medium text-stone">Telefone</Label>
                     <Input
                       type="tel"
                       placeholder="(11) 99999-9999"
@@ -305,7 +305,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">E-mail</Label>
+                    <Label className="text-xs font-medium text-stone">E-mail</Label>
                     <Input
                       type="email"
                       value={editForm.email ?? ""}
@@ -316,7 +316,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">Nascimento</Label>
+                    <Label className="text-xs font-medium text-stone">Nascimento</Label>
                     <Input
                       type="date"
                       value={editForm.birth_date ?? ""}
@@ -327,7 +327,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">Sexo</Label>
+                    <Label className="text-xs font-medium text-stone">Sexo</Label>
                     <select
                       value={editForm.gender ?? ""}
                       onChange={(e) => setEditForm((f) => ({ ...f, gender: e.target.value }))}
@@ -342,7 +342,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-stone uppercase tracking-wide">Classificação</Label>
+                    <Label className="text-xs font-medium text-stone">Classificação</Label>
                     <select
                       value={editForm.classification ?? "visitor"}
                       onChange={(e) => {
@@ -364,7 +364,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
 
                   {editForm.classification === "member" && (
                     <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-stone uppercase tracking-wide">
+                      <Label className="text-xs font-medium text-stone">
                         Data de membresía <span className="text-crimson">*</span>
                       </Label>
                       <Input
@@ -408,7 +408,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                 /* ── View Mode ── */
                 <>
                   <div className="mb-5 flex items-center justify-between">
-                    <p className="text-xs font-medium uppercase tracking-wide text-stone">Dados pessoais</p>
+                    <p className="text-sm font-medium text-stone">Dados pessoais</p>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -442,7 +442,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
 
                   {/* Reclassification */}
                   <div className="mt-6 border-t border-[var(--border-default)] pt-5">
-                    <p className="mb-3 text-xs font-medium uppercase tracking-wide text-stone">Reclassificar</p>
+                    <p className="mb-3 text-sm font-medium text-stone">Reclassificar</p>
                     <div className="flex flex-wrap gap-2">
                       {CLASSIFICATION_OPTIONS.map((o) => (
                         <button
@@ -473,7 +473,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   {/* Acesso ao sistema */}
                   {canGrantAccess && (
                     <div className="mt-6 border-t border-[var(--border-default)] pt-5">
-                      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-stone">
+                      <p className="mb-3 text-sm font-medium text-stone">
                         Acesso ao sistema
                       </p>
 
@@ -494,7 +494,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                       ) : (
                         <form onSubmit={(e) => handleGrantAccess(e, person)} className="flex flex-col gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <Label className="text-xs font-medium text-stone uppercase tracking-wide">
+                            <Label className="text-xs font-medium text-stone">
                               E-mail
                             </Label>
                             <Input
@@ -507,7 +507,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <Label className="text-xs font-medium text-stone uppercase tracking-wide">
+                            <Label className="text-xs font-medium text-stone">
                               Papel
                             </Label>
                             <select
