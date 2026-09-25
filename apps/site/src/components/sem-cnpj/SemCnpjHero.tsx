@@ -13,7 +13,7 @@ function HeroCard() {
         className="px-6 py-4 border-b flex items-center justify-between"
         style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
       >
-        <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+        <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
           Igreja da Graça · Plano Starter
         </span>
         <span
@@ -27,7 +27,7 @@ function HeroCard() {
       {/* PIX receipt */}
       <div className="px-6 py-5 flex flex-col gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[.1em] mb-1.5" style={{ color: "var(--muted)" }}>
+          <p className="text-[10px] font-medium mb-1.5" style={{ color: "var(--muted)" }}>
             Última doação recebida
           </p>
           <p className="text-2xl font-semibold tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
@@ -41,7 +41,7 @@ function HeroCard() {
           className="rounded-btn px-4 py-3 border"
           style={{ background: "var(--bg)", borderColor: "var(--border)" }}
         >
-          <p className="font-mono text-[10px] uppercase tracking-[.1em] mb-1" style={{ color: "var(--muted)" }}>
+          <p className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>
             Destino
           </p>
           <div className="flex items-center gap-2">
@@ -80,7 +80,7 @@ function HeroCard() {
           { label: "Células", val: "6" },
         ].map(({ label, val }) => (
           <div key={label} className="px-4 py-3" style={{ borderColor: "var(--border)" }}>
-            <p className="font-mono text-[9px] uppercase tracking-[.06em] mb-0.5" style={{ color: "var(--muted)" }}>
+            <p className="text-[10px] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
               {label}
             </p>
             <p className="text-sm font-semibold tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
@@ -145,8 +145,8 @@ export function SemCnpjHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap font-mono text-[11.5px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
-              {["PIX DIRETO NA CHAVE", "SEM CNPJ", "MIGRAÇÃO EM 15 MIN"].map((label) => (
+            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+              {["PIX direto na chave", "Sem CNPJ", "Migração em 15 min"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
                   {label}

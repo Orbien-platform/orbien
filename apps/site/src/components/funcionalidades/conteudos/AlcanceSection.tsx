@@ -81,7 +81,7 @@ export function AlcanceSection() {
                 className="px-5 py-4 border-b"
                 style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
               >
-                <p className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+                <p className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
                   Novo comunicado
                 </p>
               </div>
@@ -90,7 +90,7 @@ export function AlcanceSection() {
               <div className="px-5 py-5 flex flex-col gap-4">
                 {/* Audience selector */}
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[.08em] mb-2" style={{ color: "var(--muted)" }}>Público</p>
+                  <p className="text-[10px] font-medium mb-2" style={{ color: "var(--muted)" }}>Público</p>
                   <div className="flex flex-wrap gap-2">
                     {[
                       { label: "Todos", active: true  },
@@ -114,7 +114,7 @@ export function AlcanceSection() {
 
                 {/* Type selector */}
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[.08em] mb-2" style={{ color: "var(--muted)" }}>Tipo</p>
+                  <p className="text-[10px] font-medium mb-2" style={{ color: "var(--muted)" }}>Tipo</p>
                   <div className="flex gap-2">
                     {[
                       { label: "Aviso", active: true  },
@@ -186,7 +186,7 @@ export function AlcanceSection() {
                   style={{ background: "linear-gradient(to bottom, transparent 20%, var(--surface))" }}
                 >
                   <span
-                    className="font-mono text-[10px] uppercase tracking-[.12em] px-3 py-1.5 rounded-pill"
+                    className="text-xs font-medium px-3 py-1.5 rounded-pill"
                     style={{ background: "var(--subtle)", color: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     Histórico de publicações · em breve

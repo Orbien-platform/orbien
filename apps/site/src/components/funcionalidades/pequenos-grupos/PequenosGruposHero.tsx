@@ -20,7 +20,7 @@ function GroupListMockup() {
         className="flex items-center justify-between px-5 py-3.5 border-b"
         style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
       >
-        <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+        <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
           Pequenos Grupos · 4 ativos
         </span>
         <span className="font-mono text-[10px]" style={{ color: "var(--navy-accent)" }}>+ Novo grupo</span>
@@ -130,8 +130,8 @@ export function PequenosGruposHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap font-mono text-[11.5px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
-              {["SEMÁFORO DE SAÚDE", "MATERIAIS AGENDADOS", "LÍDER NO CELULAR"].map((label) => (
+            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+              {["Semáforo de saúde", "Materiais agendados", "Líder no celular"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
                   {label}

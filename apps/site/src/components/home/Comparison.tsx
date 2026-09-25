@@ -60,13 +60,13 @@ export function Comparison() {
             >
               <div className="px-6 py-[18px]" />
               <div
-                className="px-6 py-[18px] font-mono text-[11px] uppercase tracking-[.12em] font-medium"
+                className="px-6 py-[18px] text-sm font-medium"
                 style={{ color: "var(--stone)" }}
               >
                 Outros sistemas
               </div>
               <div
-                className="px-6 py-[18px] font-mono text-[11px] uppercase tracking-[.12em] font-medium"
+                className="px-6 py-[18px] text-sm font-medium"
                 style={{ color: "var(--navy-accent)" }}
               >
                 Orbien
@@ -124,7 +124,7 @@ export function Comparison() {
                   </div>
                   <div className="flex items-center gap-2 text-sm font-light pb-2" style={{ color: "var(--stone)" }}>
                     <span
-                      className="font-mono text-[10px] uppercase tracking-[.1em]"
+                      className="text-xs font-medium"
                       style={{ color: "var(--muted)" }}
                     >
                       Outros ·{" "}
@@ -136,7 +136,7 @@ export function Comparison() {
                     style={{ color: "var(--ink)", borderColor: "var(--border)" }}
                   >
                     <span
-                      className="font-mono text-[10px] uppercase tracking-[.1em] pt-2"
+                      className="text-xs font-medium pt-2"
                       style={{ color: "var(--navy-accent)" }}
                     >
                       Orbien ·{" "}

@@ -90,7 +90,7 @@ export function StarterIncludes() {
                   {body}
                 </p>
                 <span
-                  className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[.08em] w-fit px-2.5 py-1 rounded-pill"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium w-fit px-2.5 py-1 rounded-pill"
                   style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
                 >
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

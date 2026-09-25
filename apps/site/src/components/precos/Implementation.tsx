@@ -50,7 +50,7 @@ export function Implementation() {
                 style={{ background: "var(--surface)", borderColor: "var(--border)" }}
               >
                 <div
-                  className="font-mono text-[11px] uppercase tracking-[.14em]"
+                  className="text-sm font-medium"
                   style={{ color: "var(--stone)" }}
                 >
                   {label}
