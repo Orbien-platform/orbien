@@ -81,6 +81,7 @@ function harness(opts: Opts = {}) {
     gets: [] as string[],
     receiptCalls: [] as string[],
     eventRegistrationUpdates: [] as Record<string, unknown>[],
+    contexts: [] as unknown[][],
   };
 
   let catCall = 0;
@@ -102,6 +103,11 @@ function harness(opts: Opts = {}) {
       : opts.pixPayment;
 
   const tx = {
+    // O `set_config` que as rotas públicas fazem antes de ler a categoria.
+    $executeRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      cap.contexts.push(valores);
+      return Promise.resolve(1);
+    },
     financialTransaction: {
       create: (args: { data: Record<string, unknown> }) => {
         cap.transactions.push(args.data);
@@ -666,24 +672,44 @@ describe('PixService', () => {
   });
 
   describe('createPublicDonation', () => {
-    it('cria lançamento e pagamento na MESMA transação', async () => {
+    it('grava só a intenção em `pix_payments`, no cenário `public` — nenhum lançamento', async () => {
+      // DRE e dashboard somam `financial_transactions` sem olhar status: um
+      // lançamento aqui deixaria qualquer visitante inflar a receita da igreja.
       const { service, cap } = harness();
 
       const result = await service.createPublicDonation(manualDto);
 
-      expect(cap.transactions).toHaveLength(1);
+      expect(cap.transactions).toEqual([]);
       expect(cap.pixPayments).toHaveLength(1);
+      expect(cap.pixPayments[0]).toMatchObject({
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        scenario: 'public',
+        status: 'pending',
+        category_id: 'cat-oferta',
+        pix_key: 'chave@igreja.test',
+      });
       expect(result.pix_key).toBe('chave@igreja.test');
-      expect(result.transaction_ref).toMatch(/^PIX-[0-9A-Z]{6}$/);
     });
 
-    it('a referência curta do retorno é a mesma gravada em `notes`', async () => {
-      // É por ela que o tesoureiro casa o extrato bancário com o lançamento.
+    it('a referência do retorno são os 8 primeiros dígitos do id do pagamento', async () => {
       const { service, cap } = harness();
 
       const result = await service.createPublicDonation(manualDto);
 
-      expect(result.transaction_ref).toBe(`PIX-${String(cap.transactions[0]?.['notes'])}`);
+      const id = String(cap.pixPayments[0]?.['id']);
+      expect(result.transaction_ref).toBe(`PIX-${id.slice(0, 8).toUpperCase()}`);
+      expect(result.transaction_ref).toMatch(/^PIX-[0-9A-F]{8}$/);
+    });
+
+    it('fixa tenant e congregação resolvidos pelo slug antes de ler a categoria', async () => {
+      // Sem JWT não há contexto, e `financial_categories` fica invisível:
+      // era o "Categoria de receita não encontrada" de toda igreja.
+      const { service, cap } = harness();
+
+      await service.createPublicDonation(manualDto);
+
+      expect(cap.contexts).toEqual([['t1', 'c1']]);
     });
 
     it('honeypot: `website` preenchido não grava nada', async () => {
@@ -704,48 +730,13 @@ describe('PixService', () => {
       expect(cap.pixPayments).toEqual([]);
     });
 
-    it('nome do doador entra na descrição do lançamento', async () => {
-      const { service, cap } = harness();
+    it('sem categoria de receita, vira 400 e não grava nada', async () => {
+      const { service, cap } = harness({ categories: [] });
 
-      await service.createPublicDonation({ ...manualDto, donor_name: 'Maria' });
-
-      expect(cap.transactions[0]?.['description']).toBe('Doação pública — Maria');
-    });
-
-    it('sem nome do doador, a descrição é genérica', async () => {
-      const { service, cap } = harness();
-
-      await service.createPublicDonation(manualDto);
-
-      expect(cap.transactions[0]?.['description']).toBe('Doação pública');
-    });
-
-    it('o autor do lançamento é o tenant_admin, não o doador anônimo', async () => {
-      // A rota é pública: não há usuário logado para responder pelo
-      // lançamento. O serviço atribui ao admin do tenant.
-      const { service, cap } = harness();
-
-      await service.createPublicDonation(manualDto);
-
-      expect(cap.transactions[0]?.['created_by_user_id']).toBe('admin-1');
-      expect(cap.transactions[0]?.['source']).toBe('manual');
-    });
-
-    it('tenant sem `tenant_admin` vira 404 e não grava nada', async () => {
-      const { service, cap } = harness({ assignment: null });
-
-      await expect(service.createPublicDonation(manualDto)).rejects.toBeInstanceOf(
-        NotFoundException,
+      await expect(service.createPublicDonation(manualDto)).rejects.toThrow(
+        'Categoria de receita não encontrada',
       );
-      expect(cap.transactions).toEqual([]);
-    });
-
-    it('o pagamento fica no cenário `public`', async () => {
-      const { service, cap } = harness();
-
-      await service.createPublicDonation(manualDto);
-
-      expect(cap.pixPayments[0]).toMatchObject({ scenario: 'public', status: 'pending' });
+      expect(cap.pixPayments).toEqual([]);
     });
   });
 
