@@ -124,6 +124,27 @@ describe("Header", () => {
     expect(logout).toHaveBeenCalled();
   });
 
+  it("não mostra papel no menu quando a sessão não tem nenhum", async () => {
+    setup({
+      user: {
+        id: "1",
+        name: "Ana Beatriz",
+        email: "ana@example.com",
+        roles: [],
+        tenant_id: "t1",
+        congregation_id: "c1",
+        support_session: false,
+        support_tenant_name: null,
+        areas: null,
+        expires_at: Math.floor(Date.now() / 1000) + 300,
+      },
+    });
+    render(<Header />);
+    await userEvent.click(screen.getByRole("button", { name: "Menu do usuário" }));
+    expect(await screen.findByText("Ana Beatriz")).toBeInTheDocument();
+    expect(screen.queryByText("Admin do tenant")).not.toBeInTheDocument();
+  });
+
   it.each([
     ["Perfil", "/perfil"],
     ["Configurações", "/configuracoes"],

@@ -46,6 +46,19 @@ describe("PerfilPage", () => {
     expect(screen.getByText("Admin do tenant, Pastor")).toBeInTheDocument();
   });
 
+  it("usa o singular com um papel só", () => {
+    setup({ ...user, roles: ["pastor"] });
+    render(<PerfilPage />);
+    expect(screen.getByText("Papel")).toBeInTheDocument();
+    expect(screen.getByText("Pastor")).toBeInTheDocument();
+  });
+
+  it("mostra um traço quando a sessão não tem papel", () => {
+    setup({ ...user, roles: [] });
+    render(<PerfilPage />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
   it("avisa quando não há sessão", () => {
     setup(null);
     render(<PerfilPage />);
