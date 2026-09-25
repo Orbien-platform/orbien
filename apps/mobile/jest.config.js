@@ -38,20 +38,27 @@ module.exports = {
   coverageDirectory: "coverage",
   coverageReporters: ["text-summary", "lcov"],
 
-  // Piso medido em 2026-09-10 sobre `collectCoverageFrom` acima: 94,51
-  // statements / 84,69 branches / 93,81 functions / 97,94 lines, com 39
-  // suítes e 239 testes. O threshold é o inteiro para baixo de cada um —
+  // Piso medido em 2026-09-25 sobre `collectCoverageFrom` acima: 99,25
+  // statements / 97,02 branches / 98,83 functions / 99,87 lines, com 59
+  // suítes e 562 testes (já com curtir/responder da Bíblia, PR #132). O threshold é o inteiro para baixo de cada um —
   // margem para variação de instrumentação sem afrouxar o portão. Mesmo
   // mecanismo do `apps/admin/vitest.config.ts`.
   //
-  // Decisão do usuário em 2026-09-10, apresentadas as três leituras de
-  // "mesma cobertura dos outros apps": piso medido, não `global: 100` como
-  // api e site. Levar o mobile a 100 é trabalho próprio.
+  // Histórico: a Fase 15 (2026-09-10) travou 94/84/93/97, por decisão do
+  // usuário de piso medido em vez de `global: 100`. Em 2026-09-25 a meta
+  // passou a ser 96% em todas as métricas de todos os apps; a rodada que
+  // levou o mobile até lá cobriu desmontagem antes da resposta, erro
+  // offline, modo escuro e os componentes base sem suíte própria.
+  //
+  // O que ainda fica de fora são guardas que a UI não alcança — `?? []`
+  // sobre um estado que só é lido depois de preenchido, `?? ""` em índice
+  // de mês/dia que sempre existe, o `.catch` de uma promessa guardada já
+  // resolvida (notificacoes.tsx) — e os `.catch` de SplashScreen.
   //
   // **O piso nunca desce.** Se um arquivo novo derrubar o número, o caminho
   // é testar o arquivo — não reduzir o threshold.
   coverageThreshold: {
-    global: { statements: 94, branches: 84, functions: 93, lines: 97 },
+    global: { statements: 99, branches: 97, functions: 98, lines: 99 },
   },
   // O job "Unidade e cobertura" do CI roda um container Postgres em
   // paralelo (para a suíte de integração da API) na mesma máquina —

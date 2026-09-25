@@ -195,4 +195,78 @@ describe("IndisponibilidadeScreen", () => {
     });
     expect(screen.queryByTestId("sem-acesso")).toBeNull();
   });
+  it("voltar um mês vai de setembro para agosto do mesmo ano", async () => {
+    mockGetUnavailability.mockResolvedValue({ dates: [] });
+
+    await render(<IndisponibilidadeScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("prev-month"));
+    });
+
+    expect(mockGetUnavailability).toHaveBeenLastCalledWith(8, 2026);
+  });
+
+  it("voltar de janeiro vai para dezembro do ano anterior", async () => {
+    jest.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+    mockGetUnavailability.mockResolvedValue({ dates: [] });
+
+    await render(<IndisponibilidadeScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("prev-month"));
+    });
+
+    expect(mockGetUnavailability).toHaveBeenLastCalledWith(12, 2025);
+  });
+
+  it("avançar de dezembro vai para janeiro do ano seguinte", async () => {
+    jest.setSystemTime(new Date("2026-12-15T12:00:00Z"));
+    mockGetUnavailability.mockResolvedValue({ dates: [] });
+
+    await render(<IndisponibilidadeScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("next-month"));
+    });
+
+    expect(mockGetUnavailability).toHaveBeenLastCalledWith(1, 2027);
+  });
+
+  it("tocar de novo num dia marcado o desmarca", async () => {
+    mockGetUnavailability.mockResolvedValue({ dates: [{ date: "2026-09-10" }] });
+
+    await render(<IndisponibilidadeScreen />);
+    await waitFor(() =>
+      expect(screen.getByTestId("day-2026-09-10").props.accessibilityState.selected).toBe(true),
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("day-2026-09-10"));
+    });
+
+    expect(screen.getByTestId("day-2026-09-10").props.accessibilityState.selected).toBe(false);
+  });
+
+  it("resposta vazia da API (sem registro no mês) deixa todos os dias livres", async () => {
+    mockGetUnavailability.mockResolvedValue(null);
+
+    await render(<IndisponibilidadeScreen />);
+
+    await waitFor(() => expect(mockGetUnavailability).toHaveBeenCalled());
+    expect(screen.getByTestId("day-2026-09-10").props.accessibilityState.selected).toBe(false);
+  });
+
+  it("falha do mês anterior que chega depois da troca de mês é ignorada", async () => {
+    let rejectSetembro!: (reason: unknown) => void;
+    mockGetUnavailability
+      .mockReturnValueOnce(new Promise((_, r) => (rejectSetembro = r)))
+      .mockResolvedValue({ dates: [] });
+
+    await render(<IndisponibilidadeScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("next-month"));
+    });
+    await act(async () => {
+      rejectSetembro(new Error("falha de rede"));
+    });
+
+    expect(screen.queryByText(/Não foi possível carregar/)).toBeNull();
+  });
 });

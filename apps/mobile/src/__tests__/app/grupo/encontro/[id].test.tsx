@@ -3,6 +3,7 @@
 // presença condicional por papel.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Linking } from "react-native";
+import { NetworkError } from "../../../../lib/api/errors";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -166,5 +167,61 @@ describe("EncontroScreen", () => {
     fireEvent.press(screen.getByTestId("registrar-presenca-link"));
 
     expect(mockPush).toHaveBeenCalledWith("/grupo/encontro/m1/presenca");
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockListMaterials.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<EncontroScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve([]);
+    });
+
+    expect(mockListMaterials).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockListMaterials.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<EncontroScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockListMaterials).toHaveBeenCalled();
+  });
+
+  it("sem conexão, o erro de carga diz para verificar a conexão", async () => {
+    mockListMaterials.mockRejectedValue(new NetworkError());
+
+    await render(<EncontroScreen />);
+
+    expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
+  });
+
+  it("sem sessão, ou com token ilegível, ninguém vê 'Registrar presença'", async () => {
+    mockListMaterials.mockResolvedValue([]);
+
+    mockUseAuth.mockReturnValue({ session: null });
+    const semSessao = await render(<EncontroScreen />);
+    expect(screen.queryByTestId("registrar-presenca-link")).toBeNull();
+    await act(async () => {
+      semSessao.unmount();
+    });
+
+    mockUseAuth.mockReturnValue({
+      session: { accessToken: "não-é-jwt", refreshToken: "r", accessTokenExpiresAt: 0 },
+    });
+    await render(<EncontroScreen />);
+    expect(await screen.findByTestId("encontro-materials-empty")).toBeTruthy();
+    expect(screen.queryByTestId("registrar-presenca-link")).toBeNull();
   });
 });

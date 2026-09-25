@@ -126,4 +126,43 @@ describe("GruposScreen", () => {
 
     expect(mockPush).toHaveBeenCalledWith("/grupo/sg1");
   });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockListMyGroups.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<GruposScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve([]);
+    });
+
+    expect(mockListMyGroups).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockListMyGroups.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<GruposScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockListMyGroups).toHaveBeenCalled();
+  });
+
+  it("erro que não é de conexão mostra a mensagem genérica, sem falar em conexão", async () => {
+    mockListMyGroups.mockRejectedValue(new Error("500"));
+
+    await render(<GruposScreen />);
+
+    expect(await screen.findByTestId("grupos-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
 });

@@ -20,7 +20,7 @@ jest.mock("../../lib/escala/escala-client", () => ({
   checkIn: (...args: unknown[]) => mockCheckIn(...args),
 }));
 
-import { HttpError } from "../../lib/api/errors";
+import { HttpError, NetworkError } from "../../lib/api/errors";
 import EscalaScreen from "../../app/escala";
 
 const PENDING_ASSIGNMENT = {
@@ -256,5 +256,63 @@ describe("EscalaScreen", () => {
     });
 
     expect(mockCheckIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignora a lista que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetMyAssignments.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<EscalaScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve([PENDING_ASSIGNMENT]);
+    });
+
+    expect(screen.queryByTestId("assignment-a1")).toBeNull();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetMyAssignments.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<EscalaScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(screen.queryByTestId("escala-error")).toBeNull();
+  });
+
+  it("sem conexão, o erro de carga diz para verificar a conexão", async () => {
+    mockGetMyAssignments.mockRejectedValue(new NetworkError());
+
+    await render(<EscalaScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Verifique sua conexão/)).toBeTruthy();
+    });
+  });
+
+  it("responder um slot não mexe nos outros da lista, e slot sem data não mostra a linha de horário", async () => {
+    const semData = { ...CONFIRMED_ASSIGNMENT, scheduled_date: "sem data" };
+    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT, semData]);
+    mockRespondToAssignment.mockResolvedValue({ ...PENDING_ASSIGNMENT, status: "confirmed" });
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("confirm-a1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("confirm-a1"));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("confirm-a1")).toBeNull();
+    });
+    expect(screen.getByTestId("assignment-a2")).toBeTruthy();
   });
 });

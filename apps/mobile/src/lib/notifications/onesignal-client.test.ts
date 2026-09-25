@@ -159,4 +159,28 @@ describe("onesignal-client", () => {
       );
     });
   });
+
+  describe("configuração e tokens incompletos", () => {
+    it("sem oneSignalAppId configurado, falha alto em vez de inicializar vazio", () => {
+      const extra = jest.requireMock<{ default: { expoConfig: { extra: { oneSignalAppId?: string } } } }>(
+        "expo-constants",
+      ).default.expoConfig.extra;
+      const original = extra.oneSignalAppId;
+      extra.oneSignalAppId = "";
+      try {
+        expect(() => initializeOneSignal()).toThrow(/oneSignalAppId não configurado/);
+        expect(mockInitialize).not.toHaveBeenCalled();
+      } finally {
+        extra.oneSignalAppId = original;
+      }
+    });
+
+    it("token sem papel manda a tag role vazia", () => {
+      registerDevice(
+        makeToken({ sub: "user-1", tenant_id: "t1", congregation_id: "c1", roles: [], exp: 1893456000 }),
+      );
+
+      expect(mockAddTags).toHaveBeenCalledWith({ tenant_id: "t1", congregation_id: "c1", role: "" });
+    });
+  });
 });

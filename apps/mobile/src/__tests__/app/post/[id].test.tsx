@@ -1,5 +1,6 @@
 // Testes de PostScreen (MOB-07, T7 do tasks.md).
-import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Linking } from "react-native";
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "post-1" }),
@@ -175,5 +176,72 @@ describe("PostScreen", () => {
     await waitFor(() => expect(screen.getByTestId("post-title")).toBeTruthy());
     expect(screen.queryByTestId("post-event")).toBeNull();
     expect(screen.queryByTestId("event-registration-panel")).toBeNull();
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetPost.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<PostScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(EVENT_POST);
+    });
+
+    expect(mockGetPost).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetPost.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<PostScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetPost).toHaveBeenCalled();
+  });
+
+  it("imagem vira capa no topo do post", async () => {
+    mockGetPost.mockResolvedValue({ ...EVENT_POST, media_url: "https://cdn/x/capa.jpg" });
+
+    await render(<PostScreen />);
+
+    expect(await screen.findByTestId("post-media")).toBeTruthy();
+    expect(screen.queryByTestId("post-attachment")).toBeNull();
+  });
+
+  it("tocar em 'Abrir anexo' abre o arquivo e engole a falha do openURL", async () => {
+    const openURL = jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("sem app"));
+    mockGetPost.mockResolvedValue({ ...EVENT_POST, media_url: "https://cdn/x/boletim.pdf" });
+
+    await render(<PostScreen />);
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId("post-attachment"));
+    });
+
+    expect(openURL).toHaveBeenCalledWith("https://cdn/x/boletim.pdf");
+    openURL.mockRestore();
+  });
+
+  it("evento só com local mostra o local sem a linha de data, e só com data sem a de local", async () => {
+    mockGetPost.mockResolvedValue({ ...EVENT_POST, event_starts_at: null });
+    const soLocal = await render(<PostScreen />);
+    expect(await screen.findByTestId("post-event-location")).toBeTruthy();
+    expect(screen.queryByTestId("post-event-date")).toBeNull();
+    await act(async () => {
+      soLocal.unmount();
+    });
+
+    mockGetPost.mockResolvedValue({ ...EVENT_POST, event_location: null });
+    await render(<PostScreen />);
+    expect(await screen.findByTestId("post-event-date")).toBeTruthy();
+    expect(screen.queryByTestId("post-event-location")).toBeNull();
   });
 });

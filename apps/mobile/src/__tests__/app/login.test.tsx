@@ -11,6 +11,13 @@ jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => ({ login: mockLogin }),
 }));
 
+// Modo escuro sob demanda: o resto do tema é o real.
+const mockIsDark = { current: false };
+jest.mock("../../lib/theme/theme-provider", () => {
+  const actual = jest.requireActual("../../lib/theme/theme-provider");
+  return { ...actual, useTheme: () => ({ ...actual.useTheme(), isDark: mockIsDark.current }) };
+});
+
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
@@ -21,6 +28,7 @@ import LoginScreen from "../../app/login";
 describe("LoginScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIsDark.current = false;
   });
 
   // A tela não navega: quem troca de rota é o `Stack.Protected` do layout
@@ -69,5 +77,21 @@ describe("LoginScreen", () => {
     await fireEvent.press(screen.getByTestId("forgot-password-link"));
 
     expect(mockPush).toHaveBeenCalledWith("/esqueci-senha");
+  });
+  it("o olho alterna entre mostrar e ocultar a senha", async () => {
+    await render(<LoginScreen />);
+    expect(screen.getByTestId("password-input").props.secureTextEntry).toBe(true);
+
+    await fireEvent.press(screen.getByLabelText("Mostrar senha"));
+    expect(screen.getByTestId("password-input").props.secureTextEntry).toBe(false);
+
+    await fireEvent.press(screen.getByLabelText("Ocultar senha"));
+    expect(screen.getByTestId("password-input").props.secureTextEntry).toBe(true);
+  });
+
+  it("renderiza no modo escuro", async () => {
+    mockIsDark.current = true;
+    await render(<LoginScreen />);
+    expect(screen.getByTestId("login-submit")).toBeTruthy();
   });
 });

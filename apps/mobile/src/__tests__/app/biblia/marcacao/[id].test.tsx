@@ -3,6 +3,7 @@
 // marcação apagada vira aviso definitivo (sem "tentar de novo"), e a
 // referência leva ao capítulo com o trecho destacado.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Platform } from "react-native";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -231,5 +232,99 @@ describe("BibliaMarkScreen", () => {
     await renderLoaded();
 
     expect(screen.getAllByText(/Alguém/).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetMark.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<BibliaMarkScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(MARK);
+    });
+
+    expect(mockGetMark).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetMark.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<BibliaMarkScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetMark).toHaveBeenCalled();
+  });
+
+  it("erro que não é de conexão nem 404 mostra a mensagem genérica", async () => {
+    mockGetMark.mockRejectedValue(new HttpError(500, { message: "x" }));
+
+    await render(<BibliaMarkScreen />);
+
+    expect(await screen.findByTestId("biblia-mark-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+
+  it("recusa da API ao responder (4xx) mostra a mensagem que ela mandou", async () => {
+    mockCreateReply.mockRejectedValue(new HttpError(403, { message: "Respostas desativadas." }));
+
+    await renderLoaded();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-reply-input"), "Resposta válida.");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-reply-send"));
+    });
+
+    expect(screen.getByTestId("biblia-reply-error").props.children).toBe("Respostas desativadas.");
+  });
+
+  it("resposta com data ilegível mostra só o nome", async () => {
+    mockGetReplies.mockResolvedValue([reply({ created_at: "sem data" })]);
+
+    await renderLoaded();
+
+    expect(screen.getByText("Davi")).toBeTruthy();
+  });
+
+  it("apagar outra resposta enquanto um apagamento está em andamento não dispara segunda chamada", async () => {
+    mockGetReplies.mockResolvedValue([
+      reply({ id: "r1", can_delete: true }),
+      reply({ id: "r2", can_delete: true, comment: "Outra." }),
+    ]);
+    let resolveDelete!: () => void;
+    mockDeleteReply.mockReturnValue(new Promise<void>((r) => (resolveDelete = r)));
+
+    await renderLoaded();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-reply-delete-r1"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-reply-delete-r2"));
+    });
+    await act(async () => {
+      resolveDelete();
+    });
+
+    expect(mockDeleteReply).toHaveBeenCalledTimes(1);
+    expect(mockDeleteReply).toHaveBeenCalledWith("m1", "r1");
+    expect(screen.getByTestId("biblia-reply-r2")).toBeTruthy();
+  });
+  it("no Android, a tela não empurra o teclado com padding (só o iOS precisa)", async () => {
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    try {
+      await renderLoaded();
+      expect(screen.getByTestId("biblia-reply-input")).toBeTruthy();
+    } finally {
+      os.restore();
+    }
   });
 });

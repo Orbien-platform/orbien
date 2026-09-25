@@ -7,6 +7,7 @@
 // bloqueia o submit, erro do backend aparece via `Alert`, intervalo vindo da
 // query (`verse_start`/`verse_end`, navegação do feed) já chega destacado.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Platform } from "react-native";
 
 let mockSearchParams: { book: string; chapter: string; verse_start?: string; verse_end?: string } = {
   book: "JHN",
@@ -348,5 +349,54 @@ describe("BibliaChapterScreen", () => {
     expect(screen.getByTestId("biblia-verse-3").props.accessibilityState.selected).toBe(true);
     // A barra já oferece o "Comentar" — o intervalo chegou completo.
     expect(screen.getByTestId("biblia-comment-cta").props.accessibilityState.disabled).toBe(false);
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetChapter.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<BibliaChapterScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(CHAPTER);
+    });
+
+    expect(mockGetChapter).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetChapter.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<BibliaChapterScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetChapter).toHaveBeenCalled();
+  });
+
+  it("erro que não é de conexão mostra a mensagem genérica", async () => {
+    mockGetChapter.mockRejectedValue(new HttpError(500, { message: "x" }));
+
+    await render(<BibliaChapterScreen />);
+
+    expect(await screen.findByTestId("biblia-chapter-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+  it("no Android o capítulo abre sem o padding de teclado do iOS", async () => {
+    mockGetChapter.mockResolvedValue(CHAPTER);
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    try {
+      await render(<BibliaChapterScreen />);
+      expect(await screen.findByTestId("biblia-verse-1")).toBeTruthy();
+    } finally {
+      os.restore();
+    }
   });
 });

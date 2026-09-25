@@ -4,7 +4,7 @@
 // - AC 2: branding nulo/sem customização -> tema default, sem erro visível
 // - AC 2: GET /settings falha (erro de rede) -> tema cacheado permanece
 import { Text } from "react-native";
-import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockGetItem = jest.fn();
 const mockSetItem = jest.fn();
@@ -244,5 +244,125 @@ describe("ThemeProvider", () => {
     expect(screen.getByTestId("primaryColor").props.children).toBe(DEFAULT_THEME.primaryColor);
     expect(screen.getByTestId("appName").props.children).toBe(DEFAULT_THEME.appName);
     expect(screen.getByTestId("tenantSlug").props.children).toBe("sem-tenant-slug");
+  });
+
+  it("cache no formato antigo (Branding sem envelope) é ignorado, sem erro visível", async () => {
+    mockUseAuth.mockReturnValue({ session: null });
+    mockGetItem.mockResolvedValue(JSON.stringify({ app_name: "Formato velho", primary_color: "#123456" }));
+
+    await render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(mockGetItem).toHaveBeenCalled());
+    expect(screen.getByTestId("primaryColor").props.children).toBe(DEFAULT_THEME.primaryColor);
+  });
+
+  it("cache sem tenantSlug aplica as cores e fica sem slug", async () => {
+    mockAuthenticatedRequest.mockReturnValue(new Promise(() => {}));
+    mockGetItem.mockResolvedValue(
+      JSON.stringify({
+        branding: { app_name: "Igreja Cache", primary_color: "#00ff00", logo_url: null, splash_url: null },
+      }),
+    );
+
+    await render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("primaryColor").props.children).toBe("#00ff00"));
+    expect(screen.getByTestId("tenantSlug").props.children).toBe("sem-tenant-slug");
+  });
+
+  it("GET /settings que responde depois de desmontar não grava cache", async () => {
+    mockGetItem.mockResolvedValue(null);
+    let resolve!: (value: unknown) => void;
+    mockAuthenticatedRequest.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve({
+        tenant: { slug: "igreja" },
+        branding: { app_name: "Igreja", primary_color: "#00ff00", logo_url: null, splash_url: null },
+      });
+    });
+
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it("falha ao gravar o cache do branding não aparece para o usuário", async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockSetItem.mockRejectedValue(new Error("disco cheio"));
+    mockAuthenticatedRequest.mockResolvedValue({
+      tenant: { slug: "igreja" },
+      branding: { app_name: "Igreja", primary_color: "#00ff00", logo_url: null, splash_url: null },
+    });
+
+    await render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(mockSetItem).toHaveBeenCalled());
+    expect(screen.getByTestId("primaryColor").props.children).toBe("#00ff00");
+  });
+
+  it("preferência de modo ilegível no disco e falha ao gravar a escolha: segue sem erro", async () => {
+    mockUseAuth.mockReturnValue({ session: null });
+    // Só a chave da preferência falha: é o `.catch` dela que está em teste.
+    mockGetItem.mockImplementation(async (key: string) => {
+      if (key === "orbien.colorScheme") throw new Error("storage indisponível");
+      return null;
+    });
+    mockSetItem.mockRejectedValue(new Error("disco cheio"));
+
+    function PreferenceProbe() {
+      const { preference, setPreference } = useTheme();
+      return (
+        <Text testID="preference" onPress={() => setPreference("dark")}>
+          {preference}
+        </Text>
+      );
+    }
+
+    await render(
+      <ThemeProvider>
+        <PreferenceProbe />
+      </ThemeProvider>,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("preference"));
+    });
+
+    expect(screen.getByTestId("preference").props.children).toBe("dark");
+    expect(mockSetItem).toHaveBeenCalledWith(expect.any(String), "dark");
+  });
+
+  it("fora do provider, useTheme devolve o tema padrão e setPreference não faz nada", async () => {
+    function Bare() {
+      const { primaryColor, setPreference } = useTheme();
+      return (
+        <Text testID="bare" onPress={() => setPreference("dark")}>
+          {primaryColor}
+        </Text>
+      );
+    }
+
+    await render(<Bare />);
+    await fireEvent.press(screen.getByTestId("bare"));
+
+    expect(screen.getByTestId("bare").props.children).toBe(DEFAULT_THEME.primaryColor);
   });
 });

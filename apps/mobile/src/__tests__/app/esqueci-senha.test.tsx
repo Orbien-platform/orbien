@@ -13,6 +13,13 @@ jest.mock("../../lib/auth/auth-client", () => ({
   forgotPassword: (...args: unknown[]) => mockForgotPassword(...args),
 }));
 
+// Modo escuro sob demanda: o resto do tema é o real.
+const mockIsDark = { current: false };
+jest.mock("../../lib/theme/theme-provider", () => {
+  const actual = jest.requireActual("../../lib/theme/theme-provider");
+  return { ...actual, useTheme: () => ({ ...actual.useTheme(), isDark: mockIsDark.current }) };
+});
+
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
@@ -27,6 +34,7 @@ const SUCCESS_MESSAGE =
 describe("ForgotPasswordScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIsDark.current = false;
   });
 
   it("submit com e-mail chama forgotPassword com o e-mail normalizado e mostra a mensagem de sucesso", async () => {
@@ -72,5 +80,18 @@ describe("ForgotPasswordScreen", () => {
 
     expect(mockBack).toHaveBeenCalled();
     expect(mockForgotPassword).not.toHaveBeenCalled();
+  });
+  it("submit com e-mail em branco não chama a API", async () => {
+    await render(<ForgotPasswordScreen />);
+    await fireEvent.changeText(screen.getByTestId("forgot-password-email-input"), "   ");
+    await fireEvent.press(screen.getByTestId("forgot-password-submit"));
+
+    expect(mockForgotPassword).not.toHaveBeenCalled();
+  });
+
+  it("renderiza no modo escuro", async () => {
+    mockIsDark.current = true;
+    await render(<ForgotPasswordScreen />);
+    expect(screen.getByTestId("forgot-password-submit")).toBeTruthy();
   });
 });

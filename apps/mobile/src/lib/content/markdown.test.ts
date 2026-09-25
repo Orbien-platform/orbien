@@ -44,4 +44,8 @@ describe("parseMarkdown", () => {
       { kind: "paragraph", spans: [{ text: "Culto domingo às 19h." }] },
     ]);
   });
+
+  it("colchete sem link completo fica como texto", () => {
+    expect(parseInline("[sem fechamento")).toEqual([{ text: "[sem fechamento" }]);
+  });
 });
