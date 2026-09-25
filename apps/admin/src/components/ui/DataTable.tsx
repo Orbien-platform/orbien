@@ -104,9 +104,25 @@ export function DataTable<T>({
                 <tr
                   key={getRowKey(row)}
                   onClick={() => onRowClick?.(row)}
+                  // Linha clicável também abre pelo teclado (Tab até ela,
+                  // Enter ou Espaço). A tecla vinda de um botão dentro da
+                  // linha é do botão — por isso o `target` tem que ser a
+                  // própria linha.
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (e) => {
+                          if (e.target !== e.currentTarget) return;
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          onRowClick(row);
+                        }
+                      : undefined
+                  }
                   className={cn(
                     "transition-colors",
-                    onRowClick && "cursor-pointer hover:bg-[var(--surface-subtle)]"
+                    onRowClick &&
+                      "cursor-pointer hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                   )}
                 >
                   {columns.map((col) => (

@@ -603,7 +603,7 @@ export default function FinanceiroPage() {
   // ── Tab button style ─────────────────────────────────────────────────────────
   const tabBtn = (active: boolean) =>
     cn(
-      "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none",
+      "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50",
       active
         ? "text-navy dark:text-white after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:bg-navy"
         : "text-stone hover:text-ink dark:hover:text-white"

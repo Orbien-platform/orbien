@@ -166,3 +166,19 @@
     @apply font-sans;
   }
 }
+
+/* Quem pediu ao sistema para reduzir movimento não vê entrada de modal,
+   deslize de folha nem transição. A duração vai a quase zero, não a zero:
+   o Base UI espera o fim da animação para desmontar o que fecha, e o evento
+   continua disparando. O `animate-spin` fica de fora de propósito — ali o
+   giro é a informação ("carregando"), e parado ele pareceria travado. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
