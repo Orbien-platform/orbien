@@ -812,6 +812,9 @@ da Fase 13, ou sai.
 >   transformação do compilador do Next; importado pelo Vitest ele não expõe os
 >   loaders e `DM_Sans()` estoura com `is not a function`. `layout.test.tsx`
 >   mocka o módulo devolvendo `{ variable }`, que é o contrato que o layout usa.
+>   (Desde 2026-09-25 os três fronts usam `next/font/local`, com as fontes em
+>   `src/fonts/`, e o mock é o de `next/font/local` — o mesmo problema e o
+>   mesmo contrato.)
 >   `<html>`/`<body>` também não podem ser montados no container do jsdom — o
 >   teste renderiza com `renderToStaticMarkup` para asserir os atributos da raiz.
 > - **`ImageResponse` precisa do ambiente `node`.** Sob jsdom o Satori gera o
