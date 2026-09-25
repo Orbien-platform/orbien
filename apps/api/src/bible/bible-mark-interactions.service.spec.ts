@@ -129,6 +129,32 @@ describe('BibleMarkInteractionsService', () => {
       });
     });
 
+    it('push de versículo único mostra só o número, e resposta longa vai cortada com reticências', async () => {
+      const { client, notifications, service } = setup();
+      client.bibleVerseMark.findFirst.mockResolvedValue({ ...MARK, verse_end: 16 });
+      const long = 'a'.repeat(300);
+      client.bibleVerseMarkReply.create.mockResolvedValue({ ...REPLY_ROW, comment: long });
+
+      await service.createReply('m1', { comment: long }, USER);
+
+      const push = notifications.sendPush.mock.calls[0]![0];
+      expect(push.title).toBe('Ana respondeu seu comentário em João 3:16');
+      expect(push.body).toHaveLength(120);
+      expect(push.body.endsWith('…')).toBe(true);
+    });
+
+    it('livro fora da lista canônica cai no próprio código no título do push', async () => {
+      const { client, notifications, service } = setup();
+      client.bibleVerseMark.findFirst.mockResolvedValue({ ...MARK, book_code: 'XXX' });
+      client.bibleVerseMarkReply.create.mockResolvedValue(REPLY_ROW);
+
+      await service.createReply('m1', { comment: REPLY_ROW.comment }, USER);
+
+      expect(notifications.sendPush.mock.calls[0]![0].title).toBe(
+        'Ana respondeu seu comentário em XXX 3:16-18',
+      );
+    });
+
     it('o autor respondendo à própria marcação não recebe push', async () => {
       const { client, notifications, service } = setup({ personId: 'author' });
       client.bibleVerseMarkReply.create.mockResolvedValue({ ...REPLY_ROW, person_id: 'author' });
@@ -187,6 +213,16 @@ describe('BibleMarkInteractionsService', () => {
         where: { id: 'r1' },
         data: { deleted_at: expect.any(Date), deleted_by_person_id: 'p1' },
       });
+    });
+
+    it('resposta inexistente, já apagada ou de outra marcação dá 404', async () => {
+      const { client, service } = setup();
+      client.bibleVerseMarkReply.findFirst.mockResolvedValue(null);
+
+      await expect(service.removeReply('m1', 'r1', USER)).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.bibleVerseMarkReply.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'r1', mark_id: 'm1', deleted_at: null } }),
+      );
     });
 
     it('quem não é autor nem moderador não apaga', async () => {

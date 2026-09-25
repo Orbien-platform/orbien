@@ -308,6 +308,49 @@ describe('BibleVerseMarksService', () => {
     });
   });
 
+  describe('findOne', () => {
+    it('devolve a marcação viva com as contagens, pela mesma forma do feed', async () => {
+      const client = clientWith();
+      client.bibleVerseMark.findFirst.mockResolvedValue({
+        id: 'm1',
+        person_id: 'p2',
+        book_code: 'JHN',
+        chapter: 3,
+        verse_start: 16,
+        verse_end: 18,
+        comment: 'comentário',
+        created_at: new Date('2026-09-12'),
+        updated_at: new Date('2026-09-12'),
+        person: { id: 'p2', full_name: 'Bruno' },
+        likes: [],
+        _count: { likes: 2, replies: 1 },
+      });
+      const service = serviceWith(client, readerMock());
+
+      const view = await service.findOne('m1', USER);
+
+      expect(client.bibleVerseMark.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'm1', deleted_at: null } }),
+      );
+      expect(view).toMatchObject({
+        id: 'm1',
+        is_mine: false,
+        can_delete: false,
+        like_count: 2,
+        liked_by_me: false,
+        reply_count: 1,
+      });
+    });
+
+    it('marcação apagada ou fora da congregação (a RLS esconde) dá 404', async () => {
+      const client = clientWith();
+      client.bibleVerseMark.findFirst.mockResolvedValue(null);
+      const service = serviceWith(client, readerMock());
+
+      await expect(service.findOne('m1', USER)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('update', () => {
     it('autor edita o próprio comentário — muda comment (e updated_at via Prisma), created_at intocado', async () => {
       const client = clientWith();

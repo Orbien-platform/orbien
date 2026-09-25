@@ -83,11 +83,15 @@ describe('BibleVerseMarksController', () => {
     expect(service.remove).toHaveBeenCalledWith('m1', USER);
   });
 
-  it('curtir, descurtir e responder vão para o service de interações', async () => {
+  it('a marcação vai para o service de marcações; curtir e responder, para o de interações', async () => {
+    await controller.findOne('m1', USER);
+    await controller.listReplies('m1', USER);
     await controller.like('m1', USER);
     await controller.unlike('m1', USER);
     await controller.createReply('m1', { comment: 'Amém!' }, USER);
     await controller.removeReply('m1', 'r1', USER);
+    expect(service.findOne).toHaveBeenCalledWith('m1', USER);
+    expect(interactions.listReplies).toHaveBeenCalledWith('m1', USER);
     expect(interactions.like).toHaveBeenCalledWith('m1', USER);
     expect(interactions.unlike).toHaveBeenCalledWith('m1', USER);
     expect(interactions.createReply).toHaveBeenCalledWith('m1', { comment: 'Amém!' }, USER);
