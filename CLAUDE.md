@@ -42,6 +42,16 @@ leia o do app antes de mexer nele.
   `npm ci --include=dev && npm run build:api`, start
   `node apps/api/dist/src/main.js`, ambos a partir da raiz. O `Dockerfile`
   existe e funciona, mas não é o que o Render executa. Ver `/DEPLOY.md`.
+- **Toda demanda de front passa pela skill `frontend-design`** — `apps/web`,
+  `apps/site`, `apps/admin` e `apps/mobile`, tela nova, ajuste visual ou
+  correção. Carregue-a antes da primeira edição. O brief é o design system
+  do app (tokens, componentes, as regras de front abaixo), e a própria skill
+  manda o brief vencer: o "distinto" dela vale nas escolhas que o app deixa
+  livres, não para trocar a identidade que já existe. Quem garante é o hook
+  `PreToolUse` em `.claude/hooks/require-frontend-design.mjs`: Edit/Write
+  nesses apps é negado enquanto a skill não aparece carregada no transcript da
+  sessão. Não o contorne editando por Bash (`sed -i`, heredoc) — o hook não
+  vê, e a regra continua valendo.
 - No web, `<Button>` é para botões primários (com `bg-navy` na className). Para
   ícone ou link, use `<button>` puro: o `variant` padrão do componente pinta um
   fundo escuro que a className não remove.
