@@ -14,18 +14,19 @@ const mockGetMark = jest.fn();
 const mockGetReplies = jest.fn();
 const mockCreateReply = jest.fn();
 const mockDeleteReply = jest.fn();
+const mockLikeMark = jest.fn();
 jest.mock("../../../../lib/bible/bible-client", () => ({
   getMark: (...args: unknown[]) => mockGetMark(...args),
   getReplies: (...args: unknown[]) => mockGetReplies(...args),
   createReply: (...args: unknown[]) => mockCreateReply(...args),
   deleteReply: (...args: unknown[]) => mockDeleteReply(...args),
-  likeMark: jest.fn(),
+  likeMark: (...args: unknown[]) => mockLikeMark(...args),
   unlikeMark: jest.fn(),
   getBooks: () =>
     Promise.resolve([{ code: "JHN", name: "João", testament: "NT", chapters: 21 }]),
 }));
 
-import { HttpError } from "../../../../lib/api/errors";
+import { HttpError, NetworkError } from "../../../../lib/api/errors";
 import BibliaMarkScreen from "../../../../app/biblia/marcacao/[id]";
 
 const MARK = {
@@ -176,5 +177,59 @@ describe("BibliaMarkScreen", () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith("/biblia/JHN/3?verse_start=16&verse_end=16");
+  });
+
+  it("falha de rede mostra erro com tentar de novo, e o retry recarrega", async () => {
+    mockGetMark.mockRejectedValueOnce(new NetworkError());
+
+    await act(async () => {
+      render(<BibliaMarkScreen />);
+    });
+    await waitFor(() => expect(screen.getByTestId("biblia-mark-error")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-mark-retry"));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("biblia-mark-screen")).toBeTruthy());
+    expect(mockGetMark).toHaveBeenCalledTimes(2);
+  });
+
+  it("apagar que falha mantém a resposta e mostra o erro", async () => {
+    mockGetReplies.mockResolvedValue([reply({ id: "r2", is_mine: true, can_delete: true })]);
+    mockDeleteReply.mockRejectedValue(new HttpError(500, { message: "x" }));
+    await renderLoaded();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-reply-delete-r2"));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("biblia-reply-delete-error")).toHaveTextContent(
+        "Não foi possível apagar a resposta. Tente novamente.",
+      ),
+    );
+    expect(screen.getByTestId("biblia-reply-r2")).toBeTruthy();
+  });
+
+  it("curtir aqui atualiza a contagem da marcação", async () => {
+    mockLikeMark.mockResolvedValue({ liked: true, like_count: 7 });
+    await renderLoaded();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-mark-like-m1"));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("biblia-mark-like-count-m1")).toHaveTextContent("7"),
+    );
+  });
+
+  it("autor sem nome aparece como Alguém", async () => {
+    mockGetMark.mockResolvedValue({ ...MARK, person: null });
+    mockGetReplies.mockResolvedValue([reply({ person: null })]);
+    await renderLoaded();
+
+    expect(screen.getAllByText(/Alguém/).length).toBeGreaterThanOrEqual(2);
   });
 });
