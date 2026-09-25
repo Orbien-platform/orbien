@@ -24,6 +24,7 @@ import { ImpersonateDto } from './dto/impersonate.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { frontendUrl } from '../common/urls/frontend-url';
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -441,8 +442,7 @@ export class AuthService {
       data: { user_id: user.id, token: rawToken, expires_at: expiresAt },
     });
 
-    const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
-    const resetUrl = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
+    const resetUrl = `${frontendUrl()}/redefinir-senha?token=${rawToken}`;
     const userName = user.person?.full_name?.split(' ')[0] ?? '';
 
     await this.mail.sendPasswordReset(user.email, resetUrl, userName);

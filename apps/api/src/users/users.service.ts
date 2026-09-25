@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateUserDto } from './dto/create-user.dto';
+import { frontendUrl } from '../common/urls/frontend-url';
 
 const INVITE_TOKEN_TTL_DAYS = 7;
 
@@ -102,8 +103,7 @@ export class UsersService {
     }
 
     // Fora da transação: envio de e-mail não deve segurar a conexão do banco.
-    const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
-    const inviteUrl = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
+    const inviteUrl = `${frontendUrl()}/redefinir-senha?token=${rawToken}`;
     await this.mail.sendInvite(user.email, inviteUrl);
 
     return { id: user.id, email: user.email };
