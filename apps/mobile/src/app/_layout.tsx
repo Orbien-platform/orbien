@@ -1,7 +1,7 @@
 import { Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "../lib/auth/auth-provider";
@@ -45,7 +45,10 @@ SplashScreen.setOptions({ duration: 300, fade: true });
 // A `AnimatedSplash` cobre o navigator enquanto a sessão hidrata **ou** as
 // fontes da marca carregam (§1 do STYLE-GUIDE.md: nunca deixar o app
 // piscar com a fonte do sistema). A splash nativa só é escondida quando a
-// animada já desenhou.
+// animada já desenhou. Terminado o boot, a animada não some na hora: fecha a
+// volta do satélite e sai em fade (ver o cabeçalho de animated-splash.tsx),
+// por isso ela vive até o `onFinish`, e não até `isBooting` virar falso.
+// Se o primeiro render já chega sem nada a esperar, não há abertura.
 function ThemedShell() {
   const { status } = useAuth();
   const theme = useTheme();
@@ -53,6 +56,8 @@ function ThemedShell() {
   const segments = useSegments();
   const isAuthenticated = status === "authenticated";
   const isBooting = status === "loading" || !fontsReady;
+  const [splashFinished, setSplashFinished] = useState(() => !isBooting);
+  const finishSplash = useCallback(() => setSplashFinished(true), []);
   // Só as telas de detalhe desenham o header pintado com a cor da marca; as
   // abas e o login mostram a status bar sobre `bgBase`.
   const onBrandHeader = isAuthenticated && segments.length > 0 && segments[0] !== "(tabs)";
@@ -134,7 +139,9 @@ function ThemedShell() {
           <Stack.Screen name="esqueci-senha" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>
-      {isBooting ? <AnimatedSplash onReady={hideNativeSplash} /> : null}
+      {splashFinished ? null : (
+        <AnimatedSplash onReady={hideNativeSplash} done={!isBooting} onFinish={finishSplash} />
+      )}
     </>
   );
 }
