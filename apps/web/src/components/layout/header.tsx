@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { roleLabel } from "@/lib/roles";
 import { Sidebar } from "./sidebar";
 
 const routeLabels: Record<string, string> = {
@@ -25,6 +26,7 @@ const routeLabels: Record<string, string> = {
   "/voluntarios": "Voluntários",
   "/celebracoes": "Celebrações",
   "/configuracoes": "Configurações",
+  "/perfil": "Perfil",
 };
 
 function getInitials(name: string): string {
@@ -38,6 +40,7 @@ function getInitials(name: string): string {
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
 
@@ -112,12 +115,16 @@ export function Header() {
                 <p className="truncate text-sm font-medium text-ink dark:text-white">
                   {user.name}
                 </p>
-                <p className="truncate text-xs text-stone">{user.roles[0]}</p>
+                <p className="truncate text-xs text-stone">{user.roles[0] ? roleLabel(user.roles[0]) : ""}</p>
               </div>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Perfil</DropdownMenuItem>
-            <DropdownMenuItem>Configurações</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/perfil")}>
+              Perfil
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/configuracoes")}>
+              Configurações
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               data-variant="destructive"

@@ -40,5 +40,6 @@ export const config = {
     "/celebracoes/:path*",
     "/auditoria/:path*",
     "/configuracoes/:path*",
+    "/perfil/:path*",
   ],
 };
