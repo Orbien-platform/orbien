@@ -130,6 +130,7 @@ function ThemedShell() {
             `Stack.Protected` faz a troca sozinho quando ela resolve. */}
         <Stack.Protected guard={!isAuthenticated}>
           <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="esqueci-senha" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>
       {isBooting ? <AnimatedSplash onReady={hideNativeSplash} /> : null}

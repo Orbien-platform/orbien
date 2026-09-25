@@ -114,6 +114,9 @@ mesmo motivo do `PROD-25`. `PEND-08` nasceu na mesma rodada, sobre um alerta
 de `pre-push.sh` que não reconhecia arquivo dedicado — fechada no mesmo dia,
 ver `PENDENCIAS.md`.
 
+Em **2026-09-24** fechou `PROD-26` (recuperação de senha por e-mail no app
+mobile) — nota completa na seção 5.
+
 ---
 
 ## 1. Visão do produto
@@ -287,6 +290,44 @@ granularidade de channel quando existir build própria por tenant
 (`DEC-02`). Hoje só existe a variante genérica multi-tenant, então channel
 por profile já cobre o que existe; channel por tenant é pergunta em aberto,
 ver `DEC-05`.
+
+### ~~PROD-26 · Recuperação de senha por e-mail no app mobile~~ · fechado
+
+Entregue em 2026-09-24, no `apps/mobile`. **Nada de backend nesta
+entrega**: `POST /auth/forgot-password` e `POST /auth/reset-password` já
+existiam prontos (migration `20260614001415_add_password_reset_tokens`,
+antiga) e já serviam `apps/web` (`/esqueci-senha`, `/redefinir-senha`) —
+só faltava o consumo pelo app.
+
+- `src/app/esqueci-senha.tsx`: tela nova, fora de `(tabs)` (mesmo padrão de
+  `login.tsx`, sem header próprio), pede o e-mail e chama
+  `forgotPassword` (`lib/auth/auth-client.ts`, função nova). Mesmo
+  princípio de não vazar informação do login (AC 2, MOB-01): mostra a
+  mesma mensagem de sucesso tenha o e-mail conta ou não, e mesmo se a
+  chamada rejeitar por erro de rede — não há como distinguir os dois casos
+  sem abrir a brecha que o backend já fecha.
+- `src/app/login.tsx` ganhou o link "Esqueci minha senha" (`AppLink`,
+  componente já existente, reaproveitado — não criei nada novo ali).
+- **Redefinição continua na página web.** O e-mail que `forgotPassword`
+  do backend envia aponta para `${FRONTEND_URL}/redefinir-senha?token=…`
+  — decisão de não mexer nisso agora: abrir um deep link nativo
+  (`orbien://redefinir-senha`) exigiria mudança de backend (config de
+  scheme, ou um campo de "origem" no `ForgotPasswordDto` para decidir a
+  URL do e-mail) e navegação nativa própria para o formulário de nova
+  senha, escopo maior que "dar acesso ao fluxo que já existe". Hoje o
+  usuário troca a senha no navegador (o link abre fora do app) e volta a
+  entrar pelo app com a senha nova — funciona, só não é a UX ideal de um
+  app nativo. Registrado aqui como próximo passo, não como pendência: não
+  há nada quebrado, é decisão de escopo.
+- `src/app/_layout.tsx`: rota nova entra no mesmo `Stack.Protected
+  guard={!isAuthenticated}` do login — sem isso ficaria fora de qualquer
+  guarda e alcançável por deep link mesmo autenticado (é o que
+  `protected-routes.test.ts` existe para pegar; o teste "só o login fica
+  fora da guarda" virou "só login e esqueci-senha").
+- Testes: `esqueci-senha.test.tsx` novo (sucesso, mesma mensagem com
+  chamada rejeitando, navegação de volta), `auth-client.test.ts` ganhou
+  `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
+  mock de `expo-router` (a tela passou a navegar).
 
 ---
 
