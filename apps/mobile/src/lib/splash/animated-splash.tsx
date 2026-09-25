@@ -19,11 +19,20 @@
 // no mesmo lugar) são visualmente idênticos — é isso que faz a troca não
 // "pular".
 //
+// Abertura: a splash não some no instante em que o boot termina. Ela fica
+// até o satélite completar a volta em curso — no mínimo uma, a partir do
+// repouso — e então sai em fade. É o que faz a órbita ser vista como
+// abertura do app, e não um relance: a sessão costuma hidratar em poucas
+// centenas de ms, antes de meia volta. Terminar na virada da volta faz o
+// fade começar com o satélite de novo no repouso (onde o `easing` o deixa
+// quase parado), e não no meio do caminho. Com "reduzir movimento" não há
+// volta a esperar: sai assim que o boot termina.
+//
 // Sem `react-native-svg` para o satélite animado: ele é uma `View` circular
 // posicionada pela mesma equação da elipse que gerou o asset. Uma
 // dependência a menos por um `<Circle>`.
 import Constants from "expo-constants";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from "react-native";
 
 /** Largura da marca, em dp — a mesma que o plugin usa na splash nativa. */
@@ -52,8 +61,9 @@ const orbitRadiusX = 9 * unit;
 const orbitRadiusY = 4 * unit;
 const satelliteRadius = 2 * unit;
 
-const ORBIT_DURATION_MS = 2400;
+const ORBIT_DURATION_MS = 1800;
 const FADE_IN_MS = 420;
+const EXIT_MS = 320;
 
 // Uma volta completa amostrada em passos suficientes para a elipse não
 // virar polígono visível.
@@ -71,13 +81,27 @@ const offsetsY = angles.map((a) => orbitRadiusY * Math.sin(a));
 const depthScale = angles.map((a) => 1 + 0.14 * Math.sin(a));
 const depthOpacity = angles.map((a) => 0.62 + 0.38 * ((Math.sin(a) + 1) / 2));
 
-export function AnimatedSplash({ onReady }: { onReady?: () => void }) {
+type AnimatedSplashProps = {
+  /** Primeiro frame desenhado — gatilho para esconder a splash nativa. */
+  onReady?: () => void;
+  /** O boot terminou: a splash fecha a volta em curso e sai. */
+  done?: boolean;
+  /** O fade de saída acabou; quem monta a splash já pode desmontá-la. */
+  onFinish?: () => void;
+};
+
+export function AnimatedSplash({ onReady, done = false, onFinish }: AnimatedSplashProps) {
   // `useState` lazy, não `useRef(...).current`: os dois guardam o mesmo
   // valor estável entre renders, mas o segundo é leitura de ref durante o
   // render — o que a regra `react-hooks/refs` (eslint-config-expo) barra.
   const [orbit] = useState(() => new Animated.Value(0));
   const [fade] = useState(() => new Animated.Value(0));
+  const [exit] = useState(() => new Animated.Value(1));
   const [reduceMotion, setReduceMotion] = useState(false);
+  // Início da órbita, para saber onde termina a volta em curso. A saída é
+  // cronometrada por timer, não pelo callback da animação: com o driver
+  // nativo, quem anda é o lado nativo, e o JS só precisa saber quando.
+  const orbitStartedAt = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,14 +128,17 @@ export function AnimatedSplash({ onReady }: { onReady?: () => void }) {
 
     if (reduceMotion) return () => fadeIn.stop();
 
+    // `inOut`: o satélite arranca do repouso e assenta de volta nele a cada
+    // volta — é o que deixa a saída, sempre na virada, sem tranco.
     const loop = Animated.loop(
       Animated.timing(orbit, {
         toValue: 1,
         duration: ORBIT_DURATION_MS,
-        easing: Easing.linear,
+        easing: Easing.inOut(Easing.sin),
         useNativeDriver: true,
       }),
     );
+    orbitStartedAt.current = Date.now();
     loop.start();
 
     return () => {
@@ -120,15 +147,42 @@ export function AnimatedSplash({ onReady }: { onReady?: () => void }) {
     };
   }, [fade, orbit, reduceMotion]);
 
+  useEffect(() => {
+    if (!done) return;
+
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    let exitAnimation: Animated.CompositeAnimation | undefined;
+    const elapsed = Date.now() - orbitStartedAt.current;
+    const turns = Math.max(1, Math.ceil(elapsed / ORBIT_DURATION_MS));
+    const wait = reduceMotion ? 0 : turns * ORBIT_DURATION_MS - elapsed;
+
+    const turnTimer = setTimeout(() => {
+      exitAnimation = Animated.timing(exit, {
+        toValue: 0,
+        duration: EXIT_MS,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      });
+      exitAnimation.start();
+      exitTimer = setTimeout(() => onFinish?.(), EXIT_MS);
+    }, wait);
+
+    return () => {
+      clearTimeout(turnTimer);
+      clearTimeout(exitTimer);
+      exitAnimation?.stop();
+    };
+  }, [done, reduceMotion, exit, onFinish]);
+
   const interpolate = (outputRange: number[]) =>
     orbit.interpolate({ inputRange: progress, outputRange });
 
   return (
-    <View
+    <Animated.View
       testID="splash"
       accessibilityRole="progressbar"
       accessibilityLabel="Carregando"
-      style={[styles.container, { backgroundColor: BACKGROUND }]}
+      style={[styles.container, { backgroundColor: BACKGROUND, opacity: exit }]}
       onLayout={onReady}
     >
       <Animated.View style={[styles.mark, { opacity: fade }]}>
@@ -157,7 +211,7 @@ export function AnimatedSplash({ onReady }: { onReady?: () => void }) {
           ]}
         />
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 

@@ -1,6 +1,7 @@
 // Cobre o contrato visual da splash animada: a marca e o satélite estão na
 // tela, `onReady` avisa quando o primeiro frame foi desenhado (é o gatilho
-// para esconder a splash nativa) e "reduzir movimento" desliga a órbita.
+// para esconder a splash nativa), "reduzir movimento" desliga a órbita e,
+// terminado o boot, a splash fecha a volta do satélite antes de sair.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { AccessibilityInfo } from "react-native";
 
@@ -62,5 +63,67 @@ describe("AnimatedSplash", () => {
     });
 
     expect(screen.getByTestId("splash-satellite")).toHaveStyle({ opacity: 1 });
+  });
+
+  describe("saída", () => {
+    // `setImmediate` fica real: o Promise do preset do RN resolve por ele, e
+    // congelá-lo deixaria a resposta de "reduzir movimento" nunca chegar.
+    beforeEach(() => jest.useFakeTimers({ doNotFake: ["setImmediate", "nextTick"] }));
+    afterEach(() => jest.useRealTimers());
+
+    it("com o boot pronto logo, espera a primeira volta inteira e só então sai", async () => {
+      const onFinish = jest.fn();
+      const view = await render(<AnimatedSplash onFinish={onFinish} />);
+
+      await act(async () => {
+        jest.advanceTimersByTime(200);
+      });
+      await view.rerender(<AnimatedSplash done onFinish={onFinish} />);
+
+      // Volta de 1800 ms + fade de 320 ms, contados da montagem.
+      await act(async () => {
+        jest.advanceTimersByTime(1800 - 200 + 300);
+      });
+      expect(onFinish).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(20);
+      });
+      expect(onFinish).toHaveBeenCalledTimes(1);
+    });
+
+    it("com o boot pronto no meio da segunda volta, sai na virada dela", async () => {
+      const onFinish = jest.fn();
+      const view = await render(<AnimatedSplash onFinish={onFinish} />);
+
+      await act(async () => {
+        jest.advanceTimersByTime(2500);
+      });
+      await view.rerender(<AnimatedSplash done onFinish={onFinish} />);
+
+      await act(async () => {
+        jest.advanceTimersByTime(3600 - 2500 + 319);
+      });
+      expect(onFinish).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(onFinish).toHaveBeenCalledTimes(1);
+    });
+
+    it("com 'reduzir movimento', sai assim que o boot termina", async () => {
+      jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
+      const onFinish = jest.fn();
+
+      await act(async () => {
+        render(<AnimatedSplash done onFinish={onFinish} />);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(320);
+      });
+
+      expect(onFinish).toHaveBeenCalledTimes(1);
+    });
   });
 });

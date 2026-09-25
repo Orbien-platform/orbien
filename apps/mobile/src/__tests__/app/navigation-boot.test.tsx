@@ -2,7 +2,9 @@
 // ficava em branco com o "Carregando…" re-renderizando. Diferente de
 // `_layout.test.tsx` — que mocka `expo-router` inteiro e por isso não vê o
 // problema —, aqui o router REAL monta a árvore de rotas de `src/app`.
+import { waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
+import { AccessibilityInfo } from "react-native";
 
 jest.mock("expo-constants", () => ({
   __esModule: true,
@@ -54,6 +56,10 @@ jest.mock("../../lib/permissions/permissions-client", () => ({
 describe("boot do app (router real, rotas de src/app)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // A splash não some no instante em que o boot termina: fecha a volta do
+    // satélite e sai em fade. "Reduzir movimento" pula a volta, e o que
+    // sobra é só o fade — é o que o `waitFor` abaixo espera.
+    jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
     mockGetItemAsync.mockResolvedValue(null);
     mockFetchAreas.mockResolvedValue(null);
   });
@@ -62,7 +68,7 @@ describe("boot do app (router real, rotas de src/app)", () => {
     const app = await renderRouter("src/app", { initialUrl: "/" });
 
     expect(await app.findByTestId("email-input")).toBeTruthy();
-    expect(app.queryByTestId("splash")).toBeNull();
+    await waitFor(() => expect(app.queryByTestId("splash")).toBeNull());
   });
 
   it("com sessão salva: monta o shell autenticado, sem splash nem login", async () => {
@@ -81,7 +87,7 @@ describe("boot do app (router real, rotas de src/app)", () => {
     // porque a saudação (HOME-01) não depende de rede — o que importa aqui
     // é que o shell autenticado montou, em vez de ficar preso no splash.
     expect(await app.findByTestId("home-greeting")).toBeTruthy();
-    expect(app.queryByTestId("splash")).toBeNull();
+    await waitFor(() => expect(app.queryByTestId("splash")).toBeNull());
     expect(app.queryByTestId("email-input")).toBeNull();
   });
 
@@ -100,7 +106,7 @@ describe("boot do app (router real, rotas de src/app)", () => {
     // Mesmo shell autenticado do teste acima — o conteúdo da rota index
     // (Home) não muda, só a aba Escala some da tab bar.
     expect(await app.findByTestId("home-greeting")).toBeTruthy();
-    expect(app.queryByTestId("splash")).toBeNull();
+    await waitFor(() => expect(app.queryByTestId("splash")).toBeNull());
 
     expect(app.queryByText("Escala")).toBeNull();
     // As demais abas continuam normais.
