@@ -448,7 +448,13 @@ export class DomainProvisioningService {
     } catch (err) {
       const status = (err as AxiosError).response?.status;
       if (status === 404) throw new NotFoundException('Domínio não encontrado no projeto Vercel');
-      this.logger.warn(`Falha ao checar verificação da Vercel para ${domain}`, err);
+      // Só a stack, nunca o `err` inteiro: é um AxiosError, e `err.config.headers`
+      // carrega o `Authorization: Bearer <VERCEL_API_TOKEN>` da própria chamada —
+      // logar o objeto vazaria o token de plataforma em texto claro.
+      this.logger.warn(
+        `Falha ao checar verificação da Vercel para ${domain}`,
+        err instanceof Error ? err.stack : err,
+      );
       return false;
     }
   }

@@ -783,6 +783,20 @@ describe("ConfiguracoesPage — domínio próprio", () => {
     render(<ConfiguracoesPage />);
     await screen.findByDisplayValue("Doca Sede");
     expect(screen.queryByText("Domínio próprio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Erro ao carregar o status do domínio. Recarregue a página."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("mostra erro (não some em silêncio) quando /settings/branding/domain falha por motivo real, não por plano", async () => {
+    setup();
+    mockGet(null, 500);
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    expect(screen.queryByText("Domínio próprio")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Erro ao carregar o status do domínio. Recarregue a página."),
+    ).toBeInTheDocument();
   });
 
   it("mostra as instruções de DNS manual quando não há Cloudflare conectada", async () => {

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 import { applyPhoneMask, initPhone, stripPhone } from "@/lib/phoneMask";
 import { cn } from "@/lib/utils";
 
@@ -250,9 +250,16 @@ function ConfiguracoesContent() {
         setDomainAvailable(true);
         setDomainStatus(res.data);
       })
-      // 403 = plano não é Premium — seção fica de fora, mesmo silêncio do
-      // resto da base quando um recurso Premium não se aplica (PROD-20).
-      .catch(() => setDomainAvailable(false));
+      .catch((err) => {
+        // 403 = plano não é Premium — seção fica de fora, mesmo silêncio do
+        // resto da base quando um recurso Premium não se aplica (PROD-20).
+        // Qualquer outro erro (500, rede) é falha de verdade: esconder do
+        // mesmo jeito faria um admin Premium achar que não tem o recurso.
+        setDomainAvailable(false);
+        if (!isForbidden(err)) {
+          setDomainError("Erro ao carregar o status do domínio. Recarregue a página.");
+        }
+      });
   }, []);
 
   useEffect(() => {
@@ -779,6 +786,9 @@ function ConfiguracoesContent() {
           </section>
 
           {/* ── Domínio próprio (Premium) ── */}
+          {canEditTenant && !domainAvailable && domainError && (
+            <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">{domainError}</p>
+          )}
           {canEditTenant && domainAvailable && (
             <section className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-5">
               <div className="mb-4 flex items-center gap-2">
