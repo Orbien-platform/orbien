@@ -28,6 +28,7 @@ let congBId: string;
 
 let markA1Id: string;
 let markA2Id: string;
+let personA1Id: string;
 
 async function createMark(tenantId: string, congregationId: string, personId: string, label: string) {
   const mark = await prismaAdmin.bibleVerseMark.create({
@@ -93,12 +94,33 @@ beforeAll(async () => {
     },
   });
 
+  personA1Id = personA1.id;
   markA1Id = await createMark(tenantAId, congA1Id, personA1.id, 'A-Sede');
   markA2Id = await createMark(tenantAId, congA2Id, personA2.id, 'A-Filial');
+
+  // Curtida e resposta na marcação da Filial, feitas por quem é de lá.
+  await prismaAdmin.bibleVerseMarkLike.create({
+    data: { tenant_id: tenantAId, congregation_id: congA2Id, mark_id: markA2Id, person_id: personA2.id },
+  });
+  await prismaAdmin.bibleVerseMarkReply.create({
+    data: {
+      tenant_id: tenantAId,
+      congregation_id: congA2Id,
+      mark_id: markA2Id,
+      person_id: personA2.id,
+      comment: `Resposta A-Filial ${ts}`,
+    },
+  });
   await createMark(tenantBId, congBId, personB.id, 'B-Sede');
 }, 60_000);
 
 afterAll(async () => {
+  await prismaAdmin.bibleVerseMarkLike.deleteMany({
+    where: { tenant_id: { in: [tenantAId, tenantBId] } },
+  });
+  await prismaAdmin.bibleVerseMarkReply.deleteMany({
+    where: { tenant_id: { in: [tenantAId, tenantBId] } },
+  });
   await prismaAdmin.bibleVerseMark.deleteMany({
     where: { tenant_id: { in: [tenantAId, tenantBId] } },
   });
@@ -162,5 +184,75 @@ describe('bible_verse_marks — isolamento (BIB-07)', () => {
         }),
       ),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * Curtidas e respostas (`022_rls_bible_verse_mark_interactions.sql`): mesmo
+ * escopo de congregação da marcação. O caso que importa é o da congregação
+ * irmã — sem a policy, a Sede leria (e gravaria) nas marcações da Filial.
+ */
+describe('bible_verse_mark_likes / bible_verse_mark_replies — isolamento', () => {
+  it('a própria congregação vê curtida e resposta (controle positivo)', async () => {
+    const [likes, replies] = await runAsTenantWithRole(tenantAId, congA2Id, async (tx) => [
+      await tx.bibleVerseMarkLike.findMany({ where: { mark_id: markA2Id } }),
+      await tx.bibleVerseMarkReply.findMany({ where: { mark_id: markA2Id } }),
+    ]);
+
+    expect(likes).toHaveLength(1);
+    expect(replies).toHaveLength(1);
+  });
+
+  it('a congregação IRMÃ não vê curtida nem resposta da outra', async () => {
+    const [likes, replies] = await runAsTenantWithRole(tenantAId, congA1Id, async (tx) => [
+      await tx.bibleVerseMarkLike.findMany({ where: { mark_id: markA2Id } }),
+      await tx.bibleVerseMarkReply.findMany({ where: { mark_id: markA2Id } }),
+    ]);
+
+    expect(likes).toHaveLength(0);
+    expect(replies).toHaveLength(0);
+  });
+
+  it('o outro tenant não vê nada', async () => {
+    const [likes, replies] = await runAsTenantWithRole(tenantBId, congBId, async (tx) => [
+      await tx.bibleVerseMarkLike.findMany({ where: { tenant_id: tenantAId } }),
+      await tx.bibleVerseMarkReply.findMany({ where: { tenant_id: tenantAId } }),
+    ]);
+
+    expect(likes).toHaveLength(0);
+    expect(replies).toHaveLength(0);
+  });
+
+  it('curtir e responder gravando na congregação alheia é negado — WITH CHECK igual ao USING', async () => {
+    await expect(
+      runAsTenantWithRole(tenantAId, congA1Id, (tx) =>
+        tx.bibleVerseMarkLike.create({
+          data: { tenant_id: tenantAId, congregation_id: congA2Id, mark_id: markA2Id, person_id: personA1Id },
+        }),
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      runAsTenantWithRole(tenantAId, congA1Id, (tx) =>
+        tx.bibleVerseMarkReply.create({
+          data: {
+            tenant_id: tenantAId,
+            congregation_id: congA2Id,
+            mark_id: markA2Id,
+            person_id: personA1Id,
+            comment: `Intruso ${ts}`,
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('a própria congregação curte e responde normalmente', async () => {
+    const like = await runAsTenantWithRole(tenantAId, congA1Id, (tx) =>
+      tx.bibleVerseMarkLike.create({
+        data: { tenant_id: tenantAId, congregation_id: congA1Id, mark_id: markA1Id, person_id: personA1Id },
+      }),
+    );
+    expect(like.mark_id).toBe(markA1Id);
   });
 });

@@ -116,17 +116,27 @@ describe("onesignal-client", () => {
   });
 
   describe("onNotificationClick", () => {
-    it("chama o handler com o post_id do evento", () => {
+    it("post_id abre o post", () => {
       const handler = jest.fn();
       onNotificationClick(handler);
 
       const listener = mockAddEventListener.mock.calls[0]![1];
       listener({ notification: { additionalData: { post_id: "post-1" } } });
 
-      expect(handler).toHaveBeenCalledWith("post-1");
+      expect(handler).toHaveBeenCalledWith("/post/post-1");
     });
 
-    it("não chama o handler quando o evento não tem post_id", () => {
+    it("bible_mark_id (resposta a uma marcação) abre a marcação", () => {
+      const handler = jest.fn();
+      onNotificationClick(handler);
+
+      const listener = mockAddEventListener.mock.calls[0]![1];
+      listener({ notification: { additionalData: { type: "bible_mark_reply", bible_mark_id: "m1" } } });
+
+      expect(handler).toHaveBeenCalledWith("/biblia/marcacao/m1");
+    });
+
+    it("não chama o handler quando o evento não aponta para nada", () => {
       const handler = jest.fn();
       onNotificationClick(handler);
 

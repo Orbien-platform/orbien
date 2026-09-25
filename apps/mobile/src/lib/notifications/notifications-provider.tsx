@@ -23,8 +23,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     initializeOneSignal();
-    return onNotificationClick((postId) => {
-      router.push(`/post/${postId}`);
+    return onNotificationClick((route) => {
+      router.push(route);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init + listener uma vez só, mesmo princípio de onSessionExpired (auth-provider.tsx)
   }, []);

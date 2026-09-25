@@ -117,6 +117,7 @@ function ThemedShell() {
           <Stack.Screen name="biblia/index" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/[book]/[chapter]" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/feed" options={{ title: "Feed da Bíblia" }} />
+          <Stack.Screen name="biblia/marcacao/[id]" options={{ title: "Respostas" }} />
           <Stack.Screen name="indisponibilidade" options={{ title: "Indisponibilidade" }} />
           <Stack.Screen name="notificacoes" options={{ title: "Notificações" }} />
           <Stack.Screen name="post/[id]" options={{ title: "Publicação" }} />

@@ -167,6 +167,12 @@ fi
 if [ -f prisma/migrations/021_rls_bible_chapter_cache.sql ]; then
   run_sql_file prisma/migrations/021_rls_bible_chapter_cache.sql
 fi
+# Curtidas e respostas das marcações (`bible_verse_mark_likes`,
+# `bible_verse_mark_replies`): mesmo caso de 020 — tabelas novas, nascem com
+# a policy de congregação. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/022_rls_bible_verse_mark_interactions.sql ]; then
+  run_sql_file prisma/migrations/022_rls_bible_verse_mark_interactions.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -549,6 +555,18 @@ BEGIN
   RAISE NOTICE 'bible_verse_marks com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em bible_verse_marks, encontrei % — 020_rls_bible_verse_marks.sql rodou?', n;
+  END IF;
+
+  -- 022: curtidas e respostas das marcações, mesmo caso de 020.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename IN ('bible_verse_mark_likes', 'bible_verse_mark_replies')
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'bible_verse_mark_likes/replies com app_congregation_allowed simetrico: %', n;
+  IF n <> 2 THEN
+    RAISE EXCEPTION 'esperava 2 policies tenant_congregation_isolation simétricas em bible_verse_mark_likes/replies, encontrei % — 022_rls_bible_verse_mark_interactions.sql rodou?', n;
   END IF;
 
   -- 021: bible_chapter_cache (AD-005) — o caso OPOSTO aos anteriores: RLS

@@ -17,6 +17,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../components/Alert";
 import { AppButton } from "../../components/AppButton";
+import { BibleMarkSocialBar } from "../../components/BibleMarkSocialBar";
 import { Card } from "../../components/Card";
 import { Input } from "../../components/Input";
 import { Screen } from "../../components/Screen";
@@ -25,7 +26,7 @@ import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { deleteMark, getFeed, updateMark } from "../../lib/bible/bible-client";
 import { formatVerseReference, useBookNames } from "../../lib/bible/book-names";
-import type { BibleVerseMark } from "../../lib/bible/types";
+import type { BibleMarkLikeState, BibleVerseMark } from "../../lib/bible/types";
 import { formatDateTime } from "../../lib/format/date";
 import { BookOpen, CircleAlert, MessageSquare, Pencil, Trash, WifiOff } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
@@ -111,6 +112,14 @@ export default function BibliaFeedScreen() {
   function handleOpenChapter(item: BibleVerseMark) {
     router.push(
       `/biblia/${item.book_code}/${item.chapter}?verse_start=${item.verse_start}&verse_end=${item.verse_end}`,
+    );
+  }
+
+  function handleLikeChange(id: string, state: BibleMarkLikeState) {
+    setItems((current) =>
+      (current ?? []).map((item) =>
+        item.id === id ? { ...item, liked_by_me: state.liked, like_count: state.like_count } : item,
+      ),
     );
   }
 
@@ -268,6 +277,11 @@ export default function BibliaFeedScreen() {
                       {formatDateTime(item.created_at) ? ` · ${formatDateTime(item.created_at)}` : ""}
                     </Text>
                   </Pressable>
+                  <BibleMarkSocialBar
+                    mark={item}
+                    onLikeChange={(state) => handleLikeChange(item.id, state)}
+                    onOpenReplies={() => router.push(`/biblia/marcacao/${item.id}`)}
+                  />
                   {item.is_mine || item.can_delete ? (
                     <View style={styles.actionsRow}>
                       {item.is_mine ? (

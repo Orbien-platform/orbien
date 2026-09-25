@@ -1,6 +1,7 @@
 import { Reflector } from '@nestjs/core';
 import { BibleVerseMarksController } from './bible-verse-marks.controller';
 import { BibleVerseMarksService } from './bible-verse-marks.service';
+import { BibleMarkInteractionsService } from './bible-mark-interactions.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { BIBLE_ROLES } from './bible-roles.constant';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -23,24 +24,41 @@ function rolesFor(methodName: keyof BibleVerseMarksController): string[] | undef
 
 describe('BibleVerseMarksController', () => {
   let service: jest.Mocked<BibleVerseMarksService>;
+  let interactions: jest.Mocked<BibleMarkInteractionsService>;
   let controller: BibleVerseMarksController;
 
   beforeEach(() => {
     service = {
       create: jest.fn(),
       findFeed: jest.fn(),
+      findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
     } as unknown as jest.Mocked<BibleVerseMarksService>;
+    interactions = {
+      like: jest.fn(),
+      unlike: jest.fn(),
+      listReplies: jest.fn(),
+      createReply: jest.fn(),
+      removeReply: jest.fn(),
+    } as unknown as jest.Mocked<BibleMarkInteractionsService>;
 
-    controller = new BibleVerseMarksController(service);
+    controller = new BibleVerseMarksController(service, interactions);
   });
 
-  it('as quatro rotas exigem um dos BIBLE_ROLES', () => {
-    expect(rolesFor('create')).toEqual(BIBLE_ROLES);
-    expect(rolesFor('findFeed')).toEqual(BIBLE_ROLES);
-    expect(rolesFor('update')).toEqual(BIBLE_ROLES);
-    expect(rolesFor('remove')).toEqual(BIBLE_ROLES);
+  it.each([
+    'create',
+    'findFeed',
+    'findOne',
+    'update',
+    'remove',
+    'like',
+    'unlike',
+    'listReplies',
+    'createReply',
+    'removeReply',
+  ] as const)('%s exige um dos BIBLE_ROLES', (method) => {
+    expect(rolesFor(method)).toEqual(BIBLE_ROLES);
   });
 
   it('repassa o corpo e o usuário para o service ao criar', async () => {
@@ -63,5 +81,16 @@ describe('BibleVerseMarksController', () => {
   it('repassa id e usuário ao remover — a decisão de quem pode é do service', async () => {
     await controller.remove('m1', USER);
     expect(service.remove).toHaveBeenCalledWith('m1', USER);
+  });
+
+  it('curtir, descurtir e responder vão para o service de interações', async () => {
+    await controller.like('m1', USER);
+    await controller.unlike('m1', USER);
+    await controller.createReply('m1', { comment: 'Amém!' }, USER);
+    await controller.removeReply('m1', 'r1', USER);
+    expect(interactions.like).toHaveBeenCalledWith('m1', USER);
+    expect(interactions.unlike).toHaveBeenCalledWith('m1', USER);
+    expect(interactions.createReply).toHaveBeenCalledWith('m1', { comment: 'Amém!' }, USER);
+    expect(interactions.removeReply).toHaveBeenCalledWith('m1', 'r1', USER);
   });
 });

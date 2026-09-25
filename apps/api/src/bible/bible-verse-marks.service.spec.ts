@@ -104,7 +104,7 @@ describe('BibleVerseMarksService', () => {
           verse_end: 18,
           comment: CREATE_DTO.comment,
         },
-        include: { person: { select: { id: true, full_name: true } } },
+        include: expect.objectContaining({ person: { select: { id: true, full_name: true } } }),
       });
     });
 
@@ -193,6 +193,28 @@ describe('BibleVerseMarksService', () => {
         person: { id: 'p2', full_name: 'Bruno' },
       },
     ];
+
+    it('cada item traz contagem de curtidas e respostas, e se quem pede já curtiu', async () => {
+      const client = clientWith();
+      client.bibleVerseMark.findMany.mockResolvedValue([
+        { ...rows[0], likes: [{ id: 'l1' }], _count: { likes: 4, replies: 2 } },
+        { ...rows[1], likes: [], _count: { likes: 0, replies: 0 } },
+      ]);
+      const service = serviceWith(client, readerMock());
+
+      const page = await service.findFeed({ limit: 50 }, USER);
+
+      expect(client.bibleVerseMark.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            likes: { where: { person_id: 'p1' }, select: { id: true } },
+            _count: { select: { likes: true, replies: { where: { deleted_at: null } } } },
+          }),
+        }),
+      );
+      expect(page.items[0]).toMatchObject({ like_count: 4, liked_by_me: true, reply_count: 2 });
+      expect(page.items[1]).toMatchObject({ like_count: 0, liked_by_me: false, reply_count: 0 });
+    });
 
     it('exclui marcações apagadas (deleted_at IS NOT NULL) da query', async () => {
       const client = clientWith();
@@ -310,7 +332,7 @@ describe('BibleVerseMarksService', () => {
       expect(client.bibleVerseMark.update).toHaveBeenCalledWith({
         where: { id: 'm1' },
         data: { comment: 'texto revisado' }, // sem created_at nem chapter/verses — imutáveis
-        include: { person: { select: { id: true, full_name: true } } },
+        include: expect.objectContaining({ person: { select: { id: true, full_name: true } } }),
       });
       expect(result.comment).toBe('texto revisado');
       expect(result.created_at).toEqual(new Date('2026-09-01'));

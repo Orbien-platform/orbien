@@ -51,6 +51,8 @@ model Tenant {
   prayerRequests            PrayerRequest[]
   groupMessages             GroupMessage[]
   bibleVerseMarks           BibleVerseMark[]
+  bibleVerseMarkLikes       BibleVerseMarkLike[]
+  bibleVerseMarkReplies     BibleVerseMarkReply[]
   studyMaterials            StudyMaterial[]
   studyMaterialVersions     StudyMaterialVersion[]
   materialOpenRecords       MaterialOpenRecord[]
@@ -130,6 +132,8 @@ model Congregation {
   prayerRequests            PrayerRequest[]
   groupMessages             GroupMessage[]
   bibleVerseMarks           BibleVerseMark[]
+  bibleVerseMarkLikes       BibleVerseMarkLike[]
+  bibleVerseMarkReplies     BibleVerseMarkReply[]
   studyMaterials            StudyMaterial[]
   financialCategories       FinancialCategory[]
   costCenters               CostCenter[]
@@ -384,6 +388,8 @@ model Person {
   prayerRequests          PrayerRequest[]
   groupMessages           GroupMessage[]
   bibleVerseMarks         BibleVerseMark[]
+  bibleVerseMarkLikes     BibleVerseMarkLike[]
+  bibleVerseMarkReplies   BibleVerseMarkReply[]
   materialOpenRecords     MaterialOpenRecord[]
   ledSmallGroups          SmallGroup[]            @relation("GroupLeader")
   ledNetworks             Network[]               @relation("NetworkLeader")
@@ -799,28 +805,77 @@ model GroupMessage {
 /// capítulo — não uma lista arbitrária nem um range cross-capítulo (spec.md,
 /// Assumptions).
 model BibleVerseMark {
-  id                    String    @id @default(uuid())
-  tenant_id             String
-  congregation_id       String
-  person_id             String
-  version               String    @default("NVI")
-  book_code             String
-  chapter               Int
-  verse_start           Int
-  verse_end             Int
-  comment               String
-  deleted_at            DateTime?
-  deleted_by_person_id  String?
-  created_at            DateTime  @default(now())
-  updated_at            DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  person_id            String
+  version              String    @default("NVI")
+  book_code            String
+  chapter              Int
+  verse_start          Int
+  verse_end            Int
+  comment              String
+  deleted_at           DateTime?
+  deleted_by_person_id String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
+  tenant       Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  person       Person                @relation(fields: [person_id], references: [id], onDelete: Cascade)
+  likes        BibleVerseMarkLike[]
+  replies      BibleVerseMarkReply[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id, created_at])
   @@map("bible_verse_marks")
+}
+
+/// Curtida de uma marcação do feed da Bíblia — uma por pessoa por marcação
+/// (`@@unique`), então curtir de novo é no-op e descurtir apaga a linha.
+/// Carrega tenant_id+congregation_id próprios, copiados da marcação, para a
+/// RLS de `022_rls_bible_verse_mark_interactions.sql` isolar sem JOIN.
+model BibleVerseMarkLike {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  mark_id         String
+  person_id       String
+  created_at      DateTime @default(now())
+
+  tenant       Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation   @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  mark         BibleVerseMark @relation(fields: [mark_id], references: [id], onDelete: Cascade)
+  person       Person         @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([mark_id, person_id])
+  @@index([tenant_id, congregation_id])
+  @@map("bible_verse_mark_likes")
+}
+
+/// Resposta a uma marcação do feed da Bíblia. Lista simples, sem resposta de
+/// resposta e sem edição — o autor apaga a própria, a moderação apaga
+/// qualquer uma da congregação (soft delete, mesma distinção de
+/// `deleted_by_person_id` que `BibleVerseMark` faz).
+model BibleVerseMarkReply {
+  id                   String    @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  mark_id              String
+  person_id            String
+  comment              String
+  deleted_at           DateTime?
+  deleted_by_person_id String?
+  created_at           DateTime  @default(now())
+
+  tenant       Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation   @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  mark         BibleVerseMark @relation(fields: [mark_id], references: [id], onDelete: Cascade)
+  person       Person         @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([mark_id, created_at])
+  @@index([tenant_id, congregation_id])
+  @@map("bible_verse_mark_replies")
 }
 
 /// Cache do texto de um capítulo da NVI, buscado da API bíblica externa na
