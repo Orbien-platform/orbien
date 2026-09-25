@@ -115,8 +115,11 @@ test.describe("financeiro", () => {
         await expect(dreRows.first()).toBeVisible({ timeout: 3_000 });
       });
 
-      await expect(page.getByRole("cell", { name: "Receitas", exact: true })).toBeVisible();
-      await expect(page.getByRole("cell", { name: "Despesas", exact: true })).toBeVisible();
+      // Sem distinção de caixa: esta suíte também roda contra produção, que
+      // até o deploy ainda escreve "RECEITAS"/"DESPESAS". A âncora mantém o
+      // nome exato — não casa com uma categoria "Outras receitas".
+      await expect(page.getByRole("cell", { name: /^receitas$/i })).toBeVisible();
+      await expect(page.getByRole("cell", { name: /^despesas$/i })).toBeVisible();
 
       qtdAntes = await dreCount(dreRows, receita.name);
       await shot(page, "30-financeiro-dre-antes");

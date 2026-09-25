@@ -96,6 +96,16 @@ describe("DataTable", () => {
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
+  it("outra tecla na linha focada não a abre", async () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable columns={columns} rows={[{ id: "1", name: "Ana" }]} getRowKey={(r) => r.id} onRowClick={onRowClick} />
+    );
+    await userEvent.tab();
+    await userEvent.keyboard("a{ArrowDown}{Escape}");
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
   it("linha sem onRowClick não entra na ordem de Tab", () => {
     render(<DataTable columns={columns} rows={[{ id: "1", name: "Ana" }]} getRowKey={(r) => r.id} />);
     expect(screen.getByText("Ana").closest("tr")).not.toHaveAttribute("tabindex");
