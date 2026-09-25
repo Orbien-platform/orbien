@@ -28,6 +28,25 @@ describe("SearchInput", () => {
     expect(onSearch).toHaveBeenLastCalledWith("joao");
   });
 
+  it("não emite o valor inicial ao montar", () => {
+    const onSearch = vi.fn();
+    render(<SearchInput onSearch={onSearch} debounce={300} defaultValue="ana" />);
+    vi.advanceTimersByTime(1000);
+    expect(onSearch).not.toHaveBeenCalled();
+  });
+
+  it("não emite quando a digitação volta ao último valor entregue", () => {
+    const onSearch = vi.fn();
+    render(<SearchInput onSearch={onSearch} debounce={300} />);
+    const input = screen.getByPlaceholderText("Buscar…");
+
+    fireEvent.change(input, { target: { value: "a" } });
+    vi.advanceTimersByTime(100);
+    fireEvent.change(input, { target: { value: "" } });
+    vi.advanceTimersByTime(1000);
+    expect(onSearch).not.toHaveBeenCalled();
+  });
+
   it("reinicia o debounce a cada digitação", () => {
     const onSearch = vi.fn();
     render(<SearchInput onSearch={onSearch} debounce={300} />);
