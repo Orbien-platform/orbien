@@ -43,6 +43,7 @@ export class SettingsController {
       user.roles,
       dto,
       user.plan,
+      user.impersonated_by ?? user.sub,
     );
   }
 

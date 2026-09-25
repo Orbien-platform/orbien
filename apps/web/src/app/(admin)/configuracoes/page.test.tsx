@@ -748,6 +748,61 @@ describe("ConfiguracoesPage", () => {
     expect(settingsCalls).toHaveLength(1);
   });
 
+  it("mostra o campo de chave PIX só para tenant_admin", async () => {
+    setup(["admin_congregation"]);
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    expect(screen.queryByText("Chave PIX")).not.toBeInTheDocument();
+  });
+
+  it("carrega e envia a chave PIX cadastrada", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: settingsPayload({ branding: { app_name: "Doca App", primary_color: "#1C3D5A", logo_url: null, splash_url: null, pix_key: "chave@doca.com" } }),
+    });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    expect(await screen.findByDisplayValue("chave@doca.com")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [string, { branding?: { pix_key?: string } }];
+    expect(payload.branding).toEqual({ pix_key: "chave@doca.com" });
+  });
+
+  it("não envia branding quando a chave PIX fica vazia", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [string, { branding?: unknown }];
+    expect(payload).not.toHaveProperty("branding");
+  });
+
+  it("barra chave PIX maior que 140 caracteres", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    const pixInput = screen.getByPlaceholderText("CPF, CNPJ, e-mail, telefone ou chave aleatória");
+    // `fireEvent.change`, não `user.type`: 141 caracteres digitados um a um
+    // estoura o timeout default de 5000ms sob carga do CI (mesmo padrão do
+    // comentário lá em cima, sobre a suíte de e-mail/cor).
+    fireEvent.change(pixInput, { target: { value: "a".repeat(141) } });
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(
+      await screen.findByText("Chave PIX muito longa (máximo 140 caracteres).")
+    ).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
+  });
+
   it("desaparece o toast depois de um tempo", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     setup();
