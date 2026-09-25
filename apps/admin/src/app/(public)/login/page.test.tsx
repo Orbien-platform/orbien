@@ -48,6 +48,15 @@ describe("LoginPage do console", () => {
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
   });
 
+  it("linka para a recuperação de senha", () => {
+    render(<LoginPage />);
+
+    expect(screen.getByRole("link", { name: "Esqueci minha senha" })).toHaveAttribute(
+      "href",
+      "/esqueci-senha"
+    );
+  });
+
   it("entra com e-mail aparado e a senha como digitada", async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
