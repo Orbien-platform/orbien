@@ -31,6 +31,16 @@ describe('tenantMailBrand', () => {
     expect(brand.name).toBe('Igreja Teste 2');
   });
 
+  it('descarta logo SVG, que os clientes de e-mail não mostram', () => {
+    for (const logo_url of ['https://cdn/logo.svg', 'https://cdn/LOGO.SVG?v=2', 'https://cdn/logo.svgz']) {
+      const brand = tenantMailBrand({
+        name: 'Igreja Teste 2',
+        brandingConfig: { primary_color: null, secondary_color: null, logo_url },
+      });
+      expect(brand.logoUrl).toBeNull();
+    }
+  });
+
   it('sem tenant, cai na marca da plataforma', () => {
     expect(tenantMailBrand(null)).toBe(PLATFORM_MAIL_BRAND);
   });

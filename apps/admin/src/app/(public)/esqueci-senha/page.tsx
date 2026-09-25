@@ -19,11 +19,11 @@ export default function EsqueciSenhaPage() {
 
     setIsSubmitting(true);
     try {
-      // `context: "platform"` faz o e-mail sair com a marca da Orbien — sem
-      // ele, a API usa a da igreja do tenant da conta, como no web e no app.
-      await api.post("/auth/forgot-password", {
+      // Rota do console, separada da do web: só conta de plataforma recebe o
+      // e-mail, com a marca da Orbien e o link para o `/redefinir-senha`
+      // deste app.
+      await api.post("/auth/platform/forgot-password", {
         email: email.trim().toLowerCase(),
-        context: "platform",
       });
     } catch {
       // API always returns 200; any error treated the same as success

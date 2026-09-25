@@ -7,7 +7,7 @@
  *   `secondary_color` (o accent) e `logo_url` do `branding_configs`.
  *
  * Tudo que vem do tenant é dado de fora do código e vai parar dentro de HTML:
- * cor só passa se for hex, logo só se for URL http(s). O resto cai no padrão
+ * cor só passa se for hex, logo só se for URL http(s) e não SVG. O resto cai no padrão
  * da Orbien, em vez de quebrar o layout — ou abrir espaço para injetar
  * atributo no e-mail.
  */
@@ -56,12 +56,19 @@ function safeColor(value: string | null | undefined, fallback: string): string {
   return trimmed && HEX_COLOR.test(trimmed) ? trimmed : fallback;
 }
 
-function safeUrl(value: string | null | undefined): string | null {
+/**
+ * Logo que o e-mail consegue mostrar: URL http(s) e não SVG. Gmail, Outlook e
+ * boa parte dos apps de e-mail não renderizam SVG em `<img>` — o cabeçalho
+ * ficaria com um quadro vazio. Logo SVG cai no nome da igreja escrito.
+ */
+function safeLogoUrl(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
   try {
     const url = new URL(trimmed);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    if (/\.svgz?$/i.test(url.pathname)) return null;
+    return url.toString();
   } catch {
     return null;
   }
@@ -83,7 +90,7 @@ export function tenantMailBrand(tenant: TenantBrandSource | null | undefined): M
     name,
     primaryColor: safeColor(branding?.primary_color, ORBIEN_NAVY),
     accentColor: safeColor(branding?.secondary_color, ORBIEN_TEAL),
-    logoUrl: safeUrl(branding?.logo_url),
+    logoUrl: safeLogoUrl(branding?.logo_url),
   };
 }
 

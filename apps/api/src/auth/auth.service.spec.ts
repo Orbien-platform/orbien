@@ -788,24 +788,64 @@ describe('AuthService.forgotPassword', () => {
     );
   });
 
-  it("pedido do console (context: 'platform') sai com a marca da Orbien", async () => {
-    const { service, prisma, mail } = serviceWith({});
-    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+  describe('platformForgotPassword (console)', () => {
+    const ORIGINAL_ADMIN_URL = process.env['ADMIN_URL'];
+
+    afterEach(() => {
+      if (ORIGINAL_ADMIN_URL === undefined) delete process.env['ADMIN_URL'];
+      else process.env['ADMIN_URL'] = ORIGINAL_ADMIN_URL;
+    });
+
+    const platformAccount = (role_code: string) => ({
       id: 'u1',
       email: 'a@b.com',
       is_active: true,
       person: { full_name: 'Ana Silva' },
       tenant: { name: 'Igreja Teste 1', brandingConfig: null },
+      roleAssignments: [{ role_code }],
     });
 
-    await service.forgotPassword({ email: 'a@b.com', context: 'platform' });
+    it('conta com platform_support recebe o e-mail com a marca da Orbien e o link do admin', async () => {
+      process.env['ADMIN_URL'] = 'https://admin.useorbien.com';
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(platformAccount('platform_support'));
 
-    expect(mail.sendPasswordReset).toHaveBeenCalledWith(
-      'a@b.com',
-      expect.any(String),
-      'Ana',
-      expect.objectContaining({ kind: 'platform', name: 'Orbien' }),
-    );
+      const result = await service.platformForgotPassword({ email: 'a@b.com' });
+
+      expect(result.message).toMatch(/Se o email estiver cadastrado/);
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringMatching(/^https:\/\/admin\.useorbien\.com\/redefinir-senha\?token=/),
+        'Ana',
+        expect.objectContaining({ kind: 'platform', name: 'Orbien' }),
+      );
+    });
+
+    it('conta sem platform_support recebe a mesma resposta genérica e nenhum e-mail', async () => {
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(platformAccount('tenant_admin'));
+
+      const result = await service.platformForgotPassword({ email: 'a@b.com' });
+
+      expect(result.message).toMatch(/Se o email estiver cadastrado/);
+      expect(prisma.system.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(mail.sendPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('cai no admin local (3003) quando ADMIN_URL não está definida', async () => {
+      delete process.env['ADMIN_URL'];
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(platformAccount('platform_support'));
+
+      await service.platformForgotPassword({ email: 'a@b.com' });
+
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringMatching(/^http:\/\/localhost:3003\/redefinir-senha\?token=/),
+        'Ana',
+        expect.anything(),
+      );
+    });
   });
 
   describe('FRONTEND_URL no link de redefinição', () => {
