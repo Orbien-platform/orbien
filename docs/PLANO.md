@@ -1592,6 +1592,12 @@ Saídas: plano pago no Render (processo sempre ativo) ou gatilho externo
 (Render Cron Job / GitHub Actions) chamando rotas internas — esta exige
 credencial de serviço guardada no agendador, decisão que ainda não foi tomada.
 
+**Mitigado em 2026-09-25:** um monitor do UptimeRobot bate em `/api/health` a
+cada 5 minutos e mantém o serviço acordado, então os `@Cron` voltam a rodar no
+horário. Detalhes e limites (cota de 750 h do free tier, execução perdida em
+reinício ou deploy) em `DEPLOY.md`, seção 1.6. Segue como dívida até a API ir
+para plano pago ou ganhar gatilho externo.
+
 ---
 
 ## 8. Ajustes — documento, rótulo e portão
