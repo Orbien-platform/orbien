@@ -1,4 +1,4 @@
-import { frontendUrl, PRODUCTION_WEB_URL } from './frontend-url';
+import { adminUrl, frontendUrl, PRODUCTION_ADMIN_URL, PRODUCTION_WEB_URL } from './frontend-url';
 
 describe('frontendUrl', () => {
   const original = { url: process.env['FRONTEND_URL'], env: process.env['NODE_ENV'] };
@@ -52,5 +52,36 @@ describe('frontendUrl', () => {
       process.env['FRONTEND_URL'] = 'web.useorbien.com';
       expect(frontendUrl()).toBe(PRODUCTION_WEB_URL);
     });
+  });
+});
+
+describe('adminUrl', () => {
+  const original = { url: process.env['ADMIN_URL'], env: process.env['NODE_ENV'] };
+
+  afterEach(() => {
+    if (original.url === undefined) delete process.env['ADMIN_URL'];
+    else process.env['ADMIN_URL'] = original.url;
+    if (original.env === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = original.env;
+  });
+
+  it('fora de produção, cai no admin local quando ADMIN_URL não está definida', () => {
+    process.env['NODE_ENV'] = 'test';
+    delete process.env['ADMIN_URL'];
+    expect(adminUrl()).toBe('http://localhost:3003');
+  });
+
+  it('em produção, aceita subdomínio de useorbien.com e tira a barra do fim', () => {
+    process.env['NODE_ENV'] = 'production';
+    process.env['ADMIN_URL'] = 'https://admin.useorbien.com/';
+    expect(adminUrl()).toBe('https://admin.useorbien.com');
+  });
+
+  it('em produção, troca domínio fora de useorbien.com (ou ausente) pelo do console', () => {
+    process.env['NODE_ENV'] = 'production';
+    process.env['ADMIN_URL'] = 'https://orbien-admin.vercel.app';
+    expect(adminUrl()).toBe(PRODUCTION_ADMIN_URL);
+    delete process.env['ADMIN_URL'];
+    expect(adminUrl()).toBe(PRODUCTION_ADMIN_URL);
   });
 });

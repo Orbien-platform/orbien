@@ -54,13 +54,20 @@ function serviceWith() {
   const roleAssignmentClient = { create: jest.fn().mockResolvedValue({}) };
   const passwordResetTokenClient = { create: jest.fn().mockResolvedValue({}) };
 
+  // Marca do tenant para o convite — lida pelo `db` da importação.
+  const tenantClient = {
+    findUnique: jest.fn().mockResolvedValue({ name: 'Igreja Teste 1', brandingConfig: null }),
+  };
+
   const client = {
+    tenant: tenantClient,
     person: personClient,
     consentRecord: consentRecordClient,
     importJob: importJobClient,
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const system: any = {
+    tenant: tenantClient,
     person: personClient,
     consentRecord: consentRecordClient,
     importJob: { ...importJobClient, update: jest.fn().mockResolvedValue({}) },
@@ -275,6 +282,7 @@ describe('PersonsImportService', () => {
       expect(mail.sendInvite).toHaveBeenCalledWith(
         'ana@test.com',
         expect.stringContaining('/redefinir-senha?token='),
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
       );
     });
 
@@ -466,6 +474,25 @@ describe('PersonsImportService', () => {
       );
     });
 
+    it('falha ao ler a marca do tenant não derruba a linha: o convite sai com a marca padrão', async () => {
+      const { service, storage, mail, client } = serviceWith();
+      client.tenant.findUnique.mockRejectedValueOnce(new Error('banco fora do ar'));
+      const csv = ['nome,telefone,email', 'Sem Marca,11988887777,semmarca@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(mail.sendInvite).toHaveBeenCalledWith(
+        'semmarca@test.com',
+        expect.any(String),
+        expect.objectContaining({ kind: 'platform' }),
+      );
+    });
+
     it('falha no envio do convite que não é instância de Error ainda é logada como texto', async () => {
       const { service, storage, mail } = serviceWith();
       mail.sendInvite.mockRejectedValueOnce('motivo em string, não Error');
@@ -505,7 +532,8 @@ describe('PersonsImportService', () => {
         expect(mail.sendInvite).toHaveBeenCalledWith(
           'analocal@test.com',
           expect.stringContaining('http://localhost:3001/redefinir-senha?token='),
-        );
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
+      );
       } finally {
         if (original === undefined) delete process.env['FRONTEND_URL'];
         else process.env['FRONTEND_URL'] = original;
@@ -528,7 +556,8 @@ describe('PersonsImportService', () => {
         expect(mail.sendInvite).toHaveBeenCalledWith(
           'anaprod@test.com',
           expect.stringContaining('https://app.orbien.com.br/redefinir-senha?token='),
-        );
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
+      );
       } finally {
         if (original === undefined) delete process.env['FRONTEND_URL'];
         else process.env['FRONTEND_URL'] = original;

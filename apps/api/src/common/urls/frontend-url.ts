@@ -6,8 +6,12 @@ import { Logger } from '@nestjs/common';
  */
 export const PRODUCTION_WEB_URL = 'https://web.useorbien.com';
 
+/** Domínio público do console da plataforma em produção. */
+export const PRODUCTION_ADMIN_URL = 'https://admin.useorbien.com';
+
 const PRODUCTION_DOMAIN = 'useorbien.com';
 const DEV_DEFAULT = 'http://localhost:3001';
+const DEV_ADMIN_DEFAULT = 'http://localhost:3003';
 
 const logger = new Logger('FrontendUrl');
 
@@ -25,10 +29,23 @@ function isUseOrbienHost(hostname: string): boolean {
  * o valor é usado como veio — e o default é o web local.
  */
 export function frontendUrl(): string {
-  const raw = (process.env['FRONTEND_URL'] ?? '').trim().replace(/\/+$/, '');
+  return resolvePublicUrl('FRONTEND_URL', PRODUCTION_WEB_URL, DEV_DEFAULT);
+}
+
+/**
+ * Base dos links do console (`apps/admin`), sem barra no fim — hoje só o de
+ * redefinição de senha de conta de plataforma, que é fluxo separado do web.
+ * Mesma regra de `frontendUrl()`, lendo `ADMIN_URL`.
+ */
+export function adminUrl(): string {
+  return resolvePublicUrl('ADMIN_URL', PRODUCTION_ADMIN_URL, DEV_ADMIN_DEFAULT);
+}
+
+function resolvePublicUrl(envName: string, productionUrl: string, devDefault: string): string {
+  const raw = (process.env[envName] ?? '').trim().replace(/\/+$/, '');
   const isProduction = process.env['NODE_ENV'] === 'production';
 
-  if (!isProduction) return raw || DEV_DEFAULT;
+  if (!isProduction) return raw || devDefault;
 
   let hostname: string | null = null;
   try {
@@ -39,8 +56,6 @@ export function frontendUrl(): string {
 
   if (hostname && isUseOrbienHost(hostname)) return raw;
 
-  logger.warn(
-    `FRONTEND_URL="${raw}" não está em ${PRODUCTION_DOMAIN} — usando ${PRODUCTION_WEB_URL}.`,
-  );
-  return PRODUCTION_WEB_URL;
+  logger.warn(`${envName}="${raw}" não está em ${PRODUCTION_DOMAIN} — usando ${productionUrl}.`);
+  return productionUrl;
 }

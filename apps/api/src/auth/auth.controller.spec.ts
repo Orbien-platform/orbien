@@ -14,6 +14,7 @@ function serviceMock() {
     refresh: jest.fn().mockResolvedValue({ access_token: 'a2', refresh_token: 'r2', expires_in: 900 }),
     logout: jest.fn().mockResolvedValue({ message: 'Sessão encerrada.' }),
     forgotPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
+    platformForgotPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
     resetPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
     impersonate: jest.fn().mockResolvedValue({ access_token: 'imp', expires_in: 900 }),
   } as unknown as AuthService;
@@ -71,6 +72,14 @@ describe('AuthController', () => {
     expect(service.logout).toHaveBeenCalledWith('rt');
   });
 
+  it('platformForgotPassword delega ao AuthService com o DTO', async () => {
+    const service = serviceMock();
+    const controller = new AuthController(service);
+    const dto = { email: 'suporte@x.com' };
+    await controller.platformForgotPassword(dto);
+    expect(service.platformForgotPassword).toHaveBeenCalledWith(dto);
+  });
+
   it('forgotPassword delega ao AuthService com o DTO', async () => {
     const service = serviceMock();
     const controller = new AuthController(service);
@@ -103,20 +112,21 @@ describe('AuthController', () => {
     const withRoles = reflector.get(ROLES_KEY, AuthController.prototype.impersonate);
     expect(withRoles).toEqual(['platform_support']);
 
-    for (const handler of ['login', 'refresh', 'logout', 'forgotPassword', 'resetPassword'] as const) {
+    for (const handler of ['login', 'refresh', 'logout', 'forgotPassword', 'platformForgotPassword', 'resetPassword'] as const) {
       expect(
         reflector.get(ROLES_KEY, AuthController.prototype[handler]),
       ).toBeUndefined();
     }
   });
 
-  it('login, platformLogin e forgotPassword têm ThrottlerGuard por IP, além do limite por e-mail do serviço', () => {
+  it('login, platformLogin, forgotPassword e platformForgotPassword têm ThrottlerGuard por IP, além do limite por e-mail do serviço', () => {
     const reflector = new Reflector();
 
     const cases = [
       { handler: 'login', limit: 20, ttl: 900_000 },
       { handler: 'platformLogin', limit: 10, ttl: 900_000 },
       { handler: 'forgotPassword', limit: 10, ttl: 3_600_000 },
+      { handler: 'platformForgotPassword', limit: 10, ttl: 3_600_000 },
     ] as const;
 
     for (const { handler, limit, ttl } of cases) {

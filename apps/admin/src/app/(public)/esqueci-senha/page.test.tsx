@@ -27,7 +27,7 @@ describe("EsqueciSenhaPage do console", () => {
     expect(
       await screen.findByText(/você receberá um link de/i)
     ).toBeInTheDocument();
-    expect(postMock).toHaveBeenCalledWith("/auth/forgot-password", {
+    expect(postMock).toHaveBeenCalledWith("/auth/platform/forgot-password", {
       email: "suporte@orbien.app",
     });
   });

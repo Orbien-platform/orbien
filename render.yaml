@@ -80,3 +80,5 @@ services:
         value: "Orbien <naoresponda@useorbien.com>"
       - key: FRONTEND_URL
         value: "https://web.useorbien.com"
+      - key: ADMIN_URL
+        value: "https://admin.useorbien.com"

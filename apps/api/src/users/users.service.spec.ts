@@ -54,6 +54,11 @@ function serviceWith(overrides: {
   const prisma = {
     runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     system: { $transaction: (fn: (t: typeof sysTx) => Promise<unknown>) => fn(sysTx) },
+    client: {
+      tenant: {
+        findUnique: () => Promise.resolve({ name: 'Igreja Teste 1', brandingConfig: null }),
+      },
+    },
   } as unknown as PrismaService;
 
   const mail = { sendInvite: jest.fn().mockResolvedValue(undefined) } as unknown as MailService;
@@ -77,7 +82,7 @@ describe('UsersService', () => {
         }),
       }),
     );
-    expect(mail.sendInvite).toHaveBeenCalledWith(dto.email, expect.stringContaining('/redefinir-senha?token='));
+    expect(mail.sendInvite).toHaveBeenCalledWith(dto.email, expect.stringContaining('/redefinir-senha?token='), expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }));
   });
 
   it('rejeita pastor tentando conceder tenant_admin', async () => {
@@ -143,6 +148,7 @@ describe('UsersService', () => {
       expect(mail.sendInvite).toHaveBeenCalledWith(
         dto.email,
         expect.stringMatching(/^https:\/\/app\.orbien\.com\.br\/redefinir-senha\?token=/),
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
       );
     } finally {
       if (original === undefined) delete process.env['FRONTEND_URL'];
@@ -159,6 +165,7 @@ describe('UsersService', () => {
       expect(mail.sendInvite).toHaveBeenCalledWith(
         dto.email,
         expect.stringMatching(/^http:\/\/localhost:3001\/redefinir-senha\?token=/),
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
       );
     } finally {
       if (original === undefined) delete process.env['FRONTEND_URL'];
