@@ -2,15 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
 import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye, Settings2, Layers } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
@@ -22,6 +13,8 @@ import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financ
 import { ExportButton } from "@/components/financial/ExportButton";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { CostCentersModal } from "@/components/financial/CostCentersModal";
+import { WeeklyDashboardCard } from "@/components/financial/WeeklyDashboardCard";
+import { ForecastCard } from "@/components/financial/ForecastCard";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -146,48 +139,7 @@ function firstOfMonthIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-function buildWeeklyChart(txs: Transaction[]): { week: string; Entradas: number; Saídas: number }[] {
-  const map = new Map<number, { i: number; e: number }>();
-  for (const tx of txs) {
-    const week = Math.ceil(new Date(tx.occurred_at).getDate() / 7);
-    const entry = map.get(week) ?? { i: 0, e: 0 };
-    if (tx.type === "income") entry.i += Number(tx.amount);
-    else entry.e += Number(tx.amount);
-    map.set(week, entry);
-  }
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([w, d]) => ({ week: `Sem ${w}`, Entradas: d.i, Saídas: d.e }));
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function KpiCard({
-  label,
-  value,
-  loading,
-  variant,
-}: {
-  label: string;
-  value: number;
-  loading: boolean;
-  variant: "positive" | "negative";
-}) {
-  // Só é chamado com "positive" ou "negative" nas três chamadas da Visão
-  // Geral — um terceiro ramo "default" nunca era alcançado. Branch morto,
-  // removido ao fechar a Fase 10 (docs/TESTES.md tem o registro).
-  const color = variant === "positive" ? "text-teal" : "text-crimson";
-  return (
-    <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-      <p className="text-xs font-medium text-stone">{label}</p>
-      {loading ? (
-        <Skeleton className="mt-2 h-7 w-28" />
-      ) : (
-        <p className={cn("mt-1 text-2xl font-medium tabular-nums", color)}>{fmt(value)}</p>
-      )}
-    </div>
-  );
-}
 
 function DeltaCell({ current, previous }: { current: number; previous: number }) {
   const delta = deltaPercent(current, previous);
@@ -407,16 +359,13 @@ export default function FinanceiroPage() {
 
   // ── Fetch DRE ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab !== "dre" && activeTab !== "overview") return;
-    // For overview use current month; for dre tab use user-selected period
-    const start = activeTab === "overview" ? firstOfMonthIso() : dreStart;
-    const end = activeTab === "overview" ? todayIso() : dreEnd;
-    const key = `${start}|${end}`;
+    if (activeTab !== "dre") return;
+    const key = `${dreStart}|${dreEnd}`;
     if (prevDreKey.current === key) return;
     prevDreKey.current = key;
     setLoadingDre(true);
     api
-      .get<DRE>(`/financial/dre?period_start=${start}&period_end=${end}`)
+      .get<DRE>(`/financial/dre?period_start=${dreStart}&period_end=${dreEnd}`)
       .then((r) => setDre(r.data))
       .catch(() => {})
       .finally(() => setLoadingDre(false));
@@ -437,17 +386,6 @@ export default function FinanceiroPage() {
   }, [activeTab, balanceteStart, balanceteEnd]);
 
   // ── Computed ─────────────────────────────────────────────────────────────────
-  const kpiIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-  const kpiExpense = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
-  const kpiResult = kpiIncome - kpiExpense;
-  const chartData = buildWeeklyChart(transactions);
-
-  const forecastPct = dre
-    ? dre.previous_period.revenue_total > 0
-      ? Math.min(100, Math.round((dre.revenue.total / dre.previous_period.revenue_total) * 100))
-      : 100
-    : null;
-
   const filteredTx = transactions.filter((t) => {
     if (txType && t.type !== txType) return false;
     if (txCatId && t.category_id !== txCatId) return false;
@@ -672,73 +610,8 @@ export default function FinanceiroPage() {
         {/* ── Visão Geral ────────────────────────────────────────────────────── */}
         <Tabs.Panel value="overview" className="pt-5">
           <div className="space-y-5">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <KpiCard label="Receitas" value={kpiIncome} loading={loadingTx} variant="positive" />
-              <KpiCard label="Despesas" value={kpiExpense} loading={loadingTx} variant="negative" />
-              <KpiCard label="Resultado" value={kpiResult} loading={loadingTx} variant={kpiResult >= 0 ? "positive" : "negative"} />
-            </div>
-
-            <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-              <p className="mb-4 text-sm font-medium text-ink dark:text-white">Lançamentos por semana</p>
-              {loadingTx ? (
-                <Skeleton className="h-48 w-full" />
-              ) : chartData.length === 0 ? (
-                <p className="py-10 text-center text-sm text-stone">Sem lançamentos no período.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={chartData} barGap={4}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
-                    <XAxis dataKey="week" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`}
-                    />
-                    <Tooltip
-                      formatter={(value) => [fmt(Number(value))]}
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "1px solid var(--border-default)",
-                        background: "var(--surface-card)",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar dataKey="Entradas" fill="#00b8a2" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Saídas" fill="#c0392b" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-              <p className="text-sm font-medium text-ink dark:text-white">Receitas vs período anterior</p>
-              {loadingDre || forecastPct === null ? (
-                <Skeleton className="mt-3 h-2.5 w-full rounded-full" />
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-stone">
-                    {dre && dre.previous_period.revenue_total > 0
-                      ? `${forecastPct}% do período anterior (${fmt(dre.previous_period.revenue_total)})`
-                      : "Sem dados do período anterior para comparar"}
-                  </p>
-                  <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-                    <div
-                      className="h-full rounded-full bg-teal transition-all duration-500"
-                      style={{ width: `${forecastPct}%` }}
-                    />
-                  </div>
-                  {dre && (
-                    <div className="mt-2 flex items-center justify-between text-xs text-stone">
-                      <span>{fmt(dre.revenue.total)} este mês</span>
-                      <span className={forecastPct >= 100 ? "text-teal font-medium" : ""}>
-                        {forecastPct >= 100 ? "✓ Superou o período anterior" : `faltam ${100 - forecastPct}% para igualar`}
-                      </span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <WeeklyDashboardCard />
+            <ForecastCard />
           </div>
         </Tabs.Panel>
 

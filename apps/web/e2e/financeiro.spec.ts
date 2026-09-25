@@ -82,6 +82,41 @@ async function dreCount(rows: Locator, nome: string): Promise<number> {
 }
 
 test.describe("financeiro", () => {
+  test("Visão Geral mostra o dashboard semanal e o forecast (Premium)", async ({
+    page,
+    errorLog,
+  }) => {
+    // teste1-church/teste2-church seedam como Premium (`prisma/seed.ts`) —
+    // os dois únicos tenants que este spec pode tocar (CLAUDE.md/DEC-06), daí
+    // não ter ramo para 403/NoAccessState aqui.
+    await page.goto("/financeiro", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Financeiro" })).toBeVisible();
+
+    await test.step("dashboard semanal (GET /financial/dashboard/weekly)", async () => {
+      await expect(page.getByText("Receitas")).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText("Despesas")).toBeVisible();
+      await expect(page.getByText("Resultado")).toBeVisible();
+      await expect(page.getByText("Entradas e saídas por semana")).toBeVisible();
+      await shot(page, "32-financeiro-visao-geral-semanal");
+    });
+
+    await test.step("forecast (GET /financial/dashboard/forecast/:months)", async () => {
+      await expect(page.getByText("Forecast de receita")).toBeVisible();
+      // Sem NoAccessState: tenant Premium não deve ver "sem acesso" aqui.
+      await expect(page.getByText("Você não tem acesso")).toHaveCount(0);
+    });
+
+    await test.step("troca de horizonte refaz a busca do forecast", async () => {
+      await page.getByRole("combobox").selectOption("12");
+      await expect(page.getByText("12 meses")).toBeVisible();
+    });
+
+    await test.step("sem erro de console ou HTTP inesperado", async () => {
+      expect(realConsoleErrors(errorLog), "erros de console na Visão Geral").toEqual([]);
+      expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+    });
+  });
+
   test("lança transação e ela aparece no DRE na categoria certa", async ({
     page,
     errorLog,
