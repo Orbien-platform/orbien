@@ -1598,6 +1598,39 @@ horário. Detalhes e limites (cota de 750 h do free tier, execução perdida em
 reinício ou deploy) em `DEPLOY.md`, seção 1.6. Segue como dívida até a API ir
 para plano pago ou ganhar gatilho externo.
 
+### PEND-14 · A doação pública guarda a intenção, mas o tesoureiro não a vê · dívida
+
+Nasceu em 2026-09-25, junto com a correção de `POST
+/financial/pix/public-donation` e `POST /financial/pix` (a página
+`/doar/[tenant_slug]`, que o botão de Contribuição do mobile abre). As duas
+respondiam "Categoria de receita não encontrada" para **toda** igreja: rota
+pública não tem JWT, o `TenantContextInterceptor` não fixa contexto, e
+`financial_categories` fica invisível. O `PixService` agora fixa
+`app.tenant_id`/`app.congregation_id` a partir do slug resolvido no servidor
+(mesmo padrão de `public-small-groups.service.ts`), sem script de RLS novo, e
+`test/integration/public-routes.spec.ts` cobre as duas rotas contra o banco.
+
+Na mesma correção a doação pública **deixou de criar lançamento** em
+`financial_transactions`. Só grava a intenção em `pix_payments`
+(`scenario = public`, `pending`). DRE e dashboard somam lançamentos sem olhar
+`status`, e a chave é paga fora da API, sem confirmação. Com o lançamento,
+qualquer visitante inflaria a receita da igreja sem pagar nada. A referência
+que o doador vê (`PIX-` + 8 dígitos) são os primeiros dígitos do id do
+`pix_payments`.
+
+O que fica em aberto:
+
+- `donor_name`/`donor_email` são pedidos pelo formulário, mas não são
+  gravados: `pix_payments` não tem coluna para eles. Antes só entravam na
+  descrição do lançamento, que nunca chegou a ser gravado em produção.
+- Não há tela que liste os `pix_payments` pendentes para o tesoureiro casar
+  com o extrato (a conciliação de `PROD-07` casa extrato com lançamento, não
+  com intenção de PIX).
+
+As duas coisas são o mesmo trabalho: uma migration com os dados do doador em
+`pix_payments` e uma tela de intenções pendentes que vire lançamento ao ser
+confirmada.
+
 ---
 
 ### PEND-12 · Push de resposta na Bíblia sem opção de desligar · dívida

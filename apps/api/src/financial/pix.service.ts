@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { Prisma, PixScenario, PixStatus, TransactionSource, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -133,6 +134,22 @@ export class PixService {
     };
   }
 
+  /**
+   * Rota pública (sem JWT) não passa pelo `TenantContextInterceptor`: roda
+   * como `orbien_app`, sem `app.tenant_id`, e `financial_categories`/
+   * `pix_payments` não aparecem para ela — `resolveCategory` respondia
+   * "Categoria de receita não encontrada" para toda igreja. O contexto vem
+   * daqui, do tenant que `resolveTenant` achou pelo slug no servidor, nunca de
+   * um id mandado pelo formulário: o RLS continua sendo a fronteira entre
+   * igrejas. Mesmo padrão de `public-small-groups.service.ts`.
+   */
+  private runInPublicContext<T>(ctx: TenantContext, fn: () => Promise<T>): Promise<T> {
+    return this.prisma.runInTx(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${ctx.tenantId}, true), set_config('app.congregation_id', ${ctx.congregationId}, true)`;
+      return fn();
+    });
+  }
+
   private async resolveCategory(tenantId: string, congregationId: string, slug?: string) {
     const keyword = slug ?? 'oferta';
 
@@ -223,18 +240,20 @@ export class PixService {
     }
 
     const ctx = await this.resolveTenant(dto.tenant_slug);
-    const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
 
-    await this.prisma.client.pixPayment.create({
-      data: {
-        tenant_id: ctx.tenantId,
-        congregation_id: ctx.congregationId,
-        scenario: PixScenario.manual,
-        status: PixStatus.pending,
-        amount: new Prisma.Decimal(dto.amount),
-        pix_key: ctx.pixKey,
-        category_id: category.id,
-      },
+    await this.runInPublicContext(ctx, async () => {
+      const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
+      await this.prisma.client.pixPayment.create({
+        data: {
+          tenant_id: ctx.tenantId,
+          congregation_id: ctx.congregationId,
+          scenario: PixScenario.manual,
+          status: PixStatus.pending,
+          amount: new Prisma.Decimal(dto.amount),
+          pix_key: ctx.pixKey,
+          category_id: category.id,
+        },
+      });
     });
 
     return { pix_key: ctx.pixKey, amount: dto.amount, church_name: ctx.churchName };
@@ -378,27 +397,21 @@ export class PixService {
     }
 
     const ctx = await this.resolveTenant(dto.tenant_slug);
-    const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
-    const createdByUserId = await this.resolveTenantAdmin(ctx.tenantId);
-    const ref = this.shortRef();
 
-    await this.prisma.runInTx(async (tx) => {
-      await tx.financialTransaction.create({
+    // Só a intenção, em `pix_payments` — nada em `financial_transactions`. A
+    // chave é copiada e paga fora daqui, sem confirmação nenhuma para a API, e
+    // DRE e dashboard somam lançamentos sem olhar `status`: gravar receita
+    // nesta rota deixaria qualquer visitante inflar o caixa da igreja sem
+    // pagar. O dinheiro entra no livro quando o tesoureiro o vê no extrato.
+    //
+    // O id sai daqui (e não do `@default(uuid())`) porque é a referência que o
+    // doador vê: `PIX-` + os 8 primeiros dígitos, que acham a linha.
+    const paymentId = randomUUID();
+    await this.runInPublicContext(ctx, async () => {
+      const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
+      await this.prisma.client.pixPayment.create({
         data: {
-          tenant_id: ctx.tenantId,
-          congregation_id: ctx.congregationId,
-          type: TransactionType.income,
-          amount: new Prisma.Decimal(dto.amount),
-          occurred_at: new Date(),
-          description: dto.donor_name ? `Doação pública — ${dto.donor_name}` : 'Doação pública',
-          category_id: category.id,
-          source: TransactionSource.manual,
-          created_by_user_id: createdByUserId,
-          notes: ref,
-        },
-      });
-      await tx.pixPayment.create({
-        data: {
+          id: paymentId,
           tenant_id: ctx.tenantId,
           congregation_id: ctx.congregationId,
           scenario: PixScenario.public,
@@ -414,7 +427,7 @@ export class PixService {
       pix_key: ctx.pixKey,
       amount: dto.amount,
       church_name: ctx.churchName,
-      transaction_ref: `PIX-${ref}`,
+      transaction_ref: `PIX-${paymentId.slice(0, 8).toUpperCase()}`,
     };
   }
 
