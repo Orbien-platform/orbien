@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
@@ -121,6 +122,13 @@ export default function LoginPage() {
                 "Entrar"
               )}
             </Button>
+
+            <Link
+              href="/esqueci-senha"
+              className="text-center text-sm text-stone hover:text-navy transition-colors"
+            >
+              Esqueci minha senha
+            </Link>
           </form>
         </div>
 
