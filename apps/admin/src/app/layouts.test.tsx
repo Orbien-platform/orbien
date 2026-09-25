@@ -8,9 +8,8 @@ import PlatformLayout from "./(platform)/layout";
 import { useAuth } from "@/hooks/useAuth";
 import { saveTokens, getAccessToken } from "@/lib/auth";
 
-vi.mock("next/font/google", () => ({
-  DM_Sans: () => ({ variable: "--font-dm-sans" }),
-  DM_Mono: () => ({ variable: "--font-dm-mono" }),
+vi.mock("next/font/local", () => ({
+  default: ({ variable }: { variable: string }) => ({ variable }),
 }));
 vi.mock("./globals.css", () => ({}));
 vi.mock("next/navigation", () => ({
