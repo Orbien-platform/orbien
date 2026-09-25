@@ -43,21 +43,21 @@ export function PricingSection() {
               style={{ background: "var(--surface)", borderColor: "var(--border)" }}
             >
               <div
-                className="absolute -top-2.5 left-8 font-mono text-[10px] uppercase tracking-[.1em] px-2.5 py-1 rounded-pill text-white"
+                className="absolute -top-2.5 left-8 text-xs font-medium px-2.5 py-1 rounded-pill text-white"
                 style={{ background: "var(--on-ink)" }}
               >
                 Sem CNPJ? Comece aqui.
               </div>
               <div>
                 <div
-                  className="font-mono text-xs uppercase tracking-[.14em] mb-3"
+                  className="text-sm font-medium mb-3"
                   style={{ color: "var(--stone)" }}
                 >
                   Starter
                 </div>
                 <div className="leading-none">
                   <div
-                    className="font-mono text-[11px] uppercase tracking-[.08em] mb-1.5"
+                    className="text-xs mb-1.5"
                     style={{ color: "var(--muted)" }}
                   >
                     A partir de
@@ -105,20 +105,20 @@ export function PricingSection() {
               }}
             >
               <div
-                className="absolute -top-2.5 left-8 font-mono text-[10px] uppercase tracking-[.1em] px-2.5 py-1 rounded-pill text-white bg-teal"
+                className="absolute -top-2.5 left-8 text-xs font-medium px-2.5 py-1 rounded-pill text-white bg-teal"
               >
                 Mais escolhido
               </div>
               <div>
                 <div
-                  className="font-mono text-xs uppercase tracking-[.14em] mb-3"
+                  className="text-sm font-medium mb-3"
                   style={{ color: "var(--stone)" }}
                 >
                   Premium
                 </div>
                 <div className="leading-none">
                   <div
-                    className="font-mono text-[11px] uppercase tracking-[.08em] mb-1.5"
+                    className="text-xs mb-1.5"
                     style={{ color: "var(--muted)" }}
                   >
                     A partir de

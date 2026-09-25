@@ -136,7 +136,7 @@ export function MediaUploadField({
             </>
           ) : currentFile ? (
             <div className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] px-3 py-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-stone">Mídia atual</p>
+              <p className="text-xs font-medium text-stone">Mídia atual</p>
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   {iconForFile(currentFile.name)}

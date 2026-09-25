@@ -179,7 +179,7 @@ function KpiCard({
   const color = variant === "positive" ? "text-teal" : "text-crimson";
   return (
     <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-stone">{label}</p>
+      <p className="text-xs font-medium text-stone">{label}</p>
       {loading ? (
         <Skeleton className="mt-2 h-7 w-28" />
       ) : (
@@ -603,7 +603,7 @@ export default function FinanceiroPage() {
   // ── Tab button style ─────────────────────────────────────────────────────────
   const tabBtn = (active: boolean) =>
     cn(
-      "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none",
+      "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50",
       active
         ? "text-navy dark:text-white after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:bg-navy"
         : "text-stone hover:text-ink dark:hover:text-white"
@@ -865,12 +865,12 @@ export default function FinanceiroPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Descrição</th>
-                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Tipo</th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">Valor</th>
-                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Frequência</th>
-                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Próxima ocorrência</th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">Ações</th>
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium text-stone">Descrição</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium text-stone">Tipo</th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">Valor</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium text-stone">Frequência</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium text-stone">Próxima ocorrência</th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -994,18 +994,18 @@ export default function FinanceiroPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium text-stone">
                         Conta
                       </th>
                       {!isPastor && (
-                        <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                        <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                           Total
                         </th>
                       )}
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Qtd
                       </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Δ período ant.
                       </th>
                     </tr>
@@ -1013,7 +1013,7 @@ export default function FinanceiroPage() {
                   <tbody>
                     {/* RECEITAS group */}
                     <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-2.5 pl-4 text-xs font-semibold uppercase tracking-wider text-stone">RECEITAS</td>
+                      <td className="py-2.5 pl-4 text-xs font-semibold text-stone">Receitas</td>
                       {!isPastor && (
                         <td className="py-2.5 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
                           {fmt(dre.revenue.total)}
@@ -1043,7 +1043,7 @@ export default function FinanceiroPage() {
 
                     {/* DESPESAS group */}
                     <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-2.5 pl-4 text-xs font-semibold uppercase tracking-wider text-stone">DESPESAS</td>
+                      <td className="py-2.5 pl-4 text-xs font-semibold text-stone">Despesas</td>
                       {!isPastor && (
                         <td className="py-2.5 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
                           {fmt(dre.expenses.total)}
@@ -1073,7 +1073,7 @@ export default function FinanceiroPage() {
 
                     {/* Resultado líquido */}
                     <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">RESULTADO LÍQUIDO</td>
+                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">Resultado líquido</td>
                       {!isPastor && (
                         <td className={cn("py-3 pr-4 text-right text-sm font-semibold tabular-nums", dre.net_result >= 0 ? "text-teal" : "text-crimson")}>
                           {fmt(dre.net_result)}
@@ -1123,19 +1123,19 @@ export default function FinanceiroPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium text-stone">
                         Centro de custo
                       </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Receitas
                       </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Despesas
                       </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Resultado
                       </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Qtd
                       </th>
                     </tr>
@@ -1166,7 +1166,7 @@ export default function FinanceiroPage() {
                       ))
                     )}
                     <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">TOTAL</td>
+                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">Total</td>
                       <td className="py-3 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
                         {fmt(balancete.revenue_total)}
                       </td>

@@ -45,7 +45,7 @@ export function ImportHelpModal({ open, onOpenChange }: ImportHelpModalProps) {
       <div className="flex flex-col gap-5">
         {/* Section 1 — Columns */}
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone">Colunas</p>
+          <p className="mb-2 text-sm font-medium text-stone">Colunas</p>
           <div className="overflow-hidden rounded-[8px] border border-[var(--border-default)]">
             <table className="w-full text-sm">
               <thead>
@@ -70,7 +70,7 @@ export function ImportHelpModal({ open, onOpenChange }: ImportHelpModalProps) {
 
         {/* Section 2 — Formats */}
         <section>
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-stone">Formatos aceitos</p>
+          <p className="mb-1.5 text-sm font-medium text-stone">Formatos aceitos</p>
           <p className="text-sm text-ink dark:text-white">
             Aceitamos arquivos <span className="font-medium">.csv</span> (separador vírgula, UTF-8) e{" "}
             <span className="font-medium">.xlsx/.xls</span>.
@@ -86,7 +86,7 @@ export function ImportHelpModal({ open, onOpenChange }: ImportHelpModalProps) {
 
         {/* Section 3 — Download template */}
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone">Baixar modelo</p>
+          <p className="mb-2 text-sm font-medium text-stone">Baixar modelo</p>
           <Button
             variant="outline"
             size="sm"

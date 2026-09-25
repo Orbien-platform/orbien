@@ -102,7 +102,7 @@ export function EstagioAtual() {
               }}
             >
               <p
-                className="font-mono text-[10px] uppercase tracking-[.12em] mb-6"
+                className="text-sm font-medium mb-6"
                 style={{ color: "rgba(255,255,255,.45)" }}
               >
                 Linha do tempo
@@ -139,7 +139,7 @@ export function EstagioAtual() {
                 className="mt-7 pt-6 border-t"
                 style={{ borderColor: "rgba(255,255,255,.1)" }}
               >
-                <p className="font-mono text-[10px] uppercase tracking-[.1em] mb-3" style={{ color: "rgba(255,255,255,.38)" }}>
+                <p className="text-xs font-medium mb-3" style={{ color: "rgba(255,255,255,.38)" }}>
                   Igreja-piloto
                 </p>
                 <div className="flex items-center gap-3">

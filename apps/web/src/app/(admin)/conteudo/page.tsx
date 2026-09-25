@@ -72,7 +72,7 @@ function fmtDate(iso: string): string {
 
 function tabBtn(active: boolean) {
   return cn(
-    "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none",
+    "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50",
     active
       ? "text-navy dark:text-white after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:bg-navy"
       : "text-stone hover:text-ink dark:hover:text-white"
@@ -311,7 +311,7 @@ export default function ConteudoPage() {
               <select
                 value={typeFilter}
                 onChange={(e) => handleTypeFilterChange(e.target.value)}
-                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
+                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
               >
                 <option value="">Todos os tipos</option>
                 {(Object.entries(POST_TYPE_LABELS) as [PostType, string][]).map(([v, l]) => (
@@ -323,7 +323,7 @@ export default function ConteudoPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => handleStatusFilterChange(e.target.value)}
-                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
+                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
               >
                 <option value="">Todos os status</option>
                 <option value="draft">Rascunhos</option>

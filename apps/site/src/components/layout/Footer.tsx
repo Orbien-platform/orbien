@@ -119,7 +119,7 @@ export function Footer() {
           ].map(({ heading, links }) => (
             <div key={heading}>
               <h4
-                className="font-mono text-[11px] font-medium uppercase tracking-[.14em] mb-[18px]"
+                className="text-sm font-medium mb-[18px]"
                 style={{ color: "var(--muted)" }}
               >
                 {heading}

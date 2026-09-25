@@ -22,7 +22,7 @@ export function SocialProof() {
               (Passo Fundo, RS) e mais igrejas em fase de validação.
             </p>
             <p
-              className="mt-5 font-mono text-[11px] uppercase tracking-[.08em]"
+              className="mt-5 text-sm"
               style={{ color: "var(--muted)" }}
             >
               Cada feature é validada com um pastor antes de ir pra produção.

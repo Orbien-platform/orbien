@@ -88,7 +88,7 @@ export function UpgradePath() {
               }}
             >
               <p
-                className="font-mono text-[10px] uppercase tracking-[.12em] mb-5"
+                className="text-sm font-medium mb-5"
                 style={{ color: "rgba(255,255,255,.5)" }}
               >
                 O que desbloqueia no Premium
@@ -118,7 +118,7 @@ export function UpgradePath() {
                 className="mt-6 pt-5 border-t"
                 style={{ borderColor: "rgba(255,255,255,.1)" }}
               >
-                <p className="font-mono text-[10px] uppercase tracking-[.1em] mb-1" style={{ color: "rgba(255,255,255,.4)" }}>
+                <p className="text-xs mb-1" style={{ color: "rgba(255,255,255,.4)" }}>
                   Tempo de migração
                 </p>
                 <p className="text-white font-semibold text-lg tracking-[-0.02em]">15 minutos</p>

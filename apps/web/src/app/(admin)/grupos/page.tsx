@@ -224,7 +224,7 @@ export default function GruposPage() {
         <select
           value={typeFilter}
           onChange={(e) => handleTypeFilter(e.target.value)}
-          className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
+          className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
         >
           <option value="">Todos os tipos</option>
           {groupTypes.map((t) => (

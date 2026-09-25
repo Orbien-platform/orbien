@@ -124,7 +124,7 @@ export function PixCenarios() {
 
                 {/* Fee badge */}
                 <div className="mt-auto pt-4 border-t flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
-                  <span className="font-mono text-[10px] uppercase tracking-[.06em]" style={{ color: "var(--muted)" }}>
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
                     Taxa:
                   </span>
                   <span

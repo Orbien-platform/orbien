@@ -337,7 +337,7 @@ export default function RedesPage() {
                 aria-label="Selecione uma célula sem rede"
                 value={linkGroupId}
                 onChange={(e) => setLinkGroupId(e.target.value)}
-                className="h-9 flex-1 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none dark:text-white"
+                className="h-9 flex-1 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
               >
                 <option value="">— Selecione uma célula sem rede —</option>
                 {unlinkedGroups.map((g) => (

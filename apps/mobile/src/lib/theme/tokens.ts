@@ -138,13 +138,10 @@ export const typography = {
   h3: { fontFamily: fontFamily.medium, fontSize: 16, lineHeight: 22 },
   body: { fontFamily: fontFamily.light, fontSize: 15, lineHeight: 22 },
   bodyMedium: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20 },
-  label: {
-    fontFamily: fontFamily.medium,
-    fontSize: 11,
-    lineHeight: 14,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
+  // Sem caixa alta nem tracking (§2): quem diferencia o rótulo é o peso 500
+  // e a cor terciária. Por isso 12px e não 11 — sem as maiúsculas, 11px
+  // perdia presença.
+  label: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 16 },
   caption: { fontFamily: fontFamily.regular, fontSize: 11, lineHeight: 14 },
   mono: { fontFamily: fontFamily.mono, fontSize: 13, lineHeight: 18 },
   /** Sempre peso 500, nunca 600 — idêntico ao web (§2). */
