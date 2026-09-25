@@ -397,6 +397,23 @@ describe('CelebrationSchedulerService', () => {
       expect(system.celebration.findMany).toHaveBeenCalled();
     });
 
+    it('falha na subida vira log de erro, sem derrubar o boot', async () => {
+      process.env['NODE_ENV'] = 'production';
+      const system = systemWith();
+      system.celebration.findMany.mockRejectedValue(new Error('db indisponível'));
+      const { service } = serviceWith(system);
+      const errorSpy = jest
+        .spyOn((service as unknown as { logger: { error: (m: string) => void } }).logger, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => service.onApplicationBootstrap()).not.toThrow();
+      // A promessa roda solta; drena a fila de microtasks antes de conferir
+      // (a suíte usa fake timers, então nada de nextTick/setTimeout aqui).
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      expect(errorSpy).toHaveBeenCalledWith('Boot run failed: Error: db indisponível');
+    });
+
     it('não roda em teste', () => {
       process.env['NODE_ENV'] = 'test';
       const system = systemWith();
