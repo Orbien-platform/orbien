@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WeeklyDashboardCard } from "./WeeklyDashboardCard";
 import api from "@/lib/api";
@@ -10,16 +11,22 @@ vi.mock("@/lib/api", () => ({
 
 // recharts não renderiza de verdade em jsdom (ResponsiveContainer depende de
 // ResizeObserver, que jsdom não implementa) — mesmo padrão de mock de
-// `apps/web/src/app/(admin)/dashboard/page.test.tsx`.
+// `apps/web/src/app/(admin)/dashboard/page.test.tsx`. `tickFormatter` e
+// `formatter` são código real do componente (decidem o texto do
+// eixo/tooltip) — os stubs os invocam para exercitar essas closures.
 vi.mock("recharts", () => {
   const Passthrough = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
   return {
     BarChart: Passthrough,
     Bar: Passthrough,
     XAxis: Passthrough,
-    YAxis: Passthrough,
+    YAxis: ({ tickFormatter }: { tickFormatter?: (v: number) => React.ReactNode }) => (
+      <div>{tickFormatter ? tickFormatter(12345) : null}</div>
+    ),
     CartesianGrid: Passthrough,
-    Tooltip: Passthrough,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Tooltip: ({ formatter }: { formatter?: (value: any) => React.ReactNode }) =>
+      formatter ? <div>{formatter(100)}</div> : null,
     ResponsiveContainer: Passthrough,
   };
 });
@@ -70,5 +77,35 @@ describe("WeeklyDashboardCard", () => {
     render(<WeeklyDashboardCard />);
 
     expect(await screen.findByText("Você não tem acesso a Financeiro.")).toBeInTheDocument();
+  });
+
+  it("shows the Resultado KPI in negative variant when net is below zero", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: weeklyResponse({ current_month: { income: 1000, expense: 4000, net: -3000, vs_last_month_pct: null } }),
+    });
+    render(<WeeklyDashboardCard />);
+
+    expect(await screen.findByText(/-R\$\s?3\.000,00/)).toBeInTheDocument();
+  });
+
+  it("shows the empty-weeks state when there are no weeks in the response", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: weeklyResponse({ weekly: [] }) });
+    render(<WeeklyDashboardCard />);
+
+    expect(await screen.findByText("Sem lançamentos nas últimas 8 semanas.")).toBeInTheDocument();
+  });
+
+  it("guarda contra a dupla invocação de efeito do StrictMode", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: weeklyResponse() });
+    render(
+      <StrictMode>
+        <WeeklyDashboardCard />
+      </StrictMode>
+    );
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/dashboard/weekly"));
+    expect(
+      vi.mocked(api.get).mock.calls.filter(([u]) => u === "/financial/dashboard/weekly").length
+    ).toBe(1);
   });
 });

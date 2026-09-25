@@ -35,8 +35,11 @@ export function pollExportJob(
   const { intervalMs = 2000, signal } = opts;
 
   return new Promise((resolve) => {
+    // Cada tick só reagenda a si mesmo enquanto pending/processing, e todo
+    // caminho que resolve retorna em seguida — não há como um segundo tick
+    // rodar depois de `resolve()`, então a única corrida real de
+    // cancelamento é com `signal`, nunca com a própria promise já resolvida.
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let settled = false;
 
     function stop() {
       if (timer !== null) clearTimeout(timer);
@@ -52,7 +55,7 @@ export function pollExportJob(
         const res = await api.get<ExportJob>(`/financial/export/jobs/${jobId}`);
         const job = res.data;
 
-        if (signal?.aborted || settled) return;
+        if (signal?.aborted) return;
 
         if (job.status === "pending" || job.status === "processing") {
           timer = setTimeout(tick, intervalMs);
@@ -63,17 +66,14 @@ export function pollExportJob(
           const downloadRes = await api.get<{ download_url: string; expires_in: number }>(
             `/financial/export/jobs/${jobId}/download`
           );
-          if (signal?.aborted || settled) return;
-          settled = true;
+          if (signal?.aborted) return;
           resolve({ status: "done", downloadUrl: downloadRes.data.download_url });
           return;
         }
 
-        settled = true;
         resolve({ status: "error", errorMessage: job.error_message ?? "Erro ao gerar o arquivo." });
       } catch {
-        if (signal?.aborted || settled) return;
-        settled = true;
+        if (signal?.aborted) return;
         resolve({ status: "error", errorMessage: "Erro ao consultar o status da exportação." });
       }
     }
