@@ -3,6 +3,7 @@ import { PlanType, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { MailService } from '../mail/mail.service';
+import { TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfmakeLib = require('pdfmake') as {
@@ -93,7 +94,7 @@ export class DonationReceiptService {
       }),
       this.prisma.client.tenant.findUnique({
         where: { id: transaction.tenant_id },
-        select: { name: true },
+        select: TENANT_MAIL_BRAND_SELECT,
       }),
     ]);
 
@@ -120,7 +121,7 @@ export class DonationReceiptService {
       },
     });
 
-    await this.mail.sendDonationReceipt(person.email, person.full_name, amount, receiptUrl);
+    await this.mail.sendDonationReceipt(person.email, person.full_name, amount, receiptUrl, tenantMailBrand(tenant));
   }
 
   async list(tenantId: string, page: number, pageSize: number): Promise<{ data: ReceiptSummary[]; total: number }> {

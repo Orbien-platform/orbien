@@ -762,7 +762,50 @@ describe('AuthService.forgotPassword', () => {
       data: { used_at: expect.any(Date) },
     });
     expect(prisma.system.passwordResetToken.create).toHaveBeenCalled();
-    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.stringContaining('/redefinir-senha?token='), 'Ana');
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.stringContaining('/redefinir-senha?token='), 'Ana', expect.objectContaining({ kind: expect.any(String) }));
+  });
+
+  it('pedido do web/app sai com a marca da igreja do tenant da conta', async () => {
+    const { service, prisma, mail } = serviceWith({});
+    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      is_active: true,
+      person: { full_name: 'Ana Silva' },
+      tenant: {
+        name: 'Igreja Teste 1',
+        brandingConfig: { primary_color: '#7A1F2B', secondary_color: null, logo_url: null },
+      },
+    });
+
+    await service.forgotPassword({ email: 'a@b.com' });
+
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.any(String),
+      'Ana',
+      expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1', primaryColor: '#7A1F2B' }),
+    );
+  });
+
+  it("pedido do console (context: 'platform') sai com a marca da Orbien", async () => {
+    const { service, prisma, mail } = serviceWith({});
+    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      is_active: true,
+      person: { full_name: 'Ana Silva' },
+      tenant: { name: 'Igreja Teste 1', brandingConfig: null },
+    });
+
+    await service.forgotPassword({ email: 'a@b.com', context: 'platform' });
+
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.any(String),
+      'Ana',
+      expect.objectContaining({ kind: 'platform', name: 'Orbien' }),
+    );
   });
 
   describe('FRONTEND_URL no link de redefinição', () => {
@@ -792,6 +835,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringContaining('https://web.useorbien.com/redefinir-senha?token='),
         'Ana',
+        expect.anything(),
       );
     });
 
@@ -811,6 +855,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringContaining('http://localhost:3001/redefinir-senha?token='),
         'Ana',
+        expect.anything(),
       );
     });
   });
@@ -826,7 +871,7 @@ describe('AuthService.forgotPassword', () => {
 
     await service.forgotPassword({ email: 'a@b.com' });
 
-    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.any(String), '');
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.any(String), '', expect.anything());
   });
 
   it('usa FRONTEND_URL do ambiente quando definida, em vez do default de localhost', async () => {
@@ -847,6 +892,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringMatching(/^https:\/\/app\.orbien\.com\.br\/redefinir-senha\?token=/),
         '',
+        expect.anything(),
       );
     } finally {
       if (original === undefined) delete process.env['FRONTEND_URL'];
@@ -872,6 +918,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringMatching(/^http:\/\/localhost:3001\/redefinir-senha\?token=/),
         '',
+        expect.anything(),
       );
     } finally {
       if (original === undefined) delete process.env['FRONTEND_URL'];

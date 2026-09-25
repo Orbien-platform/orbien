@@ -29,6 +29,7 @@ describe("EsqueciSenhaPage do console", () => {
     ).toBeInTheDocument();
     expect(postMock).toHaveBeenCalledWith("/auth/forgot-password", {
       email: "suporte@orbien.app",
+      context: "platform",
     });
   });
 

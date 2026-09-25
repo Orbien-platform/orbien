@@ -12,6 +12,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { PLATFORM_MAIL_BRAND, TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import {
   LoginRateLimitService,
   LOGIN_POLICY,
@@ -425,7 +426,10 @@ export class AuthService {
 
     const user = await this.prisma.system.userAccount.findUnique({
       where: { email: dto.email },
-      include: { person: { select: { full_name: true } } },
+      include: {
+        person: { select: { full_name: true } },
+        tenant: { select: TENANT_MAIL_BRAND_SELECT },
+      },
     });
     if (!user || !user.is_active) return genericResponse;
 
@@ -445,7 +449,9 @@ export class AuthService {
     const resetUrl = `${frontendUrl()}/redefinir-senha?token=${rawToken}`;
     const userName = user.person?.full_name?.split(' ')[0] ?? '';
 
-    await this.mail.sendPasswordReset(user.email, resetUrl, userName);
+    const brand = dto.context === 'platform' ? PLATFORM_MAIL_BRAND : tenantMailBrand(user.tenant);
+
+    await this.mail.sendPasswordReset(user.email, resetUrl, userName, brand);
 
     return genericResponse;
   }

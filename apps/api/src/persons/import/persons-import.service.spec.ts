@@ -54,13 +54,20 @@ function serviceWith() {
   const roleAssignmentClient = { create: jest.fn().mockResolvedValue({}) };
   const passwordResetTokenClient = { create: jest.fn().mockResolvedValue({}) };
 
+  // Marca do tenant para o convite — lida pelo `db` da importação.
+  const tenantClient = {
+    findUnique: jest.fn().mockResolvedValue({ name: 'Igreja Teste 1', brandingConfig: null }),
+  };
+
   const client = {
+    tenant: tenantClient,
     person: personClient,
     consentRecord: consentRecordClient,
     importJob: importJobClient,
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const system: any = {
+    tenant: tenantClient,
     person: personClient,
     consentRecord: consentRecordClient,
     importJob: { ...importJobClient, update: jest.fn().mockResolvedValue({}) },
@@ -275,6 +282,7 @@ describe('PersonsImportService', () => {
       expect(mail.sendInvite).toHaveBeenCalledWith(
         'ana@test.com',
         expect.stringContaining('/redefinir-senha?token='),
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
       );
     });
 
@@ -505,7 +513,8 @@ describe('PersonsImportService', () => {
         expect(mail.sendInvite).toHaveBeenCalledWith(
           'analocal@test.com',
           expect.stringContaining('http://localhost:3001/redefinir-senha?token='),
-        );
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
+      );
       } finally {
         if (original === undefined) delete process.env['FRONTEND_URL'];
         else process.env['FRONTEND_URL'] = original;
@@ -528,7 +537,8 @@ describe('PersonsImportService', () => {
         expect(mail.sendInvite).toHaveBeenCalledWith(
           'anaprod@test.com',
           expect.stringContaining('https://app.orbien.com.br/redefinir-senha?token='),
-        );
+        expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1' }),
+      );
       } finally {
         if (original === undefined) delete process.env['FRONTEND_URL'];
         else process.env['FRONTEND_URL'] = original;
