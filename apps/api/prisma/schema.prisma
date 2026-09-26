@@ -63,6 +63,7 @@ model Tenant {
   transactionAttachments    TransactionAttachment[]
   recurringRules            RecurringRule[]
   pixPayments               PixPayment[]
+  pixSubscriptions          PixSubscription[]
   donationReceipts          DonationReceipt[]
   contentPosts              ContentPost[]
   eventRegistrations        EventRegistration[]
@@ -140,6 +141,7 @@ model Congregation {
   financialTransactions     FinancialTransaction[]
   recurringRules            RecurringRule[]
   pixPayments               PixPayment[]
+  pixSubscriptions          PixSubscription[]
   contentPosts              ContentPost[]
   eventRegistrations        EventRegistration[]
   audienceSegments          AudienceSegment[]
@@ -169,25 +171,25 @@ model Congregation {
 }
 
 model BrandingConfig {
-  id              String   @id @default(uuid())
-  tenant_id       String   @unique
-  primary_color   String?
+  id                                 String    @id @default(uuid())
+  tenant_id                          String    @unique
+  primary_color                      String?
   /// Cor de destaque (accent) do tenant. O nome da coluna é anterior ao
   /// design system, que chama este papel de `accent` — a API expõe o campo
   /// como `accent_color` em `GET /settings` e é assim que o front o
   /// conhece. Renomear a coluna é migration própria; não misturar.
-  secondary_color String?
-  logo_url        String?
+  secondary_color                    String?
+  logo_url                           String?
   /// Logotipo em variante para modo escuro — par de `logo_url` (o claro).
   /// Nulo cai para `logo_url` nos dois modos: um tenant que só cadastrou um
   /// logo continua vendo-o em qualquer tema, em vez de ficar sem logo no
   /// escuro.
-  logo_url_dark   String?
-  app_name        String?
-  splash_url      String?
-  pix_key         String?
+  logo_url_dark                      String?
+  app_name                           String?
+  splash_url                         String?
+  pix_key                            String?
   /// PROD-19 — domínio próprio do tenant (Premium).
-  custom_domain   String?  @unique
+  custom_domain                      String?   @unique
   /// Provisionamento de fato do `custom_domain` (ver `docs/PLANO.md`):
   /// "pending" enquanto o DNS não aponta/o cert não saiu, "verified" quando
   /// a Vercel confirma o domínio, "failed" quando a última tentativa de
@@ -195,7 +197,7 @@ model BrandingConfig {
   /// valor fica em "pending" e não significa nada — não há coluna própria
   /// para "sem domínio configurado" porque o próprio `custom_domain IS NULL`
   /// já diz isso.
-  custom_domain_status String @default("pending")
+  custom_domain_status               String    @default("pending")
   /// Access/refresh token da conexão OAuth com a conta Cloudflare do tenant,
   /// cifrados com `SecretCipher` (AES-256-GCM, `DOMAIN_SECRETS_ENCRYPTION_KEY`)
   /// — nunca em texto claro, porque dão acesso de edição de DNS na zona do
@@ -210,9 +212,9 @@ model BrandingConfig {
   /// PROD-19 — termos de uso próprios do tenant (Premium), como URL para o
   /// documento (mesmo padrão de `logo_url`/`splash_url`: link, não conteúdo
   /// inline).
-  terms_url       String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  terms_url                          String?
+  created_at                         DateTime  @default(now())
+  updated_at                         DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
@@ -413,6 +415,7 @@ model Person {
   donorTransactions       FinancialTransaction[]  @relation("TransactionDonor")
   donationReceipts        DonationReceipt[]
   pixDonations            PixPayment[]            @relation("PixDonor")
+  pixSubscriptions        PixSubscription[]       @relation("PixSubscriptionDonor")
   volunteerProfile        VolunteerProfile?
   serviceOrderItems       ServiceOrderItem[]
   eventRegistrations      EventRegistration[]
@@ -1051,8 +1054,9 @@ model FinancialCategory {
   parent       FinancialCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
   children     FinancialCategory[] @relation("CategoryHierarchy")
 
-  transactions FinancialTransaction[]
-  pixPayments  PixPayment[]
+  transactions     FinancialTransaction[]
+  pixPayments      PixPayment[]
+  pixSubscriptions PixSubscription[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1160,33 +1164,71 @@ model RecurringRule {
 }
 
 model PixPayment {
-  id               String      @id @default(uuid())
-  tenant_id        String
-  congregation_id  String
-  scenario         PixScenario
-  transaction_id   String?     @unique
-  asaas_payment_id String?
-  amount           Decimal     @db.Decimal(12, 2)
-  donor_person_id  String?
-  category_id      String
-  status           PixStatus
-  pix_key          String?
-  qr_code          String?
-  paid_at          DateTime?
-  created_at       DateTime    @default(now())
-  updated_at       DateTime    @updatedAt
+  id                  String      @id @default(uuid())
+  tenant_id           String
+  congregation_id     String
+  scenario            PixScenario
+  transaction_id      String?     @unique
+  asaas_payment_id    String?     @unique
+  pix_subscription_id String?
+  amount              Decimal     @db.Decimal(12, 2)
+  donor_person_id     String?
+  category_id         String
+  status              PixStatus
+  pix_key             String?
+  qr_code             String?
+  paid_at             DateTime?
+  created_at          DateTime    @default(now())
+  updated_at          DateTime    @updatedAt
 
   tenant            Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation      Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   transaction       FinancialTransaction? @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
   donorPerson       Person?               @relation("PixDonor", fields: [donor_person_id], references: [id], onDelete: SetNull)
   category          FinancialCategory     @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  subscription      PixSubscription?      @relation(fields: [pix_subscription_id], references: [id], onDelete: SetNull)
   eventRegistration EventRegistration?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, status])
+  @@index([pix_subscription_id])
   @@map("pix_payments")
+}
+
+/**
+ * PIX recorrente — dízimo automático mensal via PIX Automático da Asaas
+ * (PROD-27, Premium). Cada linha é a assinatura em si; os pagamentos gerados
+ * a cada ciclo chegam via webhook e viram `PixPayment` com `scenario:
+ * recurring` e `pix_subscription_id` apontando pra cá — mesma tabela que já
+ * registra os cenários 1/2/3, sem duplicar o caminho de confirmação →
+ * `FinancialTransaction` que `PixService.handleWebhook` já resolve.
+ */
+model PixSubscription {
+  id                    String                @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  donor_person_id       String
+  category_id           String
+  amount                Decimal               @db.Decimal(12, 2)
+  description           String?
+  asaas_subscription_id String                @unique
+  status                PixSubscriptionStatus @default(active)
+  created_by_user_id    String
+  cancelled_at          DateTime?
+  created_at            DateTime              @default(now())
+  updated_at            DateTime              @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation      @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  donorPerson  Person            @relation("PixSubscriptionDonor", fields: [donor_person_id], references: [id], onDelete: Restrict)
+  category     FinancialCategory @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  payments     PixPayment[]
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  @@index([tenant_id, status])
+  @@map("pix_subscriptions")
 }
 
 model DonationReceipt {
@@ -1908,12 +1950,21 @@ enum PixScenario {
   dynamic
   public
   event_registration
+  recurring
 }
 
 enum PixStatus {
   pending
   confirmed
   failed
+}
+
+// PIX recorrente (PROD-27, Premium): estado da assinatura em si, não de cada
+// pagamento gerado por ela — esses continuam em `PixStatus`, como qualquer
+// outro `PixPayment`.
+enum PixSubscriptionStatus {
+  active
+  cancelled
 }
 
 // --- Conteúdo ---

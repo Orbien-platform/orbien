@@ -183,6 +183,17 @@ lote: teste intermitente pré-existente em `CostCentersModal.test.tsx`
 feature. Geração em lote do carnê continua fora do escopo (mesma decisão do
 `PROD-08` original).
 
+Ainda em **2026-09-26**, a mesma auditoria contra `/precos` chegou em
+"Pequenos grupos" e "Doações e PIX". Os dois recursos de pequenos grupos
+(cadastro/materiais nos dois planos, semáforo de saúde só Premium) já
+batiam com o código. Em "Doações e PIX", achou uma lacuna real: **"PIX
+recorrente (dízimo automático)"** era promessa ativa na tabela do site e em
+três documentos de produto (`adrs-architecture-decisions.md`,
+`church-platform-documentos-legais.md`, `produto-gestao-igrejas-mvp.md`),
+mas não tinha nenhum código, e não estava registrada nesta lista. Fechou
+`PROD-27` (nota completa na seção 6) — assinatura PIX Automático via Asaas,
+`@RequiresPlan('premium')` como o resto do módulo Premium de `financial`.
+
 ---
 
 ## 1. Visão do produto
@@ -700,6 +711,69 @@ só coluna em tabela existente (`event_registrations`), a policy de
 roda sem alteração (a suíte inteira fecha hoje em 125 testes — a contagem
 citada aqui na redação original, 118, era a de antes do `networks.spec.ts`
 que o `PROD-20` trouxe no mesmo dia).
+
+### ~~PROD-27 · PIX recorrente — dízimo automático via Asaas (Premium)~~ · fechado (backend)
+
+Entregue em 2026-09-26. Achado pela auditoria da mesma data contra `/precos`
+("Doações e PIX"): a linha existia na tabela do site e em três documentos de
+produto como âncora comercial do Premium, mas `PixService` só tinha os
+cenários 1/2/3 — nenhuma assinatura, nenhuma integração com `/subscriptions`
+da Asaas.
+
+`PixSubscription` é tabela nova (`pix_subscriptions`) — a assinatura em si,
+não cada cobrança gerada por ela. Isso porque a Asaas gera um `payment` novo
+sozinha a cada ciclo (`cycle: MONTHLY`) e dispara o mesmo webhook que os
+cenários 2/3 já usam; diferente deles, não há como pré-criar o `PixPayment`
+de uma cobrança futura (não se sabe o `asaas_payment_id` antes de existir).
+Por isso `PixScenario` ganhou `recurring`, e `handleWebhook` ganhou um
+fallback: quando `asaas_payment_id` não bate com nenhum `PixPayment`
+existente, olha `payload.payment.subscription` contra `pix_subscriptions` e
+materializa a linha ali, na hora — dali em diante é o mesmo caminho de
+sempre (`pending → confirmed` por `updateMany` condicional, idempotente à
+reentrega). `pix_payments.asaas_payment_id` ganhou `@unique` para essa
+criação reativa não duplicar sob entrega concorrente (a `create` reativa
+trata a violação como "outra entrega já criou", e recarrega em vez de
+falhar o webhook).
+
+- `POST /financial/pix/subscriptions` (criar), `GET .../subscriptions`
+  (listar), `PATCH .../subscriptions/:id/cancel` — mesmo trio de guardas do
+  resto do Premium em `financial` (`JwtAuthGuard, RolesGuard, PlanGuard` +
+  `@RequiresPlan('premium')`), mesmos papéis de `createDynamic`
+  (`admin_congregation`/`treasurer`/`tenant_admin`).
+- **Escopo é o da sessão** (`user.tenant_id` + `user.congregation_id`), não a
+  "primeira congregação do tenant" que `resolveTenantFromUser` usa para o
+  cenário 2 — decisão deliberada, porque aqui `listSubscriptions`/
+  `cancelSubscription` precisam achar depois a mesma linha que `create`
+  gravou, e a sessão de quem cria é o dado estável.
+- Cancelar chama `DELETE /subscriptions/:id` na Asaas antes de marcar
+  `status: cancelled` — cancelar sem confirmar na Asaas deixaria a igreja
+  achando que parou de cobrar e o doador continuando a ser cobrado. Cancelar
+  duas vezes é no-op (não rechama a Asaas).
+- **Sem tela de member self-service**, mesma decisão de escopo do `PROD-16`/
+  `PROD-24`: quem cria a assinatura hoje é o tesoureiro/admin em nome do
+  doador (`donor_person_id` já precisa existir como `Person`), não o próprio
+  doador. Tela do doador — `apps/web` ou `apps/mobile` — é trabalho novo,
+  não coberto aqui.
+- RLS em `023_rls_pix_subscriptions.sql`: `tenant_congregation_isolation`
+  (AD-001) — diferente de `pix_payments`, que é de `001_rls_setup.sql` e
+  ficou só no isolamento de tenant; tabela nova segue o padrão atual, não o
+  histórico da tabela irmã. `bootstrap-db.sh` ganhou o script no passo 3 (na
+  ordem, depois de 022) e a checagem nomeada no passo 7.
+
+Testes: `pix.service.spec.ts` (`createSubscription`/`listSubscriptions`/
+`cancelSubscription`, mais o bloco de webhook "PIX recorrente" — criação
+reativa a partir de `payment.subscription`, assinatura cancelada não gera
+lançamento, `subscription` desconhecida é ignorada como pagamento
+desconhecido, idempotência ao reenvio), `pix.controller.spec.ts` (papel e
+`@RequiresPlan('premium')` das três rotas novas). Migration
+`add_pix_subscriptions` (Prisma) + `023_rls_pix_subscriptions.sql` (fora do
+histórico do Prisma, como os demais). **Não verificado nesta sessão**: a
+migration foi gerada e testada localmente contra o schema, mas aplicá-la ao
+banco (mesmo o local, isolado de produção) caiu no portão de aprovação do
+ambiente ("Production Deploy") — falta rodar `prisma migrate deploy`
+manualmente antes de considerar isto pronto para revisão. Sem tela no
+`apps/web`: a lacuna que fica, análoga à do `financeiro-ui-premium` de hoje
+mais cedo.
 
 ### Funcionalidade prevista, sem código
 
