@@ -767,13 +767,12 @@ lançamento, `subscription` desconhecida é ignorada como pagamento
 desconhecido, idempotência ao reenvio), `pix.controller.spec.ts` (papel e
 `@RequiresPlan('premium')` das três rotas novas). Migration
 `add_pix_subscriptions` (Prisma) + `023_rls_pix_subscriptions.sql` (fora do
-histórico do Prisma, como os demais). **Não verificado nesta sessão**: a
-migration foi gerada e testada localmente contra o schema, mas aplicá-la ao
-banco (mesmo o local, isolado de produção) caiu no portão de aprovação do
-ambiente ("Production Deploy") — falta rodar `prisma migrate deploy`
-manualmente antes de considerar isto pronto para revisão. Sem tela no
-`apps/web`: a lacuna que fica, análoga à do `financeiro-ui-premium` de hoje
-mais cedo.
+histórico do Prisma, como os demais) — geradas numa sessão em que
+`prisma migrate deploy` caiu no portão de aprovação do ambiente
+("Production Deploy"), e aplicadas com sucesso (`bootstrap-db.sh` completo,
+passo 7 verde) na sessão seguinte, via `npm run dev`/hook de start. Sem tela
+no `apps/web`: a lacuna que fica, análoga à do `financeiro-ui-premium` de
+hoje mais cedo.
 
 ### Funcionalidade prevista, sem código
 
