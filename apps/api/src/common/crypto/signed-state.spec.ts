@@ -46,4 +46,11 @@ describe('SignedState', () => {
     const signedState = new SignedState();
     expect(() => signedState.verify('sem-ponto-nenhum')).toThrow(UnauthorizedException);
   });
+
+  it('sem DOMAIN_SECRETS_ENCRYPTION_KEY, assina com segredo vazio em vez de quebrar — ainda assim round-trip funciona', () => {
+    delete process.env['DOMAIN_SECRETS_ENCRYPTION_KEY'];
+    const signedState = new SignedState();
+    const state = signedState.sign('tenant-1');
+    expect(signedState.verify(state).tenantId).toBe('tenant-1');
+  });
 });
