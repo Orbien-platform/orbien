@@ -14,7 +14,23 @@ antes de T1.
 ---
 
 **Design**: `.specs/features/financeiro-ui-premium/design.md`
-**Status**: Draft
+**Status**: Done — T1-T11 concluídas, cada uma com commit próprio (ver `git log` na branch `claude/upbeat-fermi-rgparw`).
+
+**Gate final (T11), via `scripts/pre-push.sh`**: `Liberado para push`, 2 alertas
+declarados (não bloqueiam):
+1. Build falha só no crash conhecido do Next 16.x ao prerenderizar
+   `/_global-error`/`/_not-found` (vercel/next.js#95741) — pré-existente,
+   documentado em `docs/PLANO.md` (`AJU-04`) e `docs/TESTES.md` (Fase 10),
+   confirmado como bug de ambiente de sandbox (o build real da Vercel passa,
+   PR #84). Não relacionado a esta feature — reproduz idêntico em
+   `origin/main` limpo, confirmado via `git worktree` nesta sessão.
+2. `npm run e2e -w orbien-web` não rodou: exige `E2E_EMAIL`/`E2E_PASSWORD`/
+   `E2E_TENANT` contra `teste1-church`/`teste2-church` reais, que esta sessão
+   não tem. O spec novo (`apps/web/e2e/financeiro.spec.ts`, teste "Visão Geral
+   mostra o dashboard semanal e o forecast (Premium)") está escrito e pronto
+   para rodar em CI/dev com credenciais — não foi executado nesta sessão.
+   Cobertura de unidade (100% branch/statement nos arquivos novos) é o que
+   valida o comportamento aqui.
 
 ---
 
@@ -91,7 +107,7 @@ T11
 
 ## Task Breakdown
 
-### T1: Helper de polling de job de exportação
+### T1: Helper de polling de job de exportação ✅
 
 **What**: Criar `pollExportJob(jobId, opts?)` — chama `GET /financial/export/jobs/:id` a cada `intervalMs` (padrão 2000ms) até `status` sair de `pending`/`processing`; em `done`, chama `GET /financial/export/jobs/:id/download` e resolve com `{ status: 'done', downloadUrl }`; em `error`, resolve com `{ status: 'error', errorMessage }`; aceita `AbortSignal` para cancelar o polling.
 **Where**: `apps/web/src/lib/exportJobPolling.ts`
@@ -114,7 +130,7 @@ T11
 
 ---
 
-### T2: `WeeklyDashboardCard`
+### T2: `WeeklyDashboardCard` ✅
 
 **What**: Componente que busca `GET /financial/dashboard/weekly` e renderiza os 3 KPIs + gráfico de 8 semanas que hoje vivem inline em `FinanceiroPage` (Visão Geral), com loading (`Skeleton`) e 403 (`NoAccessState`).
 **Where**: `apps/web/src/components/financial/WeeklyDashboardCard.tsx`
@@ -136,7 +152,7 @@ T11
 
 ---
 
-### T3: `ForecastCard`
+### T3: `ForecastCard` ✅
 
 **What**: Componente Premium com seletor de horizonte (3/6/12 meses) que busca `GET /financial/dashboard/forecast/:months` e renderiza histórico + projeção; 403 → `NoAccessState`.
 **Where**: `apps/web/src/components/financial/ForecastCard.tsx`
@@ -158,7 +174,7 @@ T11
 
 ---
 
-### T4: Wire da Visão Geral em `financeiro/page.tsx`
+### T4: Wire da Visão Geral em `financeiro/page.tsx` ✅
 
 **What**: Substituir os cards de KPI/gráfico/forecast calculados inline (`buildWeeklyChart`, `kpiIncome`, `kpiExpense`, `kpiResult`, `forecastPct` e o `useEffect` de DRE que só alimentava esse card) por `<WeeklyDashboardCard />` e `<ForecastCard />` na aba "Visão Geral". O `useEffect` de DRE que alimenta a própria aba DRE permanece — só o uso dele na Visão Geral sai.
 **Where**: `apps/web/src/app/(admin)/financeiro/page.tsx` (editar)
@@ -183,7 +199,7 @@ T11
 
 ---
 
-### T5: Botão de exportação OFX
+### T5: Botão de exportação OFX ✅
 
 **What**: Adicionar botão "OFX" ao `ExportButton`, mesmo padrão síncrono de `handleCsv`/`handlePdf` (`POST /financial/export/ofx`, download direto do blob).
 **Where**: `apps/web/src/components/financial/ExportButton.tsx` (editar)
@@ -205,7 +221,7 @@ T11
 
 ---
 
-### T6: Botão de exportação SPED (assíncrono)
+### T6: Botão de exportação SPED (assíncrono) ✅
 
 **What**: Adicionar botão "SPED" ao `ExportButton` usando `pollExportJob` (T1): `POST /financial/export/sped` → estado "processando" → download automático em `done`, mensagem de erro em `error`. Cancelar o polling ao desmontar.
 **Where**: `apps/web/src/components/financial/ExportButton.tsx` (editar)
@@ -230,7 +246,7 @@ T11
 
 ---
 
-### T7: `BankReconciliationPanel` — upload + lista de não conciliados
+### T7: `BankReconciliationPanel` — upload + lista de não conciliados ✅
 
 **What**: Componente com upload de arquivo `.ofx` (`POST /financial/import/ofx`, `multipart/form-data`, limite 10MB) e lista de transações não conciliadas (`GET /financial/import/ofx/unmatched`), com loading/erro/403.
 **Where**: `apps/web/src/components/financial/BankReconciliationPanel.tsx`
@@ -254,7 +270,7 @@ T11
 
 ---
 
-### T8: Nova aba "Conciliação" em `financeiro/page.tsx`
+### T8: Nova aba "Conciliação" em `financeiro/page.tsx` ✅
 
 **What**: Adicionar `TabValue = "conciliacao"`, visível só para `!isPastor` (mesmo critério de "Lançamentos"/"Recorrentes"), renderizando `<BankReconciliationPanel />`.
 **Where**: `apps/web/src/app/(admin)/financeiro/page.tsx` (editar)
@@ -277,7 +293,7 @@ T11
 
 ---
 
-### T9: `DonationBookletPanel` — carnê do dizimista
+### T9: `DonationBookletPanel` — carnê do dizimista ✅
 
 **What**: Componente com seletor de ano, lista de doadores (`GET /financial/donation-receipts/annual/summary?year=`) e botão de download por linha (`GET /financial/donation-receipts/annual/:personId?year=`), com loading/vazio/403.
 **Where**: `apps/web/src/components/financial/DonationBookletPanel.tsx`
@@ -302,7 +318,7 @@ T11
 
 ---
 
-### T10: Nova aba "Carnê do dizimista" em `financeiro/page.tsx`
+### T10: Nova aba "Carnê do dizimista" em `financeiro/page.tsx` ✅
 
 **What**: Adicionar `TabValue = "carne-dizimista"`, visível só para `!isPastor`, renderizando `<DonationBookletPanel />`.
 **Where**: `apps/web/src/app/(admin)/financeiro/page.tsx` (editar)
@@ -325,7 +341,7 @@ T11
 
 ---
 
-### T11: Verificação final da feature
+### T11: Verificação final da feature ✅ (ver Status acima)
 
 **What**: Rodar o gate completo (lint + testes unitários + e2e + build) sobre o estado final de `apps/web` e corrigir qualquer regressão encontrada — sem introduzir funcionalidade nova.
 **Where**: N/A (verificação, não código novo)

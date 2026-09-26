@@ -117,6 +117,25 @@ ver `PENDENCIAS.md`.
 Em **2026-09-24** fechou `PROD-26` (recuperação de senha por e-mail no app
 mobile) — nota completa na seção 5.
 
+Em **2026-09-26**, auditoria pedida contra a promessa de `/precos` ("Financeiro
+e contabilidade") achou que os quatro recursos já existiam no backend,
+corretamente gateados por plano (`PlanGuard`/`@RequiresPlan('premium')`), mas
+três não tinham tela no `apps/web` — forecast (`PROD-07`/`ForecastService`
+sem consumidor), exportação OFX/SPED (`PROD-07`, exportação em si já
+entregue, sem botão) e carnê do dizimista (`PROD-08`, "só backend" desde
+2026-09-20). Fechado nesta rodada, feature `financeiro-ui-premium`
+(`.specs/features/financeiro-ui-premium/`): `WeeklyDashboardCard` (dashboard
+semanal migrado para `GET /financial/dashboard/weekly`, endpoint dedicado,
+substituindo o cálculo duplicado que a Visão Geral fazia a partir de
+`/financial/transactions`), `ForecastCard`, botões OFX/SPED no
+`ExportButton` (SPED via `pollExportJob`, job assíncrono), aba nova
+"Conciliação" (`BankReconciliationPanel`, import de OFX) e aba nova "Carnê
+do dizimista" (`DonationBookletPanel`). Achado à parte, corrigido no mesmo
+lote: teste intermitente pré-existente em `CostCentersModal.test.tsx`
+("dismisses the delete confirmation on escape"), sem relação com esta
+feature. Geração em lote do carnê continua fora do escopo (mesma decisão do
+`PROD-08` original).
+
 ---
 
 ## 1. Visão do produto
