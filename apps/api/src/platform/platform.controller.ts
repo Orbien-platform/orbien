@@ -27,11 +27,13 @@ import { ListAuditLogsService, AuditLogPage } from './list-audit-logs.service';
 import { UpdateTenantService, UpdatedTenant } from './update-tenant.service';
 import { SetTenantActiveService, TenantActiveState } from './set-tenant-active.service';
 import { CancelTenantPlanService } from './cancel-tenant-plan.service';
+import { ChangeTenantPlanService } from './change-tenant-plan.service';
 import { TransferUserAccountService, TransferredAccount } from './transfer-user-account.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { ChangeTenantPlanDto } from './dto/change-tenant-plan.dto';
 import { TransferUserAccountDto } from './dto/transfer-user-account.dto';
 
 /**
@@ -58,6 +60,7 @@ export class PlatformController {
     private readonly updateTenant: UpdateTenantService,
     private readonly setTenantActive: SetTenantActiveService,
     private readonly cancelTenantPlan: CancelTenantPlanService,
+    private readonly changeTenantPlan: ChangeTenantPlanService,
     private readonly transferUserAccount: TransferUserAccountService,
   ) {}
 
@@ -113,6 +116,16 @@ export class PlatformController {
   @Post('tenants/:id/reactivate')
   reactivate(@Param('id', ParseUUIDPipe) id: string): Promise<TenantPlan> {
     return this.cancelTenantPlan.reactivate(id);
+  }
+
+  // Troca o plano contratado (starter ↔ premium) — não mexe em status nem em
+  // cancelled_at. Ver ChangeTenantPlanService.
+  @Patch('tenants/:id/plan')
+  changePlan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTenantPlanDto,
+  ): Promise<TenantPlan> {
+    return this.changeTenantPlan.change(id, dto);
   }
 
   // Move UserAccount + Person para outro tenant/congregação — mudança de
