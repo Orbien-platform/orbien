@@ -54,9 +54,20 @@ type Opts = {
   categories?: ({ id: string } | null)[];
   assignment?: { user_account_id: string } | null;
   pixPayment?: Record<string, unknown> | null;
+  /** Pessoa resolvida em `createSubscription` como doador (PROD-27). */
+  person?: { id: string } | null;
+  /**
+   * Assinatura (`pix_subscriptions`) usada por `listSubscriptions`,
+   * `cancelSubscription` e pelo webhook de PIX recorrente. Estado
+   * compartilhado — `cancelSubscription` e o webhook leem e escrevem nela.
+   */
+  pixSubscription?: Record<string, unknown> | null;
+  pixSubscriptions?: Record<string, unknown>[];
   httpGet?: (url: string) => unknown;
   httpPost?: (url: string, body: unknown) => unknown;
+  httpDelete?: (url: string) => unknown;
   httpFails?: boolean;
+  httpDeleteFails?: boolean;
   auditThrows?: boolean;
   /**
    * Simula a corrida: o `findFirst` devolve `pending`, mas a linha vira
@@ -82,6 +93,8 @@ function harness(opts: Opts = {}) {
     receiptCalls: [] as string[],
     eventRegistrationUpdates: [] as Record<string, unknown>[],
     contexts: [] as unknown[][],
+    pixSubscriptions: [] as Record<string, unknown>[],
+    deletes: [] as string[],
   };
 
   let catCall = 0;
@@ -101,6 +114,31 @@ function harness(opts: Opts = {}) {
           status: 'pending',
         }
       : opts.pixPayment;
+
+  // Mesmo papel de `registro`, para `pix_subscriptions`: `cancelSubscription`
+  // lê e escreve na mesma linha, e o webhook de PIX recorrente lê por
+  // `asaas_subscription_id`.
+  const assinatura: Record<string, unknown> | null =
+    opts.pixSubscription === undefined
+      ? {
+          id: 'sub-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          donor_person_id: 'donor-1',
+          category_id: 'cat-oferta',
+          amount: new Prisma.Decimal('50.00'),
+          asaas_subscription_id: 'sub_asaas_1',
+          status: 'active',
+        }
+      : opts.pixSubscription;
+
+  // PIX recorrente (PROD-27): quando `registro` é `null` (nenhum PixPayment
+  // pré-existente), é aqui que o `create` reativo do webhook grava — e onde o
+  // `findFirst`/`updateMany` seguintes precisam achar a MESMA linha, senão a
+  // idempotência do reenvio não tem o que testar. Simula também a unique
+  // constraint de `asaas_payment_id`: segunda `create` com o mesmo id rejeita
+  // como o Postgres rejeitaria.
+  let novoPagamento: Record<string, unknown> | null = null;
 
   const tx = {
     // O `set_config` que as rotas públicas fazem antes de ler a categoria.
@@ -132,13 +170,13 @@ function harness(opts: Opts = {}) {
       updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         cap.updates.push(args);
 
+        const alvo = registro ?? novoPagamento;
         const casa =
-          registro !== null &&
-          Object.entries(args.where).every(([k, v]) => registro[k] === v);
+          alvo !== null && Object.entries(args.where).every(([k, v]) => alvo[k] === v);
 
         if (!casa) return Promise.resolve({ count: 0 });
 
-        Object.assign(registro, args.data);
+        Object.assign(alvo, args.data);
         return Promise.resolve({ count: 1 });
       },
     },
@@ -178,13 +216,49 @@ function harness(opts: Opts = {}) {
       },
       pixPayment: {
         create: (args: { data: Record<string, unknown> }) => {
+          // Reativo (PROD-27): só entra aqui quando não havia `registro`
+          // (cenário 2/3 sempre pré-criam a linha antes do webhook).
+          if (registro === null) {
+            if (
+              novoPagamento !== null &&
+              novoPagamento['asaas_payment_id'] === args.data['asaas_payment_id']
+            ) {
+              return Promise.reject(
+                new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+                  code: 'P2002',
+                  clientVersion: 'test',
+                }),
+              );
+            }
+            novoPagamento = { id: 'pix-1', status: 'pending', ...args.data };
+          }
           cap.pixPayments.push(args.data);
-          return Promise.resolve({ id: 'pix-1' });
+          return Promise.resolve({ id: 'pix-1', ...args.data });
         },
         findFirst: () => {
-          const lido = registro ? { ...registro } : null;
-          if (opts.perdeCorrida && registro) registro['status'] = 'confirmed';
+          if (registro === null) {
+            return Promise.resolve(novoPagamento ? { ...novoPagamento } : null);
+          }
+          const lido = { ...registro };
+          if (opts.perdeCorrida) registro['status'] = 'confirmed';
           return Promise.resolve(lido);
+        },
+      },
+      person: {
+        findFirst: () =>
+          Promise.resolve(opts.person === undefined ? { id: 'donor-1' } : opts.person),
+      },
+      pixSubscription: {
+        create: (args: { data: Record<string, unknown> }) => {
+          cap.pixSubscriptions.push(args.data);
+          return Promise.resolve({ id: 'sub-1', ...args.data });
+        },
+        findMany: () => Promise.resolve(opts.pixSubscriptions ?? (assinatura ? [assinatura] : [])),
+        findFirst: () => Promise.resolve(assinatura ? { ...assinatura } : null),
+        findUnique: () => Promise.resolve(assinatura ? { ...assinatura } : null),
+        update: (args: { data: Record<string, unknown> }) => {
+          if (assinatura) Object.assign(assinatura, args.data);
+          return Promise.resolve(assinatura ? { ...assinatura } : null);
         },
       },
     },
@@ -239,8 +313,15 @@ function harness(opts: Opts = {}) {
           opts.httpPost?.(url, body) ??
           (url.includes('/customers')
             ? { id: 'cus_novo' }
-            : { id: 'pay_123', invoiceUrl: 'https://asaas.test/i/1' }),
+            : url.includes('/subscriptions')
+              ? { id: 'sub_asaas_novo' }
+              : { id: 'pay_123', invoiceUrl: 'https://asaas.test/i/1' }),
       });
+    },
+    delete: (url: string) => {
+      cap.deletes.push(url);
+      if (opts.httpDeleteFails) return throwError(() => new Error('asaas fora do ar'));
+      return of({ data: opts.httpDelete?.(url) ?? {} });
     },
   } as unknown as HttpService;
 
@@ -671,6 +752,140 @@ describe('PixService', () => {
     });
   });
 
+  describe('createSubscription (PIX recorrente, PROD-27)', () => {
+    const dto = { donor_person_id: 'donor-1', amount: 100 };
+
+    beforeEach(() => {
+      process.env['ASAAS_API_KEY'] = 'chave-asaas';
+      process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+    });
+
+    it('sem chave da Asaas configurada, responde 503 antes de tocar no banco', async () => {
+      delete process.env['ASAAS_API_KEY'];
+      const { service, cap } = harness();
+
+      await expect(service.createSubscription(dto, user)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(cap.pixSubscriptions).toEqual([]);
+    });
+
+    it('igreja sem chave PIX configurada vira 400', async () => {
+      const { service } = harness({ branding: { pix_key: null, app_name: 'App' } });
+
+      await expect(service.createSubscription(dto, user)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('doador inexistente no tenant vira 404 — não cria assinatura na Asaas', async () => {
+      const { service, cap } = harness({ person: null });
+
+      await expect(service.createSubscription(dto, user)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(cap.posts).toEqual([]);
+      expect(cap.pixSubscriptions).toEqual([]);
+    });
+
+    it('cria a assinatura na Asaas com ciclo mensal e grava a linha ativa', async () => {
+      const { service, cap } = harness();
+
+      const result = await service.createSubscription(dto, user);
+
+      const body = cap.posts.find((p) => p.url.endsWith('/subscriptions'))?.body as Record<
+        string,
+        unknown
+      >;
+      expect(body).toMatchObject({ billingType: 'PIX', cycle: 'MONTHLY', value: 100 });
+      expect(String(body['externalReference'])).toMatch(/^ORB-SUB-[0-9A-Z]{6}$/);
+
+      expect(cap.pixSubscriptions[0]).toMatchObject({
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        donor_person_id: 'donor-1',
+        category_id: 'cat-oferta',
+        asaas_subscription_id: 'sub_asaas_novo',
+        status: 'active',
+        created_by_user_id: 'user-1',
+      });
+      expect(result).toMatchObject({ id: 'sub-1', asaas_subscription_id: 'sub_asaas_novo' });
+    });
+
+    it('a assinatura pertence à congregação da sessão, não à "primeira do tenant"', async () => {
+      const { service, cap } = harness();
+
+      await service.createSubscription(dto, { ...user, congregation_id: 'cong-outra' });
+
+      expect(cap.pixSubscriptions[0]).toMatchObject({ congregation_id: 'cong-outra' });
+    });
+
+    it('Asaas fora do ar vira 503 e não grava assinatura órfã', async () => {
+      const { service, cap } = harness({ httpFails: true });
+
+      await expect(service.createSubscription(dto, user)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(cap.pixSubscriptions).toEqual([]);
+    });
+  });
+
+  describe('listSubscriptions', () => {
+    it('lista as assinaturas da mesma tenant+congregação da sessão', async () => {
+      const rows = [{ id: 'sub-1' }, { id: 'sub-2' }];
+      const { service } = harness({ pixSubscriptions: rows });
+
+      const result = await service.listSubscriptions(user);
+
+      expect(result).toEqual(rows);
+    });
+  });
+
+  describe('cancelSubscription', () => {
+    beforeEach(() => {
+      process.env['ASAAS_API_KEY'] = 'chave-asaas';
+      process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+    });
+
+    it('assinatura inexistente (ou de outro tenant/congregação) vira 404', async () => {
+      const { service } = harness({ pixSubscription: null });
+
+      await expect(service.cancelSubscription('sub-x', user)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('cancela na Asaas e marca a linha como cancelled, com `cancelled_at`', async () => {
+      const { service, cap } = harness();
+
+      const result = await service.cancelSubscription('sub-1', user);
+
+      expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_1']);
+      expect(result).toMatchObject({ status: 'cancelled' });
+      expect((result as { cancelled_at?: Date }).cancelled_at).toBeInstanceOf(Date);
+    });
+
+    it('já cancelada: não chama a Asaas de novo, devolve a linha como está', async () => {
+      const { service, cap } = harness({
+        pixSubscription: { id: 'sub-1', tenant_id: 't1', congregation_id: 'c1', status: 'cancelled' },
+      });
+
+      const result = await service.cancelSubscription('sub-1', user);
+
+      expect(cap.deletes).toEqual([]);
+      expect(result).toMatchObject({ status: 'cancelled' });
+    });
+
+    it('Asaas fora do ar vira 503 e não marca a linha como cancelada', async () => {
+      const { service, cap } = harness({ httpDeleteFails: true });
+
+      await expect(service.cancelSubscription('sub-1', user)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(cap.deletes).toHaveLength(1);
+    });
+  });
+
   describe('createPublicDonation', () => {
     it('grava só a intenção em `pix_payments`, no cenário `public` — nenhum lançamento', async () => {
       // DRE e dashboard somam `financial_transactions` sem olhar status: um
@@ -887,6 +1102,91 @@ describe('PixService', () => {
 
       expect(result).toEqual({ received: true });
       expect(cap.transactions).toEqual([]);
+    });
+
+    describe('PIX recorrente (PROD-27) — cobrança gerada pela assinatura Asaas', () => {
+      it('sem PixPayment prévio, materializa a linha a partir de `payment.subscription` e confirma', async () => {
+        const { service, cap } = harness({ pixPayment: null });
+
+        const result = await service.handleWebhook(
+          {
+            event: 'PAYMENT_CONFIRMED',
+            payment: { id: 'pay_recorrente_1', subscription: 'sub_asaas_1', value: '50.00' },
+          },
+          'segredo',
+        );
+
+        expect(result).toEqual({ received: true });
+        expect(cap.pixPayments).toHaveLength(1);
+        expect(cap.pixPayments[0]).toMatchObject({
+          scenario: 'recurring',
+          status: 'pending',
+          asaas_payment_id: 'pay_recorrente_1',
+          pix_subscription_id: 'sub-1',
+          category_id: 'cat-oferta',
+          donor_person_id: 'donor-1',
+        });
+        expect(cap.transactions).toHaveLength(1);
+        expect(cap.transactions[0]).toMatchObject({
+          description: 'PIX recorrente confirmado via Asaas',
+          category_id: 'cat-oferta',
+          donor_person_id: 'donor-1',
+        });
+      });
+
+      it('assinatura cancelada não gera lançamento — evento em trânsito na hora do cancelamento', async () => {
+        const { service, cap } = harness({
+          pixPayment: null,
+          pixSubscription: {
+            id: 'sub-1',
+            tenant_id: 't1',
+            congregation_id: 'c1',
+            donor_person_id: 'donor-1',
+            category_id: 'cat-oferta',
+            asaas_subscription_id: 'sub_asaas_1',
+            status: 'cancelled',
+          },
+        });
+
+        const result = await service.handleWebhook(
+          { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_recorrente_1', subscription: 'sub_asaas_1' } },
+          'segredo',
+        );
+
+        expect(result).toEqual({ received: true });
+        expect(cap.pixPayments).toEqual([]);
+        expect(cap.transactions).toEqual([]);
+      });
+
+      it('`payment.subscription` sem assinatura correspondente é ignorado, como pagamento desconhecido', async () => {
+        const { service, cap } = harness({ pixPayment: null, pixSubscription: null });
+
+        const result = await service.handleWebhook(
+          { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_recorrente_1', subscription: 'sub_desconhecida' } },
+          'segredo',
+        );
+
+        expect(result).toEqual({ received: true });
+        expect(cap.pixPayments).toEqual([]);
+        expect(cap.transactions).toEqual([]);
+      });
+
+      it('é idempotente: reenvio do mesmo evento não duplica o lançamento', async () => {
+        const { service, cap } = harness({ pixPayment: null });
+
+        const payload = {
+          event: 'PAYMENT_CONFIRMED',
+          payment: { id: 'pay_recorrente_1', subscription: 'sub_asaas_1', value: '50.00' },
+        };
+
+        await service.handleWebhook(payload, 'segredo');
+        await service.handleWebhook(payload, 'segredo');
+
+        // A segunda entrega reaproveita a MESMA linha (achada por
+        // `asaas_payment_id`, já `confirmed`) em vez de criar outra.
+        expect(cap.pixPayments).toHaveLength(1);
+        expect(cap.transactions).toHaveLength(1);
+      });
     });
 
     it('sem `value` no corpo, usa o valor gravado no pagamento', async () => {

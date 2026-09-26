@@ -9,10 +9,18 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
-import { Prisma, PixScenario, PixStatus, TransactionSource, TransactionType } from '@prisma/client';
+import {
+  Prisma,
+  PixScenario,
+  PixStatus,
+  PixSubscriptionStatus,
+  TransactionSource,
+  TransactionType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
+import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
 import { DonationReceiptService } from './donation-receipts.service';
 import { writeAuditLog } from '../common/audit/write-audit-log';
 
@@ -26,6 +34,7 @@ type TenantContext = {
 type AsaasCustomer = { id: string };
 type AsaasPayment = { id: string; invoiceUrl: string };
 type AsaasQrCode = { encodedImage: string; payload: string; expirationDate: string };
+type AsaasSubscription = { id: string };
 
 @Injectable()
 export class PixService {
@@ -69,6 +78,15 @@ export class PixService {
       }),
     );
     return data;
+  }
+
+  private async asaasDelete(path: string): Promise<void> {
+    await firstValueFrom(
+      this.http.delete(`${this.asaasUrl}${path}`, {
+        headers: this.asaasHeaders(),
+        timeout: 10_000,
+      }),
+    );
   }
 
   private async resolveTenant(slug: string): Promise<TenantContext> {
@@ -316,6 +334,112 @@ export class PixService {
     };
   }
 
+  // ── PIX recorrente — dízimo automático via Asaas (PROD-27, Premium) ──────
+  //
+  // Assinatura na Asaas (`/subscriptions`, `cycle: MONTHLY`): a cada ciclo ela
+  // gera um `payment` novo por conta própria e dispara o mesmo webhook do
+  // cenário 2 — sem chamada nossa a cada mês. Por isso não existe `PixPayment`
+  // pré-criado aqui como no cenário 2 (não sabemos o `asaas_payment_id` de
+  // cobranças futuras): cada `PixPayment` de `scenario: recurring` só nasce
+  // quando `handleWebhook` recebe a confirmação, ligado de volta a esta linha
+  // por `pix_subscription_id`. Escopo é o da sessão (`user.tenant_id` +
+  // `user.congregation_id`) — diferente de `createDynamic`, que usa a
+  // primeira congregação do tenant; aqui a assinatura pertence à congregação
+  // de quem a cria, e listar/cancelar depois tem que achar a mesma linha.
+
+  async createSubscription(dto: CreatePixSubscriptionDto, user: JwtPayload) {
+    if (!this.asaasKey) {
+      throw new ServiceUnavailableException('Serviço PIX indisponível');
+    }
+
+    const branding = await this.prisma.client.brandingConfig.findUnique({
+      where: { tenant_id: user.tenant_id },
+      select: { pix_key: true, app_name: true },
+    });
+    if (!branding?.pix_key) {
+      throw new BadRequestException('Igreja não configurou chave PIX');
+    }
+
+    const donor = await this.prisma.client.person.findFirst({
+      where: { id: dto.donor_person_id, tenant_id: user.tenant_id },
+      select: { id: true },
+    });
+    if (!donor) throw new NotFoundException('Pessoa não encontrada');
+
+    const category = await this.resolveCategory(user.tenant_id, user.congregation_id);
+
+    const tenant = await this.prisma.client.tenant.findUnique({
+      where: { id: user.tenant_id },
+      select: { name: true },
+    });
+    const churchName = branding.app_name ?? (tenant?.name ?? '');
+    const externalRef = `ORB-SUB-${this.shortRef()}`;
+
+    let asaasSubscriptionId: string;
+    try {
+      const customerId = await this.resolveAsaasCustomer(user.tenant_id, churchName);
+
+      const subscription = await this.asaasPost<AsaasSubscription>('/subscriptions', {
+        customer: customerId,
+        billingType: 'PIX',
+        value: dto.amount,
+        nextDueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        cycle: 'MONTHLY',
+        description: dto.description ?? 'Dízimo automático via Orbien',
+        externalReference: externalRef,
+      });
+
+      asaasSubscriptionId = subscription.id;
+    } catch (err) {
+      this.logger.error('Asaas API error (subscription)', err);
+      throw new ServiceUnavailableException('Serviço PIX indisponível');
+    }
+
+    return this.prisma.client.pixSubscription.create({
+      data: {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        donor_person_id: dto.donor_person_id,
+        category_id: category.id,
+        amount: new Prisma.Decimal(dto.amount),
+        description: dto.description,
+        asaas_subscription_id: asaasSubscriptionId,
+        status: PixSubscriptionStatus.active,
+        created_by_user_id: user.sub,
+      },
+    });
+  }
+
+  async listSubscriptions(user: JwtPayload) {
+    return this.prisma.client.pixSubscription.findMany({
+      where: { tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async cancelSubscription(id: string, user: JwtPayload) {
+    const subscription = await this.prisma.client.pixSubscription.findFirst({
+      where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+    });
+    if (!subscription) throw new NotFoundException('Assinatura não encontrada');
+
+    if (subscription.status === PixSubscriptionStatus.cancelled) {
+      return subscription;
+    }
+
+    try {
+      await this.asaasDelete(`/subscriptions/${subscription.asaas_subscription_id}`);
+    } catch (err) {
+      this.logger.error('Asaas API error (cancel subscription)', err);
+      throw new ServiceUnavailableException('Serviço PIX indisponível');
+    }
+
+    return this.prisma.client.pixSubscription.update({
+      where: { id },
+      data: { status: PixSubscriptionStatus.cancelled, cancelled_at: new Date() },
+    });
+  }
+
   // ── Inscrição de evento paga (PROD-24, Premium) ──────────────────────────
   //
   // Mesmo mecanismo do cenário 2 (QR dinâmico via Asaas), chamado pelo
@@ -431,6 +555,58 @@ export class PixService {
     };
   }
 
+  /**
+   * PIX recorrente (PROD-27): materializa o `PixPayment` da cobrança gerada
+   * pela assinatura Asaas, na primeira vez que o webhook fala dela.
+   * Assinatura cancelada não gera lançamento — a Asaas para de cobrar quando
+   * `cancelSubscription` chama `DELETE /subscriptions/:id`, mas um evento em
+   * trânsito na hora do cancelamento ainda pode chegar depois.
+   */
+  private async createPixPaymentFromSubscriptionWebhook(
+    payload: Record<string, unknown>,
+    asaasPaymentId: string,
+    select: Prisma.PixPaymentSelect,
+  ) {
+    const asaasSubscriptionId = (payload['payment'] as Record<string, unknown> | undefined)?.[
+      'subscription'
+    ] as string | undefined;
+    if (!asaasSubscriptionId) return null;
+
+    const subscription = await this.prisma.client.pixSubscription.findUnique({
+      where: { asaas_subscription_id: asaasSubscriptionId },
+    });
+    if (!subscription || subscription.status !== PixSubscriptionStatus.active) return null;
+
+    try {
+      return await this.prisma.client.pixPayment.create({
+        data: {
+          tenant_id: subscription.tenant_id,
+          congregation_id: subscription.congregation_id,
+          scenario: PixScenario.recurring,
+          status: PixStatus.pending,
+          amount: subscription.amount,
+          category_id: subscription.category_id,
+          donor_person_id: subscription.donor_person_id,
+          asaas_payment_id: asaasPaymentId,
+          pix_subscription_id: subscription.id,
+        },
+        select,
+      });
+    } catch (err) {
+      // Unique em asaas_payment_id: outra entrega concorrente do mesmo evento
+      // já criou esta linha entre o findFirst acima e este create. Recarrega
+      // em vez de falhar o webhook — a idempotência de handleWebhook cuida do
+      // resto a partir daqui.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return this.prisma.client.pixPayment.findFirst({
+          where: { asaas_payment_id: asaasPaymentId },
+          select,
+        });
+      }
+      throw err;
+    }
+  }
+
   // ── Webhook Asaas ─────────────────────────────────────────────────────────
 
   async handleWebhook(payload: Record<string, unknown>, token: string | undefined) {
@@ -453,19 +629,34 @@ export class PixService {
       return { received: true };
     }
 
-    const pixPayment = await this.prisma.client.pixPayment.findFirst({
+    const pixPaymentSelect = {
+      id: true,
+      tenant_id: true,
+      congregation_id: true,
+      amount: true,
+      category_id: true,
+      status: true,
+      donor_person_id: true,
+      scenario: true,
+    } as const;
+
+    let pixPayment = await this.prisma.client.pixPayment.findFirst({
       where: { asaas_payment_id: asaasPaymentId },
-      select: {
-        id: true,
-        tenant_id: true,
-        congregation_id: true,
-        amount: true,
-        category_id: true,
-        status: true,
-        donor_person_id: true,
-        scenario: true,
-      },
+      select: pixPaymentSelect,
     });
+
+    // PIX recorrente (PROD-27): diferente dos cenários 2/3, a cobrança de
+    // cada ciclo da assinatura Asaas nunca passa por um `create*` nosso — ela
+    // nasce na própria Asaas, e a primeira notícia que temos é este webhook.
+    // Sem `PixPayment` pré-existente para achar por `asaas_payment_id`, o que
+    // liga a cobrança à igreja certa é `payload.payment.subscription`.
+    if (!pixPayment) {
+      pixPayment = await this.createPixPaymentFromSubscriptionWebhook(
+        payload,
+        asaasPaymentId,
+        pixPaymentSelect,
+      );
+    }
 
     if (!pixPayment) {
       this.logger.warn(`PixPayment não encontrado para asaas_id=${asaasPaymentId}`);
@@ -521,7 +712,9 @@ export class PixService {
           description:
             pixPayment.scenario === PixScenario.event_registration
               ? 'Inscrição de evento paga via Asaas'
-              : 'PIX confirmado via Asaas',
+              : pixPayment.scenario === PixScenario.recurring
+                ? 'PIX recorrente confirmado via Asaas'
+                : 'PIX confirmado via Asaas',
           category_id: pixPayment.category_id,
           source: TransactionSource.pix_webhook,
           created_by_user_id: adminUserId,
