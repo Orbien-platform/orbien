@@ -15,6 +15,7 @@ import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { CostCentersModal } from "@/components/financial/CostCentersModal";
 import { WeeklyDashboardCard } from "@/components/financial/WeeklyDashboardCard";
 import { ForecastCard } from "@/components/financial/ForecastCard";
+import { BankReconciliationPanel } from "@/components/financial/BankReconciliationPanel";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -104,7 +105,7 @@ function statusBadgeClass(status: Transaction["status"]): string {
   return "bg-blue-100 text-blue-700";
 }
 
-type TabValue = "overview" | "transactions" | "recurring" | "dre" | "balancete";
+type TabValue = "overview" | "transactions" | "recurring" | "dre" | "balancete" | "conciliacao";
 const TX_PAGE_SIZE = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -605,6 +606,11 @@ export default function FinanceiroPage() {
           <Tabs.Tab value="balancete" className={tabBtn(activeTab === "balancete")}>
             Balancete
           </Tabs.Tab>
+          {!isPastor && (
+            <Tabs.Tab value="conciliacao" className={tabBtn(activeTab === "conciliacao")}>
+              Conciliação
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         {/* ── Visão Geral ────────────────────────────────────────────────────── */}
@@ -1057,6 +1063,13 @@ export default function FinanceiroPage() {
             )}
           </div>
         </Tabs.Panel>
+
+        {/* ── Conciliação ────────────────────────────────────────────────────── */}
+        {!isPastor && (
+          <Tabs.Panel value="conciliacao" className="pt-5">
+            <BankReconciliationPanel />
+          </Tabs.Panel>
+        )}
       </Tabs.Root>
 
       <NewTransactionModal

@@ -114,6 +114,9 @@ vi.mock("@/components/financial/WeeklyDashboardCard", () => ({
 vi.mock("@/components/financial/ForecastCard", () => ({
   ForecastCard: () => <div data-testid="forecast-card" />,
 }));
+vi.mock("@/components/financial/BankReconciliationPanel", () => ({
+  BankReconciliationPanel: () => <div data-testid="bank-reconciliation-panel" />,
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -307,14 +310,24 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByTestId("forecast-card")).toBeInTheDocument();
   });
 
-  it("esconde abas Lançamentos/Recorrentes e a coluna Total do DRE para pastor", async () => {
+  it("esconde abas Lançamentos/Recorrentes/Conciliação e a coluna Total do DRE para pastor", async () => {
     setup(["pastor"]);
     mockApi({});
     render(<FinanceiroPage />);
     await screen.findByText("Visão Geral");
     expect(screen.queryByRole("tab", { name: "Lançamentos" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Recorrentes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Conciliação" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "DRE" })).toBeInTheDocument();
+  });
+
+  it("monta o BankReconciliationPanel na aba Conciliação para quem não é pastor", async () => {
+    const user = userEvent.setup();
+    setup();
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "Conciliação" }));
+    expect(await screen.findByTestId("bank-reconciliation-panel")).toBeInTheDocument();
   });
 
   it("não mostra o botão de categorias para quem não pode gerenciar", async () => {
