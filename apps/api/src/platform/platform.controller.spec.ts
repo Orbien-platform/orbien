@@ -7,6 +7,7 @@ import { ListAuditLogsService } from './list-audit-logs.service';
 import { UpdateTenantService } from './update-tenant.service';
 import { SetTenantActiveService } from './set-tenant-active.service';
 import { CancelTenantPlanService } from './cancel-tenant-plan.service';
+import { ChangeTenantPlanService } from './change-tenant-plan.service';
 import { TransferUserAccountService } from './transfer-user-account.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { PLATFORM_ROUTE_KEY } from '../common/decorators/platform-route.decorator';
@@ -35,6 +36,9 @@ function servicesMock() {
     cancel: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', status: 'cancelled' }),
     reactivate: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', status: 'active' }),
   } as unknown as CancelTenantPlanService;
+  const changeTenantPlan = {
+    change: jest.fn().mockResolvedValue({ tenant_id: 'tenant-1', plan: 'premium' }),
+  } as unknown as ChangeTenantPlanService;
   const transferUserAccount = {
     transfer: jest.fn().mockResolvedValue({
       user_account_id: 'user-1',
@@ -53,6 +57,7 @@ function servicesMock() {
     updateTenant,
     setTenantActive,
     cancelTenantPlan,
+    changeTenantPlan,
     transferUserAccount,
   };
 }
@@ -66,6 +71,7 @@ function controllerWith(services: ReturnType<typeof servicesMock>) {
     services.updateTenant,
     services.setTenantActive,
     services.cancelTenantPlan,
+    services.changeTenantPlan,
     services.transferUserAccount,
   );
 }
@@ -167,6 +173,18 @@ describe('PlatformController', () => {
       status: 'active',
     });
     expect(services.cancelTenantPlan.reactivate).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('changePlan delega ao ChangeTenantPlanService com o id e o DTO', async () => {
+    const services = servicesMock();
+    const controller = controllerWith(services);
+    const dto = { plan: 'premium' } as never;
+
+    await expect(controller.changePlan('tenant-1', dto)).resolves.toEqual({
+      tenant_id: 'tenant-1',
+      plan: 'premium',
+    });
+    expect(services.changeTenantPlan.change).toHaveBeenCalledWith('tenant-1', dto);
   });
 
   it('transfer delega ao TransferUserAccountService com id, DTO e o usuário atual', async () => {
