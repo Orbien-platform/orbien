@@ -105,6 +105,21 @@ vi.mock("@/components/financial/CostCentersModal", () => ({
       </div>
     ) : null,
 }));
+// KPIs, gráfico semanal e forecast saíram de FinanceiroPage para componentes
+// próprios (cada um com seus próprios testes, incluindo os 403 de
+// dashboard/forecast) — aqui só interessa que a aba Visão Geral os monta.
+vi.mock("@/components/financial/WeeklyDashboardCard", () => ({
+  WeeklyDashboardCard: () => <div data-testid="weekly-dashboard-card" />,
+}));
+vi.mock("@/components/financial/ForecastCard", () => ({
+  ForecastCard: () => <div data-testid="forecast-card" />,
+}));
+vi.mock("@/components/financial/BankReconciliationPanel", () => ({
+  BankReconciliationPanel: () => <div data-testid="bank-reconciliation-panel" />,
+}));
+vi.mock("@/components/financial/DonationBookletPanel", () => ({
+  DonationBookletPanel: () => <div data-testid="donation-booklet-panel" />,
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -283,18 +298,6 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByRole("tab", { name: "Lançamentos" })).toBeInTheDocument();
   });
 
-  it("mostra o resultado em vermelho quando é negativo", async () => {
-    setup();
-    mockApi({
-      transactions: [
-        tx({ id: "1", type: "expense", amount: "900", occurred_at: "2026-02-02T00:00:00Z" }),
-        tx({ id: "2", type: "income", amount: "100", occurred_at: "2026-02-02T00:00:00Z" }),
-      ],
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText("-R$ 800,00")).toBeInTheDocument();
-  });
-
   it("redireciona secretary para /dashboard", async () => {
     const { replace } = setup(["secretary"]);
     mockApi({});
@@ -302,33 +305,42 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
   });
 
-  it("mostra KPIs de receitas/despesas/resultado e o gráfico semanal", async () => {
-    setup();
-    mockApi({
-      transactions: [
-        tx({ id: "1", type: "income", amount: "1000", occurred_at: "2026-02-02T00:00:00Z" }),
-        tx({ id: "2", type: "expense", amount: "300", occurred_at: "2026-02-09T00:00:00Z" }),
-      ],
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText("R$ 700,00")).toBeInTheDocument();
-  });
-
-  it("mostra estado vazio do gráfico quando não há lançamentos", async () => {
+  it("monta o dashboard semanal e o forecast na aba Visão Geral", async () => {
     setup();
     mockApi({});
     render(<FinanceiroPage />);
-    expect(await screen.findByText("Sem lançamentos no período.")).toBeInTheDocument();
+    expect(await screen.findByTestId("weekly-dashboard-card")).toBeInTheDocument();
+    expect(screen.getByTestId("forecast-card")).toBeInTheDocument();
   });
 
-  it("esconde abas Lançamentos/Recorrentes e a coluna Total do DRE para pastor", async () => {
+  it("esconde abas Lançamentos/Recorrentes/Conciliação/Carnê do dizimista e a coluna Total do DRE para pastor", async () => {
     setup(["pastor"]);
     mockApi({});
     render(<FinanceiroPage />);
     await screen.findByText("Visão Geral");
     expect(screen.queryByRole("tab", { name: "Lançamentos" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Recorrentes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Conciliação" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Carnê do dizimista" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "DRE" })).toBeInTheDocument();
+  });
+
+  it("monta o BankReconciliationPanel na aba Conciliação para quem não é pastor", async () => {
+    const user = userEvent.setup();
+    setup();
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "Conciliação" }));
+    expect(await screen.findByTestId("bank-reconciliation-panel")).toBeInTheDocument();
+  });
+
+  it("monta o DonationBookletPanel na aba Carnê do dizimista para quem não é pastor", async () => {
+    const user = userEvent.setup();
+    setup();
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "Carnê do dizimista" }));
+    expect(await screen.findByTestId("donation-booklet-panel")).toBeInTheDocument();
   });
 
   it("não mostra o botão de categorias para quem não pode gerenciar", async () => {
@@ -371,41 +383,8 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
-  it("mostra a barra de progresso do forecast e 'sem dados' quando não há período anterior", async () => {
-    setup();
-    mockApi({ dre: dre({ revenue: { categories: [], total: 500 } }) });
-    render(<FinanceiroPage />);
-    expect(
-      await screen.findByText("Sem dados do período anterior para comparar")
-    ).toBeInTheDocument();
-  });
-
-  it("mostra o percentual do forecast e 'superou' quando ultrapassa o período anterior", async () => {
-    setup();
-    mockApi({
-      dre: dre({
-        revenue: { categories: [], total: 1200 },
-        previous_period: { revenue_total: 1000, expenses_total: 0, net_result: 1000 },
-      }),
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText(/100% do período anterior/)).toBeInTheDocument();
-    expect(screen.getByText("✓ Superou o período anterior")).toBeInTheDocument();
-  });
-
-  it("mostra 'faltam X%' quando ainda não alcançou o período anterior", async () => {
-    setup();
-    mockApi({
-      dre: dre({
-        revenue: { categories: [], total: 400 },
-        previous_period: { revenue_total: 1000, expenses_total: 0, net_result: 1000 },
-      }),
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText(/faltam 60% para igualar/)).toBeInTheDocument();
-  });
-
   it("guarda contra a dupla invocação de efeito do StrictMode ao carregar lançamentos", async () => {
+    const user = userEvent.setup();
     setup();
     mockApi({});
     render(
@@ -413,7 +392,8 @@ describe("FinanceiroPage — visão geral e permissões", () => {
         <FinanceiroPage />
       </StrictMode>
     );
-    await screen.findByText("Sem lançamentos no período.");
+    await user.click(await screen.findByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Nenhum lançamento registrado.");
     expect(
       mockedApi.get.mock.calls.filter(([u]) => u.startsWith("/financial/transactions")).length
     ).toBe(1);
@@ -941,6 +921,17 @@ describe("FinanceiroPage — aba DRE", () => {
     await screen.findByText("Dízimos");
     expect(screen.queryByTestId("export-button")).not.toBeInTheDocument();
     expect(screen.queryByText("Total")).not.toBeInTheDocument();
+  });
+
+  it("mostra 'sem lançamentos' com o colSpan de pastor (3 colunas) quando não há categorias", async () => {
+    setup(["pastor"]);
+    mockApi({ dre: dre() });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    await screen.findByRole("cell", { name: "Receitas" });
+    const [semLancamentos] = screen.getAllByText("Sem lançamentos");
+    expect(semLancamentos.closest("td")).toHaveAttribute("colspan", "3");
   });
 
   it("mostra o ExportButton com o período correto para quem não é pastor", async () => {
