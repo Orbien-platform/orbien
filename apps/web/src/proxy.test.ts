@@ -73,6 +73,19 @@ describe("proxy — domínio próprio", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("não chama o backend em preview da Vercel (*.vercel.app)", async () => {
+    global.fetch = vi.fn();
+    await proxy(requestFromHost("orbien-web-git-feature.vercel.app", "/"));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("sem NEXT_PUBLIC_WEB_HOST configurado, host desconhecido tenta resolver mesmo assim", async () => {
+    delete process.env["NEXT_PUBLIC_WEB_HOST"];
+    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+    await proxy(requestFromHost("doar.igreja.com.br", "/"));
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
   it("reescreve / para /doar/{slug} quando o domínio resolve", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

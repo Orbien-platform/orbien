@@ -34,4 +34,10 @@ describe('SecretCipher', () => {
     const cipher = new SecretCipher();
     expect(() => cipher.encrypt('token')).toThrow(ServiceUnavailableException);
   });
+
+  it('rejeita decifrar payload sem os três segmentos separados por ":"', () => {
+    process.env['DOMAIN_SECRETS_ENCRYPTION_KEY'] = KEY;
+    const cipher = new SecretCipher();
+    expect(() => cipher.decrypt('só-um-pedaço-sem-separador')).toThrow(ServiceUnavailableException);
+  });
 });
