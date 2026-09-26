@@ -45,6 +45,7 @@ function fmt(n: number): string {
  */
 export function BankReconciliationPanel() {
   const [accessDenied, setAccessDenied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [report, setReport] = useState<OfxImportReport | null>(null);
@@ -54,13 +55,20 @@ export function BankReconciliationPanel() {
 
   const loadUnmatched = useCallback(() => {
     setLoadingUnmatched(true);
+    setLoadError(false);
     api
       .get<{ data: BankStatementTransaction[]; total: number }>("/financial/import/ofx/unmatched")
       .then((res) => {
         setUnmatched(res.data.data ?? []);
         setAccessDenied(false);
       })
-      .catch((error) => setAccessDenied(isForbidden(error)))
+      .catch((error) => {
+        if (isForbidden(error)) {
+          setAccessDenied(true);
+        } else {
+          setLoadError(true);
+        }
+      })
       .finally(() => setLoadingUnmatched(false));
   }, []);
 
@@ -190,6 +198,8 @@ export function BankReconciliationPanel() {
           getRowKey={(r) => r.id}
           isLoading={loadingUnmatched}
           emptyState="Nenhuma transação pendente de conciliação."
+          error={loadError ? "Erro ao carregar as transações não conciliadas." : undefined}
+          onRetry={loadUnmatched}
         />
       </div>
     </div>

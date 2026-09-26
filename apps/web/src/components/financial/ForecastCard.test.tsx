@@ -84,6 +84,14 @@ describe("ForecastCard", () => {
     expect(await screen.findByText("Você não tem acesso a Forecast financeiro.")).toBeInTheDocument();
   });
 
+  it("shows a generic load error (not 'dados insuficientes') on a non-403 failure", async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error("network down"));
+    render(<ForecastCard />);
+
+    expect(await screen.findByText("Erro ao carregar o forecast. Tente de novo.")).toBeInTheDocument();
+    expect(screen.queryByText("Dados insuficientes para projetar.")).not.toBeInTheDocument();
+  });
+
   it("shows 'dados insuficientes' when historical and projected come back empty", async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: { historical: [], projected: [], monthly_average: 0, recurring_monthly: 0, months_of_history: 0 },

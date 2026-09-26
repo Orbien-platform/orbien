@@ -70,6 +70,7 @@ export function WeeklyDashboardCard() {
   const [data, setData] = useState<WeeklyDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const hasFetched = useRef(false);
 
   useEffect(() => {
@@ -80,8 +81,15 @@ export function WeeklyDashboardCard() {
       .then((res) => {
         setData(res.data);
         setAccessDenied(false);
+        setLoadError(false);
       })
-      .catch((error) => setAccessDenied(isForbidden(error)))
+      .catch((error) => {
+        if (isForbidden(error)) {
+          setAccessDenied(true);
+        } else {
+          setLoadError(true);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -89,6 +97,14 @@ export function WeeklyDashboardCard() {
     return (
       <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)]">
         <NoAccessState resource="Financeiro" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-8 text-center">
+        <p className="text-sm text-crimson">Erro ao carregar o dashboard semanal. Tente de novo.</p>
       </div>
     );
   }

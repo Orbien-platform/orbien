@@ -84,6 +84,20 @@ describe("BankReconciliationPanel", () => {
     expect(await screen.findByText("Você não tem acesso a Conciliação bancária.")).toBeInTheDocument();
   });
 
+  it("shows a load error with retry (not the empty state) on a non-403 failure", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ data: { data: [unmatchedRow()], total: 1 } });
+    render(<BankReconciliationPanel />);
+
+    expect(await screen.findByText("Erro ao carregar as transações não conciliadas.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhuma transação pendente de conciliação.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("PIX RECEBIDO JOAO")).toBeInTheDocument();
+  });
+
   it("guarda contra a dupla invocação de efeito do StrictMode", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: [], total: 0 } });
     render(

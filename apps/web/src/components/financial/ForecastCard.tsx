@@ -50,6 +50,7 @@ export function ForecastCard() {
   const [data, setData] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const requestSeq = useRef(0);
   const prevMonths = useRef<Horizon | null>(null);
 
@@ -58,16 +59,22 @@ export function ForecastCard() {
     prevMonths.current = months;
     const seq = ++requestSeq.current;
     setLoading(true);
+    setLoadError(false);
     api
       .get<Forecast>(`/financial/dashboard/forecast/${months}`)
       .then((res) => {
         if (seq !== requestSeq.current) return;
         setData(res.data);
         setAccessDenied(false);
+        setLoadError(false);
       })
       .catch((error) => {
         if (seq !== requestSeq.current) return;
-        setAccessDenied(isForbidden(error));
+        if (isForbidden(error)) {
+          setAccessDenied(true);
+        } else {
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (seq === requestSeq.current) setLoading(false);
@@ -78,6 +85,14 @@ export function ForecastCard() {
     return (
       <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)]">
         <NoAccessState resource="Forecast financeiro" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-8 text-center">
+        <p className="text-sm text-crimson">Erro ao carregar o forecast. Tente de novo.</p>
       </div>
     );
   }

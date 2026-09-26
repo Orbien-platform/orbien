@@ -39,6 +39,7 @@ export function DonationBookletPanel() {
   const [donors, setDonors] = useState<AnnualDonorSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const requestSeq = useRef(0);
@@ -47,6 +48,7 @@ export function DonationBookletPanel() {
   const loadDonors = useCallback((y: number) => {
     const seq = ++requestSeq.current;
     setLoading(true);
+    setLoadError(false);
     api
       .get<AnnualDonorSummary[]>(`/financial/donation-receipts/annual/summary?year=${y}`)
       .then((res) => {
@@ -56,7 +58,11 @@ export function DonationBookletPanel() {
       })
       .catch((err) => {
         if (seq !== requestSeq.current) return;
-        setAccessDenied(isForbidden(err));
+        if (isForbidden(err)) {
+          setAccessDenied(true);
+        } else {
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (seq === requestSeq.current) setLoading(false);
@@ -165,6 +171,8 @@ export function DonationBookletPanel() {
         getRowKey={(r) => r.person_id}
         isLoading={loading}
         emptyState="Nenhum doador identificado neste ano."
+        error={loadError ? "Erro ao carregar os doadores." : undefined}
+        onRetry={() => loadDonors(year)}
       />
     </div>
   );

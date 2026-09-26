@@ -80,6 +80,20 @@ describe("DonationBookletPanel", () => {
     expect(await screen.findByText("Você não tem acesso a Carnê do dizimista.")).toBeInTheDocument();
   });
 
+  it("shows a load error with retry (not the empty state) on a non-403 failure", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ data: [donor()] });
+    render(<DonationBookletPanel />);
+
+    expect(await screen.findByText("Erro ao carregar os doadores.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum doador identificado neste ano.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("Maria Silva")).toBeInTheDocument();
+  });
+
   it("downloads the PDF named carne-dizimista-{year}.pdf when clicking 'Baixar carnê'", async () => {
     const user = userEvent.setup();
     vi.mocked(api.get)

@@ -79,6 +79,16 @@ describe("WeeklyDashboardCard", () => {
     expect(await screen.findByText("Você não tem acesso a Financeiro.")).toBeInTheDocument();
   });
 
+  it("shows a generic load error (not the empty state) on a non-403 failure", async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error("network down"));
+    render(<WeeklyDashboardCard />);
+
+    expect(
+      await screen.findByText("Erro ao carregar o dashboard semanal. Tente de novo.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Sem lançamentos nas últimas 8 semanas.")).not.toBeInTheDocument();
+  });
+
   it("shows the Resultado KPI in negative variant when net is below zero", async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: weeklyResponse({ current_month: { income: 1000, expense: 4000, net: -3000, vs_last_month_pct: null } }),
