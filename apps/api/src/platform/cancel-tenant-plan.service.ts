@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PlanStatus, TenantPlan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { findTenantPlanOrThrow } from './tenant-plan.util';
 
 /**
  * Fluxo mínimo de cancelamento/reativação de tenant — o suficiente para
@@ -18,7 +19,7 @@ export class CancelTenantPlanService {
   constructor(private readonly prisma: PrismaService) {}
 
   async cancel(tenantId: string): Promise<TenantPlan> {
-    const plan = await this.findOrThrow(tenantId);
+    const plan = await findTenantPlanOrThrow(this.prisma, tenantId);
     if (plan.status === PlanStatus.cancelled) return plan;
 
     return this.prisma.client.tenantPlan.update({
@@ -28,18 +29,12 @@ export class CancelTenantPlanService {
   }
 
   async reactivate(tenantId: string): Promise<TenantPlan> {
-    const plan = await this.findOrThrow(tenantId);
+    const plan = await findTenantPlanOrThrow(this.prisma, tenantId);
     if (plan.status !== PlanStatus.cancelled) return plan;
 
     return this.prisma.client.tenantPlan.update({
       where: { tenant_id: tenantId },
       data: { status: PlanStatus.active, cancelled_at: null },
     });
-  }
-
-  private async findOrThrow(tenantId: string): Promise<TenantPlan> {
-    const plan = await this.prisma.client.tenantPlan.findUnique({ where: { tenant_id: tenantId } });
-    if (!plan) throw new NotFoundException('Tenant sem plano — verifique o id');
-    return plan;
   }
 }

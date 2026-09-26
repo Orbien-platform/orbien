@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { TenantPlan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChangeTenantPlanDto } from './dto/change-tenant-plan.dto';
+import { findTenantPlanOrThrow } from './tenant-plan.util';
 
 /**
  * Troca `TenantPlan.plan` (starter ↔ premium) de um tenant já provisionado.
@@ -17,8 +18,7 @@ export class ChangeTenantPlanService {
   constructor(private readonly prisma: PrismaService) {}
 
   async change(tenantId: string, dto: ChangeTenantPlanDto): Promise<TenantPlan> {
-    const plan = await this.prisma.client.tenantPlan.findUnique({ where: { tenant_id: tenantId } });
-    if (!plan) throw new NotFoundException('Tenant sem plano — verifique o id');
+    const plan = await findTenantPlanOrThrow(this.prisma, tenantId);
     if (plan.plan === dto.plan) return plan;
 
     return this.prisma.client.tenantPlan.update({
