@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useTheme } from "next-themes";
+import { useSearchParams } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
@@ -15,9 +16,11 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 vi.mock("next-themes", () => ({ useTheme: vi.fn() }));
+vi.mock("next/navigation", () => ({ useSearchParams: vi.fn() }));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
+const mockedUseSearchParams = vi.mocked(useSearchParams);
 const mockedUseTheme = vi.mocked(useTheme);
 
 function setup(roles: string[] = ["tenant_admin"]) {
@@ -67,6 +70,9 @@ beforeEach(() => {
     setTheme: vi.fn(),
     themes: [],
   } as unknown as ReturnType<typeof useTheme>);
+  mockedUseSearchParams.mockReturnValue({
+    get: () => null,
+  } as unknown as ReturnType<typeof useSearchParams>);
 });
 
 describe("ConfiguracoesPage", () => {
@@ -953,5 +959,294 @@ describe("ConfiguracoesPage — domínio próprio", () => {
     );
 
     Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+  });
+
+  it("volta do OAuth com ?dominio=conectado: refaz o status e mostra o toast de sucesso", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: null,
+    });
+    mockedUseSearchParams.mockReturnValue({
+      get: (key: string) => (key === "dominio" ? "conectado" : null),
+    } as unknown as ReturnType<typeof useSearchParams>);
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+
+    render(<ConfiguracoesPage />);
+
+    await screen.findByText("Cloudflare conectada — verificando o domínio.");
+    expect(replaceStateSpy).toHaveBeenCalled();
+    replaceStateSpy.mockRestore();
+  });
+
+  it("volta do OAuth com ?dominio=erro: mostra o toast de falha", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: null,
+    });
+    mockedUseSearchParams.mockReturnValue({
+      get: (key: string) => (key === "dominio" ? "erro" : null),
+    } as unknown as ReturnType<typeof useSearchParams>);
+
+    render(<ConfiguracoesPage />);
+
+    await screen.findByText("Não foi possível conectar com a Cloudflare. Tente novamente.");
+  });
+
+  it("recusa salvar domínio em branco, sem chamar a API", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/settings") {
+        return Promise.resolve({
+          data: settingsPayload({
+            branding: { app_name: "Doca App", primary_color: "#1C3D5A", logo_url: null, splash_url: null, custom_domain: "doar.igreja.com.br" },
+          }),
+        });
+      }
+      if (url === "/settings/branding/domain") {
+        return Promise.resolve({
+          data: {
+            custom_domain: "doar.igreja.com.br",
+            status: "pending",
+            cloudflare_connected: false,
+            manual_instructions: null,
+          },
+        });
+      }
+      throw new Error(`GET inesperado em teste: ${url}`);
+    });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    // Limpa o campo (deixa de bater com o domínio já salvo — é o que
+    // habilita o botão) e clica: o saveDomain recusa antes de chamar a API.
+    await user.clear(screen.getByPlaceholderText("doar.suaigreja.com.br"));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(
+      await screen.findByText("Informe o domínio antes de salvar (ex: doar.suaigreja.com.br)."),
+    ).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
+  });
+
+  it("salva o domínio digitado e refaz o status", async () => {
+    setup();
+    mockGet({
+      custom_domain: null,
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: null,
+    });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.type(
+      screen.getByPlaceholderText("doar.suaigreja.com.br"),
+      "Doar.Igreja.COM.BR",
+    );
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() =>
+      expect(mockedApi.patch).toHaveBeenCalledWith("/settings", {
+        branding: { custom_domain: "doar.igreja.com.br" },
+      }),
+    );
+    expect(await screen.findByText("Domínio salvo. Agora escolha como apontá-lo.")).toBeInTheDocument();
+  });
+
+  it("mostra a mensagem de erro da API ao falhar salvar o domínio", async () => {
+    setup();
+    mockGet({
+      custom_domain: null,
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: null,
+    });
+    mockedApi.patch.mockRejectedValue({ response: { data: { message: "domínio já está em uso" } } });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.type(screen.getByPlaceholderText("doar.suaigreja.com.br"), "doar.igreja.com.br");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(await screen.findByText("domínio já está em uso")).toBeInTheDocument();
+  });
+
+  it("mostra mensagem genérica ao falhar salvar o domínio sem message na resposta", async () => {
+    setup();
+    mockGet({
+      custom_domain: null,
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: null,
+    });
+    mockedApi.patch.mockRejectedValue(new Error("falha de rede"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.type(screen.getByPlaceholderText("doar.suaigreja.com.br"), "doar.igreja.com.br");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(await screen.findByText("Erro ao salvar o domínio. Tente novamente.")).toBeInTheDocument();
+  });
+
+  it("verificar domínio: fica pending quando ainda não confirmou (não mostra o toast de sucesso)", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: {
+        cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+        apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+        note: "nota",
+      },
+    });
+    mockedApi.post.mockResolvedValue({
+      data: {
+        custom_domain: "doar.igreja.com.br",
+        status: "pending",
+        cloudflare_connected: false,
+        manual_instructions: null,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: "Verificar domínio" }));
+    expect(
+      await screen.findByText("Ainda não encontramos o registro — o DNS pode levar algumas horas para propagar."),
+    ).toBeInTheDocument();
+  });
+
+  it("verificar domínio: mostra erro quando a API falha", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: {
+        cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+        apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+        note: "nota",
+      },
+    });
+    mockedApi.post.mockRejectedValue(new Error("fora do ar"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: "Verificar domínio" }));
+    expect(
+      await screen.findByText("Erro ao verificar o domínio. Confira se o registro foi criado e tente de novo."),
+    ).toBeInTheDocument();
+  });
+
+  it("conectar com Cloudflare: mostra erro quando não consegue obter a URL de autorização", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: {
+        cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+        apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+        note: "nota",
+      },
+    });
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/settings") return Promise.resolve({ data: settingsPayload() });
+      if (url === "/settings/branding/domain") {
+        return Promise.resolve({
+          data: {
+            custom_domain: "doar.igreja.com.br",
+            status: "pending",
+            cloudflare_connected: false,
+            manual_instructions: {
+              cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+              apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+              note: "nota",
+            },
+          },
+        });
+      }
+      if (url === "/settings/branding/domain/cloudflare/authorize-url") {
+        return Promise.reject(new Error("fora do ar"));
+      }
+      throw new Error(`GET inesperado em teste: ${url}`);
+    });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: /Conectar com Cloudflare/ }));
+    expect(
+      await screen.findByText("Não foi possível iniciar a conexão com a Cloudflare. Tente novamente."),
+    ).toBeInTheDocument();
+    // Falhou sem navegar — o botão volta a ficar clicável (isConnectingCloudflare reseta).
+    expect(screen.getByRole("button", { name: /Conectar com Cloudflare/ })).not.toBeDisabled();
+  });
+
+  it("mostra 'Desconectar Cloudflare' e o aviso de registro automático quando já está conectado", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: true,
+      manual_instructions: null,
+    });
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    expect(
+      screen.getByText(/Cloudflare conectada — o registro é criado automaticamente/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Desconectar Cloudflare" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Conectar com Cloudflare/ })).not.toBeInTheDocument();
+  });
+
+  it("desconecta a Cloudflare e mostra o toast", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: true,
+      manual_instructions: null,
+    });
+    mockedApi.post.mockResolvedValue({
+      data: {
+        custom_domain: "doar.igreja.com.br",
+        status: "pending",
+        cloudflare_connected: false,
+        manual_instructions: {
+          cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+          apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+          note: "nota",
+        },
+      },
+    });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: "Desconectar Cloudflare" }));
+    expect(mockedApi.post).toHaveBeenCalledWith("/settings/branding/domain/cloudflare/disconnect");
+    expect(await screen.findByText("Cloudflare desconectada.")).toBeInTheDocument();
+  });
+
+  it("mostra erro ao falhar desconectar a Cloudflare", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: true,
+      manual_instructions: null,
+    });
+    mockedApi.post.mockRejectedValue(new Error("fora do ar"));
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: "Desconectar Cloudflare" }));
+    expect(
+      await screen.findByText("Erro ao desconectar a Cloudflare. Tente novamente."),
+    ).toBeInTheDocument();
   });
 });
