@@ -58,7 +58,7 @@ describe('SettingsController', () => {
 
     expect(service.updateSettings).toHaveBeenCalledWith('t1', 'g1', ['tenant_admin'], {
       tenant: { name: 'Novo' },
-    }, 'premium');
+    }, 'premium', 'u1');
     expect(result).toEqual({ tenant: {} });
   });
 

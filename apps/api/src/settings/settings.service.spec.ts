@@ -14,17 +14,33 @@ function clientWith(overrides: Record<string, unknown> = {}) {
 }
 
 function serviceWith(client: ReturnType<typeof clientWith>, storage?: Partial<StorageService>) {
+  // A auditoria de `pix_key` vai por `audit_insert()` no client BASE, não
+  // por `client.auditLog.create()` — ver `src/common/audit/write-audit-log.ts`.
+  const auditRaw = jest.fn().mockResolvedValue(1);
   const prisma = {
     client,
     runInTx: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
+    $executeRaw: auditRaw,
   } as unknown as PrismaService;
   const storageService = {
     deleteByUrl: jest.fn().mockResolvedValue(undefined),
     upload: jest.fn().mockResolvedValue('https://cdn/logo.png'),
     ...storage,
   } as unknown as StorageService;
-  return { service: new SettingsService(prisma, storageService), storageService };
+  return { service: new SettingsService(prisma, storageService), storageService, auditRaw };
 }
+
+/** Posição dos valores no template de `audit_insert()` que o helper monta. */
+const AUDIT = {
+  tenant_id: 1,
+  congregation_id: 2,
+  actor_user_id: 3,
+  subject_person_id: 4,
+  entity: 5,
+  action: 6,
+  before: 7,
+  after: 8,
+} as const;
 
 const TENANT = { name: 'Igreja', email: 't@x.com', phone: '111', slug: 'igreja-teste' };
 const CONGREGATION = {
@@ -80,6 +96,7 @@ describe('SettingsService', () => {
         splash_url: 'https://cdn/splash.png',
         custom_domain: null,
         terms_url: null,
+        pix_key: null,
       });
     });
 
@@ -112,6 +129,7 @@ describe('SettingsService', () => {
         splash_url: null,
         custom_domain: 'doar.suaigreja.com.br',
         terms_url: 'https://suaigreja.com.br/termos',
+        pix_key: null,
       });
     });
 
@@ -133,6 +151,7 @@ describe('SettingsService', () => {
         splash_url: null,
         custom_domain: null,
         terms_url: null,
+        pix_key: null,
       });
     });
 
@@ -163,7 +182,7 @@ describe('SettingsService', () => {
       const { service } = serviceWith(client);
 
       await expect(
-        service.updateSettings('t1', 'g1', ['admin_congregation'], { tenant: { name: 'Novo' } } as never, 'starter'),
+        service.updateSettings('t1', 'g1', ['admin_congregation'], { tenant: { name: 'Novo' } } as never, 'starter', 'u1'),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(client.tenant.update).not.toHaveBeenCalled();
     });
@@ -175,7 +194,7 @@ describe('SettingsService', () => {
       client.brandingConfig.findUnique.mockResolvedValue(null);
       const { service } = serviceWith(client);
 
-      await service.updateSettings('t1', 'g1', ['tenant_admin'], { tenant: { name: 'Novo' } } as never, 'starter');
+      await service.updateSettings('t1', 'g1', ['tenant_admin'], { tenant: { name: 'Novo' } } as never, 'starter', 'u1');
 
       expect(client.tenant.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { name: 'Novo' } });
     });
@@ -189,7 +208,7 @@ describe('SettingsService', () => {
 
       await service.updateSettings('t1', 'g1', ['admin_congregation'], {
         congregation: { name: 'Nova Sede' },
-      } as never, 'starter');
+      } as never, 'starter', 'u1');
 
       expect(client.congregation.update).toHaveBeenCalledWith({
         where: { id: 'g1' },
@@ -204,7 +223,7 @@ describe('SettingsService', () => {
       client.brandingConfig.findUnique.mockResolvedValue(null);
       const { service } = serviceWith(client);
 
-      await service.updateSettings('t1', 'g1', ['admin_congregation'], {} as never, 'starter');
+      await service.updateSettings('t1', 'g1', ['admin_congregation'], {} as never, 'starter', 'u1');
 
       expect(client.tenant.update).not.toHaveBeenCalled();
       expect(client.congregation.update).not.toHaveBeenCalled();
@@ -222,6 +241,7 @@ describe('SettingsService', () => {
           ['admin_congregation'],
           { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
           'premium',
+          'u1',
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(client.brandingConfig.upsert).not.toHaveBeenCalled();
@@ -238,6 +258,7 @@ describe('SettingsService', () => {
           ['tenant_admin'],
           { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
           'starter',
+          'u1',
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(client.brandingConfig.upsert).not.toHaveBeenCalled();
@@ -262,6 +283,7 @@ describe('SettingsService', () => {
           },
         } as never,
         'premium',
+        'u1',
       );
 
       expect(client.brandingConfig.upsert).toHaveBeenCalledWith({
@@ -296,6 +318,7 @@ describe('SettingsService', () => {
           ['tenant_admin'],
           { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
           'premium',
+          'u1',
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
@@ -313,8 +336,99 @@ describe('SettingsService', () => {
           ['tenant_admin'],
           { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
           'premium',
+          'u1',
         ),
       ).rejects.toBe(erroInesperado);
+    });
+
+    // PIX manual — Starter (Cenário 1), sem gate de plano.
+    it('grava pix_key com tenant_admin sem exigir Premium', async () => {
+      const client = clientWith();
+      client.tenant.findUnique.mockResolvedValue(TENANT);
+      client.congregation.findUnique.mockResolvedValue(CONGREGATION);
+      client.brandingConfig.findUnique.mockResolvedValue(null);
+      client.brandingConfig.upsert.mockResolvedValue({});
+      const { service } = serviceWith(client);
+
+      await service.updateSettings(
+        't1',
+        'g1',
+        ['tenant_admin'],
+        { branding: { pix_key: 'chave@igreja.com' } } as never,
+        'starter',
+        'u1',
+      );
+
+      expect(client.brandingConfig.upsert).toHaveBeenCalledWith({
+        where: { tenant_id: 't1' },
+        create: { tenant_id: 't1', pix_key: 'chave@igreja.com' },
+        update: { pix_key: 'chave@igreja.com' },
+      });
+    });
+
+    it('lança ForbiddenException ao alterar pix_key sem o papel tenant_admin', async () => {
+      const client = clientWith();
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.updateSettings(
+          't1',
+          'g1',
+          ['admin_congregation'],
+          { branding: { pix_key: 'chave@igreja.com' } } as never,
+          'starter',
+          'u1',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.brandingConfig.upsert).not.toHaveBeenCalled();
+    });
+
+    it('registra pix_key_updated em audit_logs com o valor anterior e o novo', async () => {
+      const client = clientWith();
+      client.tenant.findUnique.mockResolvedValue(TENANT);
+      client.congregation.findUnique.mockResolvedValue(CONGREGATION);
+      client.brandingConfig.findUnique.mockResolvedValue({ pix_key: 'antiga@igreja.com' });
+      client.brandingConfig.upsert.mockResolvedValue({});
+      const { service, auditRaw } = serviceWith(client);
+
+      await service.updateSettings(
+        't1',
+        'g1',
+        ['tenant_admin'],
+        { branding: { pix_key: 'nova@igreja.com' } } as never,
+        'starter',
+        'user-9',
+      );
+
+      expect(auditRaw).toHaveBeenCalledTimes(1);
+      const call = auditRaw.mock.calls[0];
+      expect(call[AUDIT.tenant_id]).toBe('t1');
+      expect(call[AUDIT.congregation_id]).toBe('g1');
+      expect(call[AUDIT.actor_user_id]).toBe('user-9');
+      expect(call[AUDIT.entity]).toBe('branding_config');
+      expect(call[AUDIT.action]).toBe('pix_key_updated');
+      expect(call[AUDIT.before]).toBe(JSON.stringify({ pix_key: 'antiga@igreja.com' }));
+      expect(call[AUDIT.after]).toBe(JSON.stringify({ pix_key: 'nova@igreja.com' }));
+    });
+
+    it('não grava auditoria quando branding não inclui pix_key', async () => {
+      const client = clientWith();
+      client.tenant.findUnique.mockResolvedValue(TENANT);
+      client.congregation.findUnique.mockResolvedValue(CONGREGATION);
+      client.brandingConfig.findUnique.mockResolvedValue(null);
+      client.brandingConfig.upsert.mockResolvedValue({});
+      const { service, auditRaw } = serviceWith(client);
+
+      await service.updateSettings(
+        't1',
+        'g1',
+        ['tenant_admin'],
+        { branding: { custom_domain: 'doar.suaigreja.com.br' } } as never,
+        'premium',
+        'u1',
+      );
+
+      expect(auditRaw).not.toHaveBeenCalled();
     });
   });
 

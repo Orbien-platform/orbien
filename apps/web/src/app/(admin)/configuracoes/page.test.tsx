@@ -741,7 +741,66 @@ describe("ConfiguracoesPage", () => {
       </StrictMode>
     );
     await screen.findByDisplayValue("Doca Sede");
-    expect(mockedApi.get).toHaveBeenCalledTimes(1);
+    // `hasFetched.current` guarda só `/settings` — o domínio próprio
+    // (`/settings/branding/domain`) é outro efeito, sem o mesmo guard,
+    // então a contagem geral não serve mais de prova.
+    const settingsCalls = mockedApi.get.mock.calls.filter(([url]) => url === "/settings");
+    expect(settingsCalls).toHaveLength(1);
+  });
+
+  it("mostra o campo de chave PIX só para tenant_admin", async () => {
+    setup(["admin_congregation"]);
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    expect(screen.queryByText("Chave PIX")).not.toBeInTheDocument();
+  });
+
+  it("carrega e envia a chave PIX cadastrada", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({
+      data: settingsPayload({ branding: { app_name: "Doca App", primary_color: "#1C3D5A", logo_url: null, splash_url: null, pix_key: "chave@doca.com" } }),
+    });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    expect(await screen.findByDisplayValue("chave@doca.com")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [string, { branding?: { pix_key?: string } }];
+    expect(payload.branding).toEqual({ pix_key: "chave@doca.com" });
+  });
+
+  it("não envia branding quando a chave PIX fica vazia", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+    const [, payload] = mockedApi.patch.mock.calls[0] as [string, { branding?: unknown }];
+    expect(payload).not.toHaveProperty("branding");
+  });
+
+  it("barra chave PIX maior que 140 caracteres", async () => {
+    setup();
+    mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    const pixInput = screen.getByPlaceholderText("CPF, CNPJ, e-mail, telefone ou chave aleatória");
+    // `fireEvent.change`, não `user.type`: 141 caracteres digitados um a um
+    // estoura o timeout default de 5000ms sob carga do CI (mesmo padrão do
+    // comentário lá em cima, sobre a suíte de e-mail/cor).
+    fireEvent.change(pixInput, { target: { value: "a".repeat(141) } });
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(
+      await screen.findByText("Chave PIX muito longa (máximo 140 caracteres).")
+    ).toBeInTheDocument();
+    expect(mockedApi.patch).not.toHaveBeenCalled();
   });
 
   it("desaparece o toast depois de um tempo", async () => {
@@ -757,5 +816,142 @@ describe("ConfiguracoesPage", () => {
     vi.advanceTimersByTime(3000);
     await waitFor(() => expect(screen.queryByText("Configurações salvas com sucesso.")).not.toBeInTheDocument());
     vi.useRealTimers();
+  });
+});
+
+describe("ConfiguracoesPage — domínio próprio", () => {
+  function mockGet(domainResult: unknown, domainStatus = 200) {
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/settings") return Promise.resolve({ data: settingsPayload() });
+      if (url === "/settings/branding/domain") {
+        return domainStatus === 200
+          ? Promise.resolve({ data: domainResult })
+          : Promise.reject({ response: { status: domainStatus } });
+      }
+      throw new Error(`GET inesperado em teste: ${url}`);
+    });
+  }
+
+  it("some silenciosamente quando o plano não é Premium (403)", async () => {
+    setup();
+    mockGet(null, 403);
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    expect(screen.queryByText("Domínio próprio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Erro ao carregar o status do domínio. Recarregue a página."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("mostra erro (não some em silêncio) quando /settings/branding/domain falha por motivo real, não por plano", async () => {
+    setup();
+    mockGet(null, 500);
+    render(<ConfiguracoesPage />);
+    await screen.findByDisplayValue("Doca Sede");
+    expect(screen.queryByText("Domínio próprio")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Erro ao carregar o status do domínio. Recarregue a página."),
+    ).toBeInTheDocument();
+  });
+
+  it("mostra as instruções de DNS manual quando não há Cloudflare conectada", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: {
+        cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+        apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+        note: "nota de exemplo",
+      },
+    });
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    expect(screen.getByText("cname.vercel-dns.com")).toBeInTheDocument();
+    expect(screen.getByText("76.76.21.21")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Conectar com Cloudflare/ })).toBeInTheDocument();
+  });
+
+  it("clica em Verificar domínio e reflete o status devolvido", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: {
+        cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+        apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+        note: "nota",
+      },
+    });
+    mockedApi.post.mockResolvedValue({
+      data: {
+        custom_domain: "doar.igreja.com.br",
+        status: "verified",
+        cloudflare_connected: false,
+        manual_instructions: null,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: "Verificar domínio" }));
+    expect(mockedApi.post).toHaveBeenCalledWith("/settings/branding/domain/verify");
+    await screen.findByText(/está apontado e verificado/);
+  });
+
+  it("clica em Conectar com Cloudflare e navega para a URL de autorização", async () => {
+    setup();
+    mockGet({
+      custom_domain: "doar.igreja.com.br",
+      status: "pending",
+      cloudflare_connected: false,
+      manual_instructions: {
+        cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+        apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+        note: "nota",
+      },
+    });
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/settings") return Promise.resolve({ data: settingsPayload() });
+      if (url === "/settings/branding/domain") {
+        return Promise.resolve({
+          data: {
+            custom_domain: "doar.igreja.com.br",
+            status: "pending",
+            cloudflare_connected: false,
+            manual_instructions: {
+              cname: { name: "doar.igreja.com.br", value: "cname.vercel-dns.com" },
+              apex_alternative: { name: "doar.igreja.com.br", type: "A", value: "76.76.21.21" },
+              note: "nota",
+            },
+          },
+        });
+      }
+      if (url === "/settings/branding/domain/cloudflare/authorize-url") {
+        return Promise.resolve({ data: { url: "https://dash.cloudflare.com/oauth2/auth?state=abc" } });
+      }
+      throw new Error(`GET inesperado em teste: ${url}`);
+    });
+
+    const originalLocation = window.location;
+    // Mesmo motivo do teste de sessão de suporte: `location.href` não é
+    // sobrescrevível via defineProperty parcial no jsdom.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, href: "https://web.useorbien.com/configuracoes" },
+    });
+
+    const user = userEvent.setup();
+    render(<ConfiguracoesPage />);
+    await screen.findByText("Domínio próprio");
+    await user.click(screen.getByRole("button", { name: /Conectar com Cloudflare/ }));
+
+    await waitFor(() =>
+      expect(window.location.href).toBe("https://dash.cloudflare.com/oauth2/auth?state=abc"),
+    );
+
+    Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
   });
 });

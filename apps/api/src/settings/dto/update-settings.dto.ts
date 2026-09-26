@@ -1,4 +1,12 @@
-import { IsEmail, IsOptional, IsString, IsUrl, Matches, ValidateNested } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+  Matches,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   IsAccessibleBrandColor,
@@ -61,6 +69,18 @@ class BrandingSettingsDto {
   @IsOptional()
   @IsUrl({ require_protocol: true }, { message: 'URL de termos de uso inválida' })
   terms_url?: string;
+
+  /**
+   * Chave PIX da igreja: CPF, CNPJ, e-mail, telefone ou chave aleatória — o
+   * PSP valida o formato na hora de gerar cada cobrança, então aqui só o
+   * comprimento é checado. Diferente de `custom_domain`/`terms_url`,
+   * **não** é Premium: PIX manual é Cenário 1 (Starter), e o service não
+   * aplica o gate de plano a este campo.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(1, 140, { message: 'Chave PIX deve ter entre 1 e 140 caracteres' })
+  pix_key?: string;
 }
 
 export class UpdateSettingsDto {
