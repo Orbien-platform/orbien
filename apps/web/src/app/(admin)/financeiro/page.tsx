@@ -16,6 +16,7 @@ import { CostCentersModal } from "@/components/financial/CostCentersModal";
 import { WeeklyDashboardCard } from "@/components/financial/WeeklyDashboardCard";
 import { ForecastCard } from "@/components/financial/ForecastCard";
 import { BankReconciliationPanel } from "@/components/financial/BankReconciliationPanel";
+import { DonationBookletPanel } from "@/components/financial/DonationBookletPanel";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -105,7 +106,7 @@ function statusBadgeClass(status: Transaction["status"]): string {
   return "bg-blue-100 text-blue-700";
 }
 
-type TabValue = "overview" | "transactions" | "recurring" | "dre" | "balancete" | "conciliacao";
+type TabValue = "overview" | "transactions" | "recurring" | "dre" | "balancete" | "conciliacao" | "carne-dizimista";
 const TX_PAGE_SIZE = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -611,6 +612,11 @@ export default function FinanceiroPage() {
               Conciliação
             </Tabs.Tab>
           )}
+          {!isPastor && (
+            <Tabs.Tab value="carne-dizimista" className={tabBtn(activeTab === "carne-dizimista")}>
+              Carnê do dizimista
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         {/* ── Visão Geral ────────────────────────────────────────────────────── */}
@@ -1068,6 +1074,13 @@ export default function FinanceiroPage() {
         {!isPastor && (
           <Tabs.Panel value="conciliacao" className="pt-5">
             <BankReconciliationPanel />
+          </Tabs.Panel>
+        )}
+
+        {/* ── Carnê do dizimista ─────────────────────────────────────────────── */}
+        {!isPastor && (
+          <Tabs.Panel value="carne-dizimista" className="pt-5">
+            <DonationBookletPanel />
           </Tabs.Panel>
         )}
       </Tabs.Root>

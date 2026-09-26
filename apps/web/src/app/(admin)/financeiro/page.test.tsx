@@ -117,6 +117,9 @@ vi.mock("@/components/financial/ForecastCard", () => ({
 vi.mock("@/components/financial/BankReconciliationPanel", () => ({
   BankReconciliationPanel: () => <div data-testid="bank-reconciliation-panel" />,
 }));
+vi.mock("@/components/financial/DonationBookletPanel", () => ({
+  DonationBookletPanel: () => <div data-testid="donation-booklet-panel" />,
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -310,7 +313,7 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByTestId("forecast-card")).toBeInTheDocument();
   });
 
-  it("esconde abas Lançamentos/Recorrentes/Conciliação e a coluna Total do DRE para pastor", async () => {
+  it("esconde abas Lançamentos/Recorrentes/Conciliação/Carnê do dizimista e a coluna Total do DRE para pastor", async () => {
     setup(["pastor"]);
     mockApi({});
     render(<FinanceiroPage />);
@@ -318,6 +321,7 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.queryByRole("tab", { name: "Lançamentos" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Recorrentes" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Conciliação" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Carnê do dizimista" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "DRE" })).toBeInTheDocument();
   });
 
@@ -328,6 +332,15 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     render(<FinanceiroPage />);
     await user.click(await screen.findByRole("tab", { name: "Conciliação" }));
     expect(await screen.findByTestId("bank-reconciliation-panel")).toBeInTheDocument();
+  });
+
+  it("monta o DonationBookletPanel na aba Carnê do dizimista para quem não é pastor", async () => {
+    const user = userEvent.setup();
+    setup();
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "Carnê do dizimista" }));
+    expect(await screen.findByTestId("donation-booklet-panel")).toBeInTheDocument();
   });
 
   it("não mostra o botão de categorias para quem não pode gerenciar", async () => {
