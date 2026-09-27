@@ -1,9 +1,13 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
   UseInterceptors,
@@ -19,6 +23,9 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { PixService } from './pix.service';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
+import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
+
+const FINANCIAL_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 
 @Controller('financial/pix')
 export class PixController {
@@ -39,10 +46,40 @@ export class PixController {
   @Post('dynamic')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
   @UseInterceptors(TenantContextInterceptor)
-  @Roles('admin_congregation', 'treasurer', 'tenant_admin')
+  @Roles(...FINANCIAL_ROLES)
   @RequiresPlan('premium')
   createDynamic(@Body() dto: CreateDynamicPixDto, @CurrentUser() user: JwtPayload) {
     return this.pixService.createDynamic(dto, user);
+  }
+
+  // ── PIX recorrente — dízimo automático via Asaas — AUTENTICADO, Premium ──
+  // (PROD-27, mesmo corte de papel e plano do cenário 2)
+
+  @Post('subscriptions')
+  @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @Roles(...FINANCIAL_ROLES)
+  @RequiresPlan('premium')
+  createSubscription(@Body() dto: CreatePixSubscriptionDto, @CurrentUser() user: JwtPayload) {
+    return this.pixService.createSubscription(dto, user);
+  }
+
+  @Get('subscriptions')
+  @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @Roles(...FINANCIAL_ROLES)
+  @RequiresPlan('premium')
+  listSubscriptions(@CurrentUser() user: JwtPayload) {
+    return this.pixService.listSubscriptions(user);
+  }
+
+  @Patch('subscriptions/:id/cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @Roles(...FINANCIAL_ROLES)
+  @RequiresPlan('premium')
+  cancelSubscription(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.pixService.cancelSubscription(id, user);
   }
 
   // ── Cenário 3: Doação pública — PÚBLICO ──────────────────────────────────
