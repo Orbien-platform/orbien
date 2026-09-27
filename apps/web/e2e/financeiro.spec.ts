@@ -107,8 +107,17 @@ test.describe("financeiro", () => {
     });
 
     await test.step("troca de horizonte refaz a busca do forecast", async () => {
-      await page.getByRole("combobox").selectOption("12");
-      await expect(page.getByText("12 meses")).toBeVisible();
+      // Não há texto "12 meses" visível na tela fora da própria <option> do
+      // <select> — que fica oculta assim que a seleção fecha o dropdown, e
+      // `getByText` resolvia nela mesma, falhando sempre. O que o passo
+      // afirma ("refaz a busca") é a requisição HTTP, não texto na tela.
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          (res) => res.url().includes("/financial/dashboard/forecast/12") && res.request().method() === "GET"
+        ),
+        page.getByRole("combobox").selectOption("12"),
+      ]);
+      expect(response.ok(), `GET forecast/12 → HTTP ${response.status()}`).toBe(true);
     });
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {
