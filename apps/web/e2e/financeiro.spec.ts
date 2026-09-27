@@ -107,17 +107,13 @@ test.describe("financeiro", () => {
     });
 
     await test.step("troca de horizonte refaz a busca do forecast", async () => {
-      // Não há texto "12 meses" visível na tela fora da própria <option> do
-      // <select> — que fica oculta assim que a seleção fecha o dropdown, e
-      // `getByText` resolvia nela mesma, falhando sempre. O que o passo
-      // afirma ("refaz a busca") é a requisição HTTP, não texto na tela.
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          (res) => res.url().includes("/financial/dashboard/forecast/12") && res.request().method() === "GET"
-        ),
-        page.getByRole("combobox").selectOption("12"),
-      ]);
-      expect(response.ok(), `GET forecast/12 → HTTP ${response.status()}`).toBe(true);
+      // "12 meses" só existe dentro da <option> do <select> fechado — o
+      // Playwright nunca considera essa option "visible", então a asserção é
+      // sobre o value do combobox, não sobre texto de option.
+      const forecastRequest = page.waitForRequest("**/financial/dashboard/forecast/12");
+      await page.getByRole("combobox").selectOption("12");
+      await forecastRequest;
+      await expect(page.getByRole("combobox")).toHaveValue("12");
     });
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {
