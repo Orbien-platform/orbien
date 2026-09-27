@@ -75,6 +75,15 @@ type Opts = {
    * leitura e a escrita. O `updateMany` condicional então não pega.
    */
   perdeCorrida?: boolean;
+  /**
+   * PIX recorrente (PROD-27): simula duas entregas do webhook concorrentes
+   * criando o MESMO `PixPayment` reativo — a segunda `create` bate no unique
+   * de `asaas_payment_id` (P2002) e precisa recarregar a linha que a
+   * primeira já gravou, em vez de falhar o webhook.
+   */
+  raceOnReactiveCreate?: boolean;
+  /** O `create` reativo falha com algo que NÃO é a unique de asaas_payment_id. */
+  reactiveCreateThrowsUnknownError?: boolean;
   /** Simula falha na geração do recibo (email fora do ar, etc). */
   receiptRejects?: boolean;
   /** `count` que `tx.eventRegistration.updateMany` devolve (PROD-24). */
@@ -138,7 +147,21 @@ function harness(opts: Opts = {}) {
   // idempotência do reenvio não tem o que testar. Simula também a unique
   // constraint de `asaas_payment_id`: segunda `create` com o mesmo id rejeita
   // como o Postgres rejeitaria.
-  let novoPagamento: Record<string, unknown> | null = null;
+  let novoPagamento: Record<string, unknown> | null = opts.raceOnReactiveCreate
+    ? {
+        id: 'pix-ganhou-a-corrida',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        amount: new Prisma.Decimal('50.00'),
+        category_id: 'cat-oferta',
+        status: 'pending',
+        donor_person_id: 'donor-1',
+        scenario: 'recurring',
+        asaas_payment_id: 'pay_recorrente_1',
+        pix_subscription_id: 'sub-1',
+      }
+    : null;
+  let reactiveFindFirstCalls = 0;
 
   const tx = {
     // O `set_config` que as rotas públicas fazem antes de ler a categoria.
@@ -219,6 +242,9 @@ function harness(opts: Opts = {}) {
           // Reativo (PROD-27): só entra aqui quando não havia `registro`
           // (cenário 2/3 sempre pré-criam a linha antes do webhook).
           if (registro === null) {
+            if (opts.reactiveCreateThrowsUnknownError) {
+              return Promise.reject(new Error('disco cheio'));
+            }
             if (
               novoPagamento !== null &&
               novoPagamento['asaas_payment_id'] === args.data['asaas_payment_id']
@@ -237,6 +263,15 @@ function harness(opts: Opts = {}) {
         },
         findFirst: () => {
           if (registro === null) {
+            // Corrida (raceOnReactiveCreate): a PRIMEIRA leitura ainda não
+            // vê a linha que a "outra entrega" só grava entre esta chamada e
+            // o `create` — só a partir da segunda (a recarga dentro do catch
+            // de P2002) é que `novoPagamento` aparece.
+            if (opts.raceOnReactiveCreate && reactiveFindFirstCalls === 0) {
+              reactiveFindFirstCalls++;
+              return Promise.resolve(null);
+            }
+            reactiveFindFirstCalls++;
             return Promise.resolve(novoPagamento ? { ...novoPagamento } : null);
           }
           const lido = { ...registro };
@@ -820,6 +855,35 @@ describe('PixService', () => {
       expect(cap.pixSubscriptions[0]).toMatchObject({ congregation_id: 'cong-outra' });
     });
 
+    it('sem `app_name` no branding, o nome do customer cai para o nome do tenant', async () => {
+      const { service, cap } = harness({
+        branding: { pix_key: 'k', app_name: null },
+        httpGet: (url) => (url.includes('/customers') ? { data: [] } : {}),
+      });
+
+      await service.createSubscription(dto, user);
+
+      const customerBody = cap.posts.find((p) => p.url.endsWith('/customers'))?.body as
+        | { name: string }
+        | undefined;
+      expect(customerBody?.name).toBe('Igreja Central');
+    });
+
+    it('sem `app_name` e sem nome de tenant no banco, cai para string vazia', async () => {
+      const { service, cap } = harness({
+        branding: { pix_key: 'k', app_name: null },
+        tenant: null,
+        httpGet: (url) => (url.includes('/customers') ? { data: [] } : {}),
+      });
+
+      await service.createSubscription(dto, user);
+
+      const customerBody = cap.posts.find((p) => p.url.endsWith('/customers'))?.body as
+        | { name: string }
+        | undefined;
+      expect(customerBody?.name).toBe('');
+    });
+
     it('Asaas fora do ar vira 503 e não grava assinatura órfã', async () => {
       const { service, cap } = harness({ httpFails: true });
 
@@ -1186,6 +1250,42 @@ describe('PixService', () => {
         // `asaas_payment_id`, já `confirmed`) em vez de criar outra.
         expect(cap.pixPayments).toHaveLength(1);
         expect(cap.transactions).toHaveLength(1);
+      });
+
+      it('duas entregas concorrentes: quem perde a corrida no `create` (P2002) recarrega a linha da outra, em vez de falhar o webhook', async () => {
+        const { service, cap } = harness({ pixPayment: null, raceOnReactiveCreate: true });
+
+        const result = await service.handleWebhook(
+          {
+            event: 'PAYMENT_CONFIRMED',
+            payment: { id: 'pay_recorrente_1', subscription: 'sub_asaas_1', value: '50.00' },
+          },
+          'segredo',
+        );
+
+        expect(result).toEqual({ received: true });
+        // O `create` desta entrega rejeitou (unique de asaas_payment_id) —
+        // nada gravado por ELA; a linha já existe por conta da "outra".
+        expect(cap.pixPayments).toEqual([]);
+        // Mesmo assim confirma e lança, reaproveitando a linha que a outra
+        // entrega criou — webhook não falha por causa da corrida.
+        expect(cap.transactions).toHaveLength(1);
+      });
+
+      it('erro do `create` reativo que NÃO é a unique de asaas_payment_id propaga — não é engolido como corrida', async () => {
+        const { service, cap } = harness({ pixPayment: null, reactiveCreateThrowsUnknownError: true });
+
+        await expect(
+          service.handleWebhook(
+            {
+              event: 'PAYMENT_CONFIRMED',
+              payment: { id: 'pay_recorrente_1', subscription: 'sub_asaas_1', value: '50.00' },
+            },
+            'segredo',
+          ),
+        ).rejects.toThrow('disco cheio');
+
+        expect(cap.transactions).toEqual([]);
       });
     });
 
