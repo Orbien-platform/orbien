@@ -107,8 +107,13 @@ test.describe("financeiro", () => {
     });
 
     await test.step("troca de horizonte refaz a busca do forecast", async () => {
+      // "12 meses" só existe dentro da <option> do <select> fechado — o
+      // Playwright nunca considera essa option "visible", então a asserção é
+      // sobre o value do combobox, não sobre texto de option.
+      const forecastRequest = page.waitForRequest("**/financial/dashboard/forecast/12");
       await page.getByRole("combobox").selectOption("12");
-      await expect(page.getByText("12 meses")).toBeVisible();
+      await forecastRequest;
+      await expect(page.getByRole("combobox")).toHaveValue("12");
     });
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {
