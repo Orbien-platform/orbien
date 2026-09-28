@@ -10,13 +10,14 @@ import { DemographicsService } from './demographics.service';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { StorageModule } from '../storage/storage.module';
 import { ContentModule } from '../content/content.module';
+import { MailModule } from '../mail/mail.module';
 import { PersonsImportController } from './import/persons-import.controller';
 import { PersonsImportService } from './import/persons-import.service';
 import { PersonsRetentionScheduler } from './persons-retention.scheduler';
 import { PersonsRetentionNotifier } from './persons-retention-notifier.service';
 
 @Module({
-  imports: [StorageModule, ContentModule],
+  imports: [StorageModule, ContentModule, MailModule],
   controllers: [DemographicsController, PersonsController, PersonsImportController, VisitsController],
   providers: [
     PersonsService,

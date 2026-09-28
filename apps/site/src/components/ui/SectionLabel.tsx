@@ -15,7 +15,7 @@ export function SectionLabel({
 }: SectionLabelProps) {
   return (
     <p
-      className={`inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em] ${className}`}
+      className={`inline-flex items-center gap-2.5 text-sm font-medium ${className}`}
       style={{ color }}
     >
       <span className="w-6 h-px" style={{ background: lineColor ?? color }} />

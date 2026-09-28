@@ -51,6 +51,10 @@ const SPLASH_ICON_WIDTH = 200;
 // Components > ApiClient). Default aponta para a API local (mesma porta
 // default de apps/api/src/main.ts).
 const DEFAULT_API_URL = "http://localhost:3000";
+// URL do site (apps/web) usado pelo CTA de Contribuição — abre
+// `${webUrl}/doar/{tenant_slug}` num browser in-app. Mesmo padrão de
+// `DEFAULT_API_URL` acima: default aponta para o ambiente local.
+const DEFAULT_WEB_URL = "http://localhost:3001";
 
 /** @param {{ config: import('expo/config').ExpoConfig }} params */
 module.exports = ({ config }) => {
@@ -61,6 +65,7 @@ module.exports = ({ config }) => {
   const oneSignalAppId =
     process.env.ORBIEN_ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID;
   const apiUrl = process.env.ORBIEN_API_URL || DEFAULT_API_URL;
+  const webUrl = process.env.ORBIEN_WEB_URL || DEFAULT_WEB_URL;
   const icon = process.env.ORBIEN_APP_ICON || DEFAULT_ICON;
   const splashIcon = process.env.ORBIEN_SPLASH_ICON || DEFAULT_SPLASH_ICON;
   const primaryColor = process.env.ORBIEN_PRIMARY_COLOR || DEFAULT_PRIMARY_COLOR;
@@ -132,6 +137,7 @@ module.exports = ({ config }) => {
       ...config.extra,
       oneSignalAppId,
       apiUrl,
+      webUrl,
       // Lido por src/lib/theme/brand-theme.ts como a camada de build da
       // paleta. Sempre presente (com os defaults da plataforma quando não
       // há env), para o app nunca precisar tratar "extra sem tema".

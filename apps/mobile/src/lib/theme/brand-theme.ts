@@ -37,7 +37,15 @@ export interface BrandTheme {
   primaryColor: string;
   accentColor: string;
   logoUrl: string | null;
+  /** Variante para modo escuro — par de `logoUrl`. Nulo cai em `logoUrl`
+   * nos dois modos (quem resolve isso é `BrandLogo`, não esta cadeia). */
+  logoUrlDark: string | null;
   appName: string;
+  /** Slug do tenant (`Tenant.slug`), usado para montar a URL do CTA de
+   * Contribuição (`${webUrl}/doar/{tenantSlug}`). Só existe a partir do
+   * runtime (`GET /settings`) — `null` até o login resolver, mesma
+   * justificativa de `logoUrl`/`appName` na camada de build. */
+  tenantSlug: string | null;
 }
 
 /** Camada parcial da cadeia. `undefined` significa "não opina"; para
@@ -52,7 +60,9 @@ export const PLATFORM_THEME: BrandTheme = {
   primaryColor: brand.navy,
   accentColor: brand.teal,
   logoUrl: null,
+  logoUrlDark: null,
   appName: Constants.expoConfig?.name ?? "",
+  tenantSlug: null,
 };
 
 /** Camada 2: a paleta embutida na build. Numa build genérica isto devolve
@@ -86,9 +96,17 @@ export function buildTimeLayer(): BrandThemeLayer {
  * mal cadastrada degrade para a camada de baixo em vez de virar uma tela
  * com CTA ilegível. A validação de verdade é no cadastro, na API
  * (`IsAccessibleBrandColor`).
+ *
+ * `tenantSlug` é um segundo parâmetro opcional — não faz parte de
+ * `Branding` (que espelha `ResolvedSettings.branding`), vem de
+ * `ResolvedSettings.tenant.slug` — mantendo compatível quem já chama
+ * `brandingLayer(branding)` sem o segundo argumento.
  */
-export function brandingLayer(branding: Branding | null | undefined): BrandThemeLayer {
-  if (!branding) return {};
+export function brandingLayer(
+  branding: Branding | null | undefined,
+  tenantSlug?: string | null,
+): BrandThemeLayer {
+  if (!branding) return { tenantSlug: tenantSlug ?? undefined };
 
   return {
     primaryColor: isValidHexColor(branding.primary_color)
@@ -98,23 +116,31 @@ export function brandingLayer(branding: Branding | null | undefined): BrandTheme
       ? branding.accent_color.trim()
       : undefined,
     logoUrl: branding.logo_url ?? undefined,
+    logoUrlDark: branding.logo_url_dark ?? undefined,
     appName: branding.app_name ?? undefined,
+    tenantSlug: tenantSlug ?? undefined,
   };
 }
 
 /**
- * Só as cores de uma camada — o que continua valendo quando não há sessão.
+ * Cor, logo e nome de uma camada — o que continua valendo quando não há
+ * sessão.
  *
  * O cache de branding sobrevive ao logout de propósito (é o que faz o
- * segundo login abrir na cor da igreja), mas identidade não é cor: com o
- * cache inteiro aplicado, a tela de login de uma build genérica abria com
- * o NOME e o LOGO do último tenant — dizendo "Doca Church" para quem ainda
- * não disse em que igreja vai entrar. Cor da igreja antes do login é
- * continuidade; nome da igreja antes do login é mentira. Sem sessão, a
- * identidade vem da build (versão personalizada) ou da plataforma.
+ * segundo login abrir na cor, no logo e no nome da igreja). `tenantSlug`
+ * fica de fora: não é exibido na tela de login (só monta a URL do CTA de
+ * Contribuição, que não existe ali), então preservar esse resíduo não tem
+ * propósito. Sem sessão e sem cache, o nome vem da build (versão
+ * personalizada) ou da plataforma.
  */
-export function colorsOnly(layer: BrandThemeLayer): BrandThemeLayer {
-  return { primaryColor: layer.primaryColor, accentColor: layer.accentColor };
+export function preLoginLayer(layer: BrandThemeLayer): BrandThemeLayer {
+  return {
+    primaryColor: layer.primaryColor,
+    accentColor: layer.accentColor,
+    logoUrl: layer.logoUrl,
+    logoUrlDark: layer.logoUrlDark,
+    appName: layer.appName,
+  };
 }
 
 /** Aplica as camadas na ordem recebida — a última que opinar sobre um
@@ -125,7 +151,9 @@ export function resolveBrandTheme(...layers: BrandThemeLayer[]): BrandTheme {
       primaryColor: layer.primaryColor ?? resolved.primaryColor,
       accentColor: layer.accentColor ?? resolved.accentColor,
       logoUrl: layer.logoUrl ?? resolved.logoUrl,
+      logoUrlDark: layer.logoUrlDark ?? resolved.logoUrlDark,
       appName: layer.appName ?? resolved.appName,
+      tenantSlug: layer.tenantSlug ?? resolved.tenantSlug,
     };
   }, PLATFORM_THEME);
 }

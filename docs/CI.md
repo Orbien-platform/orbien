@@ -347,7 +347,7 @@ Já implementado: `node scripts/check-skills.mjs`. Basta acrescentar como step d
 fase 1. Vale porque o modo de falha de uma skill é não ser acionada — não gera
 erro em lugar nenhum, ninguém percebe.
 
-### Fase 6 — Build de preview do mobile na EAS
+### Fase 6 — Build/update de preview do mobile na EAS
 
 `apps/mobile` é o quinto app e o único que não tem deploy contínuo: não há URL
 para publicar, há binário para submeter. O CI cobre isso com um job próprio,
@@ -356,13 +356,35 @@ para publicar, há binário para submeter. O CI cobre isso com um job próprio,
 - **Só em push para `main`**, nunca em PR — build de EAS consome cota da conta,
   e um PR ativo geraria uma build por push.
 - **Só quando o diff toca `apps/mobile`** (`git diff --quiet ... -- apps/mobile`
-  decide). Commit que não mexe no app não gasta build.
+  decide). Commit que não mexe no app não gasta build nem update.
 - **Depende dos jobs determinísticos** (`needs`): lint, build e testes de
   unidade precisam estar verdes antes. `turbo run test` já cobre o Jest do
   `orbien-mobile`, então o job de EAS nunca sobe código que o gate reprovou.
 - Precisa de `EXPO_TOKEN` nos secrets — é o único job do workflow que depende
   de segredo para rodar. Sem o token, ele falha; os outros cinco continuam
   sendo o portão real.
+
+**Build nativo (`eas build`) só quando o diff toca o que afeta o binário**
+(`apps/mobile/package.json`, `app.config.js`, `app.config.test.js`,
+`eas.json`, `assets/`) — um segundo `git diff --quiet` (step `native`) decide.
+Todo o resto de `apps/mobile` (telas, lógica, `src/**` em geral) é JS puro e
+sai por `eas update --branch preview` em vez de `eas build`: o app já roda
+`expo-updates` com `runtimeVersion.policy: "appVersion"` (`app.config.js`), o
+que existia sem estar sendo usado. Isso importa porque o build é o recurso
+limitado — 30 iOS/mês no plano Free da Expo, sem pay-as-you-go — e a maioria
+dos merges em `apps/mobile` mexe em tela, não em módulo nativo. Antes desta
+divisão (2026-09-21), todo diff em `apps/mobile` disparava build de Android
+**e** iOS, mesmo para um texto trocado.
+
+`eas update` publica no branch `preview`, que precisa estar ligado ao channel
+`preview` (`build.preview.channel` em `eas.json`) por `eas channel:edit
+preview --branch preview` — comando de uma vez só, fora do CI, com
+`EXPO_TOKEN` local. Sem esse vínculo o update sobe mas nenhum app instalado
+com o profile `preview` o recebe (fica publicado, não distribuído).
+O critério de "nativo" é por caminho de arquivo, não por conteúdo do diff:
+`package.json` conta inteiro, incluindo bump de devDependency que não afeta o
+binário — o custo de builda à toa nesse caso é menor que o de tratar uma
+dependência nativa nova como JS-only e o update nunca ativar o módulo.
 
 ### A cobertura dos cinco apps
 

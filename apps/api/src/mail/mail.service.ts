@@ -1,6 +1,13 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { Resend } from 'resend';
+import { MailBrand, mailFrom } from './mail-brand';
+import { MailContent, renderMail } from './mail-layout';
 
+/**
+ * Todo e-mail sai com uma `MailBrand` — do tenant, quando nasce no web ou no
+ * app, e da Orbien, quando nasce no console. Quem chama resolve a marca
+ * (ver `mail-brand.ts`); aqui só se monta e envia.
+ */
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -14,117 +21,66 @@ export class MailService {
     }
   }
 
-  async sendPasswordReset(to: string, resetUrl: string, userName: string): Promise<void> {
-    if (!this.resend) {
-      if (process.env['NODE_ENV'] === 'production') {
-        throw new InternalServerErrorException('Email service not configured (missing RESEND_API_KEY)');
-      }
-      this.logger.log(`[DEV] Password reset URL for ${to}: ${resetUrl}`);
-      return;
-    }
-
-    const { error } = await this.resend.emails.send({
-      from: process.env['MAIL_FROM'] ?? 'Orbien <naoresponda@useorbien.com>',
-      to,
-      subject: 'Redefinição de senha — Orbien',
-      html: `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2 style="color: #1E3A7B;">Redefinição de senha</h2>
-          <p>Olá${userName ? `, ${userName}` : ''},</p>
-          <p>Recebemos uma solicitação para redefinir sua senha. Clique no botão abaixo:</p>
-          <a href="${resetUrl}"
-             style="display: inline-block; background: #1E3A7B; color: white;
-                    padding: 12px 24px; border-radius: 6px; text-decoration: none;
-                    margin: 16px 0;">
-            Redefinir minha senha
-          </a>
-          <p style="color: #5C5A56; font-size: 14px;">
-            Este link expira em 30 minutos. Se você não solicitou, ignore este email.
-          </p>
-          <hr style="border: none; border-top: 1px solid #E0DDD9; margin: 24px 0;" />
-          <p style="color: #9B9893; font-size: 12px;">Orbien — Gestão inteligente para igrejas</p>
-        </div>
-      `,
+  async sendPasswordReset(to: string, resetUrl: string, userName: string, brand: MailBrand): Promise<void> {
+    await this.send(to, brand, `Redefinição de senha — ${brand.name}`, `[DEV] Password reset URL for ${to}: ${resetUrl}`, {
+      preheader: 'Use o link para criar uma nova senha. Ele expira em 30 minutos.',
+      heading: 'Redefinição de senha',
+      paragraphs: [
+        `Olá${userName ? `, ${userName}` : ''},`,
+        `Recebemos um pedido para redefinir a sua senha de acesso a ${brand.name}. Use o botão abaixo para criar uma nova.`,
+      ],
+      action: { label: 'Redefinir minha senha', url: resetUrl },
+      note: 'Este link expira em 30 minutos. Se você não pediu a redefinição, ignore este e-mail: sua senha continua a mesma.',
     });
-
-    if (error) {
-      this.logger.error(`Resend error sending to ${to}: ${JSON.stringify(error)}`);
-      throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
-    }
-
-    this.logger.log(`Password reset email sent to ${to}`);
   }
 
-  async sendInvite(to: string, inviteUrl: string): Promise<void> {
-    if (!this.resend) {
-      if (process.env['NODE_ENV'] === 'production') {
-        throw new InternalServerErrorException('Email service not configured (missing RESEND_API_KEY)');
-      }
-      this.logger.log(`[DEV] Invite URL for ${to}: ${inviteUrl}`);
-      return;
-    }
-
-    const { error } = await this.resend.emails.send({
-      from: process.env['MAIL_FROM'] ?? 'Orbien <naoresponda@useorbien.com>',
-      to,
-      subject: 'Você foi convidado para o Orbien',
-      html: `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2 style="color: #1E3A7B;">Bem-vindo(a) ao Orbien</h2>
-          <p>Você recebeu acesso ao sistema. Clique no botão abaixo para criar sua senha:</p>
-          <a href="${inviteUrl}"
-             style="display: inline-block; background: #1E3A7B; color: white;
-                    padding: 12px 24px; border-radius: 6px; text-decoration: none;
-                    margin: 16px 0;">
-            Criar minha senha
-          </a>
-          <p style="color: #5C5A56; font-size: 14px;">
-            Este link expira em 7 dias. Se você não esperava este convite, ignore este email.
-          </p>
-          <hr style="border: none; border-top: 1px solid #E0DDD9; margin: 24px 0;" />
-          <p style="color: #9B9893; font-size: 12px;">Orbien — Gestão inteligente para igrejas</p>
-        </div>
-      `,
+  async sendInvite(to: string, inviteUrl: string, brand: MailBrand): Promise<void> {
+    await this.send(to, brand, `Você foi convidado para ${brand.name}`, `[DEV] Invite URL for ${to}: ${inviteUrl}`, {
+      preheader: `Crie sua senha para acessar ${brand.name}.`,
+      heading: 'Crie sua senha',
+      paragraphs: [`Você recebeu acesso a ${brand.name}. Use o botão abaixo para criar sua senha e entrar.`],
+      action: { label: 'Criar minha senha', url: inviteUrl },
+      note: 'Este link expira em 7 dias. Se você não esperava este convite, ignore este e-mail.',
     });
-
-    if (error) {
-      this.logger.error(`Resend error sending to ${to}: ${JSON.stringify(error)}`);
-      throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
-    }
-
-    this.logger.log(`Invite email sent to ${to}`);
   }
 
-  async sendDonationReceipt(to: string, donorName: string, amount: number, receiptUrl: string): Promise<void> {
+  async sendDonationReceipt(
+    to: string,
+    donorName: string,
+    amount: number,
+    receiptUrl: string,
+    brand: MailBrand,
+  ): Promise<void> {
     const formattedAmount = `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+    await this.send(to, brand, `Recibo de doação — ${brand.name}`, `[DEV] Donation receipt for ${to}: ${receiptUrl}`, {
+      preheader: `Recibo da sua doação de ${formattedAmount}.`,
+      heading: 'Recibo de doação',
+      paragraphs: [`Olá, ${donorName},`, `Recebemos sua doação de ${formattedAmount}. Obrigado por contribuir.`],
+      action: { label: 'Ver recibo em PDF', url: receiptUrl },
+    });
+  }
+
+  private async send(
+    to: string,
+    brand: MailBrand,
+    subject: string,
+    devLog: string,
+    content: MailContent,
+  ): Promise<void> {
     if (!this.resend) {
       if (process.env['NODE_ENV'] === 'production') {
         throw new InternalServerErrorException('Email service not configured (missing RESEND_API_KEY)');
       }
-      this.logger.log(`[DEV] Donation receipt for ${to}: ${receiptUrl}`);
+      this.logger.log(devLog);
       return;
     }
 
     const { error } = await this.resend.emails.send({
-      from: process.env['MAIL_FROM'] ?? 'Orbien <naoresponda@useorbien.com>',
+      from: mailFrom(brand),
       to,
-      subject: 'Recibo de doação — Orbien',
-      html: `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2 style="color: #1E3A7B;">Recibo de doação</h2>
-          <p>Olá, ${donorName},</p>
-          <p>Recebemos sua doação de ${formattedAmount}. Obrigado por contribuir.</p>
-          <a href="${receiptUrl}"
-             style="display: inline-block; background: #1E3A7B; color: white;
-                    padding: 12px 24px; border-radius: 6px; text-decoration: none;
-                    margin: 16px 0;">
-            Ver recibo em PDF
-          </a>
-          <hr style="border: none; border-top: 1px solid #E0DDD9; margin: 24px 0;" />
-          <p style="color: #9B9893; font-size: 12px;">Orbien — Gestão inteligente para igrejas</p>
-        </div>
-      `,
+      subject,
+      html: renderMail(brand, content),
     });
 
     if (error) {
@@ -132,6 +88,6 @@ export class MailService {
       throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
     }
 
-    this.logger.log(`Donation receipt email sent to ${to}`);
+    this.logger.log(`Email "${subject}" sent to ${to}`);
   }
 }

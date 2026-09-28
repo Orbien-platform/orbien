@@ -58,7 +58,7 @@ export function PresencaPanel() {
                 className="flex items-center justify-between px-5 py-3.5 border-b"
                 style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
               >
-                <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+                <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
                   Radar de Presença
                 </span>
                 <span className="font-mono text-[10px]" style={{ color: "var(--navy-accent)" }}>Esta semana</span>
@@ -102,7 +102,7 @@ export function PresencaPanel() {
                   style={{ background: "linear-gradient(to bottom, transparent 40%, var(--surface))" }}
                 >
                   <span
-                    className="font-mono text-[10px] uppercase tracking-[.12em] px-3 py-1.5 rounded-pill"
+                    className="text-xs font-medium px-3 py-1.5 rounded-pill"
                     style={{ background: "var(--subtle)", color: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     Screenshot real em breve

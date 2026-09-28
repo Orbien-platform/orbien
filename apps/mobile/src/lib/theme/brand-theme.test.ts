@@ -233,6 +233,84 @@ describe("versão personalizada — paleta embutida na build", () => {
   });
 });
 
+describe("tenantSlug — segundo argumento opcional de brandingLayer", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExpoConfig.mockReturnValue(GENERIC_BUILD);
+  });
+
+  it("PLATFORM_THEME.tenantSlug é null — piso da cadeia", () => {
+    const { PLATFORM_THEME } = load();
+
+    expect(PLATFORM_THEME.tenantSlug).toBeNull();
+  });
+
+  it("brandingLayer(branding) sem segundo argumento não opina sobre tenantSlug (compatibilidade)", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const theme = resolveBrandTheme(
+      buildTimeLayer(),
+      {},
+      brandingLayer({
+        app_name: "Igreja Central",
+        primary_color: "#0F766E",
+        logo_url: null,
+        splash_url: null,
+      }),
+    );
+
+    expect(theme.tenantSlug).toBeNull();
+  });
+
+  it("brandingLayer(branding, tenantSlug) preenche tenantSlug quando /settings traz tenant.slug", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const theme = resolveBrandTheme(
+      buildTimeLayer(),
+      {},
+      brandingLayer(
+        { app_name: null, primary_color: null, logo_url: null, splash_url: null },
+        "igreja-central",
+      ),
+    );
+
+    expect(theme.tenantSlug).toBe("igreja-central");
+  });
+
+  it("mescla de camadas: o runtime vence o cache para tenantSlug (troca de sessão)", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const cached = brandingLayer(
+      { app_name: null, primary_color: null, logo_url: null, splash_url: null },
+      "igreja-antiga",
+    );
+    const runtime = brandingLayer(
+      { app_name: null, primary_color: null, logo_url: null, splash_url: null },
+      "igreja-nova",
+    );
+
+    expect(resolveBrandTheme(buildTimeLayer(), cached, runtime).tenantSlug).toBe("igreja-nova");
+  });
+
+  it("tenantSlug ausente numa camada não apaga o da camada de baixo", () => {
+    const { brandingLayer, buildTimeLayer, resolveBrandTheme } = load();
+
+    const cached = brandingLayer(
+      { app_name: null, primary_color: null, logo_url: null, splash_url: null },
+      "igreja-central",
+    );
+    // runtime sem tenantSlug (ex.: /settings ainda não respondeu de novo)
+    const runtime = brandingLayer({
+      app_name: null,
+      primary_color: null,
+      logo_url: null,
+      splash_url: null,
+    });
+
+    expect(resolveBrandTheme(buildTimeLayer(), cached, runtime).tenantSlug).toBe("igreja-central");
+  });
+});
+
 describe("build com paleta malformada", () => {
   it("extra sem brandTheme resolve para a plataforma, sem lançar", () => {
     // É o caso de um app.config antigo, ou do mock de expo-constants em

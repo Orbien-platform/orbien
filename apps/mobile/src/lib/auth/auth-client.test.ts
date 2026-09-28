@@ -21,7 +21,16 @@ jest.mock("../api/client", () => ({
 }));
 
 import { HttpError } from "../api/errors";
-import { login, logout, getSession } from "./auth-client";
+import { forgotPassword, login, logout, getSession } from "./auth-client";
+
+// Mesmo helper de jwt.test.ts — o token aqui não é decodificado por
+// AuthClient.login, só guardado como string, mas encoder um payload
+// plausível deixa o teste do ACC-02 (restricao-acesso-piso-member) legível.
+function makeToken(payload: object): string {
+  const base64url = (obj: object) =>
+    btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${base64url({ alg: "HS256" })}.${base64url(payload)}.signature`;
+}
 
 describe("AuthClient", () => {
   beforeEach(() => {
@@ -62,6 +71,33 @@ describe("AuthClient", () => {
       await expect(login("a@b.com", "errada")).rejects.toBe(genericError);
       // AuthClient não deve gravar sessão nenhuma quando o login falha.
       expect(mockSetItemAsync).not.toHaveBeenCalled();
+    });
+
+    it("ACC-02 (restricao-acesso-piso-member): conta com só o papel member autentica normalmente pelo mobile — o bloqueio é exclusivo do broker de sessão do apps/web, este client não inspeciona papel nenhum", async () => {
+      const nowSpy = jest.spyOn(Date, "now").mockReturnValue(2_000_000);
+      const memberOnlyToken = makeToken({ sub: "u1", roles: ["member"] });
+      mockPost.mockResolvedValue({
+        access_token: memberOnlyToken,
+        refresh_token: "refresh-member",
+        expires_in: 900,
+      });
+
+      const session = await login("visitante@igreja.com", "senha123");
+
+      expect(mockPost).toHaveBeenCalledWith("/auth/login", {
+        body: { email: "visitante@igreja.com", password: "senha123" },
+      });
+      expect(session).toEqual({
+        accessToken: memberOnlyToken,
+        refreshToken: "refresh-member",
+        accessTokenExpiresAt: 2_000_000 + 900 * 1000,
+      });
+      expect(mockSetItemAsync).toHaveBeenCalledWith(
+        "orbien.session",
+        JSON.stringify(session),
+      );
+
+      nowSpy.mockRestore();
     });
   });
 
@@ -112,6 +148,26 @@ describe("AuthClient", () => {
       await expect(logout()).resolves.toBeUndefined();
 
       expect(mockDeleteItemAsync).toHaveBeenCalledWith("orbien.session");
+    });
+  });
+
+  describe("forgotPassword", () => {
+    it("chama POST /auth/forgot-password com o e-mail informado, sem tocar em SecureStore", async () => {
+      mockPost.mockResolvedValue(undefined);
+
+      await forgotPassword("a@b.com");
+
+      expect(mockPost).toHaveBeenCalledWith("/auth/forgot-password", {
+        body: { email: "a@b.com" },
+      });
+      expect(mockSetItemAsync).not.toHaveBeenCalled();
+      expect(mockDeleteItemAsync).not.toHaveBeenCalled();
+    });
+
+    it("propaga erro de rede/API para quem chamou decidir o que mostrar", async () => {
+      mockPost.mockRejectedValue(new Error("Erro de rede"));
+
+      await expect(forgotPassword("a@b.com")).rejects.toThrow("Erro de rede");
     });
   });
 });

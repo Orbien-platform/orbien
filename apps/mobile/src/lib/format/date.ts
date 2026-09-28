@@ -54,6 +54,20 @@ export function formatDateTime(iso: string): string | null {
   return hasTime ? `${head} · ${pad(date.getHours())}:${pad(date.getMinutes())}` : head;
 }
 
+/**
+ * `scheduled_date` é data sem hora, gravada como meia-noite UTC. Lida como
+ * instante, ela vira a véspera às 21:00 em Brasília — o culto de domingo
+ * aparecia no sábado. Aqui ela volta a ser só o dia, e ganha o horário da
+ * celebração quando a rota o traz; ISO sem fuso é lido como hora local.
+ * Data que já vem com hora de verdade passa intacta.
+ */
+export function localWhen(scheduledDate: string, startTime?: string): string {
+  if (!scheduledDate.includes("T00:00:00")) return scheduledDate;
+  const day = scheduledDate.slice(0, 10);
+  const time = startTime && /^\d{2}:\d{2}$/.test(startTime) ? startTime : "00:00";
+  return `${day}T${time}:00`;
+}
+
 /** "13 de setembro de 2026" — título de tela de detalhe. */
 export function formatLongDate(iso: string): string | null {
   const date = parse(iso);

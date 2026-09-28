@@ -116,6 +116,36 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: apps/api/src/small-groups/networks.service.ts:107 — mutação (green+yellow)→(green) sobreviveu em networks.service.spec.ts e networks.spec.ts (apps/api/src/small-groups)
 - last seen: 2026-09-15T02:10:01Z
 
+### L-018 — Ao testar validação de intervalo (verse_end < verse_start ou similar), inclua sempre o caso-limite igual (verse_start === verse_end) — não só valores distintos.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `apps/api/src/bible` · harmful: 0
+- features: biblia-nvi-marcacoes-mobile
+- evidence: apps/api/src/bible/bible-verse-marks.service.ts:70 (apps/api/src/bible)
+- last seen: 2026-09-21T11:57:47Z
+
+### L-019 — Campo de texto livre validado só por MinLength/MaxLength aceita string whitespace-only — some @Transform(trim) antes do MinLength quando a spec disser 'tratar espaços em branco como vazio'.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `apps/api/src/bible/dto` · harmful: 0
+- features: biblia-nvi-marcacoes-mobile
+- evidence: apps/api/src/bible/dto/create-bible-verse-mark.dto.ts:comment (apps/api/src/bible/dto)
+- last seen: 2026-09-21T11:57:47Z
+
+### L-020 — When an AC says another entry point (mobile, a different route) must keep working unaffected by a change confined to one file, add a test that exercises that other entry point directly, not just a comment noting the code path is separate.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `testing` · harmful: 0
+- features: restricao-acesso-piso-member
+- evidence: ACC-02 spec.md (testing)
+- last seen: 2026-09-21T22:54:57Z
+
+### L-021 — When spec.md asks design.md to explicitly confirm two flows never cross, add that confirmation as a written section in design.md and a dedicated test — do not let it stay an implicit assumption.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `auth` · harmful: 0
+- features: restricao-acesso-piso-member
+- evidence: spec.md Edge Cases (support_session) / design.md missing confirmation (auth)
+- last seen: 2026-09-21T22:54:57Z
+
+### L-022 — A visual/pixel-level acceptance criterion (e.g. text clipping) cannot be closed by Jest/RTL in this mobile app — spec such ACs explicitly as manual UAT and require the implementer to record how closure was verified (screenshot, or documented layout reasoning) when no device/simulator is available.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `mobile` · harmful: 0
+- features: mobile-home-redesign
+- evidence: MHR-12 / .specs/features/mobile-home-redesign/validation.md (mobile)
+- last seen: 2026-09-22T01:07:01Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

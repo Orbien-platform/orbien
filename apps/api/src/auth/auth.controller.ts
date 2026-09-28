@@ -67,6 +67,16 @@ export class AuthController {
     return this.authService.forgotPassword(dto);
   }
 
+  // Recuperação do console — separada da do web, como o login. Mesmo recorte
+  // por IP; o serviço só envia e-mail a conta com `platform_support`.
+  @Post('platform/forgot-password')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
+  @HttpCode(HttpStatus.OK)
+  platformForgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.platformForgotPassword(dto);
+  }
+
   // Public — no guard
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)

@@ -79,7 +79,7 @@ export function RelatorioSemanal() {
               <div className="grid grid-cols-2 gap-px" style={{ background: "var(--border)" }}>
                 {REPORT_ITEMS.map(({ label, value, delta }) => (
                   <div key={label} className="px-5 py-4" style={{ background: "var(--surface)" }}>
-                    <p className="font-mono text-[9px] uppercase tracking-[.06em] mb-1" style={{ color: "var(--muted)" }}>{label}</p>
+                    <p className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</p>
                     <p className="font-mono text-[16px] font-medium tracking-[-0.02em]" style={{ color: "var(--ink)" }}>{value}</p>
                     <p className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>{delta}</p>
                   </div>
@@ -102,7 +102,7 @@ export function RelatorioSemanal() {
                   style={{ background: "linear-gradient(to bottom, transparent 30%, var(--surface))" }}
                 >
                   <span
-                    className="font-mono text-[10px] uppercase tracking-[.12em] px-3 py-1.5 rounded-pill"
+                    className="text-xs font-medium px-3 py-1.5 rounded-pill"
                     style={{ background: "var(--subtle)", color: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     Gráfico de arrecadação

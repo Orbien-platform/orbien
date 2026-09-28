@@ -152,11 +152,55 @@ Serviço novo significa URL nova até o domínio ser reapontado.
 | `RESEND_API_KEY` | API key do Resend | Dashboard Resend |
 
 Definidas direto no `render.yaml` (não são segredo): `NODE_ENV`, `PORT`,
-`ALLOWED_ORIGINS`, `MAIL_FROM`, `FRONTEND_URL`.
+`ALLOWED_ORIGINS`, `MAIL_FROM`, `FRONTEND_URL`, `ADMIN_URL`.
 
 `ALLOWED_ORIGINS` é a lista de origens do CORS, separada por vírgula. Se o
 domínio de algum front mudar, ele precisa ser adicionado aqui — sem isso o
-browser bloqueia as chamadas.
+browser bloqueia as chamadas. Mudar o `value:` no `render.yaml` não basta se o
+serviço não for sincronizado pelo Blueprint: confira a variável no painel. Hoje
+só o upload de mídia do `web` depende dela (`PEND-10` em `docs/PLANO.md`).
+
+`FRONTEND_URL` é a base dos links que a API manda por e-mail (redefinição de
+senha, convite). Em produção só vale host em `useorbien.com`: se o painel tiver
+outro valor (um `*.vercel.app`, por exemplo) ou nada, `frontendUrl()`
+(`apps/api/src/common/urls/frontend-url.ts`) usa `https://web.useorbien.com` e
+registra um `WARN [FrontendUrl]` no log — sinal de que o painel precisa ser
+corrigido.
+
+`ADMIN_URL` é o mesmo papel para o console: base do link de redefinição de
+senha de conta de plataforma (`POST /auth/platform/forgot-password`, que abre o
+`/redefinir-senha` do `apps/admin`). Mesma regra de domínio — fora de
+`useorbien.com` em produção, `adminUrl()` usa `https://admin.useorbien.com`.
+
+**Pendente de configurar — Bíblia NVI (`biblia-nvi-marcacoes-mobile`, `PEND-09`
+em `docs/PLANO.md`).** `ApiBibleTextProvider`
+(`apps/api/src/bible/api-bible-text.provider.ts`) já está no código, mas o
+token de produção do provedor ainda não foi criado. Checklist para fechar
+antes de abrir a leitura da Bíblia para usuário de verdade:
+
+1. Criar uma conta gratuita em https://www.abibliadigital.com.br/.
+2. Pegar o token da conta — a documentação do provedor chama esse valor de
+   "user token". Não confirmamos em qual tela exata ele aparece depois do
+   cadastro (a doc oficial deles muda com frequência), então vale conferir lá
+   na hora em vez de seguir um passo específico daqui.
+3. Configurar no Render as três variáveis abaixo (mesmos valores já
+   documentados em `apps/api/.env.example`, para desenvolvimento local):
+
+   | Variável | Valor | Segredo? |
+   |---|---|---|
+   | `BIBLE_API_BASE_URL` | `https://www.abibliadigital.com.br/api` | não |
+   | `BIBLE_API_VERSION_ID` | `nvi` | não |
+   | `BIBLE_API_KEY` | token do passo 2 | **sim** |
+
+   Só `BIBLE_API_KEY` é segredo — as outras duas são config pública, no
+   mesmo espírito de `ALLOWED_ORIGINS`/`MAIL_FROM` acima.
+
+Sem `BIBLE_API_KEY`, a integração **funciona mesmo assim**:
+`ApiBibleTextProvider` manda a requisição sem `Authorization` quando a
+variável está vazia, e cai no limite público do provedor — 20
+requisições/hora/IP. O cache-first do `BibleReaderService` (uma chamada por
+capítulo servida do banco depois da primeira leitura) reduz bastante esse
+uso, mas não o elimina — vale configurar o token antes do tráfego real.
 
 ### 1.5 Provisionar o banco do zero
 
@@ -244,8 +288,23 @@ curl https://orbien-api.onrender.com/api/health
 ```
 
 No free tier o serviço dorme após 15min sem tráfego; o primeiro request depois
-disso leva 30–50s. Para manter acordado, pingar `/api/health` a cada 14min
-(UptimeRobot resolve).
+disso leva 30–50s — e, dormindo, nenhum `@Cron` da API dispara (ver `PEND-13`
+em `docs/PLANO.md`).
+
+**Em produção, desde 2026-09-25:** um monitor do UptimeRobot (plano gratuito,
+tipo HTTP(s)) faz `GET https://orbien-api.onrender.com/api/health` a cada
+**5 minutos** para o serviço não dormir. É contorno, não solução: se alguém
+estranhar esse tráfego no log, é ele. Pontos a saber:
+
+- 5 min, e não 14: com folga, uma checagem atrasada ou falha não deixa o
+  serviço chegar aos 15 min parado.
+- `/api/health` não toca no banco nem grava auditoria — o ping custa quase nada.
+- O free tier dá 750 h de instância por mês por workspace; um serviço acordado
+  o mês inteiro usa até 744 h. Cabe enquanto a API for o **único** serviço free
+  do workspace — um segundo esgotaria a cota antes do fim do mês.
+- Reinício ou deploy no horário de um cron ainda perde aquela execução.
+- Ao migrar para plano pago (processo sempre ativo), o monitor pode continuar
+  só como alerta de indisponibilidade.
 
 E a cadeia inteira, que é o que realmente importa:
 
@@ -516,12 +575,15 @@ para reconectar, como nos outros dois.
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `/api-proxy` | browser |
 | `API_BACKEND_URL` | `https://orbien-api.onrender.com/api` | **server-only** |
-| `NEXT_PUBLIC_WEB_URL` | `https://<domínio do web>` | browser |
+| `NEXT_PUBLIC_WEB_URL` | `https://web.useorbien.com` | browser |
 
 As duas primeiras são iguais às do `web`, e pelo mesmo motivo: o browser nunca
 chama a API direto. `NEXT_PUBLIC_WEB_URL` é para onde a sessão de suporte é
 aberta — sem ela, o botão da lista de tenants falha com mensagem explícita em
-vez de abrir uma aba em branco.
+vez de abrir uma aba em branco. Em produção, valor fora de `useorbien.com`
+(ou ausente) é trocado por `https://web.useorbien.com` — o token da sessão
+viaja nessa URL e não deve sair do domínio (`resolveWebUrl()` em
+`apps/admin/src/lib/support-session.ts`).
 
 O domínio do `admin` precisa entrar em `ALLOWED_ORIGINS` no Render? **Não.**
 (O do `web` precisa, por causa do upload — ver Parte 2.)
@@ -594,6 +656,26 @@ dispara o quê:
 No Render, o filtro é o `buildFilter` do `render.yaml`. Na Vercel, é o
 `turbo-ignore`. Mudança na raiz reconstrói tudo — o que é o comportamento
 correto, já que o lockfile é compartilhado.
+
+**Mobile novo contra API velha.** O OTA do mobile (`eas update` no job
+`mobile-eas-build` da CI) sai no mesmo merge em que o Render começa a buildar a
+API, e não espera por ele. A API recusa parâmetro que não conhece
+(`forbidNonWhitelisted`), então um app que passa a mandar um parâmetro novo
+recebe 400 até a API nova subir — foi o caso do `?published=true` em
+`GET /content/posts`, que deixa o feed, os avisos e o carrossel vazios nesse
+intervalo. Some sozinho quando o deploy termina, mas é visível. Quando a
+mudança do mobile depende de rota ou parâmetro novo da API, prefira mergear a
+API primeiro e o mobile num PR seguinte; ou, no mesmo PR, confira depois do
+merge que a API nova está no ar antes de dar o assunto por encerrado:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer <token>" \
+  'https://orbien-api.onrender.com/api/content/posts?published=true&limit=1'   # 200, não 400
+```
+
+O caminho inverso — API nova, app antigo — é compatível: parâmetro novo é
+sempre opcional.
 
 ---
 

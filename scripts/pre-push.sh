@@ -98,8 +98,8 @@ if [ -n "$MIGS" ]; then
   for t in $NOVAS; do
     grep -qE "ALTER TABLE \"?$t\"? ENABLE ROW LEVEL SECURITY" $MIGS apps/api/prisma/migrations/0*_rls_*.sql 2>/dev/null \
       || alerta "tabela '$t' criada sem ENABLE ROW LEVEL SECURITY em nenhum script"
-    grep -qE "$t|$(delegate_de "$t")" apps/api/test/rls/isolation.spec.ts 2>/dev/null \
-      || alerta "tabela '$t' sem caso em test/rls/isolation.spec.ts — policy existir não prova que isola"
+    grep -qE "$t|$(delegate_de "$t")" apps/api/test/rls/*.spec.ts 2>/dev/null \
+      || alerta "tabela '$t' sem caso em nenhum spec de test/rls/ — policy existir não prova que isola"
   done
   [ -z "$NOVAS" ] && passa "nenhuma tabela nova"
 fi

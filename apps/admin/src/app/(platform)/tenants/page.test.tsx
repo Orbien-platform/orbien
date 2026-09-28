@@ -64,6 +64,28 @@ vi.mock("@/components/tenants/EditTenantModal", () => ({
   ),
 }));
 
+vi.mock("@/components/tenants/ChangePlanModal", () => ({
+  ChangePlanModal: ({
+    open,
+    onOpenChange,
+    onChanged,
+    tenant,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onChanged: () => void;
+    tenant: { name: string } | null;
+  }) => (
+    <div>
+      <span>
+        mudar-plano:{open ? "aberto" : "fechado"}:{tenant?.name ?? ""}
+      </span>
+      <button onClick={onChanged}>avisar plano mudado</button>
+      <button onClick={() => onOpenChange(false)}>fechar plano via X do modal</button>
+    </div>
+  ),
+}));
+
 const getMock = vi.mocked(api.get);
 const patchMock = vi.mocked(api.patch);
 const abrirSessao = vi.mocked(openSupportSession);
@@ -360,6 +382,43 @@ describe("TenantsPage — sessão de suporte", () => {
     expect(within(cabecalho).getByText("Acesso")).toBeInTheDocument();
     expect(within(cabecalho).getByText("Congregações")).toBeInTheDocument();
     expect(within(cabecalho).getByText("Criado em")).toBeInTheDocument();
+  });
+});
+
+describe("TenantsPage — mudar plano", () => {
+  it("abre o modal de plano com o tenant clicado e recarrega ao mudar", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: /Mudar plano/ }));
+    expect(
+      screen.getByText("mudar-plano:aberto:Doca Church")
+    ).toBeInTheDocument();
+
+    const antes = getMock.mock.calls.length;
+    await user.click(
+      screen.getByRole("button", { name: "avisar plano mudado" })
+    );
+
+    await waitFor(() => expect(getMock.mock.calls.length).toBe(antes + 1));
+  });
+
+  it("fechar o modal de plano pelo X limpa o tenant selecionado", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: /Mudar plano/ }));
+    expect(
+      screen.getByText("mudar-plano:aberto:Doca Church")
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "fechar plano via X do modal" })
+    );
+
+    expect(screen.getByText("mudar-plano:fechado:")).toBeInTheDocument();
   });
 });
 

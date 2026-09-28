@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Building2, Image as ImageIcon, Loader2, Palette } from "lucide-react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { useTheme } from "next-themes";
+import { Building2, CheckCircle2, CloudCog, Globe, Image as ImageIcon, Loader2, Palette, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import api from "@/lib/api";
+import api, { isForbidden } from "@/lib/api";
 import { applyPhoneMask, initPhone, stripPhone } from "@/lib/phoneMask";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +22,11 @@ interface Settings {
     primary_color: string | null;
     accent_color: string | null;
     logo_url: string | null;
+    logo_url_dark: string | null;
     splash_url: string | null;
+    custom_domain: string | null;
+    terms_url: string | null;
+    pix_key: string | null;
   };
   congregation: {
     name: string;
@@ -43,6 +49,18 @@ interface UpdateSettingsPayload {
     primary_color?: string;
     accent_color?: string;
   };
+  branding?: { custom_domain?: string; terms_url?: string; pix_key?: string };
+}
+
+interface DomainStatus {
+  custom_domain: string | null;
+  status: "pending" | "verified" | "failed";
+  cloudflare_connected: boolean;
+  manual_instructions: {
+    cname: { name: string; value: string };
+    apex_alternative: { name: string; type: "A"; value: string };
+    note: string;
+  } | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -116,7 +134,7 @@ function Field({
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", full && "sm:col-span-2")}>
-      <Label className="text-xs font-medium text-stone uppercase tracking-wide">{label}</Label>
+      <Label className="text-xs font-medium text-stone">{label}</Label>
       {children}
     </div>
   );
@@ -127,11 +145,19 @@ const selectCls =
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ConfiguracoesPage() {
+// `useSearchParams` (leitura do `?dominio=` que volta do OAuth da
+// Cloudflare) exige Suspense boundary no App Router — daqui pra baixo é o
+// conteúdo de verdade; o export default só embrulha.
+function ConfiguracoesContent() {
   const { user } = useAuth();
   const canEditTenant = user?.roles?.includes("tenant_admin") ?? false;
   const canEditCongregation =
     canEditTenant || (user?.roles?.includes("admin_congregation") ?? false);
+
+  // Mesmo padrão do Header (sem guard de hidratação): `next-themes` já
+  // injeta o script que aplica a classe antes do primeiro paint.
+  const { resolvedTheme } = useTheme();
+  const isDarkPreview = resolvedTheme === "dark";
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -153,10 +179,29 @@ export default function ConfiguracoesPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  const [logoUrlDark, setLogoUrlDark] = useState<string | null>(null);
+  const [logoFileDark, setLogoFileDark] = useState<File | null>(null);
+  const [logoPreviewDark, setLogoPreviewDark] = useState<string | null>(null);
+  const logoInputRefDark = useRef<HTMLInputElement>(null);
+
   // Organização (tenant)
   const [tenantName, setTenantName] = useState("");
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
+
+  // Domínio próprio (Premium) — carregado à parte de `/settings`: sem
+  // Premium a rota responde 403, e é essa falha (não `user.plan`, que o web
+  // nem carrega hoje) que decide se a seção aparece.
+  const [customDomain, setCustomDomain] = useState("");
+  const [domainStatus, setDomainStatus] = useState<DomainStatus | null>(null);
+  const [domainAvailable, setDomainAvailable] = useState(false);
+  const [isSavingDomain, setIsSavingDomain] = useState(false);
+  const [isVerifyingDomain, setIsVerifyingDomain] = useState(false);
+  const [isConnectingCloudflare, setIsConnectingCloudflare] = useState(false);
+  const [domainError, setDomainError] = useState("");
+
+  // Financeiro
+  const [pixKey, setPixKey] = useState("");
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -178,10 +223,14 @@ export default function ConfiguracoesPage() {
     setPrimaryColor(data.branding.primary_color ?? "");
     setAccentColor(data.branding.accent_color ?? "");
     setLogoUrl(data.branding.logo_url ?? null);
+    setLogoUrlDark(data.branding.logo_url_dark ?? null);
+    setCustomDomain(data.branding.custom_domain ?? "");
 
     setTenantName(data.tenant.name ?? "");
     setTenantEmail(data.tenant.email ?? "");
     setTenantPhone(initPhone(data.tenant.phone ?? undefined));
+
+    setPixKey(data.branding.pix_key ?? "");
   }
 
   const load = useCallback(() => {
@@ -200,13 +249,132 @@ export default function ConfiguracoesPage() {
     load();
   }, [load]);
 
+  const loadDomainStatus = useCallback(() => {
+    api
+      .get<DomainStatus>("/settings/branding/domain")
+      .then((res) => {
+        setDomainAvailable(true);
+        setDomainStatus(res.data);
+      })
+      .catch((err) => {
+        // 403 = plano não é Premium — seção fica de fora, mesmo silêncio do
+        // resto da base quando um recurso Premium não se aplica (PROD-20).
+        // Qualquer outro erro (500, rede) é falha de verdade: esconder do
+        // mesmo jeito faria um admin Premium achar que não tem o recurso.
+        setDomainAvailable(false);
+        if (!isForbidden(err)) {
+          setDomainError("Erro ao carregar o status do domínio. Recarregue a página.");
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    if (canEditTenant) loadDomainStatus();
+  }, [canEditTenant, loadDomainStatus]);
+
+  // Volta do redirect da Cloudflare (`.../callback` no backend redireciona
+  // pra cá com `?dominio=conectado|erro`) — refaz o status e limpa o
+  // parâmetro, pra um refresh da página não repetir o toast.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const dominio = searchParams?.get("dominio");
+    if (!dominio) return;
+    loadDomainStatus();
+    // `setTimeout` de propósito: chamar `showToast` direto aqui é setState
+    // síncrono dentro do efeito (o lint de `react-hooks` barra) — o toast
+    // não precisa aparecer no mesmo tick, só depois que o efeito terminou.
+    setTimeout(() => {
+      showToast(
+        dominio === "conectado"
+          ? "Cloudflare conectada — verificando o domínio."
+          : "Não foi possível conectar com a Cloudflare. Tente novamente.",
+      );
+    }, 0);
+    window.history.replaceState(null, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   useEffect(() => {
     return () => {
       if (logoPreview) URL.revokeObjectURL(logoPreview);
     };
   }, [logoPreview]);
 
-  function onLogoSelected(e: ChangeEvent<HTMLInputElement>) {
+  useEffect(() => {
+    return () => {
+      if (logoPreviewDark) URL.revokeObjectURL(logoPreviewDark);
+    };
+  }, [logoPreviewDark]);
+
+  async function saveDomain() {
+    setDomainError("");
+    const trimmed = customDomain.trim().toLowerCase();
+    if (!trimmed) {
+      setDomainError("Informe o domínio antes de salvar (ex: doar.suaigreja.com.br).");
+      return;
+    }
+    setIsSavingDomain(true);
+    try {
+      await api.patch("/settings", { branding: { custom_domain: trimmed } } satisfies UpdateSettingsPayload);
+      showToast("Domínio salvo. Agora escolha como apontá-lo.");
+      loadDomainStatus();
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+        "Erro ao salvar o domínio. Tente novamente.";
+      setDomainError(message);
+    } finally {
+      setIsSavingDomain(false);
+    }
+  }
+
+  async function verifyDomainManually() {
+    setDomainError("");
+    setIsVerifyingDomain(true);
+    try {
+      const { data } = await api.post<DomainStatus>("/settings/branding/domain/verify");
+      setDomainStatus(data);
+      showToast(
+        data.status === "verified"
+          ? "Domínio verificado!"
+          : "Ainda não encontramos o registro — o DNS pode levar algumas horas para propagar.",
+      );
+    } catch {
+      setDomainError("Erro ao verificar o domínio. Confira se o registro foi criado e tente de novo.");
+    } finally {
+      setIsVerifyingDomain(false);
+    }
+  }
+
+  async function connectCloudflare() {
+    setDomainError("");
+    setIsConnectingCloudflare(true);
+    try {
+      const { data } = await api.get<{ url: string }>("/settings/branding/domain/cloudflare/authorize-url");
+      window.location.href = data.url;
+    } catch {
+      setDomainError("Não foi possível iniciar a conexão com a Cloudflare. Tente novamente.");
+      setIsConnectingCloudflare(false);
+    }
+  }
+
+  async function disconnectCloudflare() {
+    setIsConnectingCloudflare(true);
+    try {
+      const { data } = await api.post<DomainStatus>("/settings/branding/domain/cloudflare/disconnect");
+      setDomainStatus(data);
+      showToast("Cloudflare desconectada.");
+    } catch {
+      setDomainError("Erro ao desconectar a Cloudflare. Tente novamente.");
+    } finally {
+      setIsConnectingCloudflare(false);
+    }
+  }
+
+  function onLogoSelected(
+    e: ChangeEvent<HTMLInputElement>,
+    variant: "light" | "dark",
+  ) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
@@ -217,9 +385,15 @@ export default function ConfiguracoesPage() {
       showToast("Arquivo muito grande. Máximo: 5MB.");
       return;
     }
-    if (logoPreview) URL.revokeObjectURL(logoPreview);
-    setLogoFile(file);
-    setLogoPreview(URL.createObjectURL(file));
+    if (variant === "dark") {
+      if (logoPreviewDark) URL.revokeObjectURL(logoPreviewDark);
+      setLogoFileDark(file);
+      setLogoPreviewDark(URL.createObjectURL(file));
+    } else {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
   }
 
   async function handleSave() {
@@ -254,6 +428,10 @@ export default function ConfiguracoesPage() {
       setSaveError("Cor de destaque deve ser um código hexadecimal válido (ex: #00B8A2).");
       return;
     }
+    if (pixKey.trim().length > 140) {
+      setSaveError("Chave PIX muito longa (máximo 140 caracteres).");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -282,31 +460,69 @@ export default function ConfiguracoesPage() {
           email: tenantEmail.trim() || undefined,
           phone: stripPhone(tenantPhone) || undefined,
         };
+        if (pixKey.trim()) {
+          payload.branding = { pix_key: pixKey.trim() };
+        }
       }
 
       const { data } = await api.patch<Settings>("/settings", payload);
       applySettings(data);
 
+      // Os dois uploads são independentes: a falha de um não pode impedir
+      // a tentativa do outro (cada `try` próprio, não `Promise.all`), e o
+      // que já salvou fica salvo — por isso o erro nomeia a variante que
+      // falhou, em vez de uma mensagem genérica que deixaria ambíguo o que
+      // precisa ser tentado de novo.
+      const uploadErrors: string[] = [];
+
       if (logoFile) {
-        const formData = new FormData();
-        formData.append("file", logoFile);
-        const { data: logoRes } = await api.post<{ logo_url: string }>(
-          "/settings/logo",
-          formData
-        );
-        setLogoUrl(logoRes.logo_url);
-        // `logoPreview` e a ref do `<input type="file">` são sempre setados
-        // juntos com `logoFile` em `onLogoSelected`, e o input só desmonta se
-        // `canEditCongregation` virar false — o que não acontece enquanto
-        // este handler roda (mesmo raciocínio do payload acima). As duas
-        // guardas eram branch morto; removidas ao fechar a Fase 10.
-        URL.revokeObjectURL(logoPreview as string);
-        setLogoFile(null);
-        setLogoPreview(null);
-        logoInputRef.current!.value = "";
+        try {
+          const formData = new FormData();
+          formData.append("file", logoFile);
+          const { data: logoRes } = await api.post<{ logo_url: string | null }>(
+            "/settings/logo?variant=light",
+            formData
+          );
+          setLogoUrl(logoRes.logo_url);
+          // `logoPreview` e a ref do `<input type="file">` são sempre setados
+          // juntos com `logoFile` em `onLogoSelected`, e o input só desmonta se
+          // `canEditCongregation` virar false — o que não acontece enquanto
+          // este handler roda (mesmo raciocínio do payload acima). As duas
+          // guardas eram branch morto; removidas ao fechar a Fase 10.
+          URL.revokeObjectURL(logoPreview as string);
+          setLogoFile(null);
+          setLogoPreview(null);
+          logoInputRef.current!.value = "";
+        } catch {
+          uploadErrors.push("logotipo claro");
+        }
       }
 
-      showToast("Configurações salvas com sucesso.");
+      if (logoFileDark) {
+        try {
+          const formData = new FormData();
+          formData.append("file", logoFileDark);
+          const { data: logoRes } = await api.post<{ logo_url_dark: string | null }>(
+            "/settings/logo?variant=dark",
+            formData
+          );
+          setLogoUrlDark(logoRes.logo_url_dark);
+          URL.revokeObjectURL(logoPreviewDark as string);
+          setLogoFileDark(null);
+          setLogoPreviewDark(null);
+          logoInputRefDark.current!.value = "";
+        } catch {
+          uploadErrors.push("logotipo escuro");
+        }
+      }
+
+      if (uploadErrors.length > 0) {
+        setSaveError(
+          `Configurações salvas, mas o upload do ${uploadErrors.join(" e do ")} falhou. Tente novamente.`
+        );
+      } else {
+        showToast("Configurações salvas com sucesso.");
+      }
     } catch {
       setSaveError("Erro ao salvar configurações. Tente novamente.");
     } finally {
@@ -406,46 +622,120 @@ export default function ConfiguracoesPage() {
             </div>
 
             <div className="flex flex-col gap-4">
+              {/* Preview no tema ativo do navegador agora — é o que confirma
+                  que a variante certa está sendo escolhida, sem precisar
+                  trocar de tema manualmente para conferir. */}
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                  {logoPreview || logoUrl ? (
-                    // O `<img>` só renderiza quando um dos dois é truthy (condição
-                    // acima), então "os dois nulos" nunca acontece aqui — um
-                    // terceiro fallback (`?? ""`) era branch morto, removido ao
-                    // fechar a Fase 10 (docs/TESTES.md tem o registro).
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={logoPreview ?? (logoUrl as string)}
-                      alt="Logotipo"
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <ImageIcon size={22} strokeWidth={1.5} className="text-stone" />
+                <div
+                  className={cn(
+                    "flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--border-default)]",
+                    isDarkPreview ? "bg-ink" : "bg-[var(--surface-subtle)]",
+                  )}
+                >
+                  {(() => {
+                    const lightSrc = logoPreview ?? logoUrl;
+                    const darkSrc = logoPreviewDark ?? logoUrlDark;
+                    const effectiveSrc = isDarkPreview ? (darkSrc ?? lightSrc) : lightSrc;
+                    return effectiveSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={effectiveSrc}
+                        alt="Logotipo"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={22} strokeWidth={1.5} className="text-stone" />
+                    );
+                  })()}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-sm text-ink dark:text-white">
+                    Prévia no tema {isDarkPreview ? "escuro" : "claro"} do navegador
+                  </p>
+                  <p className="text-xs text-stone">
+                    Sem logo para o modo escuro cadastrado, o claro é usado nos dois.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)]">
+                    {logoPreview || logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={logoPreview ?? (logoUrl as string)}
+                        alt="Logotipo (modo claro)"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={18} strokeWidth={1.5} className="text-stone" />
+                    )}
+                  </div>
+                  {canEditCongregation && (
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        onChange={(e) => onLogoSelected(e, "light")}
+                        disabled={isSaving}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-[8px]"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isSaving}
+                      >
+                        Logotipo (modo claro)
+                      </Button>
+                      <p className="text-xs text-stone">JPG, PNG, WEBP ou SVG · máx. 5MB</p>
+                    </div>
                   )}
                 </div>
-                {canEditCongregation && (
-                  <div className="flex flex-col gap-1.5">
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                      onChange={onLogoSelected}
-                      disabled={isSaving}
-                      className="hidden"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-[8px]"
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={isSaving}
-                    >
-                      Alterar logotipo
-                    </Button>
-                    <p className="text-xs text-stone">JPG, PNG, WEBP ou SVG · máx. 5MB</p>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-[var(--border-default)] bg-ink">
+                    {logoPreviewDark || logoUrlDark ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={logoPreviewDark ?? (logoUrlDark as string)}
+                        alt="Logotipo (modo escuro)"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={18} strokeWidth={1.5} className="text-white/60" />
+                    )}
                   </div>
-                )}
+                  {canEditCongregation && (
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        ref={logoInputRefDark}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        onChange={(e) => onLogoSelected(e, "dark")}
+                        disabled={isSaving}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-[8px]"
+                        onClick={() => logoInputRefDark.current?.click()}
+                        disabled={isSaving}
+                      >
+                        Logotipo (modo escuro)
+                      </Button>
+                      <p className="text-xs text-stone">
+                        Opcional · JPG, PNG, WEBP ou SVG · máx. 5MB
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -508,6 +798,151 @@ export default function ConfiguracoesPage() {
             </div>
           </section>
 
+          {/* ── Domínio próprio (Premium) ── */}
+          {canEditTenant && !domainAvailable && domainError && (
+            <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">{domainError}</p>
+          )}
+          {canEditTenant && domainAvailable && (
+            <section className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Globe size={16} strokeWidth={1.5} className="text-navy" />
+                <h2 className="text-sm font-medium text-ink dark:text-white">Domínio próprio</h2>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <Field label="Domínio" full>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={customDomain}
+                      onChange={(e) => setCustomDomain(e.target.value)}
+                      placeholder="doar.suaigreja.com.br"
+                      disabled={isSavingDomain}
+                      className="rounded-[8px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 rounded-[8px]"
+                      onClick={saveDomain}
+                      disabled={isSavingDomain || customDomain.trim() === (domainStatus?.custom_domain ?? "")}
+                    >
+                      {isSavingDomain && <Loader2 size={14} className="mr-1.5 animate-spin" />}
+                      Salvar
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-stone">
+                    Sem protocolo — só o hostname (ex: doar.suaigreja.com.br, não https://…).
+                  </p>
+                </Field>
+
+                {domainStatus?.custom_domain && (
+                  <div className="flex flex-col gap-3 rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-4">
+                    <div className="flex items-center gap-2 text-sm">
+                      {domainStatus.status === "verified" ? (
+                        <>
+                          <CheckCircle2 size={15} className="text-teal" />
+                          <span className="text-ink dark:text-white">
+                            {domainStatus.custom_domain} está apontado e verificado.
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-stone">
+                          Aguardando o DNS apontar para {domainStatus.custom_domain}.
+                        </span>
+                      )}
+                    </div>
+
+                    {domainStatus.status !== "verified" && (
+                      <>
+                        {domainStatus.cloudflare_connected ? (
+                          <p className="text-xs text-stone">
+                            Cloudflare conectada — o registro é criado automaticamente. Se o
+                            domínio acabou de ser salvo, aguarde alguns minutos e verifique.
+                          </p>
+                        ) : (
+                          domainStatus.manual_instructions && (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-left text-stone">
+                                    <th className="pb-1.5 pr-4 font-medium">Tipo</th>
+                                    <th className="pb-1.5 pr-4 font-medium">Nome</th>
+                                    <th className="pb-1.5 font-medium">Valor</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="font-mono text-ink dark:text-white">
+                                  <tr>
+                                    <td className="py-1 pr-4">CNAME</td>
+                                    <td className="py-1 pr-4">{domainStatus.manual_instructions.cname.name}</td>
+                                    <td className="py-1">{domainStatus.manual_instructions.cname.value}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="py-1 pr-4">A (domínio raiz)</td>
+                                    <td className="py-1 pr-4">{domainStatus.manual_instructions.apex_alternative.name}</td>
+                                    <td className="py-1">{domainStatus.manual_instructions.apex_alternative.value}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                              <p className="mt-2 text-xs text-stone">{domainStatus.manual_instructions.note}</p>
+                            </div>
+                          )
+                        )}
+
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-[8px]"
+                            onClick={verifyDomainManually}
+                            disabled={isVerifyingDomain}
+                          >
+                            {isVerifyingDomain && <Loader2 size={13} className="mr-1.5 animate-spin" />}
+                            Verificar domínio
+                          </Button>
+                          {domainStatus.cloudflare_connected ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-[8px]"
+                              onClick={disconnectCloudflare}
+                              disabled={isConnectingCloudflare}
+                            >
+                              Desconectar Cloudflare
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="gap-1.5 rounded-[8px] bg-[#F6821F] text-white hover:bg-[#dd7519]"
+                              onClick={connectCloudflare}
+                              disabled={isConnectingCloudflare}
+                            >
+                              {isConnectingCloudflare ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <CloudCog size={13} />
+                              )}
+                              Conectar com Cloudflare
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-stone">
+                          Conectar com a Cloudflare cria o registro automaticamente — sem
+                          precisar copiar nada. Você será levado à própria Cloudflare para
+                          autorizar o acesso.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {domainError && <p className="text-sm text-crimson">{domainError}</p>}
+              </div>
+            </section>
+          )}
+
           {/* ── Organização ── */}
           <section className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-5">
             <h2 className="text-sm font-medium text-ink dark:text-white">Organização</h2>
@@ -548,6 +983,29 @@ export default function ConfiguracoesPage() {
             </div>
           </section>
 
+          {/* ── Financeiro ── */}
+          {canEditTenant && (
+            <section className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Wallet size={16} strokeWidth={1.5} className="text-navy" />
+                <h2 className="text-sm font-medium text-ink dark:text-white">Financeiro</h2>
+              </div>
+              <Field label="Chave PIX" full>
+                <Input
+                  value={pixKey}
+                  onChange={(e) => setPixKey(e.target.value)}
+                  placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                  disabled={isSaving}
+                  className="rounded-[8px]"
+                />
+              </Field>
+              <p className="mt-1.5 text-xs text-stone">
+                Mostrada para quem doa pela página pública da igreja, para copiar e pagar
+                por PIX.
+              </p>
+            </section>
+          )}
+
           {saveError && (
             <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">{saveError}</p>
           )}
@@ -573,5 +1031,13 @@ export default function ConfiguracoesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ConfiguracoesPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-44 w-full rounded-[12px]" />}>
+      <ConfiguracoesContent />
+    </Suspense>
   );
 }

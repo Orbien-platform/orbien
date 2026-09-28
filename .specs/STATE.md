@@ -103,3 +103,28 @@ registro" a `audit_logs` é sempre um parâmetro novo em `audit_insert()`
 (`001_rls_setup.sql`, `CREATE OR REPLACE FUNCTION`) resolvido no
 `AuditInterceptor` antes do `tap()`, nunca uma query solta em cada feature
 que precisar auditar algo.
+
+### AD-005 — Tabela de referência global (sem tenant) ainda habilita RLS, com `USING (true)`
+
+**Status**: active
+**Origem**: feature `biblia-nvi-marcacoes-mobile`, fase Design, 2026-09-21
+
+Toda tabela nova do repo até aqui isola por `tenant_id` (ou
+`tenant_id`+`congregation_id`, AD-001). `bible_chapter_cache` é a primeira
+exceção deliberada: guarda o texto de um capítulo da NVI, que é **o mesmo
+para toda igreja** — não existe "congregação dona" desse dado, e RLS por
+tenant não faz sentido aqui.
+
+**Não é** "criar a tabela sem RLS". A tabela ainda roda
+`ALTER TABLE bible_chapter_cache ENABLE/FORCE ROW LEVEL SECURITY`, com uma
+policy explícita `PERMISSIVE FOR ALL TO app_user USING (true) WITH CHECK (true)`
+— visibilidade total é uma escolha registrada e testada (ver
+`apps/api/test/rls/bible-chapter-cache.spec.ts`), não a ausência de policy
+que o alerta do `pre-push.sh` (linhas ~93-110) existe para pegar.
+
+**Consequência prática**: uma tabela nova de **referência global** (texto,
+tabela de código, catálogo que não varia por igreja) segue este padrão —
+RLS habilitado com `USING (true)/WITH CHECK (true)` — em vez de ficar sem
+RLS (o que o alerta do pre-push aceitaria em silêncio, mas deixa a
+intenção implícita) ou de ganhar `tenant_id` que não tem dono nenhum para
+apontar.

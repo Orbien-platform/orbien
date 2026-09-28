@@ -15,13 +15,26 @@ import type {
  * `GET /content/posts` (MOB-06, AC2) — paginação offset/page da API
  * (`page`/`limit`), sem cursor. `page`/`limit` omitidos usam os defaults
  * do backend (1/20).
+ *
+ * Sempre com `published=true`: o app é vitrine. Sem isso, quem tem papel de
+ * escrita (pastor, admin) via o próprio rascunho no feed e na home — a API só
+ * esconde rascunho sozinha de `member` puro.
  */
 export async function getPosts(page?: number, limit?: number): Promise<PostsPage> {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ published: "true" });
   if (page !== undefined) params.set("page", String(page));
   if (limit !== undefined) params.set("limit", String(limit));
   const query = params.toString();
   return authenticatedRequest<PostsPage>("get", `/content/posts${query ? `?${query}` : ""}`);
+}
+
+/**
+ * `GET /content/posts/highlights` — os posts que a igreja escolheu no web
+ * para o carrossel da home, já na ordem e só os publicados. Lista vazia é
+ * "ninguém escolheu": a home cai nos últimos publicados.
+ */
+export async function getHighlights(): Promise<Post[]> {
+  return authenticatedRequest<Post[]>("get", "/content/posts/highlights");
 }
 
 /**

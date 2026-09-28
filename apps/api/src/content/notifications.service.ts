@@ -46,6 +46,26 @@ export interface SendPushOpts {
   data: Record<string, string>;
 }
 
+/**
+ * O corpo do post é Markdown (o editor do web grava assim), e a push mostra
+ * texto puro — sem isto a notificação chegava com `**` e `##`. Tira a
+ * marcação do subconjunto que o editor produz; o resto passa como veio.
+ */
+export function markdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*([-*+]|\d+[.)])\s+/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__|~~)(.+?)\1/g, '$2')
+    // Itálico só quando o marcador não está colado em letra ou número:
+    // `nome_do_arquivo` e `2 * 3 * 4` não são ênfase.
+    .replace(/(^|[^\p{L}\p{N}\\])([*_])(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}])/gu, '$1$3')
+    .replace(/\\([\\`*_{}[\]()#+\-.!~>])/g, '$1')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -56,7 +76,7 @@ export class NotificationsService {
     post: ContentPost & { tenant_id: string; congregation_id: string },
     segments: AudienceSegment[],
   ): Promise<void> {
-    const body = post.body ? post.body.slice(0, 200) : post.title;
+    const body = post.body ? markdownToPlainText(post.body).slice(0, 200) : post.title;
     const category = CATEGORY_BY_POST_TYPE[post.type];
     const data = { post_id: post.id, type: post.type as string };
 

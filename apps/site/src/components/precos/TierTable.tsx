@@ -66,7 +66,7 @@ export function TierTable() {
                 className="px-7 py-[22px] flex items-center border-b"
                 style={{ background: "var(--subtle)", borderColor: "var(--border-strong)" }}
               >
-                <span className="font-mono text-[11px] uppercase tracking-[.14em]" style={{ color: "var(--stone)" }}>
+                <span className="text-sm font-medium" style={{ color: "var(--stone)" }}>
                   Faixa de membros
                 </span>
               </div>

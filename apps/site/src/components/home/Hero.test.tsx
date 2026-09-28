@@ -22,7 +22,7 @@ describe("Hero", () => {
 
   it("lista os selos de entrada sem atrito", () => {
     render(<Hero />);
-    for (const selo of ["SEM CNPJ", "SEM CARTÃO", "5 MIN PARA COMEÇAR"]) {
+    for (const selo of ["Sem CNPJ", "Sem cartão", "5 min para começar"]) {
       expect(screen.getByText(selo)).toBeInTheDocument();
     }
   });

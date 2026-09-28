@@ -60,7 +60,7 @@ describe("guarda de rotas do layout raiz", () => {
     expect([...authenticated, ...anonymous].sort()).toEqual(rootRouteNames());
   });
 
-  it("só o login fica fora da guarda de sessão", () => {
-    expect(guardedRouteNames().anonymous).toEqual(["login"]);
+  it("só login e esqueci-senha ficam fora da guarda de sessão", () => {
+    expect(guardedRouteNames().anonymous).toEqual(["esqueci-senha", "login"]);
   });
 });

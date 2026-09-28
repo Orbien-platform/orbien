@@ -101,7 +101,7 @@ export function LgpdContent() {
               className="rounded-[12px] border p-6 mt-2"
               style={{ background: "var(--surface)", borderColor: "var(--border)" }}
             >
-              <p className="font-mono text-[11px] uppercase tracking-[.1em] mb-3" style={{ color: "var(--muted)" }}>Encarregado de Dados</p>
+              <p className="text-sm font-medium mb-3" style={{ color: "var(--muted)" }}>Encarregado de Dados</p>
               <p className="text-[14.5px] font-medium mb-1" style={{ color: "var(--ink)" }}>Church Platform Ltda — DPO</p>
               <p className="text-[14px] font-light" style={{ color: "var(--stone)" }}>
                 E-mail:{" "}

@@ -28,7 +28,7 @@ export default function LoginPage() {
           </div>
 
           <p
-            className="font-mono text-[11px] uppercase tracking-[.14em] mb-5"
+            className="text-sm font-medium mb-5"
             style={{ color: "var(--navy-accent)" }}
           >
             Em breve

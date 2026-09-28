@@ -175,6 +175,23 @@ export async function fetchAreas(accessToken: string): Promise<string[] | null> 
   }
 }
 
+/**
+ * Revoga um refresh token na API. Nunca lança — a API pode estar fora, e quem
+ * chama (logout, ou o bloqueio de login em `route.ts`) não pode travar por
+ * causa disso.
+ */
+export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+  try {
+    await fetch(`${BACKEND_URL}/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    // Ver comentário acima: apagar a sessão local não pode depender disso.
+  }
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

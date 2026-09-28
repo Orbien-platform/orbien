@@ -124,6 +124,18 @@ describe("PerfilScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/notificacoes");
   });
 
+  it("tocar 'Bíblia' navega para /biblia (T23, biblia-nvi-marcacoes-mobile, BIB-01)", async () => {
+    await act(async () => {
+      render(<PerfilScreen />);
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/biblia");
+  });
+
   it("sair da conta chama logout", async () => {
     await act(async () => {
       render(<PerfilScreen />);
@@ -170,5 +182,13 @@ describe("PerfilScreen", () => {
 
     expect(screen.getByTestId("powered-by")).toBeTruthy();
     expect(screen.queryByTestId("perfil-roles")).toBeNull();
+  });
+  it("sem sessão não tenta decodificar token e ainda mostra a atribuição", async () => {
+    mockUseAuth.mockReturnValue({ session: null, logout: mockLogout });
+
+    await render(<PerfilScreen />);
+
+    expect(mockDecodeJwtPayload).not.toHaveBeenCalled();
+    expect(screen.getByText(/Powered by Orbien/)).toBeTruthy();
   });
 });

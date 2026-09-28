@@ -11,6 +11,7 @@
 // A identidade (logo/nome) saiu do header do Stack e virou conteúdo da
 // primeira aba — quem cobre é brand-logo.test.tsx.
 import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { AccessibilityInfo } from "react-native";
 
 const mockSegments = jest.fn<string[], []>(() => []);
 const mockUseAuth = jest.fn();
@@ -99,9 +100,14 @@ import RootLayout from "../../app/_layout";
 describe("RootLayout — guarda de navegação", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // A splash não some no instante em que o boot termina: fecha a volta do
+    // satélite e sai em fade. "Reduzir movimento" pula a volta, e o que
+    // sobra é só o fade — é o que o `waitFor` abaixo espera.
+    jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
     mockGetItem.mockResolvedValue(null);
     mockSetItem.mockResolvedValue(undefined);
     mockAuthenticatedRequest.mockResolvedValue({
+      tenant: { slug: "tenant-default" },
       branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
     });
   });
@@ -118,7 +124,7 @@ describe("RootLayout — guarda de navegação", () => {
     expect(screen.getByTestId("shell-placeholder")).toBeTruthy();
     expect(screen.getByTestId("screen-login")).toBeTruthy();
     expect(screen.queryByTestId("screen-(tabs)")).toBeNull();
-    expect(screen.queryByTestId("splash")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("splash")).toBeNull());
   });
 
   it("status authenticated: libera as rotas autenticadas e tira o login", async () => {
@@ -131,7 +137,7 @@ describe("RootLayout — guarda de navegação", () => {
     expect(screen.getByTestId("shell-placeholder")).toBeTruthy();
     expect(screen.getByTestId("screen-(tabs)")).toBeTruthy();
     expect(screen.queryByTestId("screen-login")).toBeNull();
-    expect(screen.queryByTestId("splash")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("splash")).toBeNull());
   });
 
   it("status loading: splash por cima, mas com o navigator já montado", async () => {
@@ -175,6 +181,7 @@ describe("RootLayout — guarda de navegação", () => {
         session: { accessToken: "token-a", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
       mockAuthenticatedRequest.mockResolvedValue({
+        tenant: { slug: "igreja-a" },
         branding: {
           app_name: "Igreja A",
           primary_color: "#111111",
@@ -199,6 +206,7 @@ describe("RootLayout — guarda de navegação", () => {
         session: { accessToken: "token-b", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
       mockAuthenticatedRequest.mockResolvedValue({
+        tenant: { slug: "igreja-b" },
         branding: {
           app_name: "Igreja B",
           primary_color: "#222222",
@@ -223,6 +231,7 @@ describe("RootLayout — guarda de navegação", () => {
         session: { accessToken: "token-c", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
       });
       mockAuthenticatedRequest.mockResolvedValue({
+        tenant: { slug: "igreja-c" },
         branding: { app_name: null, primary_color: null, logo_url: null, splash_url: null },
       });
 

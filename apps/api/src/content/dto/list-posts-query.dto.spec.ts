@@ -42,6 +42,15 @@ describe('ListPostsQueryDto', () => {
     expect(dto.is_draft).toBe(false);
   });
 
+  it.each(['published', 'highlighted'] as const)(
+    '%s: "true" e true viram true; qualquer outro valor vira false',
+    (field) => {
+      expect(plainToInstance(ListPostsQueryDto, { [field]: 'true' })[field]).toBe(true);
+      expect(plainToInstance(ListPostsQueryDto, { [field]: true })[field]).toBe(true);
+      expect(plainToInstance(ListPostsQueryDto, { [field]: 'false' })[field]).toBe(false);
+    },
+  );
+
   it('rejeita type inválido', async () => {
     const errors = await errorsFor({ type: 'nao-existe' });
     expect(errors.some((e) => e.property === 'type')).toBe(true);

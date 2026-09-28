@@ -21,22 +21,25 @@ interface BrandLogoProps {
 }
 
 export function BrandLogo({ size = 28, color, style }: BrandLogoProps) {
-  const { logoUrl, accentColor, colors } = useTheme();
+  const { logoUrl, logoUrlDark, accentColor, colors, isDark } = useTheme();
+  // Sem variante escura cadastrada, `logoUrlDark` é nulo e cai no claro —
+  // mesma degradação que o resto da cadeia de branding (./brand-theme.ts).
+  const activeLogoUrl = (isDark ? logoUrlDark : null) ?? logoUrl;
   // A falha é guardada por URL, não como booleano: trocar de tenant (ou o
   // `GET /settings` chegar depois do cache) troca a URL, e um booleano
   // manteria a marca genérica para sempre, mesmo com um logo novo e
   // válido. Derivar em render também evita `setState` dentro de efeito.
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const failed = failedUrl !== null && failedUrl === logoUrl;
+  const failed = failedUrl !== null && failedUrl === activeLogoUrl;
 
-  if (logoUrl && !failed) {
+  if (activeLogoUrl && !failed) {
     return (
       <Image
         testID="brand-logo"
-        source={{ uri: logoUrl }}
+        source={{ uri: activeLogoUrl }}
         style={[{ width: size, height: size }, styles.logo, style]}
         resizeMode="contain"
-        onError={() => setFailedUrl(logoUrl)}
+        onError={() => setFailedUrl(activeLogoUrl)}
       />
     );
   }

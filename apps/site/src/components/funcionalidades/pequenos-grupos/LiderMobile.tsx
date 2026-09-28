@@ -61,7 +61,7 @@ function PhoneMockup() {
           className="pt-9 px-4 pb-3 border-b flex-shrink-0"
           style={{ background: "var(--bg)", borderColor: "var(--border)" }}
         >
-          <p className="font-mono text-[8px] uppercase tracking-[.1em] mb-0.5" style={{ color: "var(--muted)" }}>
+          <p className="text-[10px] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
             Célula Alfa · Reunião
           </p>
           <p className="text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--ink)" }}>
@@ -193,7 +193,7 @@ export function LiderMobile() {
                   style={{ background: "linear-gradient(to bottom, transparent 20%, var(--surface) 80%)" }}
                 >
                   <span
-                    className="font-mono text-[10px] uppercase tracking-[.12em] px-3 py-1.5 rounded-pill"
+                    className="text-xs font-medium px-3 py-1.5 rounded-pill"
                     style={{ background: "var(--subtle)", color: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     Visão do pastor · em breve

@@ -20,7 +20,7 @@ function MemberListMockup() {
         className="flex items-center justify-between px-5 py-3.5 border-b"
         style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
       >
-        <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+        <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
           Membros e Visitantes · 247
         </span>
         <div className="flex items-center gap-2">
@@ -127,8 +127,8 @@ export function MembrosHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap font-mono text-[11.5px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
-              {["QR CODE NA ENTRADA", "DEDUPLICAÇÃO", "HISTÓRICO COMPLETO"].map((label) => (
+            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+              {["QR code na entrada", "Deduplicação", "Histórico completo"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
                   {label}

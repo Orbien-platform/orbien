@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 18,
+  "next_id": 23,
   "lessons": [
     {
       "id": "L-001",
@@ -310,6 +310,96 @@
       ],
       "created": "2026-09-15T02:10:01Z",
       "last_seen": "2026-09-15T02:10:01Z"
+    },
+    {
+      "id": "L-018",
+      "key": "surviving_mutant::ao testar valida o de intervalo verse end verse start ou similar inclua sempre o caso limite igual verse start verse end n o s valores distintos",
+      "text": "Ao testar validação de intervalo (verse_end < verse_start ou similar), inclua sempre o caso-limite igual (verse_start === verse_end) — não só valores distintos.",
+      "signal": "surviving_mutant",
+      "scope": "apps/api/src/bible",
+      "status": "candidate",
+      "features": [
+        "biblia-nvi-marcacoes-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/bible/bible-verse-marks.service.ts:70 (apps/api/src/bible)"
+      ],
+      "created": "2026-09-21T11:57:47Z",
+      "last_seen": "2026-09-21T11:57:47Z"
+    },
+    {
+      "id": "L-019",
+      "key": "ac_gap::campo de texto livre validado s por minlength maxlength aceita string whitespace only some transform trim antes do minlength quando a spec disser tratar espa os em branco como vazio",
+      "text": "Campo de texto livre validado só por MinLength/MaxLength aceita string whitespace-only — some @Transform(trim) antes do MinLength quando a spec disser 'tratar espaços em branco como vazio'.",
+      "signal": "ac_gap",
+      "scope": "apps/api/src/bible/dto",
+      "status": "candidate",
+      "features": [
+        "biblia-nvi-marcacoes-mobile"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apps/api/src/bible/dto/create-bible-verse-mark.dto.ts:comment (apps/api/src/bible/dto)"
+      ],
+      "created": "2026-09-21T11:57:47Z",
+      "last_seen": "2026-09-21T11:57:47Z"
+    },
+    {
+      "id": "L-020",
+      "key": "ac_gap::when an ac says another entry point mobile a different route must keep working unaffected by a change confined to one file add a test that exercises that other entry point directly not just a comment noting the code path is separate",
+      "text": "When an AC says another entry point (mobile, a different route) must keep working unaffected by a change confined to one file, add a test that exercises that other entry point directly, not just a comment noting the code path is separate.",
+      "signal": "ac_gap",
+      "scope": "testing",
+      "status": "candidate",
+      "features": [
+        "restricao-acesso-piso-member"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ACC-02 spec.md (testing)"
+      ],
+      "created": "2026-09-21T22:54:57Z",
+      "last_seen": "2026-09-21T22:54:57Z"
+    },
+    {
+      "id": "L-021",
+      "key": "ac_gap::when spec md asks design md to explicitly confirm two flows never cross add that confirmation as a written section in design md and a dedicated test do not let it stay an implicit assumption",
+      "text": "When spec.md asks design.md to explicitly confirm two flows never cross, add that confirmation as a written section in design.md and a dedicated test — do not let it stay an implicit assumption.",
+      "signal": "ac_gap",
+      "scope": "auth",
+      "status": "candidate",
+      "features": [
+        "restricao-acesso-piso-member"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md Edge Cases (support_session) / design.md missing confirmation (auth)"
+      ],
+      "created": "2026-09-21T22:54:57Z",
+      "last_seen": "2026-09-21T22:54:57Z"
+    },
+    {
+      "id": "L-022",
+      "key": "spec_precision_gap::a visual pixel level acceptance criterion e g text clipping cannot be closed by jest rtl in this mobile app spec such acs explicitly as manual uat and require the implementer to record how closure was verified screenshot or documented layout reasoning when no device simulator is available",
+      "text": "A visual/pixel-level acceptance criterion (e.g. text clipping) cannot be closed by Jest/RTL in this mobile app — spec such ACs explicitly as manual UAT and require the implementer to record how closure was verified (screenshot, or documented layout reasoning) when no device/simulator is available.",
+      "signal": "spec_precision_gap",
+      "scope": "mobile",
+      "status": "candidate",
+      "features": [
+        "mobile-home-redesign"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MHR-12 / .specs/features/mobile-home-redesign/validation.md (mobile)"
+      ],
+      "created": "2026-09-22T01:07:01Z",
+      "last_seen": "2026-09-22T01:07:01Z"
     }
   ]
 }

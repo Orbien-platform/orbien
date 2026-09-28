@@ -56,13 +56,13 @@ Mesma lógica de peso do web (contraste 300/500 é a ferramenta expressiva), com
 
 | Token | Peso | Tamanho | Line height | Uso |
 |---|---|---|---|---|
-| `display` | 300 | 32px | 38px | Título de tela cheia (splash, onboarding) |
+| `display` | 400 | 32px | 38px | Título de tela cheia (splash, onboarding) — peso 300 tornava o "n" de nomes de app ambíguo com "r" nesse tamanho |
 | `h1` | 500 | 24px | 30px | Título de tela (header de stack) |
 | `h2` | 500 | 20px | 26px | Título de seção / card grande |
 | `h3` | 500 | 16px | 22px | Subtítulo, título de list item |
 | `body` | 300 | 15px | 22px | Texto corrido |
 | `body-medium` | 400 | 14px | 20px | Formulário, descrição |
-| `label` | 500 | 11px | 14px | Label de campo, categoria (caps, +10% tracking) |
+| `label` | 500 | 12px | 16px | Label de campo, categoria, rótulo de seção — sem caixa alta, sem tracking (ver §3.3 do guia de marca) |
 | `caption` | 400 | 11px | 14px | Timestamp, meta info |
 | `mono` | 400 | 13px | 18px | Valores monetários, IDs |
 | `button` | 500 | 15px | — | Sempre 500, nunca 600 (idêntico ao web) |

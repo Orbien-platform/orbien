@@ -1,5 +1,4 @@
-// Rótulo de seção — token `label` do §2 (11px, peso 500, caps, tracking
-// +10%). Serve para dar um cabeçalho às listas, que antes começavam
+// Rótulo de seção — token `label` do §2 (12px, peso 500, sem caixa alta). Serve para dar um cabeçalho às listas, que antes começavam
 // direto no primeiro card sem dizer o que eram.
 import { StyleSheet, Text, View } from "react-native";
 

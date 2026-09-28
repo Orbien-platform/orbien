@@ -9,12 +9,14 @@
 // §7), erro como alerta com ícone em vez de linha de texto solta, e botão
 // primário em estado `loading` — antes o botão só ficava apagado, sem dizer
 // que a requisição estava em curso.
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../components/Alert";
 import { AppButton } from "../components/AppButton";
+import { AppLink } from "../components/AppLink";
 import { BrandLogo } from "../components/BrandLogo";
 import { Input } from "../components/Input";
 import { Screen } from "../components/Screen";
@@ -34,6 +36,7 @@ const LOGO_SIZE = 72;
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const router = useRouter();
   const { appName, colors, shadow, isDark, primaryColor } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,17 +65,22 @@ export default function LoginScreen() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <View style={styles.brand}>
         {/* Antes do login não há tenant resolvido: numa build genérica esta
-            é a marca da Orbien, e numa build personalizada o logo do tenant
-            só aparece a partir do segundo login (cache). Ver `colorsOnly`
-            em src/lib/theme/brand-theme.ts. */}
+            é a marca da Orbien, e numa build personalizada o logo e o nome
+            do tenant só aparecem a partir do segundo login (cache). Ver
+            `preLoginLayer` em src/lib/theme/brand-theme.ts. */}
         <View style={styles.logo}>
           <BrandLogo size={LOGO_SIZE} color={isDark ? colors.textPrimary : primaryColor} />
         </View>
-        <Text style={[typography.display, styles.appName, { color: colors.textPrimary }]}>
+        <Text
+          style={[typography.display, styles.appName, { color: colors.textPrimary }]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
           {appName}
         </Text>
         <Text style={[typography.body, styles.tagline, { color: colors.textSecondary }]}>
-          Entre com os dados da sua igreja
+          Tão somente creia
         </Text>
       </View>
 
@@ -123,6 +131,12 @@ export default function LoginScreen() {
           loading={submitting}
           style={styles.submit}
         />
+
+        <View style={styles.forgotPassword}>
+          <AppLink testID="forgot-password-link" onPress={() => router.push("/esqueci-senha")}>
+            Esqueci minha senha
+          </AppLink>
+        </View>
       </View>
     </Screen>
   );
@@ -132,9 +146,10 @@ const styles = StyleSheet.create({
   brand: {
     alignItems: "center",
     marginBottom: spacing.xxxl,
+    paddingHorizontal: spacing.xs,
   },
   logo: { marginBottom: spacing.lg },
-  appName: { textAlign: "center" },
+  appName: { textAlign: "center", flexShrink: 1 },
   tagline: {
     textAlign: "center",
     marginTop: spacing.xs,
@@ -148,4 +163,5 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
   },
   submit: { marginTop: spacing.xs },
+  forgotPassword: { alignItems: "center" },
 });

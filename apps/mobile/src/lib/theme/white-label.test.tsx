@@ -51,6 +51,7 @@ function Probe() {
 async function renderWithBranding(primaryColor: string | null) {
   mockGetItem.mockResolvedValue(null);
   mockAuthenticatedRequest.mockResolvedValue({
+    tenant: { slug: "igreja-teste" },
     branding: {
       app_name: "Igreja Teste",
       primary_color: primaryColor,

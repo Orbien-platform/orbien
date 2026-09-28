@@ -12,5 +12,10 @@ export interface Branding {
    * baixo da cadeia (ver ./brand-theme.ts). */
   accent_color?: string | null;
   logo_url: string | null;
+  /** Variante para modo escuro — par de `logo_url` (o claro). Opcional pela
+   * mesma razão de `accent_color`: um branding em cache gravado antes de a
+   * API expor o campo continua válido, caindo em `logo_url` nos dois modos
+   * (ver `resolveBrandTheme`/`BrandLogo`). */
+  logo_url_dark?: string | null;
   splash_url: string | null;
 }

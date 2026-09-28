@@ -12,6 +12,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       count: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     postSegment: { createMany: jest.fn(), deleteMany: jest.fn() },
@@ -131,8 +132,56 @@ describe('PostsService', () => {
           where: expect.objectContaining({ published_at: { not: null } }),
         }),
       );
-      expect(client.contentPost.findMany.mock.calls[0]![0].where).not.toHaveProperty('is_draft');
+      // O `is_draft: true` pedido é ignorado: vale o do filtro de "no ar".
+      expect(client.contentPost.findMany.mock.calls[0]![0].where.is_draft).toBe(false);
       expect(result).toEqual({ data: [{ id: 'p1' }], total: 1 });
+    });
+
+    it('published=true esconde rascunho até de quem pode escrever (app mobile)', async () => {
+      const client = clientWith();
+      client.contentPost.findMany.mockResolvedValue([]);
+      client.contentPost.count.mockResolvedValue(0);
+      const { service } = serviceWith(client);
+
+      await service.findAll('t1', 'g1', ['tenant_admin'], {
+        page: 1,
+        limit: 20,
+        published: true,
+      } as never);
+
+      expect(client.contentPost.findMany.mock.calls[0]![0].where).toEqual(
+        expect.objectContaining({ is_draft: false, published_at: { not: null } }),
+      );
+    });
+
+    it('highlighted=true lista só o que está no carrossel, rascunho incluído', async () => {
+      const client = clientWith();
+      client.contentPost.findMany.mockResolvedValue([]);
+      client.contentPost.count.mockResolvedValue(0);
+      const { service } = serviceWith(client);
+
+      await service.findAll('t1', 'g1', ['tenant_admin'], {
+        page: 1,
+        limit: 20,
+        highlighted: true,
+      } as never);
+
+      const where = client.contentPost.findMany.mock.calls[0]![0].where;
+      expect(where.app_highlight_position).toEqual({ not: null });
+      expect(where).not.toHaveProperty('is_draft');
+    });
+
+    it('sem published, admin continua vendo rascunho (tela do web)', async () => {
+      const client = clientWith();
+      client.contentPost.findMany.mockResolvedValue([]);
+      client.contentPost.count.mockResolvedValue(0);
+      const { service } = serviceWith(client);
+
+      await service.findAll('t1', 'g1', ['tenant_admin'], { page: 1, limit: 20 } as never);
+
+      const where = client.contentPost.findMany.mock.calls[0]![0].where;
+      expect(where).not.toHaveProperty('is_draft');
+      expect(where).not.toHaveProperty('published_at');
     });
 
     it('não membro (staff) filtra por type e is_draft quando informados', async () => {
@@ -665,5 +714,63 @@ describe('PostsService — preço de inscrição exige Premium (PROD-24)', () =>
         'starter',
       ),
     ).resolves.toEqual({ id: 'p1' });
+  });
+
+  describe('destaques do app', () => {
+    it('listHighlights traz só o que está no ar, na ordem escolhida', async () => {
+      const client = clientWith();
+      client.contentPost.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+
+      await service.listHighlights('t1', 'g1');
+
+      expect(client.contentPost.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 't1',
+            congregation_id: 'g1',
+            app_highlight_position: { not: null },
+            is_draft: false,
+            published_at: { not: null },
+          }),
+          orderBy: { app_highlight_position: 'asc' },
+        }),
+      );
+    });
+
+    it('setHighlights limpa a lista antiga e grava a posição pela ordem recebida', async () => {
+      const client = clientWith();
+      client.contentPost.count.mockResolvedValue(2);
+      client.contentPost.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+
+      await service.setHighlights('t1', 'g1', ['b', 'a']);
+
+      expect(client.contentPost.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { app_highlight_position: null } }),
+      );
+      expect(client.contentPost.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 'b' },
+        data: { app_highlight_position: 0 },
+      });
+      expect(client.contentPost.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 'a' },
+        data: { app_highlight_position: 1 },
+      });
+    });
+
+    it('setHighlights recusa post de outra congregação sem mexer em nada', async () => {
+      const client = clientWith();
+      client.contentPost.count.mockResolvedValue(1);
+      const { service } = serviceWith(client);
+
+      await expect(service.setHighlights('t1', 'g1', ['a', 'x'])).rejects.toThrow('Post não encontrado');
+      expect(client.contentPost.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('setHighlights recusa id repetido', async () => {
+      const { service } = serviceWith(clientWith());
+      await expect(service.setHighlights('t1', 'g1', ['a', 'a'])).rejects.toThrow('repetido');
+    });
   });
 });

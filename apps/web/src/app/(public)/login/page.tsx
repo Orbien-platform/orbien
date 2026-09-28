@@ -36,6 +36,14 @@ export default function LoginPage() {
           setError("Serviço temporariamente indisponível. Tente novamente.");
         } else if (err.response.status === 401) {
           setError("E-mail ou senha incorretos.");
+        } else if (
+          err.response.status === 403 &&
+          (err.response.data as { code?: string } | undefined)?.code === "WEB_ACCESS_DENIED"
+        ) {
+          setError(
+            (err.response.data as { message?: string }).message ??
+              "Este acesso é apenas pelo aplicativo Orbien."
+          );
         } else {
           setError("Erro ao entrar. Tente novamente.");
         }

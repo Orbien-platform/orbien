@@ -16,7 +16,7 @@ function DashboardMockup() {
         className="flex items-center justify-between px-5 py-3.5 border-b"
         style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
       >
-        <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+        <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
           Financeiro · Este mês
         </span>
         <span className="font-mono text-[10px]" style={{ color: "var(--navy-accent)" }}>Exportar</span>
@@ -30,7 +30,7 @@ function DashboardMockup() {
           { label: "Doadores",     value: "34",       delta: "+3 vs mês ant."  },
         ].map(({ label, value, delta }) => (
           <div key={label} className="px-4 py-3.5" style={{ borderColor: "var(--border)" }}>
-            <p className="font-mono text-[9px] uppercase tracking-[.06em] mb-1" style={{ color: "var(--muted)" }}>{label}</p>
+            <p className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</p>
             <p className="text-[17px] font-semibold tracking-[-0.025em]" style={{ color: "var(--ink)" }}>{value}</p>
             <p className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>{delta}</p>
           </div>
@@ -39,7 +39,7 @@ function DashboardMockup() {
 
       {/* Chart */}
       <div className="px-5 pt-4 pb-3">
-        <p className="font-mono text-[9px] uppercase tracking-[.08em] mb-3" style={{ color: "var(--muted)" }}>
+        <p className="text-[10px] font-medium mb-3" style={{ color: "var(--muted)" }}>
           Doações · últimos 7 dias
         </p>
         <div className="flex items-end gap-1.5 h-16">
@@ -140,8 +140,8 @@ export function FinanceiroHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap font-mono text-[11.5px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
-              {["PIX NATIVO", "RECIBO AUTOMÁTICO", "SEM TAXA NO STARTER"].map((label) => (
+            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+              {["PIX nativo", "Recibo automático", "Sem taxa no Starter"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
                   {label}

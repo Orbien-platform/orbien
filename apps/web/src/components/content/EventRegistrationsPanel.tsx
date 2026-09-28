@@ -168,7 +168,7 @@ export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistra
   if (!info.registration_enabled) {
     return (
       <div className="border-t border-[var(--border-default)] pt-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-stone">Inscrições</p>
+        <p className="text-sm font-medium text-stone">Inscrições</p>
         <p className="mt-1 text-sm text-stone">
           Este evento está sem inscrição. Edite o post para abrir.
         </p>
@@ -187,7 +187,7 @@ export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistra
     <div className="flex flex-col gap-3 border-t border-[var(--border-default)] pt-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-stone">Inscrições</p>
+          <p className="text-sm font-medium text-stone">Inscrições</p>
           <p className="mt-0.5 text-sm text-ink dark:text-white">
             {info.confirmed_count} confirmada{info.confirmed_count !== 1 ? "s" : ""}
             {info.registration_limit !== null && ` de ${info.registration_limit}`}

@@ -2,11 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import RootLayout from "./layout";
 
-// next/font/google não é executável fora do compilador do Next — precisa de
-// mock, assim como o layout raiz do site fez na Fase 12 (mesmo padrão).
-vi.mock("next/font/google", () => ({
-  DM_Sans: () => ({ variable: "--font-dm-sans" }),
-  DM_Mono: () => ({ variable: "--font-dm-mono" }),
+// next/font/local não é executável fora do compilador do Next — precisa de
+// mock, assim como o layout raiz do site fez na Fase 12 (mesmo padrão). O
+// mock devolve a variável que o layout pediu, para o teste pegar nome trocado.
+vi.mock("next/font/local", () => ({
+  default: ({ variable }: { variable: string }) => ({ variable }),
 }));
 
 // AuthProvider já tem cobertura própria (Fase 7, contexts/AuthContext.test.tsx)

@@ -2,15 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 /**
- * `next/font/google` só existe como transformação do compilador do Next — o
- * módulo importado fora do build não expõe os loaders, então chamar
- * `DM_Sans()` estoura. O mock devolve o mesmo contrato usado pelo layout
- * (um objeto com `variable`), o que basta para verificar que as duas
- * variáveis de fonte chegam ao `<html>`.
+ * `next/font/local` só existe como transformação do compilador do Next — o
+ * módulo importado fora do build não expõe o loader, então chamar
+ * `localFont()` estoura. O mock devolve o mesmo contrato usado pelo layout
+ * (um objeto com `variable`), derivado da variável que o layout pediu, o que
+ * basta para verificar que as duas variáveis de fonte chegam ao `<html>`.
  */
-vi.mock("next/font/google", () => ({
-  DM_Sans: () => ({ variable: "--font-dm-sans-stub" }),
-  DM_Mono: () => ({ variable: "--font-dm-mono-stub" }),
+vi.mock("next/font/local", () => ({
+  default: ({ variable }: { variable: string }) => ({ variable: `${variable}-stub` }),
 }));
 
 // `<html>`/`<body>` não podem ser montados dentro do container do jsdom;

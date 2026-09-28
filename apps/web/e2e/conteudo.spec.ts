@@ -37,7 +37,9 @@ test.describe("conteúdo", () => {
     ) {
       await page.getByRole("button", { name: "Novo post" }).click();
       await page.getByPlaceholder("Título do post").fill(titulo);
-      await page.getByPlaceholder("Conteúdo do post…").fill("corpo criado pelo teste de e2e");
+      // O corpo é o editor rico (contenteditable, não textarea): não tem
+      // `placeholder` de verdade, e quem o nomeia é o `aria-label`.
+      await page.getByRole("textbox", { name: "Corpo" }).fill("corpo criado pelo teste de e2e");
       await page.getByRole("button", { name: modo, exact: true }).click();
       await page.getByRole("button", { name: submit, exact: true }).click();
     }

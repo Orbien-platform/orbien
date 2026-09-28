@@ -2,9 +2,15 @@
 // domínio (Conteúdo) justifica o custo, conforme já previsto no design.md
 // da Rodada 2. `expo-router/js-tabs`, não `expo-router` (export
 // deprecated) — ver AGENTS.md do mobile, Expo mudou entre versões.
-// Terceira e quarta abas "Celebrações" (MOB-08) e "Grupos" (MOB-09), na
-// ordem cronológica de entrega dos módulos de domínio; "Perfil" fecha a
-// lista com os cinco itens que o §7 do STYLE-GUIDE.md permite no máximo.
+//
+// 4 abas (Home, Grupos, Conteúdo, Perfil), Home primeiro — MHR-01/02
+// (.specs/features/mobile-home-redesign/): Escala e Celebrações saíram
+// daqui para rotas empilhadas (`src/app/escala.tsx`,
+// `src/app/celebracoes.tsx`), alcançadas a partir de CTAs na própria Home,
+// não mais abas fixas. O gate de permissão que decidia mostrar a aba
+// Escala (`areas.includes("volunteers")`) também saiu — passa a viver
+// dentro da Home. 5 → 4 abas mantém a base bem abaixo do máximo de 5 do
+// §7 do STYLE-GUIDE.md.
 //
 // Visual conforme §7 ("Bottom tab bar"): altura 56 + safe area inferior,
 // ícone lucide de 22px inativo / 28px ativo (§5), label no token `label`
@@ -22,9 +28,8 @@ import { StyleSheet, View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  CalendarCheck,
-  Church,
   CircleUser,
+  Home,
   Newspaper,
   Users,
   type IconProps,
@@ -98,11 +103,7 @@ export default function TabsLayout() {
       >
         <Tabs.Screen
           name="index"
-          options={{ title: "Escala", tabBarIcon: tabIcon(CalendarCheck) }}
-        />
-        <Tabs.Screen
-          name="celebracoes"
-          options={{ title: "Celebrações", tabBarIcon: tabIcon(Church) }}
+          options={{ title: "Home", tabBarIcon: tabIcon(Home) }}
         />
         <Tabs.Screen
           name="grupos"

@@ -10,6 +10,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CelebrationsService } from './celebrations.service';
 import { CelebrationInstancesService } from './celebration-instances.service';
 import { CelebrationScheduleService } from './celebration-schedule.service';
+import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CreateCelebrationDto } from './dto/create-celebration.dto';
 import { UpdateCelebrationDto } from './dto/update-celebration.dto';
 import { ListCelebrationsQueryDto } from './dto/list-celebrations-query.dto';
@@ -40,12 +41,19 @@ export class CelebrationsController {
     private readonly celebrationsService: CelebrationsService,
     private readonly instancesService: CelebrationInstancesService,
     private readonly scheduleService: CelebrationScheduleService,
+    private readonly schedulerService: CelebrationSchedulerService,
   ) {}
 
+  // Celebração recorrente já sai com as instâncias da janela do cron. Sem
+  // isto ela ficava com zero até o próximo cron — e o app, que lista
+  // instâncias, não mostrava culto nenhum. Mesma transação do request: se a
+  // geração falhar, o cadastro não fica pela metade.
   @Post()
   @Roles(...MANAGE_ROLES)
-  create(@Body() dto: CreateCelebrationDto, @CurrentUser() user: JwtPayload) {
-    return this.celebrationsService.create(user.tenant_id, user.congregation_id, dto);
+  async create(@Body() dto: CreateCelebrationDto, @CurrentUser() user: JwtPayload) {
+    const celebration = await this.celebrationsService.create(user.tenant_id, user.congregation_id, dto);
+    await this.schedulerService.generateUpcomingFor(user.tenant_id, celebration.id);
+    return celebration;
   }
 
   @Get()
@@ -62,8 +70,12 @@ export class CelebrationsController {
 
   @Patch(':id')
   @Roles(...MANAGE_ROLES)
-  update(@Param('id') id: string, @Body() dto: UpdateCelebrationDto, @CurrentUser() user: JwtPayload) {
-    return this.celebrationsService.update(user.tenant_id, user.congregation_id, id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateCelebrationDto, @CurrentUser() user: JwtPayload) {
+    const celebration = await this.celebrationsService.update(user.tenant_id, user.congregation_id, id, dto);
+    // Reativar ou trocar a recorrência também precisa da janela em dia. As
+    // instâncias já geradas no dia antigo ficam: podem ter escala e OC.
+    await this.schedulerService.generateUpcomingFor(user.tenant_id, id);
+    return celebration;
   }
 
   @Delete(':id')

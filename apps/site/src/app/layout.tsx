@@ -1,19 +1,30 @@
 import type { Metadata } from "next";
-import { DM_Sans, DM_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+// Fontes no repositório, não `next/font/google`: o loader do Google baixa os
+// arquivos a cada build, e um download falho derruba o `next build` inteiro
+// (aconteceu no CI da main, no merge do #128). Subset latin do Google Fonts,
+// via @fontsource — licença em src/fonts/OFL-*.txt.
+const dmSans = localFont({
   variable: "--font-dm-sans",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
   display: "swap",
+  src: [
+    { path: "../fonts/dm-sans-300.woff2", weight: "300", style: "normal" },
+    { path: "../fonts/dm-sans-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/dm-sans-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/dm-sans-600.woff2", weight: "600", style: "normal" },
+  ],
 });
 
-const dmMono = DM_Mono({
+const dmMono = localFont({
   variable: "--font-dm-mono",
-  subsets: ["latin"],
-  weight: ["300", "400", "500"],
   display: "swap",
+  src: [
+    { path: "../fonts/dm-mono-300.woff2", weight: "300", style: "normal" },
+    { path: "../fonts/dm-mono-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/dm-mono-500.woff2", weight: "500", style: "normal" },
+  ],
 });
 
 export const metadata: Metadata = {

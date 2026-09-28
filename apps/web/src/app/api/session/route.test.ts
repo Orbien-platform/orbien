@@ -166,6 +166,23 @@ describe("POST /api/session (login)", () => {
     expect(res.status).toBe(502);
   });
 
+  it("responde 502 quando o token decodifica mas roles não é um array (payload malformado)", async () => {
+    // Guarda a mesma checagem contra um payload cujo `roles` sumiu ou veio
+    // num formato inesperado — sem isso, `payload.roles.some(...)` no
+    // bloqueio de WEB_ACCESS_DENIED lançaria TypeError (500 não tratado)
+    // em vez do 502 limpo que este arquivo já dá para resposta inválida.
+    const token = makeToken({ sub: "u1", exp: Math.floor(Date.now() / 1000) + 3600 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: token, refresh_token: "r" }),
+      })
+    );
+    const res = await POST(req({ method: "POST", body: { email: "a@b.com" } }));
+    expect(res.status).toBe(502);
+  });
+
   it("grava os três cookies de sessão em um login bem-sucedido", async () => {
     const token = makeToken({
       sub: "u1",
@@ -196,6 +213,134 @@ describe("POST /api/session (login)", () => {
     // O login já traz as áreas: a barra lateral não precisa de uma segunda
     // volta ao servidor para saber o que desenhar.
     expect(user.areas).toEqual(["content"]);
+  });
+
+  it("recusa login de conta cujo único papel é member, sem gravar cookie", async () => {
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: token, refresh_token: "r1" }),
+      })
+      .mockResolvedValueOnce({ ok: true }); // POST /auth/logout (revogação)
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await POST(req({ method: "POST", body: { email: "visitante@igreja.com" } }));
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      code: "WEB_ACCESS_DENIED",
+      message: "Este acesso é apenas pelo aplicativo Orbien.",
+    });
+    expect(res.cookies.get(ACCESS_COOKIE)).toBeUndefined();
+    expect(res.cookies.get(REFRESH_COOKIE)).toBeUndefined();
+    expect(res.cookies.get(IDENTITY_COOKIE)).toBeUndefined();
+    // Revoga o refresh token recém-emitido — não deixa um token vivo sem
+    // cookie nenhum apontando pra ele.
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/auth/logout"),
+      expect.objectContaining({ body: JSON.stringify({ refresh_token: "r1" }) })
+    );
+  });
+
+  it("recusa login quando a conta não tem papel nenhum (lista vazia)", async () => {
+    const token = makeToken({ sub: "u1", roles: [], exp: Math.floor(Date.now() / 1000) + 3600 });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true })
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "sem-papel@igreja.com" } }));
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("WEB_ACCESS_DENIED");
+  });
+
+  it("libera login de conta com member e outro papel", async () => {
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member", "volunteer"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ areas: ["volunteers"] }) })
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "voluntario@igreja.com" } }));
+
+    expect(res.status).toBe(200);
+    expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe(token);
+  });
+
+  it("sessão de suporte nunca teria só member: rolesForToken sempre inclui platform_support, então o bloqueio não dispara", async () => {
+    // Documenta o raciocínio do design.md (Risks & Concerns): uma sessão de
+    // suporte nasce só em POST /auth/impersonate, que nunca passa por este
+    // handler (ele só chama /auth/login) — e mesmo que passasse, o token de
+    // impersonate sempre carrega platform_support junto (rolesForToken()),
+    // nunca `member` sozinho. Este teste fixa esse invariante: um token com
+    // support_session:true e papéis além de member sempre libera o login.
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member", "platform_support"],
+      support_session: true,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ areas: [] }) })
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "suporte@orbien.com" } }));
+
+    expect(res.status).toBe(200);
+    expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe(token);
+  });
+
+  it("responde o bloqueio mesmo quando a revogação do refresh token falha", async () => {
+    const token = makeToken({
+      sub: "u1",
+      roles: ["member"],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: token, refresh_token: "r1" }),
+        })
+        .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+    );
+
+    const res = await POST(req({ method: "POST", body: { email: "visitante@igreja.com" } }));
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("WEB_ACCESS_DENIED");
   });
 });
 

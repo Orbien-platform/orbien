@@ -76,19 +76,33 @@ export function syncNotificationPreferenceTags(prefs: {
 
 interface NotificationClickAdditionalData {
   post_id?: string;
+  bible_mark_id?: string;
 }
 
 /**
- * AC4 (MOB-07): extrai `post_id` do mesmo `data` que
- * `NotificationsService.notifyPost` já envia
- * (`apps/api/src/content/notifications.service.ts:48`) e chama `handler`
- * só quando o campo existe. Devolve função de remoção do listener (mesmo
- * padrão de `onSessionExpired`, `auth-client.ts`).
+ * Rota que o toque na push abre, a partir do `data` que a API manda:
+ * `post_id` (`NotificationsService.notifyPost`) abre o post; `bible_mark_id`
+ * (resposta a uma marcação da Bíblia, `BibleMarkInteractionsService`) abre a
+ * marcação com as respostas. Sem nenhum dos dois, `null` — o toque só abre o
+ * app.
  */
-export function onNotificationClick(handler: (postId: string) => void): () => void {
+export function routeForNotification(data: NotificationClickAdditionalData | undefined): string | null {
+  if (data?.post_id) return `/post/${data.post_id}`;
+  if (data?.bible_mark_id) return `/biblia/marcacao/${data.bible_mark_id}`;
+  return null;
+}
+
+/**
+ * AC4 (MOB-07): resolve a rota do `data` da push (`routeForNotification`) e
+ * chama `handler` só quando há para onde ir. Devolve função de remoção do
+ * listener (mesmo padrão de `onSessionExpired`, `auth-client.ts`).
+ */
+export function onNotificationClick(handler: (route: string) => void): () => void {
   const listener = (event: { notification: { additionalData?: object } }) => {
-    const data = event.notification.additionalData as NotificationClickAdditionalData | undefined;
-    if (data?.post_id) handler(data.post_id);
+    const route = routeForNotification(
+      event.notification.additionalData as NotificationClickAdditionalData | undefined,
+    );
+    if (route) handler(route);
   };
 
   OneSignal.Notifications.addEventListener("click", listener);

@@ -132,19 +132,16 @@ export const fontFamily = {
  * é a tela, porque a cor depende do modo claro/escuro ativo. Mínimo
  * absoluto de 11px — não baixar nem em caption. */
 export const typography = {
-  display: { fontFamily: fontFamily.light, fontSize: 32, lineHeight: 38 },
+  display: { fontFamily: fontFamily.regular, fontSize: 32, lineHeight: 38 },
   h1: { fontFamily: fontFamily.medium, fontSize: 24, lineHeight: 30 },
   h2: { fontFamily: fontFamily.medium, fontSize: 20, lineHeight: 26 },
   h3: { fontFamily: fontFamily.medium, fontSize: 16, lineHeight: 22 },
   body: { fontFamily: fontFamily.light, fontSize: 15, lineHeight: 22 },
   bodyMedium: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20 },
-  label: {
-    fontFamily: fontFamily.medium,
-    fontSize: 11,
-    lineHeight: 14,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
+  // Sem caixa alta nem tracking (§2): quem diferencia o rótulo é o peso 500
+  // e a cor terciária. Por isso 12px e não 11 — sem as maiúsculas, 11px
+  // perdia presença.
+  label: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 16 },
   caption: { fontFamily: fontFamily.regular, fontSize: 11, lineHeight: 14 },
   mono: { fontFamily: fontFamily.mono, fontSize: 13, lineHeight: 18 },
   /** Sempre peso 500, nunca 600 — idêntico ao web (§2). */
@@ -178,6 +175,21 @@ export const touchTarget = 48;
 /** Padding horizontal de tela (§3): 16px até 375px, 20px acima. Quem
  * escolhe por largura real é `Screen` (src/components/Screen.tsx). */
 export const screenPadding = { compact: 16, regular: 20 } as const;
+
+/** Véu sobre foto para texto claro por cima (carrossel da home). É `ink` a
+ * 55%: escurece o bastante para o título ler em qualquer foto, nos dois
+ * modos, sem apagar a imagem. */
+export const scrim = "rgba(15, 17, 23, 0.55)";
+
+/** Toque em superfície de foto: escurece levemente. O `bg-subtle` que o Card
+ * usa no pressed (§8) não aparece por baixo de uma imagem. */
+export const pressedImageOpacity = 0.9;
+
+/** Indicador de página do carrossel: ponto inativo e o ativo, esticado. */
+export const pagerDot = { size: 6, activeWidth: 16 } as const;
+
+/** Filete à esquerda de citação no corpo do post. */
+export const quoteRuleWidth = 3;
 
 /** Tamanhos de ícone (§5). Stroke 1.5, sempre outline. */
 export const iconSize = {

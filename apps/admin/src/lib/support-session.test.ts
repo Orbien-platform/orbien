@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const post = vi.fn();
 vi.mock("./api", () => ({ default: { post: (...args: unknown[]) => post(...args) } }));
 
-const { openSupportSession } = await import("./support-session");
+const { openSupportSession, PRODUCTION_WEB_URL } = await import("./support-session");
 
 const TOKEN = "header.payload.signature";
 
@@ -83,5 +83,34 @@ describe("openSupportSession", () => {
 
     await expect(openSupportSession("tenant-42", "Igreja Nova")).rejects.toThrow();
     expect(open).not.toHaveBeenCalled();
+  });
+
+  describe("em produção", () => {
+    async function openedUrl(webUrl?: string) {
+      stubEnv(webUrl);
+      vi.stubEnv("NODE_ENV", "production");
+      post.mockResolvedValue({ data: { access_token: TOKEN, expires_in: 900 } });
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      await openSupportSession("tenant-42", "Igreja Nova");
+      return String(open.mock.calls[0]![0]);
+    }
+
+    it("aceita subdomínio de useorbien.com e tira a barra do fim", async () => {
+      expect(await openedUrl("https://web.useorbien.com/")).toMatch(
+        /^https:\/\/web\.useorbien\.com\/suporte\/sessao#/
+      );
+    });
+
+    it("troca domínio da Vercel pelo de produção — o token não sai de useorbien.com", async () => {
+      expect(await openedUrl("https://orbien-web.vercel.app")).toMatch(
+        new RegExp(`^${PRODUCTION_WEB_URL}/suporte/sessao#`)
+      );
+    });
+
+    it("sem a variável, usa o domínio de produção", async () => {
+      expect(await openedUrl(undefined)).toMatch(
+        new RegExp(`^${PRODUCTION_WEB_URL}/suporte/sessao#`)
+      );
+    });
   });
 });
