@@ -194,6 +194,17 @@ mas não tinha nenhum código, e não estava registrada nesta lista. Fechou
 `PROD-27` (nota completa na seção 6) — assinatura PIX Automático via Asaas,
 `@RequiresPlan('premium')` como o resto do módulo Premium de `financial`.
 
+Em **2026-09-28**, limpeza pré-go-live de tenants (nota completa em `DEC-06`,
+seção 9): `teste1-church` passou a nascer no plano Starter e `teste2-church`
+no Premium, os dois com dado em todos os módulos — servem agora também de
+demonstração comercial, não só de teste. Consequência: os tenants de teste
+deixam de ser intercambiáveis para specs Premium-only (`financeiro.spec.ts`,
+o módulo de Celebrações), então o e2e (`e2e`/`e2e-prod` em
+`.github/workflows/ci.yml`) passou a apontar para `teste2-church` por
+padrão. Também nesta rodada: `scripts/remover-tenants-nao-permitidos.sh`,
+para apagar por inteiro tenant de teste antigo fora da lista permitida
+(`docs/AMBIENTES.md` §8).
+
 ---
 
 ## 1. Visão do produto
@@ -1932,6 +1943,17 @@ Três consequências que já entraram:
   congregações, plano de contas de sistema e as contas indicadas, com a mesma
   senha). O segundo descobre as tabelas do catálogo, não de lista escrita à
   mão: são 66 tabelas com `tenant_id` hoje e a lista cresce a cada migration.
+
+**Ajuste em 2026-09-28**: `teste1-church` passou a nascer no plano Starter e
+`teste2-church` no Premium (`apps/api/prisma/seed.ts`), para que os dois
+sirvam também de demonstração comercial dos dois planos, não só de teste —
+os dois ganharam dado em todos os módulos por isso. Consequência direta: os
+dois tenants deixam de ser intercambiáveis para specs Premium-only, porque
+`DEC-01` não deu ramo de 403/`NoAccessState` a `financeiro.spec.ts` nem ao
+módulo de Celebrações. `E2E_EMAIL`/`E2E_TENANT` do job `e2e` e do `e2e-prod`
+(`.github/workflows/ci.yml`) passaram de `teste1-church` para `teste2-church`
+por isso — `teste1-church` continua disponível para quem precisar exercitar
+o comportamento Starter na mão. Detalhe em `docs/AMBIENTES.md` §3–§5.
 
 ### ~~DEC-01 · Gating por plano~~ · decidido e executado
 

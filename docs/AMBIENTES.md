@@ -84,6 +84,16 @@ está no próprio arquivo versionado.
 | `fvargaspf+teste2@gmail.com` | `teste2-church` | `tenant_admin` |
 | `fernando.vargas@fill.tech` | `doca-church` | `platform_support` |
 
+`teste1-church` semeia no plano Starter e `teste2-church` no Premium
+(`apps/api/prisma/seed.ts`) — os dois têm dado em todos os módulos, para
+servir tanto de teste quanto de demonstração comercial dos dois planos.
+**Por isso `teste2-church` é o tenant padrão do e2e** (§4/§5): specs que
+tocam funcionalidade Premium — `financeiro.spec.ts`, o módulo de Celebrações
+inteiro — não têm ramo para 403/`NoAccessState`, de propósito (`DEC-01`,
+`DEC-06`). Quem precisar exercitar o comportamento Starter (ex.: a própria
+tela de troca de plano, ou o gate de acesso) aponta `E2E_EMAIL`/`E2E_TENANT`
+para `teste1-church` na mão.
+
 `fvargaspf@gmail.com` acumula os dois papéis de propósito: administra a
 plataforma inteira **e** é a dona do tenant do cliente zero. O papel é global
 por definição (`app_is_platform_support()` não filtra por tenant nem por
@@ -154,7 +164,7 @@ qualquer uma.
 Contra o ambiente local (banco semeado, web e API de pé):
 
 ```bash
-E2E_EMAIL=fvargaspf+teste1@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
+E2E_EMAIL=fvargaspf+teste2@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste2-church \
   npm run e2e -w orbien-web
 ```
 
@@ -163,7 +173,7 @@ Contra produção:
 ```bash
 E2E_BASE_URL=https://web.useorbien.com \
 E2E_API_URL=https://orbien-api.onrender.com/api \
-E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste1-church \
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste2-church \
   npm run e2e -w orbien-web
 ```
 
@@ -189,9 +199,9 @@ estão em texto claro no workflow:
 
 | Variável | Valor |
 |---|---|
-| `E2E_EMAIL` | `fvargaspf+teste1@gmail.com` |
+| `E2E_EMAIL` | `fvargaspf+teste2@gmail.com` |
 | `E2E_PASSWORD` | `orbien-e2e-publica-2026` |
-| `E2E_TENANT` | `teste1-church` |
+| `E2E_TENANT` | `teste2-church` |
 
 A mesma senha é o padrão de `scripts/provisionar-tenants-teste.sh`. **As duas
 pontas têm que casar**: o workflow não consulta nada, ele manda a string no
@@ -200,12 +210,12 @@ login — mudar uma sem a outra deixa o job vermelho com `Login falhou: HTTP 401
 ### O contrato que torna isso aceitável
 
 Não é que a senha seja segura. É que **não há o que proteger atrás dela**: a
-conta existe só para o e2e, só no `teste1-church`, e um tenant de teste não
+conta existe só para o e2e, só no `teste2-church`, e um tenant de teste não
 guarda dado de ninguém. Quem entrar com ela vê exatamente o que a suíte cria e
 apaga.
 
 Isso é um contrato, e vale enquanto for verdade. Se algum dia esta conta ganhar
-papel em tenant real, ou o `teste1-church` passar a guardar qualquer coisa que
+papel em tenant real, ou o `teste2-church` passar a guardar qualquer coisa que
 não seja descartável, a senha sai do repositório **no mesmo commit** — e volta
 a ser secret, como estava antes de 2026-09-19.
 
