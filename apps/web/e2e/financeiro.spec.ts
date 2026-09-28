@@ -86,9 +86,11 @@ test.describe("financeiro", () => {
     page,
     errorLog,
   }) => {
-    // teste1-church/teste2-church seedam como Premium (`prisma/seed.ts`) —
-    // os dois únicos tenants que este spec pode tocar (CLAUDE.md/DEC-06), daí
-    // não ter ramo para 403/NoAccessState aqui.
+    // teste2-church seeda como Premium (`prisma/seed.ts`); teste1-church
+    // virou Starter, então não serve mais para este spec. A suíte (CI e
+    // manual) precisa logar com a conta de teste2-church por isso — ver
+    // `.github/workflows/ci.yml` e `docs/AMBIENTES.md` §4/§5 — daí não ter
+    // ramo para 403/NoAccessState aqui.
     await page.goto("/financeiro", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Financeiro" })).toBeVisible();
 
