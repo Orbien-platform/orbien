@@ -1313,9 +1313,13 @@ async function seedDemoData(seeded: SeededTenant): Promise<void> {
       select: { id: true },
     });
 
+    // Chaves D e A de propósito fora daqui: `repertorio.spec.ts` cria (via UI)
+    // uma música em D e outra em A e afirma que o badge "Tom D"/"Tom A"
+    // aparece uma vez só — colidir com essas letras duplica o badge e quebra
+    // o teste por `strict mode violation` (dois elementos, um só esperado).
     const songSpecs = [
       { title: 'Grande é o Senhor', key: 'G', bpm: 76 },
-      { title: 'Ousado Amor', key: 'A', bpm: 68 },
+      { title: 'Ousado Amor', key: 'C', bpm: 68 },
     ];
     for (const [i, s] of songSpecs.entries()) {
       let song = await prisma.song.findFirst({
