@@ -91,7 +91,15 @@ function serviceWith(prismaOverrides: Record<string, unknown>, mail = mailMock()
   const prisma = {
     tenant: { findUnique: jest.fn() },
     userAccount: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
-    refreshToken: { findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
+    refreshToken: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      // Default "ganhou a corrida" — os testes de rotação bem-sucedida não
+      // mockam isto explicitamente; o que testa o caminho de perda é
+      // `AuthService.refresh` mais abaixo, sobrescrevendo por chamada.
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn(),
+    },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     system: {
       tenant: { findUnique: jest.fn() },
@@ -401,9 +409,53 @@ describe('AuthService.refresh', () => {
     const result = await service.refresh({ refresh_token: 'rt' });
 
     expect(result).toEqual({ access_token: 'signed-token', refresh_token: expect.any(String), expires_in: 900 });
+    // A reivindicação é condicional (`revoked_at: null` no WHERE) — é o que
+    // decide, sob corrida, quem rotaciona de verdade. Ver o teste de "perdeu
+    // a corrida" logo abaixo.
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { id: 'rtk-1', revoked_at: null },
+      data: { revoked_at: expect.any(Date) },
+    });
     expect(prisma.refreshToken.update).toHaveBeenCalledWith({
       where: { id: 'rtk-1' },
-      data: { revoked_at: expect.any(Date), replaced_by_id: 'rtk-2' },
+      data: { replaced_by_id: 'rtk-2' },
+    });
+  });
+
+  it('perdeu a corrida da reivindicação: trata como reuso, revoga a família e não cria token novo', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rtk-1',
+      user_account_id: 'u1',
+      revoked_at: null,
+      expires_at: new Date('2999-01-01'),
+      userAccount: {
+        id: 'u1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        is_active: true,
+        roleAssignments: [{ role_code: 'tenant_admin', congregation_id: 'c1' }],
+        tenant: { tenantPlan: { plan: 'premium' }, is_active: true },
+      },
+    });
+    // A leitura lá em cima ainda viu `revoked_at: null`, mas outra chamada —
+    // duas abas, ou o mobile e o web ao mesmo tempo — já reivindicou este
+    // token entre a leitura e a tentativa de rotação. `count: 0` é essa
+    // corrida perdida.
+    (prisma.refreshToken.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 });
+
+    await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+
+    // A família cai inteira, como em qualquer reuso — inclusive o token que
+    // "ganhou" em algum outro lugar concorrente: o cliente reage do mesmo
+    // jeito (login de novo) nos dois lados.
+    expect(prisma.refreshToken.updateMany).toHaveBeenLastCalledWith({
+      where: { user_account_id: 'u1', revoked_at: null },
+      data: { revoked_at: expect.any(Date) },
     });
   });
 

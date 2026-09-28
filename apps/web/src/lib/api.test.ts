@@ -164,6 +164,45 @@ describe("interceptor de resposta — refresh de token", () => {
 
     expect(axios.post).toHaveBeenCalled();
   });
+
+  // `isRefreshing` só enxerga a própria aba: duas abas são dois módulos JS
+  // distintos, cada uma com sua própria flag. Sem uma trava entre origens, as
+  // duas podem ler o refresh token antes de qualquer rotação e chamar
+  // `/api/session/refresh` quase juntas — a API vê a segunda como reuso e
+  // revoga a família inteira, derrubando as duas abas. `navigator.locks` é
+  // quem fecha essa lacuna (ver `renovarSessao` em `api.ts`).
+  it("usa navigator.locks quando disponível, para serializar a renovação entre abas", async () => {
+    const request = vi.fn(
+      async (_name: string, fn: () => Promise<unknown>) => await fn()
+    );
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: { request },
+    });
+
+    vi.spyOn(axios, "post").mockResolvedValue({ data: {} });
+    api.defaults.adapter = vi.fn().mockResolvedValue({
+      data: { ok: true },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: {},
+    });
+
+    try {
+      await responseRejected()(makeError());
+
+      expect(request).toHaveBeenCalledWith(
+        "orbien-session-refresh",
+        expect.any(Function)
+      );
+      expect(axios.post).toHaveBeenCalledWith("/api/session/refresh");
+    } finally {
+      // @ts-expect-error jsdom não tem `locks` por padrão — devolve o ambiente
+      // ao estado que as outras descrições deste arquivo esperam.
+      delete globalThis.navigator.locks;
+    }
+  });
 });
 
 describe("isForbidden", () => {
