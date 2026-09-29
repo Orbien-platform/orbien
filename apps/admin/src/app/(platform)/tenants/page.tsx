@@ -10,6 +10,8 @@ import { Modal } from "@/components/ui/Modal";
 import { CreateTenantModal } from "@/components/tenants/CreateTenantModal";
 import { EditTenantModal } from "@/components/tenants/EditTenantModal";
 import { ChangePlanModal } from "@/components/tenants/ChangePlanModal";
+import { CancelTenantModal } from "@/components/tenants/CancelTenantModal";
+import { ReactivateTenantModal } from "@/components/tenants/ReactivateTenantModal";
 import { openSupportSession } from "@/lib/support-session";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -93,6 +95,11 @@ export default function TenantsPage() {
   // Tenant com o modal de troca de plano aberto — mesmo desenho de
   // `editingTenant`.
   const [planTarget, setPlanTarget] = useState<Tenant | null>(null);
+
+  // Cancelar e reativar o plano (`cancelled_at`) — cada um com seu modal, e a
+  // linha só oferece o que é coerente com `plan_status`.
+  const [cancelTarget, setCancelTarget] = useState<Tenant | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<Tenant | null>(null);
 
   // O cancelamento evita que uma resposta antiga sobreescreva a lista: digitar
   // "doca" e apagar rápido deixa duas requisições em voo, e sem isto a
@@ -252,7 +259,7 @@ export default function TenantsPage() {
     {
       key: "actions",
       header: "",
-      width: "400px",
+      width: "520px",
       render: (t) => (
         <div className="flex items-center gap-1.5">
           <button
@@ -287,6 +294,25 @@ export default function TenantsPage() {
             <Pencil size={14} strokeWidth={1.5} />
             Editar
           </button>
+          {t.plan_status === "cancelled" ? (
+            <button
+              type="button"
+              onClick={() => setReactivateTarget(t)}
+              title="Reativa o plano e limpa o fim de contrato"
+              className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-teal transition-colors hover:bg-teal-dim"
+            >
+              Reativar plano
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCancelTarget(t)}
+              title="Encerra o contrato e inicia a contagem de retenção de dados"
+              className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-crimson transition-colors hover:bg-crimson-dim"
+            >
+              Cancelar plano
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setToggleTarget(t)}
@@ -377,6 +403,22 @@ export default function TenantsPage() {
         onOpenChange={() => setPlanTarget(null)}
         onChanged={reload}
         tenant={planTarget}
+      />
+
+      <CancelTenantModal
+        key={`cancel-${cancelTarget?.id}`}
+        open={cancelTarget !== null}
+        onOpenChange={() => setCancelTarget(null)}
+        onCancelled={reload}
+        tenant={cancelTarget}
+      />
+
+      <ReactivateTenantModal
+        key={`reactivate-${reactivateTarget?.id}`}
+        open={reactivateTarget !== null}
+        onOpenChange={() => setReactivateTarget(null)}
+        onReactivated={reload}
+        tenant={reactivateTarget}
       />
 
       <Modal
