@@ -5,6 +5,7 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 function HeroCard() {
   return (
     <div
+      aria-hidden="true"
       className="rounded-[14px] overflow-hidden border"
       style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-lg)" }}
     >
@@ -17,7 +18,7 @@ function HeroCard() {
           Igreja da Graça · Plano Starter
         </span>
         <span
-          className="font-mono text-[10px] px-2.5 py-1 rounded-pill"
+          className="text-[10px] px-2.5 py-1 rounded-pill"
           style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
         >
           ativo

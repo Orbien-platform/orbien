@@ -86,7 +86,7 @@ export function TierTable() {
                   Premium
                 </span>
                 <span
-                  className="font-mono text-[9px] px-2 py-0.5 rounded-pill tracking-[.08em] font-medium"
+                  className="text-[11px] px-2 py-0.5 rounded-pill font-medium"
                   style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
                 >
                   Mais escolhido
@@ -105,7 +105,7 @@ export function TierTable() {
                     >
                       <div>
                         <div className="text-[15px] font-medium" style={{ color: "var(--ink)" }}>{range}</div>
-                        <div className="font-mono text-[12.5px] mt-0.5 lowercase tracking-[.04em]" style={{ color: "var(--muted)" }}>{sub}</div>
+                        <div className="text-[13px] mt-0.5" style={{ color: "var(--muted)" }}>{sub}</div>
                       </div>
                     </div>
                     <div
@@ -149,7 +149,7 @@ export function TierTable() {
                 >
                   <div>
                     <div className="text-[14.5px] font-medium" style={{ color: "var(--ink)" }}>{range}</div>
-                    {sub && <div className="font-mono text-[11.5px] mt-0.5" style={{ color: "var(--muted)" }}>{sub}</div>}
+                    {sub && <div className="text-[12px] mt-0.5" style={{ color: "var(--muted)" }}>{sub}</div>}
                   </div>
                   <Price value={starter} />
                 </div>
@@ -171,7 +171,7 @@ export function TierTable() {
               >
                 <span className="text-lg font-semibold tracking-[-0.01em]" style={{ color: "var(--ink)" }}>Premium</span>
                 <span
-                  className="font-mono text-[9px] px-2 py-0.5 rounded-pill tracking-[.08em] font-medium"
+                  className="text-[11px] px-2 py-0.5 rounded-pill font-medium"
                   style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
                 >
                   Mais escolhido
@@ -185,7 +185,7 @@ export function TierTable() {
                 >
                   <div>
                     <div className="text-[14.5px] font-medium" style={{ color: "var(--ink)" }}>{range}</div>
-                    {sub && <div className="font-mono text-[11.5px] mt-0.5" style={{ color: "var(--muted)" }}>{sub}</div>}
+                    {sub && <div className="text-[12px] mt-0.5" style={{ color: "var(--muted)" }}>{sub}</div>}
                   </div>
                   <Price value={premium} />
                 </div>

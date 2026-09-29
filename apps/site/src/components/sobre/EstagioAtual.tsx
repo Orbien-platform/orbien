@@ -153,7 +153,7 @@ export function EstagioAtual() {
                   </div>
                   <div>
                     <p className="text-[14px] font-medium text-white">Doca Church</p>
-                    <p className="font-mono text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,.45)" }}>
+                    <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,.45)" }}>
                       Passo Fundo · RS · desde 2025
                     </p>
                   </div>

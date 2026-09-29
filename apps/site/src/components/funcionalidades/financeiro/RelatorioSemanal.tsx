@@ -112,8 +112,8 @@ export function RelatorioSemanal() {
 
               {/* Footer */}
               <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
-                <span className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>Gerado automaticamente toda segunda-feira</span>
-                <span className="font-mono text-[10px] font-medium" style={{ color: "var(--navy-accent)" }}>Exportar PDF</span>
+                <span className="text-[10px]" style={{ color: "var(--muted)" }}>Gerado automaticamente toda segunda-feira</span>
+                <span className="text-[10px] font-medium" style={{ color: "var(--navy-accent)" }}>Exportar PDF</span>
               </div>
             </div>
           </Reveal>

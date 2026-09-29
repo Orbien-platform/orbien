@@ -5,6 +5,7 @@ import { CheckIcon } from "@/components/ui/CheckIcon";
 function AppFeedMockup() {
   return (
     <div
+      aria-hidden="true"
       className="mx-auto"
       style={{
         width: "260px",
@@ -75,7 +76,7 @@ function AppFeedMockup() {
               <p className="text-[9px] font-light leading-relaxed" style={{ color: "var(--stone)" }}>
                 &quot;O Senhor é o meu pastor, nada me faltará.&quot; Uma meditação sobre confiar no cuidado de Deus...
               </p>
-              <p className="font-mono text-[8px] mt-1.5" style={{ color: "var(--navy-accent)" }}>Ler mais →</p>
+              <p className="text-[8px] mt-1.5" style={{ color: "var(--navy-accent)" }}>Ler mais →</p>
             </div>
           </div>
 
@@ -112,7 +113,7 @@ function AppFeedMockup() {
               Marina R. pede oração pela recuperação da mãe.
             </p>
             <div className="flex items-center gap-2 mt-2">
-              <span className="font-mono text-[8px] px-2 py-0.5 rounded-pill" style={{ background: "var(--navy-dim)", color: "var(--navy-accent)" }}>
+              <span className="text-[8px] px-2 py-0.5 rounded-pill" style={{ background: "var(--navy-dim)", color: "var(--navy-accent)" }}>
                 12 orando
               </span>
             </div>

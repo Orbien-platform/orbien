@@ -1696,25 +1696,30 @@ curl -si -X OPTIONS https://orbien-api.onrender.com/api/content/posts/x/upload \
   -H 'Access-Control-Request-Headers: authorization' | grep -i access-control-allow-origin
 ```
 
-### PEND-11 · Site ainda fora de duas regras novas do guia de marca · dívida
+### ~~PEND-11 · Site ainda fora de duas regras novas do guia de marca~~ · fechado
 
 O §3.3 de `apps/site/design-reference/orbien-brand-guidelines.md` ganhou, em
 2026-09-25, três regras: rótulo sem caixa alta, mono só para dado, mínimo de
-11px. A de caixa alta foi aplicada nos quatro fronts no mesmo PR. As outras
-duas ficaram de fora no `apps/site`, porque ali não é classe trocada, é
-decisão caso a caso:
+11px. A de caixa alta entrou nos quatro fronts no mesmo PR; as outras duas, que
+no `apps/site` pedem decisão caso a caso, foram fechadas depois:
 
-- **Mono em rótulo.** Sobram ~77 `font-mono` no site. A maioria é dado nas
-  miniaturas de tela (valor, horário, contagem), que a regra permite; uma
-  parte é rótulo ("Exportar", "Ver todos →", "Esta semana", dias da semana).
-- **Abaixo de 11px fora das miniaturas.** ~10 textos, entre eles os selos em
-  mono de 9px de `precos/TierTable.tsx` e legendas de 10px em `PixFlow`,
-  `EstagioAtual`, `ConteudosCapabilities`, `TiposConteudo`, `MemberLifecycle`
-  e `PGCapabilities`. As miniaturas de tela estão dispensadas pelo próprio guia.
+- **Mono só para dado.** Cada `font-mono` foi lido no contexto. Virou DM Sans o
+  que é rótulo ou texto: selos de plano e de disponibilidade, "Mais escolhido",
+  "Exportar", "Ver todos →", "Esta semana", "+ Novo grupo", dias da semana,
+  linhas de meta do rodapé, do contato e do Sobre, legendas dos fluxos PIX.
+  Ficou em DM Mono o que é dado: preços, valores, deltas, horários, contagens,
+  e-mail e URL, numeração de passos.
+- **Mínimo de 11px.** Os textos abaixo disso fora das miniaturas subiram para
+  11px (selos de `precos/TierTable`, legendas de `PixFlow`, `EstagioAtual`,
+  `ConteudosCapabilities`, `TiposConteudo`, `MemberLifecycle`, `PGCapabilities`
+  e também `FuncionalizadesHub`, `PixCenarios`, `FinanceiroCapabilities`,
+  `UpgradePath`). Conferido em 390px e 1440px: sem overflow horizontal. A
+  miniatura de tela segue a 8–10px, dispensada pelo guia.
+- **Acessibilidade.** As miniaturas dos seis heros (home, Sem CNPJ, Conteúdos,
+  Membros, Pequenos Grupos, Financeiro) agora levam `aria-hidden="true"`.
 
-Junto, e da mesma revisão: as miniaturas dos heros não levam `aria-hidden`,
-então leitor de tela lê "Olá, Pastor André" e "R$ 2.840" como conteúdo da
-página.
+Fica de fora, por ser fora do hero: os painéis de tela de `AlcanceSection`,
+`PresencaPanel`, `RelatorioSemanal` e `LiderMobile` continuam sem `aria-hidden`.
 
 ### ~~PEND-12 · A Escala do mobile mostra o culto um dia antes~~ · fechado
 

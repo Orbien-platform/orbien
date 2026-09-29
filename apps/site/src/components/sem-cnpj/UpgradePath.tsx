@@ -56,7 +56,7 @@ export function UpgradePath() {
                     style={{ color: "rgba(255,255,255,.88)" }}
                   >
                     <span
-                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 font-mono text-[10px] font-medium"
+                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 font-mono text-[11px] font-medium"
                       style={{ background: "rgba(255,255,255,.12)", color: "rgba(255,255,255,.7)" }}
                     >
                       {i + 1}

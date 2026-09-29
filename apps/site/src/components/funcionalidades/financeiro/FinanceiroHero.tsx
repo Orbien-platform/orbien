@@ -8,6 +8,7 @@ function DashboardMockup() {
 
   return (
     <div
+      aria-hidden="true"
       className="rounded-[14px] overflow-hidden border"
       style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-lg)" }}
     >
@@ -19,7 +20,7 @@ function DashboardMockup() {
         <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
           Financeiro · Este mês
         </span>
-        <span className="font-mono text-[10px]" style={{ color: "var(--navy-accent)" }}>Exportar</span>
+        <span className="text-[10px]" style={{ color: "var(--navy-accent)" }}>Exportar</span>
       </div>
 
       {/* KPI row */}
@@ -55,7 +56,7 @@ function DashboardMockup() {
             </div>
           ))}
         </div>
-        <div className="flex justify-between mt-1.5 font-mono text-[8px]" style={{ color: "var(--muted)" }}>
+        <div className="flex justify-between mt-1.5 text-[8px]" style={{ color: "var(--muted)" }}>
           <span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span>
         </div>
       </div>
