@@ -90,12 +90,13 @@ describe("onesignal-client", () => {
   });
 
   describe("syncNotificationPreferenceTags", () => {
-    it("chama addTags com as 4 chaves pref_* como string, nunca boolean", () => {
+    it("chama addTags com as 5 chaves pref_* como string, nunca boolean", () => {
       syncNotificationPreferenceTags({
         avisos: true,
         oracao: false,
         eventos: true,
         devocional: false,
+        biblia: false,
       });
 
       expect(mockAddTags).toHaveBeenCalledWith({
@@ -103,6 +104,7 @@ describe("onesignal-client", () => {
         pref_oracao: "false",
         pref_eventos: "true",
         pref_devocional: "false",
+        pref_biblia: "false",
       });
     });
   });

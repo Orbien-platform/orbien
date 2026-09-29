@@ -1,7 +1,7 @@
-// Tela Notificações (MOB-10a/MOB-10b) — 4 toggles de categoria de push.
+// Tela Notificações (MOB-10a/MOB-10b) — 5 toggles de categoria de push.
 // Rota solta, como indisponibilidade.tsx, acessada a partir de Perfil.
 //
-// GET no mount (sem preferência salva, o servidor já devolve as 4 ligadas
+// GET no mount (sem preferência salva, o servidor já devolve as 5 ligadas
 // — AC1). Toggle: atualização otimista + PATCH da categoria isolada;
 // sucesso sincroniza as tags OneSignal com o estado completo devolvido
 // (AC1 da história "disparo respeita a categoria"); falha reverte o
@@ -37,15 +37,17 @@ const CATEGORY_LABELS: Record<Category, string> = {
   oracao: "Pedidos de oração",
   eventos: "Eventos",
   devocional: "Conteúdo devocional",
+  biblia: "Respostas na Bíblia",
 };
 
-const CATEGORY_ORDER: Category[] = ["avisos", "oracao", "eventos", "devocional"];
+const CATEGORY_ORDER: Category[] = ["avisos", "oracao", "eventos", "devocional", "biblia"];
 
 const DEFAULT_PREFS: NotificationPreferenceValues = {
   avisos: true,
   oracao: true,
   eventos: true,
   devocional: true,
+  biblia: true,
 };
 
 const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";

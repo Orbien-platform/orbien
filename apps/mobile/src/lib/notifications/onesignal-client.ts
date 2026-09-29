@@ -65,12 +65,14 @@ export function syncNotificationPreferenceTags(prefs: {
   oracao: boolean;
   eventos: boolean;
   devocional: boolean;
+  biblia: boolean;
 }): void {
   OneSignal.User.addTags({
     pref_avisos: String(prefs.avisos),
     pref_oracao: String(prefs.oracao),
     pref_eventos: String(prefs.eventos),
     pref_devocional: String(prefs.devocional),
+    pref_biblia: String(prefs.biblia),
   });
 }
 

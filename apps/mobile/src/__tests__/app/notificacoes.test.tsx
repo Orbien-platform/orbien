@@ -19,14 +19,14 @@ jest.mock("../../lib/notifications/onesignal-client", () => ({
 
 import NotificacoesScreen from "../../app/notificacoes";
 
-const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true };
+const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true };
 
 describe("NotificacoesScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it("mount sem preferência salva mostra as 4 categorias ligadas (AC1)", async () => {
+  it("mount sem preferência salva mostra as 5 categorias ligadas (AC1)", async () => {
     mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
 
     await act(async () => {
@@ -37,6 +37,8 @@ describe("NotificacoesScreen", () => {
     expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
     expect(screen.getByTestId("switch-eventos").props.value).toBe(true);
     expect(screen.getByTestId("switch-devocional").props.value).toBe(true);
+    expect(screen.getByTestId("switch-biblia").props.value).toBe(true);
+    expect(screen.getByText("Respostas na Bíblia")).toBeTruthy();
   });
 
   it("desligar uma categoria persiste otimisticamente, chama PATCH da categoria isolada e sincroniza a tag ao suceder (AC2)", async () => {
@@ -62,6 +64,29 @@ describe("NotificacoesScreen", () => {
     await waitFor(() => {
       expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(updated);
     });
+  });
+
+  it("desligar as respostas na Bíblia manda só { biblia: false } e sincroniza pref_biblia", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    const updated = { ...ALL_ON, biblia: false };
+    mockUpdateNotificationPreferences.mockResolvedValue(updated);
+
+    await act(async () => {
+      render(<NotificacoesScreen />);
+    });
+    await waitFor(() => screen.getByTestId("switch-biblia"));
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-biblia"), "valueChange", false);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith({ biblia: false });
+    });
+    await waitFor(() => {
+      expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(updated);
+    });
+    expect(screen.getByTestId("switch-biblia").props.value).toBe(false);
   });
 
   it("toggle com falha reverte o estado visual e mostra erro, sem deixar a UI divergir do servidor (AC3)", async () => {
