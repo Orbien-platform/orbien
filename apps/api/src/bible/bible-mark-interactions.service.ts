@@ -206,7 +206,12 @@ export class BibleMarkInteractionsService {
       body: excerpt,
       // Endereçado ao autor, pela tag `person_id` — mesmo filtro do aviso de
       // escala (`CelebrationAssignmentService`).
-      filters: [{ field: 'tag', key: 'person_id', relation: '=', value: mark.person_id }],
+      // E filtrado pela preferência `biblia`, no mesmo formato do `pref_*` de
+      // `NotificationsService.notifyPost`: sem a tag, conta como ligado.
+      filters: [
+        { field: 'tag', key: 'person_id', relation: '=', value: mark.person_id },
+        { field: 'tag', key: 'pref_biblia', relation: '!=', value: 'false' },
+      ],
       data: { type: 'bible_mark_reply', bible_mark_id: mark.id },
     });
   }

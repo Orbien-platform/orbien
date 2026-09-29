@@ -29,12 +29,13 @@ describe('NotificationPreferencesController', () => {
       oracao: true,
       eventos: true,
       devocional: true,
+      biblia: true,
     });
 
     const result = await controller.get(USER);
 
     expect(service.get).toHaveBeenCalledWith('u1');
-    expect(result).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true });
+    expect(result).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
   });
 
   it('update chama service.update(user.sub, user.tenant_id, user.congregation_id, dto)', async () => {
@@ -43,11 +44,12 @@ describe('NotificationPreferencesController', () => {
       oracao: false,
       eventos: true,
       devocional: true,
+      biblia: true,
     });
 
     const result = await controller.update({ oracao: false }, USER);
 
     expect(service.update).toHaveBeenCalledWith('u1', 't1', 'g1', { oracao: false });
-    expect(result).toEqual({ avisos: true, oracao: false, eventos: true, devocional: true });
+    expect(result).toEqual({ avisos: true, oracao: false, eventos: true, devocional: true, biblia: true });
   });
 });

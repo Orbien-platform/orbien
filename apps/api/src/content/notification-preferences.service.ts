@@ -9,6 +9,7 @@ const ALL_ON: NotificationPreferenceValues = {
   oracao: true,
   eventos: true,
   devocional: true,
+  biblia: true,
 };
 
 @Injectable()
