@@ -506,7 +506,16 @@ transação de negócio, best-effort (mesmo princípio do `AuditInterceptor`,
 ver `AD-004` em `.specs/STATE.md`) — uma falha ao auditar não desfaz a
 transferência já confirmada.
 
-Sem tela ainda no `apps/admin` — só a rota da API. Ver
+Tela no `apps/admin` em `/contas` (`app/(platform)/contas/page.tsx` +
+`components/accounts/TransferAccountModal.tsx`): formulário → modal de
+confirmação que lista as consequências (sessões derrubadas, papéis do tenant
+de origem apagados, rastro em `audit_logs`) → PATCH, com a mensagem da API
+nos erros 400/404. **Lacuna que a tela expõe:** a API de plataforma não tem
+busca/listagem de contas nem de congregações — só `GET /platform/tenants`.
+Por isso o ID da conta e o ID da congregação de destino são digitados; só o
+tenant de destino é escolhido de uma lista. Uma rota de busca de contas e
+outra de congregações por tenant (ambas `@PlatformRoute()`) tirariam o
+operador do banco; não foram criadas aqui. Ver
 `.specs/features/login-email-global/design.md` para o desenho completo;
 testes em `apps/api/src/platform/transfer-user-account.service.spec.ts`,
 `apps/api/src/platform/platform.controller.spec.ts` e RLS em
