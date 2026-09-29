@@ -48,6 +48,7 @@ export function RelatorioSemanal() {
           {/* Right — report card mockup */}
           <Reveal>
             <div
+              aria-hidden="true"
               className="rounded-[14px] overflow-hidden border"
               style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-md)" }}
             >

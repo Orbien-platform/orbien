@@ -73,6 +73,7 @@ export function AlcanceSection() {
           {/* Right — compose mockup + image placeholder */}
           <Reveal>
             <div
+              aria-hidden="true"
               className="rounded-[14px] overflow-hidden border"
               style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-md)" }}
             >

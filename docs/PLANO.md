@@ -1718,8 +1718,8 @@ no `apps/site` pedem decisão caso a caso, foram fechadas depois:
 - **Acessibilidade.** As miniaturas dos seis heros (home, Sem CNPJ, Conteúdos,
   Membros, Pequenos Grupos, Financeiro) agora levam `aria-hidden="true"`.
 
-Fica de fora, por ser fora do hero: os painéis de tela de `AlcanceSection`,
-`PresencaPanel`, `RelatorioSemanal` e `LiderMobile` continuam sem `aria-hidden`.
+Os painéis de tela fora do hero (`AlcanceSection`, `PresencaPanel`,
+`RelatorioSemanal` e `LiderMobile`) receberam o mesmo `aria-hidden="true"`.
 
 ### ~~PEND-12 · A Escala do mobile mostra o culto um dia antes~~ · fechado
 

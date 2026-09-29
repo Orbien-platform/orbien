@@ -38,6 +38,7 @@ const STEPS = [
 function PhoneMockup() {
   return (
     <div
+      aria-hidden="true"
       className="mx-auto w-[220px]"
       style={{
         background: "var(--on-ink)",
