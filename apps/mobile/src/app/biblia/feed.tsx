@@ -95,8 +95,10 @@ export default function BibliaFeedScreen() {
           hasLoadedRef.current = true;
           if (paginatedRef.current) {
             const freshIds = new Set(result.items.map((item) => item.id));
+            // `paginatedRef` só vira true depois de `items` existir, então
+            // `current` nunca é null aqui.
             setItems((current) =>
-              result.items.concat((current ?? []).filter((item) => !freshIds.has(item.id))),
+              result.items.concat(current!.filter((item) => !freshIds.has(item.id))),
             );
             return;
           }
