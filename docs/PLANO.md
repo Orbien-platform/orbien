@@ -235,7 +235,7 @@ foi retomado — cinco no total.
 | Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
-| Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
+| Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan`, com tela no console |
 | Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
 | App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
@@ -1468,8 +1468,9 @@ Fechado em 2026-09-13: os seis literais de `apps/admin/src/app/(platform)/tenant
 rótulo anterior para esse valor, porque ele nunca tinha renderizado direito.
 `page.test.tsx` ajustado para os literais corretos.
 
-O botão de cancelar/reativar no console e o teste que trava o mapa contra o
-enum (como `permissions.test.ts` faz no web) ficaram de fora — não é o mesmo
+O botão de cancelar/reativar no console passou a existir depois (modais
+`CancelTenantModal`/`ReactivateTenantModal` em `apps/admin`). O teste que trava
+o mapa contra o enum (como `permissions.test.ts` faz no web) ficaram de fora — não é o mesmo
 achado, é trabalho novo; abrir como pendência própria se for para frente.
 
 ### ~~PEND-03 · O front duplica as listas de papéis da API~~ · fechado
