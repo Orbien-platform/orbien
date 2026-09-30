@@ -125,7 +125,7 @@ const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseRouter = vi.mocked(useRouter);
 
-function setup(roles: string[] = ["tenant_admin"]) {
+function setup(roles: string[] = ["tenant_admin"], plan: string = "starter") {
   const replace = vi.fn();
   mockedUseRouter.mockReturnValue({ replace } as unknown as ReturnType<typeof useRouter>);
   mockedUseAuth.mockReturnValue({
@@ -138,6 +138,7 @@ function setup(roles: string[] = ["tenant_admin"]) {
       congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
+      plan,
       areas: null,
       expires_at: Math.floor(Date.now() / 1000) + 300,
     },
@@ -955,13 +956,13 @@ describe("FinanceiroPage — aba DRE", () => {
 });
 
 describe("FinanceiroPage — aba Balancete", () => {
-  it("mostra o placeholder quando ainda não há balancete carregado", async () => {
+  it("mostra o erro quando o balancete falha ao carregar", async () => {
     setup();
     mockApi({ balanceteError: true });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Balancete" }));
-    expect(await screen.findByText("Selecione um período para ver o balancete.")).toBeInTheDocument();
+    expect(await screen.findByText("Erro ao carregar o balancete. Tente de novo.")).toBeInTheDocument();
   });
 
   it("mostra o skeleton de carregamento antes da resposta chegar", async () => {
@@ -1334,5 +1335,31 @@ describe("FinanceiroPage — corridas e casos-limite", () => {
     expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "simular criação" }));
     expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
+  });
+});
+
+describe("FinanceiroPage — abas Premium (PIX e Recibos)", () => {
+  it("esconde PIX e Recibos no plano Starter", () => {
+    setup(["tenant_admin"], "starter");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.queryByRole("tab", { name: "PIX" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Recibos" })).not.toBeInTheDocument();
+  });
+
+  it("mostra PIX e Recibos no plano Premium para o tesoureiro", () => {
+    setup(["treasurer"], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.getByRole("tab", { name: "PIX" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recibos" })).toBeInTheDocument();
+  });
+
+  it("esconde PIX e Recibos do pastor, mesmo no Premium", () => {
+    setup(["pastor"], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.queryByRole("tab", { name: "PIX" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Recibos" })).not.toBeInTheDocument();
   });
 });
