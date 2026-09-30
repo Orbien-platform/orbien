@@ -61,7 +61,8 @@ export default function ContasPage() {
       setFormError("O ID da conta precisa ser um UUID válido.");
       return;
     }
-    if (!tenantId) {
+    const tenant = tenants.find((t) => t.id === tenantId);
+    if (!tenant) {
       setFormError("Escolha o tenant de destino.");
       return;
     }
@@ -69,11 +70,10 @@ export default function ContasPage() {
       setFormError("O ID da congregação de destino precisa ser um UUID válido.");
       return;
     }
-    const tenant = tenants.find((t) => t.id === tenantId);
     setRequest({
       accountId: account,
-      tenantId,
-      tenantName: tenant?.name ?? tenantId,
+      tenantId: tenant.id,
+      tenantName: tenant.name,
       congregationId: congregation,
     });
   }

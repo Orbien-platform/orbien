@@ -119,6 +119,33 @@ describe("TransferAccountModal", () => {
     );
   });
 
+  it("sem pedido, confirmar não chama a API", async () => {
+    const user = userEvent.setup();
+    render(
+      <TransferAccountModal
+        open
+        onOpenChange={onOpenChange}
+        onTransferred={onTransferred}
+        request={null}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Transferir conta" }));
+
+    expect(patchMock).not.toHaveBeenCalled();
+  });
+
+  it("não fecha pelo X enquanto a transferência está em andamento", async () => {
+    patchMock.mockReturnValue(new Promise(() => {}) as never);
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(screen.getByRole("button", { name: "Transferir conta" }));
+    await user.click(screen.getByRole("button", { name: "Fechar" }));
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it("cancelar fecha sem chamar a API", async () => {
     const user = userEvent.setup();
     montar();

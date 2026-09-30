@@ -37,6 +37,42 @@ async function preencher(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ContasPage", () => {
+  it("recusa congregação que não é UUID", async () => {
+    const user = userEvent.setup();
+    render(<ContasPage />);
+
+    await user.type(screen.getByLabelText("ID da conta"), ACCOUNT);
+    await user.selectOptions(
+      await screen.findByRole("option", { name: /Teste 2 Church/ }).then(() =>
+        screen.getByLabelText("Tenant de destino")
+      ),
+      TENANT
+    );
+    await user.type(screen.getByLabelText("ID da congregação de destino"), "xyz");
+    await user.click(screen.getByRole("button", { name: "Revisar transferência" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/congregação de destino/);
+    expect(screen.queryByText("Transferir esta conta?")).not.toBeInTheDocument();
+  });
+
+  it("não atualiza a tela se ela sai antes de a lista chegar", async () => {
+    let resolve!: (v: unknown) => void;
+    getMock.mockReset().mockReturnValue(new Promise((r) => (resolve = r)) as never);
+    const { unmount } = render(<ContasPage />);
+    unmount();
+    resolve({ data: { data: [] } });
+    await Promise.resolve();
+  });
+
+  it("não avisa erro se ela sai antes de a lista falhar", async () => {
+    let reject!: (e: unknown) => void;
+    getMock.mockReset().mockReturnValue(new Promise((_, r) => (reject = r)) as never);
+    const { unmount } = render(<ContasPage />);
+    unmount();
+    reject(new Error("x"));
+    await Promise.resolve();
+  });
+
   it("lista só tenants ativos como destino", async () => {
     render(<ContasPage />);
 
