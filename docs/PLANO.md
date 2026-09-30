@@ -1340,12 +1340,26 @@ existia:
   com `eligible_count` informando o total elegível — evita payload grande
   em ministério com dezenas de voluntários; quem decide de fato escalar usa
   o `POST .../assignments` que já existia, então o teto não bloqueia nada.
-- **Sem tela no `apps/web`**: o padrão de UI de escala
-  (`AssignmentsPanel`/equivalente) já existe, mas encaixar "sugerir e um
-  clique aplica" nele é decisão de fluxo (lista simples? um botão por
-  função? aplica direto ou só preenche o formulário?) que vale ficar para
-  quem for desenhar a tela, não decidida aqui às pressas. Fica como API
-  pronta, mesmo padrão do `PROD-23`.
+- **Tela no `apps/web` (2026-09-30)**: `ScheduleSuggestions.tsx`, dentro do
+  `ScheduleSheet` (o painel de escala que já existia em Celebrações). Decisão
+  de fluxo: **um botão "Sugerir" por função**, ao lado de "Adicionar
+  voluntário" (abrir um fecha o outro). Ele abre uma lista curta, na ordem do
+  rodízio, com "N de `eligible_count` disponíveis", as vagas que faltam e, em
+  cada linha, o critério que a API devolve (`times_served` e
+  `last_served_at`: "Serviu 3 vezes · última em 02/08/2026" ou "Nunca serviu
+  nesta função") — a API não devolve um motivo textual, então o motivo é o
+  próprio dado do rodízio. **Um clique numa linha escala só aquela pessoa**,
+  pelo `POST .../assignments` que já existia; nada é aplicado em lote nem ao
+  abrir. Depois de aplicar, a escala e a lista de sugestões são recarregadas
+  (quem acabou de entrar sai da lista) e os avisos `overbooked`/
+  `unavailable_on_date` do POST aparecem como nos demais caminhos. Estados:
+  carregando, vazio (ninguém elegível, apontando para "Adicionar voluntário"),
+  erro com "Tentar de novo", e conflito — 409 ao aplicar avisa que a pessoa já
+  está na função e recarrega a lista. Quando `eligible_count` passa do teto de
+  10, a tela diz que mostra as primeiras e manda para "Adicionar voluntário"
+  para o resto (paginar a sugestão segue fora de escopo). Só `apps/web`, a rota
+  `GET .../schedule/suggest` foi usada como estava. Testes:
+  `ScheduleSuggestions.test.tsx` e um caso em `ScheduleSheet.test.tsx`.
 
 Testes: `celebration-schedule-suggestion.service.spec.ts` (instância
 inexistente, sem escala, sem ministério, já atribuído, sem disponibilidade
