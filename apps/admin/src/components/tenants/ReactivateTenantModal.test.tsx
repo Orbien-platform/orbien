@@ -63,4 +63,31 @@ describe("ReactivateTenantModal", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(postMock).not.toHaveBeenCalled();
   });
+
+  it("fechar pelo X com o envio em voo não descarta o modal", async () => {
+    const user = userEvent.setup();
+    postMock.mockReturnValue(new Promise(() => {}));
+    montar();
+
+    await user.click(screen.getByRole("button", { name: "Reativar plano" }));
+    await user.click(await screen.findByRole("button", { name: "Fechar" }));
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("sem tenant, confirmar não envia nada", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReactivateTenantModal
+        open
+        onOpenChange={onOpenChange}
+        onReactivated={onReactivated}
+        tenant={null}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reativar plano" }));
+
+    expect(postMock).not.toHaveBeenCalled();
+  });
 });

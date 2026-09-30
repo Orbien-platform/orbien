@@ -90,4 +90,33 @@ describe("CancelTenantModal", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(postMock).not.toHaveBeenCalled();
   });
+
+  it("fechar pelo X com o envio em voo não descarta o modal", async () => {
+    const user = userEvent.setup();
+    postMock.mockReturnValue(new Promise(() => {}));
+    montar();
+
+    await user.type(
+      screen.getByLabelText("Nome do tenant para confirmar"),
+      "Teste1 Church"
+    );
+    await user.click(screen.getByRole("button", { name: "Cancelar plano" }));
+    await user.click(await screen.findByRole("button", { name: "Fechar" }));
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("sem tenant, o botão segue travado e nada é enviado", () => {
+    render(
+      <CancelTenantModal
+        open
+        onOpenChange={onOpenChange}
+        onCancelled={onCancelled}
+        tenant={null}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Cancelar plano" })).toBeDisabled();
+    expect(postMock).not.toHaveBeenCalled();
+  });
 });
