@@ -102,4 +102,58 @@ describe("ScheduleSuggestions", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Escalar Ana Souza" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Voluntário não pertence a este ministério");
   });
+
+  it("usa o singular quando serviu uma vez e avisa quando não há vagas", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        row({
+          slots_remaining: 0,
+          eligible_count: 1,
+          suggestions: [
+            { volunteer_profile_id: "vp1", person_id: "p1", full_name: "Ana Souza", times_served: 1, last_served_at: "2026-08-02T12:00:00.000Z" },
+          ],
+        }),
+      ],
+    });
+    renderIt();
+    expect(await screen.findByText(/Serviu 1 vez · última em/)).toBeInTheDocument();
+    expect(screen.getByText(/1 de 1 disponível,/)).toBeInTheDocument();
+    expect(screen.getByText(/vagas preenchidas/)).toBeInTheDocument();
+    expect(screen.queryByText(/Mostrando as/)).not.toBeInTheDocument();
+  });
+
+  it("mostra vazio quando a função não vem na resposta ou a resposta não é lista", async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: [row({ celebration_ministry_id: "outro" })] });
+    const first = render(<ScheduleSuggestions instanceId="i1" celebrationMinistryId="cm1" onApplied={vi.fn()} />);
+    expect(await screen.findByText(/Ninguém disponível/)).toBeInTheDocument();
+    first.unmount();
+
+    vi.mocked(api.get).mockResolvedValueOnce({ data: null });
+    render(<ScheduleSuggestions instanceId="i1" celebrationMinistryId="cm1" onApplied={vi.fn()} />);
+    expect(await screen.findByText(/Ninguém disponível/)).toBeInTheDocument();
+  });
+
+  it("aceita POST sem corpo de resposta", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [row()] });
+    vi.mocked(api.post).mockResolvedValue({ data: undefined });
+    const onApplied = renderIt();
+    await userEvent.click(await screen.findByRole("button", { name: "Escalar Ana Souza" }));
+    await waitFor(() => expect(onApplied).toHaveBeenCalledWith({}));
+  });
+
+  it("ignora a resposta que chega depois de desmontar (sucesso e erro)", async () => {
+    let resolve!: (v: unknown) => void;
+    vi.mocked(api.get).mockReturnValueOnce(new Promise((r) => (resolve = r)));
+    const a = render(<ScheduleSuggestions instanceId="i1" celebrationMinistryId="cm1" onApplied={vi.fn()} />);
+    a.unmount();
+    resolve({ data: [row()] });
+
+    let reject!: (e: unknown) => void;
+    vi.mocked(api.get).mockReturnValueOnce(new Promise((_, r) => (reject = r)));
+    const b = render(<ScheduleSuggestions instanceId="i1" celebrationMinistryId="cm1" onApplied={vi.fn()} />);
+    b.unmount();
+    reject({ isAxiosError: true, response: { status: 500 } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.get).toHaveBeenCalledTimes(2);
+  });
 });

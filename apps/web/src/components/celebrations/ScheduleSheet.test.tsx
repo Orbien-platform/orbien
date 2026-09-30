@@ -814,4 +814,23 @@ describe("ScheduleSheet", () => {
     );
     expect(onChanged).toHaveBeenCalled();
   });
+
+  it("fecha as sugestões ao clicar em Sugerir de novo", async () => {
+    mockGet({ schedule: scheduleWithMinistry });
+    const baseGet = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation((url: string) =>
+      url === "/celebrations/instances/i1/schedule/suggest"
+        ? Promise.resolve({ data: [{ celebration_ministry_id: "cm1", slots_remaining: 1, eligible_count: 0, suggestions: [] }] })
+        : baseGet(url)
+    );
+    const user = userEvent.setup();
+    render(<ScheduleSheet open={true} {...baseProps} onChanged={vi.fn()} />);
+
+    await screen.findByText("Louvor");
+    const toggle = screen.getByRole("button", { name: "Sugerir" });
+    await user.click(toggle);
+    expect(await screen.findByText(/Ninguém disponível/)).toBeInTheDocument();
+    await user.click(toggle);
+    expect(screen.queryByText(/Ninguém disponível/)).not.toBeInTheDocument();
+  });
 });
