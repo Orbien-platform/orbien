@@ -16,4 +16,8 @@ export class UpdateNotificationPreferencesDto {
   @IsOptional()
   @IsBoolean()
   devocional?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  biblia?: boolean;
 }

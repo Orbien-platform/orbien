@@ -1477,6 +1477,7 @@ async function seedDemoData(seeded: SeededTenant): Promise<void> {
         oracao: true,
         eventos: true,
         devocional: true,
+        biblia: true,
       },
     });
   }

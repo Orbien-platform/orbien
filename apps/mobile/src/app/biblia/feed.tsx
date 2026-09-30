@@ -11,8 +11,8 @@
 //
 // Padrão de paginação/estado vazio/erro/guard de duplo toque adaptado de
 // `(tabs)/conteudo.tsx` (lá é offset/page; aqui é cursor `before`).
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../components/Alert";
@@ -73,24 +73,49 @@ export default function BibliaFeedScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Recarrega a primeira página toda vez que a tela ganha foco — quem
+  // responde ou curte em `biblia/marcacao/[id]` e volta precisa ver a
+  // contagem nova. Só no foco, não em toda renderização: o callback é
+  // estável (só usa setters e refs), então o efeito não reexecuta sozinho.
+  //
+  // A primeira carga mostra o erro de tela; as seguintes são silenciosas —
+  // falhar ao atualizar não pode trocar a lista que já está na tela por uma
+  // tela de erro. Se o usuário já paginou, a primeira página nova entra por
+  // id (atualiza contagem, remove o que sumiu dela) e as páginas mais
+  // antigas ficam, com o cursor que ele já tinha.
+  const hasLoadedRef = useRef(false);
+  const paginatedRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-    getFeed()
-      .then((result) => {
-        if (cancelled) return;
-        setItems(result.items);
-        setNextCursor(result.nextCursor);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(describeLoadError(err, "o feed"));
-      });
+      getFeed()
+        .then((result) => {
+          if (cancelled) return;
+          hasLoadedRef.current = true;
+          if (paginatedRef.current) {
+            const freshIds = new Set(result.items.map((item) => item.id));
+            // `paginatedRef` só vira true depois de `items` existir, então
+            // `current` nunca é null aqui.
+            setItems((current) =>
+              result.items.concat(current!.filter((item) => !freshIds.has(item.id))),
+            );
+            return;
+          }
+          setItems(result.items);
+          setNextCursor(result.nextCursor);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          if (cancelled || hasLoadedRef.current) return;
+          setError(describeLoadError(err, "o feed"));
+        });
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   async function handleLoadMore() {
     if (isLoadingMoreRef.current || !nextCursor) return;
@@ -101,6 +126,7 @@ export default function BibliaFeedScreen() {
       const result = await getFeed({ before: nextCursor });
       setItems((current) => (current ?? []).concat(result.items));
       setNextCursor(result.nextCursor);
+      paginatedRef.current = true;
     } catch {
       setLoadMoreError(LOAD_MORE_ERROR_MESSAGE);
     } finally {

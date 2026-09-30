@@ -1671,6 +1671,7 @@ model NotificationPreference {
   oracao          Boolean  @default(true)
   eventos         Boolean  @default(true)
   devocional      Boolean  @default(true)
+  biblia          Boolean  @default(true)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 

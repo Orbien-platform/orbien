@@ -1783,20 +1783,47 @@ confirmada.
 
 ---
 
-### PEND-12 · Push de resposta na Bíblia sem opção de desligar · dívida
+### ~~PEND-15 · Push de resposta na Bíblia sem opção de desligar~~ · fechado
+
+> Nasceu como um segundo `PEND-12`, ID que a escala do mobile já usava
+> (fechada, acima). Renumerado para `PEND-15`, o próximo livre; `PEND-12` fica
+> só com a escala, sem reciclagem.
 
 Responder a uma marcação do feed da Bíblia avisa o autor por push
 (`BibleMarkInteractionsService.createReply`, filtro pela tag `person_id`, o
-mesmo do aviso de escala). As preferências de notificação do app têm quatro
-categorias (`avisos`, `oracao`, `eventos`, `devocional`) e nenhuma cobre
-esse aviso, então quem não quiser recebê-lo não tem como desligar. Fechar
-com uma categoria nova (tag `pref_*` + coluna em `NotificationPreference` +
-filtro `!= false` no envio), ou encaixar numa das existentes por decisão de
-produto. Curtida não gera push, de propósito.
+mesmo do aviso de escala), e as preferências de notificação tinham quatro
+categorias (`avisos`, `oracao`, `eventos`, `devocional`) sem nenhuma que
+cobrisse esse aviso. Curtida não gera push, de propósito — segue assim.
 
-Junto, e menor: o feed carrega uma vez ao abrir. Quem responde ou curte na
-tela da marcação (`biblia/marcacao/[id]`) e volta vê a contagem antiga no
-item até reabrir o feed.
+Fechado com uma quinta categoria, `biblia` ("Respostas na Bíblia" na tela),
+no mesmo desenho das outras:
+
+- **Banco:** coluna `notification_preferences.biblia BOOLEAN NOT NULL DEFAULT
+  true` (migration `20260929120000_add_biblia_to_notification_preferences`).
+  Quem já tinha linha, ou não tem, continua recebendo — o comportamento atual
+  é o default. A policy de RLS não mudou (a tabela é a mesma), então
+  `008_rls_notification_preferences.sql` e o `bootstrap-db.sh` ficaram como
+  estavam.
+- **API:** `biblia` em `NOTIFICATION_CATEGORIES`, no DTO de atualização e no
+  default do serviço de preferências. `notifyAuthor` passou a mandar o filtro
+  `pref_biblia != false` junto do `person_id`. A categoria não entra em
+  `CATEGORY_BY_POST_TYPE`: não vem de tipo de post.
+- **Mobile:** o toggle "Respostas na Bíblia" em `notificacoes.tsx`, o campo em
+  `NotificationPreferenceValues` e a tag `pref_biblia` em
+  `syncNotificationPreferenceTags`, sincronizada a cada login e a cada toque.
+
+Atenção na virada: a tag `pref_biblia` só passa a existir no aparelho depois
+que o app novo sincroniza. Como o filtro é `!= false`, aparelho sem a tag
+continua recebendo — ninguém perde o aviso por causa do deploy, e quem
+desligar depois é respeitado.
+
+O feed (`biblia/feed.tsx`) também deixou de carregar uma vez só: recarrega a
+primeira página quando a tela volta ao foco (`useFocusEffect`), então
+responder ou curtir em `biblia/marcacao/[id]` e voltar mostra a contagem
+nova. A primeira carga mostra erro de tela; as seguintes são silenciosas e
+não trocam a lista que já está visível por uma tela de erro. Se a pessoa já
+tinha paginado, a primeira página nova entra por id e as mais antigas, com o
+cursor que ela tinha, ficam.
 
 ## 8. Ajustes — documento, rótulo e portão
 

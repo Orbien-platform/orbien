@@ -16,9 +16,9 @@ describe('UpdateNotificationPreferencesDto', () => {
     expect(await errorsFor({ oracao: false })).toHaveLength(0);
   });
 
-  it('aceita as 4 categorias juntas', async () => {
+  it('aceita as 5 categorias juntas', async () => {
     expect(
-      await errorsFor({ avisos: false, oracao: false, eventos: true, devocional: true }),
+      await errorsFor({ avisos: false, oracao: false, eventos: true, devocional: true, biblia: false }),
     ).toHaveLength(0);
   });
 

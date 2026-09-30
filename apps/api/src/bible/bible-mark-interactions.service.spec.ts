@@ -124,7 +124,10 @@ describe('BibleMarkInteractionsService', () => {
         contentPostId: null,
         title: 'Ana respondeu seu comentário em João 3:16-18',
         body: REPLY_ROW.comment,
-        filters: [{ field: 'tag', key: 'person_id', relation: '=', value: 'author' }],
+        filters: [
+          { field: 'tag', key: 'person_id', relation: '=', value: 'author' },
+          { field: 'tag', key: 'pref_biblia', relation: '!=', value: 'false' },
+        ],
         data: { type: 'bible_mark_reply', bible_mark_id: 'm1' },
       });
     });

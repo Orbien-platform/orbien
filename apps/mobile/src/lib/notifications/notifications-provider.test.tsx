@@ -44,6 +44,7 @@ describe("NotificationsProvider", () => {
       oracao: true,
       eventos: true,
       devocional: true,
+      biblia: true,
     });
   });
 
@@ -95,7 +96,7 @@ describe("NotificationsProvider", () => {
   });
 
   it("sessão presente: busca preferências e sincroniza as tags com o resultado (MOB-10b, AC2)", async () => {
-    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false };
+    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false, biblia: false };
     mockGetNotificationPreferences.mockResolvedValue(prefs);
     mockUseAuth.mockReturnValue({
       session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },

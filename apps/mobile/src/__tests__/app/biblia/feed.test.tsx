@@ -8,9 +8,21 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
-jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
-}));
+// `useFocusEffect` roda o callback ao montar e o guarda em `mockFocusRuns`,
+// para o teste simular "voltar para a tela" chamando o callback de novo.
+const mockFocusRuns: Array<() => void | (() => void)> = [];
+jest.mock("expo-router", () => {
+  const { useEffect } = jest.requireActual("react");
+  return {
+    useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      useEffect(() => {
+        mockFocusRuns.push(callback);
+        return callback();
+      }, [callback]);
+    },
+  };
+});
 
 const mockGetFeed = jest.fn();
 const mockUpdateMark = jest.fn();
@@ -54,6 +66,81 @@ function mark(overrides: Partial<BibleVerseMark> = {}): BibleVerseMark {
 describe("BibliaFeedScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFocusRuns.length = 0;
+  });
+
+  it("ao voltar o foco, recarrega o feed e mostra a contagem nova de respostas", async () => {
+    mockGetFeed.mockResolvedValueOnce({ items: [mark({ reply_count: 0 })], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-1"));
+    expect(mockGetFeed).toHaveBeenCalledTimes(1);
+
+    mockGetFeed.mockResolvedValueOnce({
+      items: [mark({ reply_count: 3, like_count: 2 })],
+      nextCursor: null,
+    });
+    await act(async () => {
+      mockFocusRuns[mockFocusRuns.length - 1]!();
+    });
+
+    expect(mockGetFeed).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("3 respostas")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+  });
+
+  it("re-renderizar sem mudar o foco não recarrega o feed", async () => {
+    mockGetFeed.mockResolvedValue({ items: [mark()], nextCursor: null });
+
+    const view = await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-1"));
+    await view.rerender(<BibliaFeedScreen />);
+
+    expect(mockGetFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha ao recarregar no foco mantém a lista que já estava na tela", async () => {
+    mockGetFeed.mockResolvedValueOnce({ items: [mark()], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-1"));
+
+    mockGetFeed.mockRejectedValueOnce(new Error("falha de rede"));
+    await act(async () => {
+      mockFocusRuns[mockFocusRuns.length - 1]!();
+    });
+
+    expect(screen.getByTestId("biblia-feed-item-mark-1")).toBeTruthy();
+    expect(screen.queryByTestId("biblia-feed-error")).toBeNull();
+  });
+
+  it("depois de paginar, o foco atualiza a primeira página e preserva as antigas e o cursor", async () => {
+    mockGetFeed.mockResolvedValueOnce({ items: [mark({ id: "mark-1" })], nextCursor: "c1" });
+    mockGetFeed.mockResolvedValueOnce({ items: [mark({ id: "mark-2" })], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-load-more"));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-load-more"));
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-2"));
+
+    mockGetFeed.mockResolvedValueOnce({
+      items: [mark({ id: "mark-1", reply_count: 5 })],
+      nextCursor: "c1",
+    });
+    await act(async () => {
+      mockFocusRuns[mockFocusRuns.length - 1]!();
+    });
+
+    expect(screen.getByText("5 respostas")).toBeTruthy();
+    expect(screen.getByTestId("biblia-feed-item-mark-2")).toBeTruthy();
   });
 
   it("carrega e lista as marcações da congregação (BIB-06)", async () => {
