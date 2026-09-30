@@ -77,6 +77,11 @@ evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
 
+Em **2026-09-30** o `PROD-25` ganhou a metade do `apps/web`: o membro se
+inscreve, vê o estado e cancela pelo `PostDetailSheet` de `/conteudo` — nota
+"Também no `apps/web`" na seção 6. Sem mudança de backend; o `PEND-07` segue
+aberto.
+
 Em **2026-09-19** fechou `PROD-23` (tela da liderança para os pedidos de
 visita, `apps/web`) — nota na seção 6 — e nasceu já decidida a `DEC-06`
 (seção 9), que fixa os tenants de teste e o que pode rodar contra produção.
@@ -719,6 +724,9 @@ organizador em evento pago (com a nota de que só o inscrito paga), e
 A tela de member (provavelmente `apps/mobile`, que é onde o membro consome
 conteúdo) é trabalho novo, não coberto aqui.
 
+*Atualização:* o mobile fechou no `PROD-25`; o web ganhou o equivalente
+depois — ver a nota "Também no `apps/web`" do `PROD-25`.
+
 Testes: `event-registrations.service.spec.ts` (reserva/hold/24h, recusa de
 organizador em evento pago, desfazer reserva em falha da Asaas),
 `pix.service.spec.ts` (`createForEventRegistration`, webhook com
@@ -980,6 +988,47 @@ desta tela — membro que ainda não se inscreveu) e `GET
 produção** desde o MOB-08 pelo mesmo motivo, mostrando erro de carga no lugar
 do estado vazio. O client agora lê o corpo como texto e devolve `undefined`
 quando ele é vazio; 204 segue sem ler corpo nenhum.
+
+**Também no `apps/web`** — o `apps/web` não tinha nenhuma chamada a
+`.../registrations/me`, só o painel do organizador. Fechado na branch
+`feat/web-inscricao-de-membro-em-evento`, sobre a mesma API, **sem nenhuma
+mudança de backend**.
+
+*Decisão de encaixe.* A nota acima dizia que o web "não tem área de membro
+nenhuma" e que criar uma seria maior que a tela. O que muda a conta: o papel
+`member` **já lê a área `content`** (`PRODUCT_AREA_READ_ROLES.content` na
+API), então `canAccessRoute` já deixa `/conteudo` — e só ela — na barra
+lateral dele. A superfície existe; o que faltava era o post de evento, aberto
+no `PostDetailSheet`, oferecer a inscrição a quem não organiza. Não se criou
+grupo de rota, layout nem guard novos.
+
+- `EventRegistrationPanel` (`components/content/`) espelha o painel do
+  mobile: bate em `.../registrations/summary` e `.../registrations/me`
+  (GET/POST/DELETE) e **em nenhum momento** na raiz `GET .../registrations`,
+  que é do organizador e responde 403 para `member`. Mesmas regras de
+  estado: lotado e gratuito oferece "Entrar na fila de espera"; lotado e pago
+  não oferece botão (a API responde 400); prazo vencido esconde "Inscrever-se"
+  e mantém "Cancelar inscrição". Status como ícone + texto (inscrito, fila,
+  aguardando pagamento); `cancelled` não aparece porque o `GET` não o devolve.
+- O `PostDetailSheet` escolhe o painel por `canEdit` — o mesmo recorte de
+  `ORGANIZER_ROLES` do controller (`admin_congregation`, `pastor`,
+  `tenant_admin`): organizador vê a lista (`EventRegistrationsPanel`), o resto
+  vê a própria inscrição. O painel do membro só monta com
+  `registration_enabled`, como no mobile.
+- **Plano.** Não há `PlanGuard` em `registrations/me`: quem exige Premium é a
+  escrita do preço no post (`assertRegistrationPricePlan`). A tela não
+  replica o gate — evento pago só existe em tenant Premium, e um evento
+  gratuito segue Starter para o membro.
+- Evento pago: QR como `<img src="data:image/png;base64,…">` sobre fundo
+  branco fixo (QR no tema escuro não lê), copia-e-cola em `<code>` com
+  botão "Copiar código PIX" via `navigator.clipboard`, validade de 24h dita em
+  tela. Sem dependência nova.
+- **`PEND-07` continua valendo, igual ao mobile**: o QR só existe na resposta
+  do `POST`. Quem fecha o post antes de pagar perde o código, e a nota abaixo
+  do QR manda cancelar e se inscrever de novo. A API não foi tocada.
+- Testes ao lado do componente (`EventRegistrationPanel.test.tsx`) e dois
+  casos novos no `PostDetailSheet.test.tsx` (membro vê o painel próprio e não
+  pede a lista do organizador; sem inscrição ligada não faz chamada).
 
 **Achados de revisão corrigidos antes do PR** (`/code-review` + `pr-review`,
 dimensões B e C — A não se aplica, não há `apps/api/**` no diff): além do bug

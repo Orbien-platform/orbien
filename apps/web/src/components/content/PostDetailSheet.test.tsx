@@ -878,4 +878,61 @@ describe("PostDetailSheet — evento (PROD-16)", () => {
       ).toBe(false)
     );
   });
+  it("membro (sem canEdit) vê a própria inscrição e nunca pede a lista do organizador", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/content/posts/post-evt") return Promise.resolve({ data: eventPost });
+      if (url === "/content/posts/post-evt/registrations/summary") {
+        return Promise.resolve({
+          data: {
+            registration_enabled: true,
+            registration_limit: null,
+            registration_deadline: null,
+            registrations_closed: false,
+            confirmed_count: 0,
+            waitlisted_count: 0,
+            seats_left: null,
+            registration_price: null,
+          },
+        });
+      }
+      if (url === "/content/posts/post-evt/registrations/me") return Promise.resolve({ data: "" });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-evt"
+        canEdit={false}
+        canDelete={false}
+        onUpdated={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole("button", { name: "Inscrever-se" })).toBeInTheDocument();
+    expect(
+      vi.mocked(api.get).mock.calls.some(([url]) => url === "/content/posts/post-evt/registrations")
+    ).toBe(false);
+  });
+
+  it("membro em evento sem inscrição ligada não monta o painel nem faz chamadas", async () => {
+    mockEventGet({ ...eventPost, registration_enabled: false });
+
+    render(
+      <PostDetailSheet
+        open
+        onOpenChange={vi.fn()}
+        postId="post-evt"
+        canEdit={false}
+        canDelete={false}
+        onUpdated={vi.fn()}
+      />
+    );
+
+    await screen.findByText("Chácara da Sede");
+    expect(
+      vi.mocked(api.get).mock.calls.some(([url]) => String(url).includes("/registrations"))
+    ).toBe(false);
+  });
 });
