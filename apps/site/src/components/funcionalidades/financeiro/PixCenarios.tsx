@@ -89,7 +89,7 @@ export function PixCenarios() {
                     {num}
                   </span>
                   <span
-                    className="font-mono text-[10px] px-2.5 py-1 rounded-pill"
+                    className="text-[11px] px-2.5 py-1 rounded-pill"
                     style={{ background: availabilityBg, color: availabilityColor }}
                   >
                     {availability}
@@ -110,7 +110,7 @@ export function PixCenarios() {
                   {steps.map((step, i) => (
                     <div key={i} className="flex items-start gap-2.5">
                       <span
-                        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 font-mono text-[8px] font-medium mt-px"
+                        className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0 font-mono text-[11px] font-medium"
                         style={{ background: "var(--navy-tint)", color: "var(--navy-accent)" }}
                       >
                         {i + 1}
@@ -128,7 +128,7 @@ export function PixCenarios() {
                     Taxa:
                   </span>
                   <span
-                    className="font-mono text-[10px] font-medium px-2 py-0.5 rounded-pill"
+                    className="text-[11px] font-medium px-2 py-0.5 rounded-pill"
                     style={{ background: feeBg, color: feeColor }}
                   >
                     {fee}

@@ -49,7 +49,7 @@ export function ContatoContent() {
 
           {/* Meta */}
           <div
-            className="flex flex-wrap gap-x-8 gap-y-3 mt-8 pt-8 border-t font-mono text-[11.5px] tracking-[.06em]"
+            className="flex flex-wrap gap-x-8 gap-y-3 mt-8 pt-8 border-t text-[12px]"
             style={{ borderColor: "var(--border)", color: "var(--muted)" }}
           >
             <span className="flex items-center gap-2">

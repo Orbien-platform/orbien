@@ -12,6 +12,7 @@ const MEMBERS = [
 function MemberListMockup() {
   return (
     <div
+      aria-hidden="true"
       className="rounded-[14px] overflow-hidden border"
       style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-lg)" }}
     >
@@ -25,7 +26,7 @@ function MemberListMockup() {
         </span>
         <div className="flex items-center gap-2">
           <span
-            className="font-mono text-[10px] px-2.5 py-1 rounded-pill"
+            className="text-[10px] px-2.5 py-1 rounded-pill"
             style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
           >
             + Cadastrar
@@ -49,13 +50,13 @@ function MemberListMockup() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium truncate" style={{ color: "var(--ink)" }}>{name}</p>
-              <p className="font-mono text-[10px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
+              <p className="text-[10px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: dot }} />
                 {sub}
               </p>
             </div>
             <span
-              className="font-mono text-[10px] px-2 py-0.5 rounded-pill flex-shrink-0"
+              className="text-[10px] px-2 py-0.5 rounded-pill flex-shrink-0"
               style={{ background: badgeBg, color: badgeColor }}
             >
               {badge}
@@ -70,7 +71,7 @@ function MemberListMockup() {
         style={{ background: "var(--bg)", borderColor: "var(--border)" }}
       >
         <span className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>4 de 247 membros</span>
-        <span className="font-mono text-[10px]" style={{ color: "var(--navy-accent)" }}>Ver todos →</span>
+        <span className="text-[10px]" style={{ color: "var(--navy-accent)" }}>Ver todos →</span>
       </div>
     </div>
   );

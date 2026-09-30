@@ -67,7 +67,7 @@ export function MemberLifecycle() {
                       style={{ background: dotColor, boxShadow: `0 0 0 3px color-mix(in srgb, ${dotColor} 20%, transparent)` }}
                     />
                     <span
-                      className="font-mono text-[11px] font-medium px-2.5 py-1 rounded-pill"
+                      className="text-[11px] font-medium px-2.5 py-1 rounded-pill"
                       style={{ background: badgeBg, color: badgeColor }}
                     >
                       {badge}
@@ -82,7 +82,7 @@ export function MemberLifecycle() {
                     </p>
                   </div>
                   <div
-                    className="mt-auto pt-4 border-t font-mono text-[10px] leading-snug"
+                    className="mt-auto pt-4 border-t text-[11px] leading-snug"
                     style={{ borderColor: "var(--border)", color: "var(--muted)" }}
                   >
                     {criteria}

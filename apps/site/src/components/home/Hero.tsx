@@ -5,6 +5,7 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 function DashboardMockup() {
   return (
     <div
+      aria-hidden="true"
       className="absolute overflow-hidden flex flex-col"
       style={{
         top: "8%", left: 0, right: "14%", bottom: "14%",
@@ -42,7 +43,7 @@ function DashboardMockup() {
             </div>
           </div>
           <span
-            className="font-mono text-[9px] px-2 py-1 rounded-pill tracking-[.06em]"
+            className="text-[9px] px-2 py-1 rounded-pill"
             style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
           >
             ● Ao vivo
@@ -122,7 +123,7 @@ function DashboardMockup() {
             <div className="text-[11px] font-medium" style={{ color: "var(--ink)" }}>
               Marina Rodrigues
             </div>
-            <div className="font-mono text-[9px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
+            <div className="text-[9px]" style={{ color: "var(--muted)" }}>
               3ª visita · sem célula
             </div>
           </div>
@@ -141,6 +142,7 @@ function DashboardMockup() {
 function PhoneMockup() {
   return (
     <div
+      aria-hidden="true"
       className="absolute right-0 bottom-0 w-[38%]"
       style={{
         aspectRatio: "9/19",

@@ -143,7 +143,7 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div
-          className="border-t pt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between font-mono text-[11px] tracking-[.06em]"
+          className="border-t pt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between text-[12px]"
           style={{ borderColor: "var(--border)", color: "var(--muted)" }}
         >
           <div>© {new Date().getFullYear()} Church Platform Ltda · CNPJ a definir · Passo Fundo · RS</div>

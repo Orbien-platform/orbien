@@ -80,7 +80,7 @@ export function SemaforoSaude() {
                     style={{ background: dot, boxShadow: `0 0 0 4px ${dotShadow}` }}
                   />
                   <span
-                    className="font-mono text-[11px] font-medium px-2.5 py-1 rounded-pill"
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-pill"
                     style={{ background: labelBg, color: labelColor }}
                   >
                     {label}

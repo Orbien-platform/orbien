@@ -26,7 +26,7 @@ export function SobreHero() {
 
           {/* Meta line */}
           <div
-            className="flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11.5px] tracking-[.08em] pt-8 border-t"
+            className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[12px] pt-8 border-t"
             style={{ borderColor: "var(--border)", color: "var(--muted)" }}
           >
             {[

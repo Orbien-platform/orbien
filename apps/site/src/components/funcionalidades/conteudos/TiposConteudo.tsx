@@ -94,7 +94,7 @@ export function TiposConteudo() {
                     {icon}
                   </div>
                   <span
-                    className="font-mono text-[10px] font-medium px-2.5 py-1 rounded-pill"
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-pill"
                     style={{ background: badgeBg, color: badgeColor }}
                   >
                     {badge}

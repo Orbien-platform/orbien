@@ -73,6 +73,7 @@ export function AlcanceSection() {
           {/* Right — compose mockup + image placeholder */}
           <Reveal>
             <div
+              aria-hidden="true"
               className="rounded-[14px] overflow-hidden border"
               style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-md)" }}
             >
@@ -99,7 +100,7 @@ export function AlcanceSection() {
                     ].map(({ label, active }) => (
                       <span
                         key={label}
-                        className="font-mono text-[11px] font-medium px-3 py-1.5 rounded-pill border cursor-pointer"
+                        className="text-[11px] font-medium px-3 py-1.5 rounded-pill border cursor-pointer"
                         style={{
                           background: active ? "var(--navy-accent)" : "var(--surface)",
                           color: active ? "#fff" : "var(--stone)",
@@ -123,7 +124,7 @@ export function AlcanceSection() {
                     ].map(({ label, active }) => (
                       <span
                         key={label}
-                        className="font-mono text-[11px] px-3 py-1.5 rounded-pill border"
+                        className="text-[11px] px-3 py-1.5 rounded-pill border"
                         style={{
                           background: active ? "var(--navy-tint)" : "var(--surface)",
                           color: active ? "var(--navy-accent)" : "var(--stone)",

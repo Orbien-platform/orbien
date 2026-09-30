@@ -116,7 +116,7 @@ export function FuncionalizadesHub() {
                     {highlights.map((h) => (
                       <span
                         key={h}
-                        className="font-mono text-[10px] px-2.5 py-1 rounded-pill"
+                        className="text-[11px] px-2.5 py-1 rounded-pill"
                         style={{ background: "var(--navy-dim)", color: "var(--navy-accent)" }}
                       >
                         {h}
