@@ -798,6 +798,12 @@ falhar o webhook).
   doador (`donor_person_id` já precisa existir como `Person`), não o próprio
   doador. Tela do doador — `apps/web` ou `apps/mobile` — é trabalho novo,
   não coberto aqui.
+
+  **Avaliação da tela do doador (2026-10-01):** spec em
+  `.specs/features/pix-recorrente-doador-mobile/`. Recomendação: **construir
+  depois** — a assinatura é criada no cliente Asaas da igreja e nada entrega o
+  PIX do ciclo ao doador (vale também para o fluxo do tesoureiro); fechar esse
+  P0 (spike em sandbox, perguntas Q1–Q3 da spec) antes de abrir a tela.
 - RLS em `023_rls_pix_subscriptions.sql`: `tenant_congregation_isolation`
   (AD-001) — diferente de `pix_payments`, que é de `001_rls_setup.sql` e
   ficou só no isolamento de tenant; tabela nova segue o padrão atual, não o
