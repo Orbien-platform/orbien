@@ -777,4 +777,60 @@ describe("ScheduleSheet", () => {
       await screen.findByText("Escala publicada. 1 voluntário notificado.")
     ).toBeInTheDocument();
   });
+
+  it("abre as sugestões de uma função e aplica uma com um clique", async () => {
+    mockGet({ schedule: scheduleWithMinistry });
+    const baseGet = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation((url: string) =>
+      url === "/celebrations/instances/i1/schedule/suggest"
+        ? Promise.resolve({
+            data: [
+              {
+                celebration_ministry_id: "cm1",
+                slots_remaining: 1,
+                eligible_count: 1,
+                suggestions: [
+                  { volunteer_profile_id: "vp9", person_id: "p9", full_name: "Carla Dias", times_served: 0, last_served_at: null },
+                ],
+              },
+            ],
+          })
+        : baseGet(url)
+    );
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+    render(<ScheduleSheet open={true} {...baseProps} onChanged={onChanged} />);
+
+    await screen.findByText("Louvor");
+    await user.click(screen.getByRole("button", { name: "Sugerir" }));
+    await user.click(await screen.findByRole("button", { name: "Escalar Carla Dias" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/instances/i1/schedule/ministries/cm1/assignments",
+        { volunteer_profile_id: "vp9" }
+      )
+    );
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("fecha as sugestões ao clicar em Sugerir de novo", async () => {
+    mockGet({ schedule: scheduleWithMinistry });
+    const baseGet = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation((url: string) =>
+      url === "/celebrations/instances/i1/schedule/suggest"
+        ? Promise.resolve({ data: [{ celebration_ministry_id: "cm1", slots_remaining: 1, eligible_count: 0, suggestions: [] }] })
+        : baseGet(url)
+    );
+    const user = userEvent.setup();
+    render(<ScheduleSheet open={true} {...baseProps} onChanged={vi.fn()} />);
+
+    await screen.findByText("Louvor");
+    const toggle = screen.getByRole("button", { name: "Sugerir" });
+    await user.click(toggle);
+    expect(await screen.findByText(/Ninguém disponível/)).toBeInTheDocument();
+    await user.click(toggle);
+    expect(screen.queryByText(/Ninguém disponível/)).not.toBeInTheDocument();
+  });
 });
