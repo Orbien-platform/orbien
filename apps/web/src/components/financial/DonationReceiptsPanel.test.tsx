@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DonationReceiptsPanel } from "./DonationReceiptsPanel";
 import api from "@/lib/api";
@@ -93,5 +94,46 @@ describe("DonationReceiptsPanel", () => {
     vi.mocked(api.get).mockRejectedValue(new Error("boom"));
     render(<DonationReceiptsPanel />);
     expect(await screen.findByText("Erro ao carregar os recibos.")).toBeInTheDocument();
+  });
+
+  it("volta para a página anterior", async () => {
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: { data: [receipt(1)], total: 45 } })
+      .mockResolvedValueOnce({ data: { data: [receipt(21)], total: 45 } })
+      .mockResolvedValueOnce({ data: { data: [receipt(1)], total: 45 } });
+    const user = userEvent.setup();
+    render(<DonationReceiptsPanel />);
+    await screen.findByText("Página 1 de 3");
+    expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+    await screen.findByText("Página 2 de 3");
+    await user.click(screen.getByRole("button", { name: "Página anterior" }));
+
+    expect(await screen.findByText("Página 1 de 3")).toBeInTheDocument();
+    expect(api.get).toHaveBeenLastCalledWith("/financial/donation-receipts?page=1&page_size=20");
+  });
+
+  it("tentar de novo refaz a carga depois de um erro", async () => {
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce({ data: { data: [receipt(1, "Maria")], total: 1 } });
+    const user = userEvent.setup();
+    render(<DonationReceiptsPanel />);
+
+    await user.click(await screen.findByRole("button", { name: "Tentar de novo" }));
+
+    expect(await screen.findByText("Maria")).toBeInTheDocument();
+  });
+
+  it("carrega uma vez só em StrictMode", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: [receipt(1, "Maria")], total: 1 } });
+    render(
+      <StrictMode>
+        <DonationReceiptsPanel />
+      </StrictMode>,
+    );
+    await screen.findByText("Maria");
+    expect(api.get).toHaveBeenCalledTimes(1);
   });
 });

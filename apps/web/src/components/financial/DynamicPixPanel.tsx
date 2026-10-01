@@ -72,10 +72,9 @@ export function DynamicPixPanel() {
     }
   }
 
-  async function copyCode() {
-    if (!pix) return;
+  async function copyCode(code: string) {
     try {
-      await navigator.clipboard.writeText(pix.qr_code);
+      await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
@@ -140,7 +139,7 @@ export function DynamicPixPanel() {
                 className="w-full resize-none break-all rounded-lg border border-[var(--border-default)] bg-[var(--surface-base)] p-2 font-mono text-xs text-ink dark:text-white"
               />
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5 rounded-[8px]" onClick={copyCode}>
+                <Button variant="outline" size="sm" className="gap-1.5 rounded-[8px]" onClick={() => copyCode(pix.qr_code)}>
                   {copied ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
                   {copied ? "Copiado" : "Copiar código"}
                 </Button>

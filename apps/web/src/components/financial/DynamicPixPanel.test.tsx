@@ -103,4 +103,64 @@ describe("DynamicPixPanel", () => {
     await user.click(screen.getByRole("button", { name: "Gerar QR Code" }));
     expect(await screen.findByText(/Você não tem acesso a PIX com QR Code/)).toBeInTheDocument();
   });
+
+  it("envia descrição e doador quando preenchidos", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: [{ id: "p1", full_name: "João Lima" }] } });
+    vi.mocked(api.post).mockResolvedValue({ data: pix });
+    const user = userEvent.setup();
+    render(<DynamicPixPanel />);
+
+    await typeAmount(user, "5000");
+    await user.type(screen.getByLabelText("Descrição (opcional)"), "  Oferta de missões ");
+    await user.type(screen.getByPlaceholderText("Buscar pessoa pelo nome"), "Joa");
+    await user.click(await screen.findByRole("button", { name: "João Lima" }));
+    await user.click(screen.getByRole("button", { name: "Gerar QR Code" }));
+
+    await screen.findByRole("img", { name: /QR Code do PIX/ });
+    expect(api.post).toHaveBeenCalledWith("/financial/pix/dynamic", {
+      amount: 50,
+      description: "Oferta de missões",
+      donor_person_id: "p1",
+    });
+  });
+
+  it("avisa quando não consegue copiar e mantém o código visível", async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: pix });
+    const user = userEvent.setup();
+    render(<DynamicPixPanel />);
+    await typeAmount(user, "5000");
+    await user.click(screen.getByRole("button", { name: "Gerar QR Code" }));
+    await screen.findByRole("img", { name: /QR Code do PIX/ });
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("negado"));
+
+    await user.click(screen.getByRole("button", { name: "Copiar código" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível copiar");
+    expect(screen.getByLabelText("Copia e cola")).toHaveValue(pix.qr_code);
+  });
+
+  it("usa texto padrão quando o 400 vem sem mensagem", async () => {
+    vi.mocked(api.post).mockRejectedValue({ isAxiosError: true, response: { status: 400, data: {} } });
+    const user = userEvent.setup();
+    render(<DynamicPixPanel />);
+    await typeAmount(user, "5000");
+    await user.click(screen.getByRole("button", { name: "Gerar QR Code" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Dados inválidos.");
+  });
+
+  it("seleciona o código ao focar e volta o botão para Copiar código depois do aviso", async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: pix });
+    const user = userEvent.setup();
+    render(<DynamicPixPanel />);
+    await typeAmount(user, "5000");
+    await user.click(screen.getByRole("button", { name: "Gerar QR Code" }));
+    const box = (await screen.findByLabelText("Copia e cola")) as HTMLTextAreaElement;
+
+    await user.click(box);
+    expect(box.selectionEnd - box.selectionStart).toBe(pix.qr_code.length);
+
+    await user.click(screen.getByRole("button", { name: "Copiar código" }));
+    await screen.findByRole("button", { name: "Copiado" });
+    expect(await screen.findByRole("button", { name: "Copiar código" }, { timeout: 4000 })).toBeInTheDocument();
+  });
 });

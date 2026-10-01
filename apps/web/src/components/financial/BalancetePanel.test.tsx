@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BalancetePanel } from "./BalancetePanel";
@@ -64,5 +64,59 @@ describe("BalancetePanel", () => {
     vi.mocked(api.get).mockRejectedValue(new Error("boom"));
     render(<BalancetePanel />);
     expect(await screen.findByText("Erro ao carregar o balancete. Tente de novo.")).toBeInTheDocument();
+  });
+
+  it("pede de novo ao mudar o período", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+    await screen.findByText("Missões");
+
+    fireEvent.change(screen.getByLabelText("Início do período"), { target: { value: "2026-08-01" } });
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    expect(String(vi.mocked(api.get).mock.calls[1][0])).toContain("period_start=2026-08-01");
+  });
+
+  it("volta ao convite quando uma das datas é apagada, sem chamar a API", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+    await screen.findByText("Missões");
+
+    fireEvent.change(screen.getByLabelText("Fim do período"), { target: { value: "" } });
+
+    expect(await screen.findByText("Selecione um período para ver o balancete.")).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("descarta a resposta de um período antigo que chega depois do novo", async () => {
+    let resolveOld!: (v: unknown) => void;
+    vi.mocked(api.get)
+      .mockReturnValueOnce(new Promise((r) => { resolveOld = r; }) as never)
+      .mockResolvedValueOnce({ data: balancete });
+    render(<BalancetePanel />);
+    fireEvent.change(screen.getByLabelText("Início do período"), { target: { value: "2026-08-01" } });
+    await screen.findByText("Missões");
+
+    resolveOld({ data: { ...balancete, lines: [{ ...balancete.lines[0], cost_center_name: "Antigo" }] } });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.queryByText("Antigo")).not.toBeInTheDocument();
+    expect(screen.getByText("Missões")).toBeInTheDocument();
+  });
+
+  it("descarta o erro de um período antigo que falha depois do novo", async () => {
+    let rejectOld!: (e: unknown) => void;
+    vi.mocked(api.get)
+      .mockReturnValueOnce(new Promise((_, r) => { rejectOld = r; }) as never)
+      .mockResolvedValueOnce({ data: balancete });
+    render(<BalancetePanel />);
+    fireEvent.change(screen.getByLabelText("Início do período"), { target: { value: "2026-08-01" } });
+    await screen.findByText("Missões");
+
+    rejectOld(new Error("tarde"));
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.queryByText("Erro ao carregar o balancete. Tente de novo.")).not.toBeInTheDocument();
+    expect(screen.getByText("Missões")).toBeInTheDocument();
   });
 });

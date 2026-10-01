@@ -39,7 +39,8 @@ function fmtDate(iso: string): string {
  * Recibos de doação (Premium). O PDF nasce fora de request, quando a Asaas
  * confirma o PIX de um doador identificado (`PROD-03`); aqui só se lista e se
  * baixa. O download é um link assinado de vida curta — pedido a cada clique,
- * nunca guardado na tela.
+ * nunca guardado na tela. Sem guarda de resposta atrasada: os botões de página
+ * ficam desabilitados enquanto carrega, então nunca há duas buscas em voo.
  */
 export function DonationReceiptsPanel() {
   const [page, setPage] = useState(1);
@@ -50,29 +51,23 @@ export function DonationReceiptsPanel() {
   const [loadError, setLoadError] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const requestSeq = useRef(0);
   const prevPage = useRef<number | null>(null);
 
   const load = useCallback((p: number) => {
-    const seq = ++requestSeq.current;
     setLoading(true);
     setLoadError(false);
     api
       .get<ReceiptsPage>(`/financial/donation-receipts?page=${p}&page_size=${PAGE_SIZE}`)
       .then((res) => {
-        if (seq !== requestSeq.current) return;
-        setRows(res.data.data ?? []);
-        setTotal(res.data.total ?? 0);
+        setRows(res.data.data);
+        setTotal(res.data.total);
         setAccessDenied(false);
       })
       .catch((err) => {
-        if (seq !== requestSeq.current) return;
         if (isForbidden(err)) setAccessDenied(true);
         else setLoadError(true);
       })
-      .finally(() => {
-        if (seq === requestSeq.current) setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {

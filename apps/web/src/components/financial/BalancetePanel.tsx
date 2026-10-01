@@ -60,7 +60,12 @@ export function BalancetePanel() {
 
   const load = useCallback((from: string, to: string) => {
     // Data apagada no input: não há período para pedir.
-    if (!from || !to) return;
+    if (!from || !to) {
+      setData(null);
+      setLoading(false);
+      setLoadError(false);
+      return;
+    }
     const seq = ++requestSeq.current;
     setLoading(true);
     setLoadError(false);

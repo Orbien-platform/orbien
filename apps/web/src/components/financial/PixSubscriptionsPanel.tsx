@@ -58,7 +58,6 @@ export function PixSubscriptionsPanel() {
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const requestSeq = useRef(0);
   const hasFetched = useRef(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -73,24 +72,19 @@ export function PixSubscriptionsPanel() {
   const [cancelError, setCancelError] = useState("");
 
   const load = useCallback(() => {
-    const seq = ++requestSeq.current;
     setLoading(true);
     setLoadError(false);
     api
       .get<PixSubscription[]>("/financial/pix/subscriptions")
       .then((res) => {
-        if (seq !== requestSeq.current) return;
-        setRows(res.data ?? []);
+        setRows(res.data);
         setAccessDenied(false);
       })
       .catch((err) => {
-        if (seq !== requestSeq.current) return;
         if (isForbidden(err)) setAccessDenied(true);
         else setLoadError(true);
       })
-      .finally(() => {
-        if (seq === requestSeq.current) setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -134,12 +128,11 @@ export function PixSubscriptionsPanel() {
     }
   }
 
-  async function handleCancel() {
-    if (!confirmCancel) return;
+  async function handleCancel(id: string) {
     setCancelError("");
     setCancelling(true);
     try {
-      await api.patch(`/financial/pix/subscriptions/${confirmCancel.id}/cancel`);
+      await api.patch(`/financial/pix/subscriptions/${id}/cancel`);
       setConfirmCancel(null);
       load();
     } catch (err) {
@@ -246,7 +239,7 @@ export function PixSubscriptionsPanel() {
       />
 
       {/* Criar */}
-      <Dialog.Root open={createOpen} onOpenChange={(v) => { if (!creating) setCreateOpen(v); }}>
+      <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
           <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--border-default)] bg-[var(--surface-base)] p-6 shadow-[var(--shadow-lg)] transition duration-150 data-ending-style:opacity-0 data-ending-style:scale-95 data-starting-style:opacity-0 data-starting-style:scale-95">
@@ -316,7 +309,7 @@ export function PixSubscriptionsPanel() {
       {/* Cancelar — chama a Asaas, então pede confirmação */}
       <Dialog.Root
         open={confirmCancel !== null}
-        onOpenChange={(v) => { if (!v && !cancelling) setConfirmCancel(null); }}
+        onOpenChange={() => setConfirmCancel(null)}
       >
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-[70] bg-black/40 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
@@ -345,7 +338,7 @@ export function PixSubscriptionsPanel() {
               <Button
                 className="flex-1 rounded-[8px] bg-crimson text-white hover:opacity-90"
                 disabled={cancelling}
-                onClick={handleCancel}
+                onClick={() => handleCancel(confirmCancel!.id)}
               >
                 {cancelling ? <Loader2 size={14} className="animate-spin" /> : "Cancelar assinatura"}
               </Button>

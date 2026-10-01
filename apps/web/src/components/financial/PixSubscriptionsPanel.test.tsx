@@ -164,4 +164,111 @@ describe("PixSubscriptionsPanel", () => {
     render(<PixSubscriptionsPanel />);
     expect(await screen.findByText("Erro ao carregar as assinaturas.")).toBeInTheDocument();
   });
+
+  async function openCreateWithDonor(user: ReturnType<typeof userEvent.setup>) {
+    await screen.findByText(/Nenhuma assinatura ainda/);
+    await user.click(screen.getByRole("button", { name: "Nova assinatura" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByPlaceholderText("Buscar pessoa pelo nome"), "Joa");
+    await user.click(await within(dialog).findByRole("button", { name: "João Lima" }));
+    return dialog;
+  }
+
+  it("exige valor maior que zero quando o doador já foi escolhido", async () => {
+    mockGets([]);
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+    const dialog = await openCreateWithDonor(user);
+
+    await user.click(within(dialog).getByRole("button", { name: "Criar assinatura" }));
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Informe um valor maior que zero.");
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("envia a descrição quando preenchida", async () => {
+    mockGets([]);
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "s9" } });
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+    const dialog = await openCreateWithDonor(user);
+    await user.type(within(dialog).getByLabelText("Valor mensal"), "10000");
+    await user.type(within(dialog).getByLabelText("Descrição (opcional)"), " Dízimo de outubro ");
+    await user.click(within(dialog).getByRole("button", { name: "Criar assinatura" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/financial/pix/subscriptions", {
+        donor_person_id: "p1",
+        amount: 100,
+        description: "Dízimo de outubro",
+      }),
+    );
+  });
+
+  it("Voltar e Escape fecham o diálogo de criação sem criar nada", async () => {
+    mockGets([]);
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+    await screen.findByText(/Nenhuma assinatura ainda/);
+
+    await user.click(screen.getByRole("button", { name: "Nova assinatura" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Voltar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Nova assinatura" }));
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("Escape fecha o diálogo de cancelamento sem chamar a API", async () => {
+    mockGets([sub()]);
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+    await user.click(await screen.findByRole("button", { name: "Cancelar assinatura de Maria Souza" }));
+    await screen.findByRole("dialog");
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("mostra a descrição da assinatura e lida com doador sem nome", async () => {
+    mockGets([sub({ description: "Dízimo", donorPerson: null })]);
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+
+    expect(await screen.findByText("Dízimo")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancelar assinatura de doador" }));
+    expect(within(await screen.findByRole("dialog")).getByText(/Cancelar a assinatura de este doador\?/)).toBeInTheDocument();
+  });
+
+  it("usa a primeira mensagem quando a validação da API devolve uma lista", async () => {
+    mockGets([]);
+    vi.mocked(api.post).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 400, data: { message: ["amount must be a positive number", "outra"] } },
+    });
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+    const dialog = await openCreateWithDonor(user);
+    await user.type(within(dialog).getByLabelText("Valor mensal"), "10000");
+    await user.click(within(dialog).getByRole("button", { name: "Criar assinatura" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("amount must be a positive number");
+  });
+
+  it("cai no texto genérico quando o 4xx não traz mensagem legível", async () => {
+    mockGets([]);
+    vi.mocked(api.post).mockRejectedValue({ isAxiosError: true, response: { status: 404, data: { message: 42 } } });
+    const user = userEvent.setup();
+    render(<PixSubscriptionsPanel />);
+    const dialog = await openCreateWithDonor(user);
+    await user.type(within(dialog).getByLabelText("Valor mensal"), "10000");
+    await user.click(within(dialog).getByRole("button", { name: "Criar assinatura" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Não foi possível criar a assinatura");
+  });
 });
