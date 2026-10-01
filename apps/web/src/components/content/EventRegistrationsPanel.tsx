@@ -57,7 +57,8 @@ function fmt(iso: string): string {
  *
  * Só o organizador chega aqui: o sheet é tela do `(admin)`, e
  * `GET .../registrations` responde 403 para os demais papéis. A tela de quem
- * se inscreve é outra (mobile/membro), e usa `.../summary` e `.../me`.
+ * se inscreve é outra (`EventRegistrationPanel`, e o mobile), e usa `.../summary` e
+ * `.../me`.
  */
 export function EventRegistrationsPanel({ postId, reloadKey = 0 }: EventRegistrationsPanelProps) {
   const [info, setInfo] = useState<RegistrationsResponse | null>(null);

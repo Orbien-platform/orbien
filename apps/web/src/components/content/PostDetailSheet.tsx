@@ -24,6 +24,7 @@ import { MarkdownView } from "@/components/content/MarkdownView";
 import { RichTextEditor } from "@/components/content/RichTextEditor";
 import { MediaUploadField, iconForFile } from "@/components/content/MediaUploadField";
 import { EventRegistrationsPanel } from "@/components/content/EventRegistrationsPanel";
+import { EventRegistrationPanel } from "@/components/content/EventRegistrationPanel";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
 import { isImageUrl } from "@/lib/media";
@@ -531,9 +532,17 @@ export function PostDetailSheet({
                     </div>
                   )}
 
-                  {/* Inscrições (PROD-16) */}
-                  {post.type === "event" && (
+                  {/* Inscrições (PROD-16): o organizador vê a lista; quem não
+                      organiza (membro) vê a própria inscrição (PROD-16/24/25).
+                      `canEdit` é o mesmo recorte de `ORGANIZER_ROLES` da API, e
+                      `GET .../registrations` responde 403 para o resto. O painel
+                      do membro só monta com inscrição ligada: post comum não
+                      paga as duas chamadas. */}
+                  {post.type === "event" && canEdit && (
                     <EventRegistrationsPanel postId={post.id} reloadKey={reloadTick} />
+                  )}
+                  {post.type === "event" && !canEdit && post.registration_enabled && (
+                    <EventRegistrationPanel postId={post.id} />
                   )}
 
                   {/* Meta */}
