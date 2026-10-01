@@ -123,6 +123,7 @@ describe("buildSessionUser", () => {
       congregation_id: "c1",
       support_session: true,
       support_tenant_name: "Igreja X",
+      plan: "pro",
       areas: null,
       expires_at: 9999999999,
     });

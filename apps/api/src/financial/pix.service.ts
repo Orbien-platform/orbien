@@ -414,6 +414,8 @@ export class PixService {
     return this.prisma.client.pixSubscription.findMany({
       where: { tenant_id: user.tenant_id, congregation_id: user.congregation_id },
       orderBy: { created_at: 'desc' },
+      // O painel do web mostra quem doa; sem o nome a lista teria só UUIDs.
+      include: { donorPerson: { select: { full_name: true } } },
     });
   }
 

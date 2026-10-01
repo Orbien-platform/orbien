@@ -92,6 +92,7 @@ type Opts = {
 
 function harness(opts: Opts = {}) {
   const cap = {
+    subscriptionFindManyArgs: undefined as Record<string, unknown> | undefined,
     pixPayments: [] as Record<string, unknown>[],
     transactions: [] as Record<string, unknown>[],
     updates: [] as Record<string, unknown>[],
@@ -288,7 +289,10 @@ function harness(opts: Opts = {}) {
           cap.pixSubscriptions.push(args.data);
           return Promise.resolve({ id: 'sub-1', ...args.data });
         },
-        findMany: () => Promise.resolve(opts.pixSubscriptions ?? (assinatura ? [assinatura] : [])),
+        findMany: (args: Record<string, unknown>) => {
+          cap.subscriptionFindManyArgs = args;
+          return Promise.resolve(opts.pixSubscriptions ?? (assinatura ? [assinatura] : []));
+        },
         findFirst: () => Promise.resolve(assinatura ? { ...assinatura } : null),
         findUnique: () => Promise.resolve(assinatura ? { ...assinatura } : null),
         update: (args: { data: Record<string, unknown> }) => {
@@ -902,6 +906,16 @@ describe('PixService', () => {
       const result = await service.listSubscriptions(user);
 
       expect(result).toEqual(rows);
+    });
+
+    it('pede o nome do doador junto, para o painel não listar só UUIDs', async () => {
+      const { service, cap } = harness({ pixSubscriptions: [] });
+
+      await service.listSubscriptions(user);
+
+      expect(cap.subscriptionFindManyArgs).toMatchObject({
+        include: { donorPerson: { select: { full_name: true } } },
+      });
     });
   });
 

@@ -108,6 +108,12 @@ export interface SessionUser {
   support_session: boolean;
   support_tenant_name: string | null;
   /**
+   * Plano do tenant segundo a claim do token. Serve só para mostrar ou
+   * esconder aba Premium — não é autoridade: a API lê o plano do banco
+   * (`PlanGuard`) e responde 403, que as telas tratam.
+   */
+  plan?: string;
+  /**
    * As áreas do produto que esta sessão lê, segundo a API
    * (`GET /me/permissions`). `null` quando não deu para perguntar — a barra
    * lateral trata isso como "desenha tudo", e a tela responde "sem acesso" se
@@ -142,6 +148,7 @@ export function buildSessionUser(
     congregation_id: payload.congregation_id,
     support_session: payload.support_session === true,
     support_tenant_name: identity.tenantName ?? null,
+    plan: payload.plan,
     areas,
     expires_at: payload.exp,
   };

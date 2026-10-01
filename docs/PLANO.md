@@ -194,6 +194,14 @@ mas não tinha nenhum código, e não estava registrada nesta lista. Fechou
 `PROD-27` (nota completa na seção 6) — assinatura PIX Automático via Asaas,
 `@RequiresPlan('premium')` como o resto do módulo Premium de `financial`.
 
+Em **2026-09-30**, feature `feat/web-financeiro-premium-pix-recibos`: as
+telas Premium do módulo financeiro que a API já tinha e o `apps/web` não
+mostrava entraram em `(admin)/financeiro` — abas **PIX** (assinaturas
+recorrentes, `PROD-27`, e QR dinâmico do tesoureiro, Cenário 2), **Recibos**
+(`PROD-03`) e o **Balancete** por centro de custo (`PROD-02`) extraído para
+componente próprio. Detalhe e a decisão sobre a tela do doador em `PROD-27`
+(seção 6).
+
 Em **2026-09-28**, limpeza pré-go-live de tenants (nota completa em `DEC-06`,
 seção 9): `teste1-church` passou a nascer no plano Starter e `teste2-church`
 no Premium, os dois com dado em todos os módulos — servem agora também de
@@ -447,6 +455,9 @@ completo em 2026-09-12**, as três tabelas que a lista tinha:
 > (lançamento avulso e edição); lançamentos parcelados/fixos não o suportam
 > ainda porque `create-recurring-rule.dto.ts` não tem o campo — decisão de
 > escopo, não esquecimento.
+> **Balancete em componente próprio (2026-09-30):** a aba já existia inline em
+> `financeiro/page.tsx`, engolindo erro (403 virava "Selecione um período").
+> Virou `BalancetePanel`, com 403 → `NoAccessState` e erro de carga explícito.
 >
 > `PROD-03` (`donation_receipts`) **fechou em 2026-09-12**. Recibo é gerado a
 > partir de `PixService.handleWebhook` — quando a Asaas confirma um PIX com
@@ -466,6 +477,11 @@ completo em 2026-09-12**, as três tabelas que a lista tinha:
 > regressão introduzida aqui). O recibo não é documento fiscal — o schema não
 > modela CNPJ/razão social da igreja, então o PDF traz doador, valor, data e
 > igreja pelo nome, sem se apresentar como nota fiscal.
+>
+> **Tela dos recibos (2026-09-30):** aba "Recibos" no `(admin)/financeiro`
+> (`DonationReceiptsPanel`, Premium): lista paginada e download por link
+> assinado pedido a cada clique (`.../:id/download`), aberto em nova aba —
+> o link vale 1h e nunca fica guardado na tela.
 
 Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
@@ -732,7 +748,7 @@ roda sem alteração (a suíte inteira fecha hoje em 125 testes — a contagem
 citada aqui na redação original, 118, era a de antes do `networks.spec.ts`
 que o `PROD-20` trouxe no mesmo dia).
 
-### ~~PROD-27 · PIX recorrente — dízimo automático via Asaas (Premium)~~ · fechado (backend)
+### ~~PROD-27 · PIX recorrente — dízimo automático via Asaas (Premium)~~ · fechado (backend + painel do tesoureiro)
 
 Entregue em 2026-09-26. Achado pela auditoria da mesma data contra `/precos`
 ("Doações e PIX"): a linha existia na tabela do site e em três documentos de
@@ -790,9 +806,34 @@ desconhecido, idempotência ao reenvio), `pix.controller.spec.ts` (papel e
 histórico do Prisma, como os demais) — geradas numa sessão em que
 `prisma migrate deploy` caiu no portão de aprovação do ambiente
 ("Production Deploy"), e aplicadas com sucesso (`bootstrap-db.sh` completo,
-passo 7 verde) na sessão seguinte, via `npm run dev`/hook de start. Sem tela
-no `apps/web`: a lacuna que fica, análoga à do `financeiro-ui-premium` de
-hoje mais cedo.
+passo 7 verde) na sessão seguinte, via `npm run dev`/hook de start.
+
+**Tela do tesoureiro — entregue em 2026-09-30**, no `apps/web`
+(`(admin)/financeiro`, aba "PIX", só para `plan === 'premium'` e papéis
+`admin_congregation`/`treasurer`/`tenant_admin`). Nada de rota nova:
+`PixSubscriptionsPanel` usa `POST`/`GET`/`PATCH .../cancel` como estão. Criar
+exige doador já cadastrado (`DonorPicker`, busca em `GET /persons`). Cancelar
+abre diálogo de confirmação explícita, porque chama a Asaas e não reativa; se a
+Asaas falhar, o diálogo fica aberto e diz que a assinatura continua ativa.
+Única mudança na API: `listSubscriptions` passou a incluir
+`donorPerson.full_name` (antes a lista só tinha UUIDs) — sem migration, sem RLS.
+A aba "PIX" traz também o `DynamicPixPanel` (QR dinâmico do Cenário 2: QR,
+copia-e-cola, validade). A claim `plan` do token entrou em `SessionUser` só
+para esconder/mostrar as abas; quem nega é o `PlanGuard`, e os painéis tratam
+o 403.
+
+**Tela do doador (self-service) — decisão: não construída no web; é do
+`apps/mobile`.** Verificado: a API só deixa o tesoureiro criar/cancelar
+(`FINANCIAL_ROLES`), e `member` não tem rota de assinatura. Uma tela do doador
+exigiria rota `/me` nova em `financial/pix` (plano lido do banco, não do token;
+escopo pelo `person_id` do `UserAccount`, que é nulável) **e** uma área de
+membro no `apps/web`, que não existe — o web é só `(admin)` e `(public)`, e o
+mesmo raciocínio já levou `PROD-25` ao mobile, onde o membro consome conteúdo.
+Fazer a rota sem a tela deixaria rota sem consumidor, o que a auditoria de
+2026-09-26 tratou como lacuna. Fica como trabalho de produto para o mobile
+(rota `/me` + tela), a decidir junto com a política de quem pode criar
+cobrança recorrente em nome próprio (teto de valor, confirmação por e-mail);
+sem ID novo aqui, porque a decisão é registrar o porquê, não abrir item.
 
 ### Funcionalidade prevista, sem código
 
@@ -1072,6 +1113,10 @@ em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
 > do Cenário 3 Premium (ADR-007) segue sem tela, porque exige o fluxo
 > autenticado de `POST /financial/pix/dynamic`, que essa página pública não
 > usa.
+> *Atualização 2026-09-30:* o fluxo autenticado de `POST
+> /financial/pix/dynamic` ganhou tela para o **tesoureiro** (`DynamicPixPanel`,
+> aba "PIX" do financeiro). A página pública `/doar/[tenant_slug]` continua
+> só Starter: o QR dinâmico para doador anônimo ainda não tem rota pública.
 
 > `PROD-09` (chat fechado por célula, Módulo 3, Starter) **fechou em
 > 2026-09-14**. Tabela nova `group_messages`
