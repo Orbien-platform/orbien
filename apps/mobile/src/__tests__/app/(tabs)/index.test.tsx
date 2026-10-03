@@ -63,6 +63,18 @@ jest.mock("../../../lib/content/content-client", () => ({
   getHighlights: (...args: unknown[]) => mockGetHighlights(...args),
 }));
 
+// Dízimo automático (PROD-28): a entrada depende da trava de pagamentos da
+// API e do plano da claim. Por padrão, trava desligada — como em produção.
+const mockFetchAsaasPaymentsEnabled = jest.fn();
+jest.mock("../../../lib/pix-recorrente/pix-recorrente-client", () => ({
+  fetchAsaasPaymentsEnabled: (...args: unknown[]) => mockFetchAsaasPaymentsEnabled(...args),
+}));
+
+const mockDecodeJwtPayload = jest.fn();
+jest.mock("../../../lib/auth/jwt", () => ({
+  decodeJwtPayload: (...args: unknown[]) => mockDecodeJwtPayload(...args),
+}));
+
 import { palettes } from "../../../lib/theme/tokens";
 import HomeScreen from "../../../app/(tabs)/index";
 
@@ -116,6 +128,41 @@ describe("HomeScreen", () => {
     mockUseAuth.mockReturnValue({ areas: null });
     mockUseTheme.mockReturnValue(themeValue());
     mockOpenBrowserAsync.mockResolvedValue({ type: "dismiss" });
+    mockFetchAsaasPaymentsEnabled.mockResolvedValue(false);
+    mockDecodeJwtPayload.mockReturnValue({ plan: "premium" });
+  });
+
+  describe("Dízimo automático (PROD-28)", () => {
+    const premiumSession = { areas: null, session: { accessToken: "token" } };
+
+    it("com a trava de pagamentos desligada, não aparece nem para tenant Premium", async () => {
+      mockUseAuth.mockReturnValue(premiumSession);
+
+      await renderHome();
+
+      expect(mockFetchAsaasPaymentsEnabled).toHaveBeenCalled();
+      expect(screen.queryByTestId("quick-action-dizimo-automatico")).toBeNull();
+    });
+
+    it("com a trava ligada e tenant Premium, aparece e leva a /dizimo-automatico", async () => {
+      mockUseAuth.mockReturnValue(premiumSession);
+      mockFetchAsaasPaymentsEnabled.mockResolvedValue(true);
+
+      await renderHome();
+
+      await fireEvent.press(screen.getByTestId("quick-action-dizimo-automatico"));
+      expect(mockPush).toHaveBeenCalledWith("/dizimo-automatico");
+    });
+
+    it("com a trava ligada, tenant Starter não vê a entrada", async () => {
+      mockUseAuth.mockReturnValue(premiumSession);
+      mockFetchAsaasPaymentsEnabled.mockResolvedValue(true);
+      mockDecodeJwtPayload.mockReturnValue({ plan: "starter" });
+
+      await renderHome();
+
+      expect(screen.queryByTestId("quick-action-dizimo-automatico")).toBeNull();
+    });
   });
 
   // HOME-01 (herdado, MHR-10): saudação sempre aparece.
