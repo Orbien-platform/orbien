@@ -456,6 +456,7 @@ export default function ConteudoPage() {
       <CreatePostModal
         open={createPostOpen}
         onOpenChange={setCreatePostOpen}
+        paidRegistrationAvailable={user?.asaas_payments === true}
         onCreated={() => {
           hasFetchedPosts.current = false;
           setPostsLoading(true);
