@@ -1960,8 +1960,8 @@ Decisão de 2026-10-03 (`AD-006`). Hoje nenhum dos três pontos de cobrança de
 `PixService` (`/payments` dinâmico e de inscrição, `/subscriptions` recorrente)
 envia `split`, e todos usam uma única `ASAAS_API_KEY` com um cliente Asaas por
 tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: montador
-único de cobrança + split + falha fechada, e a conta Asaas por tenant que isso
-exige (`DEC-07`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
+único de cobrança + split + falha fechada, e a subconta Asaas por tenant
+(`DEC-07`, decidido: `AD-007`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
 Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
 
 ## 8. Ajustes — documento, rótulo e portão
@@ -2186,16 +2186,19 @@ Nenhum tem desenho técnico.
 
 ---
 
-### DEC-07 · Conta Asaas por tenant (para a tarifa ser da igreja)
+### ~~DEC-07 · Conta Asaas por tenant (para a tarifa ser da igreja)~~ · decidido
 
-Consequência do `AD-006`. Para a tarifa da Asaas ser do tenant e o split de 1%
-sair da cobrança dele, a cobrança tem de ser criada na conta Asaas do tenant
-(subconta com wallet própria), não num cliente dentro da conta única da Orbien.
-Em aberto: modelo (subconta criada via API pela Orbien vs. conta própria da
-igreja), onboarding/KYC (CNPJ/CPF do responsável — hoje `cpfCnpj` é omitido no
-sandbox), onde guardar a chave/wallet por tenant (segredo, não coluna aberta) e
-o que acontece com tenant sem conta ativa (PIX manual do Cenário 1 segue,
-sem Asaas). Não verificado na documentação da Asaas; confirmar em spike.
+Decidido em 2026-10-03 (`AD-007` em `.specs/STATE.md`): **subconta Asaas por
+igreja, criada pela Orbien com a chave raiz**; a cobrança é emitida na subconta
+(a igreja aparece como recebedora e arca com tarifa, estorno e contestação) e o
+1% vai por split para o `walletId` da Orbien — o que deixa demonstrável que o
+dinheiro é do tenant, não da Orbien. Rejeitado: cobrança na conta da Orbien
+com split de ~99% para a igreja. A `apiKey` da subconta é guardada cifrada pela
+Orbien; a igreja nunca manuseia chave. **Só para tenant com CNPJ**: sem CNPJ, ou
+com a subconta em análise, vale só a chave PIX da igreja (Cenário 1, contribuição
+pelo banco, fora do app). Perguntas que ficam para a Asaas: painel/saque
+automático da subconta (a Orbien não opera saque), custo, KYC de organização
+religiosa. Execução em `PEND-16`.
 
 ## 10. Como manter este documento
 

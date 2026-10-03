@@ -149,4 +149,4 @@ model PixSubscription {
 | Isolamento por pessoa | Serviço + testes; RLS por pessoa só se Q5 pedir | Evita mudar `TenantContextInterceptor` para uma rota |
 | Cancelar nunca bloqueado por plano | Sim | Direito do doador; Q3 |
 
-> **Project-level**: se a feature for construída, registrar em `STATE.md` como AD-007 (AD-006 já é a regra de taxa/split): "rota de dinheiro self-service de `member` deriva pessoa e plano do banco, nunca do corpo ou da claim". Não registrado agora (feature não aprovada).
+> **Project-level**: se a feature for construída, registrar em `STATE.md` como AD-008 (AD-006/AD-007 já são taxa/split e subconta): "rota de dinheiro self-service de `member` deriva pessoa e plano do banco, nunca do corpo ou da claim". Não registrado agora (feature não aprovada).

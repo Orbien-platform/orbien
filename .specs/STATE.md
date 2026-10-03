@@ -165,3 +165,43 @@ mudança num lugar. **Pré-requisito em aberto (DEC-07/PEND-16)**: hoje há uma 
 split sair da cobrança dele, a cobrança precisa ser criada na conta Asaas do
 tenant (subconta/wallet por tenant). Ver `.specs/features/asaas-taxa-e-split-padrao/`.
 
+### AD-007 — Cobrança nasce na subconta Asaas do tenant, criada pela Orbien; só tenant com CNPJ
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-03 (fecha `DEC-07`; complementa AD-006)
+
+Como cumprir o AD-006 ("tarifa do tenant, 1% para a Orbien"):
+
+1. **A cobrança é emitida na conta do tenant, nunca na da Orbien.** Para cada
+   igreja a Orbien cria uma **subconta Asaas** com a chave raiz da Orbien
+   (`POST /accounts`). A cobrança (`/payments`, `/subscriptions`) sai com a
+   `apiKey` **da subconta**, e o `split` leva o 1% para o `walletId` da Orbien.
+   O PIX mostra a igreja como recebedora; o valor bruto, a tarifa, o estorno e a
+   contestação são da igreja. A Orbien só recebe a parte dela — que é o que
+   torna demonstrável que o dinheiro não é da Orbien.
+2. **Rejeitado**: cobrança na conta da Orbien com split de ~99% para a igreja.
+   O doador veria "Orbien" no PIX e a cobrança bruta seria da Orbien — o risco
+   tributário e de custódia que motivou esta decisão.
+3. **A igreja nunca manuseia chave.** A `apiKey` da subconta vem uma única vez,
+   na resposta de criação; a Orbien a guarda **cifrada na aplicação** (chave
+   mestra fora do banco), nunca em log, nunca no front, lida só pelo montador
+   de cobrança do AD-006. A chave raiz da Orbien e o `walletId` da Orbien ficam
+   em variável de ambiente, nunca no banco.
+4. **Só tenant com CNPJ.** Sem CNPJ não há subconta nem cobrança Asaas: a
+   igreja expõe só a própria chave PIX (copiar ou QR) e a contribuição acontece
+   no banco do doador, fora do app — é o Cenário 1 que já existe
+   (`PixService.createManual`, página `/doar/{slug}`). Sem confirmação
+   automática, sem recibo, sem recorrente, sem split. Conta em nome do CPF do
+   pastor/responsável **não** é alternativa.
+5. **Enquanto a subconta não está aprovada** (documentos pendentes, em análise,
+   recusada) vale o mesmo Cenário 1; os recursos que dependem da Asaas aparecem
+   como "ative os recebimentos", não como erro.
+
+**Consequência prática**: nenhum código cria cobrança com a chave raiz da
+Orbien. A chave raiz só cria e consulta subcontas. Base do 1%: o split da Asaas
+incide sobre o **valor líquido** (após a tarifa) — o 1% é do líquido.
+Em aberto (perguntar à Asaas, não bloqueia o modelo): se a subconta tem acesso
+ao painel ou saque automático para o banco da igreja (subconta BaaS não tem
+painel — a Orbien **não** deve operar saque de dinheiro do tenant), custo de
+criação, e como "organização religiosa" é tratada no KYC (associação pede ata).
+

@@ -230,5 +230,5 @@ ninguém paga — e o fluxo do tesoureiro já sofre o mesmo.
 | Q5 | Aceita o isolamento por pessoa só no serviço (+ testes), ou quer policy RLS por pessoa (exige `app.person_id` no interceptor, mudança transversal)? Recomendação: serviço + teste agora; policy se mais rotas `/me` financeiras surgirem. | Defesa em profundidade vs. custo. |
 | Q6 | Quem redige/aprova o texto de consentimento recorrente (`donor_recurring_consent_v1`)? | LGPD map só tem `donor_consent_v1` (avulsa). |
 | Q7 | Recibos do próprio doador (`/me/receipts`) entram junto ou depois? | Fecha o ciclo "dizimei → tenho comprovante" no app. |
-| ~~Q8~~ | **Respondida em 2026-10-03 (AD-006):** tarifa Asaas é do tenant; 1% por split para a Orbien em toda transação, inclusive a recorrente. Resta o pré-requisito técnico em `asaas-taxa-e-split-padrao` (conta Asaas por tenant, DEC-07). | Fechada. |
+| ~~Q8~~ | **Respondida em 2026-10-03 (AD-006):** tarifa Asaas é do tenant; 1% por split para a Orbien em toda transação, inclusive a recorrente. Modelo de conta decidido em AD-007 (subconta da igreja criada pela Orbien, só CNPJ). Com isso o doador passa a ser cliente da **subconta da igreja**, o que também resolve E1: a cobrança do ciclo é da igreja para o doador. | Fechada. |
 | Q9 | Alguma igreja Premium real (tenant pagante) quer isso agora? | Valida prioridade contra o backlog. |

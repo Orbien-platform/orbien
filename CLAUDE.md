@@ -132,7 +132,10 @@ leia o do app antes de mexer nele.
   da Asaas é do tenant e a Orbien recebe 1% por split, em toda e qualquer
   transação — sem exceção por cenário (`AD-006` em `.specs/STATE.md`). Não chame
   `/payments` ou `/subscriptions` com corpo próprio e não escreva percentual ou
-  wallet literal: cobrança sem split falha, não passa.
+  wallet literal: cobrança sem split falha, não passa. A cobrança nasce na
+  **subconta Asaas da igreja**, com a chave dela; a chave raiz da Orbien só cria
+  e consulta subcontas, nunca cobra (`AD-007`). Sem CNPJ não há Asaas: só a
+  chave PIX da igreja.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.
 - `apps/admin` é o console da plataforma e **não** é uma tela do produto. Só
