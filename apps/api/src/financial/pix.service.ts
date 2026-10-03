@@ -1040,6 +1040,9 @@ export class PixService {
       status: true,
       donor_person_id: true,
       scenario: true,
+      donor_name: true,
+      donor_email: true,
+      donor_consent_version: true,
     } as const;
 
     // Tudo — achar a linha, materializar a cobrança recorrente, confirmar e
@@ -1197,7 +1200,17 @@ export class PixService {
     // erro (isso faria ela reenviar um evento já tratado). Ver
     // DonationReceiptService.
     if (pixPayment.scenario !== PixScenario.event_registration) {
-      this.donationReceiptService.generateForTransaction(transactionId, scope).catch((err) => {
+      // Doação pública identificada: o recibo vai para o e-mail que o doador
+      // digitou, e só com o aceite do termo gravado na linha. Sem `Person` e sem
+      // e-mail+aceite, não há destinatário — doação anônima.
+      const declaredDonor =
+        pixPayment.scenario === PixScenario.public &&
+        pixPayment.donor_email &&
+        pixPayment.donor_consent_version
+          ? { name: pixPayment.donor_name, email: pixPayment.donor_email }
+          : undefined;
+
+      this.donationReceiptService.generateForTransaction(transactionId, scope, declaredDonor).catch((err) => {
         this.logger.warn(`Falha ao gerar recibo de doação (transaction=${transactionId}): ${String(err)}`);
       });
     }

@@ -16,6 +16,8 @@ import { PrismaClient } from '@prisma/client';
 import { of, throwError } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { MailService } from '../../src/mail/mail.service';
+import { StorageService } from '../../src/storage/storage.service';
 import { loadTestTenant, TestTenant } from '../helpers/test-tenants';
 
 const admin = new PrismaClient({ datasources: { db: { url: process.env['DIRECT_URL']! } }, log: [] });
@@ -38,6 +40,28 @@ const asaas = {
     this.calls = [];
     this.down = false;
     this.qrDown = false;
+  },
+};
+
+// ── E-mail e storage simulados (o recibo sai do webhook, fire-and-forget) ──
+const outbox = {
+  mails: [] as { to: string; name: string; amount: number }[],
+  uploads: [] as string[],
+  reset() {
+    this.mails = [];
+    this.uploads = [];
+  },
+};
+const fakeMail = {
+  sendDonationReceipt: (to: string, name: string, amount: number) => {
+    outbox.mails.push({ to, name, amount });
+    return Promise.resolve();
+  },
+};
+const fakeStorage = {
+  upload: (_buf: Buffer, key: string) => {
+    outbox.uploads.push(key);
+    return Promise.resolve(`https://cdn.test/${key}`);
   },
 };
 
@@ -93,6 +117,10 @@ beforeAll(async () => {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(HttpService)
     .useValue(fakeHttp)
+    .overrideProvider(MailService)
+    .useValue(fakeMail)
+    .overrideProvider(StorageService)
+    .useValue(fakeStorage)
     .compile();
   app = moduleRef.createNestApplication();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -100,10 +128,14 @@ beforeAll(async () => {
   await app.init();
 }, 120_000);
 
-afterEach(() => asaas.reset());
+afterEach(() => {
+  asaas.reset();
+  outbox.reset();
+});
 
 afterAll(async () => {
   const ids = { in: [premium.tenantId, starter.tenantId] };
+  await admin.donationReceipt.deleteMany({ where: { tenant_id: ids, created_at: { gte: startedAt } } });
   await admin.financialTransaction.deleteMany({
     where: { tenant_id: ids, source: 'pix_webhook', created_at: { gte: startedAt } },
   });
@@ -415,5 +447,96 @@ describe('limite de requisições (DPUB-12) — por igreja + origem', () => {
 
     const outraIgreja = await post({ tenant_slug: 'teste2-church', amount: 5 });
     expect(outraIgreja.status).toBe(200);
+  });
+});
+
+describe('recibo da doação pública identificada (DPUB-25, opção b)', () => {
+  const receiptsOf = (tenant: TestTenant) =>
+    admin.donationReceipt.findMany({ where: { tenant_id: tenant.tenantId, created_at: { gte: startedAt } } });
+
+  /** O recibo sai do webhook em segundo plano: espera aparecer, com teto. */
+  async function waitForReceipt(tenant: TestTenant, email: string) {
+    for (let i = 0; i < 50; i++) {
+      const found = (await receiptsOf(tenant)).find((r) => r.recipient_email === email);
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return undefined;
+  }
+
+  const settle = () => new Promise((r) => setTimeout(r, 600));
+
+  async function donateAndPay(slug: string, extra: Record<string, unknown>) {
+    const res = await post({ tenant_slug: slug, amount: 90, ...extra });
+    const row = await admin.pixPayment.findUniqueOrThrow({ where: { id: res.body.payment_id } });
+    await webhook(row.asaas_payment_id!, 90).expect(200);
+    return row;
+  }
+
+  it('Premium: doador com e-mail e aceite recebe o recibo no e-mail declarado, sem Person', async () => {
+    await donateAndPay('teste2-church', {
+      donor_name: 'Ana Recibo',
+      donor_email: 'ana.recibo@exemplo.com',
+      donor_consent: true,
+    });
+
+    const receipt = await waitForReceipt(premium, 'ana.recibo@exemplo.com');
+
+    expect(receipt).toMatchObject({
+      tenant_id: premium.tenantId,
+      person_id: null,
+      recipient_name: 'Ana Recibo',
+      recipient_email: 'ana.recibo@exemplo.com',
+    });
+    expect(receipt?.receipt_url).toMatch(/^https:\/\/cdn\.test\/donation-receipts\//);
+    expect(outbox.mails).toEqual([{ to: 'ana.recibo@exemplo.com', name: 'Ana Recibo', amount: 90 }]);
+  });
+
+  it('Premium: doação anônima confirmada não gera recibo', async () => {
+    const antes = (await receiptsOf(premium)).length;
+
+    await donateAndPay('teste2-church', {});
+    await settle();
+
+    expect((await receiptsOf(premium)).length).toBe(antes);
+    expect(outbox.mails).toEqual([]);
+  });
+
+  it('Premium: só o nome, sem e-mail, também não gera recibo', async () => {
+    const antes = (await receiptsOf(premium)).length;
+
+    await donateAndPay('teste2-church', { donor_name: 'Só Nome' });
+    await settle();
+
+    expect((await receiptsOf(premium)).length).toBe(antes);
+  });
+
+  it('Starter: recibo é recurso Premium — nem com e-mail e aceite gravados', async () => {
+    // Doação estática do Starter não tem cobrança na Asaas; simula-se uma linha
+    // com id de cobrança só para provar que o plano, lido do banco, barra o recibo.
+    const asaasId = `starter-recibo-${ts}`;
+    await admin.pixPayment.create({
+      data: {
+        tenant_id: starter.tenantId,
+        congregation_id: starter.congregationId,
+        scenario: 'public',
+        status: 'pending',
+        amount: '40.00',
+        asaas_payment_id: asaasId,
+        category_id: starter.ofertaCategoryId,
+        donor_name: 'Starter Doador',
+        donor_email: 'starter.doador@exemplo.com',
+        donor_consent_version: 'donor_consent_v1',
+        donor_consented_at: new Date(),
+      },
+    });
+
+    await webhook(asaasId, 40).expect(200);
+    await settle();
+
+    expect(await receiptsOf(starter)).toHaveLength(0);
+    expect(outbox.mails).toEqual([]);
+    // O lançamento, esse sim, foi criado: o recibo é que é Premium.
+    expect((await txsOf(starter)).length).toBeGreaterThan(0);
   });
 });

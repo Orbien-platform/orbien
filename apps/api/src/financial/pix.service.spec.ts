@@ -123,6 +123,8 @@ function harness(opts: Opts = {}) {
     receiptCalls: [] as string[],
     /** Escopo de RLS que o webhook repassa ao recibo (roda depois do commit, sem contexto). */
     receiptScopes: [] as unknown[],
+    /** Doador declarado (doação pública) que o webhook repassa ao recibo. */
+    receiptDonors: [] as unknown[],
     eventRegistrationUpdates: [] as Record<string, unknown>[],
     contexts: [] as unknown[][],
     pixSubscriptions: [] as Record<string, unknown>[],
@@ -467,9 +469,10 @@ function harness(opts: Opts = {}) {
   } as unknown as HttpService;
 
   const donationReceiptService = {
-    generateForTransaction: jest.fn((id: string, scope?: unknown) => {
+    generateForTransaction: jest.fn((id: string, scope?: unknown, declared?: unknown) => {
       cap.receiptCalls.push(id);
       cap.receiptScopes.push(scope);
+      cap.receiptDonors.push(declared);
       return opts.receiptRejects ? Promise.reject(new Error('recibo falhou')) : Promise.resolve(undefined);
     }),
   };
@@ -2190,6 +2193,68 @@ describe('PixService', () => {
       await Promise.resolve();
 
       expect(cap.receiptScopes).toEqual([{ tenantId: 'tenant-dono', congregationId: 'cong-dona' }]);
+    });
+
+    describe('recibo da doação pública: só com e-mail + aceite gravados na linha (DPUB-25)', () => {
+      const publicaPaga = (extra: Record<string, unknown>) => ({
+        id: 'pix-1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        amount: new Prisma.Decimal('50.00'),
+        category_id: 'cat-oferta',
+        status: 'pending',
+        donor_person_id: null,
+        scenario: 'public',
+        donor_name: null,
+        donor_email: null,
+        donor_consent_version: null,
+        ...extra,
+      });
+
+      const confirma = async (extra: Record<string, unknown>) => {
+        const { service, cap } = harness({ pixPayment: publicaPaga(extra) });
+        await service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo');
+        await Promise.resolve();
+        return cap;
+      };
+
+      it('e-mail + aceite: repassa nome e e-mail declarados ao recibo', async () => {
+        const cap = await confirma({
+          donor_name: 'Ana',
+          donor_email: 'ana@igreja.com',
+          donor_consent_version: 'donor_consent_v1',
+        });
+
+        expect(cap.receiptDonors).toEqual([{ name: 'Ana', email: 'ana@igreja.com' }]);
+      });
+
+      it('e-mail sem nome: repassa nome nulo', async () => {
+        const cap = await confirma({ donor_email: 'ana@igreja.com', donor_consent_version: 'donor_consent_v1' });
+
+        expect(cap.receiptDonors).toEqual([{ name: null, email: 'ana@igreja.com' }]);
+      });
+
+      it('e-mail SEM aceite gravado não vira destinatário', async () => {
+        const cap = await confirma({ donor_name: 'Ana', donor_email: 'ana@igreja.com' });
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+
+      it('só o nome, sem e-mail: anônimo para fins de recibo', async () => {
+        const cap = await confirma({ donor_name: 'Ana', donor_consent_version: 'donor_consent_v1' });
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+
+      it('fora do cenário público, o doador declarado nunca é repassado', async () => {
+        const cap = await confirma({
+          scenario: 'dynamic',
+          donor_email: 'ana@igreja.com',
+          donor_consent_version: 'donor_consent_v1',
+        });
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
     });
 
     it('não aciona o recibo quando a confirmação perde a corrida', async () => {
