@@ -804,6 +804,8 @@ falhar o webhook).
   depois** — a assinatura é criada no cliente Asaas da igreja e nada entrega o
   PIX do ciclo ao doador (vale também para o fluxo do tesoureiro); fechar esse
   P0 (spike em sandbox, perguntas Q1–Q3 da spec) antes de abrir a tela.
+  Em 2026-10-03 a tela e a rota foram construídas **atrás da trava
+  `ASAAS_PAYMENTS_ENABLED`**, desligada para todos — ver `PROD-28`.
 - RLS em `023_rls_pix_subscriptions.sql`: `tenant_congregation_isolation`
   (AD-001) — diferente de `pix_payments`, que é de `001_rls_setup.sql` e
   ficou só no isolamento de tenant; tabela nova segue o padrão atual, não o
@@ -848,6 +850,99 @@ Fazer a rota sem a tela deixaria rota sem consumidor, o que a auditoria de
 (rota `/me` + tela), a decidir junto com a política de quem pode criar
 cobrança recorrente em nome próprio (teto de valor, confirmação por e-mail);
 sem ID novo aqui, porque a decisão é registrar o porquê, não abrir item.
+(Atualização de 2026-10-03: a rota `/me` e a tela do mobile foram construídas
+**atrás de trava** — ver `PROD-28`.)
+
+### PROD-28 · Pagamentos pelo app via Asaas — pronto e travado, lançar depois do go-live
+
+Decisão de 2026-10-03: os pagamentos pela Asaas ficam **no código, testados e
+desligados para todo tenant** — Premium e Starter — até o produto estar no
+mercado e o modelo de `AD-007` existir. Motivo: hoje toda cobrança Asaas nasce
+na conta raiz da Orbien, sem split (`PEND-16`), e isso não pode chegar a
+usuário. Especificação, design e avaliação em
+`.specs/features/pix-recorrente-doador-mobile/` e
+`.specs/features/asaas-taxa-e-split-padrao/`.
+
+**A trava.** `ASAAS_PAYMENTS_ENABLED` (env da API, `apps/api/.env.example`);
+só o literal `true` liga (`apps/api/src/financial/asaas-payments.flag.ts`,
+`AD-008`). Desligada, ela barra **criar cobrança**:
+
+- `POST /financial/pix/dynamic` (QR do tesoureiro), `POST
+  /financial/pix/subscriptions` (recorrente do tesoureiro), `POST
+  /me/pix-subscriptions` (recorrente do doador) e a inscrição paga de evento
+  (`PixService.createForEventRegistration`) → 503 "Pagamentos pelo app ainda
+  não estão disponíveis";
+- criar/editar evento com `registration_price > 0` → 400.
+
+Não barra: listar e cancelar assinatura que já exista, o webhook da Asaas
+(cobrança já emitida precisa confirmar), o PIX manual (Cenário 1) e a doação
+pública `/doar` (Cenário 3), que não usam a Asaas. `GET /me/permissions` expõe
+`features.asaas_payments` e os fronts escondem o que depende dela, com falha
+fechada (sem resposta = escondido): no web, a aba **PIX** do financeiro e o
+campo **Preço da inscrição** do evento; no app, a entrada **Dízimo
+automático** da Home.
+
+**Mudança de comportamento ao subir isto:** quem usava a aba PIX ou criava
+evento pago deixa de ver/conseguir. Em produção a trava nasce desligada, de
+propósito.
+
+**O que já está construído (atrás da trava):**
+
+- API `GET/POST/PATCH /me/pix-subscriptions` (`MePixSubscriptionsController`,
+  `DonorPixSubscriptionsService`): o doador contrata, lista e cancela **só a
+  própria** assinatura. Pessoa lida de `user_accounts.person_id` (nunca do
+  corpo — `donor_person_id` no corpo é 400), plano lido de `tenant_plans`
+  (nunca da claim), assinatura de outra pessoa é 404, sessão de suporte não
+  contrata nem cancela, cancelar não depende de trava nem de plano.
+- Valor entre R$ 10 e R$ 5.000 e aceite versionado (`dizimo-automatico-v1`,
+  gravado em `pix_subscriptions.consent_version`/`consent_accepted_at`).
+- Uma assinatura ativa por doador: unique parcial no banco
+  (`pix_subscriptions_one_active_per_donor`) + 409 antes de chamar a Asaas.
+- Compensação: se a gravação falha depois de a Asaas criar a assinatura, a
+  API a cancela lá (vale também para o tesoureiro). Cancelar com 404 da Asaas
+  marca cancelada em vez de 503 eterno.
+- App: tela `dizimo-automatico` (contratar com aceite, ver valor e
+  contribuições confirmadas, cancelar com confirmação — "cancelado" só depois
+  da API confirmar).
+- Testes: unidade (API e app), integração com Postgres real
+  (`test/integration/me-pix-subscriptions.spec.ts`, inclusive membro A × membro
+  B da mesma congregação), RLS e web.
+
+**O que falta responder (dono do produto / Asaas / contador):**
+
+1. PIX Automático (débito autorizado) ou cobrança PIX mensal paga à mão? O
+   código faz a segunda (`billingType: PIX`, `cycle: MONTHLY`).
+2. Como o doador recebe a cobrança de cada ciclo (push, e-mail da Asaas ao
+   doador)? Com a subconta (`AD-007`), o doador vira cliente da igreja — CPF
+   do doador é exigido? (entra no consentimento e na LGPD).
+3. Valor mínimo/máximo definitivos (hoje R$ 10–5.000, provisórios).
+4. Texto jurídico do aceite recorrente (`donor_recurring_consent_v1` no mapa
+   de LGPD) — hoje é um texto curto de produto.
+5. Recibo do próprio doador no app (`/me/receipts`) entra no lançamento?
+6. Asaas: subconta com painel ou saque automático (a Orbien não opera saque),
+   custo da subconta, KYC de organização religiosa.
+7. Contador: nota do 1% da Orbien; pricing passa a dizer "1% do valor
+   líquido" (o split da Asaas incide sobre o líquido)?
+8. Rebaixamento Premium → Starter: assinaturas ativas continuam cobrando?
+   (Hoje: continuam; cancelar sempre liberado; criar bloqueado.)
+9. Isolamento por pessoa só no serviço (hoje, com teste de integração) ou
+   também policy RLS por pessoa (exige GUC novo no interceptor)?
+
+**O que falta implementar para lançar (nesta ordem):**
+
+1. `PEND-16` A1–A5: montador único de cobrança com split de 1% e falha
+   fechada (`asaas-taxa-e-split-padrao`).
+2. `AD-007` / `PEND-16` A6–A6d: subconta Asaas por igreja (tabela
+   `tenant_payment_accounts`, chave cifrada, onboarding por `onboardingUrl`,
+   estados, webhook por subconta, tela de ativação no web) — só tenant com
+   CNPJ.
+3. Entrega da cobrança ao doador (P0 da spec do doador): QR/copia-e-cola do
+   ciclo em aberto no app (`GET /me/pix-subscriptions/:id/charge`) ou o fluxo
+   de autorização do PIX Automático, conforme a resposta 1.
+4. Reconciliação de assinatura órfã (log hoje; job depois) e lembrete por push
+   do ciclo (categoria nova de preferência).
+5. Ligar `ASAAS_PAYMENTS_ENABLED=true` em produção só depois de 1–3, e
+   validar em `teste1-church`/`teste2-church` com sandbox Asaas.
 
 ### Funcionalidade prevista, sem código
 

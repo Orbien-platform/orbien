@@ -136,6 +136,11 @@ leia o do app antes de mexer nele.
   **subconta Asaas da igreja**, com a chave dela; a chave raiz da Orbien só cria
   e consulta subcontas, nunca cobra (`AD-007`). Sem CNPJ não há Asaas: só a
   chave PIX da igreja.
+- **Cobrança Asaas nova passa pela trava `ASAAS_PAYMENTS_ENABLED`** —
+  desligada para todo tenant até o lançamento (`PROD-28`, `AD-008`). Quem cria
+  cobrança chama `assertAsaasPaymentsEnabled()` no serviço; listar, cancelar e
+  o webhook nunca são travados. Os fronts escondem o que depende dela lendo
+  `features.asaas_payments` de `GET /me/permissions`, com falha fechada.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.
 - `apps/admin` é o console da plataforma e **não** é uma tela do produto. Só

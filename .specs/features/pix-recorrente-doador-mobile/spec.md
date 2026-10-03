@@ -9,6 +9,11 @@ externa, LGPD.
 fechar o pré-requisito P0 abaixo — que é um furo que já existe no fluxo do
 tesoureiro.
 
+**Atualização 2026-10-03**: P1 (contratar, ver, cancelar) e parte de P2 foram
+construídos **atrás da trava `ASAAS_PAYMENTS_ENABLED`, desligada para todos**
+(`PROD-28`). P0 (entrega da cobrança) e PRD-DONOR-12 (split/subconta) seguem
+abertos — são o que impede ligar a trava. Progresso por task em `tasks.md`.
+
 ## Problem Statement
 
 Hoje só `admin_congregation`/`treasurer`/`tenant_admin` criam, listam e cancelam
@@ -173,15 +178,15 @@ ninguém paga — e o fluxo do tesoureiro já sofre o mesmo.
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
 | PRD-DONOR-01 | P0: cobrança do ciclo chega ao doador | Design | Pending |
-| PRD-DONOR-02 | P1: criar só a própria (pessoa do banco) | Design | Pending |
-| PRD-DONOR-03 | P1: plano do banco, não da claim | Design | Pending |
-| PRD-DONOR-04 | P1: uma ativa por doador + idempotência | Design | Pending |
-| PRD-DONOR-05 | P1: listar só as próprias | Design | Pending |
-| PRD-DONOR-06 | P1: cancelar confirma na Asaas | Design | Pending |
-| PRD-DONOR-07 | P1: anti-IDOR (404 para alheia) | Design | Pending |
-| PRD-DONOR-08 | P2: consentimento versionado | Design | Pending |
-| PRD-DONOR-09 | P2: recibo/e-mail ausente | Design | Pending |
-| PRD-DONOR-10 | P2: estados e falhas no app | Design | Pending |
+| PRD-DONOR-02 | P1: criar só a própria (pessoa do banco) | Execute | Implemented (atrás da trava) |
+| PRD-DONOR-03 | P1: plano do banco, não da claim | Execute | Implemented (atrás da trava) |
+| PRD-DONOR-04 | P1: uma ativa por doador + idempotência | Execute | Partial — sem saga `pending` (tasks.md, desvio 1) |
+| PRD-DONOR-05 | P1: listar só as próprias | Execute | Implemented (atrás da trava) |
+| PRD-DONOR-06 | P1: cancelar confirma na Asaas | Execute | Implemented |
+| PRD-DONOR-07 | P1: anti-IDOR (404 para alheia) | Execute | Implemented |
+| PRD-DONOR-08 | P2: consentimento versionado | Execute | Implemented (texto jurídico pendente, PROD-28 Q4) |
+| PRD-DONOR-09 | P2: recibo/e-mail ausente | - | Pending |
+| PRD-DONOR-10 | P2: estados e falhas no app | Execute | Implemented |
 | PRD-DONOR-11 | P3: lembretes por push | - | Pending |
 | PRD-DONOR-12 | Pré-requisito: criar pelo montador único com split (AD-006) | Design | Pending — entregue por `asaas-taxa-e-split-padrao` |
 

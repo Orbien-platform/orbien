@@ -14,8 +14,39 @@ without it.**
 ---
 
 **Design**: `.specs/features/pix-recorrente-doador-mobile/design.md`
-**Status**: Draft — **não aprovado; bloqueado em Q1–Q3** (ver spec). Esta é a
-estimativa para decidir "construir depois"; nada foi executado.
+**Status**: Executado em parte, **atrás da trava `ASAAS_PAYMENTS_ENABLED`**
+(desligada para todo tenant) — decisão do dono do produto em 2026-10-03:
+"deixar minimamente pronto, mas não disponível nem para Premium nem para
+Starter, e lançar depois do produto no mercado" (`PROD-28`, `AD-008`).
+
+**Progresso de Execute (2026-10-03, branch `docs/spec-pix-recorrente-doador-mobile`):**
+
+| Task | Estado | Nota |
+|---|---|---|
+| T1, T2, T3 (Fase 0 / P0) | **não feito** | Spike Asaas e entrega da cobrança do ciclo ao doador seguem abertos (`PROD-28`, "O que falta" 3) |
+| T3b (split, AD-006/AD-007) | **não feito** | Depende de `asaas-taxa-e-split-padrao` |
+| T4 | parcial | Migration `add_pix_subscription_consent`: `consent_version`, `consent_accepted_at`. **Sem** status `pending` nem `idempotency_key` (ver desvio 1) |
+| T5 | feito | Unique parcial `pix_subscriptions_one_active_per_donor`; bootstrap/RLS 023 sem mudança |
+| T6 | feito | `PixService.createSubscriptionFor` / `cancelSubscriptionRow`, tesoureiro intacto |
+| T7 | feito | Pessoa e plano do banco, sessão de suporte barrada |
+| T8 | parcial | Limites, aceite, 409 por pré-checagem + unique, compensação na Asaas. Sem saga `pending` (desvio 1) |
+| T9 | feito | Lista com contribuições confirmadas; cancelar com 404-Asaas = removida |
+| T10 | parcial | Controller sem `/:id/charge` (depende de T3) |
+| T11 | feito | `test/integration/me-pix-subscriptions.spec.ts` (11 testes) — sensor: sem o filtro por pessoa, 2 falham |
+| T12–T14 | feito | Cliente, tela `dizimo-automatico`, entrada na Home (trava **e** Premium) |
+| (novo) | feito | Trava `ASAAS_PAYMENTS_ENABLED` na API, web (aba PIX, preço de evento) e app |
+
+**Desvios (SPEC_DEVIATION):**
+
+1. Idempotência sem status `pending` e sem `Idempotency-Key`: a garantia é a
+   unique parcial (uma ativa por doador) + compensação (cancela na Asaas se a
+   gravação falha). Cobre toque duplo e reenvio; não cobre a API cair entre a
+   Asaas responder e a compensação — fica logado com o id
+   (`Assinatura Asaas … órfã`) para reconciliação. Saga `pending` + job de
+   reconciliação ficam em `PROD-28`, "O que falta" 4.
+2. Entrada só na Home (sem atalho no Perfil) — mínimo pedido.
+3. O tesoureiro também passa a ter "uma ativa por doador" (efeito da unique
+   no banco) — antes podia criar duas para a mesma pessoa.
 
 **Branch de execução (quando aprovada)**: `feat/pix-recorrente-doador-mobile`.
 **Ambiente de teste**: só `teste1-church`/`teste2-church`; nunca `doca-church`.

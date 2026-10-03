@@ -205,3 +205,34 @@ ao painel ou saque automático para o banco da igreja (subconta BaaS não tem
 painel — a Orbien **não** deve operar saque de dinheiro do tenant), custo de
 criação, e como "organização religiosa" é tratada no KYC (associação pede ata).
 
+### AD-008 — Toda cobrança Asaas nasce atrás de `ASAAS_PAYMENTS_ENABLED`; ver e cancelar, nunca
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-03 (PROD-28)
+
+Os pagamentos pela Asaas ficam prontos e desligados até o lançamento. Regra
+para todo código que cria cobrança na Asaas — o que existe hoje e o que vier:
+
+1. **Criar cobrança** chama `assertAsaasPaymentsEnabled()`
+   (`apps/api/src/financial/asaas-payments.flag.ts`) antes de qualquer
+   consulta ou chamada à Asaas — 503 com a mensagem da trava. A checagem fica
+   no serviço que cobra (`PixService`), não só no controller, para que todo
+   caminho (inclusive o de inscrição de evento, que vem de `content/`) passe
+   por ela. O que só *prepara* uma cobrança (ex.: evento com preço) é barrado
+   também, com 400.
+2. **Nunca travar**: listar, cancelar, webhook. Cobrança emitida precisa ser
+   confirmada, e quem é cobrado precisa poder parar.
+3. Só o literal `true` liga. Valor esquecido ou digitado errado = desligado.
+4. Os fronts leem `GET /me/permissions` → `features.asaas_payments` com
+   **falha fechada** (sem resposta = escondido), ao contrário de `areas`
+   (falha aberta). Esconder é UX; quem nega é a API.
+
+**Rota de dinheiro self-service** (também desta feature): rota que um
+`member` usa para mexer em dinheiro dele deriva a pessoa
+(`user_accounts.person_id`) e o plano (`tenant_plans`) **do banco**, nunca do
+corpo nem da claim; responde 404 para linha de outra pessoa; e barra sessão de
+suporte. Modelo: `DonorPixSubscriptionsService`.
+
+**Consequência prática**: ligar pagamentos em produção é mudar uma env — e
+isso só depois de `AD-006`/`AD-007` no código (`PROD-28`, "O que falta").
+
