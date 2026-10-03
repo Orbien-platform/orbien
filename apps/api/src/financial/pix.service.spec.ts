@@ -126,6 +126,8 @@ function harness(opts: Opts = {}) {
     scopeQueries: [] as unknown[][],
     /** Quantos `set_config` já tinham rodado quando cada leitura de `pix_payments` aconteceu. */
     contextsAtRead: [] as number[],
+    /** Argumentos de cada `pixPayment.findFirst` (filtros e `select`). */
+    findFirstArgs: [] as Record<string, unknown>[],
     /** Chamadas a `pixPayment.count` (teto de cobranças públicas) e os filtros usados. */
     countWheres: [] as Record<string, unknown>[],
     /** Gravações de `asaas_payment_id`/`qr_code` na linha da doação pública. */
@@ -310,7 +312,8 @@ function harness(opts: Opts = {}) {
           cap.pixPayments.push(dados);
           return Promise.resolve({ count: 1 });
         },
-        findFirst: () => {
+        findFirst: (args?: Record<string, unknown>) => {
+          cap.findFirstArgs.push(args ?? {});
           cap.contextsAtRead.push(cap.contexts.length);
           if (registro === null) {
             // Corrida (raceOnReactiveCreate): a PRIMEIRA leitura ainda não
@@ -1408,6 +1411,115 @@ describe('PixService', () => {
         'Categoria de receita não encontrada',
       );
       expect(cap.pixPayments).toEqual([]);
+    });
+  });
+
+  describe('getPublicDonationStatus (DPUB-15, 16, 19, 20)', () => {
+    const ID = '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11';
+    const HORA = 60 * 60 * 1000;
+    const linha = (status: string, idadeMs: number) => ({
+      id: ID,
+      status,
+      created_at: new Date(Date.now() - idadeMs),
+    });
+
+    it('pendente e recente: `pending`, com a validade de 24h contada da criação', async () => {
+      const criada = new Date(Date.now() - 2 * HORA);
+      const { service } = harness({ pixPayment: { id: ID, status: 'pending', created_at: criada } });
+
+      const result = await service.getPublicDonationStatus('igreja-central', ID);
+
+      expect(result).toEqual({
+        status: 'pending',
+        expires_at: new Date(criada.getTime() + 24 * HORA).toISOString(),
+      });
+    });
+
+    it('confirmada: `confirmed`', async () => {
+      const { service } = harness({ pixPayment: linha('confirmed', HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('confirmed');
+    });
+
+    it('confirmada há mais de 24h continua `confirmed` — pago não "expira"', async () => {
+      const { service } = harness({ pixPayment: linha('confirmed', 30 * HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('confirmed');
+    });
+
+    it('pendente há mais de 24h: `expired`, sem gravar nada (expiração é lida, não escrita)', async () => {
+      const { service, cap } = harness({ pixPayment: linha('pending', 25 * HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('expired');
+      expect(cap.updates).toEqual([]);
+      expect(cap.transactions).toEqual([]);
+    });
+
+    it('`failed` (marcada pela limpeza): `expired`', async () => {
+      const { service } = harness({ pixPayment: linha('failed', HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('expired');
+    });
+
+    it('devolve só `status` e `expires_at` — nada de valor, chave, nome, e-mail ou id de tenant', async () => {
+      const { service } = harness({
+        pixPayment: {
+          ...linha('pending', HORA),
+          amount: new Prisma.Decimal('50.00'),
+          pix_key: 'chave@igreja.test',
+          tenant_id: 't1',
+          donor_email: 'a@b.com',
+        },
+      });
+
+      const result = await service.getPublicDonationStatus('igreja-central', ID);
+
+      expect(Object.keys(result).sort()).toEqual(['expires_at', 'status']);
+    });
+
+    it('lê sob o contexto do slug e filtra por id, tenant e cenário `public` — pede só status e criação', async () => {
+      const { service, cap } = harness({ pixPayment: linha('pending', HORA) });
+
+      await service.getPublicDonationStatus('igreja-central', ID);
+
+      expect(cap.contexts).toEqual([['t1', 'c1']]);
+      expect(cap.contextsAtRead).toEqual([1]);
+      expect(cap.findFirstArgs[0]).toEqual({
+        where: { id: ID, tenant_id: 't1', scenario: 'public' },
+        select: { status: true, created_at: true },
+      });
+    });
+
+    it('id que a RLS não deixa ver (outra igreja) e id inexistente: o MESMO 404', async () => {
+      const { service } = harness({ pixPayment: null, pixSubscription: null });
+
+      const erro = await service.getPublicDonationStatus('igreja-central', ID).catch((e: unknown) => e);
+
+      expect(erro).toBeInstanceOf(NotFoundException);
+      expect((erro as NotFoundException).message).toBe('Doação não encontrada');
+    });
+
+    it.each([
+      ['slug inexistente', { tenant: null }],
+      ['igreja sem chave PIX', { branding: { pix_key: null, app_name: null } }],
+    ] as const)('%s: o mesmo 404 do id desconhecido', async (_nome, opts) => {
+      const { service, cap } = harness(opts);
+
+      const erro = await service.getPublicDonationStatus('qualquer', ID).catch((e: unknown) => e);
+
+      expect(erro).toBeInstanceOf(NotFoundException);
+      expect((erro as NotFoundException).message).toBe('Doação não encontrada');
+      expect(cap.findFirstArgs).toEqual([]);
+    });
+
+    it('erro que não é 404 ao resolver a igreja não é mascarado como 404', async () => {
+      const { service } = harness();
+      (service as unknown as { prisma: { client: { tenant: { findUnique: () => Promise<never> } } } }).prisma.client.tenant.findUnique =
+        () => Promise.reject(new Error('banco fora do ar'));
+
+      await expect(service.getPublicDonationStatus('igreja-central', ID)).rejects.toThrow(
+        'banco fora do ar',
+      );
     });
   });
 

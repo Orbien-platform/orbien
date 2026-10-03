@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
   HttpCode,
   HttpStatus,
@@ -91,6 +92,20 @@ export class PixController {
   @HttpCode(HttpStatus.OK)
   createPublicDonation(@Body() dto: CreatePublicDonationDto) {
     return this.pixService.createPublicDonation(dto);
+  }
+
+  // Polling da página pública: sem login, só `status` + `expires_at`. O limite
+  // é bem mais folgado que o da criação — cada doador esperando consulta a cada
+  // poucos segundos, e a leitura é uma linha indexada.
+  @Get('public-donation/:tenant_slug/:payment_id')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 120, ttl: 60000 } })
+  @Header('Cache-Control', 'no-store')
+  getPublicDonationStatus(
+    @Param('tenant_slug') tenantSlug: string,
+    @Param('payment_id', ParseUUIDPipe) paymentId: string,
+  ) {
+    return this.pixService.getPublicDonationStatus(tenantSlug, paymentId);
   }
 
   // ── Webhook Asaas — PÚBLICO (valida token no header) ─────────────────────

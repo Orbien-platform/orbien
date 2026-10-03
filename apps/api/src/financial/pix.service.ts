@@ -726,6 +726,48 @@ export class PixService {
     };
   }
 
+  /**
+   * Estado da doação para o polling da página pública (sem login).
+   *
+   * A "chave" de leitura é o `payment_id` — UUID v4, 122 bits, devolvido só a
+   * quem criou a cobrança — junto com o slug; o `transaction_ref` curto
+   * (`PIX-` + 8 hex) nunca é aceito aqui. Slug desconhecido, id desconhecido e
+   * id de OUTRA igreja respondem o mesmo 404: a RLS faz o terceiro caso
+   * devolver zero linhas. A resposta é só `status` + `expires_at` — nada de
+   * valor, nome, e-mail, chave ou id de tenant.
+   *
+   * `expired` é lido, não gravado: `pending` com mais de 24h (ou `failed`, que
+   * a limpeza marcou). Assim a página para de esperar mesmo com o job parado.
+   */
+  async getPublicDonationStatus(
+    slug: string,
+    paymentId: string,
+  ): Promise<{ status: 'pending' | 'confirmed' | 'expired'; expires_at: string }> {
+    const notFound = () => new NotFoundException('Doação não encontrada');
+
+    const ctx = await this.resolvePublicDonationTenant(slug).catch((err: unknown) => {
+      if (err instanceof NotFoundException) throw notFound();
+      throw err;
+    });
+
+    const row = await this.runInPublicContext(ctx, () =>
+      this.prisma.client.pixPayment.findFirst({
+        where: { id: paymentId, tenant_id: ctx.tenantId, scenario: PixScenario.public },
+        select: { status: true, created_at: true },
+      }),
+    );
+    if (!row) throw notFound();
+
+    const expiresAt = new Date(row.created_at.getTime() + PUBLIC_DONATION_VALIDITY_MS);
+
+    let status: 'pending' | 'confirmed' | 'expired';
+    if (row.status === PixStatus.confirmed) status = 'confirmed';
+    else if (row.status === PixStatus.failed || expiresAt.getTime() <= Date.now()) status = 'expired';
+    else status = 'pending';
+
+    return { status, expires_at: expiresAt.toISOString() };
+  }
+
   /** Cobranças dinâmicas públicas ainda pendentes criadas na última hora. Roda sob o contexto da igreja. */
   private countRecentPublicDynamic(ctx: TenantContext): Promise<number> {
     return this.prisma.client.pixPayment.count({
