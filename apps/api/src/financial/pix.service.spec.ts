@@ -566,6 +566,30 @@ describe('PixService', () => {
       expect(cap.pixPayments).toEqual([]);
     });
 
+    it('o customer da igreja é lembrado: a segunda cobrança não volta a consultar a Asaas por ele', async () => {
+      // A doação pública chama isto sem login, a cada tentativa — cada GET
+      // /customers é cota da Asaas gasta por um visitante.
+      const { service, cap } = harness({ categories: [{ id: 'cat-1' }, { id: 'cat-2' }] });
+
+      await service.createDynamic(dto, user);
+      await service.createDynamic(dto, user);
+
+      expect(cap.gets.filter((u) => u.includes('/customers'))).toHaveLength(1);
+      expect(cap.posts.filter((p) => p.url.endsWith('/payments'))).toHaveLength(2);
+    });
+
+    it('o customer criado na primeira vez também é lembrado — sem segundo POST /customers', async () => {
+      const { service, cap } = harness({
+        categories: [{ id: 'cat-1' }, { id: 'cat-2' }],
+        httpGet: (url) => (url.includes('/customers') ? { data: [] } : undefined),
+      });
+
+      await service.createDynamic(dto, user);
+      await service.createDynamic(dto, user);
+
+      expect(cap.posts.filter((p) => p.url.endsWith('/customers'))).toHaveLength(1);
+    });
+
     it('devolve o QR e grava o pagamento com o id da Asaas', async () => {
       const { service, cap } = harness();
 

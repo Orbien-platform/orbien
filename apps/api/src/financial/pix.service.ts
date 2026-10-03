@@ -234,20 +234,71 @@ export class PixService {
 
   // ── Asaas: buscar ou criar customer ──────────────────────────────────────
 
+  /**
+   * Um customer por igreja (`externalReference = tenantId`). O id não muda, e a
+   * doação pública (sem login) chama isto a cada tentativa: lembrar evita um
+   * `GET /customers` por doação numa rota que qualquer visitante dispara —
+   * cada chamada à Asaas custa cota. Cache por processo; um deploy o esvazia.
+   */
+  private readonly asaasCustomers = new Map<string, string>();
+
   private async resolveAsaasCustomer(tenantId: string, churchName: string): Promise<string> {
+    const known = this.asaasCustomers.get(tenantId);
+    if (known) return known;
+
     type ListResult = { data: AsaasCustomer[] };
     const result = await this.asaasGet<ListResult>(
       `/customers?externalReference=${tenantId}&limit=1`,
     );
 
-    if (result.data.length > 0) return result.data[0].id;
+    let customerId: string;
+    if (result.data.length > 0) {
+      customerId = result.data[0].id;
+    } else {
+      const customer = await this.asaasPost<AsaasCustomer>('/customers', {
+        name: churchName,
+        externalReference: tenantId,
+        // cpfCnpj omitido no sandbox — preencher com dados reais em produção
+      });
+      customerId = customer.id;
+    }
 
-    const customer = await this.asaasPost<AsaasCustomer>('/customers', {
-      name: churchName,
-      externalReference: tenantId,
-      // cpfCnpj omitido no sandbox — preencher com dados reais em produção
+    this.asaasCustomers.set(tenantId, customerId);
+    return customerId;
+  }
+
+  /**
+   * Cobrança PIX dinâmica na Asaas: customer da igreja → `POST /payments` →
+   * `GET /payments/:id/pixQrCode`. Era o mesmo bloco, copiado, em
+   * `createDynamic` e `createForEventRegistration`; a doação pública seria a
+   * terceira cópia. Não captura erro: cada chamador decide o que responder (e,
+   * na doação pública, se a cobrança já criada precisa ser cancelada) — por
+   * isso devolve o id da cobrança também quando o QR falha, via `onCharged`.
+   */
+  private async createAsaasPixCharge(
+    params: {
+      tenantId: string;
+      churchName: string;
+      amount: number;
+      description: string;
+      externalReference: string;
+    },
+    onCharged?: (asaasPaymentId: string) => void,
+  ): Promise<{ asaasPaymentId: string; qrCode: AsaasQrCode }> {
+    const customerId = await this.resolveAsaasCustomer(params.tenantId, params.churchName);
+
+    const payment = await this.asaasPost<AsaasPayment>('/payments', {
+      customer: customerId,
+      billingType: 'PIX',
+      value: params.amount,
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      description: params.description,
+      externalReference: params.externalReference,
     });
-    return customer.id;
+    onCharged?.(payment.id);
+
+    const qrCode = await this.asaasGet<AsaasQrCode>(`/payments/${payment.id}/pixQrCode`);
+    return { asaasPaymentId: payment.id, qrCode };
   }
 
   // ── Cenário 1: PIX manual ─────────────────────────────────────────────────
@@ -292,19 +343,13 @@ export class PixService {
     let qrCode: AsaasQrCode;
 
     try {
-      const customerId = await this.resolveAsaasCustomer(ctx.tenantId, ctx.churchName);
-
-      const payment = await this.asaasPost<AsaasPayment>('/payments', {
-        customer: customerId,
-        billingType: 'PIX',
-        value: dto.amount,
-        dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      ({ asaasPaymentId, qrCode } = await this.createAsaasPixCharge({
+        tenantId: ctx.tenantId,
+        churchName: ctx.churchName,
+        amount: dto.amount,
         description: dto.description ?? 'Doação via Orbien',
         externalReference: externalRef,
-      });
-
-      asaasPaymentId = payment.id;
-      qrCode = await this.asaasGet<AsaasQrCode>(`/payments/${asaasPaymentId}/pixQrCode`);
+      }));
     } catch (err) {
       this.logger.error('Asaas API error', err);
       throw new ServiceUnavailableException('Serviço PIX indisponível');
@@ -474,19 +519,13 @@ export class PixService {
     let qrCode: AsaasQrCode;
 
     try {
-      const customerId = await this.resolveAsaasCustomer(tenantId, ctx.churchName);
-
-      const payment = await this.asaasPost<AsaasPayment>('/payments', {
-        customer: customerId,
-        billingType: 'PIX',
-        value: amount,
-        dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      ({ asaasPaymentId, qrCode } = await this.createAsaasPixCharge({
+        tenantId,
+        churchName: ctx.churchName,
+        amount,
         description,
         externalReference: externalRef,
-      });
-
-      asaasPaymentId = payment.id;
-      qrCode = await this.asaasGet<AsaasQrCode>(`/payments/${asaasPaymentId}/pixQrCode`);
+      }));
     } catch (err) {
       this.logger.error('Asaas API error', err);
       throw new ServiceUnavailableException('Serviço PIX indisponível');
