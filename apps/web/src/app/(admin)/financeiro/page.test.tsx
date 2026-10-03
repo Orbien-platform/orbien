@@ -120,6 +120,13 @@ vi.mock("@/components/financial/BankReconciliationPanel", () => ({
 vi.mock("@/components/financial/DonationBookletPanel", () => ({
   DonationBookletPanel: () => <div data-testid="donation-booklet-panel" />,
 }));
+vi.mock("@/components/financial/PublicIntentsPanel", () => ({
+  PublicIntentsPanel: ({ onSettled }: { onSettled?: () => void }) => (
+    <div data-testid="public-intents-panel">
+      <button onClick={onSettled}>simular baixa</button>
+    </div>
+  ),
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -1361,5 +1368,53 @@ describe("FinanceiroPage — abas Premium (PIX e Recibos)", () => {
     render(<FinanceiroPage />);
     expect(screen.queryByRole("tab", { name: "PIX" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Recibos" })).not.toBeInTheDocument();
+  });
+});
+
+describe("FinanceiroPage — aba Doações públicas (PEND-14, todos os planos)", () => {
+  it.each([
+    ["Starter", "starter"],
+    ["Premium", "premium"],
+  ])("o tesoureiro vê a aba no plano %s e ela monta o painel", async (_nome, plano) => {
+    const user = userEvent.setup();
+    setup(["treasurer"], plano);
+    mockApi({});
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Doações públicas" }));
+
+    expect(await screen.findByTestId("public-intents-panel")).toBeInTheDocument();
+  });
+
+  it("o administrador do tenant também vê", () => {
+    setup(["tenant_admin"], "starter");
+    mockApi({});
+    render(<FinanceiroPage />);
+
+    expect(screen.getByRole("tab", { name: "Doações públicas" })).toBeInTheDocument();
+  });
+
+  it.each([["pastor"], ["secretary"]])("quem tem o papel %s não vê a aba", (papel) => {
+    setup([papel], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+
+    expect(screen.queryByRole("tab", { name: "Doações públicas" })).not.toBeInTheDocument();
+  });
+
+  it("depois de uma baixa, os lançamentos são recarregados — a receita nova aparece sem trocar de tela", async () => {
+    const user = userEvent.setup();
+    setup(["treasurer"], "starter");
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Doações públicas" }));
+    await screen.findByTestId("public-intents-panel");
+    const txCalls = () =>
+      mockedApi.get.mock.calls.filter(([url]) => String(url).startsWith("/financial/transactions")).length;
+    const antes = txCalls();
+
+    await user.click(screen.getByRole("button", { name: "simular baixa" }));
+
+    await waitFor(() => expect(txCalls()).toBe(antes + 1));
   });
 });
