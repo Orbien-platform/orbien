@@ -961,8 +961,13 @@ export class PixService {
       //
       // `count === 0` significa que outra entrega ganhou a corrida e já criou o
       // lançamento. Nada a fazer, e a resposta continua 200.
+      //
+      // `failed` também confirma: a limpeza das cobranças abandonadas
+      // (`PublicDonationExpiryScheduler`) marca `failed` depois de cancelar na
+      // Asaas, mas o pagamento real prevalece — cobrança paga que chegou tarde
+      // é dinheiro na conta e tem que virar lançamento.
       const { count } = await tx.pixPayment.updateMany({
-        where: { id: pixPayment.id, status: PixStatus.pending },
+        where: { id: pixPayment.id, status: { in: [PixStatus.pending, PixStatus.failed] } },
         data: { status: PixStatus.confirmed, paid_at: new Date() },
       });
 
@@ -980,7 +985,9 @@ export class PixService {
               ? 'Inscrição de evento paga via Asaas'
               : pixPayment.scenario === PixScenario.recurring
                 ? 'PIX recorrente confirmado via Asaas'
-                : 'PIX confirmado via Asaas',
+                : pixPayment.scenario === PixScenario.public
+                  ? 'Doação pública via PIX'
+                  : 'PIX confirmado via Asaas',
           category_id: pixPayment.category_id,
           source: TransactionSource.pix_webhook,
           created_by_user_id: adminUserId,

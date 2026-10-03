@@ -220,8 +220,15 @@ function harness(opts: Opts = {}) {
         cap.updates.push(args);
 
         const alvo = registro ?? novoPagamento;
+        // `status: { in: [...] }` é o `WHERE status IN (...)` do serviço (o
+        // webhook também confirma uma linha `failed`); o resto é igualdade.
         const casa =
-          alvo !== null && Object.entries(args.where).every(([k, v]) => alvo[k] === v);
+          alvo !== null &&
+          Object.entries(args.where).every(([k, v]) =>
+            v !== null && typeof v === 'object' && 'in' in v
+              ? (v as { in: unknown[] }).in.includes(alvo[k])
+              : alvo[k] === v,
+          );
 
         if (!casa) return Promise.resolve({ count: 0 });
 
@@ -2025,6 +2032,82 @@ describe('PixService', () => {
 
       expect(cap.eventRegistrationUpdates).toEqual([]);
       expect(cap.receiptCalls).toEqual(['tx-1']);
+    });
+
+    it('doação pública (cenário `public`): lança com descrição própria e sem doador — o nome declarado não vira vínculo', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+          donor_person_id: null,
+          scenario: 'public',
+        },
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123', value: 50 } },
+        'segredo',
+      );
+
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.transactions[0]).toMatchObject({
+        type: 'income',
+        source: 'pix_webhook',
+        description: 'Doação pública via PIX',
+        category_id: 'cat-oferta',
+        donor_person_id: null,
+      });
+    });
+
+    it('linha `failed` (limpeza já rodou, mas o dinheiro entrou) é confirmada e lançada — o pagamento real prevalece (DPUB-09)', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'failed',
+          donor_person_id: null,
+          scenario: 'public',
+        },
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_RECEIVED', payment: { id: 'pay_123', value: 50 } },
+        'segredo',
+      );
+
+      expect(cap.updates[0]).toMatchObject({
+        where: { id: 'pix-1', status: { in: ['pending', 'failed'] } },
+        data: { status: 'confirmed' },
+      });
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('linha `failed` reentregue depois de confirmada não duplica o lançamento', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'failed',
+          donor_person_id: null,
+          scenario: 'public',
+        },
+      });
+      const evento = { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } };
+
+      await service.handleWebhook(evento, 'segredo');
+      await service.handleWebhook({ event: 'PAYMENT_RECEIVED', payment: { id: 'pay_123' } }, 'segredo');
+
+      expect(cap.transactions).toHaveLength(1);
     });
 
     it('pagamento que já chegou `confirmed` do banco é ignorado de saída', async () => {

@@ -162,6 +162,30 @@ describe('POST /api/financial/pix/webhook — sob a RLS real', () => {
     expect((await pixTransactions(t2)).length).toBe(antes + 1);
   });
 
+  it('doação pública cuja cobrança foi marcada `failed` pela limpeza, mas foi paga: confirma e lança (DPUB-09)', async () => {
+    const asaasId = `wh-failed-${ts}`;
+    const row = await admin.pixPayment.create({
+      data: {
+        tenant_id: t2.tenantId,
+        congregation_id: t2.congregationId,
+        scenario: 'public',
+        status: 'failed',
+        amount: '20.00',
+        asaas_payment_id: asaasId,
+        category_id: t2.ofertaCategoryId,
+      },
+    });
+    paymentIds.push(row.id);
+    const antes = (await pixTransactions(t2)).length;
+
+    await webhook({ event: 'PAYMENT_RECEIVED', payment: { id: asaasId, value: 20 } }).expect(200);
+
+    expect((await admin.pixPayment.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('confirmed');
+    const txs = await pixTransactions(t2);
+    expect(txs.length).toBe(antes + 1);
+    expect(txs.some((t) => t.description === 'Doação pública via PIX')).toBe(true);
+  });
+
   it('id da Asaas desconhecido responde 200 sem criar nada', async () => {
     const antes = (await pixTransactions(t2)).length;
 
