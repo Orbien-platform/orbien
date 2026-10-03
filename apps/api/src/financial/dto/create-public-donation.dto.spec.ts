@@ -85,6 +85,7 @@ describe('CreatePublicDonationDto', () => {
         await errorsFor({
           donor_name: 'Ana',
           donor_email: 'ana@teste.com',
+          donor_consent: true,
           category_slug: 'oferta',
           website: '',
         }),
@@ -101,6 +102,30 @@ describe('CreatePublicDonationDto', () => {
 
     it('rejeita e-mail acima de 254 caracteres', async () => {
       expect(await failsOn({ donor_email: `${'a'.repeat(250)}@x.com` }, 'donor_email')).toBe(true);
+    });
+
+    describe('consentimento do e-mail (DPUB-23)', () => {
+      it('e-mail com aceite passa', async () => {
+        expect(await errorsFor({ donor_email: 'ana@teste.com', donor_consent: true })).toHaveLength(0);
+      });
+
+      it.each([
+        ['sem o campo', undefined],
+        ['false', false],
+        ['texto "true"', 'true'],
+        ['número 1', 1],
+      ])('e-mail %s é rejeitado, com a mensagem do aceite', async (_nome, donor_consent) => {
+        const errors = await errorsFor({ donor_email: 'ana@teste.com', donor_consent });
+        const mensagens = errors.flatMap((e) => Object.values(e.constraints ?? {}));
+
+        expect(errors.some((e) => e.property === 'donor_consent')).toBe(true);
+        expect(mensagens).toContain('Aceite o uso do e-mail para receber o recibo');
+      });
+
+      it('sem e-mail, o aceite não é cobrado — nem com nome', async () => {
+        expect(await errorsFor({ donor_name: 'Ana' })).toHaveLength(0);
+        expect(await errorsFor({ donor_name: 'Ana', donor_consent: false })).toHaveLength(0);
+      });
     });
 
     it('rejeita categoria acima de 40 caracteres', async () => {

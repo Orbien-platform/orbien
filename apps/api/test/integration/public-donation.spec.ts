@@ -233,6 +233,67 @@ describe('POST /api/financial/pix/public-donation — igreja Starter (teste1-chu
   });
 });
 
+describe('dados do doador (DPUB-22, DPUB-23)', () => {
+  const rowOf = async (res: request.Response) =>
+    admin.pixPayment.findFirstOrThrow({
+      where: {
+        tenant_id: starter.tenantId,
+        scenario: 'public',
+        id: { startsWith: String(res.body.transaction_ref).replace('PIX-', '').toLowerCase() },
+      },
+    });
+
+  it('e-mail sem aceite: 400 e nenhuma linha nova', async () => {
+    const antes = await admin.pixPayment.count({ where: { tenant_id: starter.tenantId, scenario: 'public' } });
+
+    const res = await post({ tenant_slug: 'teste1-church', amount: 20, donor_email: 'ana@teste.com' });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Aceite o uso do e-mail');
+    expect(await admin.pixPayment.count({ where: { tenant_id: starter.tenantId, scenario: 'public' } })).toBe(antes);
+  });
+
+  it('com aceite: grava nome, e-mail em minúsculas e o aceite; a resposta não os devolve', async () => {
+    const res = await post({
+      tenant_slug: 'teste1-church',
+      amount: 21,
+      donor_name: 'Ana Teste',
+      donor_email: 'Ana.Teste@Exemplo.com',
+      donor_consent: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain('Ana');
+    expect(JSON.stringify(res.body)).not.toContain('exemplo');
+    const row = await rowOf(res);
+    expect(row).toMatchObject({
+      donor_name: 'Ana Teste',
+      donor_email: 'ana.teste@exemplo.com',
+      donor_consent_version: 'donor_consent_v1',
+    });
+    expect(row.donor_consented_at).not.toBeNull();
+  });
+
+  it('anônimo: colunas do doador nulas', async () => {
+    const res = await post({ tenant_slug: 'teste1-church', amount: 22 });
+
+    expect(await rowOf(res)).toMatchObject({ donor_name: null, donor_email: null, donor_consented_at: null });
+  });
+
+  it('o doador não vai para a Asaas (Premium)', async () => {
+    await post({
+      tenant_slug: 'teste2-church',
+      amount: 23,
+      donor_name: 'Beltrano Sigiloso',
+      donor_email: 'sigiloso@exemplo.com',
+      donor_consent: true,
+    });
+
+    expect(JSON.stringify(asaas.calls)).not.toContain('Sigiloso');
+    expect(JSON.stringify(asaas.calls)).not.toContain('sigiloso@');
+  });
+});
+
 describe('validação e enumeração (DPUB-11, DPUB-14)', () => {
   it.each([
     ['abaixo do mínimo', 4.99],

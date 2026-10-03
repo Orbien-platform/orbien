@@ -1,4 +1,5 @@
 import {
+  Equals,
   IsEmail,
   IsNotEmpty,
   IsNumber,
@@ -7,6 +8,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 /**
@@ -45,6 +47,15 @@ export class CreatePublicDonationDto {
   @IsEmail()
   @MaxLength(254)
   donor_email?: string;
+
+  /**
+   * Aceite do termo `donor_consent_v1` (uso do e-mail para o recibo). Só é
+   * cobrado quando há e-mail: sem e-mail não há o que consentir. Nome sozinho
+   * não precisa — não identifica ninguém para fim algum além do registro.
+   */
+  @ValidateIf((o: CreatePublicDonationDto) => !!o.donor_email)
+  @Equals(true, { message: 'Aceite o uso do e-mail para receber o recibo' })
+  donor_consent?: boolean;
 
   @IsOptional()
   @IsString()

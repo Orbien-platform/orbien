@@ -1189,6 +1189,7 @@ describe('PixService', () => {
           amount: 80.5,
           donor_name: 'Fulano de Tal',
           donor_email: 'fulano@teste.com',
+          donor_consent: true,
         });
 
         const cobranca = cap.posts.find((p) => p.url.endsWith('/payments'));
@@ -1417,6 +1418,89 @@ describe('PixService', () => {
         expect(result).toEqual({ pix_key: '', amount: 50, church_name: '', transaction_ref: '' });
         expect(cap.posts).toEqual([]);
         expect(cap.pixPayments).toEqual([]);
+      });
+    });
+
+    describe('dados declarados pelo doador (DPUB-22, DPUB-23)', () => {
+      it('nome e e-mail ficam na linha, normalizados, com a versão do termo e o instante do aceite', async () => {
+        const { service, cap } = harness();
+        const antes = Date.now();
+
+        await service.createPublicDonation({
+          ...manualDto,
+          donor_name: '  Ana Silva  ',
+          donor_email: '  Ana@Igreja.COM ',
+          donor_consent: true,
+        });
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          donor_name: 'Ana Silva',
+          donor_email: 'ana@igreja.com',
+          donor_consent_version: 'donor_consent_v1',
+        });
+        const quando = (cap.pixPayments[0]?.['donor_consented_at'] as Date).getTime();
+        expect(quando).toBeGreaterThanOrEqual(antes);
+        expect(quando).toBeLessThanOrEqual(Date.now());
+      });
+
+      it('só o nome: grava o nome, sem e-mail e sem aceite (não há o que consentir)', async () => {
+        const { service, cap } = harness();
+
+        await service.createPublicDonation({ ...manualDto, donor_name: 'Ana' });
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          donor_name: 'Ana',
+          donor_email: null,
+          donor_consent_version: null,
+          donor_consented_at: null,
+        });
+      });
+
+      it('anônimo: tudo nulo', async () => {
+        const { service, cap } = harness();
+
+        await service.createPublicDonation(manualDto);
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          donor_name: null,
+          donor_email: null,
+          donor_consent_version: null,
+          donor_consented_at: null,
+        });
+      });
+
+      it('nome e e-mail só com espaços contam como não informados', async () => {
+        const { service, cap } = harness();
+
+        await service.createPublicDonation({ ...manualDto, donor_name: '   ', donor_email: '  ' });
+
+        expect(cap.pixPayments[0]).toMatchObject({ donor_name: null, donor_email: null });
+      });
+
+      it('e-mail sem aceite é recusado e nada é gravado (guarda do service, além do DTO)', async () => {
+        const { service, cap } = harness();
+
+        await expect(
+          service.createPublicDonation({ ...manualDto, donor_email: 'ana@igreja.com' }),
+        ).rejects.toThrow('Aceite o uso do e-mail para receber o recibo');
+        await expect(
+          service.createPublicDonation({ ...manualDto, donor_email: 'ana@igreja.com', donor_consent: false }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(cap.pixPayments).toEqual([]);
+      });
+
+      it('a resposta não devolve nome nem e-mail', async () => {
+        const { service } = harness();
+
+        const result = await service.createPublicDonation({
+          ...manualDto,
+          donor_name: 'Ana',
+          donor_email: 'ana@igreja.com',
+          donor_consent: true,
+        });
+
+        expect(JSON.stringify(result)).not.toContain('Ana');
+        expect(JSON.stringify(result)).not.toContain('ana@igreja.com');
       });
     });
 

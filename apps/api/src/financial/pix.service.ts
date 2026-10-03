@@ -84,6 +84,9 @@ export const PUBLIC_DYNAMIC_PENDING_CAP_PER_HOUR = 60;
  */
 export const PUBLIC_DONATION_CANCEL_AFTER_MS = 48 * 60 * 60 * 1000;
 
+/** Termo que o doador aceita para o recibo (docs/produto/orbien-lgpd-mapping.md §3.1). */
+export const DONOR_CONSENT_VERSION = 'donor_consent_v1';
+
 /** Quantas cobranças abandonadas o job cancela por execução. */
 export const PUBLIC_DONATION_CLEANUP_BATCH = 100;
 
@@ -669,6 +672,15 @@ export class PixService {
 
     const ctx = await this.resolvePublicDonationTenant(dto.tenant_slug);
 
+    // O que o doador declarou. Nome e e-mail ficam só na linha de `pix_payments`
+    // — nunca vão à Asaas, ao log nem à resposta. E-mail exige o aceite do
+    // termo; o DTO já barra, e a guarda aqui cobre quem chama o service direto.
+    const donorName = dto.donor_name?.trim() || null;
+    const donorEmail = dto.donor_email?.trim().toLowerCase() || null;
+    if (donorEmail && dto.donor_consent !== true) {
+      throw new BadRequestException('Aceite o uso do e-mail para receber o recibo');
+    }
+
     // Só a intenção, em `pix_payments` — nada em `financial_transactions`. A
     // chave é copiada e paga fora daqui, sem confirmação nenhuma para a API, e
     // DRE e dashboard somam lançamentos sem olhar `status`: gravar receita
@@ -709,6 +721,10 @@ export class PixService {
           amount: new Prisma.Decimal(dto.amount),
           pix_key: ctx.pixKey,
           category_id: category.id,
+          donor_name: donorName,
+          donor_email: donorEmail,
+          donor_consent_version: donorEmail ? DONOR_CONSENT_VERSION : null,
+          donor_consented_at: donorEmail ? new Date() : null,
         },
       });
     });
