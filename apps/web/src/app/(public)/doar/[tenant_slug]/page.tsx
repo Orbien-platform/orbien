@@ -116,6 +116,7 @@ export default function DoarPage() {
   const [amount, setAmount] = useState(0);
   const [donorName, setDonorName] = useState("");
   const [donorEmail, setDonorEmail] = useState("");
+  const [donorConsent, setDonorConsent] = useState(false);
   const [website, setWebsite] = useState(""); // honeypot anti-spam — mantido vazio por humanos
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState("");
@@ -141,6 +142,10 @@ export default function DoarPage() {
     if (status !== "pending") clearSaved(tenantSlug);
   }, [status, tenantSlug]);
 
+  // E-mail sem aceite do termo `donor_consent_v1` (legal/consent-terms) não segue.
+  const hasEmail = donorEmail.trim() !== "";
+  const needsConsent = hasEmail && !donorConsent;
+
   const outOfRange = amount > 0 && (amount < MIN_AMOUNT || amount > MAX_AMOUNT);
   const rangeHint =
     amount > MAX_AMOUNT
@@ -149,7 +154,7 @@ export default function DoarPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (amount < MIN_AMOUNT || amount > MAX_AMOUNT) return;
+    if (amount < MIN_AMOUNT || amount > MAX_AMOUNT || needsConsent) return;
 
     setApiError("");
     setIsSubmitting(true);
@@ -159,6 +164,7 @@ export default function DoarPage() {
         amount,
         donor_name: donorName.trim() || undefined,
         donor_email: donorEmail.trim() || undefined,
+        donor_consent: hasEmail ? true : undefined,
         website: website || undefined,
       });
       if (data.mode === "dynamic") writeSaved(tenantSlug, data);
@@ -347,12 +353,34 @@ export default function DoarPage() {
                   type="email"
                   placeholder="seu@email.com"
                   value={donorEmail}
-                  onChange={(e) => setDonorEmail(e.target.value)}
+                  onChange={(e) => {
+                    setDonorEmail(e.target.value);
+                    // Sem e-mail não há aceite: quem apaga e digita outro aceita de novo.
+                    if (e.target.value.trim() === "") setDonorConsent(false);
+                  }}
                   autoComplete="email"
                   disabled={isSubmitting}
                   className="rounded-[8px]"
                 />
               </div>
+
+              {hasEmail && (
+                <div className="flex items-start gap-2">
+                  <input
+                    id="donor_consent"
+                    type="checkbox"
+                    checked={donorConsent}
+                    onChange={(e) => setDonorConsent(e.target.checked)}
+                    disabled={isSubmitting}
+                    className="mt-0.5 size-4 shrink-0 accent-[var(--color-navy)]"
+                  />
+                  <Label htmlFor="donor_consent" className="text-xs font-normal leading-relaxed text-stone">
+                    Aceito que a igreja use meu e-mail para me enviar o recibo desta doação. O
+                    e-mail não é usado para outra finalidade, e posso pedir a exclusão dele à
+                    igreja a qualquer momento.
+                  </Label>
+                </div>
+              )}
 
               {/* Honeypot anti-spam — invisível para humanos */}
               <input
@@ -374,7 +402,7 @@ export default function DoarPage() {
 
               <Button
                 type="submit"
-                disabled={isSubmitting || amount < MIN_AMOUNT || amount > MAX_AMOUNT}
+                disabled={isSubmitting || amount < MIN_AMOUNT || amount > MAX_AMOUNT || needsConsent}
                 className="mt-1 h-10 w-full rounded-[8px] bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
               >
                 {isSubmitting ? (

@@ -82,6 +82,8 @@ describe("DoarPage", () => {
     await user.type(screen.getByLabelText("Valor"), "1000");
     await user.type(screen.getByLabelText("Seu nome (opcional)"), "Ana Silva");
     await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@igreja.com");
+    // E-mail pede o aceite do termo do recibo (donor_consent_v1).
+    await user.click(screen.getByLabelText(/Aceito que a igreja use meu e-mail/));
     await user.click(screen.getByRole("button", { name: /continuar/i }));
 
     expect(await screen.findByDisplayValue("doca@pix.com")).toBeInTheDocument();
@@ -90,6 +92,7 @@ describe("DoarPage", () => {
       amount: 10,
       donor_name: "Ana Silva",
       donor_email: "ana@igreja.com",
+      donor_consent: true,
       website: undefined,
     });
   });
@@ -463,5 +466,80 @@ describe("DoarPage — limites de valor", () => {
     fireEvent.submit(form);
 
     expect(api.post).not.toHaveBeenCalled();
+  });
+});
+
+describe("DoarPage — aceite do e-mail para o recibo (DPUB-23)", () => {
+  const consentBox = () => screen.queryByLabelText(/Aceito que a igreja use meu e-mail/);
+
+  it("sem e-mail não há caixa de aceite — nome sozinho não pede", async () => {
+    const user = userEvent.setup();
+    render(<DoarPage />);
+
+    await user.type(screen.getByLabelText("Seu nome (opcional)"), "Ana");
+
+    expect(consentBox()).not.toBeInTheDocument();
+  });
+
+  it("ao digitar um e-mail aparece o aceite, desmarcado, e o botão fica desabilitado", async () => {
+    const user = userEvent.setup();
+    render(<DoarPage />);
+
+    await user.type(screen.getByLabelText("Valor"), "1000");
+    await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@igreja.com");
+
+    expect(consentBox()).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /continuar/i })).toBeDisabled();
+  });
+
+  it("aceitar habilita o botão; desmarcar desabilita de novo", async () => {
+    const user = userEvent.setup();
+    render(<DoarPage />);
+    await user.type(screen.getByLabelText("Valor"), "1000");
+    await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@igreja.com");
+
+    await user.click(consentBox()!);
+    expect(screen.getByRole("button", { name: /continuar/i })).toBeEnabled();
+
+    await user.click(consentBox()!);
+    expect(screen.getByRole("button", { name: /continuar/i })).toBeDisabled();
+  });
+
+  it("e-mail sem aceite não envia nem por submit direto do formulário", async () => {
+    const user = userEvent.setup();
+    render(<DoarPage />);
+    await user.type(screen.getByLabelText("Valor"), "1000");
+    await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@igreja.com");
+
+    fireEvent.submit(screen.getByRole("button", { name: /continuar/i }).closest("form")!);
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("apagar o e-mail some com o aceite e o zera: quem digita outro precisa aceitar de novo", async () => {
+    const user = userEvent.setup();
+    render(<DoarPage />);
+    const email = screen.getByLabelText("E-mail (opcional)");
+    await user.type(email, "ana@igreja.com");
+    await user.click(consentBox()!);
+
+    await user.clear(email);
+    expect(consentBox()).not.toBeInTheDocument();
+
+    await user.type(email, "outra@igreja.com");
+    expect(consentBox()).not.toBeChecked();
+  });
+
+  it("sem e-mail, a doação segue sem aceite e sem o campo donor_consent", async () => {
+    vi.mocked(api.post).mockResolvedValue(successResult());
+    const user = userEvent.setup();
+    render(<DoarPage />);
+
+    await user.type(screen.getByLabelText("Valor"), "1000");
+    await user.click(screen.getByRole("button", { name: /continuar/i }));
+
+    await screen.findByDisplayValue("doca@pix.com");
+    const corpo = vi.mocked(api.post).mock.calls[0][1] as Record<string, unknown>;
+    expect(corpo["donor_consent"]).toBeUndefined();
   });
 });
