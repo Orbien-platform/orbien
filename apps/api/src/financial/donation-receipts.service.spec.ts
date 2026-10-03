@@ -338,6 +338,47 @@ describe('DonationReceiptService.list', () => {
   });
 });
 
+describe('DonationReceiptService.list — recibo de doador público (sem Person)', () => {
+  const row = (extra: Record<string, unknown>) => ({
+    id: 'r2',
+    receipt_url: 'https://cdn.test/y.pdf',
+    generated_at: new Date('2026-05-10T00:00:00.000Z'),
+    person: null,
+    recipient_name: null,
+    recipient_email: null,
+    transaction: { amount: new Prisma.Decimal('20.00'), occurred_at: new Date('2026-05-09T00:00:00.000Z') },
+    ...extra,
+  });
+
+  async function nameFor(extra: Record<string, unknown>) {
+    const { service, client } = harness();
+    (client.donationReceipt as unknown as { findMany: jest.Mock; count: jest.Mock }).findMany = jest
+      .fn()
+      .mockResolvedValue([row(extra)]);
+    (client.donationReceipt as unknown as { count: jest.Mock }).count = jest.fn().mockResolvedValue(1);
+
+    return (await service.list('t1', 1, 20)).data[0].person_name;
+  }
+
+  it('sem Person, mostra o nome que o doador declarou', async () => {
+    expect(await nameFor({ recipient_name: 'Fulano', recipient_email: 'fulano@teste.com' })).toBe('Fulano');
+  });
+
+  it('sem Person e sem nome, mostra o e-mail declarado', async () => {
+    expect(await nameFor({ recipient_email: 'fulano@teste.com' })).toBe('fulano@teste.com');
+  });
+
+  it('o nome da Person tem prioridade sobre o declarado', async () => {
+    expect(
+      await nameFor({ person: { full_name: 'Maria' }, recipient_name: 'Outro Nome', recipient_email: 'x@y.com' }),
+    ).toBe('Maria');
+  });
+
+  it('linha sem nenhuma identificação (o CHECK do banco impede, mas a lista não quebra): string vazia', async () => {
+    expect(await nameFor({})).toBe('');
+  });
+});
+
 describe('DonationReceiptService.getDownloadUrl', () => {
   // O fake reproduz o `WHERE id = ... AND tenant_id = ...` do Prisma de
   // verdade: só devolve a linha quando os DOIS casam. Um fake que ignorasse

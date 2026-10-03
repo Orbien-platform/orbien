@@ -162,6 +162,8 @@ export class DonationReceiptService {
           receipt_url: true,
           generated_at: true,
           person: { select: { full_name: true } },
+          recipient_name: true,
+          recipient_email: true,
           transaction: { select: { amount: true, occurred_at: true } },
         },
       }),
@@ -173,7 +175,8 @@ export class DonationReceiptService {
         id: r.id,
         receipt_url: r.receipt_url,
         generated_at: r.generated_at,
-        person_name: r.person.full_name,
+        // Doação pública: o doador não é `Person`, vale o que ele declarou.
+        person_name: r.person?.full_name ?? r.recipient_name ?? r.recipient_email ?? '',
         amount: r.transaction.amount.toString(),
         occurred_at: r.transaction.occurred_at,
       })),
