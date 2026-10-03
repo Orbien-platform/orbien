@@ -32,6 +32,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { AxiosError } from 'axios';
 import { of, throwError } from 'rxjs';
 import { Prisma } from '@prisma/client';
 import { PixService } from './pix.service';
@@ -103,6 +104,10 @@ type Opts = {
   pendingDynamicCount?: number;
   /** A gravação de `asaas_payment_id`/`qr_code` na linha falha (banco). */
   linkChargeFails?: boolean;
+  /** Cobranças públicas abandonadas que o `prisma.system` devolve para a limpeza. */
+  abandoned?: { id: string; asaas_payment_id: string }[];
+  /** Status HTTP com que o `DELETE` na Asaas falha (404 = cobrança já não existe). */
+  httpDeleteStatus?: number;
 };
 
 function harness(opts: Opts = {}) {
@@ -132,6 +137,12 @@ function harness(opts: Opts = {}) {
     countWheres: [] as Record<string, unknown>[],
     /** Gravações de `asaas_payment_id`/`qr_code` na linha da doação pública. */
     chargeLinks: [] as Record<string, unknown>[],
+    /** Consulta da limpeza (`prisma.system.pixPayment.findMany`). */
+    abandonedQuery: undefined as Record<string, unknown> | undefined,
+    /** `updateMany` da limpeza que marca a linha `failed`. */
+    closed: [] as Record<string, unknown>[],
+    /** Ordem dos efeitos externos da limpeza: `delete:<url>` e `close:<id>`. */
+    order: [] as string[],
   };
 
   let catCall = 0;
@@ -377,6 +388,19 @@ function harness(opts: Opts = {}) {
       });
       return Promise.resolve(1);
     },
+    system: {
+      pixPayment: {
+        findMany: (args: Record<string, unknown>) => {
+          cap.abandonedQuery = args;
+          return Promise.resolve(opts.abandoned ?? []);
+        },
+        updateMany: (args: { where: { id: string } }) => {
+          cap.closed.push(args as unknown as Record<string, unknown>);
+          cap.order.push(`close:${args.where.id}`);
+          return Promise.resolve({ count: 1 });
+        },
+      },
+    },
     // `pix_webhook_scope()` (024): o webhook só conhece o id da Asaas.
     $queryRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
       cap.scopeQueries.push(valores);
@@ -428,6 +452,15 @@ function harness(opts: Opts = {}) {
     },
     delete: (url: string) => {
       cap.deletes.push(url);
+      cap.order.push(`delete:${url}`);
+      if (opts.httpDeleteStatus) {
+        return throwError(
+          () =>
+            new AxiosError('recusado', 'ERR_BAD_REQUEST', undefined, undefined, {
+              status: opts.httpDeleteStatus,
+            } as never),
+        );
+      }
       if (opts.httpDeleteFails) return throwError(() => new Error('asaas fora do ar'));
       return of({ data: opts.httpDelete?.(url) ?? {} });
     },
@@ -1520,6 +1553,113 @@ describe('PixService', () => {
       await expect(service.getPublicDonationStatus('igreja-central', ID)).rejects.toThrow(
         'banco fora do ar',
       );
+    });
+  });
+
+  describe('expireAbandonedPublicDonations (DPUB-27, DPUB-09)', () => {
+    const abandoned = [
+      { id: 'pix-a', asaas_payment_id: 'pay_a' },
+      { id: 'pix-b', asaas_payment_id: 'pay_b' },
+    ];
+
+    beforeEach(() => {
+      process.env['ASAAS_API_KEY'] = 'chave-asaas';
+      process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+    });
+
+    it('cancela cada cobrança na Asaas e SÓ DEPOIS marca a linha `failed` — a ordem evita perder dinheiro', async () => {
+      const { service, cap } = harness({ abandoned });
+
+      const result = await service.expireAbandonedPublicDonations();
+
+      expect(result).toEqual({ cancelled: 2, kept: 0 });
+      expect(cap.order).toEqual([
+        'delete:https://asaas.test/v3/payments/pay_a',
+        'close:pix-a',
+        'delete:https://asaas.test/v3/payments/pay_b',
+        'close:pix-b',
+      ]);
+      expect(cap.closed[0]).toEqual({
+        where: { id: 'pix-a', status: 'pending' },
+        data: { status: 'failed' },
+      });
+    });
+
+    it('só pega pendentes públicas COM cobrança, com mais de 48h, em lote limitado, das mais antigas', async () => {
+      const { service, cap } = harness();
+      const antes = Date.now();
+
+      await service.expireAbandonedPublicDonations();
+
+      const where = cap.abandonedQuery?.['where'] as {
+        scenario: string;
+        status: string;
+        asaas_payment_id: unknown;
+        created_at: { lt: Date };
+      };
+      expect(where).toMatchObject({ scenario: 'public', status: 'pending', asaas_payment_id: { not: null } });
+      expect(where.created_at.lt.getTime()).toBeLessThanOrEqual(antes - 48 * 60 * 60 * 1000 + 1);
+      expect(where.created_at.lt.getTime()).toBeGreaterThanOrEqual(Date.now() - 48 * 60 * 60 * 1000 - 1);
+      expect(cap.abandonedQuery).toMatchObject({ take: 100, orderBy: { created_at: 'asc' } });
+    });
+
+    it('sem nada abandonado, não fala com a Asaas nem grava', async () => {
+      const { service, cap } = harness({ abandoned: [] });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 0 });
+      expect(cap.deletes).toEqual([]);
+      expect(cap.closed).toEqual([]);
+    });
+
+    it('cancelamento recusado (cobrança talvez já paga, webhook perdido): a linha FICA pending e o caso vai para o log', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({ abandoned, httpDeleteStatus: 400 });
+
+      const result = await service.expireAbandonedPublicDonations();
+
+      expect(result).toEqual({ cancelled: 0, kept: 2 });
+      expect(cap.closed).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('pay_a'));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('pix-a'));
+    });
+
+    it('Asaas fora do ar (erro sem status): mantém pending, tenta de novo no dia seguinte', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({ abandoned, httpDeleteFails: true });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 2 });
+      expect(cap.closed).toEqual([]);
+    });
+
+    it('404 (a cobrança já não existe na Asaas): nada a cancelar, marca `failed`', async () => {
+      const { service, cap } = harness({ abandoned: [abandoned[0]], httpDeleteStatus: 404 });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 1, kept: 0 });
+      expect(cap.closed).toHaveLength(1);
+    });
+
+    it('uma falha não impede as demais cobranças do lote', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({
+        abandoned,
+        httpDelete: (url) => {
+          if (url.endsWith('pay_a')) throw new Error('falhou só esta');
+          return {};
+        },
+      });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 1, kept: 1 });
+      expect(cap.closed.map((c) => (c as { where: { id: string } }).where.id)).toEqual(['pix-b']);
+    });
+
+    it('sem ASAAS_API_KEY, pula a limpeza sem consultar o banco', async () => {
+      delete process.env['ASAAS_API_KEY'];
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({ abandoned });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 0 });
+      expect(cap.abandonedQuery).toBeUndefined();
+      expect(cap.deletes).toEqual([]);
     });
   });
 

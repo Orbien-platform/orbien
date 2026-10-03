@@ -5,6 +5,7 @@ import { StorageModule } from '../storage/storage.module';
 import { MailModule } from '../mail/mail.module';
 import { PixController } from './pix.controller';
 import { PixService } from './pix.service';
+import { PublicDonationExpiryScheduler } from './public-donation-expiry.scheduler';
 import { DonationReceiptsController } from './donation-receipts.controller';
 import { DonationReceiptService } from './donation-receipts.service';
 import { AnnualDonationReportService } from './annual-donation-report.service';
@@ -21,7 +22,7 @@ import { AnnualDonationReportService } from './annual-donation-report.service';
 @Module({
   imports: [PrismaModule, HttpModule, StorageModule, MailModule],
   controllers: [PixController, DonationReceiptsController],
-  providers: [PixService, DonationReceiptService, AnnualDonationReportService],
+  providers: [PixService, DonationReceiptService, AnnualDonationReportService, PublicDonationExpiryScheduler],
   exports: [PixService],
 })
 export class PixModule {}

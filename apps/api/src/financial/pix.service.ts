@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { randomUUID, timingSafeEqual } from 'crypto';
+import { isAxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import {
   PlanStatus,
@@ -73,6 +74,18 @@ export const PUBLIC_DONATION_VALIDITY_MS = 24 * 60 * 60 * 1000;
  * o doador recebe a chave estática, e a doação não se perde.
  */
 export const PUBLIC_DYNAMIC_PENDING_CAP_PER_HOUR = 60;
+
+/**
+ * Depois deste prazo a cobrança abandonada é cancelada na Asaas. Maior que as
+ * 24h que a página promete: entre as duas o QR ainda paga e o webhook confirma
+ * normalmente. A Asaas aceita o QR por muito mais tempo que isso (até 12 meses
+ * após o vencimento, segundo a documentação) — sem o cancelamento, um QR velho
+ * continuaria pagável e a linha, `pending` para sempre.
+ */
+export const PUBLIC_DONATION_CANCEL_AFTER_MS = 48 * 60 * 60 * 1000;
+
+/** Quantas cobranças abandonadas o job cancela por execução. */
+export const PUBLIC_DONATION_CLEANUP_BATCH = 100;
 
 type AsaasCustomer = { id: string };
 type AsaasPayment = { id: string; invoiceUrl: string };
@@ -766,6 +779,68 @@ export class PixService {
     else status = 'pending';
 
     return { status, expires_at: expiresAt.toISOString() };
+  }
+
+  /**
+   * Limpeza das cobranças públicas abandonadas (aba fechada, dois QRs, desistência).
+   *
+   * A ORDEM é a regra: primeiro cancela na Asaas, e só depois marca `failed`. O
+   * inverso perderia dinheiro — um QR ainda pagável cuja linha já está `failed`.
+   * Mesmo assim, se alguém pagar entre o cancelamento e a marcação, o webhook
+   * confirma a linha `failed` (ver `handleWebhook`).
+   *
+   * - Cancelamento recusado pela Asaas (por exemplo, a cobrança já foi paga e o
+   *   webhook se perdeu): a linha FICA `pending` e o caso vai para o log — é
+   *   dinheiro possivelmente não lançado, e não deve sumir da fila.
+   * - 404 (a cobrança já não existe na Asaas): nada a cancelar, marca `failed`.
+   * - Intenção estática (sem `asaas_payment_id`) não é tocada: quem decide é o
+   *   tesoureiro.
+   *
+   * Roda no scheduler, cross-tenant — `prisma.system`, como `RecurringRuleScheduler`.
+   */
+  async expireAbandonedPublicDonations(): Promise<{ cancelled: number; kept: number }> {
+    if (!this.asaasKey) {
+      this.logger.warn('ASAAS_API_KEY ausente — limpeza de cobranças públicas abandonadas pulada');
+      return { cancelled: 0, kept: 0 };
+    }
+
+    const abandoned = await this.prisma.system.pixPayment.findMany({
+      where: {
+        scenario: PixScenario.public,
+        status: PixStatus.pending,
+        asaas_payment_id: { not: null },
+        created_at: { lt: new Date(Date.now() - PUBLIC_DONATION_CANCEL_AFTER_MS) },
+      },
+      select: { id: true, asaas_payment_id: true },
+      orderBy: { created_at: 'asc' },
+      take: PUBLIC_DONATION_CLEANUP_BATCH,
+    });
+
+    let cancelled = 0;
+    let kept = 0;
+
+    for (const row of abandoned) {
+      try {
+        await this.asaasDelete(`/payments/${row.asaas_payment_id}`);
+      } catch (err) {
+        const alreadyGone = isAxiosError(err) && err.response?.status === 404;
+        if (!alreadyGone) {
+          kept++;
+          this.logger.warn(
+            `Cobrança ${row.asaas_payment_id} (pix_payment=${row.id}) não cancelada na Asaas — fica pending: ${String(err)}`,
+          );
+          continue;
+        }
+      }
+
+      await this.prisma.system.pixPayment.updateMany({
+        where: { id: row.id, status: PixStatus.pending },
+        data: { status: PixStatus.failed },
+      });
+      cancelled++;
+    }
+
+    return { cancelled, kept };
   }
 
   /** Cobranças dinâmicas públicas ainda pendentes criadas na última hora. Roda sob o contexto da igreja. */
