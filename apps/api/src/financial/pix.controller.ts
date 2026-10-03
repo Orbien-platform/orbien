@@ -22,6 +22,7 @@ import { RequiresPlan } from '../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { PublicDonationThrottlerGuard } from '../common/guards/public-donation-throttler.guard';
 import { PixService } from './pix.service';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
@@ -86,9 +87,12 @@ export class PixController {
 
   // ── Cenário 3: Doação pública — PÚBLICO ──────────────────────────────────
 
+  // Balde por igreja + origem (ver `PublicDonationThrottlerGuard`): 30/min. Cada
+  // tentativa Premium faz chamadas à Asaas; o teto por tenant no banco é o que
+  // segura abuso de verdade.
   @Post('public-donation')
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @UseGuards(PublicDonationThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   createPublicDonation(@Body() dto: CreatePublicDonationDto) {
     return this.pixService.createPublicDonation(dto);
@@ -98,7 +102,7 @@ export class PixController {
   // é bem mais folgado que o da criação — cada doador esperando consulta a cada
   // poucos segundos, e a leitura é uma linha indexada.
   @Get('public-donation/:tenant_slug/:payment_id')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(PublicDonationThrottlerGuard)
   @Throttle({ default: { limit: 120, ttl: 60000 } })
   @Header('Cache-Control', 'no-store')
   getPublicDonationStatus(

@@ -1,5 +1,6 @@
 import { Reflector } from '@nestjs/core';
 import { PixController } from './pix.controller';
+import { PublicDonationThrottlerGuard } from '../common/guards/public-donation-throttler.guard';
 import { PixService } from './pix.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { REQUIRES_PLAN_KEY } from '../auth/decorators/requires-plan.decorator';
@@ -138,6 +139,17 @@ describe('PixController', () => {
     ]);
     expect(rolesFor('getPublicDonationStatus')).toBeUndefined();
     expect(requiredPlanFor('getPublicDonationStatus')).toBeUndefined();
+  });
+
+  it('criação e status da doação pública usam o balde por igreja + origem; criação: 30/min', () => {
+    const guards = (m: keyof PixController) =>
+      Reflect.getMetadata('__guards__', PixController.prototype[m]) as unknown[];
+
+    expect(guards('createPublicDonation')).toEqual([PublicDonationThrottlerGuard]);
+    expect(guards('getPublicDonationStatus')).toEqual([PublicDonationThrottlerGuard]);
+    expect(
+      Reflect.getMetadata(`${THROTTLER_LIMIT}default`, PixController.prototype.createPublicDonation),
+    ).toBe(30);
   });
 
   it('o polling tem limite mais folgado que a criação da doação pública', () => {
