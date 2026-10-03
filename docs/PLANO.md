@@ -1954,6 +1954,16 @@ não trocam a lista que já está visível por uma tela de erro. Se a pessoa já
 tinha paginado, a primeira página nova entra por id e as mais antigas, com o
 cursor que ela tinha, ficam.
 
+### PEND-16 · Taxa da Asaas do tenant e split de 1% para a Orbien em toda cobrança
+
+Decisão de 2026-10-03 (`AD-006`). Hoje nenhum dos três pontos de cobrança de
+`PixService` (`/payments` dinâmico e de inscrição, `/subscriptions` recorrente)
+envia `split`, e todos usam uma única `ASAAS_API_KEY` com um cliente Asaas por
+tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: montador
+único de cobrança + split + falha fechada, e a conta Asaas por tenant que isso
+exige (`DEC-07`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
+Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
@@ -2175,6 +2185,17 @@ listados na tabela comparativa de `produto-gestao-igrejas-mvp.md` (seção 5).
 Nenhum tem desenho técnico.
 
 ---
+
+### DEC-07 · Conta Asaas por tenant (para a tarifa ser da igreja)
+
+Consequência do `AD-006`. Para a tarifa da Asaas ser do tenant e o split de 1%
+sair da cobrança dele, a cobrança tem de ser criada na conta Asaas do tenant
+(subconta com wallet própria), não num cliente dentro da conta única da Orbien.
+Em aberto: modelo (subconta criada via API pela Orbien vs. conta própria da
+igreja), onboarding/KYC (CNPJ/CPF do responsável — hoje `cpfCnpj` é omitido no
+sandbox), onde guardar a chave/wallet por tenant (segredo, não coluna aberta) e
+o que acontece com tenant sem conta ativa (PIX manual do Cenário 1 segue,
+sem Asaas). Não verificado na documentação da Asaas; confirmar em spike.
 
 ## 10. Como manter este documento
 

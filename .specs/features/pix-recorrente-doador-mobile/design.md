@@ -4,8 +4,9 @@
 **Status**: Draft (avaliação — nada implementado)
 
 Constraints ativas de `.specs/STATE.md` lidas: AD-001 (RLS de congregação com
-USING = WITH CHECK) se aplica e é **conformada**; AD-002..AD-005 não tocam esta
-feature. Nenhuma decisão é superada. Lições confirmadas: nenhuma.
+USING = WITH CHECK) se aplica e é **conformada**; **AD-006 (tarifa do tenant,
+1% de split, montador único)** se aplica e é **conformada**; AD-002..AD-005 não
+tocam esta feature. Nenhuma decisão é superada. Lições confirmadas: nenhuma.
 
 ---
 
@@ -49,7 +50,7 @@ graph TD
 
 | System | Integration Method |
 |---|---|
-| Asaas | `asaasPost('/subscriptions')`, `asaasDelete`, **novo** `asaasGet('/subscriptions/:id/payments')` + `/payments/:id/pixQrCode` (P0 — endpoints a confirmar na doc Asaas; não verificado aqui) |
+| Asaas | `AsaasChargeService.buildCharge('subscription', …)` (split de 1% e conta do tenant, AD-006) no lugar de `asaasPost('/subscriptions')` direto; `asaasDelete`, **novo** `asaasGet('/subscriptions/:id/payments')` + `/payments/:id/pixQrCode` (P0 — endpoints a confirmar na doc Asaas; não verificado aqui) |
 | JWT mobile | `plan` só para esconder/mostrar a entrada; a autoridade é o servidor |
 | Notificações | Categoria de push só no P3 |
 
@@ -134,7 +135,7 @@ model PixSubscription {
 | R4 Criar chama Asaas antes de gravar; sem idempotência | `pix.service.ts:378-410` | Cobrança duplicada/órfã | Saga `pending` + índice parcial + `Idempotency-Key` |
 | R5 Cancelar com 404 da Asaas vira 503 eterno | `pix.service.ts:432-437` | Doador não consegue cancelar | Tratar 404 como removida |
 | R6 Assinatura fica na congregação de origem; `listSubscriptions` do tesoureiro filtra por congregação da sessão | `pix.service.ts:413-420`, `app_congregation_allowed` | Doador que muda de congregação não acha/cancela a própria | `/me` não filtra congregação além do RLS; se a congregação mudou, RLS esconde → decisão: cancelar via serviço com contexto da congregação da linha, ou travar transferência com assinatura ativa (abrir pendência) |
-| R7 Sem `split` na assinatura | `pix.service.ts` (ausência) | 1% da plataforma não é cobrado em recorrente | Q8; não consertar nesta feature sem decisão |
+| R7 Sem `split` e conta Asaas única | `pix.service.ts:297,382,479` | Contra AD-006: 1% da Orbien não é cobrado e a tarifa não é do tenant | Criar a assinatura **só** pelo `AsaasChargeService` (feature `asaas-taxa-e-split-padrao`, A3/A4); esta feature depende dela |
 | R8 Webhook confia no `payment.subscription` | `:652-660` | Já tem token/validação do webhook; assinatura `pending` não casa | Manter; teste de regressão |
 | R9 Sem teste de integração para rotas PIX hoje | `apps/api/test/integration` (não há `pix`) | Regressão silenciosa | Testes das fases 1-3 incluem integração |
 | R10 `member` sem `person_id` (importação) | `schema.prisma` ~254 | 409 em parte da base | Mensagem acionável; métrica de quantos membros sem pessoa em `teste*` é tarefa de dados |
@@ -148,4 +149,4 @@ model PixSubscription {
 | Isolamento por pessoa | Serviço + testes; RLS por pessoa só se Q5 pedir | Evita mudar `TenantContextInterceptor` para uma rota |
 | Cancelar nunca bloqueado por plano | Sim | Direito do doador; Q3 |
 
-> **Project-level**: se a feature for construída, registrar em `STATE.md` como AD-006: "rota de dinheiro self-service de `member` deriva pessoa e plano do banco, nunca do corpo ou da claim". Não registrado agora (feature não aprovada).
+> **Project-level**: se a feature for construída, registrar em `STATE.md` como AD-007 (AD-006 já é a regra de taxa/split): "rota de dinheiro self-service de `member` deriva pessoa e plano do banco, nunca do corpo ou da claim". Não registrado agora (feature não aprovada).

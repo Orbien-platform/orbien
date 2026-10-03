@@ -128,6 +128,11 @@ leia o do app antes de mexer nele.
   `platform_access` nas rotas marcadas com `@PlatformRoute()` — ali não há
   impersonação, mas há o ramo de RLS que abre os N tenants, e ele também
   precisa de rastro.
+- **Toda cobrança na Asaas passa por um montador único, com split.** A tarifa
+  da Asaas é do tenant e a Orbien recebe 1% por split, em toda e qualquer
+  transação — sem exceção por cenário (`AD-006` em `.specs/STATE.md`). Não chame
+  `/payments` ou `/subscriptions` com corpo próprio e não escreva percentual ou
+  wallet literal: cobrança sem split falha, não passa.
 - Os deploys são independentes. Nada que rode na Vercel deve importar código de
   `apps/api`, e a API não deve depender de nada dos fronts.
 - `apps/admin` é o console da plataforma e **não** é uma tela do produto. Só

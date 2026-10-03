@@ -59,6 +59,7 @@ Fase 0 (spike + P0) → Fase 1 (modelo) → Fase 2 (API doador) → Fase 3 (test
 |---|---|---|---|---|
 | T1 | Spike em sandbox Asaas: o que `billingType:PIX` + `MONTHLY` gera; como obter `invoiceUrl`/QR do ciclo; se existe PIX Automático com autorização do doador. Registrar em `context.md` | — | none (pesquisa) | Q1 respondida com evidência da doc/sandbox |
 | T2 | Dono decide Q1–Q3 e Q8; registrar em `context.md` | T1 | none | Decisões gravadas |
+| T3b | Criar a assinatura pelo `AsaasChargeService` (AD-006): split de 1% e credencial do tenant; depende de `asaas-taxa-e-split-padrao` A3–A6 | T2, A4 | unit: corpo da assinatura contém `split`; sem config → 503 | PRD-DONOR-12 |
 | T3 | `asaasGet` + método `getCurrentCharge(subscription)` no `PixService` (QR/copia-e-cola do ciclo em aberto) | T2 | unit (Asaas mockado: aberto, nenhum, erro) | PRD-DONOR-01 coberto; fluxo do tesoureiro também pode usar |
 
 ### Fase 1 — Modelo de dados
@@ -92,7 +93,7 @@ Fase 0 (spike + P0) → Fase 1 (modelo) → Fase 2 (API doador) → Fase 3 (test
 | T13 | Tela `dizimo-automatico.tsx`: todos os estados, aceite de consentimento, QR/copia-e-cola do ciclo, cancelar com confirmação | T12 | unit por estado | PRD-DONOR-08/09/10; "cancelado" só após 200 |
 | T14 | Entrada na Home (`HomeQuickActions`) e no Perfil, só `plan==="premium"`; rota registrada em `_layout.tsx` | T13 | unit | Starter não vê; Premium vê; sem handler quando `disabled` |
 
-**Totais**: 14 tasks, 5 fases. > ~8 tasks ⇒ no Execute, **oferecer sub-agentes** por fase (Fase 0 sempre inline: decisão humana).
+**Totais**: 15 tasks (T3b inclusa), 5 fases. > ~8 tasks ⇒ no Execute, **oferecer sub-agentes** por fase (Fase 0 sempre inline: decisão humana).
 
 ### Diagram-Definition Cross-Check
 

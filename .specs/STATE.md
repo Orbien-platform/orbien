@@ -128,3 +128,40 @@ RLS habilitado com `USING (true)/WITH CHECK (true)` — em vez de ficar sem
 RLS (o que o alerta do pre-push aceitaria em silêncio, mas deixa a
 intenção implícita) ou de ganhar `tenant_id` que não tem dono nenhum para
 apontar.
+
+### AD-006 — Taxa da Asaas é do tenant; 1% de split vai para a Orbien, em toda cobrança
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-03 (avaliação `pix-recorrente-doador-mobile`)
+
+Para **toda e qualquer** cobrança criada na Asaas — hoje `POST /payments`
+(PIX dinâmico, inscrição de evento) e `POST /subscriptions` (PIX recorrente),
+amanhã qualquer novo cenário ou meio de pagamento — vale uma regra só:
+
+1. **A tarifa da Asaas é custo do tenant** (a igreja é a dona da cobrança e
+   absorve a tarifa). Nunca repassada à Orbien, nunca somada ao doador.
+2. **A Orbien recebe 1% por split** da própria cobrança (`split` da Asaas para
+   a wallet da Orbien), não por repasse manual nem por fatura posterior.
+3. **Um único ponto monta a cobrança.** Nenhum serviço chama
+   `asaasPost('/payments'|'/subscriptions', …)` com corpo próprio: todos passam
+   pelo mesmo montador, que injeta o split e é o único lugar que conhece o
+   percentual e a wallet (configuração, não literal espalhado).
+4. **Cobrança sem split não existe.** Wallet/percentual ausentes → a criação
+   falha (503 "serviço PIX indisponível" + log), em vez de cobrar sem a parte
+   da Orbien. Teste de unidade falha se algum POST de cobrança sair sem
+   `split`.
+
+**Motivo**: o pricing já descreve "1% retido via split + ~1% da Asaas" como
+custo efetivo ~2% para a igreja (`pricing-church-platform.md` §79-84, ADR-007),
+mas o código não tem nenhum `split` (verificado em 2026-10-03: três pontos de
+cobrança em `pix.service.ts`, nenhum com `split`/`walletId`). Sem um ponto
+único, cada cenário novo (como a recorrente do doador) reimplementaria — ou
+esqueceria — a regra.
+
+**Consequência prática**: uma feature nova de pagamento **não** decide taxa nem
+split; ela chama o montador. Mudar o percentual ou o provedor (ADR-007) é uma
+mudança num lugar. **Pré-requisito em aberto (DEC-07/PEND-16)**: hoje há uma só
+`ASAAS_API_KEY` e um cliente Asaas por tenant — para a tarifa ser do tenant e o
+split sair da cobrança dele, a cobrança precisa ser criada na conta Asaas do
+tenant (subconta/wallet por tenant). Ver `.specs/features/asaas-taxa-e-split-padrao/`.
+
