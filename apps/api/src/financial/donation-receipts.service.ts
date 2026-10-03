@@ -31,6 +31,9 @@ pdfmakeLib.setUrlAccessPolicy(() => false);
 
 const HEADER_COLOR = '#1E3A7B';
 
+/** Contexto de RLS da linha confirmada — ver `generateForTransaction`. */
+export type ReceiptScope = { tenantId: string; congregationId: string };
+
 export type ReceiptSummary = {
   id: string;
   receipt_url: string;
@@ -60,49 +63,62 @@ export class DonationReceiptService {
    * consultado no banco (`TenantPlan`), nunca na claim do token, mesmo
    * princípio do `MemberCapService`: é limite de negócio, não de sessão.
    */
-  async generateForTransaction(transactionId: string): Promise<void> {
-    const existing = await this.prisma.client.donationReceipt.findFirst({
-      where: { transaction_id: transactionId },
-      select: { id: true },
+  async generateForTransaction(transactionId: string, scope?: ReceiptScope): Promise<void> {
+    // O webhook da Asaas chama isto depois do commit, sem JWT e sem contexto de
+    // tenant: `financial_transactions`/`persons`/`donation_receipts` ficam
+    // invisíveis para `orbien_app` e o recibo nunca nascia. `scope` (tenant e
+    // congregação da linha confirmada, vindos do banco) fixa o contexto em dois
+    // blocos curtos — leitura e gravação. PDF, upload e e-mail ficam FORA da
+    // transação: não se segura conexão de banco durante chamada de rede.
+    const loaded = await this.withScope(scope, async () => {
+      const existing = await this.prisma.client.donationReceipt.findFirst({
+        where: { transaction_id: transactionId },
+        select: { id: true },
+      });
+      if (existing) return null;
+
+      const transaction = await this.prisma.client.financialTransaction.findUnique({
+        where: { id: transactionId },
+        select: {
+          id: true,
+          tenant_id: true,
+          amount: true,
+          occurred_at: true,
+          donor_person_id: true,
+          is_anonymous: true,
+          type: true,
+        },
+      });
+
+      if (!transaction || transaction.type !== TransactionType.income) return null;
+      if (transaction.is_anonymous || !transaction.donor_person_id) return null;
+
+      const [tenantPlan, person, tenant] = await Promise.all([
+        this.prisma.client.tenantPlan.findUnique({
+          where: { tenant_id: transaction.tenant_id },
+          select: { plan: true },
+        }),
+        this.prisma.client.person.findUnique({
+          where: { id: transaction.donor_person_id },
+          select: { full_name: true, email: true },
+        }),
+        this.prisma.client.tenant.findUnique({
+          where: { id: transaction.tenant_id },
+          select: TENANT_MAIL_BRAND_SELECT,
+        }),
+      ]);
+
+      return { transaction, donorPersonId: transaction.donor_person_id, tenantPlan, person, tenant };
     });
-    if (existing) return;
 
-    const transaction = await this.prisma.client.financialTransaction.findUnique({
-      where: { id: transactionId },
-      select: {
-        id: true,
-        tenant_id: true,
-        amount: true,
-        occurred_at: true,
-        donor_person_id: true,
-        is_anonymous: true,
-        type: true,
-      },
-    });
-
-    if (!transaction || transaction.type !== TransactionType.income) return;
-    if (transaction.is_anonymous || !transaction.donor_person_id) return;
-
-    const [tenantPlan, person, tenant] = await Promise.all([
-      this.prisma.client.tenantPlan.findUnique({
-        where: { tenant_id: transaction.tenant_id },
-        select: { plan: true },
-      }),
-      this.prisma.client.person.findUnique({
-        where: { id: transaction.donor_person_id },
-        select: { full_name: true, email: true },
-      }),
-      this.prisma.client.tenant.findUnique({
-        where: { id: transaction.tenant_id },
-        select: TENANT_MAIL_BRAND_SELECT,
-      }),
-    ]);
+    if (!loaded) return;
+    const { transaction, donorPersonId, tenantPlan, person, tenant } = loaded;
 
     if (tenantPlan?.plan !== PlanType.premium) return;
 
     if (!person?.email) {
       this.logger.log(
-        `Doador ${transaction.donor_person_id} sem email cadastrado — recibo não enviado (transaction=${transactionId})`,
+        `Doador ${donorPersonId} sem email cadastrado — recibo não enviado (transaction=${transactionId})`,
       );
       return;
     }
@@ -112,16 +128,26 @@ export class DonationReceiptService {
     const key = `donation-receipts/${transaction.tenant_id}/${transaction.id}.pdf`;
     const receiptUrl = await this.storage.upload(buffer, key, 'application/pdf');
 
-    await this.prisma.client.donationReceipt.create({
-      data: {
-        tenant_id: transaction.tenant_id,
-        transaction_id: transaction.id,
-        person_id: transaction.donor_person_id,
-        receipt_url: receiptUrl,
-      },
-    });
+    await this.withScope(scope, () =>
+      this.prisma.client.donationReceipt.create({
+        data: {
+          tenant_id: transaction.tenant_id,
+          transaction_id: transaction.id,
+          person_id: donorPersonId,
+          receipt_url: receiptUrl,
+        },
+      }),
+    );
 
     await this.mail.sendDonationReceipt(person.email, person.full_name, amount, receiptUrl, tenantMailBrand(tenant));
+  }
+
+  private withScope<T>(scope: ReceiptScope | undefined, fn: () => Promise<T>): Promise<T> {
+    if (!scope) return fn();
+    return this.prisma.runInTx(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${scope.tenantId}, true), set_config('app.congregation_id', ${scope.congregationId}, true)`;
+      return fn();
+    });
   }
 
   async list(tenantId: string, page: number, pageSize: number): Promise<{ data: ReceiptSummary[]; total: number }> {

@@ -27,6 +27,10 @@ function harness(opts: Opts = {}) {
     created: [] as Record<string, unknown>[],
     uploads: [] as { key: string; contentType: string }[],
     mails: [] as { to: string; name: string; amount: number; url: string }[],
+    /** `set_config(tenant, congregação)` de cada bloco com escopo. */
+    contexts: [] as unknown[][],
+    /** Quantos blocos de `runInTx` abriram. */
+    transactions: 0,
   };
 
   const transaction =
@@ -68,7 +72,19 @@ function harness(opts: Opts = {}) {
     },
   };
 
-  const prisma = { client } as unknown as PrismaService;
+  const tx = {
+    $executeRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      cap.contexts.push(valores);
+      return Promise.resolve(1);
+    },
+  };
+  const prisma = {
+    client,
+    runInTx: (fn: (t: typeof tx) => Promise<unknown>) => {
+      cap.transactions++;
+      return fn(tx);
+    },
+  } as unknown as PrismaService;
 
   const storage = {
     upload: jest.fn((_buf: Buffer, key: string, contentType: string) => {
@@ -234,6 +250,68 @@ describe('DonationReceiptService.generateForTransaction', () => {
     await service.generateForTransaction('tx-1');
 
     expect(cap.mails[0]?.amount).toBe(12.34);
+  });
+});
+
+describe('DonationReceiptService.generateForTransaction — escopo de RLS (webhook sem JWT)', () => {
+  const scope = { tenantId: 't1', congregationId: 'c1' };
+
+  it('com escopo, fixa app.tenant_id/app.congregation_id na leitura e de novo na gravação do recibo', async () => {
+    const { service, cap } = harness();
+
+    await service.generateForTransaction('tx-1', scope);
+
+    expect(cap.transactions).toBe(2);
+    expect(cap.contexts).toEqual([
+      ['t1', 'c1'],
+      ['t1', 'c1'],
+    ]);
+    expect(cap.created).toHaveLength(1);
+  });
+
+  it('PDF, upload e e-mail ficam fora da transação — só leitura e gravação seguram conexão', async () => {
+    const { service, cap, client } = harness();
+    let abertas = 0;
+    let uploadComTransacaoAberta = false;
+    // Mede, no instante do upload, quantas transações do `runInTx` estão abertas.
+    (service as unknown as { prisma: { runInTx: unknown } }).prisma.runInTx = async (
+      fn: (t: { $executeRaw: () => Promise<number> }) => Promise<unknown>,
+    ) => {
+      abertas++;
+      try {
+        return await fn({ $executeRaw: () => Promise.resolve(1) });
+      } finally {
+        abertas--;
+      }
+    };
+    (service as unknown as { storage: { upload: unknown } }).storage.upload = jest.fn(() => {
+      uploadComTransacaoAberta = abertas > 0;
+      return Promise.resolve('https://cdn.test/x.pdf');
+    });
+
+    await service.generateForTransaction('tx-1', scope);
+
+    expect(uploadComTransacaoAberta).toBe(false);
+    expect(client.donationReceipt.create).toHaveBeenCalledTimes(1);
+    expect(cap.mails).toHaveLength(1);
+  });
+
+  it('sem escopo, não abre transação nem fixa contexto (quem chama já está sob um)', async () => {
+    const { service, cap } = harness();
+
+    await service.generateForTransaction('tx-1');
+
+    expect(cap.transactions).toBe(0);
+    expect(cap.contexts).toEqual([]);
+  });
+
+  it('com escopo, transação já com recibo não grava outro', async () => {
+    const { service, cap } = harness({ donationReceipt: { id: 'ja-existe' } });
+
+    await service.generateForTransaction('tx-1', scope);
+
+    expect(cap.transactions).toBe(1);
+    expect(cap.created).toEqual([]);
   });
 });
 

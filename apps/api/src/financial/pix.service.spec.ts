@@ -108,6 +108,8 @@ function harness(opts: Opts = {}) {
     posts: [] as { url: string; body: unknown }[],
     gets: [] as string[],
     receiptCalls: [] as string[],
+    /** Escopo de RLS que o webhook repassa ao recibo (roda depois do commit, sem contexto). */
+    receiptScopes: [] as unknown[],
     eventRegistrationUpdates: [] as Record<string, unknown>[],
     contexts: [] as unknown[][],
     pixSubscriptions: [] as Record<string, unknown>[],
@@ -392,8 +394,9 @@ function harness(opts: Opts = {}) {
   } as unknown as HttpService;
 
   const donationReceiptService = {
-    generateForTransaction: jest.fn((id: string) => {
+    generateForTransaction: jest.fn((id: string, scope?: unknown) => {
       cap.receiptCalls.push(id);
+      cap.receiptScopes.push(scope);
       return opts.receiptRejects ? Promise.reject(new Error('recibo falhou')) : Promise.resolve(undefined);
     }),
   };
@@ -1489,6 +1492,20 @@ describe('PixService', () => {
       await Promise.resolve();
 
       expect(cap.receiptCalls).toEqual(['tx-1']);
+    });
+
+    it('repassa ao recibo o tenant e a congregação da LINHA — o recibo roda depois do commit, sem contexto', async () => {
+      const { service, cap } = harness({
+        webhookScope: [{ scope_tenant_id: 'tenant-dono', scope_congregation_id: 'cong-dona' }],
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      await Promise.resolve();
+
+      expect(cap.receiptScopes).toEqual([{ tenantId: 'tenant-dono', congregationId: 'cong-dona' }]);
     });
 
     it('não aciona o recibo quando a confirmação perde a corrida', async () => {

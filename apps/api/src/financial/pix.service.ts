@@ -828,7 +828,7 @@ export class PixService {
     // erro (isso faria ela reenviar um evento já tratado). Ver
     // DonationReceiptService.
     if (pixPayment.scenario !== PixScenario.event_registration) {
-      this.donationReceiptService.generateForTransaction(transactionId).catch((err) => {
+      this.donationReceiptService.generateForTransaction(transactionId, scope).catch((err) => {
         this.logger.warn(`Falha ao gerar recibo de doação (transaction=${transactionId}): ${String(err)}`);
       });
     }
