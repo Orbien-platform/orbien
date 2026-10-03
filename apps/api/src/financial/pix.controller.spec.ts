@@ -43,6 +43,8 @@ describe('PixController', () => {
       cancelSubscription: jest.fn(),
       createPublicDonation: jest.fn(),
       getPublicDonationStatus: jest.fn(),
+      listPublicIntents: jest.fn(),
+      settlePublicIntent: jest.fn(),
       handleWebhook: jest.fn(),
     } as unknown as jest.Mocked<PixService>;
 
@@ -161,6 +163,29 @@ describe('PixController', () => {
     expect(limite('getPublicDonationStatus')).toBe(120);
     expect(ttl('getPublicDonationStatus')).toBe(60_000);
     expect(limite('getPublicDonationStatus')).toBeGreaterThan(limite('createPublicDonation'));
+  });
+
+  it('listPublicIntents delega ao service, exige papel financeiro e NÃO exige plano (o Starter é quem mais precisa)', async () => {
+    pixService.listPublicIntents.mockResolvedValue({ data: [], total: 0 } as never);
+    const query = { page: 1, page_size: 20 };
+
+    const result = await controller.listPublicIntents(query as never, user);
+
+    expect(pixService.listPublicIntents).toHaveBeenCalledWith(user, query);
+    expect(result).toEqual({ data: [], total: 0 });
+    expect(rolesFor('listPublicIntents')).toEqual(DYNAMIC_ROLES);
+    expect(requiredPlanFor('listPublicIntents')).toBeUndefined();
+  });
+
+  it('settlePublicIntent delega ao service, exige papel financeiro e NÃO exige plano', async () => {
+    pixService.settlePublicIntent.mockResolvedValue({ id: 'i1', status: 'confirmed' } as never);
+
+    const result = await controller.settlePublicIntent('i1', user);
+
+    expect(pixService.settlePublicIntent).toHaveBeenCalledWith('i1', user);
+    expect(result).toEqual({ id: 'i1', status: 'confirmed' });
+    expect(rolesFor('settlePublicIntent')).toEqual(DYNAMIC_ROLES);
+    expect(requiredPlanFor('settlePublicIntent')).toBeUndefined();
   });
 
   it('handleWebhook (público) delega ao service com body e token', async () => {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -24,6 +25,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 import { CreatePublicDonationDto } from './dto/create-public-donation.dto';
+import { ListPublicIntentsQueryDto } from './dto/list-public-intents-query.dto';
 import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
 import { DonationReceiptService } from './donation-receipts.service';
 import { writeAuditLog } from '../common/audit/write-audit-log';
@@ -857,6 +859,158 @@ export class PixService {
     }
 
     return { cancelled, kept };
+  }
+
+  // ── Tesouraria: intenções da doação pública (PEND-14) ─────────────────────
+
+  /**
+   * As intenções da doação pública da congregação do tesoureiro: a chave
+   * estática copiada e paga fora daqui (a que só ele consegue casar com o
+   * extrato) e os QRs dinâmicos, com o estado de cada um. Escopo de tenant +
+   * congregação da sessão, como `listSubscriptions`; a RLS repete o corte.
+   */
+  async listPublicIntents(user: JwtPayload, query: ListPublicIntentsQueryDto) {
+    const where = {
+      tenant_id: user.tenant_id,
+      congregation_id: user.congregation_id,
+      scenario: PixScenario.public,
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.client.pixPayment.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: (query.page - 1) * query.page_size,
+        take: query.page_size,
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          created_at: true,
+          paid_at: true,
+          donor_name: true,
+          donor_email: true,
+          asaas_payment_id: true,
+          category: { select: { name: true } },
+        },
+      }),
+      this.prisma.client.pixPayment.count({ where }),
+    ]);
+
+    return {
+      data: rows.map((r) => ({
+        id: r.id,
+        reference: `PIX-${r.id.slice(0, 8).toUpperCase()}`,
+        amount: r.amount.toString(),
+        status: r.status,
+        // QR dinâmico se confirma sozinho (webhook); estática só pelo tesoureiro.
+        mode: r.asaas_payment_id ? ('dynamic' as const) : ('static' as const),
+        donor_name: r.donor_name,
+        donor_email: r.donor_email,
+        category_name: r.category.name,
+        created_at: r.created_at,
+        paid_at: r.paid_at,
+      })),
+      total,
+    };
+  }
+
+  /**
+   * Baixa manual de uma intenção de chave estática: o tesoureiro viu o PIX no
+   * extrato e confirma. É o único caminho que cria receita a partir dela —
+   * `createPublicDonation` nunca cria lançamento.
+   *
+   * - Intenção com cobrança na Asaas não dá baixa manual: quem confirma é o
+   *   webhook, e um clique aqui contaria o mesmo dinheiro duas vezes.
+   * - Idempotente pelo mesmo `updateMany` condicional do webhook: duas baixas
+   *   (ou baixa + corrida) criam UM lançamento; a segunda só devolve o estado.
+   * - `source: manual` — honesto sobre quem confirmou (o webhook usa
+   *   `pix_webhook`).
+   * - O recibo, se o tenant for Premium e o doador tiver declarado e-mail com
+   *   aceite, sai aqui também. Roda DENTRO do request (a transação do
+   *   `TenantContextInterceptor` já está aberta e um fire-and-forget usaria uma
+   *   transação encerrada); falha de e-mail/PDF não desfaz a baixa.
+   */
+  async settlePublicIntent(id: string, user: JwtPayload) {
+    const intent = await this.prisma.client.pixPayment.findFirst({
+      where: {
+        id,
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        scenario: PixScenario.public,
+      },
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        category_id: true,
+        asaas_payment_id: true,
+        donor_name: true,
+        donor_email: true,
+        donor_consent_version: true,
+      },
+    });
+    if (!intent) throw new NotFoundException('Intenção não encontrada');
+
+    if (intent.asaas_payment_id) {
+      throw new ConflictException(
+        'Esta doação tem QR code da Asaas e se confirma sozinha quando o pagamento chega',
+      );
+    }
+
+    if (intent.status === PixStatus.confirmed) return { id: intent.id, status: PixStatus.confirmed };
+
+    const transactionId = await this.prisma.runInTx(async (tx) => {
+      const { count } = await tx.pixPayment.updateMany({
+        where: { id: intent.id, status: { in: [PixStatus.pending, PixStatus.failed] } },
+        data: { status: PixStatus.confirmed, paid_at: new Date() },
+      });
+      if (count === 0) return null;
+
+      const transaction = await tx.financialTransaction.create({
+        data: {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          type: TransactionType.income,
+          amount: intent.amount,
+          occurred_at: new Date(),
+          description: 'Doação pública via PIX (baixa manual)',
+          category_id: intent.category_id,
+          source: TransactionSource.manual,
+          created_by_user_id: user.sub,
+        },
+        select: { id: true },
+      });
+      return transaction.id;
+    });
+
+    if (!transactionId) return { id: intent.id, status: PixStatus.confirmed };
+
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        actor_user_id: user.impersonated_by ?? user.sub,
+        entity: 'pix_payment',
+        action: 'pix.settled_manually',
+        after: { pix_payment_id: intent.id, transaction_id: transactionId },
+      },
+      this.logger,
+    );
+
+    const declaredDonor =
+      intent.donor_email && intent.donor_consent_version
+        ? { name: intent.donor_name, email: intent.donor_email }
+        : undefined;
+    try {
+      await this.donationReceiptService.generateForTransaction(transactionId, undefined, declaredDonor);
+    } catch (err) {
+      this.logger.warn(`Falha ao gerar recibo da baixa manual (transaction=${transactionId}): ${String(err)}`);
+    }
+
+    return { id: intent.id, status: PixStatus.confirmed };
   }
 
   /** Cobranças dinâmicas públicas ainda pendentes criadas na última hora. Roda sob o contexto da igreja. */

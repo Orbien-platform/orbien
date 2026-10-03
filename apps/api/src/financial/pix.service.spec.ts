@@ -26,6 +26,7 @@
 
 import {
   BadRequestException,
+  ConflictException,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -108,6 +109,10 @@ type Opts = {
   abandoned?: { id: string; asaas_payment_id: string }[];
   /** Status HTTP com que o `DELETE` na Asaas falha (404 = cobrança já não existe). */
   httpDeleteStatus?: number;
+  /** Linhas que `pixPayment.findMany` devolve na lista de intenções da tesouraria. */
+  intents?: Record<string, unknown>[];
+  /** Total que `pixPayment.count` devolve para a mesma lista. */
+  intentsTotal?: number;
 };
 
 function harness(opts: Opts = {}) {
@@ -139,6 +144,9 @@ function harness(opts: Opts = {}) {
     countWheres: [] as Record<string, unknown>[],
     /** Gravações de `asaas_payment_id`/`qr_code` na linha da doação pública. */
     chargeLinks: [] as Record<string, unknown>[],
+    /** Argumentos de `pixPayment.findMany` / `count` da lista de intenções. */
+    intentsFindMany: undefined as Record<string, unknown> | undefined,
+    intentsCountWhere: undefined as Record<string, unknown> | undefined,
     /** Consulta da limpeza (`prisma.system.pixPayment.findMany`). */
     abandonedQuery: undefined as Record<string, unknown> | undefined,
     /** `updateMany` da limpeza que marca a linha `failed`. */
@@ -296,9 +304,19 @@ function harness(opts: Opts = {}) {
           cap.pixPayments.push(args.data);
           return Promise.resolve({ id: 'pix-1', ...args.data });
         },
+        // `count` serve a duas consultas: o teto de cobranças pendentes e o total
+        // da lista de intenções — esta é a que filtra por congregação.
         count: (args: { where: Record<string, unknown> }) => {
+          if ('congregation_id' in args.where) {
+            cap.intentsCountWhere = args.where;
+            return Promise.resolve(opts.intentsTotal ?? opts.intents?.length ?? 0);
+          }
           cap.countWheres.push(args.where);
           return Promise.resolve(opts.pendingDynamicCount ?? 0);
+        },
+        findMany: (args: Record<string, unknown>) => {
+          cap.intentsFindMany = args;
+          return Promise.resolve(opts.intents ?? []);
         },
         updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
           if (opts.linkChargeFails) return Promise.reject(new Error('banco fora do ar'));
@@ -1747,6 +1765,269 @@ describe('PixService', () => {
       expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 0 });
       expect(cap.abandonedQuery).toBeUndefined();
       expect(cap.deletes).toEqual([]);
+    });
+  });
+
+  describe('listPublicIntents (DPUB-26)', () => {
+    const intent = (extra: Record<string, unknown> = {}) => ({
+      id: '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11',
+      amount: new Prisma.Decimal('50.00'),
+      status: 'pending',
+      created_at: new Date('2026-10-01T12:00:00Z'),
+      paid_at: null,
+      donor_name: 'Ana',
+      donor_email: 'ana@igreja.com',
+      asaas_payment_id: null,
+      category: { name: 'Oferta' },
+      ...extra,
+    });
+    const query = { page: 1, page_size: 20 };
+
+    it('devolve referência, valor, estado, doador declarado e categoria, mais o total', async () => {
+      const { service } = harness({ intents: [intent()], intentsTotal: 7 });
+
+      const result = await service.listPublicIntents(user, query);
+
+      expect(result.total).toBe(7);
+      expect(result.data).toEqual([
+        {
+          id: '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11',
+          reference: 'PIX-8C9F9A52',
+          amount: '50',
+          status: 'pending',
+          mode: 'static',
+          donor_name: 'Ana',
+          donor_email: 'ana@igreja.com',
+          category_name: 'Oferta',
+          created_at: new Date('2026-10-01T12:00:00Z'),
+          paid_at: null,
+        },
+      ]);
+    });
+
+    it('com cobrança na Asaas a intenção é `dynamic`; sem, `static`', async () => {
+      const { service } = harness({
+        intents: [intent({ asaas_payment_id: 'pay_1' }), intent({ asaas_payment_id: null })],
+      });
+
+      const result = await service.listPublicIntents(user, query);
+
+      expect(result.data.map((r) => r.mode)).toEqual(['dynamic', 'static']);
+    });
+
+    it('só lista o cenário `public` da tenant e da congregação da sessão, tanto nas linhas quanto no total', async () => {
+      const { service, cap } = harness();
+
+      await service.listPublicIntents(user, query);
+
+      const esperado = { tenant_id: 't1', congregation_id: 'c1', scenario: 'public' };
+      expect(cap.intentsFindMany?.['where']).toEqual(esperado);
+      expect(cap.intentsCountWhere).toEqual(esperado);
+    });
+
+    it('filtra por estado quando pedido', async () => {
+      const { service, cap } = harness();
+
+      await service.listPublicIntents(user, { ...query, status: 'pending' as never });
+
+      expect(cap.intentsFindMany?.['where']).toEqual({
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        scenario: 'public',
+        status: 'pending',
+      });
+      expect(cap.intentsCountWhere).toMatchObject({ status: 'pending' });
+    });
+
+    it('as mais novas primeiro, paginadas', async () => {
+      const { service, cap } = harness();
+
+      await service.listPublicIntents(user, { page: 3, page_size: 10 });
+
+      expect(cap.intentsFindMany).toMatchObject({
+        orderBy: { created_at: 'desc' },
+        skip: 20,
+        take: 10,
+      });
+    });
+
+    it('lista vazia: data vazia e total zero', async () => {
+      const { service } = harness();
+
+      expect(await service.listPublicIntents(user, query)).toEqual({ data: [], total: 0 });
+    });
+  });
+
+  describe('settlePublicIntent — baixa manual da chave estática (DPUB-26)', () => {
+    const ID = '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11';
+    const estatica = (extra: Record<string, unknown> = {}) => ({
+      id: ID,
+      tenant_id: 't1',
+      congregation_id: 'c1',
+      amount: new Prisma.Decimal('50.00'),
+      status: 'pending',
+      category_id: 'cat-oferta',
+      asaas_payment_id: null,
+      donor_name: null,
+      donor_email: null,
+      donor_consent_version: null,
+      ...extra,
+    });
+
+    it('intenção inexistente (ou de outra igreja/congregação): 404 e nada é criado', async () => {
+      const { service, cap } = harness({ pixPayment: null });
+
+      await expect(service.settlePublicIntent(ID, user)).rejects.toBeInstanceOf(NotFoundException);
+      expect(cap.transactions).toEqual([]);
+    });
+
+    it('procura só no cenário `public`, na tenant e na congregação da sessão', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.findFirstArgs[0]).toMatchObject({
+        where: { id: ID, tenant_id: 't1', congregation_id: 'c1', scenario: 'public' },
+      });
+    });
+
+    it('intenção com cobrança na Asaas: 409 — quem confirma é o webhook; nenhum lançamento', async () => {
+      const { service, cap } = harness({ pixPayment: estatica({ asaas_payment_id: 'pay_1' }) });
+
+      await expect(service.settlePublicIntent(ID, user)).rejects.toBeInstanceOf(ConflictException);
+      expect(cap.transactions).toEqual([]);
+      expect(cap.updates).toEqual([]);
+    });
+
+    it('pendente: confirma e cria 1 lançamento de receita manual, na categoria da linha, por quem deu a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      const result = await service.settlePublicIntent(ID, user);
+
+      expect(result).toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.updates[0]).toMatchObject({
+        where: { id: ID, status: { in: ['pending', 'failed'] } },
+        data: { status: 'confirmed' },
+      });
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.transactions[0]).toMatchObject({
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        type: 'income',
+        source: 'manual',
+        category_id: 'cat-oferta',
+        created_by_user_id: 'user-1',
+        description: 'Doação pública via PIX (baixa manual)',
+      });
+      expect(String(cap.transactions[0]?.['amount'])).toBe('50');
+    });
+
+    it('linha `failed` (limpeza já rodou) também aceita a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica({ status: 'failed' }) });
+
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('já confirmada: devolve o estado, sem lançamento, sem auditoria nova', async () => {
+      const { service, cap } = harness({ pixPayment: estatica({ status: 'confirmed' }) });
+
+      const result = await service.settlePublicIntent(ID, user);
+
+      expect(result).toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.transactions).toEqual([]);
+      expect(cap.audits).toEqual([]);
+    });
+
+    it('duas baixas: a segunda não cria outro lançamento', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, user);
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('perdeu a corrida (outra baixa confirmou entre a leitura e a escrita): sem lançamento e sem auditoria', async () => {
+      const { service, cap } = harness({ pixPayment: estatica(), perdeCorrida: true });
+
+      const result = await service.settlePublicIntent(ID, user);
+
+      expect(result).toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.transactions).toEqual([]);
+      expect(cap.audits).toEqual([]);
+    });
+
+    it('deixa rastro em audit_logs, em nome de quem deu a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.audits).toEqual([
+        {
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          actor_user_id: 'user-1',
+          entity: 'pix_payment',
+          action: 'pix.settled_manually',
+          after: { pix_payment_id: ID, transaction_id: 'tx-1' },
+        },
+      ]);
+    });
+
+    it('sessão de suporte: o autor da auditoria é quem impersonou', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, { ...user, impersonated_by: 'suporte-9' });
+
+      expect(cap.audits[0]).toMatchObject({ actor_user_id: 'suporte-9' });
+    });
+
+    it('falha da auditoria não desfaz a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica(), auditThrows: true });
+
+      await expect(service.settlePublicIntent(ID, user)).resolves.toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    describe('recibo', () => {
+      it('doador declarou e-mail com aceite: o recibo é pedido com o doador declarado, no request', async () => {
+        const { service, cap } = harness({
+          pixPayment: estatica({
+            donor_name: 'Ana',
+            donor_email: 'ana@igreja.com',
+            donor_consent_version: 'donor_consent_v1',
+          }),
+        });
+
+        await service.settlePublicIntent(ID, user);
+
+        expect(cap.receiptCalls).toEqual(['tx-1']);
+        expect(cap.receiptDonors).toEqual([{ name: 'Ana', email: 'ana@igreja.com' }]);
+        // Já está dentro da transação do request: não repassa escopo de RLS.
+        expect(cap.receiptScopes).toEqual([undefined]);
+      });
+
+      it('e-mail sem aceite gravado: pede o recibo sem doador declarado (anônimo)', async () => {
+        const { service, cap } = harness({
+          pixPayment: estatica({ donor_name: 'Ana', donor_email: 'ana@igreja.com' }),
+        });
+
+        await service.settlePublicIntent(ID, user);
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+
+      it('falha do recibo (e-mail fora do ar) não desfaz a baixa', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const { service, cap } = harness({ pixPayment: estatica(), receiptRejects: true });
+
+        await expect(service.settlePublicIntent(ID, user)).resolves.toEqual({ id: ID, status: 'confirmed' });
+
+        expect(cap.transactions).toHaveLength(1);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('tx-1'));
+      });
     });
   });
 

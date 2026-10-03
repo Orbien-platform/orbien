@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -27,6 +28,7 @@ import { PixService } from './pix.service';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
 import { CreatePublicDonationDto } from './dto/create-public-donation.dto';
+import { ListPublicIntentsQueryDto } from './dto/list-public-intents-query.dto';
 
 const FINANCIAL_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 
@@ -96,6 +98,28 @@ export class PixController {
   @HttpCode(HttpStatus.OK)
   createPublicDonation(@Body() dto: CreatePublicDonationDto) {
     return this.pixService.createPublicDonation(dto);
+  }
+
+  // ── Tesouraria: intenções da doação pública (PEND-14) ──────────────────────
+  // Sem `@RequiresPlan`: o Starter é quem mais precisa — a chave estática só se
+  // confirma pelo tesoureiro. Leitura e baixa têm o mesmo corte de papel dos
+  // demais endpoints financeiros.
+
+  @Get('public-intents')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @Roles(...FINANCIAL_ROLES)
+  listPublicIntents(@Query() query: ListPublicIntentsQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.pixService.listPublicIntents(user, query);
+  }
+
+  @Post('public-intents/:id/settle')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @Roles(...FINANCIAL_ROLES)
+  @HttpCode(HttpStatus.OK)
+  settlePublicIntent(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.pixService.settlePublicIntent(id, user);
   }
 
   // Polling da página pública: sem login, só `status` + `expires_at`. O limite
