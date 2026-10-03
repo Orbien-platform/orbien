@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { randomUUID } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import {
   Prisma,
@@ -563,15 +563,19 @@ export class PixService {
    * Assinatura cancelada não gera lançamento — a Asaas para de cobrar quando
    * `cancelSubscription` chama `DELETE /subscriptions/:id`, mas um evento em
    * trânsito na hora do cancelamento ainda pode chegar depois.
+   *
+   * Roda DENTRO da transação do webhook (contexto de tenant já fixado), por
+   * isso a corrida entre duas entregas não pode ser um `create` que falha com
+   * P2002: no Postgres um erro dentro da transação a aborta, e a recarga
+   * seguinte também falharia. `createMany ... skipDuplicates` vira `ON
+   * CONFLICT DO NOTHING` — quem perde a corrida só não insere, e a leitura
+   * logo depois acha a linha da outra entrega.
    */
   private async createPixPaymentFromSubscriptionWebhook(
-    payload: Record<string, unknown>,
+    asaasSubscriptionId: string | undefined,
     asaasPaymentId: string,
     select: Prisma.PixPaymentSelect,
   ) {
-    const asaasSubscriptionId = (payload['payment'] as Record<string, unknown> | undefined)?.[
-      'subscription'
-    ] as string | undefined;
     if (!asaasSubscriptionId) return null;
 
     const subscription = await this.prisma.client.pixSubscription.findUnique({
@@ -579,9 +583,9 @@ export class PixService {
     });
     if (!subscription || subscription.status !== PixSubscriptionStatus.active) return null;
 
-    try {
-      return await this.prisma.client.pixPayment.create({
-        data: {
+    await this.prisma.client.pixPayment.createMany({
+      data: [
+        {
           tenant_id: subscription.tenant_id,
           congregation_id: subscription.congregation_id,
           scenario: PixScenario.recurring,
@@ -592,28 +596,54 @@ export class PixService {
           asaas_payment_id: asaasPaymentId,
           pix_subscription_id: subscription.id,
         },
-        select,
-      });
-    } catch (err) {
-      // Unique em asaas_payment_id: outra entrega concorrente do mesmo evento
-      // já criou esta linha entre o findFirst acima e este create. Recarrega
-      // em vez de falhar o webhook — a idempotência de handleWebhook cuida do
-      // resto a partir daqui.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.prisma.client.pixPayment.findFirst({
-          where: { asaas_payment_id: asaasPaymentId },
-          select,
-        });
-      }
-      throw err;
-    }
+      ],
+      skipDuplicates: true,
+    });
+
+    return this.prisma.client.pixPayment.findFirst({
+      where: { asaas_payment_id: asaasPaymentId },
+      select,
+    });
   }
 
   // ── Webhook Asaas ─────────────────────────────────────────────────────────
 
-  async handleWebhook(payload: Record<string, unknown>, token: string | undefined) {
+  /**
+   * Comparação em tempo constante: o token é o único segredo que separa a
+   * internet de "criar receita no financeiro de qualquer igreja".
+   */
+  private isValidWebhookToken(token: string | undefined): boolean {
     const expected = process.env['ASAAS_WEBHOOK_TOKEN'];
-    if (!expected || token !== expected) {
+    if (!expected || token === undefined) return false;
+
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  /**
+   * O webhook roda como `orbien_app` sem `app.tenant_id` — `pix_payments`,
+   * `pix_subscriptions` e `financial_transactions` não aparecem para ele, e a
+   * confirmação era perdida em silêncio (200, nenhum lançamento). A única
+   * coisa que ele conhece é o id da Asaas, e `pix_webhook_scope()`
+   * (024_rls_pix_webhook_scope.sql, SECURITY DEFINER) é o caminho
+   * "id da Asaas → tenant + congregação". Com o escopo em mãos, o resto roda
+   * sob a RLS normal.
+   */
+  private async resolveWebhookScope(
+    asaasPaymentId: string,
+    asaasSubscriptionId: string | undefined,
+  ): Promise<{ tenantId: string; congregationId: string } | null> {
+    const rows = await this.prisma.$queryRaw<
+      { scope_tenant_id: string; scope_congregation_id: string }[]
+    >`SELECT scope_tenant_id, scope_congregation_id FROM pix_webhook_scope(${asaasPaymentId}, ${asaasSubscriptionId ?? null})`;
+
+    if (rows.length === 0) return null;
+    return { tenantId: rows[0].scope_tenant_id, congregationId: rows[0].scope_congregation_id };
+  }
+
+  async handleWebhook(payload: Record<string, unknown>, token: string | undefined) {
+    if (!this.isValidWebhookToken(token)) {
       throw new UnauthorizedException('Token inválido');
     }
 
@@ -622,12 +652,20 @@ export class PixService {
       return { received: true };
     }
 
-    const asaasPaymentId = (payload['payment'] as Record<string, unknown>)?.['id'] as
-      | string
-      | undefined;
+    const payment = payload['payment'] as Record<string, unknown> | undefined;
+    const asaasPaymentId = payment?.['id'] as string | undefined;
 
     if (!asaasPaymentId) {
-      this.logger.warn('Webhook sem payment.id', payload);
+      // Só o evento: o payload da Asaas traz dados do pagador e não vai para log.
+      this.logger.warn(`Webhook sem payment.id (event=${event})`);
+      return { received: true };
+    }
+
+    const asaasSubscriptionId = payment?.['subscription'] as string | undefined;
+    const scope = await this.resolveWebhookScope(asaasPaymentId, asaasSubscriptionId);
+
+    if (!scope) {
+      this.logger.warn(`PixPayment não encontrado para asaas_id=${asaasPaymentId}`);
       return { received: true };
     }
 
@@ -642,67 +680,64 @@ export class PixService {
       scenario: true,
     } as const;
 
-    let pixPayment = await this.prisma.client.pixPayment.findFirst({
-      where: { asaas_payment_id: asaasPaymentId },
-      select: pixPaymentSelect,
-    });
+    // Tudo — achar a linha, materializar a cobrança recorrente, confirmar e
+    // lançar — roda numa só transação com o contexto do tenant da LINHA
+    // (devolvido por `pix_webhook_scope`, nunca do payload). Uma falha em
+    // qualquer passo desfaz o conjunto e a Asaas reenvia o evento.
+    const outcome = await this.prisma.runInTx(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${scope.tenantId}, true), set_config('app.congregation_id', ${scope.congregationId}, true)`;
 
-    // PIX recorrente (PROD-27): diferente dos cenários 2/3, a cobrança de
-    // cada ciclo da assinatura Asaas nunca passa por um `create*` nosso — ela
-    // nasce na própria Asaas, e a primeira notícia que temos é este webhook.
-    // Sem `PixPayment` pré-existente para achar por `asaas_payment_id`, o que
-    // liga a cobrança à igreja certa é `payload.payment.subscription`.
-    if (!pixPayment) {
-      pixPayment = await this.createPixPaymentFromSubscriptionWebhook(
-        payload,
-        asaasPaymentId,
-        pixPaymentSelect,
-      );
-    }
+      let pixPayment = await this.prisma.client.pixPayment.findFirst({
+        where: { asaas_payment_id: asaasPaymentId },
+        select: pixPaymentSelect,
+      });
 
-    if (!pixPayment) {
-      this.logger.warn(`PixPayment não encontrado para asaas_id=${asaasPaymentId}`);
-      return { received: true };
-    }
+      // PIX recorrente (PROD-27): diferente dos cenários 2/3, a cobrança de
+      // cada ciclo da assinatura Asaas nunca passa por um `create*` nosso — ela
+      // nasce na própria Asaas, e a primeira notícia que temos é este webhook.
+      // Sem `PixPayment` pré-existente para achar por `asaas_payment_id`, o que
+      // liga a cobrança à igreja certa é `payload.payment.subscription`.
+      if (!pixPayment) {
+        pixPayment = await this.createPixPaymentFromSubscriptionWebhook(
+          asaasSubscriptionId,
+          asaasPaymentId,
+          pixPaymentSelect,
+        );
+      }
 
-    // Idempotência. A Asaas reenvia o webhook quando não recebe 200 a tempo, e
-    // manda `PAYMENT_CONFIRMED` e `PAYMENT_RECEIVED` para o mesmo pagamento —
-    // os dois caem aqui. Sem esta guarda, cada reenvio criava OUTRO lançamento
-    // de receita, e o dinheiro aparecia dobrado no DRE sem nenhum erro à vista.
-    //
-    // O estado é a própria linha do pagamento: `confirmed` só é gravado no
-    // mesmo `runInTx` que cria o lançamento, então "já está confirmado"
-    // equivale a "o lançamento já existe".
-    if (pixPayment.status === PixStatus.confirmed) {
-      this.logger.log(
-        `Webhook repetido para asaas_id=${asaasPaymentId} (${event}); pagamento já confirmado`,
-      );
-      return { received: true };
-    }
+      if (!pixPayment) return { kind: 'not_found' } as const;
 
-    const adminUserId = await this.resolveTenantAdmin(pixPayment.tenant_id);
-    const amount = (payload['payment'] as Record<string, unknown>)?.['value']
-      ? new Prisma.Decimal(
-          String((payload['payment'] as Record<string, unknown>)['value']),
-        )
-      : pixPayment.amount;
+      // Idempotência. A Asaas reenvia o webhook quando não recebe 200 a tempo, e
+      // manda `PAYMENT_CONFIRMED` e `PAYMENT_RECEIVED` para o mesmo pagamento —
+      // os dois caem aqui. Sem esta guarda, cada reenvio criava OUTRO
+      // lançamento de receita, e o dinheiro aparecia dobrado no DRE sem nenhum
+      // erro à vista.
+      //
+      // O estado é a própria linha do pagamento: `confirmed` só é gravado no
+      // mesmo `runInTx` que cria o lançamento, então "já está confirmado"
+      // equivale a "o lançamento já existe".
+      if (pixPayment.status === PixStatus.confirmed) return { kind: 'already_confirmed' } as const;
 
-    // A guarda que realmente fecha a porta é ESTE `updateMany` condicional, e
-    // não o `if` acima: `pending → confirmed` só acontece para quem chega
-    // primeiro, e o banco resolve o empate. O `if` anterior é atalho — evita
-    // trabalho e deixa a linha de log —, mas entre ele e este ponto há dois
-    // `await`, e duas entregas simultâneas (a Asaas manda `PAYMENT_CONFIRMED`
-    // e `PAYMENT_RECEIVED` para o mesmo pagamento) passariam as duas.
-    //
-    // `count === 0` significa que outra entrega ganhou a corrida e já criou o
-    // lançamento. Nada a fazer, e a resposta continua 200.
-    const transactionId = await this.prisma.runInTx(async (tx) => {
+      const adminUserId = await this.resolveTenantAdmin(pixPayment.tenant_id);
+      const amount = payment?.['value']
+        ? new Prisma.Decimal(String(payment['value']))
+        : pixPayment.amount;
+
+      // A guarda que realmente fecha a porta é ESTE `updateMany` condicional, e
+      // não o `if` acima: `pending → confirmed` só acontece para quem chega
+      // primeiro, e o banco resolve o empate. O `if` anterior é atalho — evita
+      // trabalho e deixa a linha de log —, mas entre ele e este ponto há
+      // `await`, e duas entregas simultâneas (a Asaas manda `PAYMENT_CONFIRMED`
+      // e `PAYMENT_RECEIVED` para o mesmo pagamento) passariam as duas.
+      //
+      // `count === 0` significa que outra entrega ganhou a corrida e já criou o
+      // lançamento. Nada a fazer, e a resposta continua 200.
       const { count } = await tx.pixPayment.updateMany({
         where: { id: pixPayment.id, status: PixStatus.pending },
         data: { status: PixStatus.confirmed, paid_at: new Date() },
       });
 
-      if (count === 0) return null;
+      if (count === 0) return { kind: 'lost_race' } as const;
 
       const transaction = await tx.financialTransaction.create({
         data: {
@@ -731,26 +766,45 @@ export class PixService {
       // recontagem de vaga: a reserva já aconteceu, e recontar abriria a
       // mesma corrida que o pedido evitou.
       if (pixPayment.scenario === PixScenario.event_registration) {
-        const { count } = await tx.eventRegistration.updateMany({
+        const { count: registrations } = await tx.eventRegistration.updateMany({
           where: { pix_payment_id: pixPayment.id, status: 'pending_payment' },
           data: { status: 'confirmed', payment_status: 'paid' },
         });
-        if (count === 0) {
+        if (registrations === 0) {
           this.logger.warn(
             `Webhook de inscrição paga sem registro pendente para pix_payment=${pixPayment.id}`,
           );
         }
       }
 
-      return transaction.id;
+      return {
+        kind: 'confirmed',
+        transactionId: transaction.id,
+        pixPayment,
+        adminUserId,
+      } as const;
     });
 
-    if (!transactionId) {
+    if (outcome.kind === 'not_found') {
+      this.logger.warn(`PixPayment não encontrado para asaas_id=${asaasPaymentId}`);
+      return { received: true };
+    }
+
+    if (outcome.kind === 'already_confirmed') {
+      this.logger.log(
+        `Webhook repetido para asaas_id=${asaasPaymentId} (${event}); pagamento já confirmado`,
+      );
+      return { received: true };
+    }
+
+    if (outcome.kind === 'lost_race') {
       this.logger.log(
         `Entrega simultânea para asaas_id=${asaasPaymentId} (${event}); outra já confirmou`,
       );
       return { received: true };
     }
+
+    const { transactionId, pixPayment, adminUserId } = outcome;
 
     // Best-effort por necessidade, não por conveniência: devolver erro à
     // Asaas faz ela reenviar o evento, e o reenvio de um evento já tratado é

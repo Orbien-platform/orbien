@@ -26,6 +26,7 @@
 
 import {
   BadRequestException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -88,6 +89,12 @@ type Opts = {
   receiptRejects?: boolean;
   /** `count` que `tx.eventRegistration.updateMany` devolve (PROD-24). */
   eventRegistrationFinalizeCount?: number;
+  /**
+   * O que `pix_webhook_scope()` devolve (024). Sem isto, o fake resolve o
+   * escopo `t1/c1` quando há `PixPayment` ou uma assinatura que casa com
+   * `payment.subscription` — e `[]` quando o id da Asaas é desconhecido.
+   */
+  webhookScope?: { scope_tenant_id: string; scope_congregation_id: string }[];
 };
 
 function harness(opts: Opts = {}) {
@@ -105,6 +112,10 @@ function harness(opts: Opts = {}) {
     contexts: [] as unknown[][],
     pixSubscriptions: [] as Record<string, unknown>[],
     deletes: [] as string[],
+    /** Argumentos de cada chamada a `pix_webhook_scope(paymentId, subscriptionId)`. */
+    scopeQueries: [] as unknown[][],
+    /** Quantos `set_config` já tinham rodado quando cada leitura de `pix_payments` aconteceu. */
+    contextsAtRead: [] as number[],
   };
 
   let catCall = 0;
@@ -240,29 +251,31 @@ function harness(opts: Opts = {}) {
       },
       pixPayment: {
         create: (args: { data: Record<string, unknown> }) => {
-          // Reativo (PROD-27): só entra aqui quando não havia `registro`
-          // (cenário 2/3 sempre pré-criam a linha antes do webhook).
-          if (registro === null) {
-            if (opts.reactiveCreateThrowsUnknownError) {
-              return Promise.reject(new Error('disco cheio'));
-            }
-            if (
-              novoPagamento !== null &&
-              novoPagamento['asaas_payment_id'] === args.data['asaas_payment_id']
-            ) {
-              return Promise.reject(
-                new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-                  code: 'P2002',
-                  clientVersion: 'test',
-                }),
-              );
-            }
-            novoPagamento = { id: 'pix-1', status: 'pending', ...args.data };
-          }
           cap.pixPayments.push(args.data);
           return Promise.resolve({ id: 'pix-1', ...args.data });
         },
+        // Reativo (PROD-27): `ON CONFLICT DO NOTHING` — o webhook roda dentro
+        // de uma transação, onde um P2002 abortaria tudo. Só entra aqui
+        // quando não havia `registro` (cenário 2/3 sempre pré-criam a linha
+        // antes do webhook). Segunda inserção do mesmo `asaas_payment_id`
+        // devolve `count: 0`, como o Postgres com `skipDuplicates`.
+        createMany: (args: { data: Record<string, unknown>[]; skipDuplicates?: boolean }) => {
+          const [dados] = args.data;
+          if (opts.reactiveCreateThrowsUnknownError) {
+            return Promise.reject(new Error('disco cheio'));
+          }
+          if (
+            novoPagamento !== null &&
+            novoPagamento['asaas_payment_id'] === dados['asaas_payment_id']
+          ) {
+            return Promise.resolve({ count: 0 });
+          }
+          novoPagamento = { id: 'pix-1', status: 'pending', ...dados };
+          cap.pixPayments.push(dados);
+          return Promise.resolve({ count: 1 });
+        },
         findFirst: () => {
+          cap.contextsAtRead.push(cap.contexts.length);
           if (registro === null) {
             // Corrida (raceOnReactiveCreate): a PRIMEIRA leitura ainda não
             // vê a linha que a "outra entrega" só grava entre esta chamada e
@@ -324,6 +337,20 @@ function harness(opts: Opts = {}) {
         ...(after === null ? {} : { after: JSON.parse(after) as unknown }),
       });
       return Promise.resolve(1);
+    },
+    // `pix_webhook_scope()` (024): o webhook só conhece o id da Asaas.
+    $queryRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      cap.scopeQueries.push(valores);
+      if (opts.webhookScope) return Promise.resolve(opts.webhookScope);
+      const [, subscriptionId] = valores;
+      const achou =
+        registro !== null ||
+        (typeof subscriptionId === 'string' &&
+          assinatura !== null &&
+          assinatura['asaas_subscription_id'] === subscriptionId);
+      return Promise.resolve(
+        achou ? [{ scope_tenant_id: 't1', scope_congregation_id: 'c1' }] : [],
+      );
     },
     runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   } as unknown as PrismaService;
@@ -1074,6 +1101,102 @@ describe('PixService', () => {
       ).rejects.toThrow();
       expect(cap.transactions).toEqual([]);
       expect(cap.updates).toEqual([]);
+    });
+  });
+
+  describe('handleWebhook — escopo de RLS (DPUB-06)', () => {
+    beforeEach(() => {
+      process.env['ASAAS_WEBHOOK_TOKEN'] = 'segredo';
+    });
+
+    it('pede o escopo à função SQL pelo id do pagamento, sem assinatura quando o payload não traz', async () => {
+      const { service, cap } = harness();
+
+      await service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo');
+
+      expect(cap.scopeQueries).toEqual([['pay_123', null]]);
+    });
+
+    it('passa também a assinatura quando o payload a traz (cobrança recorrente nova)', async () => {
+      const { service, cap } = harness({ pixPayment: null });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_novo', subscription: 'sub_asaas_1' } },
+        'segredo',
+      );
+
+      expect(cap.scopeQueries).toEqual([['pay_novo', 'sub_asaas_1']]);
+    });
+
+    it('fixa app.tenant_id e app.congregation_id com o escopo devolvido, ANTES de ler a linha', async () => {
+      const { service, cap } = harness({
+        webhookScope: [{ scope_tenant_id: 'tenant-dono', scope_congregation_id: 'cong-dona' }],
+      });
+
+      await service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo');
+
+      expect(cap.contexts[0]).toEqual(['tenant-dono', 'cong-dona']);
+      expect(cap.contextsAtRead[0]).toBe(1);
+    });
+
+    it('id da Asaas sem escopo: 200, nenhum contexto fixado, nada lido nem lançado', async () => {
+      const { service, cap } = harness({ webhookScope: [] });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_de_outro_ambiente' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.contexts).toEqual([]);
+      expect(cap.contextsAtRead).toEqual([]);
+      expect(cap.transactions).toEqual([]);
+    });
+
+    it('o contexto vem da função SQL, nunca do payload — tenant forjado no corpo é ignorado', async () => {
+      const { service, cap } = harness({
+        webhookScope: [{ scope_tenant_id: 'tenant-dono', scope_congregation_id: 'cong-dona' }],
+      });
+
+      await service.handleWebhook(
+        {
+          event: 'PAYMENT_CONFIRMED',
+          tenant_id: 'tenant-forjado',
+          payment: { id: 'pay_123', externalReference: 'tenant-forjado' },
+        },
+        'segredo',
+      );
+
+      expect(cap.contexts[0]).toEqual(['tenant-dono', 'cong-dona']);
+    });
+
+    it('o aviso de "sem payment.id" não despeja o payload (nome/CPF do pagador) no log', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service } = harness();
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { customer: { name: 'Fulano', cpfCnpj: '12345678900' } } },
+        'segredo',
+      );
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]).toEqual(['Webhook sem payment.id (event=PAYMENT_CONFIRMED)']);
+    });
+
+    it('token com o mesmo tamanho do segredo, mas diferente, é 401', async () => {
+      const { service } = harness();
+
+      await expect(
+        service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredx'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('token válido mas de tamanho diferente do segredo não lança erro de buffer — é 401', async () => {
+      const { service } = harness();
+
+      await expect(
+        service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo-bem-mais-longo'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 
