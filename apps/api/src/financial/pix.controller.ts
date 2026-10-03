@@ -24,6 +24,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { PixService } from './pix.service';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
+import { CreatePublicDonationDto } from './dto/create-public-donation.dto';
 
 const FINANCIAL_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 
@@ -88,7 +89,7 @@ export class PixController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  createPublicDonation(@Body() dto: CreatePixDto) {
+  createPublicDonation(@Body() dto: CreatePublicDonationDto) {
     return this.pixService.createPublicDonation(dto);
   }
 

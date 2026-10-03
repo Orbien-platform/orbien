@@ -68,6 +68,8 @@ type Opts = {
   httpPost?: (url: string, body: unknown) => unknown;
   httpDelete?: (url: string) => unknown;
   httpFails?: boolean;
+  /** Só o GET cuja URL contém este trecho falha (ex.: `pixQrCode`, depois de a cobrança já existir). */
+  httpGetFailsFor?: string;
   httpDeleteFails?: boolean;
   auditThrows?: boolean;
   /**
@@ -95,6 +97,12 @@ type Opts = {
    * `payment.subscription` — e `[]` quando o id da Asaas é desconhecido.
    */
   webhookScope?: { scope_tenant_id: string; scope_congregation_id: string }[];
+  /** Plano do tenant do slug (doação pública). Default: Starter ativo. */
+  tenantPlan?: { plan: 'starter' | 'premium'; status: 'active' | 'trial' | 'suspended' | 'cancelled' } | null;
+  /** Cobranças dinâmicas públicas pendentes na última hora (teto por tenant). */
+  pendingDynamicCount?: number;
+  /** A gravação de `asaas_payment_id`/`qr_code` na linha falha (banco). */
+  linkChargeFails?: boolean;
 };
 
 function harness(opts: Opts = {}) {
@@ -118,6 +126,10 @@ function harness(opts: Opts = {}) {
     scopeQueries: [] as unknown[][],
     /** Quantos `set_config` já tinham rodado quando cada leitura de `pix_payments` aconteceu. */
     contextsAtRead: [] as number[],
+    /** Chamadas a `pixPayment.count` (teto de cobranças públicas) e os filtros usados. */
+    countWheres: [] as Record<string, unknown>[],
+    /** Gravações de `asaas_payment_id`/`qr_code` na linha da doação pública. */
+    chargeLinks: [] as Record<string, unknown>[],
   };
 
   let catCall = 0;
@@ -251,10 +263,25 @@ function harness(opts: Opts = {}) {
             opts.assignment === undefined ? { user_account_id: 'admin-1' } : opts.assignment,
           ),
       },
+      tenantPlan: {
+        findUnique: () =>
+          Promise.resolve(
+            opts.tenantPlan === undefined ? { plan: 'starter', status: 'active' } : opts.tenantPlan,
+          ),
+      },
       pixPayment: {
         create: (args: { data: Record<string, unknown> }) => {
           cap.pixPayments.push(args.data);
           return Promise.resolve({ id: 'pix-1', ...args.data });
+        },
+        count: (args: { where: Record<string, unknown> }) => {
+          cap.countWheres.push(args.where);
+          return Promise.resolve(opts.pendingDynamicCount ?? 0);
+        },
+        updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          if (opts.linkChargeFails) return Promise.reject(new Error('banco fora do ar'));
+          cap.chargeLinks.push(args);
+          return Promise.resolve({ count: 1 });
         },
         // Reativo (PROD-27): `ON CONFLICT DO NOTHING` — o webhook roda dentro
         // de uma transação, onde um P2002 abortaria tudo. Só entra aqui
@@ -361,6 +388,9 @@ function harness(opts: Opts = {}) {
     get: (url: string) => {
       cap.gets.push(url);
       if (opts.httpFails) return throwError(() => new Error('asaas fora do ar'));
+      if (opts.httpGetFailsFor && url.includes(opts.httpGetFailsFor)) {
+        return throwError(() => new Error('qr indisponível'));
+      }
       return of({
         data:
           opts.httpGet?.(url) ??
@@ -1075,6 +1105,293 @@ describe('PixService', () => {
       });
       expect(cap.transactions).toEqual([]);
       expect(cap.pixPayments).toEqual([]);
+    });
+
+    describe('QR dinâmico — igreja Premium (DPUB-01…05, 08, 10, 13, 14)', () => {
+      const premium = { plan: 'premium', status: 'active' } as const;
+
+      beforeEach(() => {
+        process.env['ASAAS_API_KEY'] = 'chave-asaas';
+        process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+      });
+
+      it('cria a cobrança na Asaas e devolve o QR, o copia-e-cola, o payment_id e a validade de 24h', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+        const antes = Date.now();
+
+        const result = await service.createPublicDonation(manualDto);
+
+        const id = String(cap.pixPayments[0]?.['id']);
+        expect(result).toMatchObject({
+          mode: 'dynamic',
+          pix_key: 'chave@igreja.test',
+          amount: 50,
+          church_name: 'App da Igreja',
+          transaction_ref: `PIX-${id.slice(0, 8).toUpperCase()}`,
+          payment_id: id,
+          qr_code: '00020126...br.gov.bcb.pix',
+          qr_code_image: 'iVBORw0KG',
+        });
+        const expiraEm = new Date((result as { expires_at: string }).expires_at).getTime();
+        expect(expiraEm).toBeGreaterThanOrEqual(antes + 24 * 60 * 60 * 1000);
+        expect(expiraEm).toBeLessThanOrEqual(Date.now() + 24 * 60 * 60 * 1000);
+        expect(result).not.toHaveProperty('fallback_reason');
+      });
+
+      it('a cobrança leva o valor, PIX, o id da linha como referência externa e descrição sem dado do doador', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        await service.createPublicDonation({
+          ...manualDto,
+          amount: 80.5,
+          donor_name: 'Fulano de Tal',
+          donor_email: 'fulano@teste.com',
+        });
+
+        const cobranca = cap.posts.find((p) => p.url.endsWith('/payments'));
+        const id = String(cap.pixPayments[0]?.['id']);
+        expect(cobranca?.body).toMatchObject({
+          customer: 'cus_1',
+          billingType: 'PIX',
+          value: 80.5,
+          description: 'Doação via Orbien',
+          externalReference: id,
+        });
+        // Minimização: nome e e-mail do doador não vão para a Asaas.
+        expect(JSON.stringify(cap.posts)).not.toContain('Fulano');
+        expect(JSON.stringify(cap.posts)).not.toContain('fulano@teste.com');
+      });
+
+      it('grava a linha ANTES de falar com a Asaas — se o processo cair depois da cobrança, o webhook ainda a acha', async () => {
+        let linhasQuandoACobrancaFoiCriada = -1;
+        const { service, cap } = harness({
+          tenantPlan: premium,
+          httpPost: (url) => {
+            if (url.endsWith('/payments')) linhasQuandoACobrancaFoiCriada = cap.pixPayments.length;
+            return undefined;
+          },
+        });
+
+        await service.createPublicDonation(manualDto);
+
+        expect(linhasQuandoACobrancaFoiCriada).toBe(1);
+      });
+
+      it('amarra o id da Asaas e o QR à linha, sob o contexto da igreja', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        await service.createPublicDonation(manualDto);
+
+        const id = String(cap.pixPayments[0]?.['id']);
+        expect(cap.chargeLinks).toEqual([
+          {
+            where: { id },
+            data: { asaas_payment_id: 'pay_123', qr_code: '00020126...br.gov.bcb.pix' },
+          },
+        ]);
+        expect(cap.contexts).toEqual([
+          ['t1', 'c1'],
+          ['t1', 'c1'],
+        ]);
+      });
+
+      it('a linha nasce no cenário `public`, pendente, e nenhum lançamento é criado (DPUB-08)', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        await service.createPublicDonation(manualDto);
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          scenario: 'public',
+          status: 'pending',
+          category_id: 'cat-oferta',
+          pix_key: 'chave@igreja.test',
+        });
+        expect(cap.transactions).toEqual([]);
+      });
+
+      it('plano em período de teste (`trial`) também recebe o QR', async () => {
+        const { service } = harness({ tenantPlan: { plan: 'premium', status: 'trial' } });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'dynamic' });
+      });
+
+      it.each(['suspended', 'cancelled'] as const)(
+        'Premium %s não gera cobrança nova: chave estática, Asaas intocada',
+        async (status) => {
+          const { service, cap } = harness({ tenantPlan: { plan: 'premium', status } });
+
+          const result = await service.createPublicDonation(manualDto);
+
+          expect(result).toMatchObject({ mode: 'static', pix_key: 'chave@igreja.test' });
+          expect(result).not.toHaveProperty('fallback_reason');
+          expect(cap.gets).toEqual([]);
+          expect(cap.posts).toEqual([]);
+        },
+      );
+
+      it('Starter: chave estática, sem fallback_reason, Asaas e teto intocados (DPUB-02)', async () => {
+        const { service, cap } = harness({ tenantPlan: { plan: 'starter', status: 'active' } });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', pix_key: 'chave@igreja.test', amount: 50 });
+        expect(result).not.toHaveProperty('fallback_reason');
+        expect(result).not.toHaveProperty('payment_id');
+        expect(cap.gets).toEqual([]);
+        expect(cap.posts).toEqual([]);
+        expect(cap.countWheres).toEqual([]);
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('tenant sem registro de plano é tratado como Starter', async () => {
+        const { service, cap } = harness({ tenantPlan: null });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static' });
+        expect(cap.posts).toEqual([]);
+      });
+
+      it('sem ASAAS_API_KEY no ambiente, cai para a chave estática com o motivo e sem chamar a Asaas', async () => {
+        delete process.env['ASAAS_API_KEY'];
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(cap.gets).toEqual([]);
+        expect(cap.posts).toEqual([]);
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('Asaas fora do ar: chave estática com o motivo, a intenção fica gravada, sem lançamento', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, httpFails: true });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({
+          mode: 'static',
+          pix_key: 'chave@igreja.test',
+          fallback_reason: 'provider_unavailable',
+        });
+        expect(result).not.toHaveProperty('qr_code');
+        expect(cap.pixPayments).toHaveLength(1);
+        expect(cap.chargeLinks).toEqual([]);
+        expect(cap.transactions).toEqual([]);
+        // A cobrança nem chegou a existir: não há o que cancelar.
+        expect(cap.deletes).toEqual([]);
+      });
+
+      it('cobrança criada mas QR indisponível: cancela a cobrança na Asaas e cai para a chave estática', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, httpGetFailsFor: 'pixQrCode' });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(cap.deletes).toEqual(['https://asaas.test/v3/payments/pay_123']);
+        expect(cap.chargeLinks).toEqual([]);
+      });
+
+      it('cobrança criada mas a linha não pôde ser atualizada: cancela a cobrança e cai para a chave estática', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, linkChargeFails: true });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(cap.deletes).toEqual(['https://asaas.test/v3/payments/pay_123']);
+      });
+
+      it('se nem o cancelamento da cobrança órfã der certo, o doador ainda recebe a chave estática', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const { service } = harness({
+          tenantPlan: premium,
+          httpGetFailsFor: 'pixQrCode',
+          httpDeleteFails: true,
+        });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('pay_123'));
+      });
+
+      it('teto de cobranças pendentes na última hora: acima dele, chave estática com o motivo e Asaas intocada', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, pendingDynamicCount: 60 });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'cap_reached' });
+        expect(cap.posts).toEqual([]);
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('um abaixo do teto ainda cobra', async () => {
+        const { service } = harness({ tenantPlan: premium, pendingDynamicCount: 59 });
+
+        expect(await service.createPublicDonation(manualDto)).toMatchObject({ mode: 'dynamic' });
+      });
+
+      it('o teto conta só pendentes públicas com cobrança, deste tenant, da última hora', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+        const antes = Date.now();
+
+        await service.createPublicDonation(manualDto);
+
+        const where = cap.countWheres[0] as {
+          tenant_id: string;
+          scenario: string;
+          status: string;
+          asaas_payment_id: unknown;
+          created_at: { gte: Date };
+        };
+        expect(where).toMatchObject({
+          tenant_id: 't1',
+          scenario: 'public',
+          status: 'pending',
+          asaas_payment_id: { not: null },
+        });
+        expect(where.created_at.gte.getTime()).toBeGreaterThanOrEqual(antes - 60 * 60 * 1000 - 1);
+        expect(where.created_at.gte.getTime()).toBeLessThanOrEqual(Date.now() - 60 * 60 * 1000 + 1);
+      });
+
+      it('o plano nunca vem do corpo: um `plan` forjado no DTO não abre cobrança para o Starter', async () => {
+        const { service, cap } = harness({ tenantPlan: { plan: 'starter', status: 'active' } });
+        const forjado = { ...manualDto, plan: 'premium', mode: 'dynamic' } as unknown as typeof manualDto;
+
+        const result = await service.createPublicDonation(forjado);
+
+        expect(result).toMatchObject({ mode: 'static' });
+        expect(cap.posts).toEqual([]);
+      });
+
+      it('honeypot: nem consulta plano nem fala com a Asaas', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        const result = await service.createPublicDonation({ ...manualDto, website: 'http://spam' });
+
+        expect(result).toEqual({ pix_key: '', amount: 50, church_name: '', transaction_ref: '' });
+        expect(cap.posts).toEqual([]);
+        expect(cap.pixPayments).toEqual([]);
+      });
+    });
+
+    describe('slug sem resposta distinguível (DPUB-14)', () => {
+      it.each([
+        ['slug inexistente', { tenant: null }],
+        ['igreja sem branding', { branding: null }],
+        ['branding sem chave PIX', { branding: { pix_key: null, app_name: 'X' } }],
+        ['tenant sem congregação', { congregation: null }],
+      ] as const)('%s: o MESMO 404, sem revelar o estado da configuração', async (_nome, opts) => {
+        const { service, cap } = harness(opts);
+
+        const erro = await service.createPublicDonation(manualDto).catch((e: unknown) => e);
+
+        expect(erro).toBeInstanceOf(NotFoundException);
+        expect((erro as NotFoundException).message).toBe('Igreja não encontrada');
+        expect(cap.pixPayments).toEqual([]);
+      });
     });
 
     it('sem categoria de receita, vira 400 e não grava nada', async () => {

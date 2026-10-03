@@ -10,6 +10,8 @@ import { HttpService } from '@nestjs/axios';
 import { randomUUID, timingSafeEqual } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import {
+  PlanStatus,
+  PlanType,
   Prisma,
   PixScenario,
   PixStatus,
@@ -20,6 +22,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
+import { CreatePublicDonationDto } from './dto/create-public-donation.dto';
 import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
 import { DonationReceiptService } from './donation-receipts.service';
 import { writeAuditLog } from '../common/audit/write-audit-log';
@@ -30,6 +33,46 @@ type TenantContext = {
   pixKey: string;
   churchName: string;
 };
+
+type PublicDonationTenant = TenantContext & {
+  /** Plano Premium em vigor, lido do banco do tenant do slug (nunca do cliente). */
+  dynamicEnabled: boolean;
+};
+
+/**
+ * Resposta de `POST /financial/pix/public-donation`. `mode` diz o que o doador
+ * recebeu: a chave para copiar (`static`, todo Starter) ou um QR que a igreja
+ * reconhece sozinha (`dynamic`, Premium). Os quatro primeiros campos são o
+ * contrato anterior, e o mobile abre esta mesma página — nenhum deles muda.
+ */
+export type PublicDonationResponse = {
+  mode: 'static' | 'dynamic';
+  pix_key: string;
+  amount: number;
+  church_name: string;
+  transaction_ref: string;
+  /** Premium que caiu para a chave estática, e por quê. */
+  fallback_reason?: PublicDonationFallback;
+  /** Só em `dynamic`. UUID v4: é o que autoriza consultar o status. */
+  payment_id?: string;
+  qr_code?: string;
+  qr_code_image?: string;
+  expires_at?: string;
+};
+
+export type PublicDonationFallback = 'provider_unavailable' | 'cap_reached';
+
+/** Validade que a página mostra ao doador. A Asaas aceita o QR por mais tempo. */
+export const PUBLIC_DONATION_VALIDITY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Teto de cobranças dinâmicas públicas ainda pendentes, criadas na última
+ * hora, por igreja. Cada tentativa gasta 2–3 chamadas à Asaas e a rota não
+ * exige login: sem teto, um script esgota a cota da conta. Vive no banco, não
+ * em memória — sobrevive a deploy e vale para todas as instâncias. Acima dele
+ * o doador recebe a chave estática, e a doação não se perde.
+ */
+export const PUBLIC_DYNAMIC_PENDING_CAP_PER_HOUR = 60;
 
 type AsaasCustomer = { id: string };
 type AsaasPayment = { id: string; invoiceUrl: string };
@@ -118,6 +161,54 @@ export class PixService {
       congregationId: congregation.id,
       pixKey: branding.pix_key,
       churchName: branding.app_name ?? tenant.name,
+    };
+  }
+
+  /**
+   * Tenant da doação pública. Slug inexistente, igreja sem chave PIX e tenant
+   * sem congregação respondem o MESMO 404: o 400 "não configurou chave PIX" de
+   * `resolveTenant` confirmava que o slug existe e em que estado está a
+   * configuração da igreja.
+   *
+   * O plano é lido aqui, no banco — `tenant_plans` é legível sem contexto
+   * (`orbien_app_auth`, 017) e a rota não tem JWT, então não existe claim. Só
+   * `premium` em `active`/`trial` abre cobrança: um tenant suspenso ou
+   * cancelado não deve gerar cobrança nova na Asaas. Starter e plano ausente
+   * seguem na chave estática.
+   */
+  private async resolvePublicDonationTenant(slug: string): Promise<PublicDonationTenant> {
+    const tenant = await this.prisma.client.tenant.findUnique({
+      where: { slug },
+      select: { id: true, name: true },
+    });
+    if (!tenant) throw new NotFoundException('Igreja não encontrada');
+
+    const [branding, congregation, tenantPlan] = await Promise.all([
+      this.prisma.client.brandingConfig.findUnique({
+        where: { tenant_id: tenant.id },
+        select: { pix_key: true, app_name: true },
+      }),
+      this.prisma.client.congregation.findFirst({
+        where: { tenant_id: tenant.id },
+        orderBy: { created_at: 'asc' },
+        select: { id: true },
+      }),
+      this.prisma.client.tenantPlan.findUnique({
+        where: { tenant_id: tenant.id },
+        select: { plan: true, status: true },
+      }),
+    ]);
+
+    if (!branding?.pix_key || !congregation) throw new NotFoundException('Igreja não encontrada');
+
+    return {
+      tenantId: tenant.id,
+      congregationId: congregation.id,
+      pixKey: branding.pix_key,
+      churchName: branding.app_name ?? tenant.name,
+      dynamicEnabled:
+        tenantPlan?.plan === PlanType.premium &&
+        (tenantPlan.status === PlanStatus.active || tenantPlan.status === PlanStatus.trial),
     };
   }
 
@@ -556,24 +647,45 @@ export class PixService {
 
   // ── Cenário 3: Doação pública ─────────────────────────────────────────────
 
-  async createPublicDonation(dto: CreatePixDto) {
+  async createPublicDonation(
+    dto: CreatePublicDonationDto,
+  ): Promise<PublicDonationResponse | Omit<PublicDonationResponse, 'mode'>> {
     if (dto.website) {
       return { pix_key: '', amount: dto.amount, church_name: '', transaction_ref: '' };
     }
 
-    const ctx = await this.resolveTenant(dto.tenant_slug);
+    const ctx = await this.resolvePublicDonationTenant(dto.tenant_slug);
 
     // Só a intenção, em `pix_payments` — nada em `financial_transactions`. A
     // chave é copiada e paga fora daqui, sem confirmação nenhuma para a API, e
     // DRE e dashboard somam lançamentos sem olhar `status`: gravar receita
     // nesta rota deixaria qualquer visitante inflar o caixa da igreja sem
-    // pagar. O dinheiro entra no livro quando o tesoureiro o vê no extrato.
+    // pagar. O lançamento nasce no webhook da Asaas (QR dinâmico, Premium) ou
+    // quando o tesoureiro dá baixa (chave estática, Starter).
     //
     // O id sai daqui (e não do `@default(uuid())`) porque é a referência que o
-    // doador vê: `PIX-` + os 8 primeiros dígitos, que acham a linha.
+    // doador vê (`PIX-` + os 8 primeiros dígitos) e o `externalReference` da
+    // cobrança. A linha é gravada ANTES de falar com a Asaas: se o processo
+    // cair depois de a cobrança existir, o webhook ainda acha a linha.
     const paymentId = randomUUID();
+    let fallback: PublicDonationFallback | undefined;
+    let wantsCharge = ctx.dynamicEnabled;
+
+    if (wantsCharge && !this.asaasKey) {
+      this.logger.warn('Doação pública Premium sem ASAAS_API_KEY — caiu para a chave estática');
+      wantsCharge = false;
+      fallback = 'provider_unavailable';
+    }
+
     await this.runInPublicContext(ctx, async () => {
       const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
+
+      if (wantsCharge && (await this.countRecentPublicDynamic(ctx)) >= PUBLIC_DYNAMIC_PENDING_CAP_PER_HOUR) {
+        this.logger.warn(`Teto de cobranças públicas pendentes atingido (tenant=${ctx.tenantId})`);
+        wantsCharge = false;
+        fallback = 'cap_reached';
+      }
+
       await this.prisma.client.pixPayment.create({
         data: {
           id: paymentId,
@@ -588,12 +700,90 @@ export class PixService {
       });
     });
 
-    return {
+    const base = {
       pix_key: ctx.pixKey,
       amount: dto.amount,
       church_name: ctx.churchName,
       transaction_ref: `PIX-${paymentId.slice(0, 8).toUpperCase()}`,
     };
+
+    const charge = wantsCharge ? await this.chargePublicDonation(ctx, paymentId, dto.amount) : null;
+
+    if (!charge) {
+      // Quis cobrar e não conseguiu: a Asaas falhou. Se nem tentou, `fallback`
+      // já diz por quê (sem chave, ou teto da hora); Starter não tem motivo.
+      const reason = wantsCharge ? 'provider_unavailable' : fallback;
+      return { mode: 'static', ...base, ...(reason ? { fallback_reason: reason } : {}) };
+    }
+
+    return {
+      mode: 'dynamic',
+      ...base,
+      payment_id: paymentId,
+      qr_code: charge.qrCode.payload,
+      qr_code_image: charge.qrCode.encodedImage,
+      expires_at: new Date(Date.now() + PUBLIC_DONATION_VALIDITY_MS).toISOString(),
+    };
+  }
+
+  /** Cobranças dinâmicas públicas ainda pendentes criadas na última hora. Roda sob o contexto da igreja. */
+  private countRecentPublicDynamic(ctx: TenantContext): Promise<number> {
+    return this.prisma.client.pixPayment.count({
+      where: {
+        tenant_id: ctx.tenantId,
+        scenario: PixScenario.public,
+        status: PixStatus.pending,
+        asaas_payment_id: { not: null },
+        created_at: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+      },
+    });
+  }
+
+  /**
+   * Cria a cobrança e amarra o id da Asaas e o QR à linha já gravada. Qualquer
+   * falha devolve `null` — o chamador cai para a chave estática. Cobrança que a
+   * Asaas chegou a criar mas que não pôde ser amarrada à linha (QR indisponível,
+   * banco falhou) é cancelada na hora: cobrança órfã continua pagável na Asaas
+   * muito depois do vencimento.
+   */
+  private async chargePublicDonation(
+    ctx: TenantContext,
+    paymentId: string,
+    amount: number,
+  ): Promise<{ asaasPaymentId: string; qrCode: AsaasQrCode } | null> {
+    let created: string | undefined;
+
+    try {
+      const charge = await this.createAsaasPixCharge(
+        {
+          tenantId: ctx.tenantId,
+          churchName: ctx.churchName,
+          amount,
+          description: 'Doação via Orbien',
+          externalReference: paymentId,
+        },
+        (id) => {
+          created = id;
+        },
+      );
+
+      await this.runInPublicContext(ctx, () =>
+        this.prisma.client.pixPayment.updateMany({
+          where: { id: paymentId },
+          data: { asaas_payment_id: charge.asaasPaymentId, qr_code: charge.qrCode.payload },
+        }),
+      );
+
+      return charge;
+    } catch (err) {
+      this.logger.error('Asaas API error (doação pública)', err);
+      if (created) {
+        await this.asaasDelete(`/payments/${created}`).catch((deleteErr) =>
+          this.logger.warn(`Cobrança órfã ${created} não cancelada na Asaas: ${String(deleteErr)}`),
+        );
+      }
+      return null;
+    }
   }
 
   /**
