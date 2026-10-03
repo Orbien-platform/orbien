@@ -1,7 +1,10 @@
 # Doação pública Premium com QR dinâmico — Specification
 
-**Escopo desta sessão:** planejamento (Specify → Design → Tasks). Nenhum código
-de produto foi escrito. Dimensionamento: **Complex** — domínio de pagamento,
+**Estado:** **implementado e validado em 2026-10-03** (ver `validation.md`). A
+primeira sessão foi só de planejamento (Specify → Design → Tasks); depois o dono
+do produto respondeu as perguntas abertas e pediu tudo no mesmo PR — as respostas
+estão na coluna *Confirmed?* abaixo e o que mudou em relação ao plano está em
+`tasks.md` §Desvios. Dimensionamento: **Complex** — domínio de pagamento,
 rota sem JWT, RLS, dado pessoal (LGPD) e um defeito pré-existente que bloqueia a
 confirmação (ver `DPUB-06`).
 
@@ -75,22 +78,23 @@ bloqueiam a tarefa citada.
 | # | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- | --- |
 | A1 | Onde o plano é lido | `TenantPlan.plan` do tenant resolvido pelo slug, no banco, dentro do `runInPublicContext` | Mesmo princípio de `MemberCapService`/`DonationReceiptService` ("nunca na claim"); aqui nem há claim. `tenant_plans` é legível por `orbien_app` (`orbien_app_auth ... USING (true)`, `017_rls_auth_tables.sql`). | n |
-| A2 | Quais `PlanStatus` valem como Premium | `plan = premium` e `status ∈ {active, trial}` | `DonationReceiptService` olha só `plan`; mas um tenant `suspended`/`cancelled` não deve abrir cobrança nova. Divergência deliberada, levada à pergunta Q3. | n |
+| A2 | Quais `PlanStatus` valem como Premium | `plan = premium` e `status ∈ {active, trial}` | `DonationReceiptService` olha só `plan`; mas um tenant `suspended`/`cancelled` não deve abrir cobrança nova. Divergência deliberada, levada à pergunta Q3. | y (default aceito) |
 | A3 | Mesma rota ou rota nova | **Mesma** `POST /financial/pix/public-donation`, com campo novo `mode` na resposta | Mobile e o formulário atual já a chamam; o servidor decide o ramo pelo plano, o cliente nunca pede "dynamic". | n |
-| A4 | Falha da Asaas no ramo Premium | Cai para a chave estática com `mode: "static"` e `fallback_reason: "provider_unavailable"`; a intenção fica registrada | Doação não deve ser perdida por indisponibilidade de terceiro; o custo é perder a confirmação automática dessa tentativa. Alternativa (503) em Q4. | n |
-| A5 | Valor mínimo/máximo | Mín. R$ 5,00, máx. R$ 10.000,00, no máximo 2 casas decimais | Hoje só há `@IsPositive()`; `pix_payments.amount` é `Decimal(12,2)`, então valor ≥ 10^10 estoura em 500 e `10.123` é arredondado em silêncio. Mínimo da Asaas para PIX **não verificado** na doc oficial — conferir antes de fixar (T-01). Valores finais em Q2. | n |
+| A4 | Falha da Asaas no ramo Premium | Cai para a chave estática com `mode: "static"` e `fallback_reason: "provider_unavailable"`; a intenção fica registrada | Doação não deve ser perdida por indisponibilidade de terceiro; o custo é perder a confirmação automática dessa tentativa. Alternativa (503) em Q4. | y (default aceito) |
+| A5 | Valor mínimo/máximo | Mín. R$ 5,00, máx. R$ 50.000,00, no máximo 2 casas decimais — **os limites da Asaas por cobrança** | Hoje só há `@IsPositive()`; `pix_payments.amount` é `Decimal(12,2)`, então valor ≥ 10^10 estoura em 500 e `10.123` é arredondado em silêncio. Mínimo da Asaas para PIX **não verificado** na doc oficial — conferir antes de fixar (T-01). Valores finais em Q2. **Dono do produto: "mínimo e máximo aceitável pela Asaas".** Valores da Central de Ajuda da Asaas (conta PF: até R$ 50 mil; PJ: até R$ 500 mil; mínimo R$ 5), via busca em 2026-10-03 — a doc de referência da API estava bloqueada no ambiente. Adotado o teto de PF, que vale para qualquer conta. | y |
 | A6 | Categoria do lançamento | `resolveCategory(..., dto.category_slug)` como hoje, com fallback "Oferta" | Mesmo comportamento do Cenário 1/2/3 atual. Risco menor: o doador escolhe, por texto livre, qualquer categoria de receita cujo nome contenha o termo (ver design, Risks). | n |
 | A7 | Doador identificado → `Person` | **Nenhuma** `Person` é criada nem vinculada por e-mail nesta entrega | Vincular pelo e-mail digitado é afirmação não verificada: um terceiro digita o e-mail de um membro e a doação cai no `donor_person_id` dele (recibo e carnê de IR de PROD-08 do membro errado). Criar `Person` a partir da rota pública é coleta de dado sensível (Art. 11) fora do escopo. | n |
-| A8 | Recibo (PROD-03) para doador público | **Fora do P1.** `donation_receipts.person_id` é NOT NULL e o recibo exige `Person` com e-mail; sem A7 não há `Person`. Entra como P2 condicionado a Q5 | Reaproveitar `DonationReceiptService` sem alterá-lo exige `Person`; alterá-lo para aceitar snapshot (nome+e-mail da intenção) é decisão de produto. | n |
-| A9 | Consentimento | `donor_consent_v1` (ADR/LGPD mapping §3.1) registrado **na própria linha** de `pix_payments` (`donor_consent_version`, `donor_consented_at`), só quando há `donor_email` | `consent_record` exige `person_id` NOT NULL (A7), então não dá para gravar lá. IP/user-agent **não** são guardados (minimização) — diverge do §3.2 do mapeamento; Q6. | n |
-| A10 | Retenção do dado do doador | Intenção nunca confirmada: anonimizar `donor_name`/`donor_email` após 30 dias. Confirmada: 5 anos (obrigação contábil, mapeamento §5) | Minimização: PII de tentativa abandonada não tem finalidade. Prazo de 30 dias é sugestão; Q7. | n |
-| A11 | Quando uma cobrança some | Expiração preguiçosa na leitura (>24h sem pagamento = `expired` na resposta) + limpeza diária que cancela a cobrança na Asaas **e depois** marca `failed` | Marcar `failed` antes de cancelar na Asaas perderia dinheiro pago depois (DPUB-09). Cron depende do serviço acordado (PEND-13). | n |
-| A12 | Polling | Cliente consulta `GET /financial/pix/public-donation/:tenant_slug/:payment_id` a cada 4 s, só enquanto a aba está visível, por até 24 h; para ao ver `confirmed` | Webhook é a única fonte de verdade (não há `GET` de pagamento hoje). Alternativa SSE/WebSocket não existe na base. | n |
-| A13 | Fatiamento | Cinco PRs (ver `tasks.md`); PEND-14 entra em dois deles | Cada PR deployável sozinho; o P0 (webhook) é correção pré-existente e vai primeiro. | n |
+| A8 | Recibo (PROD-03) para doador público | **Opção (b), decidida pelo dono do produto:** recibo emitido para o **e-mail declarado**, sem criar `Person` — `donation_receipts.person_id` passou a nulo, com `recipient_name`/`recipient_email` e um CHECK. Entrou neste PR | Reaproveitar `DonationReceiptService` sem alterá-lo exige `Person`; alterá-lo para aceitar snapshot (nome+e-mail da intenção) é decisão de produto. | y |
+| A9 | Consentimento | `donor_consent_v1` (ADR/LGPD mapping §3.1) registrado **na própria linha** de `pix_payments` (`donor_consent_version`, `donor_consented_at`), só quando há `donor_email` | `consent_record` exige `person_id` NOT NULL (A7), então não dá para gravar lá. IP/user-agent **não** são guardados (minimização) — diverge do §3.2 do mapeamento; Q6. | y (default aceito: só versão + instante, sem IP/user-agent) |
+| A10 | Retenção do dado do doador | **Dado de doação e financeiro é retido** — nenhum job apaga `donor_*` (a anonimização de 30 dias do plano foi descartada) | Minimização: PII de tentativa abandonada não tem finalidade. Prazo de 30 dias é sugestão; Q7. **Dono do produto: "dados financeiros e de doação precisam ser retidos".** Prazo contábil de 5 anos segue em `CONF-02`. | y |
+| A11 | Quando uma cobrança some | Expiração preguiçosa na leitura (>24h sem pagamento = `expired` na resposta) + limpeza diária que cancela a cobrança na Asaas **e depois** marca `failed` | Marcar `failed` antes de cancelar na Asaas perderia dinheiro pago depois (DPUB-09). Cron depende do serviço acordado (PEND-13). | y |
+| A12 | Polling | Cliente consulta `GET /financial/pix/public-donation/:tenant_slug/:payment_id` a cada 4 s, só enquanto a aba está visível, por até 24 h; para ao ver `confirmed` | Webhook é a única fonte de verdade (não há `GET` de pagamento hoje). Alternativa SSE/WebSocket não existe na base. | y |
+| A13 | Fatiamento | Um único PR (o da branch `docs/spec-doacao-publica-premium-qr-dinamico`), commits atômicos por tarefa | Cada PR deployável sozinho; o P0 (webhook) é correção pré-existente e vai primeiro. **Dono do produto: "tudo resolvido nesta PR".** O fatiamento em 5 PRs do plano ficou como alternativa. | y |
 
-**Open questions:** 10 em aberto (Q1–Q10, listadas em `tasks.md`) — nenhuma
-bloqueia o Specify; Q1 e Q5 bloqueiam a execução das tarefas indicadas. Por regra do
-Specify, nada fica sem marca: cada uma tem default na tabela acima.
+**Open questions:** nenhuma — Q1–Q10 foram respondidas pelo dono do produto
+(Q1: função SQL `SECURITY DEFINER`, recomendação aceita; Q2–Q4: limites da Asaas,
+demais defaults; Q5: opção b; Q6–Q7: dado retido; Q8–Q10: sugestões simples,
+adotadas). Ver `tasks.md` §Respostas.
 
 ---
 
@@ -288,19 +292,20 @@ consentimento registrado e sem guardar mais do que preciso.
    `donor_consent_v1` (checkbox + texto/link versionado) e o servidor SHALL
    rejeitar `donor_email` sem `donor_consent: true`; gravar `donor_consent_version`
    e `donor_consented_at`. (`DPUB-23`)
-3. WHEN passam 30 dias de uma intenção nunca confirmada THEN um job SHALL
-   anonimizar `donor_name`/`donor_email` (`NULL`) e manter a linha. WHEN a
-   intenção foi confirmada THEN os campos SHALL ser mantidos pelo prazo contábil
-   (5 anos, CONF-02). (`DPUB-24`)
-4. WHEN a retenção de PROD-/CONF-02 for implementada THEN `pix_payments.donor_*`
-   SHALL estar listado como campo coberto (dependência cruzada, sem escopo aqui).
+3. ~~WHEN passam 30 dias de uma intenção nunca confirmada THEN um job SHALL
+   anonimizar `donor_name`/`donor_email`.~~ **Descartado (A10):** o dono do produto
+   decidiu que dado de doação e financeiro é retido; nenhum job apaga `donor_*`.
+   O prazo contábil (5 anos) segue em CONF-02. (`DPUB-24`)
+4. WHEN a retenção de CONF-02 for implementada THEN `pix_payments.donor_*` e
+   `donation_receipts.recipient_*` SHALL estar listados como campos cobertos
+   (dependência cruzada, sem escopo aqui).
 
 **Independent Test**: integração: `POST` com e-mail e sem consentimento → 400;
-com consentimento → colunas gravadas; job anonimiza só as pendentes antigas.
+com consentimento → colunas gravadas, e a resposta não as devolve.
 
 ---
 
-### P2 (condicional a Q5): Recibo para doador público identificado
+### P2: Recibo para doador público identificado (opção b — decidida)
 
 **User Story**: Como doador identificado com e-mail, quero receber o recibo (PROD-03).
 
@@ -314,8 +319,9 @@ com consentimento → colunas gravadas; job anonimiza só as pendentes antigas.
 3. WHEN a geração falha THEN o webhook SHALL continuar respondendo 200
    (best-effort, como hoje).
 
-> Requer alterar `DonationReceipt` (`person_id` hoje NOT NULL) ou criar `Person`.
-> Não entra no P1 (A8). **BLOQ Q5.**
+> Implementado pela opção **(b)**: `donation_receipts.person_id` passou a nulo, com
+> `recipient_name`/`recipient_email` e um CHECK (`Person` **ou** e-mail). Nenhuma
+> `Person` é criada (A7). Também vale na baixa manual do tesoureiro (DPUB-26).
 
 ---
 
@@ -370,35 +376,35 @@ do Starter, marcá-las como recebidas depois de conferir no extrato.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| DPUB-01 | P1 QR dinâmico (plano do banco, nunca do cliente) | Design | Pending |
-| DPUB-02 | P1 QR dinâmico (fallback Starter) | Design | Pending |
-| DPUB-03 | P1 QR dinâmico (cobrança na Asaas) | Design | Pending |
-| DPUB-04 | P1 QR dinâmico (contrato da resposta) | Design | Pending |
-| DPUB-05 | P1 QR dinâmico (falha da Asaas / sem chave) | Design | Pending |
-| DPUB-06 | P0 Webhook sob RLS | Design | Pending |
-| DPUB-07 | P1 Confirmação idempotente | Design | Pending |
-| DPUB-08 | P1 Sem lançamento antes de confirmar | Design | Pending |
-| DPUB-09 | P1 `failed → confirmed` | Design | Pending |
-| DPUB-10 | P1 Categoria financeira | Design | Pending |
-| DPUB-11 | P1 Valor mín./máx./casas | Design | Pending |
-| DPUB-12 | P1 Rate limit por cliente real | Design | Pending |
-| DPUB-13 | P1 Teto de cobranças pendentes por tenant | Design | Pending |
-| DPUB-14 | P1 Sem enumeração de tenant | Design | Pending |
-| DPUB-15 | P1 Sem vazamento entre tenants | Design | Pending |
-| DPUB-16 | P1 Status sem PII; CORS não se aplica | Design | Pending |
-| DPUB-17 | P1 RLS: nenhuma policy afrouxada | Design | Pending |
-| DPUB-18 | P2 UX: QR/copia-e-cola/fallback | Design | Pending |
-| DPUB-19 | P2 UX: polling → pago | Design | Pending |
-| DPUB-20 | P2 UX: validade 24 h / novo QR | Design | Pending |
-| DPUB-21 | P2 UX: erro, backoff, retomada | Design | Pending |
-| DPUB-22 | P2 Colunas `donor_*` | Design | Pending |
-| DPUB-23 | P2 Consentimento | Design | Pending |
-| DPUB-24 | P2 Retenção/anonimização | Design | Pending |
-| DPUB-25 | P2 Recibo (condicional Q5) | Design | Pending |
-| DPUB-26 | P3 Tela de intenções + baixa manual | Design | Pending |
-| DPUB-27 | P2 Expiração + cancelamento de cobrança órfã | Design | Pending |
+| DPUB-01 | P1 QR dinâmico (plano do banco, nunca do cliente) | Execute | Verified |
+| DPUB-02 | P1 QR dinâmico (fallback Starter) | Execute | Verified |
+| DPUB-03 | P1 QR dinâmico (cobrança na Asaas) | Execute | Verified |
+| DPUB-04 | P1 QR dinâmico (contrato da resposta) | Execute | Verified |
+| DPUB-05 | P1 QR dinâmico (falha da Asaas / sem chave) | Execute | Verified |
+| DPUB-06 | P0 Webhook sob RLS | Execute | Verified |
+| DPUB-07 | P1 Confirmação idempotente | Execute | Verified |
+| DPUB-08 | P1 Sem lançamento antes de confirmar | Execute | Verified |
+| DPUB-09 | P1 `failed → confirmed` | Execute | Verified |
+| DPUB-10 | P1 Categoria financeira | Execute | Verified |
+| DPUB-11 | P1 Valor mín./máx./casas | Execute | Verified |
+| DPUB-12 | P1 Rate limit por cliente real | Execute | Verified |
+| DPUB-13 | P1 Teto de cobranças pendentes por tenant | Execute | Verified |
+| DPUB-14 | P1 Sem enumeração de tenant | Execute | Verified |
+| DPUB-15 | P1 Sem vazamento entre tenants | Execute | Verified |
+| DPUB-16 | P1 Status sem PII; CORS não se aplica | Execute | Verified |
+| DPUB-17 | P1 RLS: nenhuma policy afrouxada | Execute | Verified |
+| DPUB-18 | P2 UX: QR/copia-e-cola/fallback | Execute | Verified |
+| DPUB-19 | P2 UX: polling → pago | Execute | Verified |
+| DPUB-20 | P2 UX: validade 24 h / novo QR | Execute | Verified |
+| DPUB-21 | P2 UX: erro, backoff, retomada | Execute | Verified |
+| DPUB-22 | P2 Colunas `donor_*` | Execute | Verified |
+| DPUB-23 | P2 Consentimento | Execute | Verified |
+| DPUB-24 | P2 Retenção/anonimização | — | Descartado (A10: dado retido) |
+| DPUB-25 | P2 Recibo (condicional Q5) | Execute | Verified |
+| DPUB-26 | P3 Tela de intenções + baixa manual | Execute | Verified |
+| DPUB-27 | P2 Expiração + cancelamento de cobrança órfã | Execute | Verified |
 
-**Coverage:** 27 total, 27 mapeados em `design.md`; tarefas em `tasks.md`.
+**Coverage:** 27 total, 27 mapeados em `design.md` e implementados; DPUB-24 (anonimização) **descartado** por decisão do dono do produto — ver A10. Evidência por AC em `validation.md`.
 
 ---
 

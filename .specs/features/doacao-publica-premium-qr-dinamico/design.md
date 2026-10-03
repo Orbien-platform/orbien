@@ -1,7 +1,7 @@
 # Doação pública Premium com QR dinâmico — Design
 
 **Spec**: `.specs/features/doacao-publica-premium-qr-dinamico/spec.md`
-**Status**: Draft — aguarda resposta às perguntas Q1–Q7 (`tasks.md`)
+**Status**: Approved e implementado (2026-10-03) — respostas em `tasks.md` §Respostas
 
 > `.specs/STATE.md` (`## Decisions`, AD-001…AD-005) foi lido. Conformidade:
 > AD-001 (congregação em tabela nova) **não se aplica** — não há tabela nova;
@@ -173,6 +173,7 @@ CHECK`) passa só para essa dupla. Já coberto por `public-routes.spec.ts`
   `prosecdef`, dono, `search_path` fixo, `EXECUTE` só para `orbien_app` (modelo:
   a checagem de `audit_insert`, `bootstrap-db.sh:~675`). A função **só devolve
   ids**; não devolve linha de `pix_payments`.
+- **Implementado:** `024_rls_pix_webhook_scope.sql` + passo 7 do bootstrap + `test/rls/pix-webhook-scope.spec.ts` e `pix-payments.spec.ts`. Nenhuma policy tocada.
 - **Se nenhuma policy for alterada** (cenário sem W1 e sem tabela nova): o passo 7
   não muda, mas `test:rls` ganha casos novos para `pix_payments` (hoje só
   `isolation.spec.ts` toca nela) cobrindo congregação distinta do mesmo tenant.

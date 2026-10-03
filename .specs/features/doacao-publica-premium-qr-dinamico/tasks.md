@@ -9,11 +9,12 @@ Implement these tasks with the `fillsd` skill: **activate it by name and follow 
 ---
 
 **Design**: `.specs/features/doacao-publica-premium-qr-dinamico/design.md`
-**Status**: Draft — **não executar** antes de o dono do produto responder as perguntas BLOQ (§Perguntas abertas) e aprovar as tarefas.
+**Status**: **Done** (2026-10-03) — executado e validado; ver `validation.md`.
 
-> Esta sessão foi só de planejamento: nenhuma tarefa abaixo foi implementada.
-> Cada tarefa = um commit atômico, em português, com os testes dela dentro.
-> Branch por PR (regra do monorepo): `fix/`, `feat/` a partir de `main`.
+> Cada tarefa = um commit atômico, em português, com os testes dela dentro. O
+> dono do produto pediu **tudo no mesmo PR**, então as cinco fases do plano
+> original viraram uma sequência de commits numa só branch (o fatiamento em 5 PRs
+> abaixo ficou como alternativa de revisão). Desvios do plano: §Desvios.
 
 ---
 
@@ -403,3 +404,31 @@ existe para tenants Premium no banco, e a UI depende de `mode`.
 | **Q10** | O spec antigo `public-routes.spec.ts` cria tenant `pub-<ts>` (fora da regra `teste1/2-church`, em banco efêmero): migrar para os tenants de teste numa tarefa à parte? | Fora desta entrega | — |
 
 > Nenhuma pergunta impede a leitura da spec; **Q1 e Q5 bloqueiam execução**.
+
+---
+
+## Respostas do dono do produto (2026-10-03)
+
+| # | Resposta | Efeito |
+| --- | --- | --- |
+| Q1 | "O que você recomenda?" → função SQL `SECURITY DEFINER` (W1) | `024_rls_pix_webhook_scope.sql` — AD-006 |
+| Q2 | Mínimo e máximo "aceitáveis pela Asaas" | R$ 5,00 a R$ 50.000,00 (Central de Ajuda da Asaas) |
+| Q3, Q4 | Sem resposta específica | defaults: `active`+`trial`; cair para a chave estática |
+| Q5 | **Opção (b)**: recibo para o e-mail declarado, sem `Person` | `donation_receipts.person_id` nulo + `recipient_*` + CHECK — AD-007 |
+| Q6, Q7 | "Dados financeiros e de doação precisam ser retidos" | só versão+instante do aceite; **nenhum** job apaga `donor_*` (T23 descartada) |
+| Q8–Q10 | "Sugestões simples" | Q8: limite por igreja + origem e teto por tenant no banco; Q9: `category_slug` livre como hoje; Q10: spec antigo `public-routes.spec.ts` fica fora |
+
+## Desvios do plano (e por quê)
+
+| Tarefa | O que aconteceu |
+| --- | --- |
+| T01 | Parcial: a doc de referência da Asaas (`docs.asaas.com`) e a Central de Ajuda ficaram **bloqueadas** pelo proxy do ambiente; limites vieram da busca (Central de Ajuda) e a validade do QR ("até 12 meses após o vencimento") também. Efeito de `DELETE /payments/:id` em cobrança já paga **não confirmado**: o job trata qualquer recusa como "manter `pending` e logar". |
+| T08, T11 | Entraram no commit de T10: o resolvedor de tenant e o teto só existem como parte do fluxo de `createPublicDonation`. |
+| T16 | Sem teste de integração do job: ele é cross-tenant por desenho (`prisma.system`) e rodá-lo contra um banco compartilhado marcaria `failed` linhas de quem não é do teste. Coberto por unit (ordem, 404, recusa, lote) e pela consulta no mesmo formato dos demais. |
+| T23 | **Descartada** (Q6/Q7: dado retido). |
+| T25, T26 | Mesmo commit: mesmos arquivos, e a baixa depende da lista para ser exercida. |
+| T09 | Ganhou o cache do customer da igreja por processo (corta 1 de 3 chamadas à Asaas por doação pública — risco R2). |
+| T14 | Tracker por **igreja + origem**, 30/min para criar e 120/min para o polling. A hipótese de que o IP visto pela API é o de saída do proxy do web (R1) **segue sem verificação** — precisa de staging com Vercel→Render. |
+| T22 | O texto do termo ficou em `legal/consent-terms/donor_consent_v1.md` (rascunho, **aguardando revisão jurídica — CONF-01**); a página mostra o mesmo texto inline. |
+| Extra (T04) | A cobrança recorrente nova no webhook passou de `create` + captura de P2002 para `createMany ... skipDuplicates`: dentro da transação do webhook, um P2002 abortaria a transação inteira. O harness do `pix.service.spec.ts` foi adaptado a isso (as asserções de comportamento não mudaram). |
+| Extra (T21/T22) | Dois testes **pré-existentes** mudaram porque o contrato mudou: o da página que envia e-mail agora marca o aceite e espera `donor_consent: true`; os meus próprios testes de DTO/serviço com e-mail ganharam `donor_consent`. |
