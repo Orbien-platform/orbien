@@ -3,6 +3,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { readableAreas, type ProductArea } from './product-areas';
+import { asaasPaymentsEnabled } from '../financial/asaas-payments.flag';
 
 /**
  * O que esta sessão enxerga, segundo o servidor.
@@ -26,8 +27,16 @@ import { readableAreas, type ProductArea } from './product-areas';
 @Controller('me')
 @UseGuards(JwtAuthGuard)
 export class MeController {
+  /**
+   * `features` diz o que está ligado no produto, independente de papel —
+   * hoje só a trava de pagamentos pela Asaas (`asaas-payments.flag.ts`).
+   * Os fronts escondem o que depende dela; quem nega de verdade é a API.
+   */
   @Get('permissions')
-  permissions(@CurrentUser() user: JwtPayload): { areas: ProductArea[] } {
-    return { areas: readableAreas(user) };
+  permissions(@CurrentUser() user: JwtPayload): {
+    areas: ProductArea[];
+    features: { asaas_payments: boolean };
+  } {
+    return { areas: readableAreas(user), features: { asaas_payments: asaasPaymentsEnabled() } };
   }
 }

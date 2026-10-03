@@ -1215,6 +1215,10 @@ model PixSubscription {
   asaas_subscription_id String                @unique
   status                PixSubscriptionStatus @default(active)
   created_by_user_id    String
+  /// Versão do texto que o doador aceitou ao contratar ele mesmo (PROD-28,
+  /// `/me/pix-subscriptions`). Nulo quando quem criou foi o tesoureiro.
+  consent_version       String?
+  consent_accepted_at   DateTime?
   cancelled_at          DateTime?
   created_at            DateTime              @default(now())
   updated_at            DateTime              @updatedAt
@@ -1228,6 +1232,10 @@ model PixSubscription {
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, status])
+  // + unique parcial `pix_subscriptions_one_active_per_donor`
+  //   (tenant_id, donor_person_id) WHERE status = 'active' — só em SQL, o
+  //   Prisma não expressa índice parcial. Ver a migration
+  //   `add_pix_subscription_consent`.
   @@map("pix_subscriptions")
 }
 

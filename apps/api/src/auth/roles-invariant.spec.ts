@@ -42,6 +42,11 @@ const ALLOWLIST = new Set([
   // precisa saber que não enxerga nada. O `JwtAuthGuard` continua valendo.
   'auth/me.controller.ts',
   'content/notification-preferences.controller.ts',
+  // PROD-28, dízimo automático do próprio doador: mesma razão de
+  // `notification-preferences` — opera só sobre a pessoa da conta do token,
+  // resolvida no banco (`DonorPixSubscriptionsService`), nunca sobre um id
+  // vindo do corpo. Qualquer papel é dono da própria assinatura.
+  'financial/me-pix-subscriptions.controller.ts',
   // Domínio próprio: `.../resolve` é lido pelo middleware de host do
   // `apps/web` antes de qualquer tenant estar identificado — é o que
   // resolve QUAL tenant é o domínio. `.../cloudflare/callback` é o
