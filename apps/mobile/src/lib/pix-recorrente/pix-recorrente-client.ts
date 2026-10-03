@@ -68,9 +68,30 @@ export async function fetchAsaasPaymentsEnabled(): Promise<boolean> {
   }
 }
 
-/** Valor digitado ("150", "150,50", "1.500,00") → número, ou `null` se não for valor. */
+/**
+ * Valor digitado → número, ou `null` se não for valor sem ambiguidade.
+ *
+ * O teclado `decimal-pad` mostra vírgula ou ponto conforme o idioma do
+ * aparelho, então os dois servem de separador decimal — com no máximo 2
+ * casas, que é o que separa decimal de milhar:
+ *
+ *   "150" · "150,5" · "150.50" · "1.500,00" · "1500,00" · "1.500" (= 1500)
+ *
+ * Tirar todo ponto antes de ler (a versão anterior) fazia "50.00" virar
+ * 5000 — dentro do limite, então a pessoa contrataria R$ 5.000/mês sem
+ * nenhum erro na tela. Formato misto ou fora disso ("1,500.00", "1.50.0") é
+ * recusado em vez de adivinhado.
+ */
 export function parseAmount(raw: string): number | null {
-  const normalized = raw.trim().replace(/\./g, "").replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
-  return Number(normalized);
+  const text = raw.trim();
+
+  // Vírgula decimal (pt-BR), com ou sem ponto de milhar em grupos de 3.
+  if (/^(\d+|\d{1,3}(\.\d{3})+)(,\d{1,2})?$/.test(text)) {
+    return Number(text.replace(/\./g, "").replace(",", "."));
+  }
+  // Ponto decimal (teclado en-US): 1 ou 2 casas depois do ponto.
+  if (/^\d+\.\d{1,2}$/.test(text)) {
+    return Number(text);
+  }
+  return null;
 }

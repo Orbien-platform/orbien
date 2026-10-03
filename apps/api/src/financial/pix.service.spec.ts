@@ -865,7 +865,7 @@ describe('PixService', () => {
       expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_novo']);
     });
 
-    it('unique "uma ativa por doador" vira 409 e desfaz a assinatura aberta na Asaas', async () => {
+    it('unique "uma ativa contratada pelo doador" vira 409 e desfaz a assinatura aberta na Asaas', async () => {
       const { service, cap, prisma } = harness();
       prisma.client.pixSubscription.create = () =>
         Promise.reject(

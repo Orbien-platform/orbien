@@ -383,7 +383,8 @@ export class PixService {
    * antes de gravar a linha (não sabemos o `asaas_subscription_id` antes), e
    * por isso a gravação que falha depois desfaz a assinatura lá — sem isso
    * sobraria uma assinatura cobrando o doador sem linha nenhuma aqui. A
-   * unique parcial "uma ativa por doador" (P2002) vira 409.
+   * unique parcial "uma ativa contratada pelo doador" (P2002) vira 409 — só
+   * acontece no caminho do doador; o tesoureiro não tem esse limite.
    */
   async createSubscriptionFor(input: NewSubscriptionInput, user: JwtPayload) {
     assertAsaasPaymentsEnabled();
@@ -461,7 +462,7 @@ export class PixService {
         );
       });
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Esta pessoa já tem uma assinatura ativa');
+        throw new ConflictException('Você já tem um dízimo automático ativo');
       }
       throw err;
     }

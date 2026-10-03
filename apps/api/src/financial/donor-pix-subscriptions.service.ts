@@ -49,8 +49,10 @@ export class DonorPixSubscriptionsService {
     await this.assertPremiumFromDb(user.tenant_id);
 
     // Atalho barato para o caso comum (toque duplo, tela desatualizada): não
-    // chega a abrir assinatura na Asaas. A garantia é a unique parcial do
-    // banco — `PixService.createSubscriptionFor` a traduz em 409 e desfaz a
+    // chega a abrir assinatura na Asaas. Considera também a que o tesoureiro
+    // criou para a pessoa — a tela mostra uma ativa por vez. A garantia contra
+    // corrida é a unique parcial do banco (só as do doador) —
+    // `PixService.createSubscriptionFor` a traduz em 409 e desfaz a
     // assinatura que já tinha aberto lá.
     const active = await this.prisma.client.pixSubscription.findFirst({
       where: {

@@ -884,7 +884,10 @@ automático** da Home.
 
 **Mudança de comportamento ao subir isto:** quem usava a aba PIX ou criava
 evento pago deixa de ver/conseguir. Em produção a trava nasce desligada, de
-propósito.
+propósito. **Evento pago já publicado** continua no ar com preço, mas toda
+inscrição nele responde 503 (a vaga reservada é devolvida) — antes do deploy,
+conferir se existe algum (`content_posts.registration_price > 0` com
+inscrição aberta) e, se existir, tirar o preço ou combinar com a igreja.
 
 **O que já está construído (atrás da trava):**
 
@@ -896,8 +899,9 @@ propósito.
   contrata nem cancela, cancelar não depende de trava nem de plano.
 - Valor entre R$ 10 e R$ 5.000 e aceite versionado (`dizimo-automatico-v1`,
   gravado em `pix_subscriptions.consent_version`/`consent_accepted_at`).
-- Uma assinatura ativa por doador: unique parcial no banco
-  (`pix_subscriptions_one_active_per_donor`) + 409 antes de chamar a Asaas.
+- Uma assinatura ativa **contratada pelo doador**: unique parcial no banco
+  (`pix_subscriptions_one_active_per_donor`, só linhas com aceite) + 409 antes
+  de chamar a Asaas. O tesoureiro segue sem esse limite.
 - Compensação: se a gravação falha depois de a Asaas criar a assinatura, a
   API a cancela lá (vale também para o tesoureiro). Cancelar com 404 da Asaas
   marca cancelada em vez de 503 eterno.

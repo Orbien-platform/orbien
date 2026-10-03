@@ -226,7 +226,7 @@ describe('trava ligada', () => {
     ).toBe(1);
   });
 
-  it('a unique parcial do banco barra uma segunda ativa mesmo por fora do serviço', async () => {
+  it('a unique parcial do banco barra uma segunda ativa contratada pelo doador, mesmo por fora do serviço', async () => {
     const existente = await admin.pixSubscription.findFirstOrThrow({
       where: { donor_person_id: mariaPersonId, status: 'active' },
     });
@@ -238,6 +238,20 @@ describe('trava ligada', () => {
         data: { ...resto, asaas_subscription_id: `sub_dup_${ts}` },
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('o tesoureiro continua podendo ter duas ativas para a mesma pessoa (a unique é só do doador)', async () => {
+    const base = await admin.pixSubscription.findFirstOrThrow({
+      where: { id: joaoSubscriptionId },
+    });
+    const { id: _id, asaas_subscription_id: _a, created_at: _c, updated_at: _u, ...resto } = base;
+
+    const segunda = await admin.pixSubscription.create({
+      data: { ...resto, asaas_subscription_id: `sub_joao_oferta_${ts}`, status: 'active' },
+    });
+
+    expect(segunda.consent_version).toBeNull();
+    await admin.pixSubscription.delete({ where: { id: segunda.id } });
   });
 
   it('conta sem pessoa ligada: POST 409, GET lista vazia', async () => {

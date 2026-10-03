@@ -54,12 +54,24 @@ describe("parseAmount", () => {
     ["150,5", 150.5],
     ["150,50", 150.5],
     ["1.500,00", 1500],
+    ["1500,00", 1500],
+    ["1.500", 1500],
+    // Ponto seguido de 3 dígitos é milhar, nunca decimal (máx. 2 casas).
+    ["10.123", 10123],
     [" 80 ", 80],
+    // Teclado en-US: ponto é decimal. "50.00" já virou 5000 aqui — e
+    // passava no limite de R$ 5.000.
+    ["50.00", 50],
+    ["10.50", 10.5],
+    ["10.5", 10.5],
   ])("%s → %s", (raw, expected) => {
     expect(parseAmount(raw)).toBe(expected);
   });
 
-  it.each(["", "abc", "10,123", "-5", "1,2,3"])("%s não é valor", (raw) => {
-    expect(parseAmount(raw)).toBeNull();
-  });
+  it.each(["", "abc", "10,123", "-5", "1,2,3", "1,500.00", "1.50.0", "10.1234"])(
+    "%s não é valor",
+    (raw) => {
+      expect(parseAmount(raw)).toBeNull();
+    },
+  );
 });

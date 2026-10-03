@@ -64,6 +64,20 @@ reexecutada verde (119/119 unit; 11/11 integração).
 | `PixService.createSubscriptionFor`: tirar `assertAsaasPaymentsEnabled()` + tratar todo erro do DELETE como 503 | 2 unit (trava; 404 da Asaas) |
 | `DonorPixSubscriptionsService.assertPremiumFromDb`: nunca barrar | 2 unit (claim × banco; sem linha de plano) |
 
+## Achados da revisão pré-PR (2026-10-03) — corrigidos
+
+- `/code-review`: `parseAmount` do app apagava todo ponto — "50.00" no teclado
+  en-US virava R$ 5.000/mês, dentro do limite. Corrigido; casos "50.00",
+  "10.50", "1.500,00" em `pix-recorrente-client.test.ts` (a versão antiga
+  falha em "50.00").
+- `/code-review`: unique "uma ativa por doador" valia também para o
+  tesoureiro (risco de `migrate deploy` falhar com duplicata existente).
+  Restrita a `consent_version IS NOT NULL`; teste de integração novo prova
+  que o tesoureiro ainda cria duas (12/12).
+- Revisão Orbien: evento pago já publicado passa a responder 503 na
+  inscrição com a trava desligada — registrado em `PROD-28` para conferir
+  antes do deploy (decisão do dono: só registrar).
+
 ## Gaps (bloqueiam ligar a trava — não este commit)
 
 1. P0: o doador não recebe a cobrança do ciclo (sem QR/link no app; cliente

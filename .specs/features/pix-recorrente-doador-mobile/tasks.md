@@ -45,8 +45,10 @@ Starter, e lançar depois do produto no mercado" (`PROD-28`, `AD-008`).
    (`Assinatura Asaas … órfã`) para reconciliação. Saga `pending` + job de
    reconciliação ficam em `PROD-28`, "O que falta" 4.
 2. Entrada só na Home (sem atalho no Perfil) — mínimo pedido.
-3. O tesoureiro também passa a ter "uma ativa por doador" (efeito da unique
-   no banco) — antes podia criar duas para a mesma pessoa.
+3. A unique parcial vale só para assinatura contratada pelo doador
+   (`consent_version IS NOT NULL`) — revisão de 2026-10-03: sobre todas as
+   linhas, o deploy falharia se produção já tivesse duplicata e o tesoureiro
+   perderia o "dízimo + oferta" para a mesma pessoa.
 
 **Branch de execução (quando aprovada)**: `feat/pix-recorrente-doador-mobile`.
 **Ambiente de teste**: só `teste1-church`/`teste2-church`; nunca `doca-church`.
