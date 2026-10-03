@@ -139,12 +139,11 @@ export class DonationReceiptService {
     let recipient: { name: string; email: string; declaredName: string | null } | null = null;
     if (donorPersonId) {
       if (person?.email) recipient = { name: person.full_name, email: person.email, declaredName: null };
-    } else if (declaredDonor) {
-      recipient = {
-        name: declaredDonor.name ?? declaredDonor.email,
-        email: declaredDonor.email,
-        declaredName: declaredDonor.name,
-      };
+    } else {
+      // Sem `Person` só se chega aqui com doador declarado: o bloco de leitura
+      // já devolveu `null` para "nem um, nem outro".
+      const declared = declaredDonor as DeclaredDonor;
+      recipient = { name: declared.name ?? declared.email, email: declared.email, declaredName: declared.name };
     }
 
     if (!recipient) {

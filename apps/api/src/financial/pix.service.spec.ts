@@ -1525,6 +1525,14 @@ describe('PixService', () => {
       });
     });
 
+    it('sem `app_name` no branding, o nome da igreja cai para o nome do tenant', async () => {
+      const { service } = harness({ branding: { pix_key: 'chave@igreja.test', app_name: null } });
+
+      const result = await service.createPublicDonation(manualDto);
+
+      expect(result).toMatchObject({ church_name: 'Igreja Central' });
+    });
+
     describe('slug sem resposta distinguível (DPUB-14)', () => {
       it.each([
         ['slug inexistente', { tenant: null }],
@@ -2122,6 +2130,26 @@ describe('PixService', () => {
       expect(cap.contexts).toEqual([]);
       expect(cap.contextsAtRead).toEqual([]);
       expect(cap.transactions).toEqual([]);
+    });
+
+    it('escopo achado, mas a linha sumiu e o payload não traz assinatura: 200, nada lançado', async () => {
+      // Entre a função SQL e a leitura sob contexto a linha pode ter sido
+      // removida (ou o id é de outra igreja que a RLS esconde): nada a confirmar.
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({
+        pixPayment: null,
+        pixSubscription: null,
+        webhookScope: [{ scope_tenant_id: 't1', scope_congregation_id: 'c1' }],
+      });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_sumiu' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.transactions).toEqual([]);
+      expect(warn).toHaveBeenCalledWith('PixPayment não encontrado para asaas_id=pay_sumiu');
     });
 
     it('o contexto vem da função SQL, nunca do payload — tenant forjado no corpo é ignorado', async () => {

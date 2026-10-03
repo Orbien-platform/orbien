@@ -429,6 +429,15 @@ describe('DonationReceiptService.generateForTransaction — doador declarado da 
     expect(cap.created).toEqual([]);
   });
 
+  it('doador cadastrado cuja Person já não existe NÃO cai para o declarado: sem recibo', async () => {
+    const { service, cap } = harness({ transaction: publica({ donor_person_id: 'pessoa-removida' }), person: null });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.mails).toEqual([]);
+    expect(cap.created).toEqual([]);
+  });
+
   it('com escopo de RLS, o recibo declarado também lê e grava sob o contexto do tenant', async () => {
     const { service, cap } = harness({ transaction: publica() });
 
