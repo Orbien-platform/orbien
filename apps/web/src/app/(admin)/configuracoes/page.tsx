@@ -538,7 +538,7 @@ function ConfiguracoesContent() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">Configurações</h1>
+        <h1 className="page-title">Configurações</h1>
         <p className="mt-0.5 text-sm text-stone">
           Dados da congregação, identidade visual e organização
         </p>

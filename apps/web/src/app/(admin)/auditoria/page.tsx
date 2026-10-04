@@ -182,7 +182,7 @@ export default function AuditoriaPage() {
     <div className="space-y-5">
       {/* ── Header ── */}
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">Auditoria</h1>
+        <h1 className="page-title">Auditoria</h1>
         <p className="mt-0.5 max-w-2xl text-sm text-stone">
           Todo acesso da equipe de suporte da Orbien aos dados desta igreja fica
           registrado aqui, junto com as transferências de conta entre igrejas.

@@ -69,22 +69,29 @@ function setup({
 }
 
 describe("Header", () => {
-  it("mostra o rótulo da rota atual", () => {
+  it("mostra a seção e a tela da rota atual", () => {
     setup({ pathname: "/financeiro" });
     render(<Header />);
     expect(screen.getByText("Financeiro")).toBeInTheDocument();
+    expect(screen.getByText("Visão geral")).toHaveAttribute("aria-current", "page");
   });
 
-  it("mostra o rótulo da rota mesmo em sub-rota", () => {
+  it("mostra a tela mesmo em sub-rota, sem repetir a seção de mesmo nome", () => {
     setup({ pathname: "/pessoas/123/editar" });
     render(<Header />);
-    expect(screen.getByText("Pessoas")).toBeInTheDocument();
+    expect(screen.getAllByText("Pessoas")).toHaveLength(1);
   });
 
-  it("cai para Dashboard quando a rota não é mapeada", () => {
+  it("mostra o perfil, que fica fora do menu lateral", () => {
+    setup({ pathname: "/perfil" });
+    render(<Header />);
+    expect(screen.getByText("Perfil")).toBeInTheDocument();
+  });
+
+  it("cai para Início quando a rota não é mapeada", () => {
     setup({ pathname: "/rota-desconhecida" });
     render(<Header />);
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Início")).toBeInTheDocument();
   });
 
   it("mostra as iniciais do usuário logado", () => {

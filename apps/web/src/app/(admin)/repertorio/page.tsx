@@ -13,7 +13,7 @@ export default function RepertorioPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-medium text-ink dark:text-white">Repertório</h1>
+        <h1 className="page-title">Repertório</h1>
       </div>
 
       <SongCatalogPanel canEdit={canEdit} />

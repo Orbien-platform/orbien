@@ -47,7 +47,7 @@ export function PorQueExistimos() {
                     className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                     style={{ background: "var(--crimson-dim)", color: "var(--color-crimson)" }}
                   >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#C0392B" strokeWidth="3" strokeLinecap="round">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-crimson-ink)" strokeWidth="3" strokeLinecap="round">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
                   </span>

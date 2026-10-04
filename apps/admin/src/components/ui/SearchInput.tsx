@@ -40,7 +40,7 @@ export function SearchInput({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
-        className="h-8 w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] py-1 pl-8 pr-3 text-sm text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+        className="h-8 w-full rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-base)] py-1 pl-8 pr-3 text-sm text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
       />
     </div>
   );

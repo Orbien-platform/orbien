@@ -261,12 +261,12 @@ export default function TenantsPage() {
       header: "",
       width: "520px",
       render: (t) => (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button
             type="button"
             onClick={() => setPlanTarget(t)}
             title="Mudar o plano contratado por este tenant"
-            className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-default)] whitespace-nowrap px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
           >
             <Wallet size={14} strokeWidth={1.5} />
             Mudar plano
@@ -276,7 +276,7 @@ export default function TenantsPage() {
             onClick={() => handleSupportSession(t)}
             disabled={openingFor !== null}
             title="Abre o app do tenant numa aba nova, com as permissões deste tenant. Cada requisição fica registrada em audit_logs."
-            className="inline-flex items-center gap-2 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] whitespace-nowrap px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10 disabled:opacity-50"
           >
             {openingFor === t.id ? (
               <Loader2 size={14} className="animate-spin" />
@@ -289,7 +289,7 @@ export default function TenantsPage() {
             type="button"
             onClick={() => setEditingTenant(t)}
             title="Editar nome e contato do tenant"
-            className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-default)] whitespace-nowrap px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
           >
             <Pencil size={14} strokeWidth={1.5} />
             Editar
@@ -299,7 +299,7 @@ export default function TenantsPage() {
               type="button"
               onClick={() => setReactivateTarget(t)}
               title="Reativa o plano e limpa o fim de contrato"
-              className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-teal transition-colors hover:bg-teal-dim"
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-teal transition-colors hover:bg-teal-dim"
             >
               Reativar plano
             </button>
@@ -308,7 +308,7 @@ export default function TenantsPage() {
               type="button"
               onClick={() => setCancelTarget(t)}
               title="Encerra o contrato e inicia a contagem de retenção de dados"
-              className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-crimson transition-colors hover:bg-crimson-dim"
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-crimson transition-colors hover:bg-crimson-dim"
             >
               Cancelar plano
             </button>
@@ -318,7 +318,7 @@ export default function TenantsPage() {
             onClick={() => setToggleTarget(t)}
             title={t.is_active ? "Inativar este tenant" : "Reativar este tenant"}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1.5 text-xs font-medium transition-colors",
+              "inline-flex items-center gap-1.5 rounded-full border whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-colors",
               t.is_active
                 ? "border-[var(--border-default)] text-crimson hover:bg-crimson-dim"
                 : "border-[var(--border-default)] text-teal hover:bg-teal-dim"
@@ -335,7 +335,7 @@ export default function TenantsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-medium text-ink dark:text-white">Tenants</h1>
+          <h1 className="page-title">Tenants</h1>
           <p className="text-sm text-stone">
             Todas as igrejas da plataforma. {tenants.length} listada
             {tenants.length === 1 ? "" : "s"}.
@@ -350,7 +350,7 @@ export default function TenantsPage() {
           />
           <Button
             onClick={() => setCreateOpen(true)}
-            className="h-8 rounded-[8px] bg-navy px-3 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)]"
+            className="h-8 rounded-full bg-navy px-3 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)]"
           >
             <Plus size={15} strokeWidth={1.5} className="mr-1.5" />
             Novo tenant
@@ -360,7 +360,7 @@ export default function TenantsPage() {
 
       {actionError && (
         <p
-          className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
+          className="rounded-[10px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
           role="alert"
         >
           {actionError}
@@ -441,7 +441,7 @@ export default function TenantsPage() {
             type="button"
             onClick={() => setToggleTarget(null)}
             disabled={isToggling}
-            className="rounded-[8px] px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
+            className="rounded-full px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
           >
             Cancelar
           </button>
@@ -449,7 +449,7 @@ export default function TenantsPage() {
             onClick={handleToggleActive}
             disabled={isToggling}
             className={cn(
-              "h-9 rounded-[8px] px-4 text-sm font-medium text-white disabled:opacity-60",
+              "h-9 rounded-full px-4 text-sm font-medium text-white disabled:opacity-60",
               toggleTarget?.is_active
                 ? "bg-crimson hover:opacity-90"
                 : "bg-navy hover:bg-[var(--color-navy-dark)]"

@@ -9,20 +9,32 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // arquivos a cada build, e um download falho derruba o `next build` inteiro
 // (aconteceu no CI da main, no merge do #128). Subset latin do Google Fonts,
 // via @fontsource — licença em src/fonts/OFL-*.txt.
-const dmSans = localFont({
-  variable: "--font-dm-sans",
+//
+// Direção Órbita (docs/design/orbita-v2): Geist na interface, Geist Mono em
+// números e rótulos, Instrument Serif nos títulos de página.
+const geist = localFont({
+  variable: "--font-geist",
   src: [
-    { path: "../fonts/dm-sans-300.woff2", weight: "300", style: "normal" },
-    { path: "../fonts/dm-sans-400.woff2", weight: "400", style: "normal" },
-    { path: "../fonts/dm-sans-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/geist-sans-300.woff2", weight: "300", style: "normal" },
+    { path: "../fonts/geist-sans-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/geist-sans-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/geist-sans-600.woff2", weight: "600", style: "normal" },
   ],
 });
 
-const dmMono = localFont({
-  variable: "--font-dm-mono",
+const geistMono = localFont({
+  variable: "--font-geist-mono",
   src: [
-    { path: "../fonts/dm-mono-400.woff2", weight: "400", style: "normal" },
-    { path: "../fonts/dm-mono-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/geist-mono-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/geist-mono-500.woff2", weight: "500", style: "normal" },
+  ],
+});
+
+const instrumentSerif = localFont({
+  variable: "--font-instrument-serif",
+  src: [
+    { path: "../fonts/instrument-serif-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/instrument-serif-400-italic.woff2", weight: "400", style: "italic" },
   ],
 });
 
@@ -39,13 +51,13 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${dmSans.variable} ${dmMono.variable} h-full antialiased`}
+      className={`${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >

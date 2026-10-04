@@ -3,10 +3,10 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 import { CheckIcon } from "@/components/ui/CheckIcon";
 
 const GRUPOS = [
-  { nome: "Célula Alfa",    membros: 12, reunioes: "4 reuniões",  dot: "#22C55E", dotShadow: "rgba(34,197,94,.18)",   status: "Saudável",   statusBg: "rgba(34,197,94,.1)",   statusColor: "#22C55E" },
-  { nome: "PG Jovens",      membros: 9,  reunioes: "3 reuniões",  dot: "#22C55E", dotShadow: "rgba(34,197,94,.18)",   status: "Saudável",   statusBg: "rgba(34,197,94,.1)",   statusColor: "#22C55E" },
-  { nome: "Célula Bética",  membros: 7,  reunioes: "2 reuniões",  dot: "#EAB308", dotShadow: "rgba(234,179,8,.18)",   status: "Atenção",    statusBg: "rgba(234,179,8,.1)",   statusColor: "#EAB308" },
-  { nome: "Célula Delta",   membros: 3,  reunioes: "0 reuniões",  dot: "#C0392B", dotShadow: "var(--crimson-dim)",    status: "Inativo",    statusBg: "var(--crimson-dim)",   statusColor: "#C0392B" },
+  { nome: "Célula Alfa",    membros: 12, reunioes: "4 reuniões",  dot: "var(--color-teal)", dotShadow: "color-mix(in srgb, var(--color-teal) 18%, transparent)",   status: "Saudável",   statusBg: "color-mix(in srgb, var(--color-teal) 10%, transparent)",   statusColor: "var(--color-teal)" },
+  { nome: "PG Jovens",      membros: 9,  reunioes: "3 reuniões",  dot: "var(--color-teal)", dotShadow: "color-mix(in srgb, var(--color-teal) 18%, transparent)",   status: "Saudável",   statusBg: "color-mix(in srgb, var(--color-teal) 10%, transparent)",   statusColor: "var(--color-teal)" },
+  { nome: "Célula Bética",  membros: 7,  reunioes: "2 reuniões",  dot: "var(--color-amber)", dotShadow: "color-mix(in srgb, var(--color-amber) 18%, transparent)",   status: "Atenção",    statusBg: "color-mix(in srgb, var(--color-amber) 10%, transparent)",   statusColor: "var(--color-amber)" },
+  { nome: "Célula Delta",   membros: 3,  reunioes: "0 reuniões",  dot: "var(--color-crimson-ink)", dotShadow: "var(--crimson-dim)",    status: "Inativo",    statusBg: "var(--crimson-dim)",   statusColor: "var(--color-crimson-ink)" },
 ] as const;
 
 function GroupListMockup() {
@@ -30,9 +30,9 @@ function GroupListMockup() {
       {/* Summary pills */}
       <div className="flex gap-2 px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
         {[
-          { label: "2 saudáveis",  bg: "rgba(34,197,94,.1)",  color: "#22C55E" },
-          { label: "1 em atenção", bg: "rgba(234,179,8,.1)",  color: "#EAB308" },
-          { label: "1 inativo",    bg: "var(--crimson-dim)",  color: "#C0392B" },
+          { label: "2 saudáveis",  bg: "color-mix(in srgb, var(--color-teal) 10%, transparent)",  color: "var(--color-teal)" },
+          { label: "1 em atenção", bg: "color-mix(in srgb, var(--color-amber) 10%, transparent)",  color: "var(--color-amber)" },
+          { label: "1 inativo",    bg: "var(--crimson-dim)",  color: "var(--color-crimson-ink)" },
         ].map(({ label, bg, color }) => (
           <span
             key={label}
@@ -94,13 +94,13 @@ export function PequenosGruposHero() {
             <SectionLabel className="mb-6">Funcionalidades · Pequenos Grupos</SectionLabel>
 
             <h1
-              className="font-light leading-[1.02] tracking-[-0.035em] mb-5"
-              style={{ fontSize: "clamp(38px, 6vw, 64px)", color: "var(--ink)" }}
+              className="text-display font-light leading-[1.02] tracking-[-0.035em] mb-5"
+              style={{ color: "var(--ink)" }}
             >
               Grupos{" "}
-              <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+              <em className="heading-accent">
                 saudáveis
-              </strong>
+              </em>
               {" "}não aparecem por acaso.
             </h1>
 
@@ -115,7 +115,7 @@ export function PequenosGruposHero() {
               {/* TODO: connect to real waitlist action */}
               <a
                 href="#waitlist"
-                className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+                className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
               >
                 Entrar na lista de espera
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -124,8 +124,7 @@ export function PequenosGruposHero() {
               </a>
               <Link
                 href="/funcionalidades"
-                className="inline-flex h-12 items-center gap-2 rounded-btn border px-6 text-[15px] font-medium transition-all"
-                style={{ color: "var(--navy-accent)", borderColor: "var(--navy-accent)" }}
+                className="inline-flex h-12 items-center gap-2 cta-secondary px-6 text-[15px]"
               >
                 Ver todos os módulos
               </Link>

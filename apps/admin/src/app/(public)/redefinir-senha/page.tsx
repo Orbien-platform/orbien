@@ -84,7 +84,7 @@ function RedefinirSenhaForm() {
               </p>
               <Link
                 href="/login"
-                className="mt-2 flex h-10 w-full items-center justify-center rounded-[8px] bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] transition-colors"
+                className="mt-2 flex h-10 w-full items-center justify-center rounded-full bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] transition-colors"
               >
                 Ir para o login
               </Link>
@@ -104,7 +104,7 @@ function RedefinirSenhaForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"
                     disabled={isSubmitting}
-                    className="rounded-[8px] pr-10"
+                    className="rounded-[10px] pr-10"
                   />
                   <button
                     type="button"
@@ -138,7 +138,7 @@ function RedefinirSenhaForm() {
                     autoComplete="new-password"
                     disabled={isSubmitting}
                     className={cn(
-                      "rounded-[8px] pr-10",
+                      "rounded-[10px] pr-10",
                       passwordsMismatch && "border-crimson focus:ring-crimson/20"
                     )}
                   />
@@ -159,7 +159,7 @@ function RedefinirSenhaForm() {
               </div>
 
               {apiError && (
-                <div className="rounded-[8px] bg-crimson-dim px-3 py-2" role="alert">
+                <div className="rounded-[10px] bg-crimson-dim px-3 py-2" role="alert">
                   <p className="text-sm text-crimson">{apiError}</p>
                   <Link
                     href="/esqueci-senha"
@@ -173,7 +173,7 @@ function RedefinirSenhaForm() {
               <Button
                 type="submit"
                 disabled={isSubmitting || !meetsLength || !passwordsMatch}
-                className="mt-1 h-10 w-full rounded-[8px] bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
+                className="mt-1 h-10 w-full rounded-full bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <>

@@ -2,82 +2,93 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Users,
-  UsersRound,
-  Wallet,
-  Megaphone,
-  CalendarDays,
-  Church,
-  Music,
-  ScrollText,
-  Settings,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { canAccessRoute } from "@/lib/permissions";
+import { NAV_SECTIONS, isActiveRoute } from "@/lib/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useChurchIdentity } from "@/contexts/ChurchIdentityContext";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/pessoas", label: "Pessoas", icon: Users },
-  { href: "/grupos", label: "Grupos", icon: UsersRound },
-  { href: "/financeiro", label: "Financeiro", icon: Wallet },
-  { href: "/conteudo", label: "Conteúdo", icon: Megaphone },
-  { href: "/voluntarios", label: "Voluntários", icon: CalendarDays },
-  { href: "/celebracoes", label: "Celebrações", icon: Church },
-  { href: "/repertorio", label: "Repertório", icon: Music },
-  { href: "/auditoria", label: "Auditoria", icon: ScrollText },
-  { href: "/configuracoes", label: "Configurações", icon: Settings },
-];
-
-interface SidebarProps {
-  congregationName?: string;
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .filter((w) => /^[\p{L}\p{N}]/u.test(w))
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
 }
 
-export function Sidebar({ congregationName = "Doca Church" }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { churchName, congregationName } = useChurchIdentity();
+
+  const title = churchName ?? congregationName ?? "Sua igreja";
+  // A congregação só aparece como subtítulo quando diz algo além do nome da
+  // igreja — igreja de uma congregação só costuma ter os dois iguais.
+  const subtitle =
+    congregationName && congregationName !== title ? congregationName : null;
 
   // Link que só levaria a um 403 não é desenhado. Isto é conveniência, não
   // controle de acesso: quem digitar a URL chega à tela e recebe de lá o
   // "sem acesso" — a autoridade continua sendo o `@Roles` da API.
-  const visibleItems = navItems.filter(({ href }) => canAccessRoute(user, href));
+  const sections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter(({ href }) => canAccessRoute(user, href)),
+  })).filter((section) => section.items.length > 0);
 
   return (
-    <aside className="flex h-full w-[260px] flex-col border-r border-[var(--border-default)] bg-[var(--surface-base)] dark:bg-[var(--surface-base)]">
-      {/* Logo */}
-      <div className="flex flex-col gap-0.5 px-6 py-5 border-b border-[var(--border-default)]">
-        <span className="font-sans text-xl font-medium tracking-tight text-navy">
-          orbien
-        </span>
-        <span className="text-xs font-normal text-stone">{congregationName}</span>
+    <aside className="flex h-full w-[236px] flex-col border-r border-[var(--border-default)] bg-[var(--surface-base)]">
+      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3.5">
+        <div
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-navy text-[13px] font-semibold text-white"
+        >
+          {initials(title) || "O"}
+        </div>
+        <div className="min-w-0 leading-tight">
+          <p className="truncate text-[13.5px] font-medium text-ink">{title}</p>
+          {subtitle && <p className="truncate text-xs text-muted-text">{subtitle}</p>}
+        </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <ul className="flex flex-col gap-0.5">
-          {visibleItems.map(({ href, label, icon: Icon }) => {
-            const isActive = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-[8px] px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "border-l-2 border-navy bg-navy/10 pl-[10px] text-navy"
-                      : "border-l-2 border-transparent text-stone hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white"
-                  )}
-                >
-                  <Icon size={20} strokeWidth={1.5} />
-                  <span>{label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+      <nav aria-label="Menu do painel" className="flex-1 overflow-y-auto px-2.5 pt-1 pb-3">
+        {sections.map((section) => (
+          <div key={section.title ?? "inicio"} className={cn(section.title && "mt-3.5")}>
+            {section.title && (
+              <p className="label-mono px-2 pb-1.5 text-[9.5px]">{section.title}</p>
+            )}
+            <ul className="flex flex-col gap-px">
+              {section.items.map(({ href, label, icon: Icon }) => {
+                const active = isActiveRoute(pathname, href);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex h-8 items-center gap-2.5 rounded-[7px] px-2 text-[13.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                        active
+                          ? "bg-brand-dim font-medium text-brand-ink"
+                          : "text-stone hover:bg-[var(--surface-subtle)] hover:text-ink"
+                      )}
+                    >
+                      <Icon size={16} strokeWidth={1.6} aria-hidden="true" />
+                      <span className="truncate">{label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
+
+      <div className="flex items-center gap-2 border-t border-[var(--border-default)] px-4 py-3">
+        <span aria-hidden="true" className="relative inline-block size-4 rounded-full border border-[var(--border-strong)]">
+          <span className="absolute -top-px left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-teal" />
+        </span>
+        <span className="text-xs font-medium tracking-tight text-stone">orbien</span>
+      </div>
     </aside>
   );
 }

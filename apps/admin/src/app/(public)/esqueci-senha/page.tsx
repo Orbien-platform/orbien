@@ -74,14 +74,14 @@ export default function EsqueciSenhaPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
                   disabled={isSubmitting}
-                  className="rounded-[8px]"
+                  className="rounded-[10px]"
                 />
               </div>
 
               <Button
                 type="submit"
                 disabled={isSubmitting || !email.trim()}
-                className="mt-1 h-10 w-full rounded-[8px] bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
+                className="mt-1 h-10 w-full rounded-full bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <>

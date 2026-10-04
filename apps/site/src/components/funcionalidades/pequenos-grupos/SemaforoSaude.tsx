@@ -3,11 +3,11 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const ESTADOS = [
   {
-    dot: "#22C55E",
-    dotShadow: "rgba(34,197,94,.2)",
+    dot: "var(--color-teal)",
+    dotShadow: "color-mix(in srgb, var(--color-teal) 20%, transparent)",
     label: "Verde — Saudável",
-    labelColor: "#22C55E",
-    labelBg: "rgba(34,197,94,.08)",
+    labelColor: "var(--color-teal)",
+    labelBg: "color-mix(in srgb, var(--color-teal) 8%, transparent)",
     title: "Grupo ativo e engajado",
     body: "Reuniões regulares, presença consistente e líder responsivo. Nenhuma ação necessária — o sistema só registra.",
     triggers: [
@@ -18,11 +18,11 @@ const ESTADOS = [
     pastor: null,
   },
   {
-    dot: "#EAB308",
-    dotShadow: "rgba(234,179,8,.2)",
+    dot: "var(--color-amber)",
+    dotShadow: "color-mix(in srgb, var(--color-amber) 20%, transparent)",
     label: "Amarelo — Atenção",
-    labelColor: "#92700A",
-    labelBg: "rgba(234,179,8,.1)",
+    labelColor: "var(--color-amber)",
+    labelBg: "color-mix(in srgb, var(--color-amber) 10%, transparent)",
     title: "Sinais de enfraquecimento",
     body: "Frequência caindo ou reuniões irregulares. O sistema alerta o pastor e sugere uma conversa com o líder.",
     triggers: [
@@ -33,10 +33,10 @@ const ESTADOS = [
     pastor: "O pastor recebe alerta e pode atribuir um acompanhador ao grupo.",
   },
   {
-    dot: "#C0392B",
-    dotShadow: "rgba(192,57,43,.2)",
+    dot: "var(--color-crimson-ink)",
+    dotShadow: "color-mix(in srgb, var(--color-crimson-ink) 20%, transparent)",
     label: "Vermelho — Inativo",
-    labelColor: "#C0392B",
+    labelColor: "var(--color-crimson-ink)",
     labelBg: "var(--crimson-dim)",
     title: "Grupo parado",
     body: "Sem reuniões registradas no mês. Alerta imediato para o pastor — com sugestão de redistribuição de membros.",
@@ -137,9 +137,11 @@ export function SemaforoSaude() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-px" style={{ color: "var(--navy-accent)" }}>
               <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
             </svg>
-            O semáforo de saúde está disponível no{" "}
-            <strong className="font-medium" style={{ color: "var(--ink)" }}>plano Premium</strong>.
-            {" "}No Starter, o pastor acessa o cadastro e os materiais dos grupos, mas sem o indicador automático de saúde.
+            <p>
+              O semáforo de saúde está disponível no{" "}
+              <strong className="font-medium" style={{ color: "var(--ink)" }}>plano Premium</strong>.
+              {" "}No Starter, o pastor acessa o cadastro e os materiais dos grupos, mas sem o indicador automático de saúde.
+            </p>
           </div>
         </Reveal>
       </div>

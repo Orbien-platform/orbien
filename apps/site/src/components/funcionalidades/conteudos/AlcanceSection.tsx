@@ -16,7 +16,7 @@ const SEGMENTOS = [
     desc: "Material de estudo, aviso de local ou horário para um grupo específico.",
     count: "12",
     unit: "membros",
-    color: "#00B8A2",
+    color: "var(--color-teal)",
     bg: "var(--teal-dim)",
   },
   {
@@ -103,7 +103,7 @@ export function AlcanceSection() {
                         className="text-[11px] font-medium px-3 py-1.5 rounded-pill border cursor-pointer"
                         style={{
                           background: active ? "var(--navy-accent)" : "var(--surface)",
-                          color: active ? "#fff" : "var(--stone)",
+                          color: active ? "var(--on-ink)" : "var(--stone)",
                           borderColor: active ? "var(--navy-accent)" : "var(--border)",
                         }}
                       >
@@ -151,7 +151,7 @@ export function AlcanceSection() {
                   <div className="flex items-center gap-2">
                     <span
                       className="w-5 h-5 rounded-full flex items-center justify-center"
-                      style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+                      style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
                     >
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
@@ -161,7 +161,7 @@ export function AlcanceSection() {
                   </div>
                   <span
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-btn text-[12px] font-medium text-white"
-                    style={{ background: "var(--navy-accent)" }}
+                    style={{ background: "var(--color-navy)" }}
                   >
                     Publicar agora
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

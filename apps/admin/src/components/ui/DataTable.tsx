@@ -39,7 +39,7 @@ export function DataTable<T>({
   className,
 }: DataTableProps<T>) {
   return (
-    <div className={cn("w-full overflow-x-auto rounded-[12px] border border-[var(--border-default)]", className)}>
+    <div className={cn("w-full overflow-x-auto rounded-[14px] border border-[var(--border-default)]", className)}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
@@ -47,7 +47,7 @@ export function DataTable<T>({
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
-                className="px-4 py-2.5 text-left text-xs font-medium text-stone"
+                className="label-mono whitespace-nowrap px-4 py-2.5 text-left text-[10px]"
               >
                 {col.header}
               </th>
@@ -79,7 +79,7 @@ export function DataTable<T>({
                         <button
                           type="button"
                           onClick={onRetry}
-                          className="mt-1 inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
+                          className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-[var(--border-default)] whitespace-nowrap px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-[var(--surface-subtle)] dark:text-white"
                         >
                           <RotateCw size={13} strokeWidth={1.5} />
                           Tentar de novo

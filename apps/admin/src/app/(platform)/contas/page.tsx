@@ -88,7 +88,7 @@ export default function ContasPage() {
   return (
     <div className="flex max-w-xl flex-col gap-4">
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">Contas</h1>
+        <h1 className="page-title">Contas</h1>
         <p className="text-sm text-stone">
           Move uma conta de usuário para outra igreja. A plataforma ainda não
           tem busca de contas nem de congregações: os dois IDs vêm de fora
@@ -98,7 +98,7 @@ export default function ContasPage() {
 
       {done && (
         <p
-          className="rounded-[8px] bg-teal-dim px-3 py-2 text-sm text-teal"
+          className="rounded-[10px] bg-teal-dim px-3 py-2 text-sm text-teal"
           role="status"
         >
           Conta <span className="font-mono">{done.user_account_id}</span>{" "}
@@ -160,7 +160,7 @@ export default function ContasPage() {
 
         {formError && (
           <p
-            className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
+            className="rounded-[10px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
             role="alert"
           >
             {formError}
@@ -170,7 +170,7 @@ export default function ContasPage() {
         <div>
           <Button
             type="submit"
-            className="h-9 rounded-[8px] bg-navy px-4 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)]"
+            className="h-9 rounded-full bg-navy px-4 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)]"
           >
             Revisar transferência
           </Button>

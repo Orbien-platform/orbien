@@ -17,12 +17,11 @@ export default function LoginPage() {
           <div className="flex justify-center mb-8">
             <span
               className="w-14 h-14 flex items-center justify-center rounded-[16px]"
-              style={{ background: "var(--navy-tint)", color: "var(--navy-accent)" }}
+              style={{ background: "var(--navy-tint)", color: "var(--ink)" }}
             >
-              <svg width="28" height="28" viewBox="0 0 22 22" fill="none">
-                <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="11" cy="11" r="3" fill="currentColor" />
-                <circle cx="20" cy="11" r="2" fill="#00B8A2" />
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+                <circle cx="19" cy="9" r="2.2" fill="var(--color-teal)" />
               </svg>
             </span>
           </div>
@@ -51,7 +50,7 @@ export default function LoginPage() {
           {/* TODO: connect to real waitlist action */}
           <a
             href="#waitlist"
-            className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+            className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
           >
             Entrar na lista de espera
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

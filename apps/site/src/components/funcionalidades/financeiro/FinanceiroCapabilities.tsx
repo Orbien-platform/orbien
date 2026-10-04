@@ -13,7 +13,7 @@ const CAPABILITIES = [
     title: "Recibo automático",
     body: "Confirmado o PIX, o doador recebe o comprovante por e-mail ou WhatsApp — sem nenhuma ação da tesoureira.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -25,7 +25,7 @@ const CAPABILITIES = [
     title: "Dashboard financeiro",
     body: "KPIs de arrecadação, percentual de dizimistas e comparativo com o mês anterior — visíveis em tempo real para o pastor e a tesoureira.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -37,7 +37,7 @@ const CAPABILITIES = [
     title: "Relatório semanal automático",
     body: "Todo início de semana, um resumo de entradas, saídas e doadores únicos chega por e-mail — sem ninguém precisar gerar nada.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {

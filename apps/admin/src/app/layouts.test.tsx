@@ -93,8 +93,9 @@ describe("RootLayout", () => {
 
     expect(arvore.type).toBe("html");
     expect(arvore.props.lang).toBe("pt-BR");
-    expect(arvore.props.className).toContain("--font-dm-sans");
-    expect(arvore.props.className).toContain("--font-dm-mono");
+    expect(arvore.props.className).toContain("--font-geist");
+    expect(arvore.props.className).toContain("--font-geist-mono");
+    expect(arvore.props.className).toContain("--font-instrument-serif");
     expect(arvore.props.suppressHydrationWarning).toBe(true);
   });
 

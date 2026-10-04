@@ -83,7 +83,7 @@ export function ChangePlanModal({
               onClick={() => setSelected(p.value)}
               disabled={isSubmitting}
               className={cn(
-                "flex flex-col items-start gap-0.5 rounded-[8px] border px-3 py-2.5 text-left transition-colors disabled:opacity-60",
+                "flex flex-col items-start gap-0.5 rounded-[10px] border px-3 py-2.5 text-left transition-colors disabled:opacity-60",
                 selected === p.value
                   ? "border-navy bg-navy-dim"
                   : "border-[var(--border-default)] hover:bg-[var(--surface-subtle)]"
@@ -102,7 +102,7 @@ export function ChangePlanModal({
 
         {error && (
           <p
-            className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
+            className="rounded-[10px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
             role="alert"
           >
             {error}
@@ -114,14 +114,14 @@ export function ChangePlanModal({
             type="button"
             onClick={close}
             disabled={isSubmitting}
-            className="rounded-[8px] px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
+            className="rounded-full px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
           >
             Cancelar
           </button>
           <Button
             onClick={handleConfirm}
             disabled={isSubmitting || !selected}
-            className="h-9 rounded-[8px] bg-navy px-4 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
+            className="h-9 rounded-full bg-navy px-4 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
           >
             {isSubmitting ? (
               <>

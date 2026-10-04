@@ -539,7 +539,7 @@ export default function FinanceiroPage() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-medium text-ink dark:text-white">Financeiro</h1>
+          <h1 className="page-title">Financeiro</h1>
           <p className="mt-0.5 text-sm text-stone">Visão geral e tesouraria</p>
         </div>
         {canManageCategories && (

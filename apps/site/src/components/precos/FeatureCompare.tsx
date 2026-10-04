@@ -70,7 +70,7 @@ function Cell({ value, variant, mobileLabel }: { value: CellValue; variant: "sta
       className={[
         "px-5 md:px-7 py-3 md:py-4 flex items-center gap-2 text-sm",
         isPremium
-          ? "md:[border-left:2px_solid_#00B8A2] md:bg-[var(--navy-soft)]"
+          ? "md:[border-left:2px_solid_var(--color-teal)] md:bg-[var(--navy-soft)]"
           : "md:border-l",
       ].join(" ")}
       style={{

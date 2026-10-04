@@ -76,7 +76,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
                 disabled={isSubmitting}
-                className="rounded-[8px]"
+                className="rounded-[10px]"
               />
             </div>
 
@@ -95,13 +95,13 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 disabled={isSubmitting}
-                className="rounded-[8px]"
+                className="rounded-[10px]"
               />
             </div>
 
             {error && (
               <p
-                className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
+                className="rounded-[10px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
                 role="alert"
               >
                 {error}
@@ -111,7 +111,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="mt-1 h-10 w-full rounded-[8px] bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
+              className="mt-1 h-10 w-full rounded-full bg-navy font-sans text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
             >
               {isSubmitting ? (
                 <>

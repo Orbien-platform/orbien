@@ -24,9 +24,9 @@ Use only:
 No `dangerouslySetInnerHTML`, no copy-pasted HTML string literals, no bare `<div style="…">` blobs copied from a browser. All UI is JSX composed from named components or Tailwind utilities.
 **Catch:** if you are about to paste a block of HTML markup as-is, stop — extract meaningful pieces into named sub-components or primitives first.
 
-## 4. DM Sans and DM Mono only
-The only permitted font families are `DM Sans` (Tailwind utility: `font-sans`) and `DM Mono` (`font-mono`). Both are already loaded in `layout.tsx` via `next/font`. Do not import or reference any other typeface.
-**Catch:** grep for `font-family`, `@import url`, or any Google Fonts `<link>` that isn't DM Sans / DM Mono.
+## 4. Órbita fonts only — Geist, Geist Mono, Instrument Serif
+The only permitted font families are the three of the Órbita direction (`docs/design/orbita-v2/README.md`): `Geist` (Tailwind utility: `font-sans`) for text, `Geist Mono` (`font-mono`) for labels and numbers, and `Instrument Serif` (`font-serif`) for `h1`/`h2`, which `globals.css` already applies. All three are loaded in `layout.tsx` via `next/font/local` from `src/fonts/` — never `next/font/google`, whose download at build time already broke CI. Do not import or reference any other typeface.
+**Catch:** grep for `font-family`, `@import url`, or any Google Fonts `<link>` that isn't one of the three.
 
 ## 5. No localStorage or sessionStorage
 This is a static marketing site. There is no auth, no cart, no persistent user state. `localStorage`, `sessionStorage`, `document.cookie`, and `IndexedDB` are off-limits.

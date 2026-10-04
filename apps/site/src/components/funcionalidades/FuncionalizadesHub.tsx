@@ -62,13 +62,13 @@ export function FuncionalizadesHub() {
         <div className="mx-auto max-w-[1180px] px-6">
           <SectionLabel className="mb-7">Funcionalidades</SectionLabel>
           <h1
-            className="font-light tracking-[-0.035em] mb-6"
-            style={{ fontSize: "clamp(40px, 6.5vw, 72px)", lineHeight: 1.04, color: "var(--ink)" }}
+            className="text-display font-light tracking-[-0.035em] mb-6"
+            style={{ color: "var(--ink)" }}
           >
             Uma plataforma.{" "}
-            <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+            <em className="heading-accent">
               Quatro módulos.
-            </strong>
+            </em>
           </h1>
           <p
             className="font-light leading-[1.6] max-w-[580px]"

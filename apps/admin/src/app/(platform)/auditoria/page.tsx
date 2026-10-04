@@ -129,7 +129,7 @@ export default function AuditoriaPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">
+        <h1 className="page-title">
           Auditoria de suporte
         </h1>
         <p className="text-sm text-stone">

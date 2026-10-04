@@ -142,7 +142,7 @@ export default function CrmPage() {
             onClick={() => handleSupportSession(t)}
             disabled={openingFor !== null}
             title="Abre o app do tenant numa aba nova, com as permissões deste tenant. Cada requisição fica registrada em audit_logs."
-            className="inline-flex items-center gap-2 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] whitespace-nowrap px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10 disabled:opacity-50"
           >
             {openingFor === t.id ? (
               <Loader2 size={14} className="animate-spin" />
@@ -159,7 +159,7 @@ export default function CrmPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">CRM</h1>
+        <h1 className="page-title">CRM</h1>
         <p className="text-sm text-stone">
           Trials não convertidos e tenants inadimplentes, para follow-up comercial.
         </p>
@@ -167,7 +167,7 @@ export default function CrmPage() {
 
       {actionError && (
         <p
-          className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
+          className="rounded-[10px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
           role="alert"
         >
           {actionError}

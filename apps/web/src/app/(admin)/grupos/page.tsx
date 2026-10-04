@@ -184,7 +184,7 @@ export default function GruposPage() {
       {/* Page header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-medium text-ink dark:text-white">Grupos</h1>
+          <h1 className="page-title">Grupos</h1>
           <p className="mt-0.5 text-sm text-stone">
             {total > 0 ? `${total} grupo${total !== 1 ? "s" : ""}` : "Nenhum grupo"}
           </p>

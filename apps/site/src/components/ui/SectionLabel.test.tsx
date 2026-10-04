@@ -7,7 +7,7 @@ describe("SectionLabel", () => {
     const { container } = render(<SectionLabel>Comparativo</SectionLabel>);
     expect(screen.getByText("Comparativo")).toBeInTheDocument();
     const line = container.querySelector("span")!;
-    expect(line).toHaveStyle({ background: "var(--navy-accent)" });
+    expect(line).toHaveStyle({ background: "var(--color-teal)" });
   });
 
   it("lineColor sobrescreve só o traço, não o texto", () => {
@@ -18,6 +18,14 @@ describe("SectionLabel", () => {
     );
     expect(container.firstElementChild).toHaveStyle({ color: "var(--stone)" });
     expect(container.querySelector("span")).toHaveStyle({ background: "var(--muted)" });
+  });
+
+  it("usa a tipografia de rótulo da Órbita: mono, caixa alta, espaçada", () => {
+    const { container } = render(<SectionLabel>Rótulo</SectionLabel>);
+    const cls = container.firstElementChild!.className;
+    expect(cls).toContain("font-mono");
+    expect(cls).toContain("uppercase");
+    expect(cls).toContain("tracking-[0.16em]");
   });
 
   it("aceita className extra", () => {

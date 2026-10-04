@@ -35,7 +35,7 @@ function DashboardMockup() {
         {/* Header row */}
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
+            <div className="font-mono text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: "var(--muted)" }}>
               Painel · Esta semana
             </div>
             <div className="text-[13px] font-medium tracking-[-0.01em]" style={{ color: "var(--ink)" }}>
@@ -44,7 +44,7 @@ function DashboardMockup() {
           </div>
           <span
             className="text-[9px] px-2 py-1 rounded-pill"
-            style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+            style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
           >
             ● Ao vivo
           </span>
@@ -62,13 +62,13 @@ function DashboardMockup() {
               className="rounded-btn p-2.5 border"
               style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
             >
-              <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>
+              <div className="font-mono text-[9px] uppercase tracking-[0.12em] mb-1" style={{ color: "var(--muted)" }}>
                 {label}
               </div>
               <div className="text-base font-semibold tracking-[-0.02em]" style={{ color: "var(--ink)" }}>
                 {val}
               </div>
-              <div className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>
+              <div className="font-mono text-[9px] mt-0.5" style={{ color: "var(--color-teal)" }}>
                 {delta}
               </div>
             </div>
@@ -84,7 +84,7 @@ function DashboardMockup() {
           }}
         >
           <div
-            className="absolute left-2.5 top-2 text-[10px] font-medium"
+            className="absolute left-2.5 top-2 font-mono text-[9px] uppercase tracking-[0.12em]"
             style={{ color: "var(--navy-accent)" }}
           >
             Doações · últimos 7 dias
@@ -104,7 +104,7 @@ function DashboardMockup() {
               d="M0,60 L40,52 L80,58 L120,40 L160,46 L200,28 L240,32 L300,18"
               stroke="currentColor" strokeWidth="1.5" fill="none"
             />
-            <circle cx="300" cy="18" r="3" fill="#00B8A2" />
+            <circle cx="300" cy="18" r="3" fill="var(--color-teal)" />
           </svg>
         </div>
 
@@ -129,7 +129,7 @@ function DashboardMockup() {
           </div>
           <span
             className="text-[9px] font-medium px-1.5 py-0.5 rounded-pill"
-            style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+            style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
           >
             Acompanhar
           </span>
@@ -169,7 +169,7 @@ function PhoneMockup() {
           className="pt-9 px-3.5 pb-3 border-b flex-shrink-0"
           style={{ background: "var(--bg)", borderColor: "var(--border)" }}
         >
-          <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>
+          <div className="font-mono text-[9px] uppercase tracking-[0.12em] mb-1" style={{ color: "var(--muted)" }}>
             Igreja Doca · Visitantes
           </div>
           <h4 className="text-sm font-semibold tracking-[-0.02em]" style={{ color: "var(--ink)" }}>
@@ -189,11 +189,11 @@ function PhoneMockup() {
               className="rounded-[6px] px-2.5 py-[7px] border"
               style={{
                 background: "var(--surface)",
-                borderColor: focus ? "#1E3A7B" : "var(--border)",
+                borderColor: focus ? "var(--color-navy)" : "var(--border)",
                 boxShadow: focus ? "0 0 0 3px var(--navy-dim)" : undefined,
               }}
             >
-              <div className="text-[10px] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
+              <div className="font-mono text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: "var(--muted)" }}>
                 {label}
               </div>
               <div className="text-[11px] font-medium" style={{ color: "var(--ink)" }}>
@@ -204,7 +204,7 @@ function PhoneMockup() {
 
           <div
             className="mt-auto rounded-btn p-2.5 text-center text-[11px] font-medium text-white"
-            style={{ background: "#1E3A7B" }}
+            style={{ background: "var(--color-navy)" }}
           >
             Cadastrar visitante
           </div>
@@ -217,29 +217,23 @@ function PhoneMockup() {
 export function Hero() {
   return (
     <section className="relative overflow-hidden py-14 pb-24 md:py-14 md:pb-24">
-      {/* Radial glow */}
-      <div
-        className="pointer-events-none absolute -top-48 -right-48 w-[700px] h-[700px] -z-10"
-        style={{
-          background: "radial-gradient(circle, var(--hero-glow), transparent 65%)",
-        }}
-      />
+      {/* Órbita: anéis concêntricos com o satélite teal girando */}
+      <div aria-hidden="true" className="hero-orbit" />
 
       <div className="mx-auto max-w-[1180px] px-6">
         <div className="grid grid-cols-1 gap-10 items-center md:grid-cols-[1.05fr_1fr] md:gap-14">
-          {/* Content */}
-          <div>
+          {/* Content — entrada escalonada, uma vez, no carregamento */}
+          <div className="hero-enter">
             <SectionLabel className="mb-6">Plataforma de gestão para igrejas</SectionLabel>
 
             <h1
-              className="font-semibold leading-[1.02] tracking-[-0.035em] mb-5"
+              className="text-display font-semibold leading-[1.02] tracking-[-0.035em] mb-5"
               style={{
-                fontSize: "clamp(36px, 6.4vw, 68px)",
                 color: "var(--ink)",
               }}
             >
               A plataforma de gestão que{" "}
-              <span style={{ color: "var(--navy-accent)" }}>cabe na sua igreja.</span>
+              <em className="heading-accent">cabe na sua igreja.</em>
             </h1>
 
             <p
@@ -255,7 +249,7 @@ export function Hero() {
             <div className="flex gap-3 flex-wrap items-center mb-7">
               <Link
                 href="#waitlist"
-                className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+                className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
               >
                 Entrar na lista de espera
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -264,11 +258,7 @@ export function Hero() {
               </Link>
               <Link
                 href="#pilares"
-                className="inline-flex h-12 items-center gap-2 rounded-btn border px-6 text-[15px] font-medium transition-all"
-                style={{
-                  color: "var(--navy-accent)",
-                  borderColor: "var(--navy-accent)",
-                }}
+                className="inline-flex h-12 items-center gap-2 cta-secondary px-6 text-[15px]"
               >
                 Ver como funciona
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -278,7 +268,7 @@ export function Hero() {
             </div>
 
             {/* Meta badges */}
-            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+            <div className="flex gap-5 flex-wrap font-mono text-[11px] uppercase tracking-[0.12em]" style={{ color: "var(--muted)" }}>
               {["Sem CNPJ", "Sem cartão", "5 min para começar"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />

@@ -60,7 +60,7 @@ export function RelatorioSemanal() {
                 <div className="flex items-center gap-2 mb-1">
                   <div
                     className="w-7 h-7 rounded-[6px] flex items-center justify-center flex-shrink-0"
-                    style={{ background: "var(--navy-accent)", color: "#fff" }}
+                    style={{ background: "var(--navy-accent)", color: "var(--on-ink)" }}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 3v18h18" /><path d="M7 16V9" /><path d="M12 16v-5" /><path d="M17 16V7" />
@@ -82,7 +82,7 @@ export function RelatorioSemanal() {
                   <div key={label} className="px-5 py-4" style={{ background: "var(--surface)" }}>
                     <p className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</p>
                     <p className="font-mono text-[16px] font-medium tracking-[-0.02em]" style={{ color: "var(--ink)" }}>{value}</p>
-                    <p className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>{delta}</p>
+                    <p className="font-mono text-[9px] mt-0.5" style={{ color: "var(--color-teal)" }}>{delta}</p>
                   </div>
                 ))}
               </div>

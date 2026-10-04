@@ -37,7 +37,7 @@ export default function PerfilPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">Perfil</h1>
+        <h1 className="page-title">Perfil</h1>
         <p className="mt-0.5 text-sm text-stone">Seus dados de acesso</p>
       </div>
 

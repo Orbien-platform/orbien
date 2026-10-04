@@ -11,7 +11,7 @@ const CAPABILITIES = [
     title: "Agenda de eventos",
     body: "Cultos, retiros, aniversários e conferências no calendário do app. O membro adiciona ao Google Agenda com um toque.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -23,7 +23,7 @@ const CAPABILITIES = [
     title: "Mensagem da liderança",
     body: "O pastor envia uma mensagem direta para todos ou para um segmento. Aparece destacada no topo do feed do membro.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -37,7 +37,7 @@ const CAPABILITIES = [
     title: "Segmentação de público",
     body: "Envie para todos, para um grupo específico, para líderes ou para membros de um ministério. A mensagem certa para a pessoa certa.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -62,7 +62,7 @@ const CAPABILITIES = [
     title: "Modo silencioso por horário",
     body: "Notificações são bloqueadas automaticamente entre 22h e 7h — para respeitar o descanso dos membros sem precisar de configuração individual.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -76,7 +76,7 @@ const CAPABILITIES = [
     title: "Identidade visual da igreja",
     body: "O conteúdo aparece com o logo, as cores e o nome da sua igreja no app. O membro não vê \"Orbien\" — vê \"Igreja da Graça\".",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
 ] as const;

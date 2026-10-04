@@ -7,10 +7,10 @@ const CENARIOS = [
     title: "PIX por chave manual",
     availability: "Starter e Premium",
     availabilityBg: "var(--teal-dim)",
-    availabilityColor: "#00B8A2",
+    availabilityColor: "var(--color-teal)",
     fee: "Sem taxa",
     feeBg: "var(--teal-dim)",
-    feeColor: "#00B8A2",
+    feeColor: "var(--color-teal)",
     body: "Você configura CPF, telefone ou e-mail como chave. O membro paga pelo app de qualquer banco. O recibo sai automático — a Orbien não toca no dinheiro.",
     steps: [
       "Membro abre o app e toca em Fazer doação",
@@ -44,7 +44,7 @@ const CENARIOS = [
     availabilityColor: "var(--navy-accent)",
     fee: "Sem taxa adicional",
     feeBg: "var(--teal-dim)",
-    feeColor: "#00B8A2",
+    feeColor: "var(--color-teal)",
     body: "O membro configura o valor e o dia do débito uma única vez. O sistema debita automaticamente todo mês via PIX — sem lembretes, sem esquecimentos.",
     steps: [
       "Membro define valor e dia de vencimento",

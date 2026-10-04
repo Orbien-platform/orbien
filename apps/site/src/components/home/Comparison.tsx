@@ -6,7 +6,7 @@ function Cross() {
   return (
     <span
       className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ background: "var(--crimson-dim)", color: "#C0392B" }}
+      style={{ background: "var(--crimson-dim)", color: "var(--color-crimson-ink)" }}
     >
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -103,8 +103,8 @@ export function Comparison() {
                     className="px-6 py-[18px] text-sm font-medium flex items-center gap-2"
                     style={{
                       color: "var(--ink)",
-                      borderLeft: "2px solid #00B8A2",
-                      background: "rgba(0,184,162,.04)",
+                      borderLeft: "2px solid var(--color-teal)",
+                      background: "color-mix(in srgb, var(--color-teal) 4%, transparent)",
                     }}
                   >
                     <CheckIcon /> {ours}

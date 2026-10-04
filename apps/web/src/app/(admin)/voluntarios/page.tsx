@@ -236,7 +236,7 @@ export default function VoluntariosPage() {
     <div className="flex flex-col gap-6">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-medium text-ink dark:text-white">Voluntários</h1>
+        <h1 className="page-title">Ministérios</h1>
       </div>
 
       {/* Tabs */}

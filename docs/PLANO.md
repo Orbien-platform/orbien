@@ -1669,6 +1669,40 @@ não-membro com token válido e não-duplicação) e `meetings.controller.spec.t
 (gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
 Nenhuma suíte existente mudou de comportamento.
 
+### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel começado, app não começado
+
+Handoff de design em `docs/design/orbita-v2/README.md`: nova identidade
+noturna (fundo `#05070F`, teal `#00E5C7` da Orbien, `--brand` da igreja,
+Instrument Serif nos títulos, Geist no texto, Geist Mono em rótulos), nova
+arquitetura de informação do painel (menu em seções, início por papel,
+entidades com página própria, financeiro e administração em sub-áreas) e o
+app em cinco abas. **O acompanhamento item a item está em
+`docs/design/orbita-v2/PROJETO.md`** — este item só diz onde cada superfície
+está.
+
+- **Site (`apps/site`) — entregue (2026-10-04).** Tokens, fontes, títulos em
+  serifa, CTAs em pill teal, rótulos em mono, órbita no hero, só tema escuro.
+  Os hex fixos dos componentes viraram token (era a regra 2 do
+  `apps/site/AGENTS.md`); a regra 4 do mesmo arquivo trocou DM Sans/DM Mono
+  pelas três fontes da Órbita.
+- **Painel (`apps/web`) — começado (2026-10-04).** Tokens, fontes, menu em
+  seções (`src/lib/navigation.ts`), identidade da igreja no menu e cor da
+  igreja em `--brand` (`ChurchIdentityProvider`). Faltam as telas da v2 e o
+  header completo.
+- **App (`apps/mobile`) — não começado.** Tokens, fontes (build nativa, não
+  OTA), navegação em cinco abas e as telas.
+
+- **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
+  painel, decisão de 2026-10-04: o pacote v2 não o desenha.
+- **Ícone — entregue (2026-10-04).** A marca da v2 (anel com satélite teal)
+  nos três apps e na marca do site.
+
+Decisões de 2026-10-04, na seção 5 do `PROJETO.md`: o site fica só escuro;
+o plano da igreja entra em `GET /me/permissions` e a terminologia vira
+configuração da igreja, os dois para o painel (coroa Premium, convite no
+Starter, termo da igreja em menu e títulos). Segue em aberto só a copy do
+site (títulos da v2 contra os do React, e "Precision Modern" na Sobre).
+
 ---
 
 ## 7. Pendências de código

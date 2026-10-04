@@ -41,7 +41,15 @@ export default function PlatformLayout({
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="relative flex-1 overflow-y-auto">
+          {/* Anéis da Órbita, atrás do conteúdo */}
+          <div aria-hidden="true" className="orbit-bg">
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="relative p-6">{children}</div>
+        </main>
       </div>
     </div>
   );

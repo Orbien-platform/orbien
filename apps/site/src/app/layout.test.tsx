@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
  * módulo importado fora do build não expõe o loader, então chamar
  * `localFont()` estoura. O mock devolve o mesmo contrato usado pelo layout
  * (um objeto com `variable`), derivado da variável que o layout pediu, o que
- * basta para verificar que as duas variáveis de fonte chegam ao `<html>`.
+ * basta para verificar que as três variáveis de fonte chegam ao `<html>`.
  */
 vi.mock("next/font/local", () => ({
   default: ({ variable }: { variable: string }) => ({ variable: `${variable}-stub` }),
@@ -23,11 +23,12 @@ describe("RootLayout", () => {
     expect(html).toContain('lang="pt-BR"');
   });
 
-  it("aplica as duas variáveis de fonte na raiz", () => {
+  it("aplica as três variáveis de fonte da Órbita na raiz", () => {
     const html = renderToStaticMarkup(<RootLayout>conteúdo</RootLayout>);
 
-    expect(html).toContain("--font-dm-sans-stub");
-    expect(html).toContain("--font-dm-mono-stub");
+    expect(html).toContain("--font-geist-stub");
+    expect(html).toContain("--font-geist-mono-stub");
+    expect(html).toContain("--font-instrument-serif-stub");
   });
 
   it("renderiza os filhos dentro do body", () => {

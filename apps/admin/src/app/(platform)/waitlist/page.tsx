@@ -200,7 +200,7 @@ export default function WaitlistPage() {
             type="button"
             onClick={() => setProvisioning(s)}
             title="Cria o tenant a partir deste lead e marca a waitlist como ativada."
-            className="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border-default)] px-2.5 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-default)] whitespace-nowrap px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-navy/10"
           >
             <UserPlus size={14} strokeWidth={1.5} />
             Provisionar
@@ -212,7 +212,7 @@ export default function WaitlistPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-medium text-ink dark:text-white">Waitlist</h1>
+        <h1 className="page-title">Waitlist</h1>
         <p className="text-sm text-stone">
           Leads do site. {total} inscrito{total === 1 ? "" : "s"}
           {status ? ` em "${STATUS_LABELS[status]}"` : ""}.

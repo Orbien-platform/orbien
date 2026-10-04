@@ -3,10 +3,10 @@ import { Reveal } from "@/components/ui/Reveal";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const ALERTS = [
-  { dot: "#C0392B", dotShadow: "var(--crimson-dim)", name: "Carlos Mendes",    detail: "Ausente há 4 semanas · Membro",          action: "Ligar" },
-  { dot: "#EAB308", dotShadow: "rgba(234,179,8,.18)", name: "Patrícia Lemos",    detail: "Ausente há 2 semanas · Frequentador",     action: "WhatsApp" },
-  { dot: "#EAB308", dotShadow: "rgba(234,179,8,.18)", name: "Rodrigo Figueira",  detail: "1ª visita há 14 dias — sem retorno",      action: "WhatsApp" },
-  { dot: "#22C55E", dotShadow: "rgba(34,197,94,.18)", name: "Marina Rodrigues",  detail: "Presente toda semana · Membro ativo",     action: "Ver perfil" },
+  { dot: "var(--color-crimson-ink)", dotShadow: "var(--crimson-dim)", name: "Carlos Mendes",    detail: "Ausente há 4 semanas · Membro",          action: "Ligar" },
+  { dot: "var(--color-amber)", dotShadow: "color-mix(in srgb, var(--color-amber) 18%, transparent)", name: "Patrícia Lemos",    detail: "Ausente há 2 semanas · Frequentador",     action: "WhatsApp" },
+  { dot: "var(--color-amber)", dotShadow: "color-mix(in srgb, var(--color-amber) 18%, transparent)", name: "Rodrigo Figueira",  detail: "1ª visita há 14 dias — sem retorno",      action: "WhatsApp" },
+  { dot: "var(--color-teal)", dotShadow: "color-mix(in srgb, var(--color-teal) 18%, transparent)", name: "Marina Rodrigues",  detail: "Presente toda semana · Membro ativo",     action: "Ver perfil" },
 ] as const;
 
 export function PresencaPanel() {
@@ -29,9 +29,9 @@ export function PresencaPanel() {
 
             <div className="flex flex-col gap-4">
               {[
-                { color: "#C0392B", label: "Vermelho", desc: "Membro ausente há mais de 3 semanas. Alerta imediato ao pastor." },
-                { color: "#EAB308", label: "Amarelo",  desc: "Frequentador ou visitante sem retorno há 2 semanas. Ação sugerida: WhatsApp." },
-                { color: "#22C55E", label: "Verde",    desc: "Presença regular. Nenhuma ação necessária." },
+                { color: "var(--color-crimson-ink)", label: "Vermelho", desc: "Membro ausente há mais de 3 semanas. Alerta imediato ao pastor." },
+                { color: "var(--color-amber)", label: "Amarelo",  desc: "Frequentador ou visitante sem retorno há 2 semanas. Ação sugerida: WhatsApp." },
+                { color: "var(--color-teal)", label: "Verde",    desc: "Presença regular. Nenhuma ação necessária." },
               ].map(({ color, label, desc }) => (
                 <div key={label} className="flex items-start gap-3.5">
                   <span

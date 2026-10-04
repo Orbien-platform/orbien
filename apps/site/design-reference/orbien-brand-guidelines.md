@@ -5,6 +5,16 @@
 **Status:** decidido
 **Última atualização:** 2026-05
 
+> **Substituído em parte pela direção Órbita v2 (2026-10).** Para cor,
+> tipografia e forma, vale `docs/design/orbita-v2/README.md`: fundo noturno
+> `#05070F`, teal `#00E5C7` como acento da Orbien, Instrument Serif nos
+> títulos, Geist no texto e Geist Mono em rótulos e números, botões em pill.
+> A seção 3 (Identidade Visual: cor, tipografia e forma) abaixo descreve a
+> v1 e não vale mais para o site nem para o painel. Posicionamento, nome, voz
+> e tom seguem valendo.
+> A reescrita completa deste guia está registrada em
+> `docs/design/orbita-v2/PROJETO.md`.
+
 ---
 
 ## 1. Propósito e Posicionamento

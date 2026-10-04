@@ -26,12 +26,12 @@ function BrandMark() {
   return (
     <span
       className="w-[22px] h-[22px] relative flex-shrink-0"
-      style={{ color: "var(--navy-accent)" }}
+      style={{ color: "var(--ink)" }}
     >
-      <svg viewBox="0 0 22 22" fill="none" className="w-full h-full">
-        <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" strokeWidth="1.5" />
-        <circle cx="11" cy="11" r="3" fill="currentColor" />
-        <circle cx="20" cy="11" r="2" fill="#00B8A2" />
+      {/* Marca da Órbita: anel com o satélite teal (`OrbLogo` da v2). */}
+      <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="19" cy="9" r="2.2" fill="var(--color-teal)" />
       </svg>
     </span>
   );

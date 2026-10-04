@@ -6,8 +6,8 @@ export function PrecosHero() {
       <div className="mx-auto max-w-[1180px] px-6">
         <SectionLabel className="mb-[22px]">Planos e preços</SectionLabel>
         <h1
-          className="font-semibold leading-[1.04] tracking-[-0.035em] mb-[22px] max-w-[800px]"
-          style={{ fontSize: "clamp(36px, 5.4vw, 60px)", color: "var(--ink)" }}
+          className="text-display font-semibold leading-[1.04] tracking-[-0.035em] mb-[22px] max-w-[800px]"
+          style={{ color: "var(--ink)" }}
         >
           Dois planos. O preço cresce com a sua igreja.
         </h1>
