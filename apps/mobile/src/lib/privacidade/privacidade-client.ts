@@ -30,6 +30,9 @@ export interface MyConsent {
 export interface DeletionStatus {
   requested_at: string | null;
   anonymize_after: string | null;
+  /** Só o pedido do próprio titular se cancela; a remoção feita pela igreja,
+   * não. */
+  cancellable: boolean;
 }
 
 export interface PersonalData {

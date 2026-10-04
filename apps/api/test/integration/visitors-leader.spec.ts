@@ -74,6 +74,7 @@ afterAll(async () => {
   await admin.visitRecord.deleteMany({ where: { person_id: { in: persons } } });
   await admin.consentRecord.deleteMany({ where: { person_id: { in: persons } } });
   await admin.person.deleteMany({ where: { id: { in: persons } } });
+  await admin.auditLog.deleteMany({ where: { actor_user_id: accountId } });
   await admin.userAccount.deleteMany({ where: { id: accountId } });
   await admin.$disconnect();
   await app?.close();
@@ -105,7 +106,7 @@ describe('POST /visitors', () => {
     expect(await admin.visitRecord.count({ where: { person_id: person.id } })).toBe(1);
   });
 
-  it('mesmo telefone: devolve o duplicado e não cria ninguém', async () => {
+  it('mesmo telefone: o líder vê o duplicado reduzido, a consulta fica auditada, ninguém é criado', async () => {
     const before = await admin.person.count({ where: { tenant_id: tenant.tenantId } });
     const res = await post(tokenLeader, {
       full_name: 'Outra Pessoa',
@@ -117,9 +118,20 @@ describe('POST /visitors', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('duplicate');
     expect(res.body.matches).toEqual([
-      expect.objectContaining({ id: createdPersons[0], visits: 1 }),
+      {
+        id: createdPersons[0],
+        full_name: `Visitante ${String(ts).charAt(0)}.`,
+        classification: null,
+        visits: 1,
+        last_visit_at: expect.any(String),
+      },
     ]);
     expect(await admin.person.count({ where: { tenant_id: tenant.tenantId } })).toBe(before);
+
+    const audit = await admin.auditLog.findFirstOrThrow({
+      where: { actor_user_id: accountId, action: 'visitor.duplicate_lookup' },
+    });
+    expect(audit.after).toEqual({ matched_person_ids: [createdPersons[0]], masked: true });
   });
 
   it('"é a mesma pessoa" registra só a nova visita', async () => {

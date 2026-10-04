@@ -43,10 +43,21 @@ const basePerson = {
 };
 
 function setup(
-  opts: { personId?: string | null; person?: Partial<typeof basePerson> | null } = {},
+  opts: {
+    personId?: string | null;
+    person?: Partial<typeof basePerson> | null;
+    /** Última ação de exclusão registrada para a pessoa. */
+    lastDeletionAction?: string | null;
+  } = {},
 ) {
   const person = opts.person === null ? null : { ...basePerson, ...opts.person };
   const client = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    auditLog: {
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(opts.lastDeletionAction ? { action: opts.lastDeletionAction } : null),
+    },
     userAccount: {
       findUnique: jest
         .fn()
@@ -127,7 +138,7 @@ describe('personalData / exportData', () => {
       expect.objectContaining({ small_group_id: 'g1', name: 'Célula Norte', role: 'member' }),
     ]);
     expect(data.donations[0]).toMatchObject({ amount: '150.00', category: 'Dízimos' });
-    expect(data.deletion).toEqual({ requested_at: null, anonymize_after: null });
+    expect(data.deletion).toEqual({ requested_at: null, anonymize_after: null, cancellable: false });
   });
 
   it('não religa doação anônima ao titular', async () => {
@@ -138,13 +149,33 @@ describe('personalData / exportData', () => {
     );
   });
 
-  it('com pedido de exclusão em aberto, informa a data da anonimização', async () => {
+  it('com pedido do titular em aberto, informa a data e que ele pode cancelar', async () => {
     const requested = new Date('2026-10-01T12:00:00Z');
-    const { service } = setup({ person: { deleted_at: requested } });
+    const { service, client } = setup({
+      person: { deleted_at: requested },
+      lastDeletionAction: 'person.deletion_requested',
+    });
     const data = await service.personalData(user);
     const expected = new Date(requested);
     expected.setDate(expected.getDate() + DELETION_GRACE_DAYS);
-    expect(data.deletion).toEqual({ requested_at: requested, anonymize_after: expected });
+    expect(data.deletion).toEqual({ requested_at: requested, anonymize_after: expected, cancellable: true });
+    expect(client.auditLog.findFirst).toHaveBeenCalledWith({
+      where: {
+        subject_person_id: 'person-1',
+        action: { in: ['person.deletion_requested', 'person.deleted'] },
+      },
+      orderBy: { at: 'desc' },
+      select: { action: true },
+    });
+  });
+
+  it('removido pela igreja: a marca aparece, mas não é cancelável pelo titular', async () => {
+    const { service } = setup({
+      person: { deleted_at: new Date() },
+      lastDeletionAction: 'person.deleted',
+    });
+    const data = await service.personalData(user);
+    expect(data.deletion.cancellable).toBe(false);
   });
 
   it('exportação é versionada e auditada', async () => {
@@ -224,44 +255,66 @@ describe('revokeConsent', () => {
 });
 
 describe('pedido de exclusão', () => {
-  it('marca deleted_at e audita o pedido', async () => {
+  it('marca deleted_at e audita o pedido na transação', async () => {
     const { service, client } = setup();
     const status = await service.requestDeletion(user);
     expect(client.person.update).toHaveBeenCalledWith({
       where: { id: 'person-1' },
       data: { deleted_at: expect.any(Date) },
     });
-    expect(status.requested_at).toBeInstanceOf(Date);
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ action: 'person.deletion_requested' }),
-      expect.anything(),
-    );
+    expect(status).toMatchObject({ requested_at: expect.any(Date), cancellable: true });
+    expect(client.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(client.$executeRaw.mock.calls[0]).toContain('person.deletion_requested');
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('falha da auditoria derruba o pedido (é o que garante o cancelamento depois)', async () => {
+    const { service, client } = setup();
+    client.$executeRaw.mockRejectedValue(new Error('42501'));
+    await expect(service.requestDeletion(user)).rejects.toThrow('42501');
   });
 
   it('pedido repetido devolve o que já existe, sem reiniciar o prazo', async () => {
     const requested = new Date('2026-10-01T12:00:00Z');
-    const { service, client } = setup({ person: { deleted_at: requested } });
+    const { service, client } = setup({
+      person: { deleted_at: requested },
+      lastDeletionAction: 'person.deletion_requested',
+    });
     const status = await service.requestDeletion(user);
     expect(status.requested_at).toBe(requested);
+    expect(status.cancellable).toBe(true);
     expect(client.person.update).not.toHaveBeenCalled();
   });
 
-  it('cancelar limpa deleted_at e audita', async () => {
-    const { service, client } = setup({ person: { deleted_at: new Date() } });
+  it('cancelar o próprio pedido limpa deleted_at e audita na transação', async () => {
+    const { service, client } = setup({
+      person: { deleted_at: new Date() },
+      lastDeletionAction: 'person.deletion_requested',
+    });
     await expect(service.cancelDeletion(user)).resolves.toEqual({
       requested_at: null,
       anonymize_after: null,
+      cancellable: false,
     });
     expect(client.person.update).toHaveBeenCalledWith({
       where: { id: 'person-1' },
       data: { deleted_at: null },
     });
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ action: 'person.deletion_cancelled' }),
-      expect.anything(),
-    );
+    expect(client.$executeRaw.mock.calls[0]).toContain('person.deletion_cancelled');
+  });
+
+  it('não desfaz a remoção feita pela igreja: 409', async () => {
+    const { service, client } = setup({
+      person: { deleted_at: new Date() },
+      lastDeletionAction: 'person.deleted',
+    });
+    await expect(service.cancelDeletion(user)).rejects.toBeInstanceOf(ConflictException);
+    expect(client.person.update).not.toHaveBeenCalled();
+  });
+
+  it('sem registro da origem, não cancela (na dúvida, quem desfaz é a igreja)', async () => {
+    const { service } = setup({ person: { deleted_at: new Date() } });
+    await expect(service.cancelDeletion(user)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('cancelar sem pedido em aberto: 404', async () => {

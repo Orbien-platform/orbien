@@ -308,7 +308,7 @@ na tela "em breve" do site.
 | Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Privacidade, Sair |
 | Pessoal | Privacidade e meus dados (LGPD) | [x] Meus dados com correção, consentimentos com revogação, exportação pela folha de compartilhamento, pedido de exclusão cancelável (30 dias). API nova: rotas `/me` do `CONF-03` |
 | Célula | Presença (líder): todos marcados, toque desmarca | [x] Na primeira chamada do encontro; com presença já registrada, ninguém vem pré-marcado. Falha mantém as marcações |
-| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] Fluxo da v2: sexo, origem, consentimento obrigatório; telefone repetido mostra quem o tem **antes** de criar ("registrar nova visita" ou "é outra pessoa"). API nova `POST /visitors`, aberta ao **líder de célula** |
+| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] Fluxo da v2: sexo, origem, consentimento obrigatório; telefone repetido mostra quem o tem **antes** de criar ("registrar nova visita" ou "é outra pessoa"). API nova `POST /visitors`, aberta ao **líder de célula**. Para quem não lê pessoas (o líder), o duplicado vem reduzido — nome mascarado ("André C."), sem classificação — e toda consulta que acha alguém fica em `audit_logs` (decisão de 2026-10-04) |
 
 ### 4.2 O que falta
 

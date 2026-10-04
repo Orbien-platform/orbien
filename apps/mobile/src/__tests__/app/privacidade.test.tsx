@@ -52,7 +52,7 @@ function data(overrides: Record<string, unknown> = {}) {
     groups: [],
     visits: [],
     donations: [],
-    deletion: { requested_at: null, anonymize_after: null },
+    deletion: { requested_at: null, anonymize_after: null, cancellable: false },
     ...overrides,
   };
 }
@@ -160,8 +160,13 @@ describe("PrivacidadeScreen", () => {
     mockRequestDeletion.mockResolvedValue({
       requested_at: "2026-10-04T12:00:00.000Z",
       anonymize_after: "2026-11-03T12:00:00.000Z",
+      cancellable: true,
     });
-    mockCancelDeletion.mockResolvedValue({ requested_at: null, anonymize_after: null });
+    mockCancelDeletion.mockResolvedValue({
+      requested_at: null,
+      anonymize_after: null,
+      cancellable: false,
+    });
     await renderScreen();
 
     await act(async () => {
@@ -179,5 +184,21 @@ describe("PrivacidadeScreen", () => {
     });
     expect(mockCancelDeletion).toHaveBeenCalled();
     expect(screen.getByTestId("privacidade-pedir-exclusao")).toBeTruthy();
+  });
+
+  it("removido pela igreja: mostra o aviso e não oferece cancelar", async () => {
+    mockGet.mockResolvedValue(
+      data({
+        deletion: {
+          requested_at: "2026-10-04T12:00:00.000Z",
+          anonymize_after: "2026-11-03T12:00:00.000Z",
+          cancellable: false,
+        },
+      }),
+    );
+    await renderScreen();
+    expect(screen.getByTestId("privacidade-removido-pela-igreja")).toBeTruthy();
+    expect(screen.queryByTestId("privacidade-cancelar-exclusao")).toBeNull();
+    expect(screen.queryByTestId("privacidade-pedir-exclusao")).toBeNull();
   });
 });

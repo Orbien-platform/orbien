@@ -20,6 +20,14 @@ import { UpdateMyDataDto } from './dto/update-my-data.dto';
  * (`PersonsRetentionScheduler`). Até lá o titular cancela — o cadastro volta
  * como estava. A conta de acesso continua ativa nesse intervalo, justamente
  * para que o cancelamento seja possível "entrando no app" (v2).
+ *
+ * O mesmo `deleted_at` é gravado quando o **admin** remove a pessoa
+ * (`PersonsService.remove`, ação `person.deleted`). O titular só pode desfazer
+ * o que ele mesmo pediu: quem diz a origem da marca é a última entre
+ * `person.deletion_requested` e `person.deleted` em `audit_logs`. Por isso o
+ * pedido e o cancelamento gravam a auditoria **dentro** da transação (como
+ * `PersonsService.writeAuditLog`) — um registro perdido deixaria o titular
+ * sem conseguir cancelar.
  */
 export const DELETION_GRACE_DAYS = 30;
 
@@ -68,7 +76,13 @@ export interface DeletionStatus {
   requested_at: Date | null;
   /** Data a partir da qual o job anonimiza. Nulo sem pedido. */
   anonymize_after: Date | null;
+  /** O titular pode desfazer: só quando a marca é um pedido dele, não uma
+   * remoção feita pela igreja. */
+  cancellable: boolean;
 }
+
+const SUBJECT_REQUEST = 'person.deletion_requested';
+const ADMIN_REMOVAL = 'person.deleted';
 
 export interface PersonalData {
   person: Omit<MyPerson, 'deleted_at' | 'anonymized_at'>;
@@ -177,7 +191,10 @@ export class MePrivacyService {
         category: d.category.name,
         status: d.status,
       })),
-      deletion: deletionStatus(deleted_at),
+      deletion: deletionStatus(
+        deleted_at,
+        deleted_at ? await this.requestedBySubject(person.id) : false,
+      ),
     };
   }
 
@@ -286,54 +303,69 @@ export class MePrivacyService {
   async requestDeletion(user: JwtPayload): Promise<DeletionStatus> {
     const person = await this.myPerson(user);
     // Pedir de novo não reinicia o prazo: devolve o pedido que já existe.
-    if (person.deleted_at) return deletionStatus(person.deleted_at);
+    if (person.deleted_at) {
+      return deletionStatus(person.deleted_at, await this.requestedBySubject(person.id));
+    }
 
     const requestedAt = new Date();
     await this.prisma.client.person.update({
       where: { id: person.id },
       data: { deleted_at: requestedAt },
     });
+    await this.auditInTx(user, person.id, SUBJECT_REQUEST);
 
-    await writeAuditLog(
-      this.prisma,
-      {
-        tenant_id: user.tenant_id,
-        congregation_id: user.congregation_id,
-        actor_user_id: user.sub,
-        subject_person_id: person.id,
-        entity: 'person',
-        action: 'person.deletion_requested',
-      },
-      this.logger,
-    );
-
-    return deletionStatus(requestedAt);
+    return deletionStatus(requestedAt, true);
   }
 
   /** `DELETE /me/deletion-request` — cancela o pedido dentro do prazo. */
   async cancelDeletion(user: JwtPayload): Promise<DeletionStatus> {
     const person = await this.myPerson(user);
     if (!person.deleted_at) throw new NotFoundException('Não há pedido de exclusão em aberto');
+    if (!(await this.requestedBySubject(person.id))) {
+      throw new ConflictException(
+        'O cadastro foi removido pela igreja. Para revertê-lo, fale com a secretaria.',
+      );
+    }
 
     await this.prisma.client.person.update({
       where: { id: person.id },
       data: { deleted_at: null },
     });
+    await this.auditInTx(user, person.id, 'person.deletion_cancelled');
 
-    await writeAuditLog(
-      this.prisma,
-      {
-        tenant_id: user.tenant_id,
-        congregation_id: user.congregation_id,
-        actor_user_id: user.sub,
-        subject_person_id: person.id,
-        entity: 'person',
-        action: 'person.deletion_cancelled',
-      },
-      this.logger,
-    );
+    return deletionStatus(null, false);
+  }
 
-    return deletionStatus(null);
+  /** A marca de exclusão em aberto é um pedido do próprio titular? A última
+   * entre o pedido dele e a remoção pelo admin decide. Sem nenhuma das duas
+   * registrada, não é dele — fail-closed: na dúvida, quem desfaz é a igreja. */
+  private async requestedBySubject(personId: string): Promise<boolean> {
+    const latest = await this.prisma.client.auditLog.findFirst({
+      where: { subject_person_id: personId, action: { in: [SUBJECT_REQUEST, ADMIN_REMOVAL] } },
+      orderBy: { at: 'desc' },
+      select: { action: true },
+    });
+    return latest?.action === SUBJECT_REQUEST;
+  }
+
+  /** Auditoria na transação da requisição, com a falha propagando — ver o
+   * cabeçalho deste arquivo e `PersonsService.writeAuditLog`. */
+  private async auditInTx(user: JwtPayload, personId: string, action: string): Promise<void> {
+    await this.prisma.client.$executeRaw`
+      SELECT audit_insert(
+        ${user.tenant_id}::text,
+        ${user.congregation_id}::text,
+        ${user.sub}::text,
+        ${personId}::text,
+        'person'::text,
+        ${action}::text,
+        NULL::jsonb,
+        NULL::jsonb,
+        NULL::text,
+        NULL::text,
+        NULL::text
+      )
+    `;
   }
 
   /**
@@ -364,9 +396,9 @@ export class MePrivacyService {
   }
 }
 
-function deletionStatus(requestedAt: Date | null): DeletionStatus {
-  if (!requestedAt) return { requested_at: null, anonymize_after: null };
+function deletionStatus(requestedAt: Date | null, cancellable: boolean): DeletionStatus {
+  if (!requestedAt) return { requested_at: null, anonymize_after: null, cancellable: false };
   const after = new Date(requestedAt);
   after.setDate(after.getDate() + DELETION_GRACE_DAYS);
-  return { requested_at: requestedAt, anonymize_after: after };
+  return { requested_at: requestedAt, anonymize_after: after, cancellable };
 }

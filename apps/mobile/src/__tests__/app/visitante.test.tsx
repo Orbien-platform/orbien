@@ -189,4 +189,15 @@ describe("VisitanteScreen", () => {
     await press("visitante-outro");
     expect(screen.getByTestId("visitante-nome").props.value).toBe("");
   });
+
+  it("duplicado reduzido (líder): sem classificação, só visitas", async () => {
+    mockRegister.mockResolvedValue({
+      status: "duplicate",
+      matches: [{ id: "p0", full_name: "André C.", classification: null, visits: 2, last_visit_at: null }],
+    });
+    await fill();
+    await press("visitante-enviar");
+    expect(screen.getByText("André C.")).toBeTruthy();
+    expect(screen.getByText("2 visitas")).toBeTruthy();
+  });
 });

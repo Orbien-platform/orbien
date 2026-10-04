@@ -340,7 +340,18 @@ export default function PrivacidadeScreen() {
         ]}
       />
 
-      {deletion.requested_at ? (
+      {deletion.requested_at && !deletion.cancellable ? (
+        <Card testID="privacidade-removido-pela-igreja" highlightColor={colors.danger}>
+          <Text style={[typography.h3, { color: colors.textPrimary }]}>
+            Cadastro removido pela igreja
+          </Text>
+          <Text style={[typography.bodyMedium, styles.confirmText, { color: colors.textSecondary }]}>
+            Seus dados serão anonimizados em{" "}
+            {formatLongDate(deletion.anonymize_after ?? "") ?? "30 dias"}. Para revertê-lo, fale com
+            a secretaria da igreja.
+          </Text>
+        </Card>
+      ) : deletion.requested_at ? (
         <Card testID="privacidade-exclusao-pedida" highlightColor={colors.danger}>
           <Text style={[typography.h3, { color: colors.textPrimary }]}>Exclusão pedida</Text>
           <Text style={[typography.bodyMedium, styles.confirmText, { color: colors.textSecondary }]}>

@@ -22,8 +22,10 @@ export interface NewVisitor {
 
 export interface DuplicateMatch {
   id: string;
+  /** Mascarado ("André C.") para quem não lê pessoas — o líder de célula. */
   full_name: string;
-  classification: "visitor" | "attendee" | "member";
+  /** Nula para quem não lê pessoas. */
+  classification: "visitor" | "attendee" | "member" | null;
   visits: number;
   last_visit_at: string | null;
 }
