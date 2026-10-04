@@ -2,9 +2,8 @@
 //
 // É a porta das pilhas que não cabem na tab bar: Minhas escalas,
 // Celebrações, Contribuir, Notificações e Perfil — e, para a liderança, o
-// cadastro de visitante. "Privacidade e meus dados" fica de fora até a API
-// ter as rotas do titular (`CONF-03` em docs/PLANO.md): sem elas a tela só
-// teria texto.
+// cadastro de visitante. "Privacidade e meus dados" abre os direitos do
+// titular da LGPD (`CONF-03`), para qualquer papel.
 //
 // Cada linha aparece só para quem pode usá-la (README da v2, "Papéis":
 // esconder a ação que o papel não pode fazer):
@@ -12,11 +11,13 @@
 // - Escalas e Celebrações seguem a área `volunteers` de `GET /me/permissions`,
 //   o mesmo gate que a Home já usava (fail-open enquanto `areas` é `null`,
 //   porque quem nega de verdade é a API em cada rota);
-// - Cadastrar visitante segue os papéis que `POST /persons` aceita
-//   (`WRITE_ROLES` em apps/api/src/persons/persons.controller.ts). Aqui o
-//   gate é fail-closed: sem papel legível no token, a linha não aparece;
+// - Cadastrar visitante segue os papéis que `POST /visitors` aceita
+//   (`VISITOR_LEADER_ROLES` em apps/api/src/visitor/visitor.leader.controller.ts),
+//   o líder de célula incluso. Aqui o gate é fail-closed: sem papel legível
+//   no token, a linha não aparece;
 // - QR de autocadastro segue `MANAGE_ROLES` de `admin/visitor/qr`
-//   (`SIGNUP_QR_ROLES` em src/lib/auth/roles.ts), também fail-closed;
+//   (`SIGNUP_QR_ROLES` em src/lib/auth/roles.ts), também fail-closed —
+//   o líder de célula não está nele;
 // - Dízimo automático só com a trava `ASAAS_PAYMENTS_ENABLED` ligada e
 //   tenant Premium (PROD-28), como na Home.
 import Constants from "expo-constants";
@@ -43,13 +44,20 @@ import {
   HandHeart,
   LogOut,
   QrCode,
+  ShieldCheck,
   UserPlus,
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
-/** Quem `POST /persons` aceita — espelho de `WRITE_ROLES` da API. */
-export const VISITOR_WRITE_ROLES = ["tenant_admin", "admin_congregation", "pastor", "secretary"];
+/** Quem `POST /visitors` aceita — espelho de `VISITOR_LEADER_ROLES` da API. */
+export const VISITOR_WRITE_ROLES = [
+  "tenant_admin",
+  "admin_congregation",
+  "pastor",
+  "secretary",
+  "cell_leader",
+];
 
 export default function MaisScreen() {
   const router = useRouter();
@@ -175,6 +183,13 @@ export default function MaisScreen() {
   ];
 
   const account: ListGroupItem[] = [
+    {
+      key: "privacidade",
+      testID: "mais-privacidade",
+      label: "Privacidade e meus dados",
+      icon: ShieldCheck,
+      onPress: () => router.push("/privacidade"),
+    },
     {
       key: "sair",
       testID: "mais-sair",

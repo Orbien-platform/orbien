@@ -7,7 +7,9 @@ import {
   createSignupQr,
   listSignupQrs,
   normalizePhone,
+  recordVisitForExisting,
   registerVisitor,
+  registerVisitorAnyway,
   signupUrl,
 } from "./visitantes-client";
 
@@ -21,30 +23,56 @@ describe("normalizePhone", () => {
   });
 });
 
-describe("registerVisitor", () => {
+describe("visitantes-client", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockAuthenticatedRequest.mockResolvedValue({ person: { id: "p1" }, possible_duplicates: [] });
+    mockAuthenticatedRequest.mockReset().mockResolvedValue({ status: "registered" });
   });
 
-  it("cria a pessoa como visitante, com telefone normalizado", async () => {
-    await registerVisitor({ full_name: "  Ana  ", phone: "(11) 99999-0000", email: " a@b.com " });
+  it("cadastra com consentimento, telefone normalizado e só os campos preenchidos", async () => {
+    await registerVisitor({
+      full_name: "  Ana  ",
+      phone: "(11) 99999-0000",
+      email: " a@b.com ",
+      gender: "female",
+      origin: "small_group",
+      small_group_id: "g1",
+    });
 
-    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/persons", {
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/visitors", {
       body: {
         full_name: "Ana",
-        classification: "visitor",
+        origin: "small_group",
+        lgpd_consent: true,
         phone: "11999990000",
         email: "a@b.com",
+        gender: "female",
+        small_group_id: "g1",
       },
     });
   });
 
   it("não manda telefone nem e-mail vazios", async () => {
-    await registerVisitor({ full_name: "Ana", phone: "", email: "" });
+    await registerVisitor({ full_name: "Ana", phone: "", email: "", origin: "service" });
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/visitors", {
+      body: { full_name: "Ana", origin: "service", lgpd_consent: true },
+    });
+  });
 
-    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/persons", {
-      body: { full_name: "Ana", classification: "visitor" },
+  it("'é outra pessoa' manda force_new", async () => {
+    await registerVisitorAnyway({ full_name: "Ana", origin: "event" });
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/visitors", {
+      body: { full_name: "Ana", origin: "event", lgpd_consent: true, force_new: true },
+    });
+  });
+
+  it("'é a mesma pessoa' registra só a visita", async () => {
+    await recordVisitForExisting("p0", "service");
+    expect(mockAuthenticatedRequest).toHaveBeenLastCalledWith("post", "/visitors", {
+      body: { existing_person_id: "p0", origin: "service", lgpd_consent: true },
+    });
+    await recordVisitForExisting("p0", "small_group", "g1");
+    expect(mockAuthenticatedRequest).toHaveBeenLastCalledWith("post", "/visitors", {
+      body: { existing_person_id: "p0", origin: "small_group", lgpd_consent: true, small_group_id: "g1" },
     });
   });
 });

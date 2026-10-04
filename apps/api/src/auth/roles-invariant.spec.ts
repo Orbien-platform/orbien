@@ -47,6 +47,10 @@ const ALLOWLIST = new Set([
   // resolvida no banco (`DonorPixSubscriptionsService`), nunca sobre um id
   // vindo do corpo. Qualquer papel é dono da própria assinatura.
   'financial/me-pix-subscriptions.controller.ts',
+  // CONF-03, direitos do titular (LGPD, Art. 18): mesma razão — cada rota
+  // opera só sobre a pessoa da conta do token, resolvida no banco
+  // (`MePrivacyService.myPerson`), e todo papel é titular dos próprios dados.
+  'privacy/me-privacy.controller.ts',
   // Domínio próprio: `.../resolve` é lido pelo middleware de host do
   // `apps/web` antes de qualquer tenant estar identificado — é o que
   // resolve QUAL tenant é o domínio. `.../cloudflare/callback` é o

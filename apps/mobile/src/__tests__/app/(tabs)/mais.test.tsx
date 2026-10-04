@@ -1,6 +1,6 @@
 // Aba Mais (v2): cada linha aparece só para quem pode usá-la — escalas e
 // celebrações pela área `volunteers`, o cadastro de visitante pelos papéis
-// que `POST /persons` aceita, e o "Sair" sempre.
+// que `POST /visitors` aceita (líder de célula incluso), e o "Sair" sempre.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
@@ -129,11 +129,12 @@ describe("MaisScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/visitante");
   });
 
-  it("líder de célula não vê o cadastro — a API não aceita o papel", async () => {
+  it("líder de célula vê o cadastro — é quem recebe o visitante no encontro", async () => {
     mockDecodeJwtPayload.mockReturnValue(payload(["cell_leader"]));
     await renderMais();
 
-    expect(screen.queryByTestId("mais-visitante")).toBeNull();
+    expect(screen.getByTestId("mais-visitante")).toBeTruthy();
+    // O QR de autocadastro não: `admin/visitor/qr` não aceita o papel.
     expect(screen.queryByTestId("mais-autocadastro")).toBeNull();
   });
 
@@ -161,13 +162,18 @@ describe("MaisScreen", () => {
     expect(screen.queryByTestId("mais-dizimo-automatico")).toBeNull();
   });
 
-  it("perfil abre a pilha de perfil e Sair encerra a sessão", async () => {
+  it("perfil e privacidade abrem as pilhas, e Sair encerra a sessão", async () => {
     await renderMais();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("mais-perfil"));
     });
     expect(mockPush).toHaveBeenCalledWith("/perfil");
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-privacidade"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/privacidade");
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("mais-sair"));
