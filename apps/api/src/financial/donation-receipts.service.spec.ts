@@ -27,6 +27,10 @@ function harness(opts: Opts = {}) {
     created: [] as Record<string, unknown>[],
     uploads: [] as { key: string; contentType: string }[],
     mails: [] as { to: string; name: string; amount: number; url: string }[],
+    /** `set_config(tenant, congregação)` de cada bloco com escopo. */
+    contexts: [] as unknown[][],
+    /** Quantos blocos de `runInTx` abriram. */
+    transactions: 0,
   };
 
   const transaction =
@@ -68,7 +72,19 @@ function harness(opts: Opts = {}) {
     },
   };
 
-  const prisma = { client } as unknown as PrismaService;
+  const tx = {
+    $executeRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      cap.contexts.push(valores);
+      return Promise.resolve(1);
+    },
+  };
+  const prisma = {
+    client,
+    runInTx: (fn: (t: typeof tx) => Promise<unknown>) => {
+      cap.transactions++;
+      return fn(tx);
+    },
+  } as unknown as PrismaService;
 
   const storage = {
     upload: jest.fn((_buf: Buffer, key: string, contentType: string) => {
@@ -237,6 +253,204 @@ describe('DonationReceiptService.generateForTransaction', () => {
   });
 });
 
+describe('DonationReceiptService.generateForTransaction — escopo de RLS (webhook sem JWT)', () => {
+  const scope = { tenantId: 't1', congregationId: 'c1' };
+
+  it('com escopo, fixa app.tenant_id/app.congregation_id na leitura e de novo na gravação do recibo', async () => {
+    const { service, cap } = harness();
+
+    await service.generateForTransaction('tx-1', scope);
+
+    expect(cap.transactions).toBe(2);
+    expect(cap.contexts).toEqual([
+      ['t1', 'c1'],
+      ['t1', 'c1'],
+    ]);
+    expect(cap.created).toHaveLength(1);
+  });
+
+  it('PDF, upload e e-mail ficam fora da transação — só leitura e gravação seguram conexão', async () => {
+    const { service, cap, client } = harness();
+    let abertas = 0;
+    let uploadComTransacaoAberta = false;
+    // Mede, no instante do upload, quantas transações do `runInTx` estão abertas.
+    (service as unknown as { prisma: { runInTx: unknown } }).prisma.runInTx = async (
+      fn: (t: { $executeRaw: () => Promise<number> }) => Promise<unknown>,
+    ) => {
+      abertas++;
+      try {
+        return await fn({ $executeRaw: () => Promise.resolve(1) });
+      } finally {
+        abertas--;
+      }
+    };
+    (service as unknown as { storage: { upload: unknown } }).storage.upload = jest.fn(() => {
+      uploadComTransacaoAberta = abertas > 0;
+      return Promise.resolve('https://cdn.test/x.pdf');
+    });
+
+    await service.generateForTransaction('tx-1', scope);
+
+    expect(uploadComTransacaoAberta).toBe(false);
+    expect(client.donationReceipt.create).toHaveBeenCalledTimes(1);
+    expect(cap.mails).toHaveLength(1);
+  });
+
+  it('sem escopo, não abre transação nem fixa contexto (quem chama já está sob um)', async () => {
+    const { service, cap } = harness();
+
+    await service.generateForTransaction('tx-1');
+
+    expect(cap.transactions).toBe(0);
+    expect(cap.contexts).toEqual([]);
+  });
+
+  it('com escopo, transação já com recibo não grava outro', async () => {
+    const { service, cap } = harness({ donationReceipt: { id: 'ja-existe' } });
+
+    await service.generateForTransaction('tx-1', scope);
+
+    expect(cap.transactions).toBe(1);
+    expect(cap.created).toEqual([]);
+  });
+});
+
+describe('DonationReceiptService.generateForTransaction — doador declarado da doação pública (DPUB-25)', () => {
+  const publica = (extra: Record<string, unknown> = {}) => ({
+    id: 'tx-1',
+    tenant_id: 't1',
+    amount: new Prisma.Decimal('80.00'),
+    occurred_at: new Date('2026-05-10T12:00:00.000Z'),
+    donor_person_id: null,
+    is_anonymous: false,
+    type: 'income',
+    ...extra,
+  });
+  const declarado = { name: 'Ana Declarada', email: 'ana@declarada.com' };
+
+  it('recibo vai para o e-mail declarado, sem Person: grava recipient_*, não person_id', async () => {
+    const { service, cap, client } = harness({ transaction: publica() });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.created).toEqual([
+      {
+        tenant_id: 't1',
+        transaction_id: 'tx-1',
+        recipient_name: 'Ana Declarada',
+        recipient_email: 'ana@declarada.com',
+        receipt_url: 'https://cdn.test/donation-receipts/t1/tx-1.pdf',
+      },
+    ]);
+    expect(cap.created[0]).not.toHaveProperty('person_id');
+    expect(cap.mails).toEqual([
+      {
+        to: 'ana@declarada.com',
+        name: 'Ana Declarada',
+        amount: 80,
+        url: 'https://cdn.test/donation-receipts/t1/tx-1.pdf',
+      },
+    ]);
+    // Não há Person para consultar.
+    expect(client.person.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('sem nome declarado, o recibo e o e-mail usam o próprio endereço como nome e recipient_name fica nulo', async () => {
+    const { service, cap } = harness({ transaction: publica() });
+
+    await service.generateForTransaction('tx-1', undefined, { name: null, email: 'ana@declarada.com' });
+
+    expect(cap.created[0]).toMatchObject({ recipient_name: null, recipient_email: 'ana@declarada.com' });
+    expect(cap.mails[0]).toMatchObject({ to: 'ana@declarada.com', name: 'ana@declarada.com' });
+  });
+
+  it('é Premium: tenant Starter não emite recibo nem para o doador declarado', async () => {
+    const { service, cap } = harness({ transaction: publica(), tenantPlan: { plan: 'starter' } });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.uploads).toEqual([]);
+    expect(cap.created).toEqual([]);
+    expect(cap.mails).toEqual([]);
+  });
+
+  it('sem plano cadastrado também não emite', async () => {
+    const { service, cap } = harness({ transaction: publica(), tenantPlan: null });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.mails).toEqual([]);
+  });
+
+  it('doação anônima (nem Person, nem doador declarado): nada', async () => {
+    const { service, cap } = harness({ transaction: publica() });
+
+    await service.generateForTransaction('tx-1');
+
+    expect(cap.uploads).toEqual([]);
+    expect(cap.created).toEqual([]);
+    expect(cap.mails).toEqual([]);
+  });
+
+  it('lançamento marcado `is_anonymous` não recebe recibo, mesmo com doador declarado', async () => {
+    const { service, cap } = harness({ transaction: publica({ is_anonymous: true }) });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.mails).toEqual([]);
+    expect(cap.created).toEqual([]);
+  });
+
+  it('com Person vinculada, a Person vence o doador declarado (grava person_id, escreve para o e-mail dela)', async () => {
+    const { service, cap } = harness({ transaction: publica({ donor_person_id: 'pessoa-1' }) });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.created).toEqual([
+      {
+        tenant_id: 't1',
+        transaction_id: 'tx-1',
+        person_id: 'pessoa-1',
+        receipt_url: 'https://cdn.test/donation-receipts/t1/tx-1.pdf',
+      },
+    ]);
+    expect(cap.mails[0]).toMatchObject({ to: 'maria@test.com', name: 'Maria' });
+  });
+
+  it('Person vinculada sem e-mail NÃO cai para o declarado: é doador cadastrado sem endereço', async () => {
+    const { service, cap } = harness({
+      transaction: publica({ donor_person_id: 'pessoa-1' }),
+      person: { full_name: 'Maria', email: null },
+    });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.mails).toEqual([]);
+    expect(cap.created).toEqual([]);
+  });
+
+  it('doador cadastrado cuja Person já não existe NÃO cai para o declarado: sem recibo', async () => {
+    const { service, cap } = harness({ transaction: publica({ donor_person_id: 'pessoa-removida' }), person: null });
+
+    await service.generateForTransaction('tx-1', undefined, declarado);
+
+    expect(cap.mails).toEqual([]);
+    expect(cap.created).toEqual([]);
+  });
+
+  it('com escopo de RLS, o recibo declarado também lê e grava sob o contexto do tenant', async () => {
+    const { service, cap } = harness({ transaction: publica() });
+
+    await service.generateForTransaction('tx-1', { tenantId: 't1', congregationId: 'c1' }, declarado);
+
+    expect(cap.contexts).toEqual([
+      ['t1', 'c1'],
+      ['t1', 'c1'],
+    ]);
+    expect(cap.created).toHaveLength(1);
+  });
+});
+
 describe('DonationReceiptService.list', () => {
   it('lista recibos do tenant com dados de doador e transação', async () => {
     const { service, client } = harness();
@@ -257,6 +471,47 @@ describe('DonationReceiptService.list', () => {
 
     expect(result.total).toBe(1);
     expect(result.data[0]).toMatchObject({ id: 'r1', person_name: 'Maria', amount: '50' });
+  });
+});
+
+describe('DonationReceiptService.list — recibo de doador público (sem Person)', () => {
+  const row = (extra: Record<string, unknown>) => ({
+    id: 'r2',
+    receipt_url: 'https://cdn.test/y.pdf',
+    generated_at: new Date('2026-05-10T00:00:00.000Z'),
+    person: null,
+    recipient_name: null,
+    recipient_email: null,
+    transaction: { amount: new Prisma.Decimal('20.00'), occurred_at: new Date('2026-05-09T00:00:00.000Z') },
+    ...extra,
+  });
+
+  async function nameFor(extra: Record<string, unknown>) {
+    const { service, client } = harness();
+    (client.donationReceipt as unknown as { findMany: jest.Mock; count: jest.Mock }).findMany = jest
+      .fn()
+      .mockResolvedValue([row(extra)]);
+    (client.donationReceipt as unknown as { count: jest.Mock }).count = jest.fn().mockResolvedValue(1);
+
+    return (await service.list('t1', 1, 20)).data[0].person_name;
+  }
+
+  it('sem Person, mostra o nome que o doador declarou', async () => {
+    expect(await nameFor({ recipient_name: 'Fulano', recipient_email: 'fulano@teste.com' })).toBe('Fulano');
+  });
+
+  it('sem Person e sem nome, mostra o e-mail declarado', async () => {
+    expect(await nameFor({ recipient_email: 'fulano@teste.com' })).toBe('fulano@teste.com');
+  });
+
+  it('o nome da Person tem prioridade sobre o declarado', async () => {
+    expect(
+      await nameFor({ person: { full_name: 'Maria' }, recipient_name: 'Outro Nome', recipient_email: 'x@y.com' }),
+    ).toBe('Maria');
+  });
+
+  it('linha sem nenhuma identificação (o CHECK do banco impede, mas a lista não quebra): string vazia', async () => {
+    expect(await nameFor({})).toBe('');
   });
 });
 

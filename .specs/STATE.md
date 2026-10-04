@@ -128,3 +128,54 @@ RLS habilitado com `USING (true)/WITH CHECK (true)` — em vez de ficar sem
 RLS (o que o alerta do pre-push aceitaria em silêncio, mas deixa a
 intenção implícita) ou de ganhar `tenant_id` que não tem dono nenhum para
 apontar.
+
+### AD-006 — Rota pública que acha linha por id externo resolve o escopo por função SQL `SECURITY DEFINER`
+
+**Status**: active
+**Origem**: feature `doacao-publica-premium-qr-dinamico`, fase Execute, 2026-10-03
+
+Rota sem JWT roda como `orbien_app` e **não** tem `app.tenant_id`: as tabelas com
+RLS por tenant+congregação (`pix_payments`, `pix_subscriptions`,
+`financial_transactions`) devolvem zero linhas para ela. O webhook da Asaas
+descartava toda confirmação por isso (ver `PEND-16`) — e só conhece o id da Asaas.
+
+O caminho "id externo → escopo" é uma função `SECURITY DEFINER`, com
+`search_path` fixo, `EXECUTE` só para `orbien_app`, que devolve **somente**
+`tenant_id` e `congregation_id` — nunca a linha
+(`pix_webhook_scope()`, `024_rls_pix_webhook_scope.sql`; mesmo padrão de
+`audit_insert()`, AD-004). Com o escopo, o service abre a transação, fixa
+`app.tenant_id`/`app.congregation_id` e o resto roda sob a RLS normal. O escopo
+vem do banco, **nunca** do payload: tenant forjado no corpo é ignorado.
+
+Não usar `prisma.system` (BYPASSRLS) em handler de requisição — `prisma.service.ts`
+reserva o client privilegiado a schedulers. Não criar policy para `orbien_app`
+em tabela de dado de igreja: afrouxa a fronteira que a função mantém estreita.
+
+**Consequência prática**: nova rota pública que precise achar uma linha de tenant
+por um id que só o terceiro conhece ganha uma função irmã (`0NN_rls_*.sql`, no
+`bootstrap-db.sh`, com a verificação no passo 7), nunca uma policy nova.
+Escrita sem JWT a partir de um slug resolvido no servidor continua sendo
+`runInPublicContext` (sem script de RLS novo).
+
+### AD-007 — O que o doador público declara nunca vira `Person`, e o plano é lido do banco do slug
+
+**Status**: active
+**Origem**: feature `doacao-publica-premium-qr-dinamico`, fase Design/Execute, 2026-10-03
+
+Na doação pública, nome e e-mail são **declaração sem verificação**. Gravam-se na
+própria linha de `pix_payments` (`donor_*`, com o aceite do termo) e o recibo
+(`PROD-03`) vai para o e-mail declarado (`donation_receipts.recipient_*`,
+`person_id` nulo). **Nenhuma** `Person` é criada nem vinculada por e-mail: quem
+digitasse o e-mail de um membro atribuiria a doação — e o recibo, e o carnê de IR
+de `PROD-08` — a ele. `Person` vinculada (doador cadastrado) sempre vence o
+declarado.
+
+O plano que decide QR dinâmico × chave estática é o `TenantPlan` do tenant
+resolvido pelo slug, lido no banco; um `plan`/`mode` no corpo é 400. O plano gateia
+a **criação** da cobrança, não a confirmação: o dinheiro que entrou vira
+lançamento mesmo que o plano tenha mudado no meio.
+
+**Consequência prática**: nova rota pública que receba dado de identificação do
+visitante guarda o snapshot na linha da operação, com aceite versionado
+(`legal/consent-terms/`), e só cria/vincula `Person` num fluxo que verifique o
+titular. Recibo/documento para quem não é `Person` usa `recipient_*`.

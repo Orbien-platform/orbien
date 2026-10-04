@@ -110,10 +110,13 @@ jobs:
       - name: Suítes de unidade dos 5 apps
         run: npx turbo run test
 
-      # Sem --seed: a suíte de integração monta as próprias fixtures e as
-      # remove. Dado de seed aqui só criaria acoplamento.
+      # Com --seed: as suítes da doação pública (pix-webhook, public-donation,
+      # public-intents, test/rls/pix-*) escrevem só em `teste1-church` (Starter)
+      # e `teste2-church` (Premium), os tenants de teste de docs/AMBIENTES.md —
+      # e eles nascem do seed. As demais suítes continuam montando as próprias
+      # fixtures; o seed só acrescenta linhas que elas não consultam.
       - name: Provisionar o banco para a suíte de integração
-        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh
+        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh --seed
         working-directory: apps/api
 
       # Um passo por app — app sem passo é app sem portão, que foi o estado
@@ -172,8 +175,10 @@ jobs:
 
       - run: npm ci --include=dev
 
+      # --seed: `test/rls/pix-payments.spec.ts` e `pix-webhook-scope.spec.ts`
+      # usam `teste1-church`/`teste2-church` (docs/AMBIENTES.md), que vêm do seed.
       - name: Provisionar o banco
-        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh
+        run: ORBIEN_APP_PASSWORD=ci_app bash scripts/bootstrap-db.sh --seed
         working-directory: apps/api
 
       # test/setup.ts carrega .env via dotenv, que aqui não existe. Não é

@@ -1166,6 +1166,19 @@ em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
 > /financial/pix/dynamic` ganhou tela para o **tesoureiro** (`DynamicPixPanel`,
 > aba "PIX" do financeiro). A página pública `/doar/[tenant_slug]` continua
 > só Starter: o QR dinâmico para doador anônimo ainda não tem rota pública.
+> *Atualização 2026-10-03:* a página pública ganhou o **Cenário 3 Premium**
+> (ADR-007). `POST /financial/pix/public-donation` lê o plano do tenant do slug
+> **no banco** (nunca do corpo): Premium `active`/`trial` recebe QR dinâmico +
+> copia-e-cola, com polling até "Doação recebida"; Starter segue na chave
+> estática, com o contrato anterior preservado (o mobile abre esta mesma
+> página). Se a Asaas falhar, faltar `ASAAS_API_KEY` ou a igreja passar de 60
+> cobranças pendentes na hora, cai para a chave estática com aviso. O lançamento
+> só nasce quando o webhook confirma. Valor entre R$ 5,00 e R$ 50.000,00 (limites
+> da Asaas por cobrança), limite de requisições por igreja + origem e 404
+> idêntico para slug inexistente ou sem chave. Cobrança abandonada é cancelada
+> na Asaas por um job diário (`PublicDonationExpiryScheduler`, 4h) — o status
+> já vira `expirado` por leitura, então a página não depende do job (`PEND-13`).
+> Ver `PEND-14` e `PEND-16`.
 
 > `PROD-09` (chat fechado por célula, Módulo 3, Starter) **fechou em
 > 2026-09-14**. Tabela nova `group_messages`
@@ -1871,7 +1884,7 @@ horário. Detalhes e limites (cota de 750 h do free tier, execução perdida em
 reinício ou deploy) em `DEPLOY.md`, seção 1.6. Segue como dívida até a API ir
 para plano pago ou ganhar gatilho externo.
 
-### PEND-14 · A doação pública guarda a intenção, mas o tesoureiro não a vê · dívida
+### ~~PEND-14 · A doação pública guarda a intenção, mas o tesoureiro não a vê~~ · fechado
 
 Nasceu em 2026-09-25, junto com a correção de `POST
 /financial/pix/public-donation` e `POST /financial/pix` (a página
@@ -1903,6 +1916,67 @@ O que fica em aberto:
 As duas coisas são o mesmo trabalho: uma migration com os dados do doador em
 `pix_payments` e uma tela de intenções pendentes que vire lançamento ao ser
 confirmada.
+
+> **Fechado em 2026-10-03** (spec `.specs/features/doacao-publica-premium-qr-dinamico/`).
+> As duas pontas que o texto acima deixou em aberto:
+>
+> - **`donor_name`/`donor_email` gravados.** Migration
+>   `20261003191848_doacao_publica_dados_do_doador`: `pix_payments.donor_name`,
+>   `donor_email`, `donor_consent_version` e `donor_consented_at`. E-mail só com
+>   o aceite de `donor_consent_v1` (texto versionado em
+>   `legal/consent-terms/`, **rascunho aguardando a revisão jurídica de
+>   `CONF-01`**); sem aceite, 400 no DTO e no service. IP e user-agent **não** são
+>   guardados (minimização) e nada vira `Person` — o e-mail digitado é declaração
+>   sem verificação, e vincular por ele atribuiria a doação (e o recibo, e o
+>   carnê de IR de `PROD-08`) ao membro errado. Retenção: a linha é dado
+>   financeiro/de doação e **fica** (decisão do dono do produto); não há job que
+>   apague `donor_*` de intenção abandonada.
+> - **Tela do tesoureiro.** Aba "Doações públicas" no financeiro
+>   (`PublicIntentsPanel`), em **todos os planos** — o Starter é quem mais
+>   precisa. `GET /financial/pix/public-intents` lista; `POST
+>   /financial/pix/public-intents/:id/settle` dá a baixa da chave estática:
+>   confirma por `updateMany` condicional, cria 1 lançamento `manual`, audita
+>   (`pix.settled_manually`) e, se Premium e o doador declarou e-mail com aceite,
+>   emite o recibo. QR dinâmico responde 409: quem o confirma é o webhook.
+>
+> Fechou junto, no mesmo PR, o Cenário 3 **Premium** do ADR-007 — ver `PROD-04`
+> e `PEND-16`.
+
+---
+
+### ~~PEND-16 · O webhook da Asaas não enxergava `pix_payments` sob RLS~~ · fechado
+
+Achado em 2026-10-03, ao desenhar a doação pública Premium. `POST
+/financial/pix/webhook` é rota pública: roda como `orbien_app`, sem
+`app.tenant_id`, e `pix_payments` (`FORCE ROW LEVEL SECURITY`, policy `TO
+app_user` por tenant + congregação) devolvia **zero linhas**. `handleWebhook`
+respondia 200 com `PixPayment não encontrado` e **nenhuma confirmação** — QR do
+tesoureiro (Cenário 2), inscrição paga (`PROD-24`) e PIX recorrente (`PROD-27`) —
+virava lançamento. Mesmo que a leitura passasse, o `INSERT` em
+`financial_transactions` e o recibo falhariam na RLS. Nenhum teste via isso:
+`pix.service.spec.ts` mocka o Prisma e nada em `test/` tocava o webhook (a mesma
+família de `8a623ac`, auditoria que "nunca gravou no banco").
+
+Evidência: sonda no banco local (transação com `ROLLBACK`) — sem contexto,
+`orbien_app` lê 0 linhas; com contexto, 1. E o teste novo
+`test/integration/pix-webhook.spec.ts` contra o código anterior: **6 de 10
+falham**; com a correção, passam. **Produção não foi verificada** — o que se
+sabe é o código e a RLS; vale conferir o log da Render por `PixPayment não
+encontrado` em confirmações reais.
+
+Fechado:
+
+- `024_rls_pix_webhook_scope.sql`: `pix_webhook_scope()` — `SECURITY DEFINER`,
+  `search_path` fixo, `EXECUTE` só para `orbien_app`, devolve **só**
+  `tenant_id` e `congregation_id` (nunca a linha). Mesmo padrão de
+  `audit_insert()`/`resolve_actor_name()`. Entra no `bootstrap-db.sh` e ganhou a
+  verificação do passo 7. Nenhuma policy foi tocada.
+- `PixService.handleWebhook` resolve o escopo pelo id da Asaas (nunca pelo
+  payload) e roda tudo numa transação com `app.tenant_id`/`app.congregation_id`
+  da linha. A cobrança recorrente nova usa `ON CONFLICT DO NOTHING` — um P2002
+  abortaria a transação. O recibo recebe o mesmo escopo.
+- Token do webhook comparado em tempo constante; o payload da Asaas (nome/CPF do
+  pagador) não vai mais para o log.
 
 ---
 

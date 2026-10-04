@@ -19,6 +19,7 @@ import { BankReconciliationPanel } from "@/components/financial/BankReconciliati
 import { DonationBookletPanel } from "@/components/financial/DonationBookletPanel";
 import { BalancetePanel } from "@/components/financial/BalancetePanel";
 import { DynamicPixPanel } from "@/components/financial/DynamicPixPanel";
+import { PublicIntentsPanel } from "@/components/financial/PublicIntentsPanel";
 import { PixSubscriptionsPanel } from "@/components/financial/PixSubscriptionsPanel";
 import { DonationReceiptsPanel } from "@/components/financial/DonationReceiptsPanel";
 import { useAuth } from "@/hooks/useAuth";
@@ -101,6 +102,7 @@ type TabValue =
   | "balancete"
   | "conciliacao"
   | "carne-dizimista"
+  | "doacoes-publicas"
   | "pix"
   | "recibos";
 const TX_PAGE_SIZE = 20;
@@ -596,6 +598,11 @@ export default function FinanceiroPage() {
               Carnê do dizimista
             </Tabs.Tab>
           )}
+          {canManageCategories && (
+            <Tabs.Tab value="doacoes-publicas" className={tabBtn(activeTab === "doacoes-publicas")}>
+              Doações públicas
+            </Tabs.Tab>
+          )}
           {showPremiumTabs && (
             <Tabs.Tab value="pix" className={tabBtn(activeTab === "pix")}>
               PIX
@@ -979,6 +986,13 @@ export default function FinanceiroPage() {
         {!isPastor && (
           <Tabs.Panel value="carne-dizimista" className="pt-5">
             <DonationBookletPanel />
+          </Tabs.Panel>
+        )}
+
+        {/* ── Doações públicas (todos os planos) ─────────────────────────────── */}
+        {canManageCategories && (
+          <Tabs.Panel value="doacoes-publicas" className="pt-5">
+            <PublicIntentsPanel onSettled={refreshTx} />
           </Tabs.Panel>
         )}
 
