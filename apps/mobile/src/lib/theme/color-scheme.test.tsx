@@ -53,6 +53,9 @@ function Probe() {
       <Text testID="set-dark" onPress={() => setPreference("dark")}>
         escuro
       </Text>
+      <Text testID="set-light" onPress={() => setPreference("light")}>
+        claro
+      </Text>
     </>
   );
 }
@@ -75,23 +78,27 @@ describe("ThemeProvider — modo claro/escuro", () => {
     mockUseColorScheme.mockReturnValue("light");
   });
 
-  it("sem preferência gravada, segue o sistema (claro)", async () => {
+  it("sem preferência gravada, abre no escuro — o padrão da Órbita", async () => {
     await renderProbe();
 
-    expect(screen.getByTestId("preference").props.children).toBe("system");
-    expect(screen.getByTestId("scheme").props.children).toBe("light");
-    expect(screen.getByTestId("bgBase").props.children).toBe(palettes.light.bgBase);
-    expect(screen.getByTestId("textPrimary").props.children).toBe(brand.ink);
-  });
-
-  it("sem preferência gravada, segue o sistema (escuro)", async () => {
-    mockUseColorScheme.mockReturnValue("dark");
-    await renderProbe();
-
+    expect(screen.getByTestId("preference").props.children).toBe("dark");
     expect(screen.getByTestId("scheme").props.children).toBe("dark");
     expect(screen.getByTestId("isDark").props.children).toBe("true");
-    expect(screen.getByTestId("bgBase").props.children).toBe(brand.ink);
-    expect(screen.getByTestId("textPrimary").props.children).toBe(brand.parchment);
+    expect(screen.getByTestId("bgBase").props.children).toBe(brand.night);
+    expect(screen.getByTestId("textPrimary").props.children).toBe(brand.snow);
+  });
+
+  it("preferência 'system' gravada segue o sistema (claro)", async () => {
+    mockGetItem.mockImplementation(async (key: string) =>
+      key === "orbien.colorScheme" ? "system" : null,
+    );
+    await renderProbe();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("scheme").props.children).toBe("light");
+    });
+    expect(screen.getByTestId("bgBase").props.children).toBe(palettes.light.bgBase);
+    expect(screen.getByTestId("textPrimary").props.children).toBe(brand.ink);
   });
 
   it("preferência gravada vence o sistema", async () => {
@@ -108,15 +115,15 @@ describe("ThemeProvider — modo claro/escuro", () => {
     expect(screen.getByTestId("preference").props.children).toBe("dark");
   });
 
-  it("valor inválido no storage é ignorado — segue o sistema, sem erro visível", async () => {
+  it("valor inválido no storage é ignorado — fica no escuro, sem erro visível", async () => {
     mockGetItem.mockImplementation(async (key: string) =>
       key === "orbien.colorScheme" ? '{"não":"é um modo"}' : null,
     );
 
     await renderProbe();
 
-    expect(screen.getByTestId("preference").props.children).toBe("system");
-    expect(screen.getByTestId("scheme").props.children).toBe("light");
+    expect(screen.getByTestId("preference").props.children).toBe("dark");
+    expect(screen.getByTestId("scheme").props.children).toBe("dark");
   });
 
   it("o boot não grava preferência — só a escolha explícita do usuário grava", async () => {
@@ -125,23 +132,23 @@ describe("ThemeProvider — modo claro/escuro", () => {
     expect(mockSetItem).not.toHaveBeenCalledWith("orbien.colorScheme", expect.anything());
 
     await act(async () => {
-      fireEvent.press(screen.getByTestId("set-dark"));
+      fireEvent.press(screen.getByTestId("set-light"));
     });
 
-    expect(mockSetItem).toHaveBeenCalledWith("orbien.colorScheme", "dark");
-    expect(screen.getByTestId("scheme").props.children).toBe("dark");
+    expect(mockSetItem).toHaveBeenCalledWith("orbien.colorScheme", "light");
+    expect(screen.getByTestId("scheme").props.children).toBe("light");
   });
 
   it("a cor do tenant é a mesma nos dois modos; o que muda é a superfície (§8)", async () => {
     await renderProbe();
-    const primaryLight = screen.getByTestId("primaryColor").props.children;
-    const bgLight = screen.getByTestId("bgBase").props.children;
+    const primaryDark = screen.getByTestId("primaryColor").props.children;
+    const bgDark = screen.getByTestId("bgBase").props.children;
 
     await act(async () => {
-      fireEvent.press(screen.getByTestId("set-dark"));
+      fireEvent.press(screen.getByTestId("set-light"));
     });
 
-    expect(screen.getByTestId("primaryColor").props.children).toBe(primaryLight);
-    expect(screen.getByTestId("bgBase").props.children).not.toBe(bgLight);
+    expect(screen.getByTestId("primaryColor").props.children).toBe(primaryDark);
+    expect(screen.getByTestId("bgBase").props.children).not.toBe(bgDark);
   });
 });

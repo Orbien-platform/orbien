@@ -36,8 +36,8 @@ import {
   type BrandTheme,
   type BrandThemeLayer,
 } from "./brand-theme";
-import { meetsAA, readableOn } from "./color";
-import { palettes, shadows, type ColorScheme, type Palette, type Shadows } from "./tokens";
+import { meetsAA, mixHex, readableOn } from "./color";
+import { brand, palettes, shadows, type ColorScheme, type Palette, type Shadows } from "./tokens";
 import type { Branding } from "./types";
 
 /** Camada vazia, estável — para o `useMemo` do tema não recalcular a cada
@@ -56,8 +56,8 @@ export type ThemeBranding = BrandTheme;
  * nunca deixa a UI sem tema, nunca expõe erro). */
 export const DEFAULT_THEME: ThemeBranding = PLATFORM_THEME;
 
-/** Preferência do usuário (§8): segue o sistema por padrão, com override
- * manual na tela de Perfil. */
+/** Preferência do usuário: na Órbita o escuro é o padrão, com o claro e o
+ * "seguir o sistema" alternáveis na tela de Perfil. */
 export type ThemePreference = "system" | "light" | "dark";
 
 const THEME_PREFERENCES: readonly ThemePreference[] = ["system", "light", "dark"];
@@ -79,6 +79,13 @@ export interface ThemeValue extends ThemeBranding {
    * nenhuma tela.
    */
   accentReadable: string;
+  /** Texto/ícone em cor da marca sobre a superfície do modo ativo. No
+   * escuro é `color-mix(brand 45%, branco)` — a cor pura da igreja some no
+   * fundo noturno. No claro é a própria `primaryColor`. */
+  brandInk: string;
+  /** Fundo suave da marca (chip ativo, selo, destaque). No escuro é
+   * `color-mix(brand 28%, fundo)`; no claro, a marca a 12% sobre branco. */
+  brandSoft: string;
   /** Modo efetivamente ativo, já resolvido (`system` virou claro ou escuro). */
   scheme: ColorScheme;
   isDark: boolean;
@@ -106,13 +113,16 @@ interface CachedBranding {
 
 const FALLBACK: ThemeValue = {
   ...DEFAULT_THEME,
-  accentReadable: DEFAULT_THEME.primaryColor,
-  scheme: "light",
-  isDark: false,
-  preference: "system",
+  accentColor: brand.tealDark,
+  accentReadable: brand.tealDark,
+  brandInk: mixHex(DEFAULT_THEME.primaryColor, "#FFFFFF", 0.45),
+  brandSoft: mixHex(DEFAULT_THEME.primaryColor, brand.night, 0.28),
+  scheme: "dark",
+  isDark: true,
+  preference: "dark",
   setPreference: () => {},
-  colors: palettes.light,
-  shadow: shadows(false),
+  colors: palettes.dark,
+  shadow: shadows(true),
 };
 
 const ThemeContext = createContext<ThemeValue>(FALLBACK);
@@ -134,7 +144,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   });
   const runtimeLayer =
     runtime.token && runtime.token === session?.accessToken ? runtime.layer : NO_LAYER;
-  const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const [preference, setPreferenceState] = useState<ThemePreference>("dark");
 
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +212,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setPreferenceState(raw);
       })
       .catch(() => {
-        // sem preferência legível: segue o sistema.
+        // sem preferência legível: fica no escuro, o padrão da Órbita.
       });
     return () => {
       cancelled = true;
@@ -233,11 +243,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       runtimeLayer,
     );
 
+    // O teal é da Orbien e tem um tom por modo: o brilhante no escuro, o
+    // `tealInk` no claro (o #00B8A2 não passa AA sobre branco). Um accent
+    // próprio da igreja é usado como veio.
+    const accentColor =
+      branding.accentColor === brand.teal
+        ? isDark
+          ? brand.tealDark
+          : brand.tealInk
+        : branding.accentColor;
+
     return {
       ...branding,
-      accentReadable: meetsAA(branding.accentColor, palette.bgSurface)
-        ? branding.accentColor
-        : branding.primaryColor,
+      accentColor,
+      accentReadable: meetsAA(accentColor, palette.bgSurface) ? accentColor : branding.primaryColor,
+      brandInk: isDark ? mixHex(branding.primaryColor, "#FFFFFF", 0.45) : branding.primaryColor,
+      brandSoft: isDark
+        ? mixHex(branding.primaryColor, palette.bgBase, 0.28)
+        : mixHex(branding.primaryColor, "#FFFFFF", 0.12),
       scheme,
       isDark,
       preference,

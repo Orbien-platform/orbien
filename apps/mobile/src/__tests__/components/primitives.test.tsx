@@ -117,7 +117,7 @@ describe("Badge", () => {
   it("usa o tom neutro quando nenhum é passado", async () => {
     await render(<Badge testID="badge" label="Rascunho" />);
     const style = StyleSheet.flatten(screen.getByTestId("badge").props.style);
-    expect(style.backgroundColor).toBe(palettes.light.bgSubtle);
+    expect(style.backgroundColor).toBe(palettes.dark.bgSubtle);
   });
 });
 
@@ -144,7 +144,7 @@ describe("Card", () => {
         <Text>conteúdo</Text>
       </Card>,
     );
-    expect(styleOf("card").backgroundColor).toBe(palettes.light.bgSubtle);
+    expect(styleOf("card").backgroundColor).toBe(palettes.dark.bgSubtle);
   });
 });
 
@@ -160,7 +160,7 @@ describe("EmptyState", () => {
     await render(<EmptyState testID="empty" icon={Star} title="Nada aqui" />);
     expect(screen.getByText("Nada aqui")).toBeTruthy();
     const title = StyleSheet.flatten(screen.getByText("Nada aqui").props.style);
-    expect(title.color).toBe(palettes.light.textPrimary);
+    expect(title.color).toBe(palettes.dark.textPrimary);
   });
 });
 

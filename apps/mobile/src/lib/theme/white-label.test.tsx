@@ -48,13 +48,14 @@ function Probe() {
   );
 }
 
-async function renderWithBranding(primaryColor: string | null) {
+async function renderWithBranding(primaryColor: string | null, accentColor: string | null = null) {
   mockGetItem.mockResolvedValue(null);
   mockAuthenticatedRequest.mockResolvedValue({
     tenant: { slug: "igreja-teste" },
     branding: {
       app_name: "Igreja Teste",
       primary_color: primaryColor,
+      accent_color: accentColor,
       logo_url: null,
       splash_url: null,
     },
@@ -114,19 +115,17 @@ describe("texto sobre a cor da marca", () => {
 describe("accentReadable — destaque sobre superfície", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("o teal da plataforma não passa AA sobre branco, então cai no primary", async () => {
+  it("no escuro (padrão), o teal da plataforma é o brilhante e passa AA sobre a superfície", async () => {
     await renderWithBranding("#1D4ED8");
 
-    expect(screen.getByTestId("accentColor").props.children).toBe(brand.teal);
-    expect(screen.getByTestId("accentReadable").props.children).toBe("#1D4ED8");
+    expect(screen.getByTestId("accentColor").props.children).toBe(brand.tealDark);
+    expect(screen.getByTestId("accentReadable").props.children).toBe(brand.tealDark);
   });
 
-  it("o accent cru continua exposto — quem precisa da cor da marca a tem", async () => {
-    await renderWithBranding(null);
+  it("um accent próprio da igreja sem contraste cai no primary", async () => {
+    await renderWithBranding("#1D4ED8", "#1A1D2E");
 
-    // accentColor é a verdade da marca; accentReadable é a versão segura
-    // para ícone/label sobre superfície. Os dois existem de propósito.
-    expect(screen.getByTestId("accentColor").props.children).toBe(brand.teal);
-    expect(screen.getByTestId("accentReadable").props.children).not.toBe(brand.teal);
+    expect(screen.getByTestId("accentColor").props.children).toBe("#1A1D2E");
+    expect(screen.getByTestId("accentReadable").props.children).toBe("#1D4ED8");
   });
 });
