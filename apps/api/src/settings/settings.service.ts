@@ -41,6 +41,11 @@ export interface ResolvedSettings {
      * por congregação — `branding_configs` não tem par de congregação para
      * este campo, ao contrário de `app_name`/`primary_color`/etc. */
     pix_key: string | null;
+    /** Como a igreja chama o pequeno grupo, no singular e no plural. Os dois
+     * são nulos juntos quando a igreja não definiu — o front usa o termo
+     * padrão do produto. Por tenant, como `pix_key`. */
+    group_term_singular: string | null;
+    group_term_plural: string | null;
   };
   congregation: {
     name: string;
@@ -83,6 +88,8 @@ export class SettingsService {
         custom_domain: branding?.custom_domain ?? null,
         terms_url: branding?.terms_url ?? null,
         pix_key: branding?.pix_key ?? null,
+        group_term_singular: branding?.group_term_singular ?? null,
+        group_term_plural: branding?.group_term_plural ?? null,
       },
       congregation: {
         name: congregation.name,
@@ -121,6 +128,24 @@ export class SettingsService {
       if ((dto.branding.custom_domain !== undefined || dto.branding.terms_url !== undefined) &&
         plan !== 'premium') {
         throw new ForbiddenException('Domínio próprio e termos de uso são recursos Premium.');
+      }
+
+      // Terminologia: singular e plural andam juntos — os dois definidos ou
+      // os dois nulos. A mesma regra está num CHECK no banco
+      // (`branding_configs_group_term_pair_chk`); aqui ela vira 400 legível
+      // em vez de erro de constraint.
+      const singular = dto.branding.group_term_singular;
+      const plural = dto.branding.group_term_plural;
+      if (singular !== undefined || plural !== undefined) {
+        const singularSet = typeof singular === 'string' && singular.trim() !== '';
+        const pluralSet = typeof plural === 'string' && plural.trim() !== '';
+        if (singular === undefined || plural === undefined || singularSet !== pluralSet) {
+          throw new BadRequestException(
+            'Informe o termo no singular e no plural, ou limpe os dois para voltar ao padrão.',
+          );
+        }
+        dto.branding.group_term_singular = singularSet ? (singular as string).trim() : null;
+        dto.branding.group_term_plural = pluralSet ? (plural as string).trim() : null;
       }
     }
 

@@ -2,7 +2,7 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { readableAreas, type ProductArea } from './product-areas';
+import { readableAreas, upgradeAreas, type ProductArea } from './product-areas';
 import { asaasPaymentsEnabled } from '../financial/asaas-payments.flag';
 
 /**
@@ -31,12 +31,29 @@ export class MeController {
    * `features` diz o que está ligado no produto, independente de papel —
    * hoje só a trava de pagamentos pela Asaas (`asaas-payments.flag.ts`).
    * Os fronts escondem o que depende dela; quem nega de verdade é a API.
+   *
+   * `plan` é o plano da igreja, lido do mesmo lugar que o `PlanGuard` lê
+   * (`user.plan` do token, escrito a partir de `TenantPlan.plan` em todo
+   * login, refresh e impersonação — na sessão de suporte, o plano do tenant
+   * alvo). Serve ao front para marcar o que é Premium e mostrar o convite no
+   * Starter, em vez de esconder. Como o resto desta rota, é informação: quem
+   * nega o recurso Premium continua sendo o `PlanGuard`.
+   *
+   * `upgrade_areas` são as áreas que o papel leria no Premium e o plano atual
+   * barra — o que o front mostra com coroa e convite. Vazio no Premium.
    */
   @Get('permissions')
   permissions(@CurrentUser() user: JwtPayload): {
     areas: ProductArea[];
+    upgrade_areas: ProductArea[];
+    plan: 'starter' | 'premium';
     features: { asaas_payments: boolean };
   } {
-    return { areas: readableAreas(user), features: { asaas_payments: asaasPaymentsEnabled() } };
+    return {
+      areas: readableAreas(user),
+      upgrade_areas: upgradeAreas(user),
+      plan: user.plan,
+      features: { asaas_payments: asaasPaymentsEnabled() },
+    };
   }
 }

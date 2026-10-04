@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import AuditoriaPage from "./page";
 
+// A tela pergunta à sessão se a área é Premium barrada (convite) antes de
+// carregar; aqui a sessão é de um tenant que lê a auditoria.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ user: { areas: ["audit"], upgrade_areas: [] } }),
+}));
 vi.mock("@/lib/api", () => ({
   // Espelha o `isForbidden` real: 403 e só 403.
   isForbidden: (error: unknown) =>

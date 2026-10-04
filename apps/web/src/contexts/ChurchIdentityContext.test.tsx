@@ -21,20 +21,28 @@ function signedIn(signed: boolean) {
 }
 
 function Probe() {
-  const { churchName, congregationName } = useChurchIdentity();
+  const { churchName, congregationName, groupTerm } = useChurchIdentity();
   return (
-    <p>
-      {churchName ?? "sem-igreja"} / {congregationName ?? "sem-congregacao"}
-    </p>
+    <>
+      <p>
+        {churchName ?? "sem-igreja"} / {congregationName ?? "sem-congregacao"}
+      </p>
+      <p>
+        termo: {groupTerm.singular} / {groupTerm.plural}
+      </p>
+    </>
   );
 }
 
-function settings(primary_color: string | null) {
+function settings(
+  primary_color: string | null,
+  terms: { group_term_singular?: string | null; group_term_plural?: string | null } = {}
+) {
   return {
     data: {
       tenant: { name: "Igreja Teste Um" },
       congregation: { name: "Sede" },
-      branding: { primary_color },
+      branding: { primary_color, ...terms },
     },
   };
 }
@@ -72,6 +80,33 @@ describe("ChurchIdentityProvider", () => {
 
     await screen.findByText("Igreja Teste Um / Sede");
     expect(document.documentElement.style.getPropertyValue("--brand")).toBe("");
+  });
+
+  it("traz o termo da igreja para pequeno grupo", async () => {
+    signedIn(true);
+    mockedGet.mockResolvedValue(
+      settings(null, { group_term_singular: "Célula", group_term_plural: "Células" })
+    );
+    render(
+      <ChurchIdentityProvider>
+        <Probe />
+      </ChurchIdentityProvider>
+    );
+
+    expect(await screen.findByText("termo: Célula / Células")).toBeInTheDocument();
+  });
+
+  it("sem termo configurado, usa Grupo / Grupos", async () => {
+    signedIn(true);
+    mockedGet.mockResolvedValue(settings(null));
+    render(
+      <ChurchIdentityProvider>
+        <Probe />
+      </ChurchIdentityProvider>
+    );
+
+    await screen.findByText("Igreja Teste Um / Sede");
+    expect(screen.getByText("termo: Grupo / Grupos")).toBeInTheDocument();
   });
 
   it("sem sessão não chama a API e fica no fallback", () => {

@@ -6,6 +6,8 @@ import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
+import { PremiumInvite } from "@/components/ui/PremiumInvite";
+import { isUpgradeRoute } from "@/lib/permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/components/celebrations/CreateCelebrationModal";
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
@@ -56,7 +58,28 @@ function tabBtn(active: boolean) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Celebrações é área Premium. Numa igreja Starter, quem alcançaria a área no
+ * Premium vê o convite em vez da tela — sem pedir à API o dado que viria 403.
+ * O componente da tela fica separado para os hooks dele não dependerem disso.
+ */
 export default function CelebracoesPage() {
+  const { user } = useAuth();
+  if (isUpgradeRoute(user, "/celebracoes")) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="page-title">Celebrações</h1>
+        <PremiumInvite
+          resource="Celebrações"
+          description="Monte a ordem de celebração, a setlist e a escala de cada culto num lugar só, e exporte a OC em PDF com a identidade da igreja."
+        />
+      </div>
+    );
+  }
+  return <CelebracoesContent />;
+}
+
+function CelebracoesContent() {
   const { user } = useAuth();
   const roles = user?.roles ?? [];
   const canEdit = roles.some((r) =>

@@ -129,6 +129,14 @@ export interface SessionUser {
    */
   asaas_payments?: boolean;
   /**
+   * Áreas que o papel desta sessão leria se a igreja fosse Premium e que o
+   * plano atual barra (`GET /me/permissions` → `upgrade_areas`). O menu as
+   * mostra com a coroa e a tela abre o convite "Conhecer o Premium", em vez
+   * de sumir — direção Órbita. Vazio no Premium e quando não deu para
+   * perguntar.
+   */
+  upgrade_areas?: string[];
+  /**
    * `exp` do token, em segundos. A faixa de suporte conta o tempo que resta
    * com isto: a sessão de suporte dura 5 minutos e não se renova, então
    * chegar ao fim sem aviso é perder o que estava sendo feito.
@@ -146,7 +154,8 @@ export function buildSessionUser(
   payload: JwtPayload,
   identity: Identity,
   areas: string[] | null = null,
-  asaasPayments = false
+  asaasPayments = false,
+  upgradeAreas: string[] = []
 ): SessionUser {
   return {
     id: payload.sub,
@@ -160,6 +169,7 @@ export function buildSessionUser(
     plan: payload.plan,
     areas,
     asaas_payments: asaasPayments,
+    upgrade_areas: upgradeAreas,
     expires_at: payload.exp,
   };
 }
@@ -168,6 +178,7 @@ export function buildSessionUser(
 export interface SessionPermissions {
   areas: string[] | null;
   asaasPayments: boolean;
+  upgradeAreas: string[];
 }
 
 /**
@@ -190,15 +201,22 @@ export async function fetchPermissions(accessToken: string): Promise<SessionPerm
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) return { areas: null, asaasPayments: false };
+    if (!res.ok) return { areas: null, asaasPayments: false, upgradeAreas: [] };
 
-    const body = (await res.json()) as { areas?: unknown; features?: { asaas_payments?: unknown } };
+    const body = (await res.json()) as {
+      areas?: unknown;
+      upgrade_areas?: unknown;
+      features?: { asaas_payments?: unknown };
+    };
     return {
       areas: Array.isArray(body.areas) ? (body.areas as string[]) : null,
       asaasPayments: body.features?.asaas_payments === true,
+      upgradeAreas: Array.isArray(body.upgrade_areas)
+        ? (body.upgrade_areas as unknown[]).filter((a): a is string => typeof a === "string")
+        : [],
     };
   } catch {
-    return { areas: null, asaasPayments: false };
+    return { areas: null, asaasPayments: false, upgradeAreas: [] };
   }
 }
 

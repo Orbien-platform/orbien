@@ -56,6 +56,35 @@ describe('UpdateSettingsDto', () => {
     ).toHaveLength(0);
   });
 
+  it.each([
+    ['Célula', 'Células'],
+    ['PG', 'PGs'],
+    ['Grupo de crescimento', 'Grupos de crescimento'],
+    ["Pequeno grupo d'água", "Pequenos grupos d'água"],
+  ])('aceita a terminologia %s / %s', async (singular, plural) => {
+    expect(
+      await errorsFor({ branding: { group_term_singular: singular, group_term_plural: plural } }),
+    ).toHaveLength(0);
+  });
+
+  it('aceita null nos dois termos (volta ao padrão)', async () => {
+    expect(
+      await errorsFor({ branding: { group_term_singular: null, group_term_plural: null } }),
+    ).toHaveLength(0);
+  });
+
+  it.each([
+    ['curto demais', 'G'],
+    ['longo demais', 'x'.repeat(25)],
+    ['com número', 'Célula 1'],
+    ['começando por espaço', ' Célula'],
+    ['com HTML', '<b>PG</b>'],
+  ])('rejeita termo %s', async (_caso, termo) => {
+    expect(
+      await errorsFor({ branding: { group_term_singular: termo, group_term_plural: 'Grupos' } }),
+    ).not.toHaveLength(0);
+  });
+
   it('rejeita custom_domain com formato de hostname inválido', async () => {
     const errors = await errorsFor({ branding: { custom_domain: 'não é um domínio' } });
     expect(errors.some((e) => e.property === 'branding')).toBe(true);

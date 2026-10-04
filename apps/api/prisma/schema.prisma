@@ -213,6 +213,12 @@ model BrandingConfig {
   /// documento (mesmo padrão de `logo_url`/`splash_url`: link, não conteúdo
   /// inline).
   terms_url                          String?
+  /// Terminologia da igreja para pequeno grupo ("Célula"/"Células",
+  /// "PG"/"PGs", "GC"/"GCs", "EBD"/"EBDs"…), usada pelos fronts em menus e
+  /// títulos. Os dois andam juntos; nulos = o termo padrão do produto
+  /// ("Grupo"/"Grupos"), que é decidido no front, não gravado aqui.
+  group_term_singular                String?   @db.VarChar(24)
+  group_term_plural                  String?   @db.VarChar(24)
   created_at                         DateTime  @default(now())
   updated_at                         DateTime  @updatedAt
 

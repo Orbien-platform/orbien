@@ -28,6 +28,11 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * O rótulo é o termo da igreja para pequeno grupo, no plural ("Células",
+   * "PGs"…), não o `label` fixo. Ver `navLabel`.
+   */
+  usesGroupTerm?: boolean;
 }
 
 export interface NavSection {
@@ -48,7 +53,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Comunidade",
     items: [
-      { href: "/grupos", label: "Grupos", icon: HeartHandshake },
+      { href: "/grupos", label: "Grupos", icon: HeartHandshake, usesGroupTerm: true },
       { href: "/redes", label: "Redes", icon: GitBranch },
     ],
   },
@@ -76,6 +81,11 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+/** Rótulo do item, com o termo da igreja onde o item o usa. */
+export function navLabel(item: NavItem, groupTermPlural: string): string {
+  return item.usesGroupTerm ? groupTermPlural : item.label;
+}
 
 /** A rota está ativa no pathname atual — ela mesma ou uma sub-rota dela. */
 export function isActiveRoute(pathname: string, href: string): boolean {

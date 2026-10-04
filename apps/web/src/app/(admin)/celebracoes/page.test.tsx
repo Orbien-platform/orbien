@@ -84,6 +84,38 @@ beforeEach(() => {
 });
 
 describe("CelebracoesPage", () => {
+  it("numa igreja Starter, mostra o convite Premium em vez de carregar a tela", () => {
+    mockedUseAuth.mockReturnValue({
+      user: {
+        id: "u1",
+        name: "Ana",
+        email: "ana@a.com",
+        roles: ["tenant_admin"],
+        tenant_id: "t1",
+        congregation_id: "c1",
+        support_session: false,
+        support_tenant_name: null,
+        plan: "starter",
+        areas: ["persons"],
+        upgrade_areas: ["celebrations"],
+        expires_at: Math.floor(Date.now() / 1000) + 300,
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    render(<CelebracoesPage />);
+
+    expect(screen.getByText("Disponível no plano Premium")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Conhecer o Premium" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/precos")
+    );
+    // Não pede à API o dado que viria 403.
+    expect(mockedApi.get).not.toHaveBeenCalled();
+  });
+
   it("carrega e mostra a lista de celebrações", async () => {
     setup();
     mockedApi.get.mockResolvedValue({

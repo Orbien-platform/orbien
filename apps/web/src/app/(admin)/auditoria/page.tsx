@@ -5,6 +5,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
+import { PremiumInvite } from "@/components/ui/PremiumInvite";
+import { useAuth } from "@/hooks/useAuth";
+import { isUpgradeRoute } from "@/lib/permissions";
 import api, { isForbidden } from "@/lib/api";
 import { formatInstant } from "@/lib/datetime";
 
@@ -83,7 +86,27 @@ function describeLog(log: AuditLog): string {
  * e só no Premium (`GET /audit-logs`) — quem não alcança nem vê o link na
  * barra lateral, e quem chega pela URL recebe o 403 que vira "sem acesso".
  */
+/**
+ * Auditoria é área Premium (PROD-21). Numa igreja Starter, o `tenant_admin`
+ * vê o convite em vez da tela — sem pedir à API o dado que viria 403.
+ */
 export default function AuditoriaPage() {
+  const { user } = useAuth();
+  if (isUpgradeRoute(user, "/auditoria")) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="page-title">Auditoria</h1>
+        <PremiumInvite
+          resource="Auditoria"
+          description="Veja todo acesso da equipe de suporte da Orbien aos dados da sua igreja e as transferências de conta, com data, rota e resultado."
+        />
+      </div>
+    );
+  }
+  return <AuditoriaContent />;
+}
+
+function AuditoriaContent() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
   const [accessDenied, setAccessDenied] = useState(false);

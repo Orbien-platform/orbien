@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { roleLabel } from "@/lib/roles";
-import { findNavEntry } from "@/lib/navigation";
+import { findNavEntry, navLabel } from "@/lib/navigation";
+import { useChurchIdentity } from "@/contexts/ChurchIdentityContext";
 import { Sidebar } from "./sidebar";
 
 /** Telas fora do menu lateral — hoje só o perfil, que mora no menu da conta. */
@@ -38,9 +39,10 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
 
+  const { groupTerm } = useChurchIdentity();
   const entry = findNavEntry(pathname);
   const crumbs: string[] = entry
-    ? [entry.section, entry.item.label].filter(
+    ? [entry.section, navLabel(entry.item, groupTerm.plural)].filter(
         // Seção com o mesmo nome da tela ("Pessoas › Pessoas") vira um passo só.
         (c, i, all): c is string => !!c && all.indexOf(c) === i
       )

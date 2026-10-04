@@ -168,10 +168,27 @@ e `/admin/{igreja|usuarios|identidade|plano|lgpd|auditoria}`.
 - [ ] **Header completo:** busca (⌘K), tema, notificações e menu da conta
   ("Nome e e-mail", "Trocar senha", "Sair"). A frase "Escalas e perfil pessoal
   ficam no app" também entra no menu da conta.
-- [ ] **Coroa nos itens Premium e convite "Disponível no plano Premium".**
-  Depende de a sessão do web saber o plano da igreja, e hoje não sabe.
-- [ ] **Terminologia da igreja** (célula/PG/GC) em menus e títulos. Depende de
-  configuração nova na API, que hoje não existe.
+- [x] **Coroa nos itens Premium e convite "Disponível no plano Premium"**
+  (2026-10-04, branch `feat/plano-e-terminologia-no-painel`).
+  - `GET /me/permissions` devolve `plan` e `upgrade_areas` (as áreas que o
+    papel leria no Premium e o plano barra).
+  - O menu mostra essas áreas com a coroa, em vez de escondê-las.
+  - Celebrações e Auditoria abrem o `PremiumInvite` numa igreja Starter, sem
+    pedir à API o dado que viria 403.
+  - Ainda falta: as abas Premium *dentro* de telas que existem nos dois
+    planos (DRE, Balancete, Conciliação… em Financeiro) continuam com o
+    estado de cada aba, sem o convite.
+- [x] **Terminologia da igreja** (2026-10-04, mesma branch).
+  - O termo fica em `branding_configs.group_term_singular`/`_plural`, com o
+    CHECK de que os dois andam juntos.
+  - Grava por `PATCH /settings` (`tenant_admin`, nos dois planos) e lê por
+    `GET /settings`.
+  - Seção **Terminologia** em Configurações.
+  - Aplicado no item do menu, no caminho do topo e no título da tela de grupos.
+  - Ainda falta: textos dentro das telas ("Novo grupo", "2 grupos", "Buscar
+    grupos…") e notificações. Trocar esses por um termo livre esbarra no
+    gênero ("Novo grupo" × "Nova célula") e pede decidir se a igreja informa
+    o gênero ou se o texto é reescrito para não depender dele.
 - [ ] **Estados obrigatórios** em toda tela: skeleton, vazio, erro com
   "tentar de novo" e sem acesso.
 - [ ] **Transições:** fade + translateY(3px), 180 ms.
@@ -287,11 +304,10 @@ Mais**. Hoje são Home · Grupos · Conteúdo · Perfil, e a Bíblia não é aba
 1. **Console (`apps/admin`) herda tudo do painel** — feito, §3.3.
 2. **O site não volta a ter tema claro.** A v2 é noturna e fica assim.
 3. **Ícone novo** com a marca da v2 — feito, §3.4.
-4. **Plano da igreja na sessão do web e terminologia configurável** entram
-   pela API: o plano em `GET /me/permissions`, para a coroa Premium e o
-   convite no Starter; a terminologia (célula, PG, GC, EBD…) como
-   configuração da igreja, aplicada em menus e títulos do painel. Trabalho em
-   branch própria (`feat/plano-e-terminologia-no-painel`), por ter migration.
+4. **Plano da igreja e terminologia configurável via API** — feito, §3.2.
+   Correção do que este documento dizia antes: a sessão do web já tinha o
+   plano (vem do token). O que faltava era saber *quais* áreas o Premium
+   abriria para o papel — é o `upgrade_areas`.
 
 **Ainda em aberto:**
 

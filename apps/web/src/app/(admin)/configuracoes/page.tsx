@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Building2, CheckCircle2, CloudCog, Globe, Image as ImageIcon, Loader2, Palette, Wallet } from "lucide-react";
+import { Building2, CheckCircle2, CloudCog, Globe, Image as ImageIcon, Loader2, Palette, Users, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,8 @@ interface Settings {
     custom_domain: string | null;
     terms_url: string | null;
     pix_key: string | null;
+    group_term_singular?: string | null;
+    group_term_plural?: string | null;
   };
   congregation: {
     name: string;
@@ -49,7 +51,13 @@ interface UpdateSettingsPayload {
     primary_color?: string;
     accent_color?: string;
   };
-  branding?: { custom_domain?: string; terms_url?: string; pix_key?: string };
+  branding?: {
+    custom_domain?: string;
+    terms_url?: string;
+    pix_key?: string;
+    group_term_singular?: string | null;
+    group_term_plural?: string | null;
+  };
 }
 
 interface DomainStatus {
@@ -88,6 +96,8 @@ const ALLOWED_LOGO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/svg+
 const MAX_LOGO_SIZE = 5 * 1024 * 1024; // 5MB
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HEX_COLOR_RE = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+// Mesmo formato que a API aceita para o termo de grupo (`update-settings.dto.ts`).
+const GROUP_TERM_RE = /^\p{L}[\p{L} '-]{1,23}$/u;
 
 // Contraste AA (4.5:1) da cor principal contra branco. A API barra de todo
 // jeito (IsAccessibleBrandColor, em apps/api/src/common/validators/), mas
@@ -203,6 +213,13 @@ function ConfiguracoesContent() {
   // Financeiro
   const [pixKey, setPixKey] = useState("");
 
+  // Terminologia (tenant): como a igreja chama o pequeno grupo
+  const [groupTermSingular, setGroupTermSingular] = useState("");
+  const [groupTermPlural, setGroupTermPlural] = useState("");
+  // O que veio da API: o PATCH só leva os termos quando eles mudaram, para um
+  // salvamento de outra seção não regravar a terminologia.
+  const savedGroupTerm = useRef({ singular: "", plural: "" });
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [toastMsg, setToastMsg] = useState("");
@@ -231,6 +248,12 @@ function ConfiguracoesContent() {
     setTenantPhone(initPhone(data.tenant.phone ?? undefined));
 
     setPixKey(data.branding.pix_key ?? "");
+    setGroupTermSingular(data.branding.group_term_singular ?? "");
+    setGroupTermPlural(data.branding.group_term_plural ?? "");
+    savedGroupTerm.current = {
+      singular: data.branding.group_term_singular ?? "",
+      plural: data.branding.group_term_plural ?? "",
+    };
   }
 
   const load = useCallback(() => {
@@ -432,6 +455,20 @@ function ConfiguracoesContent() {
       setSaveError("Chave PIX muito longa (máximo 140 caracteres).");
       return;
     }
+    const termSingular = groupTermSingular.trim();
+    const termPlural = groupTermPlural.trim();
+    if (canEditTenant && (termSingular !== "") !== (termPlural !== "")) {
+      setSaveError("Preencha o termo no singular e no plural, ou deixe os dois vazios para usar “Grupo”.");
+      return;
+    }
+    if (
+      canEditTenant &&
+      termSingular &&
+      (!GROUP_TERM_RE.test(termSingular) || !GROUP_TERM_RE.test(termPlural))
+    ) {
+      setSaveError("O termo do grupo deve ter de 2 a 24 letras (espaço, hífen e apóstrofo valem).");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -462,6 +499,17 @@ function ConfiguracoesContent() {
         };
         if (pixKey.trim()) {
           payload.branding = { pix_key: pixKey.trim() };
+        }
+        const groupTermChanged =
+          termSingular !== savedGroupTerm.current.singular ||
+          termPlural !== savedGroupTerm.current.plural;
+        if (groupTermChanged) {
+          payload.branding = {
+            ...payload.branding,
+            // Vazio nos dois volta ao termo padrão do produto.
+            group_term_singular: termSingular || null,
+            group_term_plural: termPlural || null,
+          };
         }
       }
 
@@ -982,6 +1030,42 @@ function ConfiguracoesContent() {
               </Field>
             </div>
           </section>
+
+          {/* ── Terminologia ── */}
+          {canEditTenant && (
+            <section className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Users size={16} strokeWidth={1.5} className="text-navy" />
+                <h2 className="text-sm font-medium text-ink dark:text-white">Terminologia</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Pequeno grupo, no singular">
+                  <Input
+                    aria-label="Pequeno grupo, no singular"
+                    value={groupTermSingular}
+                    onChange={(e) => setGroupTermSingular(e.target.value)}
+                    placeholder="Grupo"
+                    maxLength={24}
+                    disabled={isSaving}
+                  />
+                </Field>
+                <Field label="No plural">
+                  <Input
+                    aria-label="Pequeno grupo, no plural"
+                    value={groupTermPlural}
+                    onChange={(e) => setGroupTermPlural(e.target.value)}
+                    placeholder="Grupos"
+                    maxLength={24}
+                    disabled={isSaving}
+                  />
+                </Field>
+              </div>
+              <p className="mt-1.5 text-xs text-stone">
+                Como a sua igreja chama o pequeno grupo: Célula, PG, GC, EBD… Aparece no menu e
+                nos títulos do painel. Deixe vazio para usar “Grupo”.
+              </p>
+            </section>
+          )}
 
           {/* ── Financeiro ── */}
           {canEditTenant && (

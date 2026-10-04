@@ -56,9 +56,11 @@ export async function GET(request: NextRequest) {
   // As áreas vêm da API, não daqui: é a chamada que apagou a cópia das listas
   // de `@Roles` que o front mantinha. Ela nunca lança — token vencido ou API
   // fora devolvem `null`, e a barra lateral desenha tudo. Ver `fetchPermissions`.
-  const { areas, asaasPayments } = await fetchPermissions(access);
+  const { areas, asaasPayments, upgradeAreas } = await fetchPermissions(access);
 
-  return NextResponse.json({ user: buildSessionUser(payload, identity, areas, asaasPayments) });
+  return NextResponse.json({
+    user: buildSessionUser(payload, identity, areas, asaasPayments, upgradeAreas),
+  });
 }
 
 /** Login. O corpo é repassado à API tal como veio da tela. */
@@ -105,9 +107,9 @@ export async function POST(request: NextRequest) {
   }
 
   const identity = { email: body.email };
-  const { areas, asaasPayments } = await fetchPermissions(pair.access_token);
+  const { areas, asaasPayments, upgradeAreas } = await fetchPermissions(pair.access_token);
   const response = NextResponse.json({
-    user: buildSessionUser(payload, identity, areas, asaasPayments),
+    user: buildSessionUser(payload, identity, areas, asaasPayments, upgradeAreas),
   });
   setAccessCookie(response.cookies, pair.access_token, REFRESH_MAX_AGE);
   setRefreshCookie(response.cookies, pair.refresh_token);
