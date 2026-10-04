@@ -1843,6 +1843,7 @@ describe('PixService', () => {
       const antes = Date.now();
 
       await service.expireAbandonedPublicDonations();
+      const depois = Date.now();
 
       const where = cap.abandonedQuery?.['where'] as {
         scenario: string;
@@ -1851,8 +1852,12 @@ describe('PixService', () => {
         created_at: { lt: Date };
       };
       expect(where).toMatchObject({ scenario: 'public', status: 'pending', asaas_payment_id: { not: null } });
-      expect(where.created_at.lt.getTime()).toBeLessThanOrEqual(antes - 48 * 60 * 60 * 1000 + 1);
-      expect(where.created_at.lt.getTime()).toBeGreaterThanOrEqual(Date.now() - 48 * 60 * 60 * 1000 - 1);
+      // O corte é "agora − 48h", calculado durante a chamada: fica entre o
+      // relógio de antes e o de depois dela. Com as margens invertidas o teste
+      // só passava se a chamada durasse menos de 1ms — no CI, sob carga, não.
+      const QUARENTA_E_OITO_HORAS = 48 * 60 * 60 * 1000;
+      expect(where.created_at.lt.getTime()).toBeGreaterThanOrEqual(antes - QUARENTA_E_OITO_HORAS);
+      expect(where.created_at.lt.getTime()).toBeLessThanOrEqual(depois - QUARENTA_E_OITO_HORAS);
       expect(cap.abandonedQuery).toMatchObject({ take: 100, orderBy: { created_at: 'asc' } });
     });
 
