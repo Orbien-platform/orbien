@@ -47,6 +47,7 @@ describe("Sidebar", () => {
     mockedUseChurchIdentity.mockReturnValue({
       churchName: "Igreja Teste Um",
       congregationName: "Sede",
+      groupTerm: { singular: "Grupo", plural: "Grupos" },
     });
   });
 
@@ -93,6 +94,7 @@ describe("Sidebar", () => {
     mockedUseChurchIdentity.mockReturnValue({
       churchName: "Igreja Teste Um",
       congregationName: "Igreja Teste Um",
+      groupTerm: { singular: "Grupo", plural: "Grupos" },
     });
     render(<Sidebar />);
     expect(screen.getAllByText("Igreja Teste Um")).toHaveLength(1);
@@ -100,14 +102,22 @@ describe("Sidebar", () => {
 
   it("cai num nome genérico enquanto a identidade não carrega", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
-    mockedUseChurchIdentity.mockReturnValue({ churchName: null, congregationName: null });
+    mockedUseChurchIdentity.mockReturnValue({
+      churchName: null,
+      congregationName: null,
+      groupTerm: { singular: "Grupo", plural: "Grupos" },
+    });
     render(<Sidebar />);
     expect(screen.getByText("Sua igreja")).toBeInTheDocument();
   });
 
   it("usa a inicial da Orbien quando o nome não tem letra nem número", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
-    mockedUseChurchIdentity.mockReturnValue({ churchName: "— ★", congregationName: null });
+    mockedUseChurchIdentity.mockReturnValue({
+      churchName: "— ★",
+      congregationName: null,
+      groupTerm: { singular: "Grupo", plural: "Grupos" },
+    });
     render(<Sidebar />);
     expect(screen.getByText("O")).toBeInTheDocument();
   });
@@ -141,6 +151,47 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Ministérios" })).toHaveAttribute("href", "/voluntarios");
     expect(screen.getByRole("link", { name: "Publicações" })).toHaveAttribute("href", "/conteudo");
     expect(screen.getByRole("link", { name: "Redes" })).toHaveAttribute("href", "/redes");
+  });
+
+  it("usa o termo da igreja para pequeno grupo no item de grupos", () => {
+    mockedUsePathname.mockReturnValue("/dashboard");
+    mockedUseChurchIdentity.mockReturnValue({
+      churchName: "Igreja Teste Um",
+      congregationName: null,
+      groupTerm: { singular: "Célula", plural: "Células" },
+    });
+    render(<Sidebar />);
+    expect(screen.getByRole("link", { name: "Células" })).toHaveAttribute("href", "/grupos");
+    expect(screen.queryByRole("link", { name: "Grupos" })).not.toBeInTheDocument();
+  });
+
+  describe("áreas Premium numa igreja Starter", () => {
+    it("mostra com a coroa a área que o papel alcançaria no Premium", () => {
+      mockedUsePathname.mockReturnValue("/dashboard");
+      signedInAs({
+        plan: "starter",
+        areas: ["persons", "small_groups", "financial", "content", "volunteers"],
+        upgrade_areas: ["celebrations", "audit"],
+      });
+      render(<Sidebar />);
+
+      expect(screen.getByRole("link", { name: "Celebrações (Premium)" })).toHaveAttribute(
+        "href",
+        "/celebracoes"
+      );
+      expect(screen.getByRole("link", { name: "Auditoria (Premium)" })).toBeInTheDocument();
+      // Área que o plano não barra continua sem coroa.
+      expect(screen.getByRole("link", { name: "Pessoas" })).toBeInTheDocument();
+    });
+
+    it("não oferece área que o papel não leria nem no Premium", () => {
+      mockedUsePathname.mockReturnValue("/dashboard");
+      signedInAs({ roles: ["treasurer"], plan: "starter", areas: ["financial"], upgrade_areas: [] });
+      render(<Sidebar />);
+
+      expect(screen.queryByRole("link", { name: /Celebrações/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /Auditoria/ })).not.toBeInTheDocument();
+    });
   });
 
   // O link só desenha o que a sessão alcança, e quem diz o que ela alcança é a

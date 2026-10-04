@@ -57,6 +57,46 @@ describe('MeController', () => {
     expect(controller.permissions(payload({ roles: ['platform_support'] })).areas).toEqual([]);
   });
 
+  describe('plan (plano da igreja, do token)', () => {
+    it('responde o plano do token de quem pergunta', () => {
+      expect(controller.permissions(payload({ plan: 'starter' })).plan).toBe('starter');
+      expect(controller.permissions(payload({ plan: 'premium' })).plan).toBe('premium');
+    });
+
+    it('na sessão de suporte responde o plano do tenant alvo, que é o que o token carrega', () => {
+      const result = controller.permissions(
+        payload({ roles: ['platform_support'], support_session: true, plan: 'premium' }),
+      );
+      expect(result.plan).toBe('premium');
+    });
+  });
+
+  describe('upgrade_areas (o que o Premium abriria para este papel)', () => {
+    it('no Starter, lista as áreas Premium que o papel alcançaria', () => {
+      expect(
+        controller.permissions(payload({ roles: ['tenant_admin'], plan: 'starter' })).upgrade_areas,
+      ).toEqual(['celebrations', 'audit']);
+    });
+
+    it('não oferece área que o papel não leria nem no Premium', () => {
+      // `treasurer` não lê celebrações nem auditoria em plano nenhum.
+      expect(
+        controller.permissions(payload({ roles: ['treasurer'], plan: 'starter' })).upgrade_areas,
+      ).toEqual([]);
+      // `ministry_leader` lê celebrações no Premium, auditoria não.
+      expect(
+        controller.permissions(payload({ roles: ['ministry_leader'], plan: 'starter' }))
+          .upgrade_areas,
+      ).toEqual(['celebrations']);
+    });
+
+    it('no Premium é vazio', () => {
+      expect(
+        controller.permissions(payload({ roles: ['tenant_admin'], plan: 'premium' })).upgrade_areas,
+      ).toEqual([]);
+    });
+  });
+
   describe('features.asaas_payments (trava de pagamentos pela Asaas)', () => {
     const original = process.env['ASAAS_PAYMENTS_ENABLED'];
     afterEach(() => {

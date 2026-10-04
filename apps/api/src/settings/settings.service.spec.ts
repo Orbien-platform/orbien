@@ -97,7 +97,25 @@ describe('SettingsService', () => {
         custom_domain: null,
         terms_url: null,
         pix_key: null,
+        group_term_singular: null,
+        group_term_plural: null,
       });
+    });
+
+    it('devolve a terminologia de grupo gravada pela igreja', async () => {
+      const client = clientWith();
+      client.tenant.findUnique.mockResolvedValue(TENANT);
+      client.congregation.findUnique.mockResolvedValue(CONGREGATION);
+      client.brandingConfig.findUnique.mockResolvedValue({
+        group_term_singular: 'Célula',
+        group_term_plural: 'Células',
+      });
+      const { service } = serviceWith(client);
+
+      const result = await service.getSettings('t1', 'g1');
+
+      expect(result.branding.group_term_singular).toBe('Célula');
+      expect(result.branding.group_term_plural).toBe('Células');
     });
 
     it('cai no branding do tenant quando a congregação não tem os campos preenchidos', async () => {
@@ -130,6 +148,8 @@ describe('SettingsService', () => {
         custom_domain: 'doar.suaigreja.com.br',
         terms_url: 'https://suaigreja.com.br/termos',
         pix_key: null,
+        group_term_singular: null,
+        group_term_plural: null,
       });
     });
 
@@ -152,6 +172,8 @@ describe('SettingsService', () => {
         custom_domain: null,
         terms_url: null,
         pix_key: null,
+        group_term_singular: null,
+        group_term_plural: null,
       });
     });
 
@@ -342,6 +364,87 @@ describe('SettingsService', () => {
     });
 
     // PIX manual — Starter (Cenário 1), sem gate de plano.
+    describe('terminologia de grupo', () => {
+      function ready() {
+        const client = clientWith();
+        client.tenant.findUnique.mockResolvedValue(TENANT);
+        client.congregation.findUnique.mockResolvedValue(CONGREGATION);
+        client.brandingConfig.findUnique.mockResolvedValue(null);
+        client.brandingConfig.upsert.mockResolvedValue({});
+        return client;
+      }
+
+      it('grava singular e plural no Starter, com tenant_admin, sem espaço sobrando', async () => {
+        const client = ready();
+        const { service } = serviceWith(client);
+
+        await service.updateSettings(
+          't1',
+          'g1',
+          ['tenant_admin'],
+          { branding: { group_term_singular: ' Célula ', group_term_plural: 'Células' } } as never,
+          'starter',
+          'u1',
+        );
+
+        expect(client.brandingConfig.upsert).toHaveBeenCalledWith({
+          where: { tenant_id: 't1' },
+          create: { tenant_id: 't1', group_term_singular: 'Célula', group_term_plural: 'Células' },
+          update: { group_term_singular: 'Célula', group_term_plural: 'Células' },
+        });
+      });
+
+      it('null nos dois volta ao termo padrão', async () => {
+        const client = ready();
+        const { service } = serviceWith(client);
+
+        await service.updateSettings(
+          't1',
+          'g1',
+          ['tenant_admin'],
+          { branding: { group_term_singular: null, group_term_plural: null } } as never,
+          'premium',
+          'u1',
+        );
+
+        expect(client.brandingConfig.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            update: { group_term_singular: null, group_term_plural: null },
+          }),
+        );
+      });
+
+      it.each([
+        ['só o singular', { group_term_singular: 'PG' }],
+        ['só o plural', { group_term_plural: 'PGs' }],
+        ['um preenchido e outro nulo', { group_term_singular: 'PG', group_term_plural: null }],
+      ])('recusa %s com 400, sem gravar', async (_caso, branding) => {
+        const client = ready();
+        const { service } = serviceWith(client);
+
+        await expect(
+          service.updateSettings('t1', 'g1', ['tenant_admin'], { branding } as never, 'starter', 'u1'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(client.brandingConfig.upsert).not.toHaveBeenCalled();
+      });
+
+      it('exige tenant_admin, como o resto de branding', async () => {
+        const client = ready();
+        const { service } = serviceWith(client);
+
+        await expect(
+          service.updateSettings(
+            't1',
+            'g1',
+            ['admin_congregation'],
+            { branding: { group_term_singular: 'PG', group_term_plural: 'PGs' } } as never,
+            'premium',
+            'u1',
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+    });
+
     it('grava pix_key com tenant_admin sem exigir Premium', async () => {
       const client = clientWith();
       client.tenant.findUnique.mockResolvedValue(TENANT);

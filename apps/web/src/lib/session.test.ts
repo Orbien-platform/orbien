@@ -126,8 +126,15 @@ describe("buildSessionUser", () => {
       plan: "pro",
       areas: null,
       asaas_payments: false,
+      upgrade_areas: [],
       expires_at: 9999999999,
     });
+  });
+
+  it("carrega as áreas que o Premium abriria", () => {
+    expect(
+      buildSessionUser(payload, { email: "ana@example.com" }, [], false, ["celebrations"]).upgrade_areas
+    ).toEqual(["celebrations"]);
   });
 
   it("carrega a trava de pagamentos que a API respondeu", () => {
@@ -216,12 +223,17 @@ describe("fetchPermissions", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
-        Promise.resolve({ areas: ["persons", "financial"], features: { asaas_payments: true } }),
+        Promise.resolve({
+          areas: ["persons", "financial"],
+          upgrade_areas: ["celebrations"],
+          features: { asaas_payments: true },
+        }),
     }) as unknown as typeof fetch;
 
     await expect(fetchPermissions("token-abc")).resolves.toEqual({
       areas: ["persons", "financial"],
       asaasPayments: true,
+      upgradeAreas: ["celebrations"],
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/me/permissions"),
@@ -239,7 +251,11 @@ describe("fetchPermissions", () => {
         json: () => Promise.resolve({ areas: [], features }),
       }) as unknown as typeof fetch;
 
-      await expect(fetchPermissions("token")).resolves.toEqual({ areas: [], asaasPayments: false });
+      await expect(fetchPermissions("token")).resolves.toEqual({
+        areas: [],
+        asaasPayments: false,
+        upgradeAreas: [],
+      });
     }
   });
 
@@ -249,6 +265,7 @@ describe("fetchPermissions", () => {
     await expect(fetchPermissions("token-vencido")).resolves.toEqual({
       areas: null,
       asaasPayments: false,
+      upgradeAreas: [],
     });
   });
 
@@ -258,12 +275,33 @@ describe("fetchPermissions", () => {
       json: () => Promise.resolve({ areas: "tudo" }),
     }) as unknown as typeof fetch;
 
-    await expect(fetchPermissions("token")).resolves.toEqual({ areas: null, asaasPayments: false });
+    await expect(fetchPermissions("token")).resolves.toEqual({
+      areas: null,
+      asaasPayments: false,
+      upgradeAreas: [],
+    });
+  });
+
+  it("upgrade_areas malformado vira lista vazia, sem derrubar o resto", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ areas: ["persons"], upgrade_areas: "audit" }),
+    }) as unknown as typeof fetch;
+
+    await expect(fetchPermissions("token")).resolves.toEqual({
+      areas: ["persons"],
+      asaasPayments: false,
+      upgradeAreas: [],
+    });
   });
 
   it("não propaga falha de rede — a sessão sobe sem as áreas e sem pagamentos", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
 
-    await expect(fetchPermissions("token")).resolves.toEqual({ areas: null, asaasPayments: false });
+    await expect(fetchPermissions("token")).resolves.toEqual({
+      areas: null,
+      asaasPayments: false,
+      upgradeAreas: [],
+    });
   });
 });

@@ -11,6 +11,7 @@ import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
 import { GroupTypesModal } from "@/components/groups/GroupTypesModal";
 import { fetchGroupTypes, DEFAULT_GROUP_TYPE_COLOR, type GroupTypeDef } from "@/lib/groupTypes";
 import { useAuth } from "@/hooks/useAuth";
+import { useChurchIdentity } from "@/contexts/ChurchIdentityContext";
 import api, { isForbidden } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ const LIMIT = 20;
 
 export default function GruposPage() {
   const { user } = useAuth();
+  const { groupTerm } = useChurchIdentity();
   const roles = user?.roles ?? [];
   const canEdit =
     roles.includes("admin_congregation") ||
@@ -184,7 +186,7 @@ export default function GruposPage() {
       {/* Page header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Grupos</h1>
+          <h1 className="page-title">{groupTerm.plural}</h1>
           <p className="mt-0.5 text-sm text-stone">
             {total > 0 ? `${total} grupo${total !== 1 ? "s" : ""}` : "Nenhum grupo"}
           </p>

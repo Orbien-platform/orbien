@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { canAccessRoute } from "@/lib/permissions";
-import { NAV_SECTIONS, isActiveRoute } from "@/lib/navigation";
+import { Crown } from "lucide-react";
+import { canAccessRoute, isUpgradeRoute } from "@/lib/permissions";
+import { NAV_SECTIONS, isActiveRoute, navLabel } from "@/lib/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useChurchIdentity } from "@/contexts/ChurchIdentityContext";
 
@@ -20,7 +21,7 @@ function initials(name: string): string {
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const { churchName, congregationName } = useChurchIdentity();
+  const { churchName, congregationName, groupTerm } = useChurchIdentity();
 
   const title = churchName ?? congregationName ?? "Sua igreja";
   // A congregação só aparece como subtítulo quando diz algo além do nome da
@@ -31,9 +32,13 @@ export function Sidebar() {
   // Link que só levaria a um 403 não é desenhado. Isto é conveniência, não
   // controle de acesso: quem digitar a URL chega à tela e recebe de lá o
   // "sem acesso" — a autoridade continua sendo o `@Roles` da API.
+  // A exceção é a área que o papel alcançaria no Premium: ela aparece com a
+  // coroa, e a tela abre o convite em vez do dado (direção Órbita).
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter(({ href }) => canAccessRoute(user, href)),
+    items: section.items.filter(
+      ({ href }) => canAccessRoute(user, href) || isUpgradeRoute(user, href)
+    ),
   })).filter((section) => section.items.length > 0);
 
   return (
@@ -58,13 +63,17 @@ export function Sidebar() {
               <p className="label-mono px-2 pb-1.5 text-[9.5px]">{section.title}</p>
             )}
             <ul className="flex flex-col gap-px">
-              {section.items.map(({ href, label, icon: Icon }) => {
+              {section.items.map((item) => {
+                const { href, icon: Icon } = item;
+                const label = navLabel(item, groupTerm.plural);
                 const active = isActiveRoute(pathname, href);
+                const upgrade = isUpgradeRoute(user, href);
                 return (
                   <li key={href}>
                     <Link
                       href={href}
                       aria-current={active ? "page" : undefined}
+                      aria-label={upgrade ? `${label} (Premium)` : undefined}
                       className={cn(
                         "flex h-8 items-center gap-2.5 rounded-[7px] px-2 text-[13.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                         active
@@ -73,7 +82,15 @@ export function Sidebar() {
                       )}
                     >
                       <Icon size={16} strokeWidth={1.6} aria-hidden="true" />
-                      <span className="truncate">{label}</span>
+                      <span className="flex-1 truncate">{label}</span>
+                      {upgrade && (
+                        <Crown
+                          size={12}
+                          strokeWidth={1.6}
+                          className="shrink-0 text-amber-ink"
+                          aria-hidden="true"
+                        />
+                      )}
                     </Link>
                   </li>
                 );

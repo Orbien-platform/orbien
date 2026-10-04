@@ -1697,11 +1697,17 @@ está.
 - **Ícone — entregue (2026-10-04).** A marca da v2 (anel com satélite teal)
   nos três apps e na marca do site.
 
-Decisões de 2026-10-04, na seção 5 do `PROJETO.md`: o site fica só escuro;
-o plano da igreja entra em `GET /me/permissions` e a terminologia vira
-configuração da igreja, os dois para o painel (coroa Premium, convite no
-Starter, termo da igreja em menu e títulos). Segue em aberto só a copy do
-site (títulos da v2 contra os do React, e "Precision Modern" na Sobre).
+- **Coroa Premium e terminologia no painel — entregue (2026-10-04).**
+  `GET /me/permissions` ganhou `plan` e `upgrade_areas`; áreas Premium
+  aparecem no Starter com a coroa e abrem o convite. A terminologia da igreja
+  (`branding_configs.group_term_singular`/`_plural`, migration
+  `20261004160000_add_group_terminology`) é editada em Configurações e vale
+  no menu, no caminho do topo e no título de grupos. Fica para depois o termo
+  dentro das telas e nas notificações (esbarra no gênero gramatical).
+
+Decisões de 2026-10-04, na seção 5 do `PROJETO.md`: o site fica só escuro.
+Segue em aberto só a copy do site (títulos da v2 contra os do React, e
+"Precision Modern" na Sobre).
 
 ---
 

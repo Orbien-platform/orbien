@@ -791,6 +791,93 @@ describe("ConfiguracoesPage", () => {
     expect(payload).not.toHaveProperty("branding");
   });
 
+  describe("terminologia do pequeno grupo", () => {
+    it("carrega os termos gravados e envia o par quando muda", async () => {
+      setup();
+      mockedApi.get.mockResolvedValue({
+        data: settingsPayload({
+          branding: {
+            app_name: null,
+            primary_color: null,
+            logo_url: null,
+            splash_url: null,
+            group_term_singular: "Célula",
+            group_term_plural: "Células",
+          },
+        }),
+      });
+      mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+      const user = userEvent.setup();
+      render(<ConfiguracoesPage />);
+      expect(await screen.findByDisplayValue("Células")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no singular" }), { target: { value: "PG" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no plural" }), { target: { value: "PGs" } });
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+      const [, payload] = mockedApi.patch.mock.calls[0] as [string, { branding?: unknown }];
+      expect(payload.branding).toEqual({ group_term_singular: "PG", group_term_plural: "PGs" });
+    });
+
+    it("limpar os dois manda null e volta ao termo padrão", async () => {
+      setup();
+      mockedApi.get.mockResolvedValue({
+        data: settingsPayload({
+          branding: {
+            app_name: null,
+            primary_color: null,
+            logo_url: null,
+            splash_url: null,
+            group_term_singular: "Célula",
+            group_term_plural: "Células",
+          },
+        }),
+      });
+      mockedApi.patch.mockResolvedValue({ data: settingsPayload() });
+      const user = userEvent.setup();
+      render(<ConfiguracoesPage />);
+      await screen.findByDisplayValue("Células");
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no singular" }), { target: { value: "" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no plural" }), { target: { value: "" } });
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      await waitFor(() => expect(mockedApi.patch).toHaveBeenCalled());
+      const [, payload] = mockedApi.patch.mock.calls[0] as [string, { branding?: unknown }];
+      expect(payload.branding).toEqual({ group_term_singular: null, group_term_plural: null });
+    });
+
+    it("barra o singular sem o plural, sem chamar a API", async () => {
+      setup();
+      mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+      const user = userEvent.setup();
+      render(<ConfiguracoesPage />);
+      await screen.findByDisplayValue("Doca Sede");
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no singular" }), { target: { value: "PG" } });
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      expect(await screen.findByText(/Preencha o termo no singular e no plural/)).toBeInTheDocument();
+      expect(mockedApi.patch).not.toHaveBeenCalled();
+    });
+
+    it("barra termo com número", async () => {
+      setup();
+      mockedApi.get.mockResolvedValue({ data: settingsPayload() });
+      const user = userEvent.setup();
+      render(<ConfiguracoesPage />);
+      await screen.findByDisplayValue("Doca Sede");
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no singular" }), { target: { value: "Grupo 1" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "Pequeno grupo, no plural" }), { target: { value: "Grupos" } });
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      expect(await screen.findByText(/de 2 a 24 letras/)).toBeInTheDocument();
+      expect(mockedApi.patch).not.toHaveBeenCalled();
+    });
+  });
+
   it("barra chave PIX maior que 140 caracteres", async () => {
     setup();
     mockedApi.get.mockResolvedValue({ data: settingsPayload() });

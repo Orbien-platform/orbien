@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import AuditoriaPage from "./page";
 
+// A tela pergunta à sessão se a área é Premium barrada (convite) antes de
+// carregar; por padrão a sessão é de um tenant que lê a auditoria.
+const session = vi.hoisted(() => ({
+  user: { areas: ["audit"], upgrade_areas: [] as string[] },
+}));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => session }));
 vi.mock("@/lib/api", () => ({
   // Espelha o `isForbidden` real: 403 e só 403.
   isForbidden: (error: unknown) =>
@@ -40,9 +46,20 @@ function lastUrl(): string {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  session.user = { areas: ["audit"], upgrade_areas: [] };
 });
 
 describe("AuditoriaPage", () => {
+  it("numa igreja Starter, mostra o convite Premium em vez de carregar a tela", () => {
+    session.user = { areas: ["persons"], upgrade_areas: ["audit"] };
+
+    render(<AuditoriaPage />);
+
+    expect(screen.getByText("Disponível no plano Premium")).toBeInTheDocument();
+    // Não pede à API o dado que viria 403.
+    expect(mockedApi.get).not.toHaveBeenCalled();
+  });
+
   it("lista o acesso do suporte com quem, quando e o quê", async () => {
     respondWith([log()]);
 

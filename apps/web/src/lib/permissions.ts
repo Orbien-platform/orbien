@@ -46,6 +46,8 @@ interface AccessSubject {
    * perguntar (API fora, token vencido antes da primeira renovação).
    */
   areas: string[] | null;
+  /** Áreas que o Premium abriria para este papel (`upgrade_areas`). */
+  upgrade_areas?: string[];
 }
 
 /**
@@ -71,4 +73,19 @@ export function canAccessRoute(
   if (!area) return true;
 
   return subject.areas.includes(area);
+}
+
+/**
+ * A rota é de uma área que o papel desta sessão leria no Premium, e o plano
+ * atual barra. O menu a desenha com a coroa e a tela mostra o convite
+ * (`PremiumInvite`) — direção Órbita: Premium no Starter aparece, não some.
+ */
+export function isUpgradeRoute(
+  subject: AccessSubject | null | undefined,
+  href: string
+): boolean {
+  if (!subject) return false;
+  const area = ROUTE_AREAS[href];
+  if (!area) return false;
+  return subject.upgrade_areas?.includes(area) ?? false;
 }

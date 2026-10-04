@@ -97,3 +97,20 @@ export function readableAreas(user: {
   if (user.plan === 'premium') return byRole;
   return byRole.filter((area) => !PREMIUM_ONLY_AREAS.has(area));
 }
+
+/**
+ * Áreas que o papel desta sessão leria se a igreja fosse Premium e que o
+ * plano atual barra — o que o front mostra com a coroa e o convite "Conhecer
+ * o Premium", em vez de esconder (direção Órbita, `docs/design/orbita-v2`).
+ * Vazio no Premium. Como `readableAreas`, é informação para desenhar a tela:
+ * quem nega a rota continua sendo o `PlanGuard`.
+ */
+export function upgradeAreas(user: {
+  roles: string[];
+  support_session?: boolean;
+  plan?: 'starter' | 'premium';
+}): ProductArea[] {
+  if (user.plan === 'premium') return [];
+  const current = new Set(readableAreas(user));
+  return readableAreas({ ...user, plan: 'premium' }).filter((area) => !current.has(area));
+}

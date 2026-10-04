@@ -13,6 +13,9 @@ import {
   IsBrandColor,
 } from '../../common/validators/brand-color.validator';
 
+/** Termo de grupo: começa com letra; depois letras, espaço, hífen ou apóstrofo. */
+const GROUP_TERM_PATTERN = /^\p{L}[\p{L} '-]*$/u;
+
 class TenantSettingsDto {
   @IsOptional() @IsString() name?: string;
 
@@ -81,6 +84,25 @@ class BrandingSettingsDto {
   @IsString()
   @Length(1, 140, { message: 'Chave PIX deve ter entre 1 e 140 caracteres' })
   pix_key?: string;
+
+  /**
+   * Como a igreja chama o pequeno grupo — "Célula", "PG", "GC", "EBD"… — no
+   * singular e no plural. Vale nos dois planos (o site promete a
+   * terminologia configurável no Starter também). Os dois andam juntos, e
+   * `null` nos dois volta ao termo padrão do produto; a regra do par é do
+   * service, porque depende de olhar os dois campos ao mesmo tempo.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(2, 24, { message: 'O termo deve ter entre 2 e 24 caracteres' })
+  @Matches(GROUP_TERM_PATTERN, { message: 'Use só letras, espaço, hífen ou apóstrofo' })
+  group_term_singular?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 24, { message: 'O termo deve ter entre 2 e 24 caracteres' })
+  @Matches(GROUP_TERM_PATTERN, { message: 'Use só letras, espaço, hífen ou apóstrofo' })
+  group_term_plural?: string | null;
 }
 
 export class UpdateSettingsDto {
