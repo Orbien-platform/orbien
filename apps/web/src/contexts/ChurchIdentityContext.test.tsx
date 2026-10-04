@@ -86,6 +86,37 @@ describe("ChurchIdentityProvider", () => {
     expect(screen.getByText("sem-igreja / sem-congregacao")).toBeInTheDocument();
   });
 
+  it("resposta sem tenant, congregação ou branding fica no fallback", async () => {
+    signedIn(true);
+    mockedGet.mockResolvedValue({ data: {} });
+    render(
+      <ChurchIdentityProvider>
+        <Probe />
+      </ChurchIdentityProvider>
+    );
+
+    await waitFor(() => expect(mockedGet).toHaveBeenCalled());
+    expect(screen.getByText("sem-igreja / sem-congregacao")).toBeInTheDocument();
+    expect(document.documentElement.style.getPropertyValue("--brand")).toBe("");
+  });
+
+  it("resposta que chega depois de desmontar não aplica a cor", async () => {
+    signedIn(true);
+    let resolve!: (value: unknown) => void;
+    mockedGet.mockReturnValue(new Promise((r) => (resolve = r)) as ReturnType<typeof api.get>);
+    const { unmount } = render(
+      <ChurchIdentityProvider>
+        <Probe />
+      </ChurchIdentityProvider>
+    );
+
+    unmount();
+    resolve(settings("#7a1e5b"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.documentElement.style.getPropertyValue("--brand")).toBe("");
+  });
+
   it("falha da API não quebra: fica no fallback", async () => {
     signedIn(true);
     mockedGet.mockRejectedValue(new Error("rede"));
