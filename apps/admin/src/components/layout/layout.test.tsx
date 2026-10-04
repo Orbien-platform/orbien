@@ -99,15 +99,17 @@ describe("Sidebar", () => {
   it("marca o item ativo, inclusive em rota filha", () => {
     vi.mocked(usePathname).mockReturnValue("/tenants");
     const { rerender } = render(<Sidebar />);
-    expect(
-      screen.getByRole("link", { name: /Tenants/ }).className
-    ).toContain("text-navy");
+    expect(screen.getByRole("link", { name: /Tenants/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
 
     vi.mocked(usePathname).mockReturnValue("/tenants/abc");
     rerender(<Sidebar />);
-    expect(
-      screen.getByRole("link", { name: /Tenants/ }).className
-    ).toContain("text-navy");
+    expect(screen.getByRole("link", { name: /Tenants/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
 
     // O irmão continua inativo.
     expect(

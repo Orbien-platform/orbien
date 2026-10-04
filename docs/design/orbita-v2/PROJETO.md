@@ -16,7 +16,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 | Site (`apps/site`) | **Entregue** | As 8 páginas da v2 e as 5 de apoio (hub de funcionalidades, contato, LGPD, login e 404), só no tema escuro, com tokens, fontes, títulos, CTAs, órbita no hero e brilho do CTA final | Itens menores em [§2.3](#23-o-que-ficou-de-fora) |
 | Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em serifa, menu em seções, identidade da igreja no menu, caminho no topo e anéis no fundo | Todas as telas da v2 e o header completo — [§3.2](#32-o-que-falta) |
 | App (`apps/mobile`) | **Não começado** | — | Tokens, fontes, navegação em 5 abas e as telas — [§4](#4-app-apps-mobile) |
-| Console (`apps/admin`) | **Fora do pacote** | — | O README não traz desenho para ele; decidir se herda os tokens — [§5](#5-decisões-em-aberto) |
+| Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em serifa, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
 
 ---
 
@@ -117,8 +117,6 @@ item separado. O defeito já existia antes da v2.
   site (ex.: "Cada pessoa, uma história…"). O README diz que o conteúdo não
   muda, então valeu o texto do React, que é o que está no ar. Trocar algum
   título é decisão de copy, não de estilo.
-- **Ícone do site** (`icon.tsx`, `apple-icon.tsx`). Continua com o desenho da
-  v1, que é o mesmo nos três apps. Trocar exige desenho novo.
 - **Menção ao design anterior.** A página Sobre ainda cita "Precision Modern"
   como direção de design, em dois lugares (princípio "Rigor sem frieza" e a
   linha do tempo). É copy, e precisa de decisão.
@@ -214,6 +212,32 @@ e `/admin/{igreja|usuarios|identidade|plano|lgpd|auditoria}`.
 
 ---
 
+### 3.3 Console (`apps/admin`)
+
+O pacote v2 não desenha o console, e a decisão (2026-10-04) foi que ele
+herda tudo do painel, com a mesma pegada de interface:
+
+- mesmos tokens e fontes do `apps/web` (o `globals.css` é o do painel, sem o
+  bloco de rich-text que o console não usa), tema escuro como padrão;
+- menu no estilo do painel: marca da Órbita, rótulo de seção em mono, item
+  ativo em `--brand`; título das telas em `page-title`;
+- botões em pill (os feitos à mão nas telas e nos modais também), campos,
+  avisos e cartões de opção com raio de 10px;
+- `DataTable` com cabeçalho em Geist Mono caixa alta e raio de 14px — o do
+  painel mudou junto, para as duas tabelas serem a mesma;
+- ações da linha de Tenants agrupadas sem quebrar o texto do botão;
+- anéis da órbita no fundo da área de conteúdo.
+
+O console não tem cor de igreja: `--brand` fica no azul Orbien.
+
+### 3.4 Ícone
+
+A marca da v2 (`OrbLogo` do protótipo: um anel com o satélite teal) virou o
+ícone dos três apps — `icon.tsx` (32px, fundo `#05070F`), `apple-icon.tsx`
+(180px, com o brilho da marca atrás do anel) e um `favicon.ico` novo gerado do
+ícone de 32px. A mesma marca substitui a elipse antiga no header, no rodapé e
+na tela "em breve" do site.
+
 ## 4. App (`apps/mobile`)
 
 Nada da Órbita foi aplicado ainda. O app segue a v1:
@@ -256,17 +280,20 @@ Mais**. Hoje são Home · Grupos · Conteúdo · Perfil, e a Bíblia não é aba
 
 ---
 
-## 5. Decisões em aberto
+## 5. Decisões
 
-1. **Console (`apps/admin`).** O pacote v2 não o desenha. Duas opções:
-   herdar os tokens do painel, ou continuar na v1 por ser ferramenta interna.
-2. **Tema claro do site.** A v2 é só escura, e o site deixou de seguir o modo
-   claro do sistema operacional. Se o claro tiver de voltar, falta o desenho.
-3. **Ícone/favicon** da Orbien na direção nova.
-4. **Copy do site:** os títulos da v2 contra os do React (§2.3), e a menção
-   a "Precision Modern".
-5. **Plano na sessão do web.** É pré-requisito da coroa Premium e do convite
-   no Starter. A rota `GET /me/permissions` já traz `features`, e poderia
-   trazer o plano.
-6. **Terminologia configurável.** O site já promete ("Posso chamar de EBD…?"),
-   mas a API não tem esse campo.
+**Tomadas em 2026-10-04:**
+
+1. **Console (`apps/admin`) herda tudo do painel** — feito, §3.3.
+2. **O site não volta a ter tema claro.** A v2 é noturna e fica assim.
+3. **Ícone novo** com a marca da v2 — feito, §3.4.
+4. **Plano da igreja na sessão do web e terminologia configurável** entram
+   pela API: o plano em `GET /me/permissions`, para a coroa Premium e o
+   convite no Starter; a terminologia (célula, PG, GC, EBD…) como
+   configuração da igreja, aplicada em menus e títulos do painel. Trabalho em
+   branch própria (`feat/plano-e-terminologia-no-painel`), por ter migration.
+
+**Ainda em aberto:**
+
+1. **Copy do site:** os títulos da v2 contra os do React (§2.3), e a menção
+   a "Precision Modern" na página Sobre.

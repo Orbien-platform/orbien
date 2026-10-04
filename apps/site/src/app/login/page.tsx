@@ -17,12 +17,11 @@ export default function LoginPage() {
           <div className="flex justify-center mb-8">
             <span
               className="w-14 h-14 flex items-center justify-center rounded-[16px]"
-              style={{ background: "var(--navy-tint)", color: "var(--navy-accent)" }}
+              style={{ background: "var(--navy-tint)", color: "var(--ink)" }}
             >
-              <svg width="28" height="28" viewBox="0 0 22 22" fill="none">
-                <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="11" cy="11" r="3" fill="currentColor" />
-                <circle cx="20" cy="11" r="2" fill="var(--color-teal)" />
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+                <circle cx="19" cy="9" r="2.2" fill="var(--color-teal)" />
               </svg>
             </span>
           </div>

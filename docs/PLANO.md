@@ -1669,7 +1669,7 @@ não-membro com token válido e não-duplicação) e `meetings.controller.spec.t
 (gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
 Nenhuma suíte existente mudou de comportamento.
 
-### PROD-29 · Direção visual Órbita v2 — site entregue, painel começado, app não começado
+### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel começado, app não começado
 
 Handoff de design em `docs/design/orbita-v2/README.md`: nova identidade
 noturna (fundo `#05070F`, teal `#00E5C7` da Orbien, `--brand` da igreja,
@@ -1692,13 +1692,16 @@ está.
 - **App (`apps/mobile`) — não começado.** Tokens, fontes (build nativa, não
   OTA), navegação em cinco abas e as telas.
 
-Decisões em aberto, detalhadas na seção 5 do `PROJETO.md`:
-- se o `apps/admin` herda os tokens;
-- se o site volta a ter tema claro;
-- ícone na direção nova;
-- divergência de copy entre o HTML da v2 e o site no ar;
-- plano da igreja na sessão do web (pré-requisito da coroa Premium);
-- terminologia configurável — o site promete e a API não tem.
+- **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
+  painel, decisão de 2026-10-04: o pacote v2 não o desenha.
+- **Ícone — entregue (2026-10-04).** A marca da v2 (anel com satélite teal)
+  nos três apps e na marca do site.
+
+Decisões de 2026-10-04, na seção 5 do `PROJETO.md`: o site fica só escuro;
+o plano da igreja entra em `GET /me/permissions` e a terminologia vira
+configuração da igreja, os dois para o painel (coroa Premium, convite no
+Starter, termo da igreja em menu e títulos). Segue em aberto só a copy do
+site (títulos da v2 contra os do React, e "Precision Modern" na Sobre).
 
 ---
 

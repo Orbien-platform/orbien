@@ -44,7 +44,7 @@ export function Modal({
               )}
             </div>
             <Dialog.Close
-              className="flex h-7 w-7 items-center justify-center rounded-[8px] text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink"
               aria-label="Fechar"
             >
               <X size={15} strokeWidth={1.5} />

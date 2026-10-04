@@ -3,15 +3,14 @@ import { ImageResponse } from "next/og";
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
-// ImageResponse uses Satori which does not support CSS variables —
-// hex values are intentional and acceptable here.
-// Versão de fundo escuro: navy (`--color-navy`) no fundo, órbita e núcleo em
-// `--navy-tint`, e o teal claro (`--color-teal-dark`) que é o do modo escuro.
+// ImageResponse usa o Satori, que não lê variável CSS — os hex aqui são
+// intencionais. Marca da direção Órbita (docs/design/orbita-v2, `OrbLogo` do
+// protótipo): um anel com o satélite teal, sobre o fundo noturno `#05070F`,
+// com o brilho da cor da marca atrás do anel — o mesmo do hero do site.
+// Sem cantos arredondados: o iOS aplica a própria máscara.
 // Os três apps (site, web, admin) usam este mesmo ícone.
-// Geometry: original SVG viewBox 22×22, scaled ×6.36 and centered in 180px.
-//   Ellipse  cx=11,cy=11,rx=9,ry=4   → width=114, height=51, top=64, left=33
-//   Center   cx=11,cy=11,r=3         → ⌀38, top=71, left=71
-//   Teal     cx=20,cy=11,r=2         → ⌀25, top=77, left=135
+// Geometria no viewBox 24×24 do `OrbLogo`: anel cx=12 cy=12 r=9, satélite
+// cx=19 cy=9 r=2.2.
 export default function AppleIcon() {
   return new ImageResponse(
     (
@@ -22,46 +21,14 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#1E3A7B",
-          position: "relative",
+          background: "radial-gradient(circle at 50% 50%, #1B2A55 0%, #05070F 62%)",
         }}
       >
-        {/* Orbit ellipse */}
-        <div
-          style={{
-            position: "absolute",
-            width: 114,
-            height: 51,
-            borderRadius: "50%",
-            border: "2px solid #F0F3FA",
-            top: 64,
-            left: 33,
-          }}
-        />
-        {/* Center dot */}
-        <div
-          style={{
-            position: "absolute",
-            width: 38,
-            height: 38,
-            borderRadius: "50%",
-            background: "#F0F3FA",
-            top: 71,
-            left: 71,
-          }}
-        />
-        {/* Teal accent dot */}
-        <div
-          style={{
-            position: "absolute",
-            width: 25,
-            height: 25,
-            borderRadius: "50%",
-            background: "#00CDB5",
-            top: 77,
-            left: 135,
-          }}
-        />
+        <svg width="120" height="120" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="#F2F1EE" strokeWidth="1.4" />
+          <circle cx="19" cy="9" r="3.6" fill="#00E5C7" opacity="0.25" />
+          <circle cx="19" cy="9" r="2.2" fill="#00E5C7" />
+        </svg>
       </div>
     ),
     { ...size }

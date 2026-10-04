@@ -232,7 +232,7 @@ export function CreateTenantModal({
 
         {error && (
           <p
-            className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
+            className="rounded-[10px] bg-crimson-dim px-3 py-2 text-sm text-crimson"
             role="alert"
           >
             {error}
@@ -244,14 +244,14 @@ export function CreateTenantModal({
             type="button"
             onClick={close}
             disabled={isSubmitting}
-            className="rounded-[8px] px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
+            className="rounded-full px-3 py-2 text-sm font-medium text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white disabled:opacity-60"
           >
             Cancelar
           </button>
           <Button
             type="submit"
             disabled={isSubmitting}
-            className="h-9 rounded-[8px] bg-navy px-4 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
+            className="h-9 rounded-full bg-navy px-4 text-sm font-medium text-white hover:bg-[var(--color-navy-dark)] disabled:opacity-60"
           >
             {isSubmitting ? (
               <>
@@ -301,7 +301,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         placeholder={placeholder}
-        className="rounded-[8px]"
+        className="rounded-[10px]"
       />
       {hint && <span className="text-xs text-muted-text">{hint}</span>}
     </div>
