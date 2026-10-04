@@ -9,6 +9,8 @@ import { PublicDonationExpiryScheduler } from './public-donation-expiry.schedule
 import { DonationReceiptsController } from './donation-receipts.controller';
 import { DonationReceiptService } from './donation-receipts.service';
 import { AnnualDonationReportService } from './annual-donation-report.service';
+import { MePixSubscriptionsController } from './me-pix-subscriptions.controller';
+import { DonorPixSubscriptionsService } from './donor-pix-subscriptions.service';
 
 /**
  * Módulo próprio, separado do resto de `FinancialModule` (`PROD-24`):
@@ -21,8 +23,14 @@ import { AnnualDonationReportService } from './annual-donation-report.service';
  */
 @Module({
   imports: [PrismaModule, HttpModule, StorageModule, MailModule],
-  controllers: [PixController, DonationReceiptsController],
-  providers: [PixService, DonationReceiptService, AnnualDonationReportService, PublicDonationExpiryScheduler],
+  controllers: [PixController, DonationReceiptsController, MePixSubscriptionsController],
+  providers: [
+    PixService,
+    DonationReceiptService,
+    AnnualDonationReportService,
+    PublicDonationExpiryScheduler,
+    DonorPixSubscriptionsService,
+  ],
   exports: [PixService],
 })
 export class PixModule {}

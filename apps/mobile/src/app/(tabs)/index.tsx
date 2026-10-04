@@ -17,10 +17,12 @@ import { HomeQuickActions, type QuickAction } from "../../components/HomeQuickAc
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { useAuth } from "../../lib/auth/auth-provider";
+import { decodeJwtPayload } from "../../lib/auth/jwt";
 import { getHighlights, getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
 import { formatDateTime, getGreeting } from "../../lib/format/date";
 import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
+import { fetchAsaasPaymentsEnabled } from "../../lib/pix-recorrente/pix-recorrente-client";
 import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
 import {
   BookOpen,
@@ -46,7 +48,12 @@ const MAX_HERO_POSTS = 5;
 export default function HomeScreen() {
   const router = useRouter();
   const { colors, tenantSlug } = useTheme();
-  const { areas } = useAuth();
+  const { areas, session } = useAuth();
+  // Dízimo automático (PROD-28): só com a trava de pagamentos ligada na API
+  // E tenant Premium. Fail-closed — até a resposta chegar, a entrada não
+  // existe. Hoje a trava está desligada para todos, então nunca aparece.
+  const [asaasPaymentsEnabled, setAsaasPaymentsEnabled] = useState(false);
+  const isPremium = session ? decodeJwtPayload(session.accessToken)?.plan === "premium" : false;
   // Destaques da home (HOME-02/03) e hero (MHR-05/06): `null` = ainda não
   // chegou (não desenha nada); erro cai no `catch` sem `setError` — a
   // seção some, a tela não trava por isso.
@@ -74,6 +81,10 @@ export default function HomeScreen() {
         setPosts(result.data);
       })
       .catch(() => undefined);
+
+    fetchAsaasPaymentsEnabled().then((result) => {
+      if (!cancelled) setAsaasPaymentsEnabled(result);
+    });
 
     getHighlights()
       .then((result) => {
@@ -134,6 +145,16 @@ export default function HomeScreen() {
       icon: Church,
       onPress: () => router.push("/celebracoes"),
     },
+    ...(asaasPaymentsEnabled && isPremium
+      ? [
+          {
+            key: "dizimo-automatico",
+            label: "Dízimo automático",
+            icon: HandHeart,
+            onPress: () => router.push("/dizimo-automatico"),
+          } satisfies QuickAction,
+        ]
+      : []),
   ];
 
   return (

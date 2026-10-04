@@ -798,6 +798,14 @@ falhar o webhook).
   doador (`donor_person_id` já precisa existir como `Person`), não o próprio
   doador. Tela do doador — `apps/web` ou `apps/mobile` — é trabalho novo,
   não coberto aqui.
+
+  **Avaliação da tela do doador (2026-10-01):** spec em
+  `.specs/features/pix-recorrente-doador-mobile/`. Recomendação: **construir
+  depois** — a assinatura é criada no cliente Asaas da igreja e nada entrega o
+  PIX do ciclo ao doador (vale também para o fluxo do tesoureiro); fechar esse
+  P0 (spike em sandbox, perguntas Q1–Q3 da spec) antes de abrir a tela.
+  Em 2026-10-03 a tela e a rota foram construídas **atrás da trava
+  `ASAAS_PAYMENTS_ENABLED`**, desligada para todos — ver `PROD-28`.
 - RLS em `023_rls_pix_subscriptions.sql`: `tenant_congregation_isolation`
   (AD-001) — diferente de `pix_payments`, que é de `001_rls_setup.sql` e
   ficou só no isolamento de tenant; tabela nova segue o padrão atual, não o
@@ -842,6 +850,106 @@ Fazer a rota sem a tela deixaria rota sem consumidor, o que a auditoria de
 (rota `/me` + tela), a decidir junto com a política de quem pode criar
 cobrança recorrente em nome próprio (teto de valor, confirmação por e-mail);
 sem ID novo aqui, porque a decisão é registrar o porquê, não abrir item.
+(Atualização de 2026-10-03: a rota `/me` e a tela do mobile foram construídas
+**atrás de trava** — ver `PROD-28`.)
+
+### PROD-28 · Pagamentos pelo app via Asaas — pronto e travado, lançar depois do go-live
+
+Decisão de 2026-10-03: os pagamentos pela Asaas ficam **no código, testados e
+desligados para todo tenant** — Premium e Starter — até o produto estar no
+mercado e o modelo de `AD-009` existir. Motivo: hoje toda cobrança Asaas nasce
+na conta raiz da Orbien, sem split (`PEND-17`), e isso não pode chegar a
+usuário. Especificação, design e avaliação em
+`.specs/features/pix-recorrente-doador-mobile/` e
+`.specs/features/asaas-taxa-e-split-padrao/`.
+
+**A trava.** `ASAAS_PAYMENTS_ENABLED` (env da API, `apps/api/.env.example`);
+só o literal `true` liga (`apps/api/src/financial/asaas-payments.flag.ts`,
+`AD-010`). Desligada, ela barra **criar cobrança**:
+
+- `POST /financial/pix/dynamic` (QR do tesoureiro), `POST
+  /financial/pix/subscriptions` (recorrente do tesoureiro), `POST
+  /me/pix-subscriptions` (recorrente do doador) e a inscrição paga de evento
+  (`PixService.createForEventRegistration`) → 503 "Pagamentos pelo app ainda
+  não estão disponíveis";
+- o QR dinâmico da doação pública Premium (`/doar`, `PEND-14`/#153) → a igreja
+  Premium recebe a chave estática, como o Starter (sem `fallback_reason`; a
+  intenção continua gravada para a baixa manual);
+- criar/editar evento com `registration_price > 0` → 400.
+
+Não barra: listar e cancelar assinatura que já exista, o webhook da Asaas
+(cobrança já emitida precisa confirmar), o PIX manual (Cenário 1) e a chave
+estática da doação pública `/doar`, que não usam a Asaas. `GET /me/permissions` expõe
+`features.asaas_payments` e os fronts escondem o que depende dela, com falha
+fechada (sem resposta = escondido): no web, a aba **PIX** do financeiro e o
+campo **Preço da inscrição** do evento; no app, a entrada **Dízimo
+automático** da Home.
+
+**Mudança de comportamento ao subir isto:** quem usava a aba PIX ou criava
+evento pago deixa de ver/conseguir. Em produção a trava nasce desligada, de
+propósito. **Evento pago já publicado** continua no ar com preço, mas toda
+inscrição nele responde 503 (a vaga reservada é devolvida) — antes do deploy,
+conferir se existe algum (`content_posts.registration_price > 0` com
+inscrição aberta) e, se existir, tirar o preço ou combinar com a igreja.
+
+**O que já está construído (atrás da trava):**
+
+- API `GET/POST/PATCH /me/pix-subscriptions` (`MePixSubscriptionsController`,
+  `DonorPixSubscriptionsService`): o doador contrata, lista e cancela **só a
+  própria** assinatura. Pessoa lida de `user_accounts.person_id` (nunca do
+  corpo — `donor_person_id` no corpo é 400), plano lido de `tenant_plans`
+  (nunca da claim), assinatura de outra pessoa é 404, sessão de suporte não
+  contrata nem cancela, cancelar não depende de trava nem de plano.
+- Valor entre R$ 10 e R$ 5.000 e aceite versionado (`dizimo-automatico-v1`,
+  gravado em `pix_subscriptions.consent_version`/`consent_accepted_at`).
+- Uma assinatura ativa **contratada pelo doador**: unique parcial no banco
+  (`pix_subscriptions_one_active_per_donor`, só linhas com aceite) + 409 antes
+  de chamar a Asaas. O tesoureiro segue sem esse limite.
+- Compensação: se a gravação falha depois de a Asaas criar a assinatura, a
+  API a cancela lá (vale também para o tesoureiro). Cancelar com 404 da Asaas
+  marca cancelada em vez de 503 eterno.
+- App: tela `dizimo-automatico` (contratar com aceite, ver valor e
+  contribuições confirmadas, cancelar com confirmação — "cancelado" só depois
+  da API confirmar).
+- Testes: unidade (API e app), integração com Postgres real
+  (`test/integration/me-pix-subscriptions.spec.ts`, inclusive membro A × membro
+  B da mesma congregação), RLS e web.
+
+**O que falta responder (dono do produto / Asaas / contador):**
+
+1. PIX Automático (débito autorizado) ou cobrança PIX mensal paga à mão? O
+   código faz a segunda (`billingType: PIX`, `cycle: MONTHLY`).
+2. Como o doador recebe a cobrança de cada ciclo (push, e-mail da Asaas ao
+   doador)? Com a subconta (`AD-009`), o doador vira cliente da igreja — CPF
+   do doador é exigido? (entra no consentimento e na LGPD).
+3. Valor mínimo/máximo definitivos (hoje R$ 10–5.000, provisórios).
+4. Texto jurídico do aceite recorrente (`donor_recurring_consent_v1` no mapa
+   de LGPD) — hoje é um texto curto de produto.
+5. Recibo do próprio doador no app (`/me/receipts`) entra no lançamento?
+6. Asaas: subconta com painel ou saque automático (a Orbien não opera saque),
+   custo da subconta, KYC de organização religiosa.
+7. Contador: nota do 1% da Orbien; pricing passa a dizer "1% do valor
+   líquido" (o split da Asaas incide sobre o líquido)?
+8. Rebaixamento Premium → Starter: assinaturas ativas continuam cobrando?
+   (Hoje: continuam; cancelar sempre liberado; criar bloqueado.)
+9. Isolamento por pessoa só no serviço (hoje, com teste de integração) ou
+   também policy RLS por pessoa (exige GUC novo no interceptor)?
+
+**O que falta implementar para lançar (nesta ordem):**
+
+1. `PEND-17` A1–A5: montador único de cobrança com split de 1% e falha
+   fechada (`asaas-taxa-e-split-padrao`).
+2. `AD-009` / `PEND-17` A6–A6d: subconta Asaas por igreja (tabela
+   `tenant_payment_accounts`, chave cifrada, onboarding por `onboardingUrl`,
+   estados, webhook por subconta, tela de ativação no web) — só tenant com
+   CNPJ.
+3. Entrega da cobrança ao doador (P0 da spec do doador): QR/copia-e-cola do
+   ciclo em aberto no app (`GET /me/pix-subscriptions/:id/charge`) ou o fluxo
+   de autorização do PIX Automático, conforme a resposta 1.
+4. Reconciliação de assinatura órfã (log hoje; job depois) e lembrete por push
+   do ciclo (categoria nova de preferência).
+5. Ligar `ASAAS_PAYMENTS_ENABLED=true` em produção só depois de 1–3, e
+   validar em `teste1-church`/`teste2-church` com sandbox Asaas.
 
 ### Funcionalidade prevista, sem código
 
@@ -2022,6 +2130,16 @@ não trocam a lista que já está visível por uma tela de erro. Se a pessoa já
 tinha paginado, a primeira página nova entra por id e as mais antigas, com o
 cursor que ela tinha, ficam.
 
+### PEND-17 · Taxa da Asaas do tenant e split de 1% para a Orbien em toda cobrança
+
+Decisão de 2026-10-03 (`AD-008`). Hoje nenhum dos três pontos de cobrança de
+`PixService` (`/payments` dinâmico e de inscrição, `/subscriptions` recorrente)
+envia `split`, e todos usam uma única `ASAAS_API_KEY` com um cliente Asaas por
+tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: montador
+único de cobrança + split + falha fechada, e a subconta Asaas por tenant
+(`DEC-07`, decidido: `AD-009`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
+Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
@@ -2243,6 +2361,20 @@ listados na tabela comparativa de `produto-gestao-igrejas-mvp.md` (seção 5).
 Nenhum tem desenho técnico.
 
 ---
+
+### ~~DEC-07 · Conta Asaas por tenant (para a tarifa ser da igreja)~~ · decidido
+
+Decidido em 2026-10-03 (`AD-009` em `.specs/STATE.md`): **subconta Asaas por
+igreja, criada pela Orbien com a chave raiz**; a cobrança é emitida na subconta
+(a igreja aparece como recebedora e arca com tarifa, estorno e contestação) e o
+1% vai por split para o `walletId` da Orbien — o que deixa demonstrável que o
+dinheiro é do tenant, não da Orbien. Rejeitado: cobrança na conta da Orbien
+com split de ~99% para a igreja. A `apiKey` da subconta é guardada cifrada pela
+Orbien; a igreja nunca manuseia chave. **Só para tenant com CNPJ**: sem CNPJ, ou
+com a subconta em análise, vale só a chave PIX da igreja (Cenário 1, contribuição
+pelo banco, fora do app). Perguntas que ficam para a Asaas: painel/saque
+automático da subconta (a Orbien não opera saque), custo, KYC de organização
+religiosa. Execução em `PEND-17`.
 
 ## 10. Como manter este documento
 

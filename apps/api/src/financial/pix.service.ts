@@ -29,6 +29,7 @@ import { ListPublicIntentsQueryDto } from './dto/list-public-intents-query.dto';
 import { CreatePixSubscriptionDto } from './dto/create-pix-subscription.dto';
 import { DonationReceiptService } from './donation-receipts.service';
 import { writeAuditLog } from '../common/audit/write-audit-log';
+import { asaasPaymentsEnabled, assertAsaasPaymentsEnabled } from './asaas-payments.flag';
 
 type TenantContext = {
   tenantId: string;
@@ -96,6 +97,28 @@ type AsaasCustomer = { id: string };
 type AsaasPayment = { id: string; invoiceUrl: string };
 type AsaasQrCode = { encodedImage: string; payload: string; expirationDate: string };
 type AsaasSubscription = { id: string };
+
+/**
+ * O que distingue quem cria a assinatura: o tesoureiro escolhe o doador
+ * (`dto.donor_person_id`); o próprio doador (`DonorPixSubscriptionsService`)
+ * nunca escolhe — chega aqui com a pessoa já resolvida no banco, e com o
+ * aceite que deu na tela.
+ */
+export type NewSubscriptionInput = {
+  donorPersonId: string;
+  amount: number;
+  description?: string;
+  consentVersion?: string;
+};
+
+function isUniqueViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+}
+
+/** A Asaas respondeu 404: o recurso (cobrança, assinatura) já não existe lá. */
+function isHttpNotFound(err: unknown): boolean {
+  return isAxiosError(err) && err.response?.status === 404;
+}
 
 @Injectable()
 export class PixService {
@@ -440,6 +463,7 @@ export class PixService {
   // ── Cenário 2: PIX dinâmico com QR Asaas ─────────────────────────────────
 
   async createDynamic(dto: CreateDynamicPixDto, user: JwtPayload) {
+    assertAsaasPaymentsEnabled();
     if (!this.asaasKey) {
       throw new ServiceUnavailableException('Serviço PIX indisponível');
     }
@@ -502,6 +526,22 @@ export class PixService {
   // de quem a cria, e listar/cancelar depois tem que achar a mesma linha.
 
   async createSubscription(dto: CreatePixSubscriptionDto, user: JwtPayload) {
+    return this.createSubscriptionFor(
+      { donorPersonId: dto.donor_person_id, amount: dto.amount, description: dto.description },
+      user,
+    );
+  }
+
+  /**
+   * Núcleo da criação, comum ao tesoureiro e ao doador. A Asaas é chamada
+   * antes de gravar a linha (não sabemos o `asaas_subscription_id` antes), e
+   * por isso a gravação que falha depois desfaz a assinatura lá — sem isso
+   * sobraria uma assinatura cobrando o doador sem linha nenhuma aqui. A
+   * unique parcial "uma ativa contratada pelo doador" (P2002) vira 409 — só
+   * acontece no caminho do doador; o tesoureiro não tem esse limite.
+   */
+  async createSubscriptionFor(input: NewSubscriptionInput, user: JwtPayload) {
+    assertAsaasPaymentsEnabled();
     if (!this.asaasKey) {
       throw new ServiceUnavailableException('Serviço PIX indisponível');
     }
@@ -515,7 +555,7 @@ export class PixService {
     }
 
     const donor = await this.prisma.client.person.findFirst({
-      where: { id: dto.donor_person_id, tenant_id: user.tenant_id },
+      where: { id: input.donorPersonId, tenant_id: user.tenant_id },
       select: { id: true },
     });
     if (!donor) throw new NotFoundException('Pessoa não encontrada');
@@ -536,10 +576,10 @@ export class PixService {
       const subscription = await this.asaasPost<AsaasSubscription>('/subscriptions', {
         customer: customerId,
         billingType: 'PIX',
-        value: dto.amount,
+        value: input.amount,
         nextDueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
         cycle: 'MONTHLY',
-        description: dto.description ?? 'Dízimo automático via Orbien',
+        description: input.description ?? 'Dízimo automático via Orbien',
         externalReference: externalRef,
       });
 
@@ -549,19 +589,37 @@ export class PixService {
       throw new ServiceUnavailableException('Serviço PIX indisponível');
     }
 
-    return this.prisma.client.pixSubscription.create({
-      data: {
-        tenant_id: user.tenant_id,
-        congregation_id: user.congregation_id,
-        donor_person_id: dto.donor_person_id,
-        category_id: category.id,
-        amount: new Prisma.Decimal(dto.amount),
-        description: dto.description,
-        asaas_subscription_id: asaasSubscriptionId,
-        status: PixSubscriptionStatus.active,
-        created_by_user_id: user.sub,
-      },
-    });
+    try {
+      return await this.prisma.client.pixSubscription.create({
+        data: {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          donor_person_id: input.donorPersonId,
+          category_id: category.id,
+          amount: new Prisma.Decimal(input.amount),
+          description: input.description,
+          asaas_subscription_id: asaasSubscriptionId,
+          status: PixSubscriptionStatus.active,
+          created_by_user_id: user.sub,
+          ...(input.consentVersion
+            ? { consent_version: input.consentVersion, consent_accepted_at: new Date() }
+            : {}),
+        },
+      });
+    } catch (err) {
+      await this.asaasDelete(`/subscriptions/${asaasSubscriptionId}`).catch((undoErr) => {
+        // Não dá para desfazer: a assinatura segue ativa na Asaas sem linha
+        // aqui. O id no log é o que a reconciliação manual precisa.
+        this.logger.error(
+          `Assinatura Asaas ${asaasSubscriptionId} órfã: gravação falhou e o cancelamento também`,
+          undoErr,
+        );
+      });
+      if (isUniqueViolation(err)) {
+        throw new ConflictException('Você já tem um dízimo automático ativo');
+      }
+      throw err;
+    }
   }
 
   async listSubscriptions(user: JwtPayload) {
@@ -579,6 +637,21 @@ export class PixService {
     });
     if (!subscription) throw new NotFoundException('Assinatura não encontrada');
 
+    return this.cancelSubscriptionRow(subscription);
+  }
+
+  /**
+   * Cancela uma linha que quem chama já achou (e já provou ser dela). Não
+   * passa pela trava de pagamentos: parar de cobrar é sempre permitido. A
+   * Asaas confirma primeiro — marcar `cancelled` sem isso deixaria o doador
+   * sendo cobrado. 404 da Asaas é "já não existe lá": aí marcar é o certo,
+   * senão a linha ficaria ativa para sempre, com o cancelamento dando 503.
+   */
+  async cancelSubscriptionRow(subscription: {
+    id: string;
+    status: PixSubscriptionStatus;
+    asaas_subscription_id: string;
+  }) {
     if (subscription.status === PixSubscriptionStatus.cancelled) {
       return subscription;
     }
@@ -586,12 +659,14 @@ export class PixService {
     try {
       await this.asaasDelete(`/subscriptions/${subscription.asaas_subscription_id}`);
     } catch (err) {
-      this.logger.error('Asaas API error (cancel subscription)', err);
-      throw new ServiceUnavailableException('Serviço PIX indisponível');
+      if (!isHttpNotFound(err)) {
+        this.logger.error('Asaas API error (cancel subscription)', err);
+        throw new ServiceUnavailableException('Serviço PIX indisponível');
+      }
     }
 
     return this.prisma.client.pixSubscription.update({
-      where: { id },
+      where: { id: subscription.id },
       data: { status: PixSubscriptionStatus.cancelled, cancelled_at: new Date() },
     });
   }
@@ -616,6 +691,7 @@ export class PixService {
     amount: number;
     expires_at: string;
   }> {
+    assertAsaasPaymentsEnabled();
     if (!this.asaasKey) {
       throw new ServiceUnavailableException('Serviço PIX indisponível');
     }
@@ -696,7 +772,10 @@ export class PixService {
     // cair depois de a cobrança existir, o webhook ainda acha a linha.
     const paymentId = randomUUID();
     let fallback: PublicDonationFallback | undefined;
-    let wantsCharge = ctx.dynamicEnabled;
+    // Trava de cobranças Asaas (PROD-28, AD-010): desligada, a doação Premium
+    // cai para a chave estática exatamente como o Starter — sem motivo de
+    // fallback, porque não é falha: é o produto que ainda não cobra pela Asaas.
+    let wantsCharge = ctx.dynamicEnabled && asaasPaymentsEnabled();
 
     if (wantsCharge && !this.asaasKey) {
       this.logger.warn('Doação pública Premium sem ASAAS_API_KEY — caiu para a chave estática');
@@ -841,7 +920,7 @@ export class PixService {
       try {
         await this.asaasDelete(`/payments/${row.asaas_payment_id}`);
       } catch (err) {
-        const alreadyGone = isAxiosError(err) && err.response?.status === 404;
+        const alreadyGone = isHttpNotFound(err);
         if (!alreadyGone) {
           kept++;
           this.logger.warn(

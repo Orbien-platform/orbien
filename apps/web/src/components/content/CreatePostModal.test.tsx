@@ -604,10 +604,23 @@ describe("CreatePostModal — inscrição paga (PROD-24)", () => {
     await user.selectOptions(screen.getByLabelText(/Tipo/), "event");
   }
 
+  it("com a trava de pagamentos desligada (padrão), o campo de preço não aparece", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    await escolherEvento(user);
+    await user.click(screen.getByRole("checkbox", { name: "Abrir inscrições" }));
+
+    expect(screen.getByLabelText(/Limite de vagas/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Preço da inscrição/)).not.toBeInTheDocument();
+  });
+
   it("manda `registration_price` quando preenchido", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
-    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    render(
+      <CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} paidRegistrationAvailable />
+    );
 
     await escolherEvento(user);
     await user.type(screen.getByLabelText(/Título/), "Acampamento");
@@ -626,7 +639,9 @@ describe("CreatePostModal — inscrição paga (PROD-24)", () => {
   it("sem preço, o campo não vai no payload — evento gratuito de sempre", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
-    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    render(
+      <CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} paidRegistrationAvailable />
+    );
 
     await escolherEvento(user);
     await user.type(screen.getByLabelText(/Título/), "Culto aberto");
@@ -640,7 +655,9 @@ describe("CreatePostModal — inscrição paga (PROD-24)", () => {
 
   it("preço zero ou negativo é barrado na tela, antes de chegar à API", async () => {
     const user = userEvent.setup();
-    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    render(
+      <CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} paidRegistrationAvailable />
+    );
 
     await escolherEvento(user);
     await user.type(screen.getByLabelText(/Título/), "Acampamento");
@@ -657,7 +674,9 @@ describe("CreatePostModal — inscrição paga (PROD-24)", () => {
   it("com inscrição desligada, preço preenchido antes não vaza no payload", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockResolvedValue({ data: { id: "p1" } } as never);
-    render(<CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    render(
+      <CreatePostModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} paidRegistrationAvailable />
+    );
 
     await escolherEvento(user);
     await user.type(screen.getByLabelText(/Título/), "Acampamento");

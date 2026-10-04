@@ -37,6 +37,13 @@ interface CreatePostModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  /**
+   * Inscrição paga cobra pela Asaas na hora da inscrição. Com a trava de
+   * pagamentos desligada (o padrão, PROD-28) o campo de preço nem aparece —
+   * a API recusa evento pago nesse estado. Quem decide é a sessão
+   * (`user.asaas_payments`), passada pela página.
+   */
+  paidRegistrationAvailable?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -45,6 +52,7 @@ export function CreatePostModal({
   open,
   onOpenChange,
   onCreated,
+  paidRegistrationAvailable = false,
 }: CreatePostModalProps) {
   const [type, setType] = useState<PostType>("post");
   const [title, setTitle] = useState("");
@@ -128,7 +136,7 @@ export function CreatePostModal({
         registrationEnabled && registrationDeadline
           ? new Date(registrationDeadline).toISOString()
           : null,
-      ...(registrationEnabled && registrationPrice
+      ...(paidRegistrationAvailable && registrationEnabled && registrationPrice
         ? { registration_price: Number(registrationPrice) }
         : {}),
     };
@@ -143,7 +151,13 @@ export function CreatePostModal({
     if (isEvent && registrationEnabled && registrationLimit && Number(registrationLimit) < 1) {
       setError("O limite de vagas precisa ser ao menos 1."); return;
     }
-    if (isEvent && registrationEnabled && registrationPrice && Number(registrationPrice) <= 0) {
+    if (
+      paidRegistrationAvailable &&
+      isEvent &&
+      registrationEnabled &&
+      registrationPrice &&
+      Number(registrationPrice) <= 0
+    ) {
       setError("O preço da inscrição precisa ser maior que zero."); return;
     }
     setError("");
@@ -357,25 +371,27 @@ export function CreatePostModal({
                       className="rounded-[8px]"
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="cp-event-price" className="text-sm font-medium text-ink dark:text-white">
-                      Preço da inscrição{" "}
-                      <span className="text-xs font-normal text-stone">
-                        (vazio = gratuito · Premium)
-                      </span>
-                    </Label>
-                    <Input
-                      id="cp-event-price"
-                      type="number"
-                      min={0.01}
-                      step={0.01}
-                      placeholder="R$"
-                      value={registrationPrice}
-                      onChange={(e) => setRegistrationPrice(e.target.value)}
-                      disabled={isSubmitting}
-                      className="rounded-[8px]"
-                    />
-                  </div>
+                  {paidRegistrationAvailable && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="cp-event-price" className="text-sm font-medium text-ink dark:text-white">
+                        Preço da inscrição{" "}
+                        <span className="text-xs font-normal text-stone">
+                          (vazio = gratuito · Premium)
+                        </span>
+                      </Label>
+                      <Input
+                        id="cp-event-price"
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        placeholder="R$"
+                        value={registrationPrice}
+                        onChange={(e) => setRegistrationPrice(e.target.value)}
+                        disabled={isSubmitting}
+                        className="rounded-[8px]"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
