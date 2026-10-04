@@ -1,0 +1,31 @@
+/* Órbita — direção visual v2 para painel e app (sobrepõe base.css) */
+:root{--teal:#00E5C7;--serif:'Instrument Serif',Georgia,serif}
+[data-theme="dark"]{--bg:#05070F;--fg:#F2F1EE;--surface:#0B0F1D;--subtle:#121729;--stone:#A9AEBD;--muted:#6C7286;--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--brand-ink:color-mix(in oklab,var(--brand) 45%,white);--brand-dim:color-mix(in oklab,var(--brand) 28%,#05070F);--teal-ink:#00E5C7;--teal-dim:rgba(0,229,199,.12);--amber-ink:#F2C766;--amber-dim:rgba(242,199,102,.12);--crimson-ink:#FF7A6B;--crimson-dim:rgba(255,122,107,.12);--shadow-sm:0 1px 0 rgba(255,255,255,.03) inset;--shadow-md:0 10px 30px rgba(0,0,0,.45);--shadow-lg:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06)}
+[data-theme="light"]{--bg:#F4F3EF;--surface:#FFFFFF;--subtle:#ECEBE6;--border:#E2E0DA;--teal-ink:#007F70}
+html,body,button,input,textarea,select{font-family:'Geist',system-ui,sans-serif}
+.mono,.num,.label,.otag,.tbl th{font-family:'Geist Mono',ui-monospace,monospace}
+.label{letter-spacing:.14em}
+h1{font-family:var(--serif)!important;font-weight:400!important;letter-spacing:-.01em!important}
+h1 b{font-weight:400!important;font-style:italic;color:var(--teal-ink)}
+.card{border-radius:14px}
+[data-theme="dark"] .card{background:linear-gradient(180deg,#0C1121,#090C18);box-shadow:none}
+.btn{border-radius:999px}
+.btn.primary{box-shadow:0 0 0 1px rgba(255,255,255,.06) inset}
+.btn.teal{background:var(--teal);color:#03110E}
+[data-theme="dark"] .btn.primary:hover{box-shadow:0 0 30px color-mix(in oklab,var(--brand) 60%,transparent)}
+.badge{border-radius:999px}
+.badge.teal{box-shadow:0 0 0 1px rgba(0,229,199,.25) inset}
+.bar>i{background:var(--teal);box-shadow:0 0 10px rgba(0,229,199,.45)}
+[data-theme="dark"] .dot.green{box-shadow:0 0 8px rgba(0,229,199,.7)}
+.seg{border-radius:999px}.seg button{border-radius:999px}
+.input{border-radius:10px}
+[data-theme="dark"] .input{background:#080B16}
+.tabs button.on{border-bottom-color:var(--teal-ink)}
+[data-theme="dark"] .stripe{background-color:#0E1326;background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.05) 0 1px,transparent 1px 9px),radial-gradient(circle at 70% 30%,color-mix(in oklab,var(--brand) 55%,transparent),transparent 60%)}
+.toggle.on{background:var(--teal)}
+[data-theme="dark"] .tbl tbody tr:hover td{background:rgba(255,255,255,.025)}
+/* fundo com órbitas (painel) */
+.orb-bg{position:fixed;inset:0;pointer-events:none;z-index:-1;overflow:hidden}
+.orb-bg i{position:absolute;right:-380px;top:-380px;width:900px;height:900px;border-radius:50%;border:1px solid var(--border)}
+.orb-bg i:nth-child(2){right:-260px;top:-260px;width:660px;height:660px}
+.orb-bg i:nth-child(3){right:-140px;top:-140px;width:420px;height:420px;border:none;background:radial-gradient(circle,color-mix(in oklab,var(--brand) 35%,transparent),transparent 65%);opacity:.6}

@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbien — Membros e voluntários</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:           #1E3A7B;
+    --navy-dark:      #162D62;
+    --teal:           #00B8A2;
+    --teal-bright:    #00CDB5;
+    --crimson:        #C0392B;
+    --burgundy:       #991B1B;
+
+    --navy-accent:    #1E3A7B;
+    --navy-dim:       #D4DCEF;
+    --navy-tint:      #F0F3FA;
+    --teal-dim:       #D0F5F1;
+    --crimson-dim:    #FDECEA;
+    --amber:          #B8860B;
+    --amber-dim:      #FAF2E0;
+    --bg:             #F5F4F1;
+    --ink:            #0F1117;
+    --on-ink:         #0F1117;
+    --surface:        #FFFFFF;
+    --subtle:         #EEECEA;
+    --sand:           #EAE6DF;
+    --stone:          #5C5A56;
+    --muted:          #9B9893;
+    --border:         #E0DDD9;
+    --border-strong:  #C8C5C0;
+    --nav-bg:         rgba(245,244,241,.85);
+    --hero-glow:      rgba(30,58,123,.06);
+
+    --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+    --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+    --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
+    --shadow-xl: 0 24px 60px rgba(15,17,23,.16), 0 8px 20px rgba(15,17,23,.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --navy-accent:  #7A99D9;
+      --navy-dim:     #1A2540;
+      --navy-tint:    #161D33;
+      --teal-dim:     #0A2E2A;
+      --crimson-dim:  #2A1414;
+      --amber-dim:    #2A2210;
+      --bg:           #0F1117;
+      --ink:          #F5F4F1;
+      --on-ink:       #1A1D27;
+      --surface:      #13151E;
+      --subtle:       #1C1F2B;
+      --sand:         #16192A;
+      --stone:        #B5B2AD;
+      --muted:        #7A7975;
+      --border:       #232634;
+      --border-strong:#2E3142;
+      --nav-bg:       rgba(15,17,23,.78);
+      --hero-glow:    rgba(122,153,217,.08);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.20);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.24);
+      --shadow-xl: 0 24px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.32);
+    }
+  }
+  html { color-scheme: light dark; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg); color: var(--ink);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    line-height: 1.5;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  svg { display: block; }
+
+  .wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 96px 0; }
+  @media (max-width: 720px) { .section { padding: 64px 0; } }
+
+  .eyebrow {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--navy-accent);
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ''; display: block; width: 24px; height: 1px; background: var(--navy-accent); }
+  .eyebrow.muted { color: var(--stone); }
+  .eyebrow.muted::before { background: var(--stone); }
+  .eyebrow.teal { color: var(--teal); }
+  .eyebrow.teal::before { background: var(--teal); }
+
+  h1, h2, h3 { color: var(--ink); letter-spacing: -.02em; text-wrap: balance; }
+  h1 { font-weight: 600; }
+  h2 { font-weight: 500; letter-spacing: -.025em; }
+  h3 { font-weight: 500; }
+
+  .section-title { font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin-bottom: 14px; }
+  .section-sub { font-size: 17px; font-weight: 300; color: var(--stone); max-width: 620px; line-height: 1.6; }
+  .section-head { margin-bottom: 56px; }
+  .section-head .eyebrow { margin-bottom: 18px; }
+
+  /* Nav */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--nav-bg);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid rgba(224,221,217,.6);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 500; font-size: 17px; letter-spacing: -.02em; }
+  .brand-mark { width: 22px; height: 22px; color: var(--navy-accent); }
+  .nav-links { display: flex; align-items: center; gap: 28px; }
+  .nav-links a { font-size: 14px; color: var(--stone); font-weight: 400; transition: color .15s; }
+  .nav-links a:hover, .nav-links a.active { color: var(--ink); }
+  .nav-actions { display: flex; align-items: center; gap: 8px; }
+  @media (max-width: 860px) { .nav-links { display: none; } }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; font-weight: 500; letter-spacing: -.005em;
+    transition: transform .12s, box-shadow .15s, background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover { background: var(--navy-dark); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-secondary { background: transparent; color: var(--navy-accent); border: 1px solid var(--navy-accent); }
+  .btn-secondary:hover { background: var(--navy-dim); }
+  .btn-ghost { color: var(--stone); padding: 12px 14px; }
+  .btn-ghost:hover { color: var(--ink); }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn-teal:hover { background: #00a08c; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-lg { padding: 14px 24px; font-size: 15px; }
+  .btn-sm { padding: 8px 14px; font-size: 13px; }
+
+  /* Module breadcrumb (top of hero) */
+  .mod-crumb {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--stone);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 6px 14px 6px 8px;
+    margin-bottom: 24px;
+  }
+  .mod-crumb .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--navy-tint); color: var(--navy-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .mod-crumb b { color: var(--ink); font-weight: 500; letter-spacing: .14em; }
+  .mod-crumb .sep { color: var(--muted); }
+
+  /* ═══════════════════════════ HERO ═══════════════════════════ */
+  .hero { padding: 56px 0 96px; position: relative; overflow: hidden; }
+  .hero-bg {
+    position: absolute; top: -200px; right: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, var(--hero-glow), transparent 65%);
+    pointer-events: none; z-index: 0;
+  }
+  .hero-grid {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 1.05fr 1fr;
+    gap: 56px; align-items: center;
+  }
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .hero { padding: 40px 0 64px; }
+  }
+  .hero h1 {
+    font-size: clamp(34px, 5.6vw, 60px);
+    line-height: 1.03; letter-spacing: -.035em;
+    margin-bottom: 22px; max-width: 580px;
+  }
+  .hero h1 .accent { color: var(--navy-accent); font-weight: 600; }
+  .hero p.lead {
+    font-size: clamp(16px, 1.7vw, 18px);
+    font-weight: 300; color: var(--stone);
+    line-height: 1.6; max-width: 520px; margin-bottom: 32px;
+  }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+  /* Hero phone — person profile */
+  .profile-stage { position: relative; min-height: 540px; display: flex; justify-content: center; align-items: center; }
+  @media (max-width: 520px) { .profile-stage { min-height: 480px; } }
+
+  .phone {
+    position: relative;
+    width: 290px;
+    aspect-ratio: 9/19;
+    background: var(--on-ink);
+    border-radius: 36px;
+    padding: 7px;
+    box-shadow: var(--shadow-xl), 0 0 0 1px var(--border);
+  }
+  .phone-screen {
+    width: 100%; height: 100%;
+    background: var(--surface);
+    border-radius: 29px; overflow: hidden;
+    display: flex; flex-direction: column; position: relative;
+  }
+  .phone-notch {
+    position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+    width: 84px; height: 22px; background: var(--on-ink); border-radius: 100px; z-index: 2;
+  }
+  .phone-status {
+    padding: 14px 22px 6px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink);
+    z-index: 1;
+  }
+  .phone-status .ico { display: inline-flex; gap: 4px; align-items: center; }
+  .phone-head {
+    padding: 14px 18px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-head .back { color: var(--stone); display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .phone-head .more { color: var(--stone); }
+  .phone-body { flex: 1; overflow: hidden; padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  .pp-avatar-block { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .pp-avatar {
+    width: 76px; height: 76px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--navy-dim), var(--teal-dim));
+    color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 600; letter-spacing: -.02em;
+    position: relative;
+    border: 3px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+  .pp-avatar .stripe-overlay {
+    position: absolute; inset: 0; border-radius: 50%;
+    background-image: repeating-linear-gradient(45deg, rgba(15,17,23,.04) 0 1px, transparent 1px 6px);
+    pointer-events: none;
+  }
+  .pp-name { font-size: 17px; font-weight: 600; letter-spacing: -.015em; text-align: center; }
+  .pp-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+
+  .pp-badge {
+    align-self: center;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--teal-dim); color: var(--teal);
+    border-radius: 100px;
+    padding: 5px 11px 5px 8px;
+    font-size: 11px; font-weight: 500; letter-spacing: -.005em;
+  }
+  .pp-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+
+  .pp-section { display: flex; flex-direction: column; gap: 6px; }
+  .pp-section-label {
+    font-family: 'DM Mono', monospace; font-size: 9px;
+    color: var(--muted); letter-spacing: .12em; text-transform: uppercase;
+  }
+  .pp-history {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--subtle); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .pp-history-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--navy-tint); color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .pp-history-text { font-size: 12px; line-height: 1.4; }
+  .pp-history-text b { font-weight: 600; }
+  .pp-history-text small { display: block; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: .04em; margin-top: 2px; }
+
+  .pp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pp-tag {
+    font-size: 10px; padding: 4px 9px;
+    border-radius: 100px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--stone); font-weight: 500;
+  }
+  .pp-tag.navy { background: var(--navy-tint); color: var(--navy-accent); border-color: transparent; }
+
+  .pp-bottom-bar {
+    margin-top: auto;
+    padding-top: 10px;
+    display: flex; gap: 8px;
+  }
+  .pp-action {
+    flex: 1; padding: 10px;
+    border-radius: 8px;
+    font-size: 11px; font-weight: 500;
+    text-align: center;
+    background: var(--navy); color: #fff;
+  }
+  .pp-action.ghost {
+    background: var(--surface); color: var(--navy-accent);
+    border: 1px solid var(--navy-accent);
+  }
+
+  /* Floating annotation chips around phone */
+  .anno {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    box-shadow: var(--shadow-md);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .06em;
+    color: var(--stone);
+    display: flex; align-items: center; gap: 8px;
+    white-space: nowrap;
+  }
+  .anno .swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .anno-1 { top: 12%; left: 0; }
+  .anno-2 { top: 44%; right: 0; }
+  .anno-3 { bottom: 16%; left: 4%; }
+  @media (max-width: 520px) { .anno { display: none; } }
+
+  /* ═══════════════════════════ SECTION SHELL ═══════════════════════════ */
+  .feat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    gap: 56px; align-items: center;
+  }
+  .feat-grid.reverse { grid-template-columns: 1.1fr 1fr; }
+  @media (max-width: 900px) {
+    .feat-grid, .feat-grid.reverse { grid-template-columns: 1fr; gap: 40px; }
+    .feat-grid.reverse .feat-visual { order: 2; }
+    .feat-grid.reverse .feat-copy   { order: 1; }
+  }
+  .feat-copy h2 { font-size: clamp(26px, 3.6vw, 36px); line-height: 1.1; margin-bottom: 14px; }
+  .feat-copy p.body { font-size: 16.5px; font-weight: 300; color: var(--stone); line-height: 1.65; max-width: 480px; margin-bottom: 24px; }
+  .feat-copy .eyebrow { margin-bottom: 16px; }
+  .feat-bullets { list-style: none; display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
+  .feat-bullets li {
+    display: flex; gap: 10px; align-items: flex-start;
+    font-size: 14.5px; line-height: 1.55; color: var(--ink); font-weight: 400;
+  }
+  .feat-bullets li::before {
+    content: ''; flex-shrink: 0;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--teal);
+    margin-top: 9px;
+  }
+  .feat-bullets li b { font-weight: 500; }
+  .feat-note {
+    margin-top: 20px;
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: .04em; line-height: 1.55;
+    border-left: 2px solid var(--border);
+    padding: 6px 0 6px 14px;
+    max-width: 460px;
+  }
+
+  /* ═════════════ S2 — QR + form ═════════════ */
+  .qr-stage {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .qr-totem {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 22px 22px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    min-height: 360px;
+  }
+  .qr-totem-label {
+    font-family: 'DM Mono', monospace; font-size: 9px;
+    color: var(--muted); letter-spacing: .14em; text-transform: uppercase;
+    align-self: flex-start;
+  }
+  .qr-church {
+    text-align: center;
+    font-size: 15px; font-weight: 600; letter-spacing: -.015em;
+    color: var(--ink);
+  }
+  .qr-church small {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--stone); letter-spacing: .08em;
+    font-weight: 400; margin-top: 2px;
+  }
+  .qr-code {
+    width: 156px; height: 156px;
+    padding: 10px;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .qr-code svg { width: 100%; height: 100%; }
+  .qr-foot {
+    text-align: center;
+    font-size: 12.5px; color: var(--stone); font-weight: 500;
+    line-height: 1.4;
+  }
+  .qr-foot small {
+    display: block; font-family: 'DM Mono', monospace;
+    font-size: 9px; color: var(--muted); letter-spacing: .08em;
+    text-transform: uppercase; margin-top: 4px;
+  }
+  .qr-stand {
+    width: 90%; height: 14px;
+    background: var(--subtle);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: auto;
+  }
+
+  /* Mini phone for QR section */
+  .mini-phone {
+    background: var(--on-ink);
+    border-radius: 24px;
+    padding: 6px;
+    box-shadow: var(--shadow-lg), 0 0 0 1px var(--border);
+    aspect-ratio: 9/19;
+    max-width: 260px;
+    width: 100%;
+    justify-self: center;
+  }
+  .mini-phone-screen {
+    width: 100%; height: 100%;
+    background: var(--surface);
+    border-radius: 19px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .mini-phone-head {
+    padding: 18px 14px 10px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .mini-phone-head .crumb { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 3px; }
+  .mini-phone-head h4 { font-size: 13px; font-weight: 600; letter-spacing: -.02em; }
+  .mini-phone-body { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .mf-field {
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 9px; background: var(--surface);
+  }
+  .mf-field .lbl { font-size: 7px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; font-weight: 500; margin-bottom: 2px; }
+  .mf-field .val { font-size: 11px; color: var(--ink); font-weight: 500; }
+  .mf-field .val.placeholder { color: var(--muted); font-weight: 400; }
+  .mf-field.focus { border-color: var(--navy); box-shadow: 0 0 0 3px var(--navy-dim); }
+
+  .mf-radio { display: flex; gap: 6px; padding: 4px 0; }
+  .mf-radio .opt {
+    flex: 1;
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 4px; text-align: center;
+    font-size: 9px; font-weight: 500; color: var(--stone);
+  }
+  .mf-radio .opt.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  .mf-check {
+    display: flex; gap: 8px; align-items: flex-start;
+    font-size: 9px; color: var(--stone); line-height: 1.45;
+    padding: 6px 2px;
+  }
+  .mf-check .box {
+    width: 14px; height: 14px; border-radius: 4px;
+    background: var(--teal); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .mf-cta {
+    margin-top: auto;
+    background: var(--navy); color: #fff;
+    border-radius: 8px; padding: 10px;
+    text-align: center; font-size: 11px; font-weight: 500;
+  }
+
+  .qr-arrow {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--navy-accent);
+    z-index: 2;
+    box-shadow: var(--shadow-sm);
+  }
+  @media (max-width: 520px) {
+    .qr-stage { grid-template-columns: 1fr; }
+    .qr-arrow { display: none; }
+  }
+
+  /* ═════════════ S3 — Dashboard ═════════════ */
+  .dash-frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+  .dash-topbar {
+    height: 32px;
+    background: var(--subtle);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 14px;
+  }
+  .dash-topbar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); }
+  .dash-topbar .url {
+    margin-left: 14px;
+    font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted);
+  }
+  .dash-pad { padding: 24px 24px 26px; }
+  .dash-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 22px; flex-wrap: wrap; gap: 12px;
+  }
+  .dash-head h4 {
+    font-size: 17px; font-weight: 600; letter-spacing: -.02em;
+  }
+  .dash-head h4 small {
+    display: block; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted);
+    font-weight: 400; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px;
+  }
+  .dash-filter {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 100px;
+    padding: 5px 12px;
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--stone); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .dash-grid {
+    display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px;
+  }
+  .dash-row2 {
+    display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 16px;
+  }
+  @media (max-width: 720px) {
+    .dash-grid, .dash-row2 { grid-template-columns: 1fr; }
+  }
+  .dash-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .dash-card-label {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--muted); letter-spacing: .12em; text-transform: uppercase;
+    font-weight: 500;
+  }
+  .dash-card-label .total { color: var(--ink); font-weight: 500; }
+
+  /* Age bars (horizontal) */
+  .agebars { display: flex; flex-direction: column; gap: 9px; }
+  .agebar { display: grid; grid-template-columns: 56px 1fr 32px; align-items: center; gap: 10px; }
+  .agebar .lbl { font-size: 11.5px; color: var(--stone); font-family: 'DM Mono', monospace; letter-spacing: .04em; }
+  .agebar .track {
+    height: 8px; background: var(--subtle); border-radius: 100px; overflow: hidden;
+  }
+  .agebar .fill {
+    height: 100%; background: var(--navy-accent); border-radius: 100px;
+    display: block;
+  }
+  .agebar.hi .fill { background: var(--teal); }
+  .agebar .v { font-size: 11px; color: var(--ink); font-family: 'DM Mono', monospace; font-weight: 500; text-align: right; }
+
+  /* Donut */
+  .donut-wrap { display: flex; align-items: center; gap: 16px; }
+  .donut { width: 96px; height: 96px; position: relative; flex-shrink: 0; }
+  .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .donut .center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace;
+  }
+  .donut .center b { font-size: 18px; font-weight: 600; font-family: 'DM Sans', sans-serif; letter-spacing: -.02em; }
+  .donut .center small { font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-top: 2px; }
+  .donut-legend { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+  .donut-legend .row { display: flex; align-items: center; gap: 8px; }
+  .donut-legend .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .donut-legend .row b { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--ink); margin-left: auto; }
+
+  /* Map */
+  .map-wrap { position: relative; }
+  .map-canvas {
+    background: var(--subtle);
+    border-radius: 8px;
+    padding: 12px;
+    aspect-ratio: 16/9;
+    position: relative;
+    overflow: hidden;
+  }
+  .map-canvas .grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(15,17,23,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15,17,23,.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .map-blob {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--navy-accent);
+    opacity: .25;
+    transform: translate(-50%, -50%);
+  }
+  .map-pin {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--navy);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--navy);
+  }
+  .map-pin.teal { background: var(--teal); box-shadow: 0 0 0 1px var(--teal); }
+  .map-pin .ring {
+    position: absolute; inset: -8px; border-radius: 50%;
+    border: 1px solid currentColor; color: var(--navy-accent);
+    opacity: .35;
+  }
+  .map-pin.teal .ring { color: var(--teal); }
+  .map-label {
+    position: absolute;
+    font-family: 'DM Mono', monospace; font-size: 9px;
+    color: var(--stone); letter-spacing: .04em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 6px; border-radius: 4px;
+    transform: translate(-50%, calc(-100% - 6px));
+    white-space: nowrap;
+  }
+
+  /* Big number */
+  .bignum-wrap { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+  .bignum {
+    font-size: clamp(40px, 7vw, 56px);
+    font-weight: 600; letter-spacing: -.04em;
+    line-height: 1; color: var(--ink);
+  }
+  .bignum-sub {
+    font-size: 12.5px; color: var(--stone);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .bignum-sub .delta {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    background: var(--teal-dim); color: var(--teal);
+    padding: 2px 8px; border-radius: 100px; font-weight: 500;
+    letter-spacing: .04em;
+  }
+  .bignum-spark {
+    height: 36px;
+    color: var(--teal);
+    margin-top: 6px;
+  }
+  .bignum-spark svg { width: 100%; height: 100%; }
+
+  .dash-perm-note {
+    margin-top: 16px;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--stone); font-weight: 400;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 8px 14px;
+  }
+  .dash-perm-note svg { color: var(--navy-accent); }
+
+  /* ═════════════ S4 — Reclassification timeline ═════════════ */
+  .timeline {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+    box-shadow: var(--shadow-sm);
+  }
+  .timeline-head {
+    display: flex; align-items: center; gap: 12px;
+    padding-bottom: 18px;
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 26px;
+  }
+  .timeline-head .av {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--navy-dim), var(--teal-dim));
+    color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 13px;
+  }
+  .timeline-head .who { font-size: 14px; font-weight: 600; }
+  .timeline-head .who small {
+    display: block; font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--muted); font-weight: 400; letter-spacing: .06em; margin-top: 1px;
+  }
+  .tl-rule {
+    margin-left: auto;
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--stone); letter-spacing: .08em;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 100px; padding: 4px 10px;
+  }
+
+  .tl-line {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; position: relative;
+  }
+  .tl-line::before {
+    content: ''; position: absolute;
+    left: 16px; right: 16px; top: 38px; height: 2px;
+    background: linear-gradient(90deg, var(--border) 0%, var(--border) 60%, var(--teal) 60%, var(--teal) 100%);
+    z-index: 0;
+  }
+  .tl-step { display: flex; flex-direction: column; align-items: center; gap: 12px; position: relative; z-index: 1; }
+  .tl-step .node {
+    width: 76px; height: 76px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--stone); font-family: 'DM Mono', monospace; font-size: 11px;
+    text-align: center; line-height: 1.1;
+  }
+  .tl-step.now .node {
+    border-color: var(--teal); background: var(--teal-dim); color: var(--teal);
+    box-shadow: 0 0 0 6px rgba(0,184,162,.12);
+  }
+  .tl-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--subtle); border: 1px solid var(--border);
+    color: var(--stone); border-radius: 100px;
+    padding: 3px 10px;
+    font-size: 11px; font-weight: 500;
+  }
+  .tl-pill.teal { background: var(--teal-dim); color: var(--teal); border-color: transparent; font-weight: 600; }
+  .tl-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .tl-date { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  .tl-flag {
+    margin-top: 4px; text-align: center;
+    font-family: 'DM Mono', monospace; font-size: 9.5px;
+    color: var(--teal); letter-spacing: .08em; line-height: 1.5;
+  }
+  .tl-flag::before { content: '↑'; display: block; font-family: 'DM Sans'; font-size: 13px; margin-bottom: 2px; }
+  @media (max-width: 620px) {
+    .tl-line { grid-template-columns: 1fr; gap: 24px; }
+    .tl-line::before { left: 50%; top: 0; bottom: 0; width: 2px; height: auto; background: linear-gradient(180deg, var(--border) 0%, var(--border) 60%, var(--teal) 60%, var(--teal) 100%); }
+  }
+
+  /* ═════════════ S5 — Dedup alert ═════════════ */
+  .alert-stage {
+    position: relative;
+    padding: 32px;
+    background: var(--subtle);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .alert-stage::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(15,17,23,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15,17,23,.025) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .alert-card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: var(--shadow-xl);
+    max-width: 460px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+  .alert-head {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .alert-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--amber-dim); color: var(--amber);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .alert-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
+  .alert-title small {
+    display: block; font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--muted); font-weight: 400; letter-spacing: .08em;
+    text-transform: uppercase; margin-top: 3px;
+  }
+  .alert-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .alert-person {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex; gap: 12px; align-items: center;
+  }
+  .alert-person.new { background: var(--navy-tint); border-color: transparent; }
+  .alert-person.existing { background: var(--bg); }
+  .alert-person .av {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: var(--stone);
+    flex-shrink: 0;
+  }
+  .alert-person .lbl {
+    font-family: 'DM Mono', monospace; font-size: 9px;
+    color: var(--muted); letter-spacing: .12em; text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .alert-person.new .lbl { color: var(--navy-accent); }
+  .alert-person .nm { font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+  .alert-person .info {
+    font-family: 'DM Mono', monospace; font-size: 10.5px;
+    color: var(--stone); letter-spacing: .03em; margin-top: 3px;
+  }
+  .alert-sim {
+    align-self: flex-start;
+    font-family: 'DM Mono', monospace; font-size: 9.5px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--stone); padding: 3px 8px; border-radius: 100px;
+    letter-spacing: .08em; margin-left: auto; flex-shrink: 0;
+  }
+  .alert-foot {
+    padding: 14px 20px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px;
+    flex-wrap: wrap;
+  }
+  .alert-btn {
+    flex: 1; padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12.5px; font-weight: 500;
+    text-align: center;
+    transition: background .15s, color .15s;
+    cursor: pointer;
+  }
+  .alert-btn.primary { background: var(--navy); color: #fff; }
+  .alert-btn.primary:hover { background: var(--navy-dark); }
+  .alert-btn.secondary {
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--border-strong);
+  }
+  .alert-btn.secondary:hover { border-color: var(--ink); }
+
+  /* ═════════════ S6 — Family ═════════════ */
+  .family {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    box-shadow: var(--shadow-sm);
+  }
+  .family-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .family-head h4 {
+    font-size: 14px; font-weight: 600; letter-spacing: -.01em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .family-head h4 .ico {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--navy-tint); color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .family-head .meta {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--muted); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .family-tree {
+    display: flex; flex-direction: column; gap: 8px;
+    font-family: 'DM Mono', monospace;
+  }
+  .family-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    position: relative;
+  }
+  .family-row .branch {
+    font-size: 14px; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    flex-shrink: 0;
+  }
+  .family-row .av {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Sans'; font-size: 11px; font-weight: 600;
+    color: var(--stone);
+    flex-shrink: 0;
+  }
+  .family-row .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .family-row .name { font-family: 'DM Sans'; font-size: 14px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; }
+  .family-row .roles { display: flex; gap: 5px; flex-wrap: wrap; }
+  .family-row .role {
+    font-family: 'DM Mono', monospace; font-size: 9.5px;
+    padding: 2px 7px; border-radius: 100px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--stone); letter-spacing: .04em;
+    font-weight: 500;
+  }
+  .family-row .role.navy   { background: var(--navy-tint); color: var(--navy-accent); border-color: transparent; }
+  .family-row .role.teal   { background: var(--teal-dim); color: var(--teal); border-color: transparent; }
+  .family-row .role.amber  { background: var(--amber-dim); color: var(--amber); border-color: transparent; }
+  .family-row .age {
+    margin-left: auto; flex-shrink: 0;
+    font-size: 11px; color: var(--muted);
+    font-family: 'DM Mono', monospace; letter-spacing: .06em;
+  }
+  .family-title-row { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; padding: 6px 4px 4px; }
+
+  /* ═════════════ S7 — LGPD trio ═════════════ */
+  .lgpd-wrap {
+    background: var(--sand);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+  }
+  .lgpd-head { text-align: center; max-width: 580px; margin: 0 auto 28px; }
+  .lgpd-head .eyebrow { justify-content: center; margin-bottom: 14px; }
+  .lgpd-head h2 { font-size: clamp(24px, 3vw, 32px); line-height: 1.1; margin-bottom: 10px; }
+  .lgpd-head p { font-size: 15.5px; font-weight: 300; color: var(--stone); line-height: 1.6; }
+  .lgpd-trio {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    max-width: 820px; margin: 0 auto;
+  }
+  @media (max-width: 720px) { .lgpd-trio { grid-template-columns: 1fr; } }
+  .lgpd-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .lgpd-card .ico {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--navy-tint); color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lgpd-card h4 { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+  .lgpd-card p { font-size: 13.5px; color: var(--stone); font-weight: 300; line-height: 1.55; }
+  .lgpd-foot {
+    text-align: center; margin-top: 28px;
+  }
+  .lgpd-foot a {
+    font-size: 13.5px; color: var(--navy-accent); font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 2px;
+    transition: border-color .15s, gap .15s;
+  }
+  .lgpd-foot a:hover { border-color: var(--navy-accent); gap: 9px; }
+
+  /* ═════════════ S8 — Cross-sell ═════════════ */
+  .cross-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  }
+  @media (max-width: 820px) { .cross-grid { grid-template-columns: 1fr; } }
+  .cross-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .cross-card:hover { border-color: var(--navy); box-shadow: var(--shadow-md); }
+  .cross-card .head { display: flex; align-items: center; gap: 10px; }
+  .cross-card .ico {
+    width: 36px; height: 36px; border-radius: 9px;
+    background: var(--teal-dim); color: var(--teal);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cross-card h4 { font-size: 15.5px; font-weight: 600; letter-spacing: -.01em; }
+  .cross-card p { font-size: 13.5px; color: var(--stone); font-weight: 300; line-height: 1.55; flex: 1; }
+  .cross-card .lnk {
+    font-size: 13px; color: var(--navy-accent); font-weight: 500;
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: gap .15s;
+  }
+  .cross-card:hover .lnk { gap: 8px; }
+
+  /* ═════════════ Final CTA ═════════════ */
+  .final-cta {
+    background: var(--navy);
+    color: #fff;
+    padding: 96px 0;
+    position: relative; overflow: hidden;
+  }
+  .final-cta::before {
+    content: ''; position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 80% 20%, rgba(0,184,162,.22), transparent 45%),
+      radial-gradient(circle at 10% 80%, rgba(255,255,255,.06), transparent 50%);
+    pointer-events: none;
+  }
+  .final-cta-inner { position: relative; max-width: 720px; }
+  .final-cta .eyebrow { color: var(--teal-bright); margin-bottom: 20px; }
+  .final-cta .eyebrow::before { background: var(--teal-bright); }
+  .final-cta h2 {
+    font-size: clamp(30px, 4.6vw, 50px);
+    font-weight: 600; color: #fff;
+    line-height: 1.05; letter-spacing: -.03em;
+    margin-bottom: 18px;
+  }
+  .final-cta p {
+    font-size: 18px; color: rgba(255,255,255,.78);
+    font-weight: 300; line-height: 1.55;
+    margin-bottom: 32px; max-width: 540px;
+  }
+  .final-cta-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .final-cta .btn-teal { background: var(--teal); color: #fff; }
+  .final-cta .btn-teal:hover { background: var(--teal-bright); }
+  .final-cta .wpp {
+    color: #fff; font-size: 14px; font-weight: 400;
+    display: inline-flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,.25);
+    padding-bottom: 2px; transition: border-color .15s, color .15s;
+  }
+  .final-cta .wpp:hover { border-color: var(--teal-bright); color: var(--teal-bright); }
+
+  /* Footer (same as Home) */
+  .footer { background: var(--bg); padding: 64px 0 32px; border-top: 1px solid var(--border); }
+  .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+  @media (max-width: 820px) { .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; } .footer-brand-col { grid-column: 1 / -1; } }
+  @media (max-width: 520px) { .footer-grid { grid-template-columns: 1fr; } }
+  .footer-brand-col .brand { font-size: 19px; margin-bottom: 14px; }
+  .footer-tagline { font-size: 14px; color: var(--stone); font-weight: 300; line-height: 1.55; max-width: 280px; margin-bottom: 20px; }
+  .footer h4 { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 18px; }
+  .footer ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .footer ul a { font-size: 14px; color: var(--stone); transition: color .15s; }
+  .footer ul a:hover { color: var(--ink); }
+  .footer-bar { border-top: 1px solid var(--border); padding-top: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+  .footer-socials { display: flex; gap: 10px; }
+  .footer-socials a { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--stone); transition: color .15s, border-color .15s; }
+  .footer-socials a:hover { color: var(--navy-accent); border-color: var(--navy-accent); }
+
+  /* Reveal */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site-orbita.css">
+</head>
+<body>
+
+<!-- ───────────── NAV ───────────── -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a href="Orbien Home.html" class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 22 22" fill="none">
+          <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="11" cy="11" r="3" fill="currentColor"/>
+          <circle cx="20" cy="11" r="2" fill="#00B8A2"/>
+        </svg>
+      </span>
+      Orbien
+    </a>
+    <div class="nav-links">
+      <a href="Orbien Home.html#modulos" class="active">Funcionalidades</a>
+      <a href="Orbien Home.html#comparativo">Comparativo</a>
+      <a href="Orbien Preços.html">Preços</a>
+      <a href="Orbien Home.html#faq">Perguntas</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#" class="btn btn-ghost btn-sm">Entrar</a>
+      <a href="#waitlist" class="btn btn-primary btn-sm">Lista de espera</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ───────────── HERO ───────────── -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="mod-crumb">
+          <span class="dot">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </span>
+          Módulo <span class="sep">/</span> <b>Membros e voluntários</b>
+        </div>
+        <h1>Cada pessoa, uma história. Cada história, <span class="accent">no lugar certo.</span></h1>
+        <p class="lead">A sua secretária não precisa decorar quem é frequentador, quem é membro, quem foi batizado mês passado. Tudo fica registrado — e acessível pra quem precisa, do jeito que a LGPD pede.</p>
+        <div class="hero-ctas">
+          <a href="#modulos-outros" class="btn btn-primary btn-lg">
+            Ver os outros módulos
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+          <a href="#waitlist" class="btn btn-secondary btn-lg">Entrar na lista de espera</a>
+        </div>
+      </div>
+
+      <!-- Person profile mobile mockup -->
+      <div class="profile-stage">
+        <div class="anno anno-1">
+          <span class="swatch" style="background:var(--teal)"></span>
+          CLASSIFICAÇÃO AUTOMÁTICA
+        </div>
+        <div class="anno anno-2">
+          <span class="swatch" style="background:var(--navy-accent)"></span>
+          HISTÓRICO DE PRESENÇA
+        </div>
+        <div class="anno anno-3">
+          <span class="swatch" style="background:var(--amber)"></span>
+          TAGS DE CUIDADO
+        </div>
+
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="phone-status">
+              <span>9:41</span>
+              <span class="ico">
+                <svg width="14" height="9" viewBox="0 0 14 9" fill="currentColor"><rect x="0" y="3" width="2" height="6" rx="1"/><rect x="3" y="2" width="2" height="7" rx="1"/><rect x="6" y="1" width="2" height="8" rx="1"/><rect x="9" y="0" width="2" height="9" rx="1"/></svg>
+                <svg width="16" height="9" viewBox="0 0 16 9" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="13" height="8" rx="2"/><rect x="2" y="2" width="10" height="5" fill="currentColor"/><rect x="14.5" y="3" width="1" height="3" rx=".5" fill="currentColor"/></svg>
+              </span>
+            </div>
+            <div class="phone-head">
+              <span class="back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Pessoas
+              </span>
+              <span class="more">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </span>
+            </div>
+
+            <div class="phone-body">
+              <div class="pp-avatar-block">
+                <div class="pp-avatar">
+                  MS
+                  <span class="stripe-overlay"></span>
+                </div>
+                <div class="pp-name">Marina Silva</div>
+                <div class="pp-meta">38 anos · Passo Fundo · RS</div>
+              </div>
+
+              <div class="pp-badge">
+                <span class="dot"></span> Frequentador
+              </div>
+
+              <div class="pp-section">
+                <div class="pp-section-label">Histórico</div>
+                <div class="pp-history">
+                  <div class="pp-history-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                  </div>
+                  <div class="pp-history-text">
+                    <b>Visitou 3 vezes</b> nos últimos 60 dias
+                    <small>Última: dom · 28/abr</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pp-section">
+                <div class="pp-section-label">Tags</div>
+                <div class="pp-tags">
+                  <span class="pp-tag navy">Recém-chegada</span>
+                  <span class="pp-tag">Família com criança</span>
+                </div>
+              </div>
+
+              <div class="pp-bottom-bar">
+                <div class="pp-action ghost">Família</div>
+                <div class="pp-action">Acompanhar</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S2 — QR CODE ───────────── -->
+<section class="section" style="padding-top:32px;">
+  <div class="wrap">
+    <div class="feat-grid">
+      <div class="feat-copy reveal">
+        <div class="eyebrow">Cadastro de visitante</div>
+        <h2>Cadastro rápido por QR&nbsp;code.</h2>
+        <p class="body">Coloque um QR na entrada do culto. O visitante preenche nome, telefone e aceita receber contato — em 30 segundos, sem app, sem login.</p>
+        <ul class="feat-bullets">
+          <li>Funciona sem o visitante <b>instalar nada</b>.</li>
+          <li><b>Consentimento LGPD</b> obrigatório no formulário.</li>
+          <li>Cadastro chega na hora no <b>painel da secretária</b>.</li>
+          <li>Foto opcional — o visitante tira ou pula.</li>
+        </ul>
+      </div>
+
+      <div class="qr-stage reveal">
+        <!-- Totem -->
+        <div class="qr-totem">
+          <div class="qr-totem-label">// Totem · entrada</div>
+          <div class="qr-church">
+            Igreja Doca
+            <small>Bem-vindo · escaneie pra se cadastrar</small>
+          </div>
+          <div class="qr-code">
+            <svg viewBox="0 0 33 33" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+              <rect width="33" height="33" fill="#fff"/>
+              <g fill="#0F1117">
+                <!-- finder squares -->
+                <rect x="0" y="0" width="7" height="7"/>
+                <rect x="1" y="1" width="5" height="5" fill="#fff"/>
+                <rect x="2" y="2" width="3" height="3"/>
+                <rect x="26" y="0" width="7" height="7"/>
+                <rect x="27" y="1" width="5" height="5" fill="#fff"/>
+                <rect x="28" y="2" width="3" height="3"/>
+                <rect x="0" y="26" width="7" height="7"/>
+                <rect x="1" y="27" width="5" height="5" fill="#fff"/>
+                <rect x="2" y="28" width="3" height="3"/>
+                <!-- timing / data pseudo-pattern -->
+                <rect x="8" y="0" width="1" height="1"/><rect x="10" y="0" width="1" height="1"/><rect x="13" y="0" width="2" height="1"/><rect x="17" y="0" width="1" height="1"/><rect x="19" y="0" width="2" height="1"/><rect x="23" y="0" width="1" height="1"/>
+                <rect x="8" y="1" width="1" height="1"/><rect x="11" y="1" width="1" height="1"/><rect x="14" y="1" width="1" height="1"/><rect x="16" y="1" width="2" height="1"/><rect x="20" y="1" width="1" height="1"/><rect x="22" y="1" width="2" height="1"/>
+                <rect x="9" y="2" width="2" height="1"/><rect x="12" y="2" width="1" height="1"/><rect x="15" y="2" width="2" height="1"/><rect x="19" y="2" width="1" height="1"/><rect x="21" y="2" width="2" height="1"/><rect x="25" y="2" width="1" height="1"/>
+                <rect x="8" y="3" width="1" height="1"/><rect x="11" y="3" width="2" height="1"/><rect x="14" y="3" width="1" height="1"/><rect x="17" y="3" width="2" height="1"/><rect x="22" y="3" width="1" height="1"/><rect x="24" y="3" width="1" height="1"/>
+                <rect x="10" y="4" width="1" height="1"/><rect x="13" y="4" width="1" height="1"/><rect x="15" y="4" width="1" height="1"/><rect x="18" y="4" width="1" height="1"/><rect x="20" y="4" width="2" height="1"/><rect x="23" y="4" width="2" height="1"/>
+                <rect x="8" y="5" width="2" height="1"/><rect x="12" y="5" width="2" height="1"/><rect x="16" y="5" width="1" height="1"/><rect x="19" y="5" width="1" height="1"/><rect x="22" y="5" width="2" height="1"/><rect x="25" y="5" width="1" height="1"/>
+                <rect x="9" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="14" y="6" width="2" height="1"/><rect x="17" y="6" width="1" height="1"/><rect x="20" y="6" width="1" height="1"/><rect x="24" y="6" width="2" height="1"/>
+                <rect x="0" y="8" width="2" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="6" y="8" width="3" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="13" y="8" width="2" height="1"/><rect x="17" y="8" width="1" height="1"/><rect x="20" y="8" width="2" height="1"/><rect x="24" y="8" width="1" height="1"/><rect x="27" y="8" width="2" height="1"/><rect x="31" y="8" width="2" height="1"/>
+                <rect x="1" y="9" width="1" height="1"/><rect x="4" y="9" width="2" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="11" y="9" width="2" height="1"/><rect x="15" y="9" width="1" height="1"/><rect x="18" y="9" width="1" height="1"/><rect x="22" y="9" width="2" height="1"/><rect x="26" y="9" width="1" height="1"/><rect x="29" y="9" width="2" height="1"/>
+                <rect x="2" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="7" y="10" width="2" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="14" y="10" width="1" height="1"/><rect x="16" y="10" width="2" height="1"/><rect x="20" y="10" width="1" height="1"/><rect x="23" y="10" width="2" height="1"/><rect x="27" y="10" width="1" height="1"/><rect x="30" y="10" width="2" height="1"/>
+                <rect x="0" y="11" width="1" height="1"/><rect x="3" y="11" width="2" height="1"/><rect x="7" y="11" width="1" height="1"/><rect x="9" y="11" width="2" height="1"/><rect x="13" y="11" width="1" height="1"/><rect x="15" y="11" width="2" height="1"/><rect x="19" y="11" width="1" height="1"/><rect x="22" y="11" width="1" height="1"/><rect x="25" y="11" width="2" height="1"/><rect x="29" y="11" width="1" height="1"/><rect x="32" y="11" width="1" height="1"/>
+                <rect x="1" y="12" width="2" height="1"/><rect x="5" y="12" width="1" height="1"/><rect x="8" y="12" width="2" height="1"/><rect x="11" y="12" width="1" height="1"/><rect x="14" y="12" width="2" height="1"/><rect x="17" y="12" width="1" height="1"/><rect x="20" y="12" width="2" height="1"/><rect x="24" y="12" width="1" height="1"/><rect x="27" y="12" width="2" height="1"/><rect x="31" y="12" width="1" height="1"/>
+                <rect x="0" y="13" width="1" height="1"/><rect x="4" y="13" width="1" height="1"/><rect x="7" y="13" width="2" height="1"/><rect x="10" y="13" width="1" height="1"/><rect x="13" y="13" width="2" height="1"/><rect x="16" y="13" width="1" height="1"/><rect x="19" y="13" width="2" height="1"/><rect x="23" y="13" width="1" height="1"/><rect x="26" y="13" width="2" height="1"/><rect x="30" y="13" width="1" height="1"/>
+                <rect x="2" y="14" width="1" height="1"/><rect x="5" y="14" width="2" height="1"/><rect x="8" y="14" width="1" height="1"/><rect x="12" y="14" width="2" height="1"/><rect x="15" y="14" width="1" height="1"/><rect x="18" y="14" width="2" height="1"/><rect x="22" y="14" width="1" height="1"/><rect x="25" y="14" width="2" height="1"/><rect x="29" y="14" width="2" height="1"/><rect x="32" y="14" width="1" height="1"/>
+                <rect x="1" y="15" width="1" height="1"/><rect x="3" y="15" width="2" height="1"/><rect x="7" y="15" width="1" height="1"/><rect x="10" y="15" width="2" height="1"/><rect x="14" y="15" width="1" height="1"/><rect x="17" y="15" width="2" height="1"/><rect x="21" y="15" width="1" height="1"/><rect x="24" y="15" width="2" height="1"/><rect x="28" y="15" width="1" height="1"/><rect x="31" y="15" width="1" height="1"/>
+                <rect x="0" y="16" width="1" height="1"/><rect x="4" y="16" width="2" height="1"/><rect x="8" y="16" width="2" height="1"/><rect x="11" y="16" width="1" height="1"/><rect x="13" y="16" width="2" height="1"/><rect x="16" y="16" width="1" height="1"/><rect x="19" y="16" width="2" height="1"/><rect x="23" y="16" width="2" height="1"/><rect x="26" y="16" width="1" height="1"/><rect x="29" y="16" width="2" height="1"/>
+                <rect x="2" y="17" width="2" height="1"/><rect x="6" y="17" width="1" height="1"/><rect x="9" y="17" width="2" height="1"/><rect x="12" y="17" width="1" height="1"/><rect x="15" y="17" width="2" height="1"/><rect x="19" y="17" width="1" height="1"/><rect x="22" y="17" width="2" height="1"/><rect x="25" y="17" width="1" height="1"/><rect x="28" y="17" width="2" height="1"/><rect x="32" y="17" width="1" height="1"/>
+                <rect x="0" y="18" width="2" height="1"/><rect x="3" y="18" width="1" height="1"/><rect x="6" y="18" width="2" height="1"/><rect x="10" y="18" width="1" height="1"/><rect x="14" y="18" width="2" height="1"/><rect x="17" y="18" width="1" height="1"/><rect x="20" y="18" width="2" height="1"/><rect x="24" y="18" width="1" height="1"/><rect x="27" y="18" width="2" height="1"/><rect x="31" y="18" width="1" height="1"/>
+                <rect x="1" y="19" width="1" height="1"/><rect x="4" y="19" width="2" height="1"/><rect x="7" y="19" width="1" height="1"/><rect x="11" y="19" width="2" height="1"/><rect x="15" y="19" width="1" height="1"/><rect x="18" y="19" width="1" height="1"/><rect x="21" y="19" width="1" height="1"/><rect x="23" y="19" width="2" height="1"/><rect x="26" y="19" width="1" height="1"/><rect x="29" y="19" width="2" height="1"/>
+                <rect x="0" y="20" width="1" height="1"/><rect x="2" y="20" width="1" height="1"/><rect x="5" y="20" width="2" height="1"/><rect x="8" y="20" width="1" height="1"/><rect x="11" y="20" width="1" height="1"/><rect x="13" y="20" width="2" height="1"/><rect x="17" y="20" width="2" height="1"/><rect x="20" y="20" width="1" height="1"/><rect x="22" y="20" width="2" height="1"/><rect x="25" y="20" width="2" height="1"/><rect x="28" y="20" width="1" height="1"/><rect x="31" y="20" width="2" height="1"/>
+                <rect x="3" y="21" width="2" height="1"/><rect x="6" y="21" width="1" height="1"/><rect x="9" y="21" width="2" height="1"/><rect x="12" y="21" width="1" height="1"/><rect x="14" y="21" width="2" height="1"/><rect x="18" y="21" width="1" height="1"/><rect x="20" y="21" width="2" height="1"/><rect x="24" y="21" width="2" height="1"/><rect x="27" y="21" width="1" height="1"/><rect x="30" y="21" width="2" height="1"/>
+                <rect x="1" y="22" width="2" height="1"/><rect x="5" y="22" width="1" height="1"/><rect x="8" y="22" width="2" height="1"/><rect x="11" y="22" width="1" height="1"/><rect x="13" y="22" width="2" height="1"/><rect x="16" y="22" width="1" height="1"/><rect x="19" y="22" width="2" height="1"/><rect x="23" y="22" width="1" height="1"/><rect x="26" y="22" width="2" height="1"/><rect x="30" y="22" width="1" height="1"/><rect x="32" y="22" width="1" height="1"/>
+                <rect x="0" y="23" width="1" height="1"/><rect x="4" y="23" width="1" height="1"/><rect x="6" y="23" width="2" height="1"/><rect x="10" y="23" width="2" height="1"/><rect x="14" y="23" width="1" height="1"/><rect x="17" y="23" width="2" height="1"/><rect x="21" y="23" width="1" height="1"/><rect x="24" y="23" width="2" height="1"/><rect x="28" y="23" width="1" height="1"/><rect x="31" y="23" width="2" height="1"/>
+                <rect x="2" y="24" width="1" height="1"/><rect x="5" y="24" width="2" height="1"/><rect x="8" y="24" width="1" height="1"/><rect x="11" y="24" width="1" height="1"/><rect x="15" y="24" width="2" height="1"/><rect x="18" y="24" width="1" height="1"/><rect x="22" y="24" width="2" height="1"/><rect x="25" y="24" width="1" height="1"/><rect x="28" y="24" width="2" height="1"/><rect x="32" y="24" width="1" height="1"/>
+                <!-- bottom -->
+                <rect x="8" y="26" width="1" height="1"/><rect x="10" y="26" width="2" height="1"/><rect x="13" y="26" width="1" height="1"/><rect x="16" y="26" width="2" height="1"/><rect x="19" y="26" width="1" height="1"/><rect x="22" y="26" width="2" height="1"/><rect x="25" y="26" width="1" height="1"/>
+                <rect x="9" y="27" width="2" height="1"/><rect x="12" y="27" width="1" height="1"/><rect x="14" y="27" width="2" height="1"/><rect x="17" y="27" width="1" height="1"/><rect x="20" y="27" width="2" height="1"/><rect x="23" y="27" width="1" height="1"/>
+                <rect x="8" y="28" width="2" height="1"/><rect x="11" y="28" width="1" height="1"/><rect x="13" y="28" width="2" height="1"/><rect x="16" y="28" width="1" height="1"/><rect x="19" y="28" width="2" height="1"/><rect x="22" y="28" width="1" height="1"/><rect x="25" y="28" width="2" height="1"/>
+                <rect x="9" y="29" width="1" height="1"/><rect x="12" y="29" width="2" height="1"/><rect x="15" y="29" width="1" height="1"/><rect x="18" y="29" width="2" height="1"/><rect x="21" y="29" width="1" height="1"/><rect x="24" y="29" width="2" height="1"/>
+                <rect x="8" y="30" width="1" height="1"/><rect x="10" y="30" width="1" height="1"/><rect x="13" y="30" width="2" height="1"/><rect x="17" y="30" width="1" height="1"/><rect x="19" y="30" width="2" height="1"/><rect x="23" y="30" width="1" height="1"/><rect x="25" y="30" width="2" height="1"/>
+                <rect x="9" y="31" width="2" height="1"/><rect x="12" y="31" width="1" height="1"/><rect x="15" y="31" width="2" height="1"/><rect x="18" y="31" width="1" height="1"/><rect x="21" y="31" width="2" height="1"/><rect x="24" y="31" width="1" height="1"/>
+                <rect x="8" y="32" width="2" height="1"/><rect x="11" y="32" width="1" height="1"/><rect x="14" y="32" width="2" height="1"/><rect x="17" y="32" width="1" height="1"/><rect x="20" y="32" width="2" height="1"/><rect x="23" y="32" width="1" height="1"/><rect x="25" y="32" width="2" height="1"/>
+              </g>
+            </svg>
+          </div>
+          <div class="qr-foot">
+            Aponte a câmera
+            <small>orbien.app/d/doca</small>
+          </div>
+          <div class="qr-stand"></div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="qr-arrow">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </div>
+
+        <!-- Mini phone -->
+        <div class="mini-phone">
+          <div class="mini-phone-screen">
+            <div class="mini-phone-head">
+              <div class="crumb">Igreja Doca · Visitante</div>
+              <h4>Quem está chegando?</h4>
+            </div>
+            <div class="mini-phone-body">
+              <div class="mf-field">
+                <div class="lbl">Nome completo</div>
+                <div class="val">João Pedro Souza</div>
+              </div>
+              <div class="mf-field focus">
+                <div class="lbl">WhatsApp</div>
+                <div class="val">(54) 99821-4408</div>
+              </div>
+              <div class="mf-field">
+                <div class="lbl">Email (opcional)</div>
+                <div class="val placeholder">seu@email.com</div>
+              </div>
+              <div class="mf-radio">
+                <div class="opt on">Masc.</div>
+                <div class="opt">Fem.</div>
+                <div class="opt">—</div>
+              </div>
+              <div class="mf-check">
+                <span class="box">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                Aceito receber contato da Igreja Doca conforme a LGPD.
+              </div>
+              <div class="mf-cta">Estou na igreja</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S3 — Dashboard demográfico ───────────── -->
+<section class="section" style="background: var(--sand); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Dashboard demográfico</div>
+      <h2 class="section-title">Você sabe quem está na sua igreja.</h2>
+      <p class="section-sub">Faixa etária, sexo, distribuição geográfica, novos cadastros no mês. Em painéis simples, sem precisar exportar planilha.</p>
+    </div>
+
+    <div class="dash-frame reveal">
+      <div class="dash-topbar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="url">orbien.app/igrejadoca/pessoas/demografico</span>
+      </div>
+      <div class="dash-pad">
+        <div class="dash-head">
+          <h4>
+            <small>Painel · Demográfico</small>
+            Quem é a Igreja Doca
+          </h4>
+          <span class="dash-filter">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            ABRIL · 2026
+          </span>
+        </div>
+
+        <div class="dash-grid">
+          <!-- Age bars -->
+          <div class="dash-card">
+            <div class="dash-card-label">Faixa etária <span class="total">· 248 pessoas</span></div>
+            <div class="agebars">
+              <div class="agebar"><span class="lbl">0–17</span><span class="track"><span class="fill" style="width:24%"></span></span><span class="v">59</span></div>
+              <div class="agebar"><span class="lbl">18–29</span><span class="track"><span class="fill" style="width:38%"></span></span><span class="v">94</span></div>
+              <div class="agebar hi"><span class="lbl">30–49</span><span class="track"><span class="fill" style="width:62%"></span></span><span class="v">154</span></div>
+              <div class="agebar"><span class="lbl">50–69</span><span class="track"><span class="fill" style="width:28%"></span></span><span class="v">69</span></div>
+              <div class="agebar"><span class="lbl">70+</span><span class="track"><span class="fill" style="width:9%"></span></span><span class="v">22</span></div>
+            </div>
+          </div>
+
+          <!-- Donut -->
+          <div class="dash-card">
+            <div class="dash-card-label">Sexo</div>
+            <div class="donut-wrap">
+              <div class="donut">
+                <svg viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15.91549" fill="none" stroke="var(--subtle)" stroke-width="4"/>
+                  <circle cx="18" cy="18" r="15.91549" fill="none" stroke="var(--navy-accent)" stroke-width="4"
+                          stroke-dasharray="54 100" stroke-linecap="butt"/>
+                  <circle cx="18" cy="18" r="15.91549" fill="none" stroke="var(--teal)" stroke-width="4"
+                          stroke-dasharray="42 100" stroke-dashoffset="-54" stroke-linecap="butt"/>
+                  <circle cx="18" cy="18" r="15.91549" fill="none" stroke="var(--muted)" stroke-width="4"
+                          stroke-dasharray="4 100" stroke-dashoffset="-96" stroke-linecap="butt"/>
+                </svg>
+                <div class="center"><b>248</b><small>pessoas</small></div>
+              </div>
+              <div class="donut-legend">
+                <div class="row"><span class="sw" style="background:var(--navy-accent)"></span>Feminino <b>54%</b></div>
+                <div class="row"><span class="sw" style="background:var(--teal)"></span>Masculino <b>42%</b></div>
+                <div class="row"><span class="sw" style="background:var(--muted)"></span>Não inf. <b>4%</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-row2">
+          <!-- Map -->
+          <div class="dash-card">
+            <div class="dash-card-label">Distribuição por bairro · Passo Fundo</div>
+            <div class="map-wrap">
+              <div class="map-canvas">
+                <div class="grid-bg"></div>
+                <div class="map-blob" style="left:42%; top:55%; width:160px; height:120px;"></div>
+                <div class="map-blob" style="left:68%; top:38%; width:90px; height:80px; opacity:.18;"></div>
+                <div class="map-pin" style="left:42%; top:55%;"><span class="ring"></span></div>
+                <div class="map-pin teal" style="left:68%; top:38%;"><span class="ring"></span></div>
+                <div class="map-pin" style="left:25%; top:68%;"></div>
+                <div class="map-pin" style="left:55%; top:28%;"></div>
+                <div class="map-pin" style="left:80%; top:62%;"></div>
+                <div class="map-pin" style="left:33%; top:42%;"></div>
+                <div class="map-label" style="left:42%; top:55%;">Centro · 38%</div>
+                <div class="map-label" style="left:68%; top:38%;">Petrópolis · 22%</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Big number -->
+          <div class="dash-card">
+            <div class="dash-card-label">Novos cadastros · este mês</div>
+            <div class="bignum-wrap">
+              <div class="bignum">27</div>
+              <div class="bignum-sub">
+                <span class="delta">+9 vs. março</span>
+                <span>visitantes &amp; membros</span>
+              </div>
+              <div class="bignum-spark">
+                <svg viewBox="0 0 200 36" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="sparkg" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="currentColor" stop-opacity=".25"/>
+                      <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M0,28 L25,22 L50,26 L75,18 L100,20 L125,12 L150,15 L175,8 L200,4 L200,36 L0,36 Z" fill="url(#sparkg)"/>
+                  <path d="M0,28 L25,22 L50,26 L75,18 L100,20 L125,12 L150,15 L175,8 L200,4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+                  <circle cx="200" cy="4" r="3" fill="currentColor"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-perm-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Dados visíveis apenas pra papéis com permissão — pastor e secretária. Membro vê apenas o próprio perfil.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S4 — Reclassificação ───────────── -->
+<section class="section">
+  <div class="wrap">
+    <div class="feat-grid reverse">
+      <div class="feat-copy reveal">
+        <div class="eyebrow">Regra determinística</div>
+        <h2>Visitante vira frequentador sozinho.</h2>
+        <p class="body">Um visitante que aparece três vezes vira frequentador automaticamente. Você define a regra, a Orbien aplica.</p>
+        <ul class="feat-bullets">
+          <li>Regra padrão: <b>3 visitas em 60 dias</b> → frequentador.</li>
+          <li>A regra pode ser ajustada pela liderança (ex: 2 visitas em 30 dias).</li>
+          <li>Histórico mostra <b>quem mudou, quando e por quê</b>.</li>
+          <li>Pastor pode reverter manualmente, sem perder o rastro.</li>
+        </ul>
+        <div class="feat-note">// Sem caixa-preta: a Orbien só aplica regras que você consegue explicar pra mesa diretora.</div>
+      </div>
+
+      <div class="feat-visual reveal">
+        <div class="timeline">
+          <div class="timeline-head">
+            <div class="av">MS</div>
+            <div class="who">Marina Silva <small>// Jornada da pessoa</small></div>
+            <div class="tl-rule">Regra ativa · 3 visitas / 60 dias</div>
+          </div>
+          <div class="tl-line">
+            <div class="tl-step">
+              <div class="node">VISITA<br>01</div>
+              <span class="tl-pill"><span class="dot"></span>Visitante</span>
+              <span class="tl-date">14 · abr</span>
+            </div>
+            <div class="tl-step">
+              <div class="node">VISITA<br>02</div>
+              <span class="tl-pill"><span class="dot"></span>Visitante</span>
+              <span class="tl-date">21 · abr</span>
+            </div>
+            <div class="tl-step now">
+              <div class="node">VISITA<br>03</div>
+              <span class="tl-pill teal"><span class="dot"></span>Frequentador</span>
+              <span class="tl-date">28 · abr</span>
+              <div class="tl-flag">Reclassificada<br>automaticamente</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S5 — Dedup ───────────── -->
+<section class="section" style="padding-top:0;">
+  <div class="wrap">
+    <div class="feat-grid">
+      <div class="feat-copy reveal">
+        <div class="eyebrow">Deduplicação</div>
+        <h2>Nunca mais duas Marinas iguais.</h2>
+        <p class="body">Se a Marina Silva já está no sistema e alguém tentar cadastrar “Marina S. Silva”, a Orbien avisa antes de duplicar.</p>
+        <ul class="feat-bullets">
+          <li>Algoritmo de <b>fuzzy matching</b> considera nome, telefone e data de nascimento.</li>
+          <li>Mostra a similaridade antes de bloquear o cadastro.</li>
+          <li>Permite confirmar “é outra pessoa” sem fricção.</li>
+          <li>Importação por planilha também passa pela deduplicação.</li>
+        </ul>
+      </div>
+
+      <div class="feat-visual reveal">
+        <div class="alert-stage">
+          <div class="alert-card">
+            <div class="alert-head">
+              <div class="alert-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div class="alert-title">
+                Atenção: cadastro parecido encontrado.
+                <small>// Similaridade 94% · nome + telefone</small>
+              </div>
+            </div>
+
+            <div class="alert-body">
+              <div class="alert-person new">
+                <div class="av">MS</div>
+                <div>
+                  <div class="lbl">Você está cadastrando</div>
+                  <div class="nm">Marina S. Silva</div>
+                  <div class="info">38 anos · (54) 9 9999-9999</div>
+                </div>
+              </div>
+
+              <div class="alert-person existing">
+                <div class="av">MS</div>
+                <div>
+                  <div class="lbl">Já existe no sistema</div>
+                  <div class="nm">Marina Silva</div>
+                  <div class="info">38 anos · (54) 9 9999-9999</div>
+                </div>
+                <span class="alert-sim">★ 94%</span>
+              </div>
+            </div>
+
+            <div class="alert-foot">
+              <div class="alert-btn secondary">É outra pessoa</div>
+              <div class="alert-btn primary">É a mesma pessoa</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S6 — Família e papéis ───────────── -->
+<section class="section" style="padding-top:0;">
+  <div class="wrap">
+    <div class="feat-grid reverse">
+      <div class="feat-copy reveal">
+        <div class="eyebrow">Núcleo familiar &amp; papéis</div>
+        <h2>A família junto, os papéis separados.</h2>
+        <p class="body">Marina é mãe, frequentadora, voluntária no infantil e líder de pequeno grupo. A Orbien entende que tudo isso é uma pessoa só — com vários papéis e uma família.</p>
+        <ul class="feat-bullets">
+          <li>Modelo de dados orientado <b>a pessoa, não a membro</b>.</li>
+          <li>Uma pessoa acumula papéis — visitante, membro, voluntário, líder, dizimista — sem virar registros duplicados.</li>
+          <li>Núcleo familiar facilita <b>cuidado pastoral e visita</b>.</li>
+        </ul>
+      </div>
+
+      <div class="feat-visual reveal">
+        <div class="family">
+          <div class="family-head">
+            <h4>
+              <span class="ico">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 9.5 12 3l9 6.5"/><path d="M5 21V11"/><path d="M19 21V11"/><path d="M9 21v-7h6v7"/>
+                </svg>
+              </span>
+              Família Silva
+            </h4>
+            <span class="meta">4 pessoas · 2 adultos · 2 crianças</span>
+          </div>
+          <div class="family-tree">
+            <div class="family-row">
+              <span class="branch">├─</span>
+              <div class="av">RS</div>
+              <div class="who">
+                <span class="name">Roberto Silva</span>
+                <span class="roles">
+                  <span class="role navy">Membro</span>
+                  <span class="role amber">Dizimista</span>
+                </span>
+              </div>
+              <span class="age">42 anos</span>
+            </div>
+            <div class="family-row">
+              <span class="branch">├─</span>
+              <div class="av">MS</div>
+              <div class="who">
+                <span class="name">Marina Silva</span>
+                <span class="roles">
+                  <span class="role teal">Frequentadora</span>
+                  <span class="role navy">Vol. infantil</span>
+                  <span class="role navy">Líder PG</span>
+                </span>
+              </div>
+              <span class="age">38 anos</span>
+            </div>
+            <div class="family-row">
+              <span class="branch">├─</span>
+              <div class="av">LS</div>
+              <div class="who">
+                <span class="name">Lucas Silva</span>
+                <span class="roles">
+                  <span class="role">Criança · Infantil</span>
+                </span>
+              </div>
+              <span class="age">12 anos</span>
+            </div>
+            <div class="family-row">
+              <span class="branch">└─</span>
+              <div class="av">SS</div>
+              <div class="who">
+                <span class="name">Sofia Silva</span>
+                <span class="roles">
+                  <span class="role">Criança · Infantil</span>
+                </span>
+              </div>
+              <span class="age">5 anos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S7 — LGPD ───────────── -->
+<section class="section" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="lgpd-wrap reveal">
+      <div class="lgpd-head">
+        <div class="eyebrow">LGPD</div>
+        <h2>Os dados da sua igreja seguem a lei.</h2>
+        <p>Toda pessoa cadastrada aceita expressamente receber contato. O membro pode pedir exclusão a qualquer momento — a Orbien remove em até 7 dias. A igreja é a controladora dos dados, a Orbien é a operadora.</p>
+      </div>
+      <div class="lgpd-trio">
+        <div class="lgpd-card">
+          <div class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <h4>Consentimento explícito</h4>
+          <p>Checkbox obrigatório no cadastro com texto claro sobre o que a igreja vai fazer com os dados.</p>
+        </div>
+        <div class="lgpd-card">
+          <div class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/>
+            </svg>
+          </div>
+          <h4>Servidores no Brasil</h4>
+          <p>Dados em data center em São Paulo, com criptografia em trânsito e em repouso.</p>
+        </div>
+        <div class="lgpd-card">
+          <div class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </div>
+          <h4>Exclusão em até 7 dias</h4>
+          <p>O membro pede pelo app, a Orbien apaga e te avisa. Sem ticket, sem ligação, sem fila.</p>
+        </div>
+      </div>
+      <div class="lgpd-foot">
+        <a href="/lgpd">
+          Saber mais sobre LGPD na Orbien
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── S8 — Cross-sell ───────────── -->
+<section class="section" id="modulos-outros" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow muted">Outros módulos</div>
+      <h2 class="section-title">Membros é só o começo.</h2>
+    </div>
+    <div class="cross-grid">
+      <a href="#" class="cross-card reveal">
+        <div class="head">
+          <span class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+            </svg>
+          </span>
+          <h4>Doações e finanças</h4>
+        </div>
+        <p>PIX, recibo automático e relatório semanal.</p>
+        <span class="lnk">Ver módulo
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
+      </a>
+      <a href="#" class="cross-card reveal">
+        <div class="head">
+          <span class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/>
+            </svg>
+          </span>
+          <h4>Pequenos grupos</h4>
+        </div>
+        <p>Materiais agendados, semáforo de saúde da célula.</p>
+        <span class="lnk">Ver módulo
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
+      </a>
+      <a href="#" class="cross-card reveal">
+        <div class="head">
+          <span class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+          </span>
+          <h4>Conteúdo e notificações</h4>
+        </div>
+        <p>Avisos e devocionais no app da sua igreja.</p>
+        <span class="lnk">Ver módulo
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── FINAL CTA ───────────── -->
+<section class="final-cta" id="waitlist">
+  <div class="wrap final-cta-inner reveal">
+    <div class="eyebrow">Lista de espera aberta</div>
+    <h2>Pronto pra cadastrar o primeiro visitante?</h2>
+    <p>Entre na lista de espera e a gente te chama assim que abrir a primeira leva de igrejas-piloto.</p>
+    <div class="final-cta-actions">
+      <a href="#" class="btn btn-teal btn-lg">
+        Entrar na lista de espera
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+      <a href="#" class="wpp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+        Falar no WhatsApp →
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── FOOTER ───────────── -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand-col">
+        <a href="Orbien Home.html" class="brand">
+          <span class="brand-mark">
+            <svg viewBox="0 0 22 22" fill="none">
+              <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="11" cy="11" r="3" fill="currentColor"/>
+              <circle cx="20" cy="11" r="2" fill="#00B8A2"/>
+            </svg>
+          </span>
+          Orbien
+        </a>
+        <p class="footer-tagline">Gestão que serve. Igreja que cresce. Plataforma e app white-label para igrejas de 50 a 300 membros.</p>
+        <div class="footer-socials">
+          <a href="#" aria-label="Instagram"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"/></svg></a>
+          <a href="#" aria-label="YouTube"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg></a>
+          <a href="#" aria-label="LinkedIn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg></a>
+        </div>
+      </div>
+
+      <div>
+        <h4>Produto</h4>
+        <ul>
+          <li><a href="Orbien Home.html#modulos">Funcionalidades</a></li>
+          <li><a href="Orbien Preços.html">Preços</a></li>
+          <li><a href="Orbien Home.html#comparativo">Comparativo</a></li>
+          <li><a href="#">Roadmap</a></li>
+          <li><a href="#">Mudanças</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Empresa</h4>
+        <ul>
+          <li><a href="#">Sobre</a></li>
+          <li><a href="#">Pastores parceiros</a></li>
+          <li><a href="#">Contato</a></li>
+          <li><a href="#">WhatsApp</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Legal e segurança</h4>
+        <ul>
+          <li><a href="#">Termos de uso</a></li>
+          <li><a href="#">Política de privacidade</a></li>
+          <li><a href="#">LGPD</a></li>
+          <li><a href="#">Status</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <div>© 2026 Church Platform Ltda · CNPJ a definir · Passo Fundo · RS</div>
+      <div>orbien.app</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

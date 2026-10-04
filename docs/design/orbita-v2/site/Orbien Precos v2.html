@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preços — Orbien</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Brand — invariant */
+    --navy:           #1E3A7B;
+    --navy-dark:      #162D62;
+    --teal:           #00B8A2;
+    --teal-bright:    #00CDB5;
+    --crimson:        #C0392B;
+
+    /* Semantic — light */
+    --navy-accent:    #1E3A7B;
+    --navy-dim:       #D4DCEF;
+    --navy-tint:      #F0F3FA;
+    --navy-soft:      rgba(30,58,123,.03);
+    --teal-dim:       #D0F5F1;
+    --bg:             #F5F4F1;
+    --ink:            #0F1117;
+    --on-ink:         #0F1117;
+    --surface:        #FFFFFF;
+    --subtle:         #EEECEA;
+    --sand:           #EAE6DF;
+    --sand-soft:      #F0EDE6;
+    --stone:          #5C5A56;
+    --muted:          #9B9893;
+    --border:         #E0DDD9;
+    --border-strong:  #C8C5C0;
+    --nav-bg:         rgba(245,244,241,.85);
+
+    --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+    --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+    --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --navy-accent:  #7A99D9;
+      --navy-dim:     #1A2540;
+      --navy-tint:    #161D33;
+      --navy-soft:    rgba(122,153,217,.06);
+      --teal-dim:     #0A2E2A;
+      --bg:           #0F1117;
+      --ink:          #F5F4F1;
+      --on-ink:       #1A1D27;
+      --surface:      #13151E;
+      --subtle:       #1C1F2B;
+      --sand:         #16192A;
+      --sand-soft:    #141727;
+      --stone:        #B5B2AD;
+      --muted:        #7A7975;
+      --border:       #232634;
+      --border-strong:#2E3142;
+      --nav-bg:       rgba(15,17,23,.78);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.20);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.24);
+    }
+  }
+  html { color-scheme: light dark; scroll-behavior: smooth; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.5;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  svg { display: block; }
+  .mono { font-family: 'DM Mono', monospace; }
+
+  .wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 80px 0; }
+  @media (max-width: 720px) { .section { padding: 56px 0; } }
+
+  .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--navy-accent);
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ''; width: 24px; height: 1px; background: var(--navy-accent); }
+
+  h1, h2, h3 { color: var(--ink); letter-spacing: -.02em; text-wrap: balance; }
+  h2 { font-weight: 500; letter-spacing: -.025em; }
+  h3 { font-weight: 500; }
+
+  .section-title {
+    font-size: clamp(28px, 3.6vw, 40px);
+    line-height: 1.1;
+    margin-bottom: 14px;
+  }
+  .section-sub {
+    font-size: 16px;
+    font-weight: 300;
+    color: var(--stone);
+    max-width: 620px;
+    line-height: 1.6;
+  }
+  .section-head { margin-bottom: 48px; }
+  .section-head .eyebrow { margin-bottom: 18px; }
+
+  /* ───── Nav ───── */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--nav-bg);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 17px; letter-spacing: -.02em;
+  }
+  .brand-mark { width: 22px; height: 22px; color: var(--navy-accent); }
+  .brand-name { font-family: 'DM Sans'; }
+  .brand-name b { font-weight: 600; } .brand-name span { font-weight: 300; }
+  .nav-links { display: flex; align-items: center; gap: 28px; }
+  .nav-links a { font-size: 14px; color: var(--stone); transition: color .15s; }
+  .nav-links a:hover, .nav-links a.active { color: var(--ink); }
+  .nav-links a.active { font-weight: 500; }
+  .nav-actions { display: flex; align-items: center; gap: 8px; }
+  @media (max-width: 860px) { .nav-links { display: none; } }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px; font-weight: 500;
+    transition: transform .12s, box-shadow .15s, background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover { background: var(--navy-dark); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-secondary { background: transparent; color: var(--navy-accent); border: 1px solid var(--navy-accent); }
+  .btn-secondary:hover { background: var(--navy-dim); }
+  .btn-ghost { color: var(--stone); padding: 12px 14px; }
+  .btn-ghost:hover { color: var(--ink); }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn-teal:hover { background: #00a08c; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-white { background: #fff; color: var(--navy); }
+  .btn-white:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-sm { padding: 8px 14px; font-size: 13px; }
+  .btn-lg { padding: 14px 24px; font-size: 15px; }
+
+  /* ───── HERO ───── */
+  .hero {
+    padding: 80px 0 64px;
+    text-align: left;
+  }
+  .hero .eyebrow { margin-bottom: 22px; }
+  .hero h1 {
+    font-size: clamp(36px, 5.4vw, 60px);
+    font-weight: 600;
+    line-height: 1.04;
+    letter-spacing: -.035em;
+    margin-bottom: 22px;
+    max-width: 800px;
+  }
+  .hero p.lead {
+    font-size: clamp(17px, 1.6vw, 19px);
+    font-weight: 300;
+    color: var(--stone);
+    line-height: 1.55;
+    max-width: 640px;
+  }
+  @media (max-width: 720px) { .hero { padding: 48px 0 32px; } }
+
+  /* ───── TIER TABLE ───── */
+  .tier-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .tier-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+  }
+  .tier-cell { padding: 22px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+  .tier-grid > div:nth-last-child(-n+3) { border-bottom: none; }
+  .tier-grid .col-premium { background: var(--navy-soft); border-left: 1px solid var(--border); }
+
+  .tier-head { background: var(--subtle); border-bottom: 1px solid var(--border-strong) !important; }
+  .tier-head .label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--stone);
+  }
+  .tier-head .plan-name {
+    font-family: 'DM Sans';
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    color: var(--ink);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .tier-head .plan-name .tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; padding: 3px 8px;
+    background: var(--teal-dim); color: var(--teal);
+    border-radius: 100px; letter-spacing: .08em;
+    font-weight: 500;
+  }
+  .tier-head.col-premium { background: var(--navy-soft); }
+
+  .tier-faixa { font-size: 15px; font-weight: 500; color: var(--ink); }
+  .tier-faixa small { display: block; font-size: 12.5px; font-weight: 400; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: .04em; margin-top: 2px; text-transform: lowercase; }
+
+  .tier-price {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 18px;
+    color: var(--ink);
+    letter-spacing: -.01em;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .tier-price .rs { font-family: 'DM Sans'; font-weight: 400; font-size: 13px; color: var(--stone); letter-spacing: 0; }
+  .tier-price .per { font-family: 'DM Sans'; font-weight: 400; font-size: 12px; color: var(--muted); letter-spacing: 0; }
+  .tier-price.empty { color: var(--muted); font-family: 'DM Sans'; font-weight: 300; font-size: 18px; }
+
+  .tier-notes {
+    margin-top: 20px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .tier-notes p {
+    font-size: 13.5px;
+    color: var(--stone);
+    font-weight: 400;
+    line-height: 1.55;
+    padding-left: 16px;
+    position: relative;
+  }
+  .tier-notes p::before {
+    content: '·';
+    position: absolute; left: 4px; top: -2px;
+    color: var(--navy-accent);
+    font-weight: 700; font-size: 18px;
+  }
+
+  /* Tier — mobile cards */
+  .tier-cards { display: none; }
+  @media (max-width: 760px) {
+    .tier-wrap { display: none; }
+    .tier-cards {
+      display: grid; grid-template-columns: 1fr; gap: 16px;
+    }
+    .tier-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .tier-card.premium { background: linear-gradient(180deg, var(--navy-soft), var(--surface) 30%); border-color: var(--border-strong); }
+    .tier-card-head {
+      padding: 20px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .tier-card-head .name { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+    .tier-card-head .tag {
+      font-family: 'DM Mono', monospace; font-size: 9px; padding: 3px 8px;
+      background: var(--teal-dim); color: var(--teal); border-radius: 100px; letter-spacing: .08em;
+    }
+    .tier-card-rows { display: flex; flex-direction: column; }
+    .tier-card-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tier-card-row:last-child { border-bottom: none; }
+    .tier-card-row .faixa { font-size: 14.5px; font-weight: 500; }
+    .tier-card-row .faixa small { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  }
+
+  /* ───── COMPARE ───── */
+  .compare-section .section-head { margin-bottom: 36px; }
+  .compare-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .compare-group { }
+  .compare-group + .compare-group { border-top: 1px solid var(--border-strong); }
+  .compare-group-head {
+    padding: 16px 28px;
+    background: var(--subtle);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--stone);
+    font-weight: 500;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    align-items: center;
+  }
+  .compare-group-head .me { color: var(--navy-accent); }
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    align-items: center;
+    border-top: 1px solid var(--border);
+  }
+  .compare-row:first-child { border-top: none; }
+  .compare-row > div { padding: 16px 28px; }
+  .compare-row:nth-child(odd) { background: var(--sand-soft); }
+  .compare-row .feature { font-size: 14.5px; font-weight: 500; color: var(--ink); }
+  .compare-row .cell { font-size: 14px; color: var(--stone); font-weight: 300; display: flex; align-items: center; gap: 8px; }
+  .compare-row .cell.premium { background: var(--navy-soft); color: var(--ink); border-left: 2px solid var(--teal); font-weight: 400; }
+  .compare-row .cell.has-text { font-weight: 400; color: var(--ink); }
+
+  .check { width: 18px; height: 18px; border-radius: 50%; background: var(--teal-dim); color: var(--teal); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .em-dash { color: var(--muted); font-weight: 400; }
+  .qual { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--stone); letter-spacing: .02em; }
+
+  @media (max-width: 760px) {
+    .compare-group-head { grid-template-columns: 1fr; padding: 14px 20px; }
+    .compare-group-head .col { display: none; }
+    .compare-row { grid-template-columns: 1fr; }
+    .compare-row > div { padding: 10px 20px; }
+    .compare-row .feature { padding-top: 14px; padding-bottom: 4px; font-size: 14.5px; }
+    .compare-row .cell::before {
+      font-family: 'DM Mono', monospace; font-size: 10px;
+      letter-spacing: .1em; text-transform: uppercase; margin-right: 6px;
+      color: var(--muted);
+    }
+    .compare-row .cell.starter::before { content: 'Starter · '; }
+    .compare-row .cell.premium::before { content: 'Premium · '; color: var(--navy-accent); }
+    .compare-row .cell.premium { border-left: none; border-top: 1px dashed var(--border); }
+  }
+
+  /* ───── IMPLANTATION ───── */
+  .impl-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .impl-grid { grid-template-columns: 1fr; } }
+  .impl-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 14px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .impl-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .impl-card .label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--stone);
+  }
+  .impl-card .name { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+  .impl-card .value {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500; font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--ink);
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .impl-card .value .rs { font-family: 'DM Sans'; font-weight: 400; font-size: 15px; color: var(--stone); }
+  .impl-card .value .once { font-family: 'DM Sans'; font-weight: 400; font-size: 13px; color: var(--muted); margin-left: 4px; }
+  .impl-card .desc { font-size: 14.5px; color: var(--stone); font-weight: 300; line-height: 1.6; flex: 1; }
+
+  .impl-note {
+    margin-top: 24px;
+    padding: 16px 20px;
+    background: var(--sand);
+    border-radius: 10px;
+    font-size: 13.5px;
+    color: var(--stone);
+    line-height: 1.55;
+    display: flex; gap: 12px;
+    align-items: flex-start;
+  }
+  .impl-note svg { color: var(--navy-accent); flex-shrink: 0; margin-top: 2px; }
+
+  /* ───── SEM CNPJ ───── */
+  .nocnpj {
+    background: var(--navy);
+    color: #fff;
+    padding: 72px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .nocnpj::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 90% 10%, rgba(0,184,162,.18), transparent 55%),
+      radial-gradient(circle at 5% 95%, rgba(255,255,255,.05), transparent 50%);
+    pointer-events: none;
+  }
+  .nocnpj-inner {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 56px;
+    align-items: center;
+  }
+  @media (max-width: 860px) { .nocnpj-inner { grid-template-columns: 1fr; gap: 32px; } }
+  .nocnpj .eyebrow { color: rgba(255,255,255,.7); margin-bottom: 18px; }
+  .nocnpj .eyebrow::before { background: rgba(255,255,255,.4); }
+  .nocnpj h2 {
+    color: #fff;
+    font-size: clamp(28px, 3.6vw, 38px);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -.025em;
+    margin-bottom: 16px;
+  }
+  .nocnpj p {
+    font-size: 17px;
+    font-weight: 300;
+    color: rgba(255,255,255,.78);
+    line-height: 1.6;
+    margin-bottom: 24px;
+    max-width: 480px;
+  }
+  .nocnpj-stat {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px;
+    padding: 28px;
+    backdrop-filter: blur(20px);
+  }
+  .nocnpj-stat .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+  .nocnpj-stat .row + .row { border-top: 1px solid rgba(255,255,255,.08); }
+  .nocnpj-stat .check {
+    background: rgba(0,205,181,.2); color: var(--teal-bright);
+    width: 20px; height: 20px;
+  }
+  .nocnpj-stat .row span { font-size: 14.5px; color: rgba(255,255,255,.9); }
+
+  /* ───── FAQ ───── */
+  .faq-list { display: flex; flex-direction: column; gap: 8px; max-width: 880px; }
+  .faq {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color .15s;
+  }
+  .faq[open] { border-color: var(--border-strong); }
+  .faq summary {
+    list-style: none;
+    padding: 20px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    cursor: pointer;
+    font-size: 16px; font-weight: 500; letter-spacing: -.01em;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary:hover { background: var(--bg); }
+  .faq-icon {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--navy-tint);
+    color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: transform .2s, background .2s, color .2s;
+  }
+  .faq[open] .faq-icon { transform: rotate(45deg); background: var(--navy); color: #fff; }
+  .faq-body {
+    padding: 0 24px 22px;
+    font-size: 14.5px; color: var(--stone); line-height: 1.65; font-weight: 300;
+    max-width: 720px;
+  }
+  .faq-body strong { color: var(--ink); font-weight: 500; }
+
+  /* ───── FINAL CTA ───── */
+  .final-cta {
+    background: var(--on-ink);
+    color: #fff;
+    padding: 88px 0;
+    position: relative;
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .final-cta::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 80% 20%, rgba(30,58,123,.35), transparent 50%),
+      radial-gradient(circle at 10% 90%, rgba(0,184,162,.15), transparent 50%);
+    pointer-events: none;
+  }
+  .final-cta-inner { position: relative; max-width: 720px; }
+  .final-cta .eyebrow { color: var(--teal); margin-bottom: 20px; }
+  .final-cta .eyebrow::before { background: var(--teal); }
+  .final-cta h2 {
+    color: #fff;
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -.025em;
+    margin-bottom: 16px;
+  }
+  .final-cta p {
+    font-size: 17px;
+    color: #BFC0C9;
+    font-weight: 300;
+    line-height: 1.55;
+    margin-bottom: 28px;
+    max-width: 540px;
+  }
+  .final-cta-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .final-cta-actions a.wpp {
+    color: #fff; font-size: 14px;
+    display: inline-flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,.25);
+    padding-bottom: 2px; transition: border-color .15s, color .15s;
+  }
+  .final-cta-actions a.wpp:hover { border-color: var(--teal); color: var(--teal); }
+
+  /* ───── FOOTER ───── */
+  .footer {
+    background: var(--bg);
+    padding: 64px 0 32px;
+    border-top: 1px solid var(--border);
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+  @media (max-width: 820px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+    .footer-brand-col { grid-column: 1 / -1; }
+  }
+  @media (max-width: 520px) { .footer-grid { grid-template-columns: 1fr; } }
+
+  .footer-brand-col .brand { font-size: 19px; margin-bottom: 14px; }
+  .footer-tagline {
+    font-size: 14px; color: var(--stone); font-weight: 300;
+    line-height: 1.55; max-width: 280px; margin-bottom: 20px;
+  }
+  .footer h4 {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    color: var(--muted);
+    letter-spacing: .14em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .footer ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .footer ul a { font-size: 14px; color: var(--stone); transition: color .15s; }
+  .footer ul a:hover { color: var(--ink); }
+  .footer-bar {
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px;
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: .06em;
+  }
+  .footer-socials { display: flex; gap: 10px; }
+  .footer-socials a {
+    width: 32px; height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--stone);
+    transition: color .15s, border-color .15s;
+  }
+  .footer-socials a:hover { color: var(--navy-accent); border-color: var(--navy-accent); }
+
+  /* ───── reveal ───── */
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site-orbita.css">
+</head>
+<body>
+
+<!-- ───── NAV ───── -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a href="Orbien Home.html" class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 22 22" fill="none">
+          <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="11" cy="11" r="3" fill="currentColor"/>
+          <circle cx="20" cy="11" r="2" fill="#00B8A2"/>
+        </svg>
+      </span>
+      <span class="brand-name"><span>orbi</span><b>en</b></span>
+    </a>
+    <div class="nav-links">
+      <a href="Orbien Home.html#modulos">Funcionalidades</a>
+      <a href="Orbien Home.html#comparativo">Comparativo</a>
+      <a href="#" class="active">Preços</a>
+      <a href="#faq">Perguntas</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#" class="btn btn-ghost btn-sm">Entrar</a>
+      <a href="#cta" class="btn btn-primary btn-sm">Lista de espera</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ───── 1. HERO ───── -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Planos e preços</div>
+    <h1>Dois planos. O preço cresce com a sua igreja.</h1>
+    <p class="lead">Sem pegadinha por funcionalidade escondida. Você paga pelo plano e pela faixa de membros que sua igreja tem hoje. Quando crescer, o sistema avisa — e você tem 30 dias pra ajustar.</p>
+  </div>
+</section>
+
+<!-- ───── 2. TIER TABLE ───── -->
+<section class="section" style="padding-top: 24px;" id="faixas">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">A tabela</div>
+      <h2 class="section-title">Preço por faixa de membros</h2>
+      <p class="section-sub">Em 10 segundos: encontre sua faixa, veja o valor. Sem assistente, sem cotação.</p>
+    </div>
+
+    <!-- Desktop grid -->
+    <div class="tier-wrap reveal">
+      <div class="tier-grid">
+        <!-- header row -->
+        <div class="tier-cell tier-head">
+          <div class="label">Faixa de membros</div>
+        </div>
+        <div class="tier-cell tier-head">
+          <div class="plan-name">Starter</div>
+        </div>
+        <div class="tier-cell tier-head col-premium">
+          <div class="plan-name">Premium <span class="tag">Mais escolhido</span></div>
+        </div>
+
+        <!-- row 1 -->
+        <div class="tier-cell"><div class="tier-faixa">Até 50 membros<small>igrejas em formação</small></div></div>
+        <div class="tier-cell"><div class="tier-price"><span class="rs">R$</span>59,90<span class="per">/mês</span></div></div>
+        <div class="tier-cell col-premium"><div class="tier-price"><span class="rs">R$</span>99,90<span class="per">/mês</span></div></div>
+
+        <!-- row 2 -->
+        <div class="tier-cell"><div class="tier-faixa">51 a 150<small>perfil mais comum</small></div></div>
+        <div class="tier-cell"><div class="tier-price"><span class="rs">R$</span>89,90<span class="per">/mês</span></div></div>
+        <div class="tier-cell col-premium"><div class="tier-price"><span class="rs">R$</span>159,90<span class="per">/mês</span></div></div>
+
+        <!-- row 3 -->
+        <div class="tier-cell"><div class="tier-faixa">151 a 300<small>igrejas estabelecidas</small></div></div>
+        <div class="tier-cell"><div class="tier-price"><span class="rs">R$</span>159,90<span class="per">/mês</span></div></div>
+        <div class="tier-cell col-premium"><div class="tier-price"><span class="rs">R$</span>249,00<span class="per">/mês</span></div></div>
+
+        <!-- row 4 -->
+        <div class="tier-cell"><div class="tier-faixa">301 a 600<small>multissite começando</small></div></div>
+        <div class="tier-cell"><div class="tier-price empty">—</div></div>
+        <div class="tier-cell col-premium"><div class="tier-price"><span class="rs">R$</span>349,00<span class="per">/mês</span></div></div>
+
+        <!-- row 5 -->
+        <div class="tier-cell"><div class="tier-faixa">Acima de 600<small>conversamos plano sob medida a partir de 500</small></div></div>
+        <div class="tier-cell"><div class="tier-price empty">—</div></div>
+        <div class="tier-cell col-premium"><div class="tier-price"><span class="rs">R$</span>499,00<span class="per">/mês</span></div></div>
+      </div>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="tier-cards reveal">
+      <div class="tier-card">
+        <div class="tier-card-head">
+          <div class="name">Starter</div>
+        </div>
+        <div class="tier-card-rows">
+          <div class="tier-card-row"><div class="faixa">Até 50 membros<small>igrejas em formação</small></div><div class="tier-price"><span class="rs">R$</span>59,90<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">51 a 150<small>perfil mais comum</small></div><div class="tier-price"><span class="rs">R$</span>89,90<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">151 a 300<small>igrejas estabelecidas</small></div><div class="tier-price"><span class="rs">R$</span>159,90<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">301 a 600</div><div class="tier-price empty">—</div></div>
+          <div class="tier-card-row"><div class="faixa">Acima de 600</div><div class="tier-price empty">—</div></div>
+        </div>
+      </div>
+
+      <div class="tier-card premium">
+        <div class="tier-card-head">
+          <div class="name">Premium</div>
+          <div class="tag">Mais escolhido</div>
+        </div>
+        <div class="tier-card-rows">
+          <div class="tier-card-row"><div class="faixa">Até 50 membros<small>igrejas em formação</small></div><div class="tier-price"><span class="rs">R$</span>99,90<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">51 a 150<small>perfil mais comum</small></div><div class="tier-price"><span class="rs">R$</span>159,90<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">151 a 300<small>igrejas estabelecidas</small></div><div class="tier-price"><span class="rs">R$</span>249,00<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">301 a 600<small>multissite começando</small></div><div class="tier-price"><span class="rs">R$</span>349,00<span class="per">/mês</span></div></div>
+          <div class="tier-card-row"><div class="faixa">Acima de 600<small>plano sob medida a partir de 500</small></div><div class="tier-price"><span class="rs">R$</span>499,00<span class="per">/mês</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tier-notes">
+      <p>Starter não está disponível acima de 300 membros.</p>
+      <p>10% de desconto no primeiro ano do Premium.</p>
+      <p>Filial adicional: R$ 49,90 (Starter) / R$ 79,90 (Premium) por mês.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───── 3. COMPARE ───── -->
+<section class="section compare-section" id="compare">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">O que está incluso</div>
+      <h2 class="section-title">O que cabe em cada plano</h2>
+      <p class="section-sub">Cinco frentes da gestão da igreja, lado a lado. Sem categoria "Enterprise" escondendo o que importa.</p>
+    </div>
+
+    <div class="compare-wrap reveal">
+
+      <!-- Group 1 -->
+      <div class="compare-group">
+        <div class="compare-group-head">
+          <div>Acesso e identidade</div>
+          <div class="col">Starter</div>
+          <div class="col me">Premium</div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Igreja sem CNPJ</div>
+          <div class="cell starter"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Cadastro ilimitado de membros</div>
+          <div class="cell starter"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">App nas lojas</div>
+          <div class="cell starter has-text"><span class="qual">skin da igreja</span></div>
+          <div class="cell premium has-text"><span class="qual">app próprio</span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Domínio próprio (web)</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+      </div>
+
+      <!-- Group 2 -->
+      <div class="compare-group">
+        <div class="compare-group-head">
+          <div>Doações e PIX</div>
+          <div class="col">Starter</div>
+          <div class="col me">Premium</div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">PIX por chave manual</div>
+          <div class="cell starter"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Página pública de doação</div>
+          <div class="cell starter has-text"><span class="qual">chave PIX</span></div>
+          <div class="cell premium has-text"><span class="qual">QR dinâmico</span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">PIX com QR dinâmico</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">PIX recorrente (dízimo automático)</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Recibo automático por email</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+      </div>
+
+      <!-- Group 3 -->
+      <div class="compare-group">
+        <div class="compare-group-head">
+          <div>Financeiro e contabilidade</div>
+          <div class="col">Starter</div>
+          <div class="col me">Premium</div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Dashboard de entradas semanais</div>
+          <div class="cell starter"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">DRE, fluxo de caixa, forecast</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Exportação contábil (OFX, SPED)</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Carnê do dizimista (IR)</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+      </div>
+
+      <!-- Group 4 -->
+      <div class="compare-group">
+        <div class="compare-group-head">
+          <div>Pequenos grupos</div>
+          <div class="col">Starter</div>
+          <div class="col me">Premium</div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Cadastro e materiais</div>
+          <div class="cell starter"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Semáforo de saúde da célula</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+      </div>
+
+      <!-- Group 5 -->
+      <div class="compare-group">
+        <div class="compare-group-head">
+          <div>Suporte</div>
+          <div class="col">Starter</div>
+          <div class="col me">Premium</div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Suporte por email</div>
+          <div class="cell starter"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Suporte por WhatsApp</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        </div>
+
+        <div class="compare-row">
+          <div class="feature">Treinamento da equipe</div>
+          <div class="cell starter"><span class="em-dash">—</span></div>
+          <div class="cell premium has-text"><span class="qual">1 sessão inclusa</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ───── 4. IMPLANTATION ───── -->
+<section class="section" id="implantacao" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Setup inicial</div>
+      <h2 class="section-title">Implantação — pagamento único na contratação</h2>
+      <p class="section-sub">Cobrado uma vez, no início. Depois é só a mensalidade da tabela acima.</p>
+    </div>
+
+    <div class="impl-grid">
+      <div class="impl-card reveal">
+        <div class="label">Plano Starter</div>
+        <div class="name">Starter</div>
+        <div class="value"><span class="rs">R$</span>299,00<span class="once">único</span></div>
+        <p class="desc">Setup completo do ambiente, importação dos primeiros dados e treinamento da equipe. Sem publicação nas lojas.</p>
+      </div>
+
+      <div class="impl-card reveal">
+        <div class="label">Plano Premium</div>
+        <div class="name">Premium</div>
+        <div class="value"><span class="rs">R$</span>499,00<span class="once">único</span></div>
+        <p class="desc">Tudo do Starter + publicação do app próprio nas lojas (App Store e Google Play) via EAS Build.</p>
+      </div>
+
+      <div class="impl-card reveal">
+        <div class="label">Vindo de outro sistema</div>
+        <div class="name">Migração assistida</div>
+        <div class="value"><span class="rs">R$</span>499<span class="once">a R$ 999</span></div>
+        <p class="desc">Pra igrejas vindas de Eklesia, InPeace ou planilha. A gente faz a importação e validação dos dados junto com você.</p>
+      </div>
+    </div>
+
+    <div class="impl-note reveal">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <div>Publicação nas lojas exige conta própria da igreja na <strong style="color: var(--ink); font-weight: 500;">Apple Developer</strong> (US$ 99/ano) e <strong style="color: var(--ink); font-weight: 500;">Google Play Console</strong> (US$ 25, pagamento único).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── 5. SEM CNPJ ───── -->
+<section class="nocnpj">
+  <div class="wrap nocnpj-inner">
+    <div>
+      <div class="eyebrow">Antes da formalização</div>
+      <h2>Sua igreja ainda não tem CNPJ?</h2>
+      <p>O Starter foi feito pra você. Comece hoje, formalize depois — a gente faz a transição sem complicação.</p>
+      <a href="/sem-cnpj" class="btn btn-white btn-lg">
+        Veja como funciona
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    </div>
+    <div class="nocnpj-stat">
+      <div class="row">
+        <span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span>PIX cai direto na chave da igreja</span>
+      </div>
+      <div class="row">
+        <span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span>Orbien não toca no dinheiro</span>
+      </div>
+      <div class="row">
+        <span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span>Migração pro Premium em 15 min</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── 6. FAQ ───── -->
+<section class="section" id="faq">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">FAQ</div>
+      <h2 class="section-title">Perguntas sobre preço e contrato</h2>
+      <p class="section-sub">As coisas que aparecem antes de assinar — e que a gente prefere responder agora.</p>
+    </div>
+
+    <div class="faq-list">
+
+      <details class="faq reveal">
+        <summary>Posso começar no Starter e migrar pro Premium depois?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Sim. Todos os dados migram automaticamente, sem retrabalho. O ajuste de cobrança é <strong>pro rata</strong> no mês da mudança.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Tem fidelidade?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">O contrato tem prazo mínimo de <strong>12 meses</strong>. A multa por cancelamento antecipado é de <strong>35% do que sobrar</strong>. O trial de 14 dias não conta — você só assume o contrato quando decide ficar.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Quem cobra do membro quando ele doa?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">No <strong>Starter</strong>, a doação cai direto na chave PIX da igreja — a Orbien não toca no dinheiro. No <strong>Premium</strong>, a Asaas processa e repassa em D+1.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Quanto custa a taxa de PIX?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body"><strong>Cenário 1 (PIX manual, Starter e Premium):</strong> sem taxa — o dinheiro cai direto na chave da igreja, a Orbien não toca. <strong>Cenário 2 (PIX dinâmico, Premium):</strong> a Asaas cobra cerca de 1% e a Orbien retém 1% pelo serviço de orquestração — total aproximado de <strong>2% por transação</strong>.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>E se a igreja crescer e passar de 300 membros?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Sem problema. Não há limite duro no Premium. Conversamos sobre plano sob medida a partir de <strong>500 membros</strong>.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Posso pagar anualmente com desconto?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Sim, <strong>dois meses grátis</strong> no pagamento anual de qualquer plano.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Cobra por membro cadastrado?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Não. Os planos têm cadastro ilimitado de membros e visitantes. O preço varia pela <strong>faixa de membros ativos</strong> da igreja, não pelo total cadastrado.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Tem limite de espaço pra fotos e arquivos?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body"><strong>Starter:</strong> 5 GB. <strong>Premium:</strong> 50 GB. Aumenta sob demanda.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Como funciona o reajuste anual?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body"><strong>IGPM/IPCA</strong> (o maior dos dois), aplicado na renovação anual, com aviso de 30 dias.</div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- ───── 7. FINAL CTA ───── -->
+<section class="final-cta" id="cta">
+  <div class="wrap final-cta-inner reveal">
+    <div class="eyebrow">Sem pressa</div>
+    <h2>Ainda em dúvida sobre qual plano serve?</h2>
+    <p>Reservamos 30 minutos pra te mostrar a Orbien rodando, com o cenário da sua igreja em mente.</p>
+    <div class="final-cta-actions">
+      <a href="#" class="btn btn-teal btn-lg">
+        Agendar demonstração
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+      <a href="#" class="wpp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+        Prefere conversar agora? Fale no WhatsApp →
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───── 8. FOOTER ───── -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand-col">
+        <a href="Orbien Home.html" class="brand">
+          <span class="brand-mark">
+            <svg viewBox="0 0 22 22" fill="none">
+              <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="11" cy="11" r="3" fill="currentColor"/>
+              <circle cx="20" cy="11" r="2" fill="#00B8A2"/>
+            </svg>
+          </span>
+          <span class="brand-name"><span>orbi</span><b>en</b></span>
+        </a>
+        <p class="footer-tagline">Gestão que serve. Igreja que cresce. Plataforma e app white-label para igrejas de 50 a 300 membros.</p>
+        <div class="footer-socials">
+          <a href="#" aria-label="Instagram">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"/></svg>
+          </a>
+          <a href="#" aria-label="YouTube">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+          </a>
+          <a href="#" aria-label="LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <h4>Produto</h4>
+        <ul>
+          <li><a href="Orbien Home.html#modulos">Funcionalidades</a></li>
+          <li><a href="#">Preços</a></li>
+          <li><a href="Orbien Home.html#comparativo">Comparativo</a></li>
+          <li><a href="#">Roadmap</a></li>
+          <li><a href="#">Mudanças</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Empresa</h4>
+        <ul>
+          <li><a href="#">Sobre</a></li>
+          <li><a href="#">Pastores parceiros</a></li>
+          <li><a href="#">Contato</a></li>
+          <li><a href="#">WhatsApp</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Legal e segurança</h4>
+        <ul>
+          <li><a href="#">Termos de uso</a></li>
+          <li><a href="#">Política de privacidade</a></li>
+          <li><a href="#">LGPD</a></li>
+          <li><a href="#">Status</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <div>© 2026 Church Platform Ltda · CNPJ a definir · Passo Fundo · RS</div>
+      <div>orbien.app</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

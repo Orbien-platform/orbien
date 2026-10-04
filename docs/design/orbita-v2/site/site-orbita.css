@@ -1,0 +1,33 @@
+/* Órbita — direção visual v2 para o site (sobrepõe o CSS de cada página) */
+html:root{--navy-accent:#7FA0E6;--navy-dim:#141C36;--navy-tint:#0C1122;--teal:#00E5C7;--teal-bright:#3DF2D9;--teal-dim:rgba(0,229,199,.12);--crimson-dim:rgba(255,122,107,.12);--bg:#05070F;--ink:#F2F1EE;--on-ink:#0A0E1C;--surface:#0B0F1D;--subtle:#121729;--sand:#0A0E1C;--stone:#A9AEBD;--muted:#6C7286;--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--nav-bg:rgba(5,7,15,.6);--hero-glow:rgba(43,79,168,.25);--shadow-sm:none;--shadow-md:0 10px 30px rgba(0,0,0,.45);--shadow-lg:0 30px 80px rgba(0,0,0,.55);--shadow-xl:0 40px 120px rgba(30,58,123,.35);color-scheme:dark}
+html{color-scheme:dark}
+body{font-family:'Geist',system-ui,sans-serif!important;background:#05070F!important;color:#F2F1EE}
+h1,h2,.section-title{font-family:'Instrument Serif',Georgia,serif!important;font-weight:400!important;letter-spacing:-.015em!important}
+h1{font-size:clamp(52px,7.2vw,104px)!important;line-height:.98!important}
+h2,.section-title{line-height:1.03!important}
+h1 .accent,h2 .accent,h1 .teal,.accent{color:#00E5C7!important;font-style:italic;-webkit-text-fill-color:#00E5C7;background:none!important}
+h3{font-family:'Geist',sans-serif;font-weight:500;letter-spacing:-.01em}
+.eyebrow{font-family:'Geist Mono',monospace!important;color:#00E5C7!important;letter-spacing:.16em!important}
+.eyebrow::before{background:#00E5C7!important}
+.lead,.section-sub{color:#A9AEBD!important;font-weight:300}
+.mono,code,[class*="mono"]{font-family:'Geist Mono',monospace}
+.btn{border-radius:999px!important;font-family:'Geist',sans-serif!important;font-weight:500!important}
+.btn-primary,.btn-teal{background:#00E5C7!important;color:#03110E!important;border:none!important}
+.btn-primary:hover,.btn-teal:hover{background:#fff!important;color:#03110E!important;box-shadow:0 0 40px rgba(0,229,199,.45)!important}
+.btn-secondary{background:transparent!important;color:#F2F1EE!important;border:1px solid rgba(255,255,255,.16)!important}
+.btn-secondary:hover{border-color:#00E5C7!important;color:#00E5C7!important}
+.btn-ghost{color:#A9AEBD!important}.btn-ghost:hover{color:#00E5C7!important;background:transparent!important}
+nav,header.nav,.nav{background:rgba(5,7,15,.6)!important;backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.08)!important}
+.hero{position:relative;overflow:hidden}
+.hero-bg{position:absolute!important;inset:0!important;background:none!important;pointer-events:none;overflow:hidden}
+.hero-bg::before{content:'';position:absolute;right:-300px;top:50%;width:960px;height:960px;transform:translateY(-50%);border-radius:50%;border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 0 0 120px transparent,0 0 0 0 transparent;background:radial-gradient(circle,rgba(43,79,168,.5) 0,rgba(30,58,123,.12) 22%,transparent 34%),radial-gradient(circle,transparent 61.5%,rgba(43,79,168,.35) 62%,transparent 62.6%),radial-gradient(circle,transparent 36.5%,rgba(255,255,255,.07) 37%,transparent 37.6%)}
+.hero-bg::after{content:'';position:absolute;right:172px;top:calc(50% - 8px);width:16px;height:16px;border-radius:50%;background:#00E5C7;box-shadow:0 0 30px 6px rgba(0,229,199,.55);transform-origin:8px 8px;animation:orbSat 26s linear infinite}
+@keyframes orbSat{from{transform:rotate(0) translateX(480px) rotate(0)}to{transform:rotate(360deg) translateX(480px) rotate(-360deg)}}
+section{border-color:rgba(255,255,255,.08)!important}
+.card,[class*="card"],.price,[class*="price-card"],.faq-item,details{border-color:rgba(255,255,255,.08)!important}
+[class*="card"]:not([class*="card-"]),.price{background:linear-gradient(180deg,#0C1121,#090C18)!important}
+.final-cta{background:radial-gradient(ellipse at 50% 120%,rgba(0,229,199,.22),transparent 60%),#05070F!important;border-top:1px solid rgba(255,255,255,.08)}
+.final-cta h2{font-size:clamp(48px,7vw,96px)!important}
+footer{background:#05070F!important;border-top:1px solid rgba(255,255,255,.08)}
+a:not(.btn){transition:color .2s}
+::selection{background:#00E5C7;color:#03110E}

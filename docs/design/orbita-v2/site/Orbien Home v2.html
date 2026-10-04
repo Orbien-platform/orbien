@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbien — A plataforma de gestão que cabe na sua igreja</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Brand — invariant */
+    --navy:           #1E3A7B;
+    --navy-dark:      #162D62;
+    --teal:           #00B8A2;
+    --teal-bright:    #00CDB5;
+    --crimson:        #C0392B;
+    --burgundy:       #991B1B;
+
+    /* Semantic — light theme */
+    --navy-accent:    #1E3A7B;   /* navy used as text/border — readable on bg */
+    --navy-dim:       #D4DCEF;
+    --navy-tint:      #F0F3FA;
+    --teal-dim:       #D0F5F1;
+    --crimson-dim:    #FDECEA;
+    --bg:             #F5F4F1;   /* parchment */
+    --ink:            #0F1117;
+    --on-ink:         #0F1117;   /* ink that should STAY dark (chips, final cta bg) */
+    --surface:        #FFFFFF;
+    --subtle:         #EEECEA;
+    --sand:           #EAE6DF;
+    --stone:          #5C5A56;
+    --muted:          #9B9893;
+    --border:         #E0DDD9;
+    --border-strong:  #C8C5C0;
+    --nav-bg:         rgba(245,244,241,.85);
+    --hero-glow:      rgba(30,58,123,.06);
+
+    --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+    --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+    --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
+    --shadow-xl: 0 24px 60px rgba(15,17,23,.16), 0 8px 20px rgba(15,17,23,.08);
+  }
+
+  /* Dark theme — auto, based on OS / browser preference */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --navy-accent:  #7A99D9;   /* brighter navy for text on dark bg */
+      --navy-dim:     #1A2540;
+      --navy-tint:    #161D33;
+      --teal-dim:     #0A2E2A;
+      --crimson-dim:  #2A1414;
+      --bg:           #0F1117;
+      --ink:          #F5F4F1;
+      --on-ink:       #1A1D27;   /* lifted slightly above bg for separation */
+      --surface:      #13151E;
+      --subtle:       #1C1F2B;
+      --sand:         #16192A;
+      --stone:        #B5B2AD;
+      --muted:        #7A7975;
+      --border:       #232634;
+      --border-strong:#2E3142;
+      --nav-bg:       rgba(15,17,23,.78);
+      --hero-glow:    rgba(122,153,217,.08);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.20);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.24);
+      --shadow-xl: 0 24px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.32);
+    }
+    /* Slight surface lift on hero illustration to separate from page bg */
+    img, svg { color-scheme: dark; }
+  }
+
+  html { color-scheme: light dark; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.5;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  svg { display: block; }
+
+  /* ────── Layout primitives ────── */
+  .wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 80px 0; }
+  @media (max-width: 720px) { .section { padding: 64px 0; } }
+
+  .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--navy-accent);
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before {
+    content: ''; display: block; width: 24px; height: 1px; background: var(--navy-accent);
+  }
+  .eyebrow.muted { color: var(--stone); }
+  .eyebrow.muted::before { background: var(--stone); }
+
+  h1, h2, h3 { color: var(--ink); letter-spacing: -.02em; text-wrap: balance; }
+  h1 { font-weight: 600; }
+  h2 { font-weight: 500; letter-spacing: -.025em; }
+  h3 { font-weight: 500; }
+
+  .section-title {
+    font-size: clamp(30px, 4.2vw, 44px);
+    line-height: 1.1;
+    margin-bottom: 14px;
+  }
+  .section-sub {
+    font-size: 17px;
+    font-weight: 300;
+    color: var(--stone);
+    max-width: 620px;
+    line-height: 1.6;
+  }
+  .section-head { margin-bottom: 48px; }
+  .section-head .eyebrow { margin-bottom: 18px; }
+
+  /* ────── Nav ────── */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--nav-bg);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid rgba(224,221,217,.6);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 500; font-size: 17px; letter-spacing: -.02em;
+  }
+  .brand-mark { width: 22px; height: 22px; position: relative; color: var(--navy-accent); }
+  .brand-mark svg { width: 100%; height: 100%; }
+  .nav-links { display: flex; align-items: center; gap: 28px; }
+  .nav-links a {
+    font-size: 14px; color: var(--stone); font-weight: 400;
+    transition: color .15s;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-actions { display: flex; align-items: center; gap: 8px; }
+  @media (max-width: 860px) { .nav-links { display: none; } }
+
+  /* ────── Buttons ────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px; font-weight: 500;
+    letter-spacing: -.005em;
+    transition: transform .12s ease, box-shadow .15s ease, background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover { background: var(--navy-dark); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-secondary { background: transparent; color: var(--navy-accent); border: 1px solid var(--navy-accent); }
+  .btn-secondary:hover { background: var(--navy-dim); }
+  .btn-ghost { color: var(--stone); padding: 12px 14px; }
+  .btn-ghost:hover { color: var(--ink); }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn-teal:hover { background: #00a08c; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-white { background: #fff; color: var(--ink); }
+  .btn-white:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-lg { padding: 14px 24px; font-size: 15px; }
+  .btn-sm { padding: 8px 14px; font-size: 13px; }
+
+  /* ────── HERO ────── */
+  .hero { padding: 56px 0 96px; position: relative; overflow: hidden; }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 56px;
+    align-items: center;
+  }
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .hero { padding: 40px 0 64px; }
+  }
+  .hero-eyebrow { margin-bottom: 24px; }
+  .hero h1 {
+    font-size: clamp(36px, 6.4vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+    margin-bottom: 22px;
+    max-width: 620px;
+  }
+  .hero h1 .accent { color: var(--navy-accent); font-weight: 600; }
+  .hero p.lead {
+    font-size: clamp(17px, 1.8vw, 19px);
+    font-weight: 300;
+    color: var(--stone);
+    line-height: 1.55;
+    max-width: 520px;
+    margin-bottom: 32px;
+  }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 28px; }
+  .hero-meta {
+    display: flex; gap: 22px; flex-wrap: wrap;
+    font-size: 12px; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: .04em;
+  }
+  .hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .hero-meta .tick {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--teal-dim); color: var(--teal);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Mockup composition */
+  .mockup-stage {
+    position: relative;
+    aspect-ratio: 5/4.2;
+    min-height: 420px;
+  }
+  @media (max-width: 980px) { .mockup-stage { min-height: 380px; } }
+  @media (max-width: 520px) { .mockup-stage { min-height: 340px; aspect-ratio: 5/4.6; } }
+
+  .mock-dashboard {
+    position: absolute;
+    top: 8%; left: 0; right: 14%;
+    bottom: 14%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-xl);
+    transform: perspective(1600px) rotateY(-6deg) rotateX(2deg);
+    transform-origin: center right;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .mock-bar {
+    height: 28px;
+    background: var(--subtle);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 5px; padding: 0 12px;
+  }
+  .mock-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+  .mock-bar .url {
+    margin-left: 16px;
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--muted);
+  }
+  .mock-body { padding: 16px 18px; flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .mock-header { display: flex; align-items: center; justify-content: space-between; }
+  .mock-title { font-size: 13px; font-weight: 500; letter-spacing: -.01em; }
+  .mock-title small { display: block; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); font-weight: 400; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+  .mock-pill {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; padding: 3px 8px;
+    background: var(--teal-dim); color: var(--teal);
+    border-radius: 100px; letter-spacing: .06em;
+  }
+  .mock-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mock-kpi {
+    background: var(--subtle);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 11px;
+  }
+  .mock-kpi .lbl { font-size: 9px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+  .mock-kpi .val { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+  .mock-kpi .delta { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--teal); margin-top: 2px; }
+
+  .mock-chart {
+    flex: 1;
+    min-height: 80px;
+    background: linear-gradient(180deg, var(--navy-tint) 0%, transparent 100%);
+    border-radius: 8px;
+    position: relative;
+    padding: 8px 10px 0;
+    color: var(--navy-accent);
+  }
+  .mock-chart svg { width: 100%; height: 100%; }
+  .mock-chart-label {
+    position: absolute; left: 10px; top: 8px;
+    font-family: 'DM Mono', monospace; font-size: 9px;
+    color: var(--navy-accent); letter-spacing: .08em; text-transform: uppercase;
+  }
+
+  .mock-row {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px;
+    background: var(--subtle);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .mock-avatar { width: 22px; height: 22px; border-radius: 6px; background: var(--navy-dim); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: var(--navy-accent); }-navy); }
+  .mock-name { font-size: 11px; font-weight: 500; }
+  .mock-sub  { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: .04em; }
+  .mock-tag  { margin-left: auto; font-size: 9px; padding: 2px 7px; border-radius: 100px; background: var(--teal-dim); color: var(--teal); font-weight: 500; }
+
+  /* Phone */
+  .mock-phone {
+    position: absolute;
+    right: 0; bottom: 0;
+    width: 38%;
+    aspect-ratio: 9/19;
+    background: var(--on-ink);
+    border-radius: 28px;
+    padding: 6px;
+    box-shadow: var(--shadow-xl), 0 0 0 1px var(--border);
+    transform: perspective(1400px) rotateY(8deg) rotateX(2deg) translateZ(0);
+    transform-origin: left center;
+  }
+  .mock-phone-screen {
+    width: 100%; height: 100%;
+    background: var(--surface);
+    border-radius: 22px;
+    overflow: hidden;
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  .mock-phone-notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 64px; height: 18px; background: var(--on-ink); border-radius: 100px;
+    z-index: 2;
+  }
+  .mock-phone-head {
+    padding: 36px 14px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .mock-phone-head .crumb { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+  .mock-phone-head h4 { font-size: 14px; letter-spacing: -.02em; font-weight: 600; }
+  .mock-phone-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; flex: 1; }
+  .mock-field {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+    background: var(--surface);
+  }
+  .mock-field .lbl { font-size: 8px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; font-weight: 500; margin-bottom: 2px; }
+  .mock-field .val { font-size: 11px; color: var(--ink); font-weight: 500; }
+  .mock-field.focus { border-color: var(--navy); box-shadow: 0 0 0 3px var(--navy-dim); }
+  .mock-phone-cta {
+    margin-top: auto;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    font-size: 11px; font-weight: 500;
+  }
+
+  /* ────── CREDIBILITY ────── */
+  .credibility {
+    padding: 32px 0;
+    background: var(--sand);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .cred-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 28px; flex-wrap: wrap;
+  }
+  .cred-quote {
+    font-size: 15px; font-weight: 400; color: var(--ink);
+    font-style: italic;
+    max-width: 360px;
+  }
+  .cred-quote::before { content: '“'; color: var(--navy-accent); font-weight: 600; }
+  .cred-quote::after  { content: '”'; color: var(--navy-accent); font-weight: 600; }
+  .cred-tag {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--stone); letter-spacing: .14em; text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .cred-tag::before { content: ''; width: 20px; height: 1px; background: var(--stone); }
+
+  /* ────── PILLARS ────── */
+  .pillars-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 860px) { .pillars-grid { grid-template-columns: 1fr; } }
+  .pillar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+    transition: transform .2s, box-shadow .2s, border-color .2s;
+  }
+  .pillar:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+  .pillar-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    background: var(--navy-tint);
+    color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px;
+  }
+  .pillar h3 { font-size: 20px; line-height: 1.25; margin-bottom: 10px; letter-spacing: -.02em; font-weight: 600; }
+  .pillar p { font-size: 14.5px; color: var(--stone); line-height: 1.6; font-weight: 300; }
+
+  /* ────── MODULES (4 cards) ────── */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 720px) { .modules-grid { grid-template-columns: 1fr; } }
+  .mod {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 14px;
+    transition: border-color .2s, box-shadow .2s;
+    position: relative;
+  }
+  .mod:hover { border-color: var(--navy); box-shadow: var(--shadow-md); }
+  .mod-top { display: flex; align-items: center; gap: 14px; }
+  .mod-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--teal-dim);
+    color: var(--teal);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .mod h3 { font-size: 17px; letter-spacing: -.015em; font-weight: 600; }
+  .mod p { font-size: 14px; color: var(--stone); line-height: 1.6; font-weight: 300; flex: 1; }
+  .mod-link {
+    font-size: 13px; font-weight: 500; color: var(--navy-accent);
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: gap .15s;
+  }
+  .mod:hover .mod-link { gap: 8px; }
+
+  /* ────── SOCIAL PROOF ────── */
+  .proof {
+    background: var(--sand);
+  }
+  .proof-card {
+    max-width: 720px; margin: 0 auto;
+    text-align: center;
+    padding: 56px 32px;
+  }
+  .proof-card .eyebrow { margin-bottom: 18px; }
+  .proof-text {
+    font-size: clamp(20px, 2.4vw, 26px);
+    font-weight: 300;
+    line-height: 1.4;
+    color: var(--ink);
+    letter-spacing: -.015em;
+  }
+  .proof-text strong { color: var(--navy-accent); font-weight: 600; }
+  .proof-note {
+    margin-top: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  /* ────── COMPARE ────── */
+  .compare-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    align-items: center;
+  }
+  .compare-row > div { padding: 18px 24px; }
+  .compare-row.head {
+    background: var(--subtle);
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-row.head > div {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--stone);
+    font-weight: 500;
+  }
+  .compare-row.head .me { color: var(--navy-accent); }
+  .compare-row + .compare-row { border-top: 1px solid var(--border); }
+  .compare-row:nth-child(odd):not(.head) { background: var(--bg); }
+  .compare-row .feature { font-size: 14.5px; font-weight: 500; color: var(--ink); }
+  .compare-row .other   { font-size: 14px; color: var(--stone); font-weight: 300; display: flex; align-items: center; gap: 8px; }
+  .compare-row .ours    { font-size: 14px; color: var(--ink); font-weight: 500; display: flex; align-items: center; gap: 8px; border-left: 2px solid var(--teal); background: rgba(0,184,162,.04); }
+  .check { width: 18px; height: 18px; border-radius: 50%; background: var(--teal-dim); color: var(--teal); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .cross { width: 18px; height: 18px; border-radius: 50%; background: var(--crimson-dim); color: var(--crimson); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  @media (max-width: 720px) {
+    .compare-row { grid-template-columns: 1fr; }
+    .compare-row > div { padding: 12px 18px; }
+    .compare-row .feature { padding-bottom: 4px; padding-top: 16px; }
+    .compare-row .other::before { content: 'Outros · '; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
+    .compare-row .ours::before  { content: 'Orbien · '; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--navy-accent); letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
+    .compare-row .ours { border-left: none; border-top: 1px dashed var(--border); }
+    .compare-row.head { display: none; }
+  }
+
+  /* ────── PRICING ────── */
+  .price-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 820px) { .price-grid { grid-template-columns: 1fr; } }
+  .price {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+    display: flex; flex-direction: column; gap: 20px;
+    position: relative;
+  }
+  .price-featured { border-color: var(--navy); box-shadow: var(--shadow-md); }
+  .price-badge {
+    position: absolute; top: -10px; left: 32px;
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    background: var(--on-ink); color: #fff;
+    padding: 4px 10px; border-radius: 100px;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  .price-featured .price-badge { background: var(--teal); }
+  .price-name { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); }
+  .price-amount { font-size: 38px; font-weight: 600; letter-spacing: -.03em; line-height: 1; }
+  .price-amount small { font-family: 'DM Mono', monospace; display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-bottom: 6px; letter-spacing: .08em; text-transform: uppercase; }
+  .price-amount .per { font-size: 14px; font-weight: 400; color: var(--stone); letter-spacing: 0; }
+  .price-target { font-size: 13.5px; color: var(--stone); font-weight: 300; }
+  .price-bullets { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .price-bullets li { display: flex; gap: 10px; font-size: 14px; color: var(--ink); line-height: 1.5; font-weight: 400; }
+  .price-bullets li .check { margin-top: 2px; }
+  .price hr { border: none; border-top: 1px solid var(--border); }
+  .price-cta { margin-top: auto; }
+
+  .price-foot {
+    text-align: center; margin-top: 32px;
+  }
+
+  /* ────── FAQ ────── */
+  .faq-list { display: flex; flex-direction: column; gap: 8px; max-width: 820px; }
+  .faq {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color .15s;
+  }
+  .faq[open] { border-color: var(--border-strong); }
+  .faq summary {
+    list-style: none;
+    padding: 22px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    cursor: pointer;
+    font-size: 16px; font-weight: 500; letter-spacing: -.01em;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary:hover { background: var(--bg); }
+  .faq-icon {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--navy-tint);
+    color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: transform .2s;
+  }
+  .faq[open] .faq-icon { transform: rotate(45deg); background: var(--navy); color: #fff; }
+  .faq-body {
+    padding: 0 24px 24px;
+    font-size: 14.5px; color: var(--stone); line-height: 1.65; font-weight: 300;
+    max-width: 680px;
+  }
+
+  /* ────── FINAL CTA ────── */
+  .final-cta {
+    background: var(--on-ink);
+    color: #fff;
+    padding: 96px 0;
+    position: relative;
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .final-cta::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 80% 20%, rgba(30,58,123,.35), transparent 50%),
+      radial-gradient(circle at 10% 90%, rgba(0,184,162,.15), transparent 50%);
+    pointer-events: none;
+  }
+  .final-cta-inner { position: relative; max-width: 720px; }
+  .final-cta .eyebrow { color: var(--teal); margin-bottom: 20px; }
+  .final-cta .eyebrow::before { background: var(--teal); }
+  .final-cta h2 {
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.05;
+    letter-spacing: -.03em;
+    margin-bottom: 18px;
+  }
+  .final-cta p {
+    font-size: 18px;
+    color: #BFC0C9;
+    font-weight: 300;
+    line-height: 1.55;
+    margin-bottom: 32px;
+    max-width: 540px;
+  }
+  .final-cta-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .final-cta-actions a.wpp {
+    color: #fff; font-size: 14px; font-weight: 400;
+    display: inline-flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,.25);
+    padding-bottom: 2px; transition: border-color .15s;
+  }
+  .final-cta-actions a.wpp:hover { border-color: var(--teal); color: var(--teal); }
+
+  /* ────── FOOTER ────── */
+  .footer {
+    background: var(--bg);
+    padding: 64px 0 32px;
+    border-top: 1px solid var(--border);
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+  @media (max-width: 820px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+    .footer-brand-col { grid-column: 1 / -1; }
+  }
+  @media (max-width: 520px) { .footer-grid { grid-template-columns: 1fr; } }
+
+  .footer-brand-col .brand { font-size: 19px; margin-bottom: 14px; }
+  .footer-tagline {
+    font-size: 14px; color: var(--stone); font-weight: 300;
+    line-height: 1.55; max-width: 280px; margin-bottom: 20px;
+  }
+  .footer h4 {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    color: var(--muted);
+    letter-spacing: .14em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .footer ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .footer ul a { font-size: 14px; color: var(--stone); transition: color .15s; }
+  .footer ul a:hover { color: var(--ink); }
+  .footer-bar {
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px;
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: .06em;
+  }
+  .footer-socials { display: flex; gap: 10px; }
+  .footer-socials a {
+    width: 32px; height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--stone);
+    transition: color .15s, border-color .15s;
+  }
+  .footer-socials a:hover { color: var(--navy-accent); border-color: var(--navy-accent); }
+
+  /* ────── Reveal animation ────── */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* Hero subtle backdrop */
+  .hero-bg {
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, var(--hero-glow), transparent 65%);
+    pointer-events: none;
+    z-index: -1;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site-orbita.css">
+</head>
+<body>
+
+<!-- ───────────── NAV ───────────── -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a href="#" class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 22 22" fill="none">
+          <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="11" cy="11" r="3" fill="currentColor"/>
+          <circle cx="20" cy="11" r="2" fill="#00B8A2"/>
+        </svg>
+      </span>
+      Orbien
+    </a>
+    <div class="nav-links">
+      <a href="#modulos">Funcionalidades</a>
+      <a href="#comparativo">Comparativo</a>
+      <a href="#precos">Preços</a>
+      <a href="#faq">Perguntas</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#login" class="btn btn-ghost btn-sm">Entrar</a>
+      <a href="#waitlist" class="btn btn-primary btn-sm">Lista de espera</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ───────────── HERO ───────────── -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow hero-eyebrow">Plataforma de gestão para igrejas</div>
+        <h1>A plataforma de gestão que <span class="accent">cabe na sua igreja.</span></h1>
+        <p class="lead">Membros, finanças, células e app próprio nas lojas — mesmo que sua igreja ainda não tenha CNPJ. Comece hoje, sem cartão de crédito.</p>
+        <div class="hero-ctas">
+          <a href="#waitlist" class="btn btn-primary btn-lg">
+            Entrar na lista de espera
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+          <a href="#pilares" class="btn btn-secondary btn-lg">
+            Ver como funciona
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          </a>
+        </div>
+        <div class="hero-meta">
+          <span><span class="tick"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>SEM CNPJ</span>
+          <span><span class="tick"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>SEM CARTÃO</span>
+          <span><span class="tick"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>5 MIN PARA COMEÇAR</span>
+        </div>
+      </div>
+
+      <!-- Mockup composition -->
+      <div class="mockup-stage">
+        <!-- Dashboard mock -->
+        <div class="mock-dashboard">
+          <div class="mock-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="url">orbien.app/painel</span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-header">
+              <div class="mock-title">
+                <small>Painel · Esta semana</small>
+                Olá, Pastor André
+              </div>
+              <span class="mock-pill">● Ao vivo</span>
+            </div>
+
+            <div class="mock-kpis">
+              <div class="mock-kpi"><div class="lbl">Doações</div><div class="val">R$ 2.840</div><div class="delta">+14%</div></div>
+              <div class="mock-kpi"><div class="lbl">Visitantes</div><div class="val">12</div><div class="delta">+3 vs sem. ant.</div></div>
+              <div class="mock-kpi"><div class="lbl">Células ativas</div><div class="val">3</div><div class="delta">de 4</div></div>
+            </div>
+
+            <div class="mock-chart">
+              <div class="mock-chart-label">Doações · últimos 7 dias</div>
+              <svg viewBox="0 0 300 80" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="currentColor" stop-opacity=".3"/>
+                    <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,60 L40,52 L80,58 L120,40 L160,46 L200,28 L240,32 L300,18 L300,80 L0,80 Z" fill="url(#grad)"/>
+                <path d="M0,60 L40,52 L80,58 L120,40 L160,46 L200,28 L240,32 L300,18" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <circle cx="300" cy="18" r="3" fill="#00B8A2"/>
+              </svg>
+            </div>
+
+            <div class="mock-row">
+              <div class="mock-avatar">MR</div>
+              <div>
+                <div class="mock-name">Marina Rodrigues</div>
+                <div class="mock-sub">3ª visita · sem célula</div>
+              </div>
+              <span class="mock-tag">Acompanhar</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phone mock -->
+        <div class="mock-phone">
+          <div class="mock-phone-screen">
+            <div class="mock-phone-notch"></div>
+            <div class="mock-phone-head">
+              <div class="crumb">Igreja Doca · Visitantes</div>
+              <h4>Cadastrar visitante</h4>
+            </div>
+            <div class="mock-phone-body">
+              <div class="mock-field">
+                <div class="lbl">Nome</div>
+                <div class="val">João Pedro Souza</div>
+              </div>
+              <div class="mock-field focus">
+                <div class="lbl">WhatsApp</div>
+                <div class="val">(54) 99821-4408</div>
+              </div>
+              <div class="mock-field">
+                <div class="lbl">Como conheceu</div>
+                <div class="val">Convite de membro</div>
+              </div>
+              <div class="mock-phone-cta">Cadastrar visitante</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── CREDIBILIDADE ───────────── -->
+<section class="credibility">
+  <div class="wrap cred-inner">
+    <div class="cred-quote">Feito com pastores, para pastores.</div>
+    <div class="cred-tag">Em desenvolvimento com igrejas de Passo Fundo · RS</div>
+  </div>
+</section>
+
+<!-- ───────────── PILARES ───────────── -->
+<section class="section" id="pilares">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Por que Orbien</div>
+      <h2 class="section-title">Três motivos para a sua igreja começar hoje.</h2>
+      <p class="section-sub">Igrejas de 50 a 300 membros merecem uma plataforma moderna — sem complexidade enterprise, sem fricção de CNPJ, sem dashboard de banco.</p>
+    </div>
+
+    <div class="pillars-grid">
+      <div class="pillar reveal">
+        <div class="pillar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/>
+            <path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5.762 20.2a2 2 0 0 1-1.762-2V5.821a2 2 0 0 1 1.276-1.864l5-1.815A1 1 0 0 1 13 3.066Z"/>
+          </svg>
+        </div>
+        <h3>Sua igreja entra hoje.</h3>
+        <p>Sem CNPJ, sem instalação, sem treinamento. O cadastro leva 5 minutos e a sua secretária aprende em uma tarde.</p>
+      </div>
+
+      <div class="pillar reveal">
+        <div class="pillar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+          </svg>
+        </div>
+        <h3>O app é seu, não nosso.</h3>
+        <p>Logo da sua igreja, cores da sua igreja, nome da sua igreja. No Premium, o app vai para as lojas com domínio próprio.</p>
+      </div>
+
+      <div class="pillar reveal">
+        <div class="pillar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16v-5"/><path d="M17 16V7"/>
+          </svg>
+        </div>
+        <h3>Você vê o que está acontecendo.</h3>
+        <p>Quantos visitantes voltaram, quanto entrou esta semana, qual célula está esfriando. Em painéis simples, atualizados em tempo real.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── MÓDULOS ───────────── -->
+<section class="section" id="modulos" style="padding-top:24px;">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Funcionalidades</div>
+      <h2 class="section-title">O dia a dia, simplificado.</h2>
+      <p class="section-sub">Quatro módulos que cobrem o que sua igreja faz toda semana.</p>
+    </div>
+
+    <div class="modules-grid">
+      <a href="#" class="mod reveal">
+        <div class="mod-top">
+          <div class="mod-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <h3>Membros e visitantes</h3>
+        </div>
+        <p>Cadastre um visitante em 30 segundos pelo QR code. Acompanhe quem voltou.</p>
+        <span class="mod-link">Ver módulo <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+      </a>
+
+      <a href="#" class="mod reveal">
+        <div class="mod-top">
+          <div class="mod-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+              <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+              <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+            </svg>
+          </div>
+          <h3>Doações e finanças</h3>
+        </div>
+        <p>PIX, recibo automático e relatório semanal. Pronto pra contabilidade.</p>
+        <span class="mod-link">Ver módulo <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+      </a>
+
+      <a href="#" class="mod reveal">
+        <div class="mod-top">
+          <div class="mod-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/>
+              <path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/>
+            </svg>
+          </div>
+          <h3>Pequenos grupos</h3>
+        </div>
+        <p>Materiais agendados, semáforo de saúde da célula, notificação automática pro líder.</p>
+        <span class="mod-link">Ver módulo <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+      </a>
+
+      <a href="#" class="mod reveal">
+        <div class="mod-top">
+          <div class="mod-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+          </div>
+          <h3>Conteúdo e notificações</h3>
+        </div>
+        <p>Avisos, devocionais e mensagens da liderança no app da sua igreja.</p>
+        <span class="mod-link">Ver módulo <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── PROVA SOCIAL ───────────── -->
+<section class="proof">
+  <div class="wrap">
+    <div class="proof-card reveal">
+      <div class="eyebrow muted">Igrejas-piloto</div>
+      <p class="proof-text">Em desenvolvimento ativo com a <strong>Doca Church</strong> (Passo Fundo, RS) e mais igrejas em fase de validação.</p>
+      <div class="proof-note">Cada feature é validada com um pastor antes de ir pra produção.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── COMPARATIVO ───────────── -->
+<section class="section" id="comparativo">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Comparativo</div>
+      <h2 class="section-title">Por que igrejas que tentaram outros sistemas ficam.</h2>
+      <p class="section-sub">Sem nomes — só os detalhes que importam quando você compara opções.</p>
+    </div>
+
+    <div class="compare-wrap reveal">
+      <div class="compare-row head">
+        <div></div>
+        <div>Outros sistemas</div>
+        <div class="me">Orbien</div>
+      </div>
+
+      <div class="compare-row">
+        <div class="feature">Exige CNPJ</div>
+        <div class="other"><span class="cross"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>Sim</div>
+        <div class="ours"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Não</div>
+      </div>
+
+      <div class="compare-row">
+        <div class="feature">App nas lojas</div>
+        <div class="other"><span class="cross"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>Só nos planos caros</div>
+        <div class="ours"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Starter já tem</div>
+      </div>
+
+      <div class="compare-row">
+        <div class="feature">PIX com recibo automático</div>
+        <div class="other"><span class="cross"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>Plano alto</div>
+        <div class="ours"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Starter já tem</div>
+      </div>
+
+      <div class="compare-row">
+        <div class="feature">UX</div>
+        <div class="other"><span class="cross"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>Datada</div>
+        <div class="ours"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Mobile-first</div>
+      </div>
+
+      <div class="compare-row">
+        <div class="feature">Tempo pra começar</div>
+        <div class="other"><span class="cross"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>Dias</div>
+        <div class="ours"><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>5 minutos</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── PREÇOS ───────────── -->
+<section class="section" id="precos">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Planos</div>
+      <h2 class="section-title">Dois planos. O preço cresce com a sua igreja.</h2>
+      <p class="section-sub">Sem pegadinha por funcionalidade escondida. Você paga pelo plano e pela faixa de membros que sua igreja tem hoje.</p>
+    </div>
+
+    <div class="price-grid">
+      <div class="price reveal">
+        <div class="price-badge">Sem CNPJ? Comece aqui.</div>
+        <div>
+          <div class="price-name">Starter</div>
+        </div>
+        <div class="price-amount">
+          <small>A partir de</small>
+          R$ 59<span class="per">,90/mês</span>
+        </div>
+        <div class="price-target">Para igrejas de até 300 membros.</div>
+        <hr>
+        <ul class="price-bullets">
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>App nas lojas com a marca da sua igreja</li>
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>PIX por chave manual</li>
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Cadastro ilimitado de membros</li>
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Suporte por email</li>
+        </ul>
+        <a href="/precos" class="btn btn-secondary price-cta">
+          Ver plano completo
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+
+      <div class="price price-featured reveal">
+        <div class="price-badge">Mais escolhido</div>
+        <div>
+          <div class="price-name">Premium</div>
+        </div>
+        <div class="price-amount">
+          <small>A partir de</small>
+          R$ 99<span class="per">,90/mês</span>
+        </div>
+        <div class="price-target">Para igrejas que querem app próprio.</div>
+        <hr>
+        <ul class="price-bullets">
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>App próprio nas lojas + domínio</li>
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>PIX dinâmico com recibo automático</li>
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Forecast, DRE e exportação contábil</li>
+          <li><span class="check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Suporte WhatsApp + treinamento incluso</li>
+        </ul>
+        <a href="/precos" class="btn btn-primary price-cta">
+          Ver plano completo
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="price-foot">
+      <a href="/precos" class="btn btn-ghost">Ver tabela completa de preços →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── FAQ ───────────── -->
+<section class="section" id="faq">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">FAQ</div>
+      <h2 class="section-title">Perguntas que a gente sempre ouve.</h2>
+    </div>
+
+    <div class="faq-list">
+      <details class="faq reveal">
+        <summary>A Orbien funciona pra qualquer denominação?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Sim. O produto é confessional-neutro: batista, assembleia, presbiteriana, carismática, católica, qualquer tradição. A terminologia (célula, pequeno grupo, EBD, ministério) é configurável pela igreja.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Preciso ter CNPJ pra usar?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Não. O Starter foi feito pra igrejas sem CNPJ — a doação por PIX cai direto na chave da igreja, sem passar pela Orbien. Quando a igreja formalizar, a migração pro Premium leva 15 minutos.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Tem trial gratuito?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Sim, 14 dias do Premium pra você ver tudo. Depois você escolhe entre Starter e Premium ou cancela sem custo.</div>
+      </details>
+
+      <details class="faq reveal">
+        <summary>Onde os dados ficam guardados?<span class="faq-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></summary>
+        <div class="faq-body">Em servidores no Brasil (São Paulo), em conformidade com a LGPD. A igreja é controladora dos dados, a Orbien é operadora.</div>
+      </details>
+    </div>
+
+    <div style="margin-top:24px">
+      <a href="/precos#faq" class="btn btn-ghost">Ver todas as perguntas →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── FINAL CTA ───────────── -->
+<section class="final-cta" id="waitlist">
+  <div class="wrap final-cta-inner reveal">
+    <div class="eyebrow">Lista de espera aberta</div>
+    <h2>Pronto pra ver na sua igreja?</h2>
+    <p>Entre na lista de espera e a gente te chama assim que abrir a primeira leva de igrejas-piloto.</p>
+    <div class="final-cta-actions">
+      <a href="#" class="btn btn-teal btn-lg">
+        Entrar na lista de espera
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+      <a href="#" class="wpp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+        Prefere conversar antes? Fale no WhatsApp →
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── FOOTER ───────────── -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand-col">
+        <a href="#" class="brand">
+          <span class="brand-mark">
+            <svg viewBox="0 0 22 22" fill="none">
+              <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="11" cy="11" r="3" fill="currentColor"/>
+              <circle cx="20" cy="11" r="2" fill="#00B8A2"/>
+            </svg>
+          </span>
+          Orbien
+        </a>
+        <p class="footer-tagline">Gestão que serve. Igreja que cresce. Plataforma e app white-label para igrejas de 50 a 300 membros.</p>
+        <div class="footer-socials">
+          <a href="#" aria-label="Instagram">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"/></svg>
+          </a>
+          <a href="#" aria-label="YouTube">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+          </a>
+          <a href="#" aria-label="LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <h4>Produto</h4>
+        <ul>
+          <li><a href="#modulos">Funcionalidades</a></li>
+          <li><a href="#precos">Preços</a></li>
+          <li><a href="#comparativo">Comparativo</a></li>
+          <li><a href="#">Roadmap</a></li>
+          <li><a href="#">Mudanças</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Empresa</h4>
+        <ul>
+          <li><a href="#">Sobre</a></li>
+          <li><a href="#">Pastores parceiros</a></li>
+          <li><a href="#">Contato</a></li>
+          <li><a href="#">WhatsApp</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Legal e segurança</h4>
+        <ul>
+          <li><a href="#">Termos de uso</a></li>
+          <li><a href="#">Política de privacidade</a></li>
+          <li><a href="#">LGPD</a></li>
+          <li><a href="#">Status</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <div>© 2026 Church Platform Ltda · CNPJ a definir · Passo Fundo · RS</div>
+      <div>orbien.app</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Reveal on scroll
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

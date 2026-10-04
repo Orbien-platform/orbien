@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbien · Conteúdo e Notificações — A voz da liderança chega onde precisa chegar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:           #1E3A7B;
+    --navy-dark:      #162D62;
+    --teal:           #00B8A2;
+    --teal-bright:    #00CDB5;
+    --crimson:        #C0392B;
+    --burgundy:       #991B1B;
+
+    --navy-accent:    #1E3A7B;
+    --navy-dim:       #D4DCEF;
+    --navy-tint:      #F0F3FA;
+    --teal-dim:       #D0F5F1;
+    --crimson-dim:    #FDECEA;
+    --bg:             #F5F4F1;
+    --ink:            #0F1117;
+    --on-ink:         #0F1117;
+    --surface:        #FFFFFF;
+    --subtle:         #EEECEA;
+    --sand:           #EAE6DF;
+    --stone:          #5C5A56;
+    --muted:          #9B9893;
+    --border:         #E0DDD9;
+    --border-strong:  #C8C5C0;
+    --nav-bg:         rgba(245,244,241,.85);
+    --hero-glow:      rgba(30,58,123,.06);
+
+    --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
+    --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
+    --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
+    --shadow-xl: 0 24px 60px rgba(15,17,23,.16), 0 8px 20px rgba(15,17,23,.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --navy-accent:  #7A99D9;
+      --navy-dim:     #1A2540;
+      --navy-tint:    #161D33;
+      --teal-dim:     #0A2E2A;
+      --crimson-dim:  #2A1414;
+      --bg:           #0F1117;
+      --ink:          #F5F4F1;
+      --on-ink:       #1A1D27;
+      --surface:      #13151E;
+      --subtle:       #1C1F2B;
+      --sand:         #16192A;
+      --stone:        #B5B2AD;
+      --muted:        #7A7975;
+      --border:       #232634;
+      --border-strong:#2E3142;
+      --nav-bg:       rgba(15,17,23,.78);
+      --hero-glow:    rgba(122,153,217,.08);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.20);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.24);
+      --shadow-xl: 0 24px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.32);
+    }
+    img, svg { color-scheme: dark; }
+  }
+
+  html { color-scheme: light dark; scroll-behavior: smooth; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.5;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  svg { display: block; }
+
+  .wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 96px 0; }
+  @media (max-width: 720px) { .section { padding: 64px 0; } }
+
+  .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--navy-accent);
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ''; display: block; width: 24px; height: 1px; background: var(--navy-accent); }
+  .eyebrow.muted { color: var(--stone); }
+  .eyebrow.muted::before { background: var(--stone); }
+  .eyebrow.teal  { color: var(--teal); }
+  .eyebrow.teal::before  { background: var(--teal); }
+
+  h1, h2, h3 { color: var(--ink); letter-spacing: -.02em; text-wrap: balance; }
+  h1 { font-weight: 600; }
+  h2 { font-weight: 500; letter-spacing: -.025em; }
+  h3 { font-weight: 500; }
+
+  .section-title { font-size: clamp(30px, 4.2vw, 46px); line-height: 1.08; margin-bottom: 16px; letter-spacing: -.03em; }
+  .section-sub   { font-size: 17px; font-weight: 300; color: var(--stone); max-width: 620px; line-height: 1.6; }
+  .section-head  { margin-bottom: 56px; }
+  .section-head .eyebrow { margin-bottom: 20px; }
+
+  /* nav */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--nav-bg);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid rgba(224,221,217,.6);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 500; font-size: 17px; letter-spacing: -.02em; }
+  .brand-mark { width: 22px; height: 22px; color: var(--navy-accent); }
+  .brand-mark svg { width: 100%; height: 100%; }
+  .nav-links { display: flex; align-items: center; gap: 28px; }
+  .nav-links a { font-size: 14px; color: var(--stone); font-weight: 400; transition: color .15s; }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links a.active { color: var(--ink); font-weight: 500; }
+  .nav-actions { display: flex; align-items: center; gap: 8px; }
+  @media (max-width: 860px) { .nav-links { display: none; } }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; font-weight: 500; letter-spacing: -.005em;
+    transition: transform .12s, box-shadow .15s, background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover { background: var(--navy-dark); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-secondary { background: transparent; color: var(--navy-accent); border: 1px solid var(--navy-accent); }
+  .btn-secondary:hover { background: var(--navy-dim); }
+  .btn-ghost { color: var(--stone); padding: 12px 14px; }
+  .btn-ghost:hover { color: var(--ink); }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn-teal:hover { background: #00a08c; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn-lg { padding: 14px 24px; font-size: 15px; }
+  .btn-sm { padding: 8px 14px; font-size: 13px; }
+
+  /* ─────── HERO ─────── */
+  .hero { padding: 64px 0 104px; position: relative; overflow: hidden; }
+  .hero-bg {
+    position: absolute; top: -240px; right: -220px;
+    width: 720px; height: 720px;
+    background: radial-gradient(circle, var(--hero-glow), transparent 65%);
+    pointer-events: none; z-index: -1;
+  }
+  .breadcrumbs {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 24px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .breadcrumbs a { color: var(--muted); transition: color .15s; }
+  .breadcrumbs a:hover { color: var(--ink); }
+  .breadcrumbs .sep { opacity: .55; }
+  .breadcrumbs .here { color: var(--navy-accent); }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    gap: 56px;
+    align-items: center;
+  }
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 48px; }
+    .hero { padding: 40px 0 64px; }
+  }
+  .hero h1 {
+    font-size: clamp(36px, 5.6vw, 60px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+    margin-bottom: 22px;
+    max-width: 580px;
+  }
+  .hero h1 .accent { color: var(--navy-accent); font-weight: 600; }
+  .hero p.lead {
+    font-size: clamp(17px, 1.6vw, 19px);
+    font-weight: 300; color: var(--stone);
+    line-height: 1.55; max-width: 540px;
+    margin-bottom: 32px;
+  }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 28px; }
+  .hero-meta {
+    display: flex; gap: 22px; flex-wrap: wrap;
+    font-size: 12px; color: var(--muted);
+    font-family: 'DM Mono', monospace; letter-spacing: .04em;
+  }
+  .hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .hero-meta .tick {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--teal-dim); color: var(--teal);
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  /* Hero stage: dois phones lado a lado em ângulo */
+  .hero-stage {
+    position: relative;
+    height: 560px;
+    display: flex; justify-content: center; align-items: center;
+  }
+  @media (max-width: 980px) { .hero-stage { height: 520px; } }
+  @media (max-width: 520px) { .hero-stage { height: 460px; } }
+
+  /* ─────── PHONE BASE ─────── */
+  .phone {
+    background: var(--on-ink);
+    border-radius: 32px;
+    padding: 7px;
+    box-shadow: var(--shadow-xl);
+    position: relative;
+  }
+  .phone .screen {
+    width: 100%; height: 100%;
+    background: var(--surface);
+    border-radius: 25px;
+    overflow: hidden; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .phone .notch {
+    position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+    width: 80px; height: 22px; background: var(--on-ink); border-radius: 100px; z-index: 3;
+  }
+  .phone-status {
+    padding: 18px 18px 6px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'DM Mono', monospace; font-size: 10px; color: var(--ink); font-weight: 500;
+    flex-shrink: 0;
+  }
+  .phone-status .icons { display: flex; gap: 4px; opacity: .55; align-items: center; }
+  .phone-status .icons .bar { width: 11px; height: 8px; background: currentColor; border-radius: 1px; }
+  .phone-status .icons .batt { width: 14px; height: 8px; border: 1px solid currentColor; border-radius: 2px; position: relative; }
+  .phone-status .icons .batt::after { content: ''; position: absolute; left: 1px; top: 1px; bottom: 1px; width: 70%; background: currentColor; border-radius: 1px; }
+
+  /* lockscreen for hero left phone */
+  .lockscreen {
+    flex: 1; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, #1E3A7B 0%, #0F1117 70%);
+    color: #fff; padding: 14px;
+  }
+  .lock-time {
+    text-align: center; padding: 16px 0 22px;
+  }
+  .lock-time .date { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .75; margin-bottom: 4px; }
+  .lock-time .clock { font-size: 56px; font-weight: 300; letter-spacing: -.04em; line-height: 1; }
+  .lock-notifs { display: flex; flex-direction: column; gap: 9px; }
+  .push {
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 11px 13px;
+    color: var(--ink);
+    box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  }
+  .push .head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .push .app-ico { width: 20px; height: 20px; border-radius: 5px; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+  .push .app-ico.teal { background: var(--teal); }
+  .push .app-ico.wpp { background: #25D366; }
+  .push .app-name { font-size: 10px; font-weight: 600; flex: 1; letter-spacing: -.005em; }
+  .push .when { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); }
+  .push .title { font-size: 11.5px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 2px; line-height: 1.25; }
+  .push .body { font-size: 10.5px; color: var(--stone); line-height: 1.4; }
+  .push.stacked { margin-top: -52px; transform: scale(.94); opacity: .85; z-index: -1; }
+  .push.stacked2 { margin-top: -52px; transform: scale(.88); opacity: .55; z-index: -2; }
+
+  /* Feed (phone direito) */
+  .feed-head {
+    padding: 14px 16px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .feed-head .row { display: flex; align-items: center; justify-content: space-between; }
+  .feed-head .logo {
+    display: flex; align-items: center; gap: 7px;
+  }
+  .feed-head .ico { width: 24px; height: 24px; border-radius: 7px; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; }
+  .feed-head .nm { font-size: 13px; font-weight: 600; letter-spacing: -.015em; }
+  .feed-head .bell { width: 18px; height: 18px; color: var(--stone); }
+  .feed-head h5 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; margin-top: 10px; }
+  .feed-tabs {
+    display: flex; gap: 6px; margin-top: 10px;
+    font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: .04em;
+  }
+  .feed-tab {
+    padding: 4px 10px; border-radius: 100px;
+    background: var(--subtle); color: var(--stone);
+  }
+  .feed-tab.active { background: var(--navy); color: #fff; }
+
+  .feed-body { padding: 12px 14px; flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .feed-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 12px;
+  }
+  .feed-card .meta { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .feed-card .tag {
+    font-family: 'DM Mono', monospace; font-size: 8.5px;
+    padding: 2px 7px; border-radius: 100px;
+    letter-spacing: .06em; text-transform: uppercase; font-weight: 500;
+  }
+  .feed-card .tag.navy { background: var(--navy-tint); color: var(--navy-accent); }
+  .feed-card .tag.teal { background: var(--teal-dim); color: var(--teal); }
+  .feed-card .tag.sand { background: var(--sand); color: var(--stone); }
+  .feed-card .when { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); margin-left: auto; }
+  .feed-card .ttl { font-size: 11.5px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 3px; line-height: 1.3; }
+  .feed-card .bod { font-size: 10.5px; color: var(--stone); line-height: 1.45; }
+  .feed-card .from { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 9.5px; color: var(--muted); }
+  .feed-card .from .ava { width: 16px; height: 16px; border-radius: 5px; background: var(--navy-dim); color: var(--navy-accent); font-size: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+
+  /* HERO phones positioning */
+  .hero-phone-left {
+    width: 250px; aspect-ratio: 9/19;
+    transform: translateX(-60px) rotate(-3deg);
+    z-index: 2;
+  }
+  .hero-phone-right {
+    width: 250px; aspect-ratio: 9/19;
+    transform: translateX(60px) rotate(3deg);
+    z-index: 1;
+    position: absolute;
+  }
+  @media (max-width: 520px) {
+    .hero-phone-left { width: 210px; transform: translateX(-44px) rotate(-3deg); }
+    .hero-phone-right { width: 210px; transform: translateX(44px) rotate(3deg); }
+  }
+
+  /* ─────── PUBLISH FLOW (section 2) ─────── */
+  .feat {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: center;
+  }
+  @media (max-width: 980px) { .feat { grid-template-columns: 1fr; gap: 48px; } }
+  .feat h2 { font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; letter-spacing: -.025em; margin-bottom: 18px; }
+  .feat p.lead { font-size: 17px; color: var(--stone); font-weight: 300; line-height: 1.6; max-width: 520px; margin-bottom: 28px; }
+  .detail-mini { list-style: none; display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
+  .detail-mini li { font-size: 14px; color: var(--ink); font-weight: 400; display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
+  .detail-mini li .tick {
+    width: 16px; height: 16px; border-radius: 4px;
+    background: var(--teal-dim); color: var(--teal);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 2px;
+  }
+  .feat-eyebrow { margin-bottom: 16px; }
+
+  /* Publish flow diagram */
+  .pub-flow {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 28px;
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .pub-source {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .pub-source .pub-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); margin-bottom: 10px; }
+  .pub-source .pub-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .pub-source .pub-input .nm { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .pub-source .pub-input .sub { font-size: 12px; color: var(--stone); line-height: 1.5; font-weight: 300; }
+  .pub-source .pub-tools { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .pub-tool {
+    font-family: 'DM Mono', monospace; font-size: 9px;
+    padding: 4px 8px; border-radius: 5px;
+    background: var(--subtle); color: var(--stone);
+    letter-spacing: .04em;
+    border: 1px solid var(--border);
+  }
+  .pub-action {
+    display: flex; gap: 8px;
+  }
+  .pub-btn {
+    flex: 1;
+    background: var(--navy); color: #fff;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    font-size: 12px; font-weight: 500;
+  }
+  .pub-btn.secondary { background: transparent; color: var(--navy-accent); border: 1px solid var(--navy-accent); flex: 0 1 auto; padding: 10px 16px; }
+
+  .pub-arrow {
+    text-align: center;
+    color: var(--navy-accent);
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .pub-arrow .label { font-family: 'DM Mono', monospace; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; }
+  .pub-arrow svg { width: 18px; height: 18px; }
+
+  .pub-outputs { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .pub-channel {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--navy-accent);
+    border-radius: 10px;
+    padding: 13px 16px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .pub-channel .ico {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--navy-tint); color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .pub-channel .info { flex: 1; min-width: 0; }
+  .pub-channel .nm { font-size: 13px; font-weight: 500; margin-bottom: 2px; letter-spacing: -.005em; }
+  .pub-channel .sub { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: .04em; }
+  .pub-channel .num {
+    font-family: 'DM Mono', monospace; font-size: 12px;
+    color: var(--teal); font-weight: 500;
+  }
+  .pub-channel.teal { border-left-color: var(--teal); }
+  .pub-channel.teal .ico { background: var(--teal-dim); color: var(--teal); }
+  .pub-channel.email { border-left-color: var(--stone); }
+  .pub-channel.email .ico { background: var(--sand); color: var(--stone); }
+  .pub-channel.email .num { color: var(--stone); }
+
+  /* ─────── SEGMENTATION SELECTOR ─────── */
+  .seg-canvas {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .seg-canvas-bar {
+    height: 32px; background: var(--subtle);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px; padding: 0 14px;
+  }
+  .seg-canvas-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); }
+  .seg-canvas-bar .url { margin-left: 14px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); }
+  .seg-canvas-body { padding: 28px 30px; }
+  @media (max-width: 720px) { .seg-canvas-body { padding: 22px 20px; } }
+  .seg-prompt {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--stone); margin-bottom: 6px;
+  }
+  .seg-question { font-size: 22px; font-weight: 600; letter-spacing: -.025em; margin-bottom: 22px; }
+  @media (max-width: 720px) { .seg-question { font-size: 18px; } }
+  .seg-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .seg-opt {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: border-color .15s;
+  }
+  .seg-opt.checked { background: var(--navy-tint); border-color: var(--navy); }
+  .seg-opt .check {
+    width: 22px; height: 22px; border-radius: 6px;
+    border: 1.5px solid var(--border-strong);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: transparent;
+  }
+  .seg-opt.checked .check { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .seg-opt .nm { font-size: 15px; font-weight: 500; flex: 1; letter-spacing: -.005em; }
+  .seg-opt.checked .nm { font-weight: 600; color: var(--navy-accent); }
+  .seg-opt .cnt { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+  .seg-opt.checked .cnt { color: var(--navy-accent); }
+
+  .seg-summary {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px;
+    background: var(--bg);
+    border: 1px dashed var(--teal);
+    border-radius: 10px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .seg-summary .reach {
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .seg-summary .reach .num { font-family: 'DM Mono', monospace; font-size: 24px; font-weight: 600; color: var(--teal); letter-spacing: -.02em; }
+  .seg-summary .reach .lbl { font-size: 14px; color: var(--stone); font-weight: 400; }
+  .seg-summary .seg-actions { display: flex; gap: 8px; }
+  .seg-summary .btn-pub { background: var(--navy); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+  .seg-summary .btn-sched { background: transparent; color: var(--navy-accent); border: 1px solid var(--navy-accent); padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+
+  /* ─────── DEVOCIONAL SERIES ─────── */
+  .devo-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 56px;
+    align-items: stretch;
+  }
+  @media (max-width: 980px) { .devo-grid { grid-template-columns: 1fr; gap: 40px; } }
+
+  .devo-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    display: flex; flex-direction: column;
+  }
+  .devo-card-head {
+    padding: 24px 24px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .devo-card-head .label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); margin-bottom: 8px; }
+  .devo-card-head .ttl { font-size: 26px; font-weight: 600; letter-spacing: -.025em; line-height: 1.15; margin-bottom: 10px; }
+  .devo-card-head .meta-row {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--stone); font-weight: 400;
+  }
+  .devo-card-head .meta-row .item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .04em;
+  }
+  .devo-card-head .meta-row .item svg { color: var(--navy-accent); }
+
+  .devo-days {
+    padding: 8px;
+    flex: 1;
+    overflow: hidden;
+  }
+  .devo-day {
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .devo-day:last-child { border-bottom: none; }
+  .devo-day:hover { background: var(--bg); }
+  .devo-day .num {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: .04em; text-align: center;
+  }
+  .devo-day.active .num { color: var(--teal); font-weight: 600; }
+  .devo-day .ref { font-size: 14px; font-weight: 500; letter-spacing: -.005em; }
+  .devo-day .ref small { display: block; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 400; color: var(--muted); letter-spacing: .04em; margin-top: 2px; }
+  .devo-day.active .ref { color: var(--navy-accent); }
+  .devo-day .when {
+    font-family: 'DM Mono', monospace; font-size: 10.5px;
+    color: var(--muted); letter-spacing: .04em;
+  }
+  .devo-day.active .when { color: var(--teal); }
+  .devo-day.future .num { color: var(--muted); opacity: .55; }
+  .devo-day.future .ref { color: var(--stone); }
+  .devo-day.future .when { color: var(--muted); opacity: .55; }
+  .devo-more {
+    padding: 14px 16px;
+    text-align: center;
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    color: var(--muted); letter-spacing: .12em; text-transform: uppercase;
+    border-top: 1px dashed var(--border);
+  }
+
+  .devo-features {
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 18px 24px 24px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .devo-feat {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13.5px; color: var(--ink); font-weight: 400;
+  }
+  .devo-feat .tick {
+    width: 18px; height: 18px; border-radius: 4px;
+    background: var(--teal-dim); color: var(--teal);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  /* ─────── HISTORY FEED (full) ─────── */
+  .history-stage {
+    display: flex; justify-content: center;
+    padding: 8px 0;
+  }
+  .phone-big {
+    width: 300px;
+    aspect-ratio: 9/19;
+    background: var(--on-ink);
+    border-radius: 36px;
+    padding: 8px;
+    box-shadow: var(--shadow-xl);
+    position: relative;
+  }
+  .phone-big .screen {
+    width: 100%; height: 100%;
+    background: var(--surface);
+    border-radius: 28px;
+    overflow: hidden; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .phone-big .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 92px; height: 24px; background: var(--on-ink); border-radius: 100px; z-index: 3;
+  }
+
+  /* big-feed header */
+  .bf-head {
+    padding: 30px 16px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .bf-head .top { display: flex; align-items: center; justify-content: space-between; }
+  .bf-head .ig { display: flex; align-items: center; gap: 8px; }
+  .bf-head .ig .ico { width: 26px; height: 26px; border-radius: 7px; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600; }
+  .bf-head .ig .nm { font-size: 13px; font-weight: 600; letter-spacing: -.015em; }
+  .bf-head .search { width: 18px; height: 18px; color: var(--stone); }
+  .bf-head h6 { font-size: 18px; font-weight: 600; letter-spacing: -.02em; margin-top: 14px; }
+  .bf-tabs { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
+  .bf-tab {
+    padding: 5px 11px; border-radius: 100px;
+    background: var(--subtle); color: var(--stone);
+    font-family: 'DM Mono', monospace; font-size: 9.5px;
+    letter-spacing: .04em; white-space: nowrap;
+  }
+  .bf-tab.active { background: var(--navy); color: #fff; }
+
+  .bf-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; overflow: hidden; }
+  .bf-day-label {
+    font-family: 'DM Mono', monospace; font-size: 9.5px;
+    color: var(--muted); letter-spacing: .14em; text-transform: uppercase;
+    margin-top: 4px; margin-bottom: 2px;
+  }
+  .bf-day-label:first-child { margin-top: 0; }
+  .bf-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    padding: 11px 12px;
+  }
+  .bf-card .meta { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .bf-card .meta .tag {
+    font-family: 'DM Mono', monospace; font-size: 8.5px;
+    padding: 2px 7px; border-radius: 100px;
+    letter-spacing: .06em; text-transform: uppercase; font-weight: 500;
+  }
+  .bf-card .meta .tag.navy { background: var(--navy-tint); color: var(--navy-accent); }
+  .bf-card .meta .tag.teal { background: var(--teal-dim); color: var(--teal); }
+  .bf-card .meta .tag.sand { background: var(--sand); color: var(--stone); }
+  .bf-card .meta .tag.financial { background: var(--teal-dim); color: var(--teal); }
+  .bf-card .ttl { font-size: 12px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 3px; line-height: 1.3; }
+  .bf-card .bod { font-size: 11px; color: var(--stone); line-height: 1.45; }
+  .bf-card .from { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 10px; color: var(--muted); }
+  .bf-card .from .ava { width: 18px; height: 18px; border-radius: 5px; background: var(--navy-dim); color: var(--navy-accent); font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+
+  /* ─────── PREFERENCES (notifications) ─────── */
+  .prefs-canvas {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    max-width: 520px;
+  }
+  .prefs-head {
+    padding: 24px 28px 18px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .prefs-head .crumb { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .prefs-head h4 { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+  .prefs-body { padding: 8px 14px 16px; }
+  .pref-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pref-row:last-of-type { border-bottom: none; }
+  .pref-row .info { flex: 1; min-width: 0; }
+  .pref-row .nm { font-size: 14px; font-weight: 500; letter-spacing: -.005em; margin-bottom: 2px; }
+  .pref-row .sub { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: .04em; }
+  .toggle {
+    width: 40px; height: 22px;
+    background: var(--border-strong);
+    border-radius: 100px;
+    position: relative;
+    transition: background .15s;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform .15s;
+    box-shadow: var(--shadow-sm);
+  }
+  .toggle.on { background: var(--teal); }
+  .toggle.on::after { transform: translateX(18px); }
+  .pref-meta {
+    margin: 8px 14px 0;
+    padding: 14px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .pref-meta .nm { font-size: 13px; font-weight: 500; }
+  .pref-meta .val { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--navy-accent); letter-spacing: .04em; }
+  .pref-pause {
+    margin: 12px 14px 4px;
+    padding: 12px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    text-align: center;
+    font-size: 13px; font-weight: 500; color: var(--stone);
+  }
+  .pref-pause:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* feature block aside */
+  .pref-feat {
+    display: flex; flex-direction: column; gap: 28px;
+  }
+  .pastoral-note {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--teal);
+    border-radius: 10px;
+    padding: 22px 24px;
+    font-size: 14px;
+    color: var(--stone);
+    font-weight: 300;
+    line-height: 1.65;
+  }
+  .pastoral-note strong { font-weight: 500; color: var(--ink); }
+  .pastoral-note .note-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--teal);
+    letter-spacing: .14em; text-transform: uppercase;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  /* CROSS-SELL */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 860px) { .modules-grid { grid-template-columns: 1fr; } }
+  .mod-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 14px;
+    transition: border-color .2s, box-shadow .2s, transform .2s;
+  }
+  .mod-card:hover { border-color: var(--navy); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .mod-card .ico {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--navy-tint); color: var(--navy-accent);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mod-card h3 { font-size: 18px; font-weight: 600; letter-spacing: -.015em; line-height: 1.25; }
+  .mod-card p { font-size: 14.5px; color: var(--stone); line-height: 1.6; font-weight: 300; flex: 1; }
+  .mod-card .lnk {
+    font-size: 13px; font-weight: 500; color: var(--navy-accent);
+    display: inline-flex; align-items: center; gap: 4px; transition: gap .15s;
+  }
+  .mod-card:hover .lnk { gap: 8px; }
+
+  /* FINAL CTA */
+  .final-cta {
+    background: var(--on-ink);
+    color: #fff;
+    padding: 104px 0;
+    position: relative; overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .final-cta::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 82% 20%, rgba(30,58,123,.38), transparent 50%),
+      radial-gradient(circle at 12% 88%, rgba(0,184,162,.16), transparent 50%);
+    pointer-events: none;
+  }
+  .final-cta-inner { position: relative; max-width: 720px; }
+  .final-cta .eyebrow { color: var(--teal); margin-bottom: 22px; }
+  .final-cta .eyebrow::before { background: var(--teal); }
+  .final-cta h2 { font-size: clamp(32px, 5vw, 56px); font-weight: 600; color: #fff; line-height: 1.05; letter-spacing: -.03em; margin-bottom: 18px; }
+  .final-cta p { font-size: 18px; color: #BFC0C9; font-weight: 300; line-height: 1.55; margin-bottom: 32px; max-width: 540px; }
+  .final-cta-actions { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .final-cta-actions a.wpp {
+    color: #fff; font-size: 14px; font-weight: 400;
+    display: inline-flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,.25);
+    padding-bottom: 2px; transition: border-color .15s;
+  }
+  .final-cta-actions a.wpp:hover { border-color: var(--teal); color: var(--teal); }
+
+  /* FOOTER */
+  .footer { background: var(--bg); padding: 64px 0 32px; border-top: 1px solid var(--border); }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 48px; margin-bottom: 48px;
+  }
+  @media (max-width: 820px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+    .footer-brand-col { grid-column: 1 / -1; }
+  }
+  @media (max-width: 520px) { .footer-grid { grid-template-columns: 1fr; } }
+  .footer-brand-col .brand { font-size: 19px; margin-bottom: 14px; }
+  .footer-tagline { font-size: 14px; color: var(--stone); font-weight: 300; line-height: 1.55; max-width: 280px; margin-bottom: 20px; }
+  .footer h4 { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 18px; }
+  .footer ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .footer ul a { font-size: 14px; color: var(--stone); transition: color .15s; }
+  .footer ul a:hover { color: var(--ink); }
+  .footer-bar {
+    border-top: 1px solid var(--border); padding-top: 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: .06em;
+  }
+  .footer-socials { display: flex; gap: 10px; }
+  .footer-socials a {
+    width: 32px; height: 32px;
+    border: 1px solid var(--border); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--stone); transition: color .15s, border-color .15s;
+  }
+  .footer-socials a:hover { color: var(--navy-accent); border-color: var(--navy-accent); }
+
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* Order swap for feat-visual */
+  .feat-visual.right { order: 2; }
+  @media (max-width: 980px) { .feat-visual.right { order: 2; } }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site-orbita.css">
+</head>
+<body>
+
+<!-- ───────── NAV ───────── -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a href="Orbien Home.html" class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 22 22" fill="none">
+          <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"></ellipse>
+          <circle cx="11" cy="11" r="3" fill="currentColor"></circle>
+          <circle cx="20" cy="11" r="2" fill="#00B8A2"></circle>
+        </svg>
+      </span>
+      Orbien
+    </a>
+    <div class="nav-links">
+      <a href="Orbien Home.html#modulos" class="active">Funcionalidades</a>
+      <a href="Orbien Home.html#comparativo">Comparativo</a>
+      <a href="Orbien Preços.html">Preços</a>
+      <a href="Orbien Home.html#faq">Perguntas</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#login" class="btn btn-ghost btn-sm">Entrar</a>
+      <a href="#waitlist" class="btn btn-primary btn-sm">Lista de espera</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ───────── HERO ───────── -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="wrap">
+    <div class="breadcrumbs">
+      <a href="Orbien Home.html">Orbien</a>
+      <span class="sep">/</span>
+      <a href="Orbien Home.html#modulos">Funcionalidades</a>
+      <span class="sep">/</span>
+      <span class="here">Conteúdo e Notificações</span>
+    </div>
+
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow" style="margin-bottom:24px">Módulo · Conteúdo e Notificações</div>
+        <h1>A voz da liderança <span class="accent">chega onde precisa chegar.</span></h1>
+        <p class="lead">Aviso de culto, devocional da semana, mensagem do pastor — tudo no app da sua igreja. Sem depender de grupo de WhatsApp que ninguém lê.</p>
+        <div class="hero-ctas">
+          <a href="#waitlist" class="btn btn-primary btn-lg">
+            Entrar na lista de espera
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          </a>
+          <a href="#segmentacao" class="btn btn-secondary btn-lg">
+            Ver como funciona
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+          </a>
+        </div>
+        <div class="hero-meta">
+          <span><span class="tick"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>PUSH + FEED + EMAIL</span>
+          <span><span class="tick"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>SEGMENTÁVEL POR GRUPO</span>
+          <span><span class="tick"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>HISTÓRICO PESQUISÁVEL</span>
+        </div>
+      </div>
+
+      <!-- Dois phones lado a lado: lockscreen com push + feed do app -->
+      <div class="hero-stage">
+
+        <!-- Phone esquerdo: lockscreen com push -->
+        <div class="phone hero-phone-left">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="lockscreen">
+              <div class="lock-time">
+                <div class="date">Quarta · 14 maio</div>
+                <div class="clock">14:30</div>
+              </div>
+              <div class="lock-notifs">
+                <div class="push">
+                  <div class="head">
+                    <div class="app-ico">O</div>
+                    <div class="app-name">Sua Igreja</div>
+                    <div class="when">agora</div>
+                  </div>
+                  <div class="title">Mensagem do Pastor Cláudio</div>
+                  <div class="body">A reunião de oração de quarta foi adiada — toca às 19h em vez de 20h.</div>
+                </div>
+                <div class="push stacked">
+                  <div class="head">
+                    <div class="app-ico wpp">W</div>
+                    <div class="app-name">Líderes de Célula · WhatsApp</div>
+                    <div class="when">10:22</div>
+                  </div>
+                  <div class="body" style="margin:0">Carlos: alguém viu a planilha que mandei?</div>
+                </div>
+                <div class="push stacked2">
+                  <div class="head">
+                    <div class="app-ico" style="background:#9b9893">G</div>
+                    <div class="app-name">Gmail</div>
+                    <div class="when">09:11</div>
+                  </div>
+                  <div class="body" style="margin:0">Sua fatura de maio está disponível</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phone direito: feed do app aberto -->
+        <div class="phone hero-phone-right">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="phone-status">
+              <span>14:30</span>
+              <div class="icons"><span class="bar"></span><span class="bar"></span><span class="batt"></span></div>
+            </div>
+            <div class="feed-head">
+              <div class="row">
+                <div class="logo">
+                  <div class="ico">O</div>
+                  <div class="nm">Igreja Doca</div>
+                </div>
+                <svg class="bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              </div>
+              <h5>Feed da Igreja</h5>
+              <div class="feed-tabs">
+                <span class="feed-tab active">Tudo</span>
+                <span class="feed-tab">Avisos</span>
+                <span class="feed-tab">Devocional</span>
+              </div>
+            </div>
+            <div class="feed-body">
+              <div class="feed-card">
+                <div class="meta">
+                  <span class="tag navy">Aviso</span>
+                  <span class="when">agora</span>
+                </div>
+                <div class="ttl">Reunião de oração antecipada</div>
+                <div class="bod">Toca às 19h hoje, no salão principal.</div>
+                <div class="from"><span class="ava">PC</span>Pastor Cláudio</div>
+              </div>
+              <div class="feed-card">
+                <div class="meta">
+                  <span class="tag teal">Devocional</span>
+                  <span class="when">6h30</span>
+                </div>
+                <div class="ttl">Salmo 23 — O Senhor é meu pastor</div>
+                <div class="bod">Reflexão do dia 14 da série "Salmos em 30 dias".</div>
+              </div>
+              <div class="feed-card">
+                <div class="meta">
+                  <span class="tag sand">Liderança</span>
+                  <span class="when">ontem</span>
+                </div>
+                <div class="ttl">Convite pra ministrar no culto de jovens</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── SEÇÃO 2 — PUBLICAÇÃO CENTRALIZADA ───────── -->
+<section class="section" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="feat">
+      <div class="reveal">
+        <div class="eyebrow feat-eyebrow">01 · Publicação centralizada</div>
+        <h2>Publica uma vez, chega em todo lugar.</h2>
+        <p class="lead">Você publica o aviso ou o devocional uma vez no painel. A Orbien envia automaticamente como notificação push, posta no feed do app e mantém no histórico. Sem copiar e colar em 3 grupos diferentes.</p>
+        <ul class="detail-mini">
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Editor simples: negrito, itálico, link, lista</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Anexo de imagem ou PDF</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Pré-visualização antes de publicar</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Agendamento pra data e hora futura</li>
+        </ul>
+      </div>
+
+      <div class="feat-visual right reveal">
+        <div class="pub-flow">
+          <div class="pub-source">
+            <div class="pub-label">Painel da liderança</div>
+            <div class="pub-input">
+              <div class="nm">Reunião de oração antecipada</div>
+              <div class="sub">Toca às 19h hoje, no salão principal. Quem puder vir, é bem-vindo.</div>
+            </div>
+            <div class="pub-tools">
+              <span class="pub-tool">B</span>
+              <span class="pub-tool"><i>i</i></span>
+              <span class="pub-tool">↗ Link</span>
+              <span class="pub-tool">≡ Lista</span>
+              <span class="pub-tool">📎 PDF</span>
+              <span class="pub-tool">🖼 Imagem</span>
+            </div>
+            <div class="pub-action">
+              <div class="pub-btn">Publicar agora</div>
+              <div class="pub-btn secondary">Agendar</div>
+            </div>
+          </div>
+
+          <div class="pub-arrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <polyline points="19 12 12 19 5 12"></polyline>
+            </svg>
+            <div class="label">Distribuição automática</div>
+          </div>
+
+          <div class="pub-outputs">
+            <div class="pub-channel">
+              <div class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+              </div>
+              <div class="info">
+                <div class="nm">Notificação push</div>
+                <div class="sub">Celular, imediato</div>
+              </div>
+              <div class="num">142 celulares</div>
+            </div>
+            <div class="pub-channel teal">
+              <div class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+              </div>
+              <div class="info">
+                <div class="nm">Feed do app</div>
+                <div class="sub">Histórico permanente</div>
+              </div>
+              <div class="num">+ histórico</div>
+            </div>
+            <div class="pub-channel email">
+              <div class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+              </div>
+              <div class="info">
+                <div class="nm">Email opcional</div>
+                <div class="sub">Só quem optou</div>
+              </div>
+              <div class="num">87 inscritos</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── SEÇÃO 3 — SEGMENTAÇÃO ───────── -->
+<section class="section" id="segmentacao">
+  <div class="wrap">
+    <div class="section-head reveal" style="max-width:720px">
+      <div class="eyebrow">02 · Segmentação por grupo</div>
+      <h2 class="section-title">Aviso pra quem precisa, não pra todo mundo.</h2>
+      <p class="section-sub">Aviso só pra líderes de célula? Só pra ministério de louvor? Só pra pais do infantil? É um clique. A Orbien sabe quem está em qual grupo e entrega só pra eles.</p>
+    </div>
+
+    <div class="seg-canvas reveal">
+      <div class="seg-canvas-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="url">orbien.app/comunicacao/nova</span>
+      </div>
+      <div class="seg-canvas-body">
+        <div class="seg-prompt">Passo 2 de 3 · Público</div>
+        <div class="seg-question">Pra quem é essa mensagem?</div>
+
+        <div class="seg-list">
+          <div class="seg-opt">
+            <div class="check"></div>
+            <div class="nm">Toda a igreja</div>
+            <div class="cnt">142 pessoas</div>
+          </div>
+          <div class="seg-opt checked">
+            <div class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+            <div class="nm">Líderes de célula</div>
+            <div class="cnt">18 pessoas</div>
+          </div>
+          <div class="seg-opt checked">
+            <div class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+            <div class="nm">Pastores e diáconos</div>
+            <div class="cnt">8 pessoas</div>
+          </div>
+          <div class="seg-opt">
+            <div class="check"></div>
+            <div class="nm">Ministério de louvor</div>
+            <div class="cnt">14 pessoas</div>
+          </div>
+          <div class="seg-opt">
+            <div class="check"></div>
+            <div class="nm">Pais do infantil</div>
+            <div class="cnt">26 pessoas</div>
+          </div>
+          <div class="seg-opt">
+            <div class="check"></div>
+            <div class="nm">Voluntários da recepção</div>
+            <div class="cnt">11 pessoas</div>
+          </div>
+        </div>
+
+        <div class="seg-summary">
+          <div class="reach">
+            <div class="num">23</div>
+            <div class="lbl">pessoas vão receber esta mensagem</div>
+          </div>
+          <div class="seg-actions">
+            <div class="btn-sched">Agendar</div>
+            <div class="btn-pub">Publicar agora</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:48px" class="seg-detail-row">
+      <div class="reveal">
+        <div class="eyebrow muted" style="margin-bottom:18px">Como combinar</div>
+        <ul class="detail-mini">
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Segmentação por papel, ministério, célula e voluntariado</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Combinação livre — selecione vários grupos de uma vez</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Contagem em tempo real do público antes de publicar</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Histórico mostra quais grupos receberam cada mensagem</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <div class="pastoral-note">
+          <span class="note-label">⛨ Sobre o WhatsApp</span>
+          O WhatsApp da liderança continua existindo — pra conversa rápida ele é insubstituível. <strong>O app é pra comunicação que precisa chegar, ficar registrada e ser pesquisável depois.</strong> Um complementa o outro.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── SEÇÃO 4 — DEVOCIONAL PROGRAMADO ───────── -->
+<section class="section" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="section-head reveal" style="max-width:720px">
+      <div class="eyebrow">03 · Devocional programado</div>
+      <h2 class="section-title">Devocional no horário certo, todo dia.</h2>
+      <p class="section-sub">Agende o devocional pra cada dia da semana. A Orbien envia no horário certo, sem você precisar lembrar. Pode ser série ("Salmos em 30 dias") ou avulso ("reflexão da quaresma").</p>
+    </div>
+
+    <div class="devo-grid">
+      <div class="devo-card reveal">
+        <div class="devo-card-head">
+          <div class="label">Série programada</div>
+          <div class="ttl">Salmos em 30 dias</div>
+          <div class="meta-row">
+            <div class="item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              INÍCIO 1 MAI
+            </div>
+            <div class="item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              06:30
+            </div>
+            <div class="item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"></circle><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path></svg>
+              112 INSCRITOS
+            </div>
+          </div>
+        </div>
+        <div class="devo-days">
+          <div class="devo-day">
+            <div class="num">DIA 01</div>
+            <div class="ref">Salmo 1<small>O homem bem-aventurado</small></div>
+            <div class="when">enviado</div>
+          </div>
+          <div class="devo-day active">
+            <div class="num">DIA 14</div>
+            <div class="ref">Salmo 23<small>O Senhor é meu pastor</small></div>
+            <div class="when">hoje · 6h30</div>
+          </div>
+          <div class="devo-day future">
+            <div class="num">DIA 15</div>
+            <div class="ref">Salmo 27<small>O Senhor é a minha luz</small></div>
+            <div class="when">amanhã</div>
+          </div>
+          <div class="devo-day future">
+            <div class="num">DIA 16</div>
+            <div class="ref">Salmo 42<small>Como o cervo</small></div>
+            <div class="when">sex</div>
+          </div>
+          <div class="devo-day future">
+            <div class="num">DIA 17</div>
+            <div class="ref">Salmo 51<small>Misericórdia</small></div>
+            <div class="when">sáb</div>
+          </div>
+          <div class="devo-day future">
+            <div class="num">DIA 18</div>
+            <div class="ref">Salmo 91<small>Habitação do altíssimo</small></div>
+            <div class="when">dom</div>
+          </div>
+        </div>
+        <div class="devo-more">+ 24 dias agendados até 30 maio</div>
+        <div class="devo-features">
+          <div class="devo-feat"><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Notificação push diária no horário marcado</div>
+          <div class="devo-feat"><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Texto + áudio gravado pelo pastor</div>
+          <div class="devo-feat"><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Espaço de oração ao final</div>
+        </div>
+      </div>
+
+      <div class="reveal" style="display:flex;flex-direction:column;justify-content:center">
+        <div class="eyebrow feat-eyebrow muted">Como funciona</div>
+        <h3 style="font-size:24px;font-weight:600;letter-spacing:-.025em;margin-bottom:14px;line-height:1.2">Cada devocional aceita texto, imagem, áudio ou vídeo.</h3>
+        <p style="font-size:15px;color:var(--stone);font-weight:300;line-height:1.6;margin-bottom:24px">A liderança grava uma série de uma vez ou agenda um por um. A Orbien dispara no horário certo, todo dia.</p>
+        <ul class="detail-mini">
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Texto, imagem, áudio ou vídeo — combinados livremente</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Cada devocional aceita oração ao final — texto livre ou pedido</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Histórico acessível pra quem entrou depois — membro novo lê tudo</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Métrica simples: quantas pessoas abriram, quantas oraram</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── SEÇÃO 5 — HISTÓRICO ───────── -->
+<section class="section">
+  <div class="wrap">
+    <div class="feat">
+      <div class="feat-visual reveal">
+        <div class="history-stage">
+          <div class="phone-big">
+            <div class="notch"></div>
+            <div class="screen">
+              <div class="bf-head">
+                <div class="top">
+                  <div class="ig">
+                    <div class="ico">O</div>
+                    <div class="nm">Igreja Doca</div>
+                  </div>
+                  <svg class="search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
+                <h6>Histórico</h6>
+                <div class="bf-tabs">
+                  <span class="bf-tab active">Tudo</span>
+                  <span class="bf-tab">Avisos</span>
+                  <span class="bf-tab">Devocional</span>
+                  <span class="bf-tab">Pastoral</span>
+                  <span class="bf-tab">Financeiro</span>
+                </div>
+              </div>
+              <div class="bf-body">
+
+                <div class="bf-day-label">14 maio · quarta</div>
+                <div class="bf-card">
+                  <div class="meta">
+                    <span class="tag navy">Aviso</span>
+                    <span class="when" style="margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">11:42</span>
+                  </div>
+                  <div class="ttl">Reunião de oração antecipada pra 19h</div>
+                  <div class="bod">Toca às 19h hoje, no salão principal.</div>
+                  <div class="from"><span class="ava">PC</span>Pastor Cláudio</div>
+                </div>
+
+                <div class="bf-day-label">13 maio · terça</div>
+                <div class="bf-card">
+                  <div class="meta">
+                    <span class="tag teal">Devocional</span>
+                    <span class="when" style="margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">6:30</span>
+                  </div>
+                  <div class="ttl">Salmo 23 — O Senhor é meu pastor</div>
+                  <div class="bod">Dia 13 da série "Salmos em 30 dias".</div>
+                </div>
+
+                <div class="bf-day-label">12 maio · segunda</div>
+                <div class="bf-card">
+                  <div class="meta">
+                    <span class="tag sand">Liderança</span>
+                    <span class="when" style="margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">19:08</span>
+                  </div>
+                  <div class="ttl">Convite pra ministrar no culto de jovens</div>
+                  <div class="bod">Quem quiser dividir uma palavra…</div>
+                </div>
+
+                <div class="bf-day-label">10 maio · sábado</div>
+                <div class="bf-card">
+                  <div class="meta">
+                    <span class="tag teal">Financeiro</span>
+                    <span class="when" style="margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">10:00</span>
+                  </div>
+                  <div class="ttl">Recibo do dízimo de abril disponível</div>
+                </div>
+
+                <div class="bf-day-label">8 maio · quinta</div>
+                <div class="bf-card">
+                  <div class="meta">
+                    <span class="tag navy">Aviso</span>
+                    <span class="when" style="margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">14:22</span>
+                  </div>
+                  <div class="ttl">Avisos do domingo</div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal">
+        <div class="eyebrow feat-eyebrow">04 · Histórico permanente</div>
+        <h2>Nada se perde no scroll.</h2>
+        <p class="lead">Mensagem importante não some entre vídeos engraçados e bom dia. O membro que entrou na igreja esta semana abre o app e acessa o que foi publicado no mês passado. Tudo organizado e pesquisável.</p>
+        <ul class="detail-mini">
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Feed cronológico ordenado por data</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Filtro por tipo — aviso, devocional, pastoral, financeiro</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Busca por palavra-chave em todo o histórico</li>
+          <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>O membro marca posts como lidos ou favoritos</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── SEÇÃO 6 — PREFERÊNCIAS ───────── -->
+<section class="section" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="feat" style="grid-template-columns:1fr 1.05fr">
+      <div class="reveal">
+        <div class="eyebrow feat-eyebrow">05 · Notificação personalizada</div>
+        <h2>Cada membro escolhe o que quer receber.</h2>
+        <p class="lead">LGPD na prática: o membro decide se quer notificação de aviso geral, de devocional, de aniversário, de doação confirmada. Pausa tudo a qualquer momento, sem precisar pedir pra ninguém.</p>
+        <div class="pref-feat">
+          <ul class="detail-mini">
+            <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Cada tipo de notificação ligado ou desligado individualmente</li>
+            <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Período silencioso configurável — sem push de madrugada</li>
+            <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Pausa de uma semana com um clique — viagem, retiro, descanso</li>
+            <li><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Avisos da liderança seguem prioritários, mas respeitam silêncio</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feat-visual right reveal">
+        <div class="prefs-canvas">
+          <div class="prefs-head">
+            <div class="crumb">Igreja Doca · Perfil</div>
+            <h4>Notificações</h4>
+          </div>
+          <div class="prefs-body">
+            <div class="pref-row">
+              <div class="info">
+                <div class="nm">Avisos da liderança</div>
+                <div class="sub">Reuniões, cultos, mudanças</div>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="pref-row">
+              <div class="info">
+                <div class="nm">Devocional diário</div>
+                <div class="sub">Todo dia · 06:30</div>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="pref-row">
+              <div class="info">
+                <div class="nm">Mensagens do meu pequeno grupo</div>
+                <div class="sub">Família Silva</div>
+              </div>
+              <div class="toggle"></div>
+            </div>
+            <div class="pref-row">
+              <div class="info">
+                <div class="nm">Confirmação de doação</div>
+                <div class="sub">Recibo e lembrete de dízimo</div>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="pref-row">
+              <div class="info">
+                <div class="nm">Aniversários de membros</div>
+                <div class="sub">Lembrete no dia</div>
+              </div>
+              <div class="toggle"></div>
+            </div>
+            <div class="pref-row">
+              <div class="info">
+                <div class="nm">Eventos especiais</div>
+                <div class="sub">Conferências, retiros, cultos extras</div>
+              </div>
+              <div class="toggle"></div>
+            </div>
+
+            <div class="pref-meta">
+              <div class="info">
+                <div class="nm">Período silencioso</div>
+                <div class="sub" style="color:var(--stone);font-family:'DM Sans',sans-serif;font-size:12px;letter-spacing:0">Sem notificação durante a noite</div>
+              </div>
+              <div class="val">22:00 — 06:00</div>
+            </div>
+
+            <div class="pref-pause">Pausar todas por uma semana</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── CROSS-SELL ───────── -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head reveal" style="max-width:720px">
+      <div class="eyebrow muted">Conexões com outros módulos</div>
+      <h2 class="section-title">Comunicação atravessa tudo.</h2>
+      <p class="section-sub">Cada notificação puxa dado dos outros módulos automaticamente — perfil, financeiro, pequenos grupos.</p>
+    </div>
+
+    <div class="modules-grid">
+      <a href="Orbien Membros.html" class="mod-card reveal">
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+        </div>
+        <h3>Membros e visitantes</h3>
+        <p>Aniversário, primeira visita confirmada, mudança de classificação — tudo gera notificação opcional pra liderança.</p>
+        <span class="lnk">Ver módulo →</span>
+      </a>
+
+      <a href="Orbien Financeiro.html" class="mod-card reveal">
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+        </div>
+        <h3>Doações e finanças</h3>
+        <p>Recibo automático após doação, lembrete de dízimo configurável, notificação de campanha de missões.</p>
+        <span class="lnk">Ver módulo →</span>
+      </a>
+
+      <a href="Orbien Pequenos Grupos.html" class="mod-card reveal">
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="7" r="4"></circle><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path><circle cx="17" cy="17" r="4"></circle>
+          </svg>
+        </div>
+        <h3>Pequenos grupos</h3>
+        <p>Lembrete da reunião no dia, aviso de material novo, mensagem da liderança direcionada pro grupo.</p>
+        <span class="lnk">Ver módulo →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── FINAL CTA ───────── -->
+<section class="final-cta" id="waitlist">
+  <div class="wrap final-cta-inner reveal">
+    <div class="eyebrow">Lista de espera aberta</div>
+    <h2>Pronto pra centralizar a comunicação?</h2>
+    <p>Entre na lista de espera e a gente te chama assim que abrir a primeira leva de igrejas-piloto.</p>
+    <div class="final-cta-actions">
+      <a href="#" class="btn btn-teal btn-lg">
+        Entrar na lista de espera
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+      </a>
+      <a href="#" class="wpp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+        </svg>
+        Falar no WhatsApp →
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── FOOTER ───────── -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand-col">
+        <a href="Orbien Home.html" class="brand">
+          <span class="brand-mark">
+            <svg viewBox="0 0 22 22" fill="none">
+              <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" stroke-width="1.5"></ellipse>
+              <circle cx="11" cy="11" r="3" fill="currentColor"></circle>
+              <circle cx="20" cy="11" r="2" fill="#00B8A2"></circle>
+            </svg>
+          </span>
+          Orbien
+        </a>
+        <p class="footer-tagline">Gestão que serve. Igreja que cresce. Plataforma e app white-label para igrejas de 50 a 300 membros.</p>
+        <div class="footer-socials">
+          <a href="#" aria-label="Instagram">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"></line></svg>
+          </a>
+          <a href="#" aria-label="YouTube">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>
+          </a>
+          <a href="#" aria-label="LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <h4>Produto</h4>
+        <ul>
+          <li><a href="Orbien Home.html#modulos">Funcionalidades</a></li>
+          <li><a href="Orbien Preços.html">Preços</a></li>
+          <li><a href="Orbien Home.html#comparativo">Comparativo</a></li>
+          <li><a href="Orbien Membros.html">Membros</a></li>
+          <li><a href="Orbien Pequenos Grupos.html">Pequenos grupos</a></li>
+          <li><a href="Orbien Financeiro.html">Financeiro</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Empresa</h4>
+        <ul>
+          <li><a href="#">Sobre</a></li>
+          <li><a href="#">Pastores parceiros</a></li>
+          <li><a href="#">Contato</a></li>
+          <li><a href="#">WhatsApp</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Legal e segurança</h4>
+        <ul>
+          <li><a href="#">Termos de uso</a></li>
+          <li><a href="#">Política de privacidade</a></li>
+          <li><a href="#">LGPD</a></li>
+          <li><a href="#">Status</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <div>© 2026 Church Platform Ltda · CNPJ a definir · Passo Fundo · RS</div>
+      <div>orbien.app · Conteúdo e Notificações</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
