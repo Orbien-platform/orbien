@@ -111,6 +111,13 @@ describe("Sidebar", () => {
     expect(screen.getByText("Sua igreja")).toBeInTheDocument();
   });
 
+  it("usa a inicial da Orbien quando o nome não tem letra nem número", () => {
+    mockedUsePathname.mockReturnValue("/dashboard");
+    mockedUseChurchIdentity.mockReturnValue({ churchName: "— ★", congregationName: null });
+    render(<Sidebar />);
+    expect(screen.getByText("O")).toBeInTheDocument();
+  });
+
   it("marca o item ativo quando o pathname é exatamente a rota", () => {
     mockedUsePathname.mockReturnValue("/pessoas");
     render(<Sidebar />);
