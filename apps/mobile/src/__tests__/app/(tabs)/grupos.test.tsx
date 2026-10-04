@@ -124,7 +124,10 @@ describe("GruposScreen", () => {
     });
     fireEvent.press(screen.getByTestId("grupo-sg1"));
 
-    expect(mockPush).toHaveBeenCalledWith("/grupo/sg1");
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/grupo/[id]",
+      params: { id: "sg1", role: expect.any(String) },
+    });
   });
 
   it("ignora a resposta que chega depois de a tela desmontar", async () => {

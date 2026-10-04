@@ -10,6 +10,9 @@
 // verdade em vez de um link de ~20px de alvo, e cada material com o ícone
 // do seu tipo (§5) — antes um pdf e um estudo em texto eram visualmente
 // idênticos.
+//
+// PROD-12: a liderança abre daqui o QR de check-in do encontro; os outros
+// papéis, o leitor que grava a própria presença.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
@@ -29,7 +32,9 @@ import {
   ExternalLink,
   CircleAlert,
   FileText,
+  QrCode,
   RefreshCw,
+  ScanLine,
   UserCheck,
   WifiOff,
 } from "../../../lib/theme/icons";
@@ -97,14 +102,31 @@ export default function EncontroScreen() {
   return (
     <Screen scroll testID="encontro-detail">
       {isLeader ? (
+        <View style={styles.actions}>
+          <AppButton
+            testID="registrar-presenca-link"
+            title="Registrar presença"
+            icon={UserCheck}
+            onPress={() => router.push(`/grupo/encontro/${id}/presenca`)}
+          />
+          <AppButton
+            testID="encontro-mostrar-qr"
+            title="Mostrar QR de check-in"
+            icon={QrCode}
+            variant="secondary"
+            onPress={() => router.push(`/grupo/encontro/${id}/qr`)}
+          />
+        </View>
+      ) : (
         <AppButton
-          testID="registrar-presenca-link"
-          title="Registrar presença"
-          icon={UserCheck}
-          onPress={() => router.push(`/grupo/encontro/${id}/presenca`)}
-          style={styles.presencaButton}
+          testID="encontro-fazer-checkin"
+          title="Fazer check-in"
+          icon={ScanLine}
+          variant="secondary"
+          onPress={() => router.push("/checkin")}
+          style={styles.actions}
         />
-      ) : null}
+      )}
 
       {materials && materials.length === 0 ? (
         <View testID="encontro-materials-empty" style={styles.empty}>
@@ -170,7 +192,7 @@ export default function EncontroScreen() {
 }
 
 const styles = StyleSheet.create({
-  presencaButton: { marginBottom: spacing.lg },
+  actions: { gap: spacing.sm, marginBottom: spacing.lg },
   materialHeader: {
     flexDirection: "row",
     alignItems: "center",

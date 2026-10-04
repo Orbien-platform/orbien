@@ -105,6 +105,18 @@ describe("MaisScreen", () => {
     await renderMais();
 
     expect(screen.queryByTestId("mais-visitante")).toBeNull();
+    expect(screen.queryByTestId("mais-autocadastro")).toBeNull();
+    expect(screen.queryByTestId("mais-lideranca")).toBeNull();
+  });
+
+  it("pastor vê o QR de autocadastro, que abre a lista de QRs", async () => {
+    mockDecodeJwtPayload.mockReturnValue(payload(["pastor"]));
+    await renderMais();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-autocadastro"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/autocadastro");
   });
 
   it("secretaria vê o cadastro de visitante", async () => {
@@ -122,6 +134,7 @@ describe("MaisScreen", () => {
     await renderMais();
 
     expect(screen.queryByTestId("mais-visitante")).toBeNull();
+    expect(screen.queryByTestId("mais-autocadastro")).toBeNull();
   });
 
   it("Contribuir abre a página de doação da igreja", async () => {

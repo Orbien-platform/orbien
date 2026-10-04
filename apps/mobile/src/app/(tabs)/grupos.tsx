@@ -126,7 +126,9 @@ export default function GruposScreen() {
         renderItem={({ item }) => (
           <Card
             testID={`grupo-${item.id}`}
-            onPress={() => router.push(`/grupo/${item.id}`)}
+            onPress={() =>
+              router.push({ pathname: "/grupo/[id]", params: { id: item.id, role: item.role } })
+            }
             accessibilityLabel={`${item.name} — ${ROLE_LABELS[item.role]}`}
           >
             <View style={styles.cardRow}>

@@ -85,3 +85,10 @@ export function getGreeting(date: Date): string {
   if (hour < 18) return "Boa tarde";
   return "Boa noite";
 }
+
+/** "23:40" — hora local de um instante (validade do QR de check-in). */
+export function formatTime(iso: string): string | null {
+  const date = parse(iso);
+  if (!date) return null;
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}

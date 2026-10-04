@@ -149,6 +149,12 @@ function ThemedShell() {
           <Stack.Screen name="grupo/[id]" options={{ title: "Grupo" }} />
           <Stack.Screen name="grupo/encontro/[id]" options={{ title: "Encontro" }} />
           <Stack.Screen name="grupo/encontro/[id]/presenca" options={{ title: "Presença" }} />
+          {/* Telas de QR: sem header, o código ocupa a tela e o "Fechar"
+              vem de `FullScreenFrame`. */}
+          <Stack.Screen name="grupo/encontro/[id]/qr" options={{ headerShown: false }} />
+          <Stack.Screen name="checkin" options={{ headerShown: false }} />
+          <Stack.Screen name="autocadastro" options={{ title: "QR de autocadastro" }} />
+          <Stack.Screen name="autocadastro-qr" options={{ headerShown: false }} />
         </Stack.Protected>
         {/* Enquanto `status` é "loading" as rotas autenticadas ainda não
             existem; o splash cobre a tela até a sessão resolver, e o

@@ -16,7 +16,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 |---|---|---|---|
 | Site (`apps/site`) | **Entregue** | As 8 páginas da v2 e as 5 de apoio (hub de funcionalidades, contato, LGPD, login e 404), só no tema escuro, com tokens, fontes, títulos, CTAs, órbita no hero e brilho do CTA final | Itens menores em [§2.3](#23-o-que-ficou-de-fora) |
 | Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em serifa, menu em seções, identidade da igreja no menu, caminho no topo e anéis no fundo | Todas as telas da v2 e o header completo — [§3.2](#32-o-que-falta) |
-| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante, presença já marcada, transição de entrada, login e destaque da v2 | Privacidade, QRs, Contribuir nativo, blocos por papel no Início e o resto das telas — [§4.2](#42-o-que-falta) |
+| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante, presença já marcada, transição de entrada, login, destaque da v2, QR de check-in (líder e leitor) e QR de autocadastro | Privacidade, página pública do autocadastro no web, Contribuir nativo, blocos por papel no Início e o resto das telas — [§4.2](#42-o-que-falta) |
 | Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em serifa, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
 
 ---
@@ -308,6 +308,9 @@ na tela "em breve" do site.
 | Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Sair |
 | Célula | Presença (líder): todos marcados, toque desmarca | [x] Na primeira chamada do encontro; com presença já registrada, ninguém vem pré-marcado. Falha mantém as marcações |
 | Liderança | Cadastro de visitante (deduplicação por telefone) | [x] `POST /persons` como visitante; mostra quem já tem o mesmo telefone. Só para os papéis que a rota aceita (`tenant_admin`, `admin_congregation`, `pastor`, `secretary`) |
+| Célula | QR de check-in (líder) | [x] Do encontro e da presença; tela cheia, brilho máximo e tela acesa, validade e contagem regressiva, presenças relidas a cada 15 s, "Renovar código". As 4h e as 24h são da API; o 409 vira "passou há mais de 24 horas" com atalho para a lista. Abrir a tela gera o código (a API não lê o vigente) |
+| Célula | Leitura do QR (membro) | [x] `/checkin` com `expo-camera`: permissão pedida, negada e bloqueada (abre os ajustes); ignora QR que não é de check-in; 404 "expirou ou foi renovado", 403 "não está neste grupo", sem conexão reenvia o mesmo código. Entrada no grupo e no encontro |
+| Liderança | QR de autocadastro | [x] Mais › Liderança, mesmos papéis de `admin/visitor/qr`. Lista os ativos e projeta o escolhido em tela cheia; sem nenhum, cria o do culto. Falta a página pública no web (§4.2) |
 
 ### 4.2 O que falta
 
@@ -317,10 +320,11 @@ na tela "em breve" do site.
   meus grupos e avisos.
 - [ ] **Privacidade (LGPD)** na Mais: depende das rotas do titular
   (`CONF-03`). Saiu da Mais até elas existirem.
-- [ ] **QR de check-in** (líder) e **leitura do QR** (membro): pede lib de QR
-  e câmera (`PROD-12`).
-- [ ] **QR de autocadastro** (liderança): a rota `admin/visitor/qr` existe,
-  falta a lib de QR no app.
+- [x] **QR de check-in** (líder) e **leitura do QR** (membro) — feito em
+  2026-10-04, ver a linha "Célula" da tabela de §4.1 (`PROD-12`).
+- [x] **QR de autocadastro** (liderança) — feito em 2026-10-04 no app. **A
+  página pública que o QR abre (`/visitante/{slug}/{token}` no `apps/web`)
+  ainda não existe**: sem ela o visitante cai num 404. Ver `PROD-29`.
 - [ ] **Cadastro de visitante pelo líder de célula:** a v2 mostra a seção
   Liderança para o líder; `POST /persons` não aceita `cell_leader`. Decisão
   de produto antes de abrir a rota.

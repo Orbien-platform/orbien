@@ -292,6 +292,7 @@ O guia é a regra; esta seção é o mapa. Mexer em uma coluna sem olhar a outra
 | §7 marca em tela | `src/components/BrandHeader.tsx`, `BrandLogo.tsx`, `BrandMark.tsx` |
 | §7 card de lista | `src/components/Card.tsx` + `Avatar.tsx` / `DateBlock.tsx` |
 | §7 badge de status | `src/components/Badge.tsx` |
+| §7 QR na tela (placa branca nos dois modos, tela cheia, brilho máximo) | `src/components/QrCode.tsx`, `FullScreenFrame.tsx`, `src/lib/qr/use-presentation-mode.ts`; `tokens.ts` → `qr`, `successMark` |
 | §8 papéis semânticos e modo claro/escuro | `tokens.ts` → `palettes`; resolução em `theme-provider.tsx`; override manual em `src/app/perfil.tsx` |
 | §8 status bar dinâmica | `src/app/_layout.tsx` |
 

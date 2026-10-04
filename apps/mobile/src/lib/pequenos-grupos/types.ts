@@ -42,3 +42,15 @@ export interface GroupRosterMember {
   full_name: string;
   role: "leader" | "trainee" | "member";
 }
+
+/** `MeetingsService.createCheckinToken` — `expires_at` em ISO. */
+export interface CheckinToken {
+  token: string;
+  expires_at: string;
+}
+
+/** `MeetingsService.checkin`. */
+export interface CheckinResult {
+  status: "checked_in" | "already_checked_in";
+  group_meeting_id: string;
+}

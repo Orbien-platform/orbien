@@ -3,6 +3,8 @@
 // vs. tela (UI) que `celebracoes-client.ts`/`escala-client.ts` já seguem.
 import { authenticatedRequest } from "../auth/auth-client";
 import type {
+  CheckinResult,
+  CheckinToken,
   GroupMeetingDetail,
   GroupMeetingSummary,
   GroupRosterMember,
@@ -55,4 +57,24 @@ export async function recordAttendance(
     `/small-groups/meetings/${meetingId}/attendance`,
     { body: { person_ids: personIds } },
   );
+}
+
+/**
+ * `POST /small-groups/meetings/:meetingId/checkin-token` (PROD-12). Gera ou
+ * renova o QR do encontro: cada chamada troca o token e reabre as 4h, o que
+ * também invalida o QR anterior. A API recusa com 409 se o encontro passou
+ * há mais de 24h.
+ */
+export async function createCheckinToken(meetingId: string): Promise<CheckinToken> {
+  return authenticatedRequest<CheckinToken>(
+    "post",
+    `/small-groups/meetings/${meetingId}/checkin-token`,
+  );
+}
+
+/** `POST /small-groups/meetings/checkin` (PROD-12): o membro manda o token lido. */
+export async function checkIn(token: string): Promise<CheckinResult> {
+  return authenticatedRequest<CheckinResult>("post", "/small-groups/meetings/checkin", {
+    body: { token },
+  });
 }

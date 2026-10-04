@@ -16,8 +16,8 @@
 // do §3) — marcar dez pessoas era dez toques de precisão. O texto do
 // estado continua em tela, ao lado do checkbox, porque é ele que diz o que
 // vai acontecer ao confirmar.
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../../../components/Alert";
@@ -36,6 +36,7 @@ import type { GroupRosterMember } from "../../../../lib/pequenos-grupos/types";
 import {
   CircleAlert,
   CircleCheck,
+  QrCode,
   RefreshCw,
   Square,
   SquareCheck,
@@ -49,6 +50,7 @@ const SUBMIT_ERROR_MESSAGE = "Não foi possível registrar a presença. Tente no
 
 export default function PresencaScreen() {
   const { id: meetingId } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { primaryColor, brandInk, colors } = useTheme();
   const [roster, setRoster] = useState<GroupRosterMember[] | null>(null);
   const [alreadyMarked, setAlreadyMarked] = useState<Set<string>>(new Set());
@@ -58,6 +60,17 @@ export default function PresencaScreen() {
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  // Quem fez check-in pelo QR enquanto a tela dele estava aberta já tem
+  // presença gravada: na volta, a lista é relida para aparecer marcada.
+  const openedQrRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!openedQrRef.current) return;
+      openedQrRef.current = false;
+      setRetryCount((n) => n + 1);
+    }, []),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -67,9 +80,14 @@ export default function PresencaScreen() {
         getGroupRoster(meeting.small_group_id).then((members) => {
           if (cancelled) return;
           setRoster(members);
-          setAlreadyMarked(new Set(meeting.attendanceRecords.map((a) => a.person_id)));
-          if (meeting.attendanceRecords.length === 0) {
+          const marked = new Set(meeting.attendanceRecords.map((a) => a.person_id));
+          setAlreadyMarked(marked);
+          if (marked.size === 0) {
             setSelected(new Set(members.map((member) => member.person_id)));
+          } else {
+            // Releitura depois do QR: quem já entrou pelo check-in sai da
+            // seleção, senão contaria duas vezes no "Confirmar (n)".
+            setSelected((current) => new Set([...current].filter((id) => !marked.has(id))));
           }
         }),
       )
@@ -140,6 +158,20 @@ export default function PresencaScreen() {
       {submitError ? (
         <Alert messageTestID="presenca-submit-error" message={submitError} />
       ) : null}
+
+      {/* PROD-12: quem tem o app marca a si mesmo pelo QR; a lista fica para
+          quem não tem. */}
+      <AppButton
+        testID="presenca-mostrar-qr"
+        title="Mostrar QR de check-in"
+        icon={QrCode}
+        variant="secondary"
+        onPress={() => {
+          openedQrRef.current = true;
+          router.push(`/grupo/encontro/${meetingId}/qr`);
+        }}
+        style={styles.qrButton}
+      />
 
       <FlatList
         testID="presenca-roster"
@@ -255,4 +287,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   confirmButton: { marginTop: spacing.md },
+  qrButton: { marginBottom: spacing.lg },
 });

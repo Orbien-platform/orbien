@@ -1669,6 +1669,30 @@ não-membro com token válido e não-duplicação) e `meetings.controller.spec.t
 (gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
 Nenhuma suíte existente mudou de comportamento.
 
+**Lado do membro, no `apps/mobile` — 2026-10-04** (branch
+`feat/qr-checkin-e-autocadastro`, junto com a v2 do `PROD-29`). A pergunta
+"digitar o código ou apontar a câmera" foi respondida pela câmera:
+`expo-camera` (SDK 57, plugin com permissão de câmera e **sem** microfone —
+módulo nativo, sai por build, não OTA). O QR é desenhado com
+`qrcode-generator` (JS puro) sobre `react-native-svg`.
+
+- **Líder:** "Mostrar QR de check-in" no encontro e na presença abre
+  `grupo/encontro/[id]/qr` em tela cheia, com brilho no máximo e a tela
+  acesa (`expo-brightness`, `expo-keep-awake`), validade, contagem
+  regressiva, presenças relidas a cada 15 s e "Renovar código". Abrir a tela
+  **gera** o código — a API só tem o `upsert`, não a leitura do token
+  vigente; documentado no cabeçalho da tela. O 409 das 24h vira "passou há
+  mais de 24 horas" com atalho para a lista de presença, que é relida na
+  volta do QR.
+- **Membro:** "Fazer check-in" no grupo e no encontro abre `/checkin`. O QR
+  carrega `orbien:checkin:{token}` para o leitor recusar na hora código que
+  não é de check-in; o UUID puro que o painel mostra também é aceito.
+  Permissão pedida, negada e bloqueada (abre os ajustes); 404, 403 e sem
+  conexão (reenvia o mesmo token) têm estado próprio.
+- **API:** a regra da v2 (4h de validade, gerar até 24h depois do encontro)
+  já era a dela. Ganhou só teste que fixa os dois limites
+  (`meetings.service.spec.ts`, "janelas da regra da v2").
+
 ### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel e app começados
 
 Handoff de design em `docs/design/orbita-v2/README.md`: nova identidade
@@ -1694,10 +1718,19 @@ está.
   build nativa, não OTA), `STYLE-GUIDE.md` reescrito, navegação em cinco abas
   (Início · Conteúdo · Bíblia · {termo} · Mais), aba Mais, cadastro de
   visitante, presença já marcada, transição de entrada na cor da igreja e
-  selo "Destaque" no hero. Faltam, entre outros: Privacidade (depende do
-  `CONF-03`), QR de check-in e de autocadastro, Contribuir nativo (atrás do
+  selo "Destaque" no hero. **QRs (2026-10-04):** check-in do encontro
+  (líder mostra, membro lê pela câmera — nota no `PROD-12`) e QR de
+  autocadastro na Mais, para a liderança projetar no culto. Faltam, entre
+  outros: Privacidade (depende do `CONF-03`), Contribuir nativo (atrás do
   `PROD-28`), blocos por papel no Início e o modo ao vivo da celebração —
   lista em `PROJETO.md` §4.
+  - **Pendente — página pública do autocadastro no `apps/web`.** O QR de
+    autocadastro do app aponta para `{webUrl}/visitante/{tenant_slug}/{token}`
+    (`signupUrl` em `apps/mobile/src/lib/visitantes/visitantes-client.ts`),
+    mas essa página não existe: nenhum front consome
+    `POST /public/visitor/register` hoje. Até ela existir, quem lê o QR cai
+    num 404. A rota escolhida segue o formato de `/doar/{tenant_slug}`;
+    se a página nascer em outro caminho, é uma linha no app.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
   painel, decisão de 2026-10-04: o pacote v2 não o desenha.

@@ -131,6 +131,20 @@ module.exports = ({ config }) => {
           resizeMode: "contain",
         },
       ],
+      // Câmera só para ler o QR de check-in do encontro (PROD-12). Sem
+      // microfone: o app não grava vídeo, e pedir a permissão à toa custa
+      // revisão na App Store e confiança do membro. Módulo nativo novo:
+      // exige build, não OTA.
+      [
+        "expo-camera",
+        {
+          cameraPermission:
+            "A câmera é usada para ler o QR de check-in que o líder mostra no encontro.",
+          microphonePermission: false,
+          recordAudioAndroid: false,
+          barcodeScannerEnabled: true,
+        },
+      ],
       ...(config.plugins ?? []),
     ],
     extra: {

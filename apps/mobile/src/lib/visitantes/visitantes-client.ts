@@ -44,3 +44,46 @@ export async function registerVisitor(input: NewVisitor): Promise<RegisterVisito
     },
   });
 }
+
+/** Origem do visitante (`VisitOrigin` no schema da API). */
+export type VisitOrigin = "service" | "small_group" | "event" | "other";
+
+/** `QrToken` de `GET /admin/visitor/qr` — o QR de autocadastro. */
+export interface SignupQr {
+  id: string;
+  token: string;
+  origin: VisitOrigin;
+  label: string | null;
+  is_active: boolean;
+  scan_count: number;
+  created_at: string;
+}
+
+/** Os QRs de autocadastro da congregação, mais novo primeiro. */
+export async function listSignupQrs(): Promise<SignupQr[]> {
+  return authenticatedRequest<SignupQr[]>("get", "/admin/visitor/qr");
+}
+
+export async function createSignupQr(origin: VisitOrigin, label: string): Promise<SignupQr> {
+  return authenticatedRequest<SignupQr>("post", "/admin/visitor/qr", {
+    body: { origin, label },
+  });
+}
+
+/**
+ * Endereço que o QR de autocadastro abre: a página pública do web onde o
+ * visitante deixa nome, WhatsApp e consentimento e que chama
+ * `POST /public/visitor/register` com o token. Mesmo formato de
+ * `/doar/{tenant_slug}`: o slug no caminho deixa a página aplicar a marca da
+ * igreja antes de qualquer envio.
+ */
+export function signupUrl(webUrl: string, tenantSlug: string, token: string): string {
+  return `${webUrl.replace(/\/+$/, "")}/visitante/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(token)}`;
+}
+
+export const ORIGIN_LABELS: Record<VisitOrigin, string> = {
+  service: "Culto",
+  small_group: "Grupo",
+  event: "Evento",
+  other: "Outro",
+};

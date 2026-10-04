@@ -8,6 +8,10 @@
 // ("2026-09-13T19:00:00.000Z"). Agora a data vem formatada em pt-BR
 // (src/lib/format/date.ts) como bloco à esquerda do card (§7), e o tópico
 // fica no título, com um rótulo neutro quando não há.
+//
+// PROD-12: acima da lista, "Fazer check-in" abre o leitor do QR do líder.
+// Não aparece para quem lidera o grupo (`role` vem da aba, de
+// `GET /small-groups/mine`) — o líder mostra o QR a partir do encontro.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -22,16 +26,23 @@ import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error
 import { listMeetings } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { GroupMeetingSummary } from "../../lib/pequenos-grupos/types";
 import { formatDateTime } from "../../lib/format/date";
-import { CalendarDays, ChevronRight, CircleAlert, RefreshCw, WifiOff } from "../../lib/theme/icons";
+import {
+  CalendarDays,
+  ChevronRight,
+  CircleAlert,
+  RefreshCw,
+  ScanLine,
+  WifiOff,
+} from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
 const EMPTY_MESSAGE = "Nenhum encontro registrado.";
 
 export default function GrupoScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, role } = useLocalSearchParams<{ id: string; role?: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, brandInk } = useTheme();
   const [meetings, setMeetings] = useState<GroupMeetingSummary[] | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -100,7 +111,40 @@ export default function GrupoScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           meetings && meetings.length > 0 ? (
-            <SectionLabel trailing={String(meetings.length)}>Encontros</SectionLabel>
+            <>
+              {role !== "leader" ? (
+                <Card
+                  testID="grupo-fazer-checkin"
+                  onPress={() => router.push("/checkin")}
+                  accessibilityLabel="Fazer check-in"
+                  style={styles.checkin}
+                >
+                  <View style={styles.cardRow}>
+                    <ScanLine
+                      size={iconSize.action}
+                      color={brandInk}
+                      strokeWidth={ICON_STROKE_WIDTH}
+                    />
+                    <View style={styles.cardBody}>
+                      <Text style={[typography.h3, { color: colors.textPrimary }]}>
+                        Fazer check-in
+                      </Text>
+                      <Text
+                        style={[typography.caption, styles.when, { color: colors.textTertiary }]}
+                      >
+                        Leia o QR que o líder mostra no encontro
+                      </Text>
+                    </View>
+                    <ChevronRight
+                      size={iconSize.inline}
+                      color={colors.textTertiary}
+                      strokeWidth={ICON_STROKE_WIDTH}
+                    />
+                  </View>
+                </Card>
+              ) : null}
+              <SectionLabel trailing={String(meetings.length)}>Encontros</SectionLabel>
+            </>
           ) : null
         }
         renderItem={({ item }) => {
@@ -145,4 +189,5 @@ const styles = StyleSheet.create({
   },
   cardBody: { flex: 1 },
   when: { marginTop: spacing.xs },
+  checkin: { marginBottom: spacing.lg },
 });
