@@ -1,46 +1,89 @@
-// Cadastro de visitante pela liderança (v2, "Cadastrar visitante").
+// Cadastro de visitante pela liderança (v2, "Cadastrar visitante") — sobre
+// `POST /visitors` (apps/api/src/visitor/visitor.leader.controller.ts), aberto
+// ao líder de célula.
 //
-// É o `POST /persons` do painel com `classification: "visitor"`: a API cria
-// a pessoa e devolve, em `possible_duplicates`, quem já tem o mesmo
-// telefone na igreja. A deduplicação é depois do cadastro, não antes — o app
-// mostra os nomes para a liderança decidir, no painel, se mescla.
+// O duplicado por telefone vem ANTES de criar: se o número já existe na
+// igreja, a API devolve quem o tem e não grava nada. A tela então pergunta:
+// é a mesma pessoa (`existing_person_id` — registra só a visita) ou é outra
+// (`force_new` — cria mesmo assim)?
 import { authenticatedRequest } from "../auth/auth-client";
+
+export type VisitOrigin = "service" | "small_group" | "event" | "other";
+export type VisitorGender = "female" | "male";
 
 export interface NewVisitor {
   full_name: string;
   phone?: string;
   email?: string;
+  gender?: VisitorGender;
+  origin: VisitOrigin;
+  small_group_id?: string;
 }
 
-export interface PossibleDuplicate {
+export interface DuplicateMatch {
   id: string;
   full_name: string;
-  phone: string | null;
   classification: "visitor" | "attendee" | "member";
+  visits: number;
+  last_visit_at: string | null;
 }
 
-export interface RegisterVisitorResult {
-  person: { id: string; full_name: string };
-  possible_duplicates: PossibleDuplicate[];
-}
+export type RegisterVisitorResult =
+  | { status: "duplicate"; matches: DuplicateMatch[] }
+  | {
+      status: "registered" | "visit_recorded";
+      person: { id: string; full_name: string };
+      reclassified: boolean;
+    };
 
-/** Só dígitos e o `+` inicial: o telefone é comparado como texto na API,
- * então "(11) 99999-0000" e "11999990000" seriam pessoas diferentes. */
+/** Só dígitos e o `+` inicial — a API normaliza do mesmo jeito. */
 export function normalizePhone(raw: string): string {
   const trimmed = raw.trim();
   const digits = trimmed.replace(/\D/g, "");
   return trimmed.startsWith("+") ? `+${digits}` : digits;
 }
 
-export async function registerVisitor(input: NewVisitor): Promise<RegisterVisitorResult> {
+function visitorBody(input: NewVisitor) {
   const phone = input.phone ? normalizePhone(input.phone) : "";
   const email = input.email?.trim() ?? "";
-  return authenticatedRequest<RegisterVisitorResult>("post", "/persons", {
+  return {
+    full_name: input.full_name.trim(),
+    origin: input.origin,
+    lgpd_consent: true,
+    ...(phone ? { phone } : {}),
+    ...(email ? { email } : {}),
+    ...(input.gender ? { gender: input.gender } : {}),
+    ...(input.small_group_id ? { small_group_id: input.small_group_id } : {}),
+  };
+}
+
+/** Primeira tentativa: cria, ou devolve os duplicados por telefone. Só é
+ * chamada com o consentimento do visitante já marcado na tela. */
+export function registerVisitor(input: NewVisitor): Promise<RegisterVisitorResult> {
+  return authenticatedRequest<RegisterVisitorResult>("post", "/visitors", {
+    body: visitorBody(input),
+  });
+}
+
+/** "É outra pessoa": cria mesmo com o telefone repetido. */
+export function registerVisitorAnyway(input: NewVisitor): Promise<RegisterVisitorResult> {
+  return authenticatedRequest<RegisterVisitorResult>("post", "/visitors", {
+    body: { ...visitorBody(input), force_new: true },
+  });
+}
+
+/** "É a mesma pessoa": registra só a nova visita. */
+export function recordVisitForExisting(
+  personId: string,
+  origin: VisitOrigin,
+  smallGroupId?: string,
+): Promise<RegisterVisitorResult> {
+  return authenticatedRequest<RegisterVisitorResult>("post", "/visitors", {
     body: {
-      full_name: input.full_name.trim(),
-      classification: "visitor",
-      ...(phone ? { phone } : {}),
-      ...(email ? { email } : {}),
+      existing_person_id: personId,
+      origin,
+      lgpd_consent: true,
+      ...(smallGroupId ? { small_group_id: smallGroupId } : {}),
     },
   });
 }

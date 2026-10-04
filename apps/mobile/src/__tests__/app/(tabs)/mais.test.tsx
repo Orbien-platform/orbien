@@ -1,6 +1,6 @@
 // Aba Mais (v2): cada linha aparece só para quem pode usá-la — escalas e
 // celebrações pela área `volunteers`, o cadastro de visitante pelos papéis
-// que `POST /persons` aceita, e o "Sair" sempre.
+// que `POST /visitors` aceita (líder de célula incluso), e o "Sair" sempre.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
@@ -117,11 +117,11 @@ describe("MaisScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/visitante");
   });
 
-  it("líder de célula não vê o cadastro — a API não aceita o papel", async () => {
+  it("líder de célula vê o cadastro — é quem recebe o visitante no encontro", async () => {
     mockDecodeJwtPayload.mockReturnValue(payload(["cell_leader"]));
     await renderMais();
 
-    expect(screen.queryByTestId("mais-visitante")).toBeNull();
+    expect(screen.getByTestId("mais-visitante")).toBeTruthy();
   });
 
   it("Contribuir abre a página de doação da igreja", async () => {

@@ -11,9 +11,10 @@
 // - Escalas e Celebrações seguem a área `volunteers` de `GET /me/permissions`,
 //   o mesmo gate que a Home já usava (fail-open enquanto `areas` é `null`,
 //   porque quem nega de verdade é a API em cada rota);
-// - Cadastrar visitante segue os papéis que `POST /persons` aceita
-//   (`WRITE_ROLES` em apps/api/src/persons/persons.controller.ts). Aqui o
-//   gate é fail-closed: sem papel legível no token, a linha não aparece;
+// - Cadastrar visitante segue os papéis que `POST /visitors` aceita
+//   (`VISITOR_LEADER_ROLES` em apps/api/src/visitor/visitor.leader.controller.ts),
+//   o líder de célula incluso. Aqui o gate é fail-closed: sem papel legível
+//   no token, a linha não aparece;
 // - Dízimo automático só com a trava `ASAAS_PAYMENTS_ENABLED` ligada e
 //   tenant Premium (PROD-28), como na Home.
 import Constants from "expo-constants";
@@ -45,8 +46,14 @@ import {
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
-/** Quem `POST /persons` aceita — espelho de `WRITE_ROLES` da API. */
-export const VISITOR_WRITE_ROLES = ["tenant_admin", "admin_congregation", "pastor", "secretary"];
+/** Quem `POST /visitors` aceita — espelho de `VISITOR_LEADER_ROLES` da API. */
+export const VISITOR_WRITE_ROLES = [
+  "tenant_admin",
+  "admin_congregation",
+  "pastor",
+  "secretary",
+  "cell_leader",
+];
 
 export default function MaisScreen() {
   const router = useRouter();
