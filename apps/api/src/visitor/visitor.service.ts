@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient, QrToken } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificationService } from '../persons/classification.service';
@@ -6,11 +6,36 @@ import { VisitsService } from '../persons/visits.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { RegisterVisitorDto } from './dto/register-visitor.dto';
 import { CreateQrTokenDto } from './dto/create-qr-token.dto';
+import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto';
 
 type PrismaTx = Omit<
   PrismaClient,
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
 >;
+
+export interface DuplicateMatch {
+  id: string;
+  full_name: string;
+  classification: string;
+  visits: number;
+  last_visit_at: Date | null;
+}
+
+export type LeaderRegisterResult =
+  | { status: 'duplicate'; matches: DuplicateMatch[] }
+  | { status: 'registered'; person: { id: string; full_name: string }; reclassified: boolean }
+  | { status: 'visit_recorded'; person: { id: string; full_name: string }; reclassified: boolean };
+
+/** Só dígitos e o `+` inicial: "(11) 99999-0000" e "11999990000" são o mesmo
+ * telefone. Grava normalizado; procura pelo normalizado e pelo que veio. */
+export function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/\D/g, '');
+  return trimmed.startsWith('+') ? `+${digits}` : digits;
+}
+
+/** Quantos possíveis duplicados a tela mostra — é uma escolha, não uma busca. */
+const MAX_DUPLICATE_MATCHES = 5;
 
 type RegisterResult =
   | { status: 'registered'; message: string }
@@ -143,6 +168,129 @@ export class VisitorService {
       status: 'visit_recorded',
       message: `Tudo certo, ${firstName}! Sua presença foi registrada.`,
     };
+  }
+
+  /**
+   * Cadastro de visitante pela liderança, no app (v2). Abre ao líder de
+   * célula, que é quem recebe o visitante no encontro — o mesmo conjunto de
+   * papéis que já registra visita (`POST /persons/visits`).
+   *
+   * Diferente do `POST /persons` do painel, que cria e depois avisa do
+   * duplicado: aqui o duplicado por telefone vem **antes**, e quem decide é a
+   * liderança ("é a mesma pessoa" registra a visita; "é outra pessoa" cria).
+   * Em todos os caminhos a visita e o consentimento do visitante são
+   * gravados juntos, e a reclassificação automática (3 visitas em 60 dias)
+   * roda como no QR.
+   */
+  async registerByLeader(
+    dto: RegisterVisitorByLeaderDto,
+    user: JwtPayload,
+  ): Promise<LeaderRegisterResult> {
+    if (dto.origin === 'small_group' && !dto.small_group_id) {
+      throw new BadRequestException('small_group_id é obrigatório quando origin = small_group');
+    }
+
+    const db = this.prisma.client;
+    const phone = dto.phone ? normalizePhone(dto.phone) : '';
+
+    if (dto.existing_person_id) {
+      const existing = await db.person.findFirst({
+        where: { id: dto.existing_person_id, deleted_at: null, anonymized_at: null },
+        select: { id: true, full_name: true },
+      });
+      if (!existing) throw new NotFoundException('Pessoa não encontrada');
+      const reclassified = await this.recordVisitAndConsent(existing.id, dto, user);
+      return { status: 'visit_recorded', person: existing, reclassified };
+    }
+
+    if (phone && !dto.force_new) {
+      const found = await db.person.findMany({
+        where: {
+          phone: { in: Array.from(new Set([phone, dto.phone!.trim()])) },
+          deleted_at: null,
+          anonymized_at: null,
+        },
+        take: MAX_DUPLICATE_MATCHES,
+        orderBy: { created_at: 'asc' },
+        select: {
+          id: true,
+          full_name: true,
+          classification: true,
+          _count: { select: { visitRecords: true } },
+          visitRecords: { orderBy: { visited_at: 'desc' }, take: 1, select: { visited_at: true } },
+        },
+      });
+      if (found.length > 0) {
+        return {
+          status: 'duplicate',
+          matches: found.map((p) => ({
+            id: p.id,
+            full_name: p.full_name,
+            classification: p.classification,
+            visits: p._count.visitRecords,
+            last_visit_at: p.visitRecords[0]?.visited_at ?? null,
+          })),
+        };
+      }
+    }
+
+    let reclassified = false;
+    const person = await this.prisma.runInTx(async (tx) => {
+      const created = await tx.person.create({
+        data: {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          full_name: dto.full_name!.trim(),
+          phone: phone || null,
+          email: dto.email?.trim() || null,
+          gender: dto.gender ?? null,
+          classification: 'visitor',
+        },
+        select: { id: true, full_name: true },
+      });
+      reclassified = await this.recordVisitAndConsent(created.id, dto, user, tx);
+      return created;
+    });
+
+    return { status: 'registered', person, reclassified };
+  }
+
+  /** Consentimento do visitante + visita + reclassificação, na mesma
+   * transação — o mapeamento LGPD (§3.2) não admite visitante gravado sem o
+   * consentimento correspondente. */
+  private async recordVisitAndConsent(
+    personId: string,
+    dto: RegisterVisitorByLeaderDto,
+    user: JwtPayload,
+    tx?: PrismaTx,
+  ): Promise<boolean> {
+    const run = async (t: PrismaTx) => {
+      const now = new Date();
+      await t.consentRecord.create({
+        data: {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          person_id: personId,
+          version: 'visitor_consent_v1',
+          consented_at: now,
+          ip: null,
+          user_agent: 'app: cadastro pela liderança',
+          origin: dto.origin,
+        },
+      });
+      await t.visitRecord.create({
+        data: {
+          tenant_id: user.tenant_id,
+          congregation_id: user.congregation_id,
+          person_id: personId,
+          origin: dto.origin,
+          small_group_id: dto.small_group_id ?? null,
+          visited_at: now,
+        },
+      });
+      return this.classificationService.checkAutoReclassification(personId, user.sub, t);
+    };
+    return tx ? run(tx) : this.prisma.runInTx(run);
   }
 
   async createQrToken(dto: CreateQrTokenDto, user: JwtPayload): Promise<QrToken> {
