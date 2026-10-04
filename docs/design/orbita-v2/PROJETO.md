@@ -16,7 +16,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 |---|---|---|---|
 | Site (`apps/site`) | **Entregue** | As 8 páginas da v2 e as 5 de apoio (hub de funcionalidades, contato, LGPD, login e 404), só no tema escuro, com tokens, fontes, títulos, CTAs, órbita no hero e brilho do CTA final | Itens menores em [§2.3](#23-o-que-ficou-de-fora) |
 | Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em serifa, menu em seções, identidade da igreja no menu, caminho no topo e anéis no fundo | Todas as telas da v2 e o header completo — [§3.2](#32-o-que-falta) |
-| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante, presença já marcada, transição de entrada, login e destaque da v2 | Privacidade, QRs, Contribuir nativo, blocos por papel no Início e o resto das telas — [§4.2](#42-o-que-falta) |
+| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante (líder incluso), Privacidade (LGPD), presença já marcada, transição de entrada, login e destaque da v2 | QRs (em sessão própria), Início por papel, Contribuir nativo e o resto das telas — [§4.2](#42-o-que-falta) |
 | Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em serifa, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
 
 ---
@@ -305,34 +305,31 @@ na tela "em breve" do site.
 | Acesso | Transição que aplica cor e logo da igreja | [x] `ChurchWelcome`: só depois de um login, até o `GET /settings` resolver (900 ms a 3 s) |
 | Abas | Início: destaque | [x] Selo "Destaque" quando os posts foram escolhidos no painel; saudação em serifa |
 | Abas | Conteúdo, Bíblia, {termo} | [x] Título da aba em serifa; o resto herda os tokens |
-| Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Sair |
+| Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Privacidade, Sair |
+| Pessoal | Privacidade e meus dados (LGPD) | [x] Meus dados com correção, consentimentos com revogação, exportação pela folha de compartilhamento, pedido de exclusão cancelável (30 dias). API nova: rotas `/me` do `CONF-03` |
 | Célula | Presença (líder): todos marcados, toque desmarca | [x] Na primeira chamada do encontro; com presença já registrada, ninguém vem pré-marcado. Falha mantém as marcações |
-| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] `POST /persons` como visitante; mostra quem já tem o mesmo telefone. Só para os papéis que a rota aceita (`tenant_admin`, `admin_congregation`, `pastor`, `secretary`) |
+| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] Fluxo da v2: sexo, origem, consentimento obrigatório; telefone repetido mostra quem o tem **antes** de criar ("registrar nova visita" ou "é outra pessoa"). API nova `POST /visitors`, aberta ao **líder de célula** |
 
 ### 4.2 O que falta
 
-- [ ] **Início por papel:** encontro de hoje (líder), celebração do domingo
-  (líder de ministério), semáforo (pastor), minhas escalas com
-  confirmar/recusar e avisos de evento. Hoje o Início tem destaque, atalhos,
-  meus grupos e avisos.
-- [ ] **Privacidade (LGPD)** na Mais: depende das rotas do titular
-  (`CONF-03`). Saiu da Mais até elas existirem.
-- [ ] **QR de check-in** (líder) e **leitura do QR** (membro): pede lib de QR
-  e câmera (`PROD-12`).
-- [ ] **QR de autocadastro** (liderança): a rota `admin/visitor/qr` existe,
-  falta a lib de QR no app.
-- [ ] **Cadastro de visitante pelo líder de célula:** a v2 mostra a seção
-  Liderança para o líder; `POST /persons` não aceita `cell_leader`. Decisão
-  de produto antes de abrir a rota.
-- [ ] **Contribuir nativo** (Starter = chave PIX, Premium = QR + recorrente):
-  hoje a Mais abre a página de doação do web; o nativo está atrás do
-  `PROD-28`.
+- [ ] **Início por papel** (`PROD-30`): encontro de hoje (líder),
+  celebração do domingo (líder de ministério), semáforo (pastor), minhas
+  escalas com confirmar/recusar e avisos de evento.
+- [x] **Privacidade (LGPD)** — feito (2026-10-04), com as rotas do titular
+  na API (`CONF-03`).
+- [ ] **QR de check-in** (líder) e **leitura do QR** (membro, câmera —
+  `PROD-12`) e **QR de autocadastro** (liderança): em sessão própria, branch
+  `feat/qr-checkin-e-autocadastro`.
+- [x] **Cadastro de visitante pelo líder de célula** — feito (2026-10-04),
+  `POST /visitors`.
+- [ ] **Contribuir nativo** (`PROD-31`; o QR dinâmico e o recorrente dependem
+  do `PROD-28`): hoje a Mais abre a página de doação do web.
 - [ ] **Minhas escalas:** pedir troca e perfil de voluntário na mesma pilha.
 - [ ] **Celebração:** minha função em destaque já existe; o modo ao vivo do
   Host é `PROPOSTA`.
 - [ ] **Notificações:** central + preferências em abas (segmentado).
-- [ ] **Sem conexão** que atualiza sozinho (`netinfo`).
-- [ ] **Transições** fade + translateY(3px), 180 ms, entre telas.
+- [ ] **Sem conexão** que atualiza sozinho (`PROD-32`, `netinfo`).
+- [ ] **Transições** fade + translateY(3px), 180 ms, entre telas (`PROD-33`).
 - [ ] **Convite Premium** ("Disponível no plano Premium" + "Conhecer o
   Premium") onde o app hoje esconde o recurso.
 
