@@ -53,6 +53,11 @@ import { spacing, typography } from "../lib/theme/tokens";
 
 const ACTION_ERROR = "Não foi possível concluir. Verifique sua conexão e tente de novo.";
 
+/** Data por extenso, ou `fallback` quando não há data legível. */
+function longDateOr(iso: string | null, fallback: string): string {
+  return (iso ? formatLongDate(iso) : null) ?? fallback;
+}
+
 function addressLine(p: PersonalData["person"]): string | null {
   const street = [p.address_street, p.address_number].filter(Boolean).join(", ");
   const parts = [street, p.address_neighborhood, p.address_city, p.address_state].filter(Boolean);
@@ -144,11 +149,12 @@ export default function PrivacidadeScreen() {
   const { person, consents, deletion } = data;
   const address = addressLine(person);
 
-  async function saveEdit() {
-    if (!editing) return;
+  // Os handlers abaixo só existem com `data` carregado: o `!` é o que o
+  // render já garantiu.
+  async function saveEdit(patch: MyDataPatch) {
     await run("salvar", async () => {
-      const updated = await updateMyData(editing);
-      setData((current) => (current ? { ...current, person: { ...current.person, ...updated } } : current));
+      const updated = await updateMyData(patch);
+      setData((current) => ({ ...current!, person: { ...current!.person, ...updated } }));
       setEditing(null);
     });
   }
@@ -170,7 +176,7 @@ export default function PrivacidadeScreen() {
           <Input
             testID="privacidade-nome"
             label="Nome"
-            value={editing.full_name ?? ""}
+            value={editing.full_name}
             onChangeText={(full_name) => setEditing({ ...editing, full_name })}
             autoCapitalize="words"
           />
@@ -209,7 +215,7 @@ export default function PrivacidadeScreen() {
           <AppButton
             testID="privacidade-salvar"
             title="Salvar correção"
-            onPress={saveEdit}
+            onPress={() => saveEdit(editing)}
             loading={busy === "salvar"}
           />
           <AppButton
@@ -270,8 +276,8 @@ export default function PrivacidadeScreen() {
                 </Text>
                 <Text style={[typography.caption, { color: colors.textTertiary }]}>
                   {active
-                    ? `Dado em ${formatLongDate(consent.consented_at) ?? ""}`
-                    : `Revogado em ${formatLongDate(consent.revoked_at ?? "") ?? ""}`}
+                    ? `Dado em ${longDateOr(consent.consented_at, "data não registrada")}`
+                    : `Revogado em ${longDateOr(consent.revoked_at, "data não registrada")}`}
                 </Text>
                 {active && confirmRevoke === consent.version ? (
                   <View style={styles.confirm}>
@@ -288,18 +294,14 @@ export default function PrivacidadeScreen() {
                         run(`revogar-${consent.version}`, async () => {
                           await revokeConsent(consent.version);
                           const revokedAt = new Date().toISOString();
-                          setData((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  consents: current.consents.map((c) =>
-                                    c.version === consent.version && c.revoked_at === null
-                                      ? { ...c, revoked_at: revokedAt }
-                                      : c,
-                                  ),
-                                }
-                              : current,
-                          );
+                          setData((current) => ({
+                            ...current!,
+                            consents: current!.consents.map((c) =>
+                              c.version === consent.version && c.revoked_at === null
+                                ? { ...c, revoked_at: revokedAt }
+                                : c,
+                            ),
+                          }));
                           setConfirmRevoke(null);
                         })
                       }
@@ -347,7 +349,7 @@ export default function PrivacidadeScreen() {
           </Text>
           <Text style={[typography.bodyMedium, styles.confirmText, { color: colors.textSecondary }]}>
             Seus dados serão anonimizados em{" "}
-            {formatLongDate(deletion.anonymize_after ?? "") ?? "30 dias"}. Para revertê-lo, fale com
+            {longDateOr(deletion.anonymize_after, "30 dias")}. Para revertê-lo, fale com
             a secretaria da igreja.
           </Text>
         </Card>
@@ -356,7 +358,7 @@ export default function PrivacidadeScreen() {
           <Text style={[typography.h3, { color: colors.textPrimary }]}>Exclusão pedida</Text>
           <Text style={[typography.bodyMedium, styles.confirmText, { color: colors.textSecondary }]}>
             Seus dados serão anonimizados em{" "}
-            {formatLongDate(deletion.anonymize_after ?? "") ?? "30 dias"}. Até lá, você pode cancelar
+            {longDateOr(deletion.anonymize_after, "30 dias")}. Até lá, você pode cancelar
             o pedido.
           </Text>
           <AppButton
@@ -367,7 +369,7 @@ export default function PrivacidadeScreen() {
             onPress={() =>
               run("cancelar", async () => {
                 const status = await cancelDeletion();
-                setData((current) => (current ? { ...current, deletion: status } : current));
+                setData((current) => ({ ...current!, deletion: status }));
               })
             }
             style={styles.after}
@@ -388,7 +390,7 @@ export default function PrivacidadeScreen() {
             onPress={() =>
               run("excluir", async () => {
                 const status = await requestDeletion();
-                setData((current) => (current ? { ...current, deletion: status } : current));
+                setData((current) => ({ ...current!, deletion: status }));
                 setConfirmDeletion(false);
               })
             }

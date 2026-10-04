@@ -151,4 +151,17 @@ describe("ThemeProvider — modo claro/escuro", () => {
     expect(screen.getByTestId("primaryColor").props.children).toBe(primaryDark);
     expect(screen.getByTestId("bgBase").props.children).not.toBe(bgDark);
   });
+
+  it("preferência 'system' gravada segue o sistema (escuro)", async () => {
+    mockUseColorScheme.mockReturnValue("dark");
+    mockGetItem.mockImplementation(async (key: string) =>
+      key === "orbien.colorScheme" ? "system" : null,
+    );
+    await renderProbe();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("preference").props.children).toBe("system");
+    });
+    expect(screen.getByTestId("scheme").props.children).toBe("dark");
+  });
 });

@@ -6,6 +6,7 @@ import {
   contrastRatio,
   isValidHexColor,
   meetsAA,
+  mixHex,
   readableOn,
   relativeLuminance,
 } from "./color";
@@ -94,5 +95,18 @@ describe("readableOn", () => {
   it("valor inválido cai no branco, sem lançar", () => {
     expect(readableOn("navy")).toBe(brand.surface);
     expect(readableOn("")).toBe(brand.surface);
+  });
+});
+
+describe("mixHex", () => {
+  it("mistura no sRGB pelo peso da primeira cor", () => {
+    expect(mixHex("#000000", "#FFFFFF", 0.5)).toBe("#808080");
+    expect(mixHex("#1E3A7B", "#FFFFFF", 1)).toBe("#1E3A7B");
+    expect(mixHex("#1E3A7B", "#FFFFFF", 2)).toBe("#1E3A7B");
+  });
+
+  it("entrada inválida devolve a primeira cor, sem inventar", () => {
+    expect(mixHex("azul", "#FFFFFF", 0.5)).toBe("azul");
+    expect(mixHex("#1E3A7B", "rgba(0,0,0,.1)", 0.5)).toBe("#1E3A7B");
   });
 });

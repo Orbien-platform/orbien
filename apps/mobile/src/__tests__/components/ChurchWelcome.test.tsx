@@ -68,4 +68,55 @@ describe("ChurchWelcome", () => {
     });
     expect(onFinish).toHaveBeenCalledTimes(1);
   });
+
+  it("sem 'reduzir movimento', sai em fade e só então avisa", async () => {
+    (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(false);
+    mockTheme.current = { brandingResolved: true };
+    const onFinish = jest.fn();
+    await render(<ChurchWelcome onFinish={onFinish} />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(WELCOME_MIN_MS);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem como ler a preferência de movimento, faz o fade", async () => {
+    (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockRejectedValue(new Error("x"));
+    mockTheme.current = { brandingResolved: true };
+    const onFinish = jest.fn();
+    await render(<ChurchWelcome onFinish={onFinish} />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(WELCOME_MIN_MS);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
+  it("desmontada antes de ler a preferência, não avisa ninguém", async () => {
+    let resolve!: (value: boolean) => void;
+    (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockReturnValue(
+      new Promise<boolean>((r) => (resolve = r)),
+    );
+    mockTheme.current = { brandingResolved: true };
+    const onFinish = jest.fn();
+    const view = await render(<ChurchWelcome onFinish={onFinish} />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(WELCOME_MIN_MS);
+    });
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(true);
+    });
+    expect(onFinish).not.toHaveBeenCalled();
+  });
 });

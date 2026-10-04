@@ -201,4 +201,155 @@ describe("PrivacidadeScreen", () => {
     expect(screen.queryByTestId("privacidade-cancelar-exclusao")).toBeNull();
     expect(screen.queryByTestId("privacidade-pedir-exclusao")).toBeNull();
   });
+
+  it("cadastro sem endereço e sem contato mostra 'Não informado' e edita campo a campo", async () => {
+    const person = {
+      ...data().person,
+      phone: null,
+      email: null,
+      address_street: null,
+      address_number: null,
+      address_city: null,
+      address_state: null,
+    };
+    mockGet.mockResolvedValue(data({ person, consents: [] }));
+    mockUpdate.mockImplementation(async (patch: Record<string, unknown>) => ({ ...person, ...patch }));
+    await renderScreen();
+
+    expect(screen.getAllByText("Não informado")).toHaveLength(3);
+    expect(screen.getByText("Nenhum consentimento registrado para o seu cadastro.")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("privacidade-corrigir"));
+    });
+    const campos: Array<[string, string]> = [
+      ["privacidade-nome", "Ana S."],
+      ["privacidade-telefone", "11977776666"],
+      ["privacidade-rua", "Rua B"],
+      ["privacidade-numero", "20"],
+      ["privacidade-bairro", "Centro"],
+      ["privacidade-cidade", "Campinas"],
+    ];
+    for (const [id, value] of campos) {
+      expect(screen.getByTestId(id).props.value).toBe(id === "privacidade-nome" ? "Ana Souza" : "");
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId(id), value);
+      });
+    }
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("privacidade-salvar"));
+    });
+    expect(mockUpdate).toHaveBeenCalledWith({
+      full_name: "Ana S.",
+      phone: "11977776666",
+      address_street: "Rua B",
+      address_number: "20",
+      address_neighborhood: "Centro",
+      address_city: "Campinas",
+    });
+    expect(screen.getByText("Rua B, 20 · Centro · Campinas")).toBeTruthy();
+  });
+
+  it("cancelar a edição volta para os dados", async () => {
+    await renderScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("privacidade-corrigir"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("privacidade-cancelar-edicao"));
+    });
+    expect(screen.getByTestId("privacidade-dados")).toBeTruthy();
+  });
+
+  it("revogar uma versão só marca os aceites ativos dela; 'Manter' desiste", async () => {
+    mockRevoke.mockResolvedValue({ revoked: 1 });
+    mockGet.mockResolvedValue(
+      data({
+        consents: [
+          { id: "c1", version: "member_consent_v1", consented_at: "2026-01-10T12:00:00.000Z", origin: null, revoked_at: null },
+          { id: "c2", version: "visitor_consent_v1", consented_at: "não é data", origin: null, revoked_at: null },
+          {
+            id: "c3",
+            version: "member_consent_v1",
+            consented_at: "2025-01-10T12:00:00.000Z",
+            origin: null,
+            revoked_at: "2025-06-01T12:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await renderScreen();
+
+    expect(screen.getByText("Dado em data não registrada")).toBeTruthy();
+    expect(screen.getByText("Revogado em 1 de junho de 2025")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("revogar-c2"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Manter"));
+    });
+    expect(screen.queryByTestId("revogar-confirmar-c2")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("revogar-c1"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("revogar-confirmar-c1"));
+    });
+    expect(mockRevoke).toHaveBeenCalledWith("member_consent_v1");
+    // O outro termo segue ativo, e o aceite já revogado mantém a data dele.
+    expect(screen.getByTestId("revogar-c2")).toBeTruthy();
+    expect(screen.getByText("Revogado em 1 de junho de 2025")).toBeTruthy();
+  });
+
+  it("'Voltar' desiste do pedido de exclusão", async () => {
+    await renderScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("privacidade-pedir-exclusao"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Voltar"));
+    });
+    expect(mockRequestDeletion).not.toHaveBeenCalled();
+    expect(screen.getByTestId("privacidade-pedir-exclusao")).toBeTruthy();
+  });
+
+  it("removido pela igreja sem data de anonimização cai no prazo padrão", async () => {
+    mockGet.mockResolvedValue(
+      data({ deletion: { requested_at: "2026-10-04T12:00:00.000Z", anonymize_after: null, cancellable: false } }),
+    );
+    await renderScreen();
+    expect(screen.getByText(/30 dias/)).toBeTruthy();
+  });
+
+  it("erro do servidor (não de rede) mostra o erro sem falar de conexão", async () => {
+    mockGet.mockRejectedValue(new HttpError(500, { message: "x" }));
+    await renderScreen();
+    expect(screen.getByTestId("privacidade-erro")).toBeTruthy();
+    expect(screen.getByText(/O problema é do nosso lado/)).toBeTruthy();
+  });
+
+  it("ignora a resposta e a falha que chegam depois de sair da tela", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGet.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+    const first = await render(<PrivacidadeScreen />);
+    await act(async () => {
+      first.unmount();
+    });
+    await act(async () => {
+      resolve(data());
+    });
+
+    let reject!: (reason: unknown) => void;
+    mockGet.mockReturnValueOnce(new Promise((_, r) => (reject = r)));
+    const second = await render(<PrivacidadeScreen />);
+    await act(async () => {
+      second.unmount();
+    });
+    await act(async () => {
+      reject(new NetworkError());
+    });
+    expect(mockGet).toHaveBeenCalledTimes(2);
+  });
 });

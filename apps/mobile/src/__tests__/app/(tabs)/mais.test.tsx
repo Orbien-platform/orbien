@@ -166,4 +166,81 @@ describe("MaisScreen", () => {
     });
     expect(mockLogout).toHaveBeenCalledTimes(1);
   });
+
+  it("sem sessão legível e sem áreas: fail-open nas escalas, nenhum papel de liderança", async () => {
+    mockUseAuth.mockReturnValue({ session: null, areas: null, logout: mockLogout });
+    await renderMais();
+
+    expect(screen.getByTestId("mais-escalas")).toBeTruthy();
+    expect(screen.queryByTestId("mais-visitante")).toBeNull();
+  });
+
+  it("sem o slug da igreja, Contribuir não aparece", async () => {
+    mockUseTheme.mockReturnValue({
+      appName: "Igreja Teste",
+      primaryColor: "#1E3A7B",
+      tenantSlug: null,
+      colors: palettes.dark,
+      shadow: { sm: {}, md: {}, lg: {} },
+    });
+    await renderMais();
+    expect(screen.queryByTestId("mais-contribuir")).toBeNull();
+  });
+
+  it("navegador indisponível ao contribuir não quebra a tela", async () => {
+    mockOpenBrowser.mockRejectedValue(new Error("sem navegador"));
+    await renderMais();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-contribuir"));
+    });
+    expect(screen.getByTestId("mais-screen")).toBeTruthy();
+  });
+
+  it("dízimo automático e notificações abrem as pilhas", async () => {
+    mockDecodeJwtPayload.mockReturnValue(payload(["member"], "premium"));
+    mockFetchAsaas.mockResolvedValue(true);
+    await renderMais();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-dizimo-automatico"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/dizimo-automatico");
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-notificacoes"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/notificacoes");
+  });
+
+  it("Sair mostra 'Saindo…' e ignora o segundo toque enquanto encerra", async () => {
+    let finish!: () => void;
+    mockLogout.mockReturnValue(new Promise<void>((r) => (finish = r)));
+    await renderMais();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-sair"));
+    });
+    expect(screen.getByText("Saindo…")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-sair"));
+    });
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finish();
+    });
+    expect(screen.getByText("Sair")).toBeTruthy();
+  });
+
+  it("ignora a trava de pagamentos que responde depois de sair da tela", async () => {
+    let resolve!: (value: boolean) => void;
+    mockFetchAsaas.mockReturnValue(new Promise<boolean>((r) => (resolve = r)));
+    const view = await render(<MaisScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(true);
+    });
+    expect(mockFetchAsaas).toHaveBeenCalled();
+  });
 });
