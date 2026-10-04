@@ -13,7 +13,7 @@ export function CheckIcon({ size = "md", className = "" }: CheckIconProps) {
           : "w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0") +
         (className ? ` ${className}` : "")
       }
-      style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+      style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
     >
       <svg
         width={isSm ? 8 : 10}

@@ -8,13 +8,13 @@ export function SobreHero() {
           <SectionLabel className="mb-7">Sobre a Orbien</SectionLabel>
 
           <h1
-            className="font-light tracking-[-0.035em] mb-7"
-            style={{ fontSize: "clamp(44px, 7vw, 80px)", lineHeight: 1.02, color: "var(--ink)" }}
+            className="text-display font-light tracking-[-0.035em] mb-7"
+            style={{ color: "var(--ink)" }}
           >
             Gestão que serve.{" "}
-            <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+            <em className="heading-accent">
               Igreja que cresce.
-            </strong>
+            </em>
           </h1>
 
           <p

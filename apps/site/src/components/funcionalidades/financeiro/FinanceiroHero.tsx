@@ -33,7 +33,7 @@ function DashboardMockup() {
           <div key={label} className="px-4 py-3.5" style={{ borderColor: "var(--border)" }}>
             <p className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</p>
             <p className="text-[17px] font-semibold tracking-[-0.025em]" style={{ color: "var(--ink)" }}>{value}</p>
-            <p className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>{delta}</p>
+            <p className="font-mono text-[9px] mt-0.5" style={{ color: "var(--color-teal)" }}>{delta}</p>
           </div>
         ))}
       </div>
@@ -75,7 +75,7 @@ function DashboardMockup() {
           >
             <div
               className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[10px] font-semibold flex-shrink-0"
-              style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+              style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
             >
               {name.split(" ").map(w => w[0]).join("")}
             </div>
@@ -105,13 +105,13 @@ export function FinanceiroHero() {
             <SectionLabel className="mb-6">Funcionalidades · Financeiro</SectionLabel>
 
             <h1
-              className="font-light leading-[1.02] tracking-[-0.035em] mb-5"
-              style={{ fontSize: "clamp(38px, 6vw, 64px)", color: "var(--ink)" }}
+              className="text-display font-light leading-[1.02] tracking-[-0.035em] mb-5"
+              style={{ color: "var(--ink)" }}
             >
               O dinheiro da sua igreja,{" "}
-              <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+              <em className="heading-accent">
                 organizado.
-              </strong>
+              </em>
             </h1>
 
             <p
@@ -125,7 +125,7 @@ export function FinanceiroHero() {
               {/* TODO: connect to real waitlist action */}
               <a
                 href="#waitlist"
-                className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+                className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
               >
                 Entrar na lista de espera
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -134,8 +134,7 @@ export function FinanceiroHero() {
               </a>
               <Link
                 href="/precos"
-                className="inline-flex h-12 items-center gap-2 rounded-btn border px-6 text-[15px] font-medium transition-all"
-                style={{ color: "var(--navy-accent)", borderColor: "var(--navy-accent)" }}
+                className="inline-flex h-12 items-center gap-2 cta-secondary px-6 text-[15px]"
               >
                 Ver planos
               </Link>

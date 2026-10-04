@@ -7,129 +7,96 @@
 ════════════════════════════════════════════════════════════════ */
 
 /* ── Static brand tokens → Tailwind utilities ──────────────── */
+/* Direção Órbita v2 (docs/design/orbita-v2): identidade noturna, teal como
+   acento da Orbien, navy como cor de marca. */
 @theme {
-  /* Brand colors (invariant — don't change with dark mode) */
   --color-navy:      #1E3A7B;
   --color-navy-dark: #162D62;
-  --color-teal:      #00B8A2;
-  --color-teal-dark: #00CDB5;
+  --color-navy-glow: #2B4FA8;
+  --color-teal:      #00E5C7;
+  --color-teal-dark: #3DF2D9;
+  --color-on-teal:   #03110E;
   --color-crimson:   #C0392B;
+  --color-crimson-ink: #FF7A6B;  /* crimson como texto/ponto sobre o fundo escuro */
+  --color-amber:     #F2C766;    /* atenção (semáforo amarelo) */
   --color-burgundy:  #991B1B;
+  --color-whatsapp:  #25D366;    /* cor da marca WhatsApp, só no botão de contato */
 
-  /* Border radius */
+  /* Border radius — botão, badge e segmentado em pill na Órbita */
   --radius-btn:     8px;
-  --radius-card:    12px;
-  --radius-modal:   16px;
+  --radius-card:    16px;
+  --radius-modal:   20px;
   --radius-pill:    9999px;
   --radius-avatar:  10px;
-  --radius-input:   8px;
+  --radius-input:   10px;
   --radius-tooltip: 6px;
 }
 
 /* Font references (resolved at compile time from next/font CSS vars) */
 @theme inline {
-  --font-sans: var(--font-dm-sans), 'DM Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-dm-mono), 'DM Mono', ui-monospace, monospace;
+  --font-sans: var(--font-geist), 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, monospace;
+  --font-serif: var(--font-instrument-serif), 'Instrument Serif', Georgia, serif;
 }
 
-/* ── Semantic tokens — light mode defaults ──────────────────── */
+/* ── Semantic tokens — Órbita (só tema escuro) ──────────────── */
 :root {
   /* Navy contextual */
-  --navy-accent:    #1E3A7B;
-  --navy-dim:       #D4DCEF;
-  --navy-tint:      #F0F3FA;
+  --navy-accent:    #7FA0E6;
+  --navy-dim:       #141C36;
+  --navy-tint:      #0C1122;
   /* Teal/Crimson contextual */
-  --teal-dim:       #D0F5F1;
-  --crimson-dim:    #FDECEA;
+  --teal-dim:       rgba(0,229,199,.12);
+  --crimson-dim:    rgba(255,122,107,.12);
   /* Surface palette */
-  --bg:             #F5F4F1;
-  --ink:            #0F1117;
-  --on-ink:         #0F1117;
-  --surface:        #FFFFFF;
-  --subtle:         #EEECEA;
-  --sand:           #EAE6DF;
-  --stone:          #5C5A56;
-  --muted:          #9B9893;
-  --border:         #E0DDD9;
-  --border-strong:  #C8C5C0;
+  --bg:             #05070F;
+  --ink:            #F2F1EE;
+  --on-ink:         #0A0E1C;
+  --surface:        #0B0F1D;
+  --subtle:         #121729;
+  --sand:           #0A0E1C;
+  --stone:          #A9AEBD;
+  --muted:          #6C7286;
+  --border:         rgba(255,255,255,.08);
+  --border-strong:  rgba(255,255,255,.16);
+  /* Cards: gradiente sutil de cima para baixo */
+  --card-from:      #0C1121;
+  --card-to:        #090C18;
   /* Component-specific */
-  --navy-soft:      rgba(30,58,123,.03);   /* Premium column tint */
-  --sand-soft:      #F0EDE6;              /* Alternating compare rows */
-  --nav-bg:         rgba(245,244,241,.85);
-  --hero-glow:      rgba(30,58,123,.06);
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
-  --shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
-  --shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
-  --shadow-xl: 0 24px 60px rgba(15,17,23,.16), 0 8px 20px rgba(15,17,23,.08);
+  --navy-soft:      rgba(127,160,230,.06);   /* Premium column tint */
+  --sand-soft:      #090C18;                 /* Alternating compare rows */
+  --nav-bg:         rgba(5,7,15,.6);
+  --hero-glow:      rgba(43,79,168,.25);
+  /* Shadows — no escuro a elevação é borda + brilho */
+  --shadow-sm: none;
+  --shadow-md: 0 10px 30px rgba(0,0,0,.45);
+  --shadow-lg: 0 30px 80px rgba(0,0,0,.55);
+  --shadow-xl: 0 40px 120px rgba(30,58,123,.35);
   /* shadcn/ui semantic aliases */
-  --background:          #F5F4F1;
-  --foreground:          #0F1117;
-  --card:                #FFFFFF;
-  --card-foreground:     #0F1117;
-  --popover:             #FFFFFF;
-  --popover-foreground:  #0F1117;
-  --primary:             #1E3A7B;
-  --primary-foreground:  #F5F4F1;
-  --secondary:           #EEECEA;
-  --secondary-foreground:#0F1117;
-  --muted-ui:            #EEECEA;
-  --muted-foreground:    #5C5A56;
-  --accent-ui:           #00B8A2;
-  --accent-foreground:   #0F1117;
+  --background:          #05070F;
+  --foreground:          #F2F1EE;
+  --card:                #0B0F1D;
+  --card-foreground:     #F2F1EE;
+  --popover:             #0B0F1D;
+  --popover-foreground:  #F2F1EE;
+  --primary:             #00E5C7;
+  --primary-foreground:  #03110E;
+  --secondary:           #121729;
+  --secondary-foreground:#F2F1EE;
+  --muted-ui:            #121729;
+  --muted-foreground:    #A9AEBD;
+  --accent-ui:           #00E5C7;
+  --accent-foreground:   #03110E;
   --destructive:         #C0392B;
-  --border-ui:           #E0DDD9;
-  --input:               #E0DDD9;
-  --ring:                #1E3A7B;
-  --radius:              8px;
-}
-
-/* ── Dark mode overrides (OS-level, no toggle) ──────────────── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --navy-accent:    #7A99D9;
-    --navy-dim:       #1A2540;
-    --navy-tint:      #161D33;
-    --teal-dim:       #0A2E2A;
-    --crimson-dim:    #2A1414;
-    --bg:             #0F1117;
-    --ink:            #F5F4F1;
-    --on-ink:         #1A1D27;
-    --surface:        #13151E;
-    --subtle:         #1C1F2B;
-    --sand:           #16192A;
-    --stone:          #B5B2AD;
-    --muted:          #7A7975;
-    --border:         #232634;
-    --border-strong:  #2E3142;
-    --navy-soft:      rgba(122,153,217,.06);
-    --sand-soft:      #141727;
-    --nav-bg:         rgba(15,17,23,.78);
-    --hero-glow:      rgba(122,153,217,.08);
-    --shadow-sm: 0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.18);
-    --shadow-md: 0 4px 16px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.20);
-    --shadow-lg: 0 12px 40px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.24);
-    --shadow-xl: 0 24px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.32);
-    /* shadcn dark */
-    --background:          #0F1117;
-    --foreground:          #F5F4F1;
-    --card:                #13151E;
-    --card-foreground:     #F5F4F1;
-    --popover:             #13151E;
-    --popover-foreground:  #F5F4F1;
-    --primary:             #3D62CC;
-    --secondary:           #1C1F2B;
-    --secondary-foreground:#F5F4F1;
-    --muted-ui:            #1C1F2B;
-    --muted-foreground:    #B5B2AD;
-    --border-ui:           #232634;
-    --input:               #232634;
-  }
+  --border-ui:           rgba(255,255,255,.08);
+  --input:               rgba(255,255,255,.16);
+  --ring:                #00E5C7;
+  --radius:              10px;
 }
 
 /* ── Base ───────────────────────────────────────────────────── */
 html {
-  color-scheme: light dark;
+  color-scheme: dark;
   scroll-behavior: smooth;
 }
 
@@ -138,6 +105,162 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-teal);
+  color: var(--color-on-teal);
+}
+
+/* Títulos da Órbita: Instrument Serif 400. Fora de camada de propósito —
+   precisa vencer os utilitários de peso e tracking que cada seção já traz
+   (`font-semibold`, `tracking-[-0.035em]`), que eram da tipografia anterior.
+   A serifa só tem o peso 400; negrito seria sintetizado pelo navegador. */
+h1,
+h2 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+h1 {
+  line-height: 0.98;
+}
+h2 {
+  line-height: 1.03;
+}
+
+/* Trecho em destaque dentro de um título: itálico em teal. */
+.heading-accent {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--color-teal);
+}
+
+/* Tamanho do título de abertura das páginas de marketing. */
+@utility text-display {
+  font-size: clamp(52px, 7.2vw, 104px);
+}
+
+/* ── CTAs ───────────────────────────────────────────────────── */
+/* Primário: pill teal com texto escuro; no hover vira branco com brilho. */
+/* Sem `display` de propósito: quem usa decide (`inline-flex`,
+   `hidden md:inline-flex`), e um `display` aqui brigaria com o `hidden`. */
+@utility cta-primary {
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-teal);
+  color: var(--color-on-teal);
+  font-weight: 500;
+  transition: background-color .2s ease, box-shadow .2s ease, color .2s ease;
+  &:hover {
+    background: var(--ink);
+    box-shadow: 0 0 40px rgba(0,229,199,.45);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--color-teal);
+    outline-offset: 3px;
+  }
+}
+
+/* Secundário: pill transparente com borda; no hover a borda vira teal. */
+@utility cta-secondary {
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 500;
+  transition: border-color .2s ease, color .2s ease;
+  &:hover {
+    border-color: var(--color-teal);
+    color: var(--color-teal);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--color-teal);
+    outline-offset: 3px;
+  }
+}
+
+/* Card da Órbita: gradiente vertical e borda fina, sem sombra. */
+@utility card-orbita {
+  background: linear-gradient(180deg, var(--card-from), var(--card-to));
+  border: 1px solid var(--border);
+}
+
+/* ── Órbita do hero ─────────────────────────────────────────── */
+/* Anéis concêntricos com um satélite teal girando (26s, linear). Decorativo:
+   quem pede movimento reduzido vê o satélite parado. */
+.hero-orbit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: -1;
+}
+.hero-orbit::before {
+  content: '';
+  position: absolute;
+  right: -300px;
+  top: 50%;
+  width: 960px;
+  height: 960px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.12);
+  background:
+    radial-gradient(circle, rgba(43,79,168,.5) 0, rgba(30,58,123,.12) 22%, transparent 34%),
+    radial-gradient(circle, transparent 61.5%, rgba(43,79,168,.35) 62%, transparent 62.6%),
+    radial-gradient(circle, transparent 36.5%, rgba(255,255,255,.07) 37%, transparent 37.6%);
+}
+.hero-orbit::after {
+  content: '';
+  position: absolute;
+  right: 172px;
+  top: calc(50% - 8px);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-teal);
+  box-shadow: 0 0 30px 6px rgba(0,229,199,.55);
+  transform-origin: 8px 8px;
+  animation: orbit-satellite 26s linear infinite;
+}
+@keyframes orbit-satellite {
+  from { transform: rotate(0) translateX(480px) rotate(0); }
+  to   { transform: rotate(360deg) translateX(480px) rotate(-360deg); }
+}
+
+/* Hero: entrada escalonada (100/250/400/550ms), uma vez, no carregamento. */
+.hero-enter > * {
+  animation: hero-enter .9s cubic-bezier(.2,.7,.2,1) both;
+}
+.hero-enter > *:nth-child(1) { animation-delay: .1s; }
+.hero-enter > *:nth-child(2) { animation-delay: .25s; }
+.hero-enter > *:nth-child(3) { animation-delay: .4s; }
+.hero-enter > *:nth-child(n+4) { animation-delay: .55s; }
+@keyframes hero-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* No celular a órbita passa por trás do texto; o satélite cruzaria os selos
+   do hero, então fica só o anel. */
+@media (max-width: 767px) {
+  .hero-orbit::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-orbit::after,
+  .hero-enter > * {
+    animation: none;
+  }
 }
 
 /* ── Reveal animation ───────────────────────────────────────── */
@@ -173,13 +296,13 @@ body {
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
 .card-hover-navy:hover {
-  border-color: #1E3A7B;
+  border-color: var(--navy-accent);
   box-shadow: var(--shadow-md);
 }
 
 /* ── FAQ accordion icon ─────────────────────────────────────── */
 .faq-details[open] .faq-icon {
   transform: rotate(45deg);
-  background: #1E3A7B;
-  color: #fff;
+  background: var(--color-teal);
+  color: var(--color-on-teal);
 }

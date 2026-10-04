@@ -87,7 +87,7 @@ export function TierTable() {
                 </span>
                 <span
                   className="text-[11px] px-2 py-0.5 rounded-pill font-medium"
-                  style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+                  style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
                 >
                   Mais escolhido
                 </span>
@@ -172,7 +172,7 @@ export function TierTable() {
                 <span className="text-lg font-semibold tracking-[-0.01em]" style={{ color: "var(--ink)" }}>Premium</span>
                 <span
                   className="text-[11px] px-2 py-0.5 rounded-pill font-medium"
-                  style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+                  style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
                 >
                   Mais escolhido
                 </span>

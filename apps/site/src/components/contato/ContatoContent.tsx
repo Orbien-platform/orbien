@@ -19,13 +19,13 @@ export function ContatoContent() {
           <SectionLabel className="mb-7">Contato</SectionLabel>
 
           <h1
-            className="font-light tracking-[-0.035em] mb-5"
-            style={{ fontSize: "clamp(38px, 6vw, 60px)", lineHeight: 1.04, color: "var(--ink)" }}
+            className="text-display font-light tracking-[-0.035em] mb-5"
+            style={{ color: "var(--ink)" }}
           >
             Fale com a{" "}
-            <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+            <em className="heading-accent">
               gente.
-            </strong>
+            </em>
           </h1>
 
           <p
@@ -41,7 +41,7 @@ export function ContatoContent() {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 rounded-btn px-7 py-4 text-[16px] font-medium text-white transition-all hover:-translate-y-px"
-            style={{ background: "#25D366", boxShadow: "0 4px 20px rgba(37,211,102,.3)" }}
+            style={{ background: "var(--color-whatsapp)", boxShadow: "0 4px 20px color-mix(in srgb, var(--color-whatsapp) 30%, transparent)" }}
           >
             <WhatsAppIcon />
             Abrir conversa no WhatsApp
@@ -83,8 +83,7 @@ export function ContatoContent() {
           {/* TODO: replace href with real scheduling link (Calendly / Cal.com) */}
           <a
             href="#"
-            className="inline-flex items-center gap-2 h-10 rounded-btn border px-5 text-[13px] font-medium whitespace-nowrap transition-all hover:-translate-y-px flex-shrink-0"
-            style={{ color: "var(--navy-accent)", borderColor: "var(--navy-accent)" }}
+            className="inline-flex items-center gap-2 h-10 cta-secondary px-5 text-[13px] whitespace-nowrap flex-shrink-0"
           >
             Agendar demo
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

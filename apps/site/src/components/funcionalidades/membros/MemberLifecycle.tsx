@@ -25,9 +25,9 @@ const STAGES = [
   {
     badge: "Membro",
     badgeBg: "var(--teal-dim)",
-    badgeColor: "#00B8A2",
-    borderColor: "#00B8A2",
-    dotColor: "#00B8A2",
+    badgeColor: "var(--color-teal)",
+    borderColor: "var(--color-teal)",
+    dotColor: "var(--color-teal)",
     title: "Filiação confirmada",
     body: "Filiação validada pela liderança. Acesso pleno ao app, histórico, grupos e histórico de contribuições.",
     criteria: "Entrada: confirmação manual pela liderança",
@@ -115,9 +115,11 @@ export function MemberLifecycle() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-px" style={{ color: "var(--navy-accent)" }}>
               <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
             </svg>
-            A reclassificação de Visitante para Frequentador é automática. A filiação como{" "}
-            <strong className="font-medium" style={{ color: "var(--ink)" }}>Membro</strong>{" "}
-            sempre requer confirmação manual da liderança — nunca acontece sem intenção.
+            <p>
+              A reclassificação de Visitante para Frequentador é automática. A filiação como{" "}
+              <strong className="font-medium" style={{ color: "var(--ink)" }}>Membro</strong>{" "}
+              sempre requer confirmação manual da liderança — nunca acontece sem intenção.
+            </p>
           </div>
         </Reveal>
       </div>

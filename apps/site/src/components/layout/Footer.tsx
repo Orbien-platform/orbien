@@ -31,7 +31,7 @@ function BrandMark() {
       <svg viewBox="0 0 22 22" fill="none" className="w-full h-full">
         <ellipse cx="11" cy="11" rx="9" ry="4" stroke="currentColor" strokeWidth="1.5" />
         <circle cx="11" cy="11" r="3" fill="currentColor" />
-        <circle cx="20" cy="11" r="2" fill="#00B8A2" />
+        <circle cx="20" cy="11" r="2" fill="var(--color-teal)" />
       </svg>
     </span>
   );

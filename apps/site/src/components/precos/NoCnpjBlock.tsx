@@ -11,14 +11,14 @@ export function NoCnpjBlock() {
   return (
     <section
       className="relative overflow-hidden py-[72px]"
-      style={{ background: "#1E3A7B", color: "#fff" }}
+      style={{ background: "var(--color-navy)", color: "var(--ink)" }}
     >
       {/* Gradient overlay */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(circle at 90% 10%, rgba(0,184,162,.18), transparent 55%), radial-gradient(circle at 5% 95%, rgba(255,255,255,.05), transparent 50%)",
+            "radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--color-teal) 18%, transparent), transparent 55%), radial-gradient(circle at 5% 95%, color-mix(in srgb, var(--ink) 5%, transparent), transparent 50%)",
         }}
       />
 
@@ -29,7 +29,7 @@ export function NoCnpjBlock() {
         >
           {/* Left */}
           <div>
-            <SectionLabel className="mb-[18px]" color="rgba(255,255,255,.7)" lineColor="rgba(255,255,255,.4)">
+            <SectionLabel className="mb-[18px]" color="color-mix(in srgb, var(--ink) 70%, transparent)" lineColor="color-mix(in srgb, var(--ink) 40%, transparent)">
               Antes da formalização
             </SectionLabel>
             <h2
@@ -40,14 +40,13 @@ export function NoCnpjBlock() {
             </h2>
             <p
               className="text-[17px] font-light leading-relaxed mb-6 max-w-[480px]"
-              style={{ color: "rgba(255,255,255,.78)" }}
+              style={{ color: "color-mix(in srgb, var(--ink) 78%, transparent)" }}
             >
               O Starter foi feito pra você. Comece hoje, formalize depois — a gente faz a transição sem complicação.
             </p>
             <Link
               href="/sem-cnpj"
-              className="inline-flex h-12 items-center gap-2 rounded-btn bg-white px-6 text-[15px] font-medium transition-all hover:-translate-y-px"
-              style={{ color: "#1E3A7B" }}
+              className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
             >
               Veja como funciona
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -60,8 +59,8 @@ export function NoCnpjBlock() {
           <div
             className="rounded-[12px] p-7"
             style={{
-              background: "rgba(255,255,255,.06)",
-              border: "1px solid rgba(255,255,255,.12)",
+              background: "color-mix(in srgb, var(--ink) 6%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--ink) 12%, transparent)",
               backdropFilter: "blur(20px)",
             }}
           >
@@ -69,17 +68,17 @@ export function NoCnpjBlock() {
               <div
                 key={stat}
                 className={`flex items-center gap-3 py-2.5 ${i > 0 ? "border-t" : ""}`}
-                style={{ borderColor: "rgba(255,255,255,.08)" }}
+                style={{ borderColor: "color-mix(in srgb, var(--ink) 8%, transparent)" }}
               >
                 <span
                   className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(0,205,181,.2)", color: "#00CDB5" }}
+                  style={{ background: "color-mix(in srgb, var(--color-teal) 20%, transparent)", color: "var(--color-teal-dark)" }}
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </span>
-                <span className="text-[14.5px]" style={{ color: "rgba(255,255,255,.9)" }}>
+                <span className="text-[14.5px]" style={{ color: "color-mix(in srgb, var(--ink) 90%, transparent)" }}>
                   {stat}
                 </span>
               </div>

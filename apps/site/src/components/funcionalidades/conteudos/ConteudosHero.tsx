@@ -52,7 +52,7 @@ function AppFeedMockup() {
           {/* Push notification banner */}
           <div
             className="rounded-[10px] p-3 flex items-start gap-2.5"
-            style={{ background: "var(--navy-accent)", color: "#fff" }}
+            style={{ background: "var(--navy-accent)", color: "var(--on-ink)" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-px">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -69,7 +69,7 @@ function AppFeedMockup() {
             style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
             <div className="px-3 py-2 border-b" style={{ background: "var(--teal-dim)", borderColor: "var(--border)" }}>
-              <p className="text-[10px] font-medium" style={{ color: "#00B8A2" }}>Devocional · Hoje</p>
+              <p className="text-[10px] font-medium" style={{ color: "var(--color-teal)" }}>Devocional · Hoje</p>
             </div>
             <div className="px-3 py-2.5">
               <p className="text-[11px] font-semibold mb-1" style={{ color: "var(--ink)" }}>Salmos 23 — O Senhor é meu pastor</p>
@@ -104,7 +104,7 @@ function AppFeedMockup() {
             style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
             <div className="flex items-center gap-1.5 mb-1.5">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#C0392B" }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-crimson-ink)" }}>
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
               <p className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>Pedido de oração</p>
@@ -138,13 +138,13 @@ export function ConteudosHero() {
             <SectionLabel className="mb-6">Funcionalidades · Conteúdos</SectionLabel>
 
             <h1
-              className="font-light leading-[1.02] tracking-[-0.035em] mb-5"
-              style={{ fontSize: "clamp(38px, 6vw, 64px)", color: "var(--ink)" }}
+              className="text-display font-light leading-[1.02] tracking-[-0.035em] mb-5"
+              style={{ color: "var(--ink)" }}
             >
               A igreja{" "}
-              <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+              <em className="heading-accent">
                 presente
-              </strong>
+              </em>
               {" "}entre os cultos.
             </h1>
 
@@ -159,7 +159,7 @@ export function ConteudosHero() {
               {/* TODO: connect to real waitlist action */}
               <a
                 href="#waitlist"
-                className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+                className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
               >
                 Entrar na lista de espera
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -168,8 +168,7 @@ export function ConteudosHero() {
               </a>
               <Link
                 href="/funcionalidades"
-                className="inline-flex h-12 items-center gap-2 rounded-btn border px-6 text-[15px] font-medium transition-all"
-                style={{ color: "var(--navy-accent)", borderColor: "var(--navy-accent)" }}
+                className="inline-flex h-12 items-center gap-2 cta-secondary px-6 text-[15px]"
               >
                 Ver todos os módulos
               </Link>

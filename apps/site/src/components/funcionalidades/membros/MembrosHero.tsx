@@ -3,10 +3,10 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 import { CheckIcon } from "@/components/ui/CheckIcon";
 
 const MEMBERS = [
-  { initials: "MR", name: "Marina Rodrigues",   sub: "Membro · Líder de célula",      badge: "Membro",       badgeBg: "var(--teal-dim)",  badgeColor: "#00B8A2", dot: "#00B8A2" },
+  { initials: "MR", name: "Marina Rodrigues",   sub: "Membro · Líder de célula",      badge: "Membro",       badgeBg: "var(--teal-dim)",  badgeColor: "var(--color-teal)", dot: "var(--color-teal)" },
   { initials: "JP", name: "João Pedro Souza",    sub: "Frequentador · 3ª visita",       badge: "Frequentador", badgeBg: "var(--navy-dim)",  badgeColor: "var(--navy-accent)", dot: "var(--navy-accent)" },
   { initials: "AB", name: "Ana Beatriz Lima",    sub: "Visitante · ontem, 1ª visita",   badge: "Visitante",    badgeBg: "var(--subtle)",    badgeColor: "var(--stone)", dot: "var(--muted)" },
-  { initials: "CM", name: "Carlos Mendes",       sub: "Membro · ausente há 3 semanas",  badge: "Atenção",      badgeBg: "var(--crimson-dim)", badgeColor: "var(--color-crimson)", dot: "#C0392B" },
+  { initials: "CM", name: "Carlos Mendes",       sub: "Membro · ausente há 3 semanas",  badge: "Atenção",      badgeBg: "var(--crimson-dim)", badgeColor: "var(--color-crimson)", dot: "var(--color-crimson-ink)" },
 ] as const;
 
 function MemberListMockup() {
@@ -27,7 +27,7 @@ function MemberListMockup() {
         <div className="flex items-center gap-2">
           <span
             className="text-[10px] px-2.5 py-1 rounded-pill"
-            style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+            style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
           >
             + Cadastrar
           </span>
@@ -92,13 +92,13 @@ export function MembrosHero() {
             <SectionLabel className="mb-6">Funcionalidades · Membros</SectionLabel>
 
             <h1
-              className="font-light leading-[1.02] tracking-[-0.035em] mb-5"
-              style={{ fontSize: "clamp(38px, 6.2vw, 66px)", color: "var(--ink)" }}
+              className="text-display font-light leading-[1.02] tracking-[-0.035em] mb-5"
+              style={{ color: "var(--ink)" }}
             >
               Do visitante ao membro{" "}
-              <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+              <em className="heading-accent">
                 — sem planilha.
-              </strong>
+              </em>
             </h1>
 
             <p
@@ -112,7 +112,7 @@ export function MembrosHero() {
               {/* TODO: connect to real waitlist action */}
               <a
                 href="#waitlist"
-                className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+                className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
               >
                 Entrar na lista de espera
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -121,8 +121,7 @@ export function MembrosHero() {
               </a>
               <Link
                 href="/funcionalidades"
-                className="inline-flex h-12 items-center gap-2 rounded-btn border px-6 text-[15px] font-medium transition-all"
-                style={{ color: "var(--navy-accent)", borderColor: "var(--navy-accent)" }}
+                className="inline-flex h-12 items-center gap-2 cta-secondary px-6 text-[15px]"
               >
                 Ver todos os módulos
               </Link>

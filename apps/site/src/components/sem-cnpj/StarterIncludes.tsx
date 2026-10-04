@@ -77,7 +77,7 @@ export function StarterIncludes() {
                   <div className="flex items-center gap-3.5">
                     <div
                       className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0"
-                      style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+                      style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
                     >
                       {icon}
                     </div>
@@ -91,7 +91,7 @@ export function StarterIncludes() {
                 </p>
                 <span
                   className="inline-flex items-center gap-1.5 text-xs font-medium w-fit px-2.5 py-1 rounded-pill"
-                  style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+                  style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
                 >
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />

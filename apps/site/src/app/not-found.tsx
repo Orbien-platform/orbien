@@ -50,7 +50,7 @@ export default function NotFound() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+              className="inline-flex h-12 items-center justify-center gap-2 cta-primary px-6 text-[15px]"
             >
               <svg
                 width="14"
@@ -69,11 +69,7 @@ export default function NotFound() {
             </Link>
             <Link
               href="/contato"
-              className="inline-flex h-12 items-center justify-center rounded-btn border px-6 text-[15px] font-medium transition-all hover:-translate-y-px"
-              style={{
-                color: "var(--navy-accent)",
-                borderColor: "var(--navy-dim)",
-              }}
+              className="inline-flex h-12 items-center justify-center cta-secondary px-6 text-[15px]"
             >
               Falar com a equipe
             </Link>

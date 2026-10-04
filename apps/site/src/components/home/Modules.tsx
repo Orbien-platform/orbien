@@ -84,7 +84,7 @@ export function Modules() {
                 <div className="flex items-center gap-3.5">
                   <div
                     className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0"
-                    style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+                    style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
                   >
                     {icon}
                   </div>

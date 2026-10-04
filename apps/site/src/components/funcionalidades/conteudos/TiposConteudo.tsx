@@ -28,11 +28,11 @@ const TIPOS = [
         <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
       </svg>
     ),
-    color: "#00B8A2",
+    color: "var(--color-teal)",
     colorBg: "var(--teal-dim)",
     badge: "Devocionais",
     badgeBg: "var(--teal-dim)",
-    badgeColor: "#00B8A2",
+    badgeColor: "var(--color-teal)",
     title: "Devocionais diários",
     body: "O pastor escreve (ou importa) o devocional do mês de uma vez. O sistema publica um por dia no app, com o horário que você escolher — sem precisar postar manualmente todo dia.",
     details: [
@@ -47,11 +47,11 @@ const TIPOS = [
         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
       </svg>
     ),
-    color: "#C0392B",
+    color: "var(--color-crimson-ink)",
     colorBg: "var(--crimson-dim)",
     badge: "Oração",
     badgeBg: "var(--crimson-dim)",
-    badgeColor: "#C0392B",
+    badgeColor: "var(--color-crimson-ink)",
     title: "Pedidos de oração",
     body: "O membro registra um pedido no app e a comunidade ora. A liderança pode marcar pedidos como respondidos — criando uma memória coletiva de fé da igreja.",
     details: [

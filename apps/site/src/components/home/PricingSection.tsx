@@ -83,11 +83,7 @@ export function PricingSection() {
               </ul>
               <Link
                 href="/precos"
-                className="inline-flex items-center justify-center gap-2 h-11 rounded-btn border text-sm font-medium transition-all"
-                style={{
-                  color: "var(--navy-accent)",
-                  borderColor: "var(--navy-accent)",
-                }}
+                className="inline-flex items-center justify-center gap-2 h-11 cta-secondary text-sm"
               >
                 Ver plano completo <ArrowRight />
               </Link>
@@ -100,12 +96,12 @@ export function PricingSection() {
               className="relative rounded-[14px] border-2 p-8 flex flex-col gap-5 h-full"
               style={{
                 background: "var(--surface)",
-                borderColor: "#1E3A7B",
+                borderColor: "var(--color-navy)",
                 boxShadow: "var(--shadow-md)",
               }}
             >
               <div
-                className="absolute -top-2.5 left-8 text-xs font-medium px-2.5 py-1 rounded-pill text-white bg-teal"
+                className="absolute -top-2.5 left-8 text-xs font-medium px-2.5 py-1 rounded-pill text-on-teal bg-teal"
               >
                 Mais escolhido
               </div>
@@ -144,7 +140,7 @@ export function PricingSection() {
               </ul>
               <Link
                 href="/precos"
-                className="inline-flex items-center justify-center gap-2 h-11 rounded-btn bg-navy text-sm font-medium text-white transition-all hover:bg-navy-dark"
+                className="inline-flex items-center justify-center gap-2 h-11 cta-primary text-sm"
               >
                 Ver plano completo <ArrowRight />
               </Link>

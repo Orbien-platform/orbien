@@ -19,7 +19,7 @@ function HeroCard() {
         </span>
         <span
           className="text-[10px] px-2.5 py-1 rounded-pill"
-          style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
+          style={{ background: "var(--teal-dim)", color: "var(--color-teal)" }}
         >
           ativo
         </span>
@@ -63,7 +63,7 @@ function HeroCard() {
         </div>
 
         <div className="flex items-center gap-2 text-[12px] font-light" style={{ color: "var(--stone)" }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00B8A2" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-teal)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
           Orbien não intermediou esta transação
@@ -109,14 +109,14 @@ export function SemCnpjHero() {
             <SectionLabel className="mb-6">Para igrejas sem CNPJ</SectionLabel>
 
             <h1
-              className="font-light leading-[1.02] tracking-[-0.035em] mb-5"
-              style={{ fontSize: "clamp(40px, 6.8vw, 72px)", color: "var(--ink)" }}
+              className="text-display font-light leading-[1.02] tracking-[-0.035em] mb-5"
+              style={{ color: "var(--ink)" }}
             >
               Comece hoje.{" "}
               <br className="hidden sm:block" />
-              <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+              <em className="heading-accent">
                 Formalize depois.
-              </strong>
+              </em>
             </h1>
 
             <p
@@ -130,7 +130,7 @@ export function SemCnpjHero() {
               {/* TODO: connect to real waitlist action */}
               <a
                 href="#waitlist"
-                className="inline-flex h-12 items-center gap-2 rounded-btn bg-navy px-6 text-[15px] font-medium text-white transition-all hover:bg-navy-dark hover:-translate-y-px"
+                className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
               >
                 Entrar na lista de espera
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -139,8 +139,7 @@ export function SemCnpjHero() {
               </a>
               <Link
                 href="/precos"
-                className="inline-flex h-12 items-center gap-2 rounded-btn border px-6 text-[15px] font-medium transition-all"
-                style={{ color: "var(--navy-accent)", borderColor: "var(--navy-accent)" }}
+                className="inline-flex h-12 items-center gap-2 cta-secondary px-6 text-[15px]"
               >
                 Ver plano Starter
               </Link>

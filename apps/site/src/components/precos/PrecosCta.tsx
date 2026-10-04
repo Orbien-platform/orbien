@@ -12,13 +12,13 @@ export function PrecosCta() {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(circle at 80% 20%, rgba(30,58,123,.35), transparent 50%), radial-gradient(circle at 10% 90%, rgba(0,184,162,.15), transparent 50%)",
+            "radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--color-navy) 35%, transparent), transparent 50%), radial-gradient(circle at 10% 90%, color-mix(in srgb, var(--color-teal) 15%, transparent), transparent 50%)",
         }}
       />
 
       <div className="relative mx-auto max-w-[1180px] px-6">
         <Reveal className="max-w-[720px]">
-          <SectionLabel className="mb-5" color="#00B8A2">Sem pressa</SectionLabel>
+          <SectionLabel className="mb-5" color="var(--color-teal)">Sem pressa</SectionLabel>
           <h2
             className="font-semibold tracking-[-0.025em] mb-4 text-white"
             style={{ fontSize: "clamp(28px, 4vw, 44px)", lineHeight: 1.08 }}
@@ -27,14 +27,14 @@ export function PrecosCta() {
           </h2>
           <p
             className="text-[17px] font-light leading-[1.55] mb-7 max-w-[540px]"
-            style={{ color: "#BFC0C9" }}
+            style={{ color: "var(--stone)" }}
           >
             Reservamos 30 minutos pra te mostrar a Orbien rodando, com o cenário da sua igreja em mente.
           </p>
           <div className="flex gap-4 items-center flex-wrap">
             <a
               href="#"
-              className="inline-flex h-12 items-center gap-2 rounded-btn bg-teal px-6 text-[15px] font-medium text-white transition-all hover:bg-teal-dark hover:-translate-y-px"
+              className="inline-flex h-12 items-center gap-2 cta-primary px-6 text-[15px]"
             >
               Agendar demonstração
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

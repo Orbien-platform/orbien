@@ -11,7 +11,7 @@ const CAPABILITIES = [
     title: "Materiais agendados",
     body: "Carregue os estudos bíblicos do trimestre de uma vez. O sistema libera cada material na data certa para o líder e os membros do grupo.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -23,7 +23,7 @@ const CAPABILITIES = [
     title: "Notificação automática",
     body: "O líder recebe uma notificação push no dia da reunião com o material do encontro e a lista de presença para registrar.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -36,7 +36,7 @@ const CAPABILITIES = [
     title: "Registro de presença mobile",
     body: "O líder marca os presentes pelo celular, no mesmo dia, direto do app. O histórico aparece no painel da secretária em tempo real.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -61,7 +61,7 @@ const CAPABILITIES = [
     title: "Sugestão de convite",
     body: "Quando um visitante frequenta mais de duas vezes sem célula, o sistema sugere um convite para o grupo mais próximo do perfil dele.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
   {
@@ -74,7 +74,7 @@ const CAPABILITIES = [
     title: "Terminologia configurável",
     body: "Célula, pequeno grupo, EBD, ministério, discipulado — você define como a sua tradição chama. O sistema adapta todos os textos e notificações.",
     plan: "Starter e Premium",
-    planColor: "#00B8A2",
+    planColor: "var(--color-teal)",
     planBg: "var(--teal-dim)",
   },
 ] as const;

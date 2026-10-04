@@ -83,8 +83,8 @@ function PhoneMockup() {
               key={name}
               className="flex items-center gap-2.5 rounded-btn px-2.5 py-2 border"
               style={{
-                background: present ? "rgba(0,184,162,.06)" : "var(--surface)",
-                borderColor: present ? "rgba(0,184,162,.3)" : "var(--border)",
+                background: present ? "color-mix(in srgb, var(--color-teal) 6%, transparent)" : "var(--surface)",
+                borderColor: present ? "color-mix(in srgb, var(--color-teal) 30%, transparent)" : "var(--border)",
               }}
             >
               <div
@@ -97,8 +97,8 @@ function PhoneMockup() {
               <span
                 className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
                 style={{
-                  background: present ? "#00B8A2" : "var(--subtle)",
-                  color: present ? "#fff" : "var(--muted)",
+                  background: present ? "var(--color-teal)" : "var(--subtle)",
+                  color: present ? "var(--on-ink)" : "var(--muted)",
                 }}
               >
                 {present && (
@@ -113,7 +113,7 @@ function PhoneMockup() {
           {/* Submit button */}
           <div
             className="mt-auto rounded-btn py-2.5 text-center text-[11px] font-medium text-white"
-            style={{ background: "var(--navy-accent)" }}
+            style={{ background: "var(--color-navy)" }}
           >
             Salvar presença (3 / 5)
           </div>

@@ -12,19 +12,19 @@ const MARCOS = [
 ] as const;
 
 const dotStyle: Record<typeof MARCOS[number]["status"], { bg: string; shadow: string; label: string }> = {
-  done:    { bg: "#22C55E", shadow: "rgba(34,197,94,.2)",    label: "Concluído"  },
-  active:  { bg: "#EAB308", shadow: "rgba(234,179,8,.2)",    label: "Em andamento" },
+  done:    { bg: "var(--color-teal)", shadow: "color-mix(in srgb, var(--color-teal) 20%, transparent)",    label: "Concluído"  },
+  active:  { bg: "var(--color-amber)", shadow: "color-mix(in srgb, var(--color-amber) 20%, transparent)",    label: "Em andamento" },
   pending: { bg: "var(--border-strong)", shadow: "transparent", label: "Próximo"  },
 };
 
 export function EstagioAtual() {
   return (
-    <section className="relative overflow-hidden py-20 md:py-24" style={{ background: "#1E3A7B" }}>
+    <section className="relative overflow-hidden py-20 md:py-24" style={{ background: "var(--color-navy)" }}>
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(circle at 80% 20%, rgba(0,184,162,.15), transparent 50%), radial-gradient(circle at 5% 85%, rgba(255,255,255,.04), transparent 50%)",
+            "radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--color-teal) 15%, transparent), transparent 50%), radial-gradient(circle at 5% 85%, color-mix(in srgb, var(--ink) 4%, transparent), transparent 50%)",
         }}
       />
 
@@ -36,8 +36,8 @@ export function EstagioAtual() {
             <div>
               <SectionLabel
                 className="mb-5"
-                color="rgba(255,255,255,.6)"
-                lineColor="rgba(255,255,255,.3)"
+                color="color-mix(in srgb, var(--ink) 60%, transparent)"
+                lineColor="color-mix(in srgb, var(--ink) 30%, transparent)"
               >
                 Estágio atual
               </SectionLabel>
@@ -51,16 +51,16 @@ export function EstagioAtual() {
 
               <p
                 className="text-[16px] font-light leading-[1.65] mb-8 max-w-[460px]"
-                style={{ color: "rgba(255,255,255,.72)" }}
+                style={{ color: "color-mix(in srgb, var(--ink) 72%, transparent)" }}
               >
                 O Orbien não está em venda aberta. Estamos validando com igrejas parceiras em Passo Fundo, RS — construindo de verdade com quem vai usar, não apenas para quem vai comprar.
               </p>
 
               <blockquote
                 className="border-l-2 pl-5 mb-8"
-                style={{ borderColor: "rgba(0,205,181,.6)" }}
+                style={{ borderColor: "color-mix(in srgb, var(--color-teal) 60%, transparent)" }}
               >
-                <p className="text-[15px] font-light italic leading-[1.6]" style={{ color: "rgba(255,255,255,.82)" }}>
+                <p className="text-[15px] font-light italic leading-[1.6]" style={{ color: "color-mix(in srgb, var(--ink) 82%, transparent)" }}>
                   &quot;Cada feature é validada com um pastor antes de ir pra produção. Quem usa decide o que fica.&quot;
                 </p>
               </blockquote>
@@ -69,8 +69,7 @@ export function EstagioAtual() {
                 {/* TODO: connect to real waitlist action */}
                 <a
                   href="#waitlist"
-                  className="inline-flex h-11 items-center gap-2 rounded-btn bg-white px-5 text-[14px] font-medium transition-all hover:-translate-y-px"
-                  style={{ color: "#1E3A7B" }}
+                  className="inline-flex h-11 items-center gap-2 cta-primary px-5 text-[14px]"
                 >
                   Entrar na lista de espera
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -81,8 +80,7 @@ export function EstagioAtual() {
                   href="https://wa.me/5554999529683"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex h-11 items-center gap-2 rounded-btn border px-5 text-[14px] font-medium transition-all hover:border-white"
-                  style={{ color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.3)" }}
+                  className="inline-flex h-11 items-center gap-2 cta-secondary px-5 text-[14px]"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
@@ -96,14 +94,14 @@ export function EstagioAtual() {
             <div
               className="rounded-[14px] p-7"
               style={{
-                background: "rgba(255,255,255,.06)",
-                border: "1px solid rgba(255,255,255,.1)",
+                background: "color-mix(in srgb, var(--ink) 6%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--ink) 10%, transparent)",
                 backdropFilter: "blur(20px)",
               }}
             >
               <p
                 className="text-sm font-medium mb-6"
-                style={{ color: "rgba(255,255,255,.45)" }}
+                style={{ color: "color-mix(in srgb, var(--ink) 45%, transparent)" }}
               >
                 Linha do tempo
               </p>
@@ -121,10 +119,10 @@ export function EstagioAtual() {
                         className="text-[14px] font-light leading-snug"
                         style={{
                           color: status === "pending"
-                            ? "rgba(255,255,255,.38)"
+                            ? "color-mix(in srgb, var(--ink) 38%, transparent)"
                             : status === "active"
-                            ? "rgba(255,255,255,.9)"
-                            : "rgba(255,255,255,.65)",
+                            ? "color-mix(in srgb, var(--ink) 90%, transparent)"
+                            : "color-mix(in srgb, var(--ink) 65%, transparent)",
                         }}
                       >
                         {label}
@@ -137,30 +135,30 @@ export function EstagioAtual() {
               {/* Pilot partner */}
               <div
                 className="mt-7 pt-6 border-t"
-                style={{ borderColor: "rgba(255,255,255,.1)" }}
+                style={{ borderColor: "color-mix(in srgb, var(--ink) 10%, transparent)" }}
               >
-                <p className="text-xs font-medium mb-3" style={{ color: "rgba(255,255,255,.38)" }}>
+                <p className="text-xs font-medium mb-3" style={{ color: "color-mix(in srgb, var(--ink) 38%, transparent)" }}>
                   Igreja-piloto
                 </p>
                 <div className="flex items-center gap-3">
                   <div
                     className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0"
-                    style={{ background: "rgba(255,255,255,.1)" }}
+                    style={{ background: "color-mix(in srgb, var(--ink) 10%, transparent)" }}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="color-mix(in srgb, var(--ink) 70%, transparent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
                     </svg>
                   </div>
                   <div>
                     <p className="text-[14px] font-medium text-white">Doca Church</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,.45)" }}>
+                    <p className="text-[11px] mt-0.5" style={{ color: "color-mix(in srgb, var(--ink) 45%, transparent)" }}>
                       Passo Fundo · RS · desde 2025
                     </p>
                   </div>
                 </div>
                 <p
                   className="mt-3 text-[13px] font-light leading-relaxed"
-                  style={{ color: "rgba(255,255,255,.55)" }}
+                  style={{ color: "color-mix(in srgb, var(--ink) 55%, transparent)" }}
                 >
                   Validação ativa dos módulos de membros, financeiro e pequenos grupos com a equipe da Doca Church.
                 </p>

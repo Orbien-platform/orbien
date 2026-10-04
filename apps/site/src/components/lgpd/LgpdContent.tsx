@@ -52,9 +52,9 @@ export function LgpdContent() {
             style={{ fontSize: "clamp(38px, 5.5vw, 60px)", lineHeight: 1.04, color: "var(--ink)" }}
           >
             Política de{" "}
-            <strong className="font-semibold" style={{ color: "var(--navy-accent)" }}>
+            <em className="heading-accent">
               Privacidade e LGPD
-            </strong>
+            </em>
           </h1>
           <p className="font-light leading-[1.65] mb-3" style={{ fontSize: "17px", color: "var(--stone)" }}>
             Orbien — Church Platform Ltda · Versão 1.0 · Última atualização: junho de 2026

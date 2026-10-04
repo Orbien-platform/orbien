@@ -38,7 +38,7 @@ describe("FinanceiroHero", () => {
   it("pinta os três deltas do mockup em verde", () => {
     render(<FinanceiroHero />);
     for (const delta of ["+14%", "meta 70%", "+3 vs mês ant."]) {
-      expect(screen.getByText(delta)).toHaveStyle({ color: "#00B8A2" });
+      expect(screen.getByText(delta)).toHaveStyle({ color: "var(--color-teal)" });
     }
   });
 });
