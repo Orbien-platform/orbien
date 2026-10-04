@@ -406,6 +406,8 @@ describe("HomeScreen", () => {
     let resolveGroups!: (value: unknown) => void;
     let resolvePosts!: (value: unknown) => void;
     let resolveHighlights!: (value: unknown) => void;
+    let resolvePayments!: (value: boolean) => void;
+    mockFetchAsaasPaymentsEnabled.mockReturnValue(new Promise((r) => (resolvePayments = r)));
     mockListMyGroups.mockReturnValue(new Promise((r) => (resolveGroups = r)));
     mockGetPosts.mockReturnValue(new Promise((r) => (resolvePosts = r)));
     mockGetHighlights.mockReturnValue(new Promise((r) => (resolveHighlights = r)));
@@ -418,6 +420,7 @@ describe("HomeScreen", () => {
       resolveGroups([]);
       resolvePosts({ data: [makePost()], total: 1 });
       resolveHighlights([makePost()]);
+      resolvePayments(true);
     });
 
     let rejectHighlights!: (reason: unknown) => void;

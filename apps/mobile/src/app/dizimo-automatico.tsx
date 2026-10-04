@@ -108,15 +108,18 @@ export default function DizimoAutomaticoScreen() {
   const amount = parseAmount(amountText);
   const amountInvalid =
     amountText.trim() !== "" && (amount === null || amount < MIN_AMOUNT || amount > MAX_AMOUNT);
-  const canSubmit = amount !== null && !amountInvalid && consented && !submitting;
+  // O valor que o botão envia, ou `null` quando não pode enviar. Botão sem
+  // valor não recebe `onPress` (mesmo padrão de `HomeQuickActions`): não há
+  // um `if` dentro do handler que pudesse divergir do estado visual.
+  const submitAmount =
+    amount !== null && !amountInvalid && consented && !submitting ? amount : null;
 
-  async function handleCreate() {
-    if (!canSubmit || amount === null) return;
+  async function handleCreate(value: number) {
     setSubmitting(true);
     setActionError(null);
     setNotice(null);
     try {
-      await createMySubscription(amount);
+      await createMySubscription(value);
       setAmountText("");
       setConsented(false);
       setNotice("Dízimo automático ativado.");
@@ -308,8 +311,8 @@ export default function DizimoAutomaticoScreen() {
           testID="dizimo-submit"
           title="Ativar dízimo automático"
           loading={submitting}
-          disabled={!canSubmit}
-          onPress={handleCreate}
+          disabled={submitAmount === null}
+          onPress={submitAmount === null ? undefined : () => void handleCreate(submitAmount)}
         />
       </Card>
     </Screen>

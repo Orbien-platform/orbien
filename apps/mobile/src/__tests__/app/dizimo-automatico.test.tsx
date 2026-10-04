@@ -23,7 +23,7 @@ jest.mock("../../lib/pix-recorrente/pix-recorrente-client", () => {
 jest.mock("../../lib/auth/auth-client", () => ({ authenticatedRequest: jest.fn() }));
 
 import DizimoAutomaticoScreen from "../../app/dizimo-automatico";
-import { HttpError } from "../../lib/api/errors";
+import { HttpError, NetworkError } from "../../lib/api/errors";
 
 const ACTIVE = {
   id: "sub-1",
@@ -175,6 +175,72 @@ describe("DizimoAutomaticoScreen", () => {
     expect(screen.getByTestId("dizimo-action-error")).toBeTruthy();
     expect(screen.queryByText("Dízimo automático cancelado.")).toBeNull();
     expect(screen.getByTestId("dizimo-active")).toBeTruthy();
+  });
+
+  it("sem conexão ao contratar, diz que é a conexão — não o servidor", async () => {
+    mockCreate.mockRejectedValue(new NetworkError());
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId("dizimo-amount-input"), "150");
+    await fireEvent.press(screen.getByTestId("dizimo-consent"));
+    await act(async () => {
+      await fireEvent.press(screen.getByTestId("dizimo-submit"));
+    });
+
+    expect(screen.getByText("Sem conexão. Verifique a internet e tente de novo.")).toBeTruthy();
+  });
+
+  it("lista várias contribuições; valor numérico e pagamento sem data não quebram a tela", async () => {
+    mockList.mockResolvedValue([
+      {
+        ...ACTIVE,
+        amount: 80,
+        created_at: "data-invalida",
+        payments: [
+          { id: "pay-1", amount: 80, paid_at: "2026-10-02T12:00:00.000Z" },
+          { id: "pay-2", amount: "80.00", paid_at: null },
+        ],
+      },
+    ]);
+
+    await renderScreen();
+
+    expect(screen.getByTestId("dizimo-amount").props.children).toBe("R$ 80,00");
+    expect(screen.getByText("Data não informada")).toBeTruthy();
+    // Sem data de início legível, a frase não inventa uma.
+    expect(screen.getByText("Cobrança mensal via PIX.")).toBeTruthy();
+  });
+
+  it("sem conexão ao carregar, mostra o erro de conexão (não o de servidor)", async () => {
+    mockList.mockRejectedValue(new NetworkError());
+
+    await renderScreen();
+
+    expect(screen.getByText(/Verifique sua conexão/)).toBeTruthy();
+  });
+
+  it("resposta que chega depois de a tela fechar é ignorada (sucesso e falha)", async () => {
+    let resolveList!: (value: unknown) => void;
+    mockList.mockReturnValue(new Promise((r) => (resolveList = r)));
+    const view = await render(<DizimoAutomaticoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolveList([ACTIVE]);
+    });
+
+    let rejectList!: (reason: unknown) => void;
+    mockList.mockReturnValue(new Promise((_, r) => (rejectList = r)));
+    const second = await render(<DizimoAutomaticoScreen />);
+    await act(async () => {
+      second.unmount();
+    });
+    await act(async () => {
+      rejectList(new Error("500"));
+    });
+
+    expect(mockList).toHaveBeenCalledTimes(2);
   });
 
   it("falha ao carregar mostra erro com 'Tentar de novo'", async () => {
