@@ -113,7 +113,11 @@ describe("Sidebar", () => {
 
   it("usa a inicial da Orbien quando o nome não tem letra nem número", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
-    mockedUseChurchIdentity.mockReturnValue({ churchName: "— ★", congregationName: null });
+    mockedUseChurchIdentity.mockReturnValue({
+      churchName: "— ★",
+      congregationName: null,
+      groupTerm: { singular: "Grupo", plural: "Grupos" },
+    });
     render(<Sidebar />);
     expect(screen.getByText("O")).toBeInTheDocument();
   });
