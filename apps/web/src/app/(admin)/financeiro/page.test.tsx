@@ -132,7 +132,7 @@ const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseRouter = vi.mocked(useRouter);
 
-function setup(roles: string[] = ["tenant_admin"], plan: string = "starter") {
+function setup(roles: string[] = ["tenant_admin"], plan: string = "starter", asaasPayments = false) {
   const replace = vi.fn();
   mockedUseRouter.mockReturnValue({ replace } as unknown as ReturnType<typeof useRouter>);
   mockedUseAuth.mockReturnValue({
@@ -147,6 +147,7 @@ function setup(roles: string[] = ["tenant_admin"], plan: string = "starter") {
       support_tenant_name: null,
       plan,
       areas: null,
+      asaas_payments: asaasPayments,
       expires_at: Math.floor(Date.now() / 1000) + 300,
     },
     isLoading: false,
@@ -1354,11 +1355,19 @@ describe("FinanceiroPage — abas Premium (PIX e Recibos)", () => {
     expect(screen.queryByRole("tab", { name: "Recibos" })).not.toBeInTheDocument();
   });
 
-  it("mostra PIX e Recibos no plano Premium para o tesoureiro", () => {
-    setup(["treasurer"], "premium");
+  it("mostra PIX e Recibos no plano Premium para o tesoureiro, com a trava de pagamentos ligada", () => {
+    setup(["treasurer"], "premium", true);
     mockApi({});
     render(<FinanceiroPage />);
     expect(screen.getByRole("tab", { name: "PIX" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recibos" })).toBeInTheDocument();
+  });
+
+  it("com a trava de pagamentos desligada (padrão), PIX some mesmo no Premium — Recibos fica", () => {
+    setup(["treasurer"], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.queryByRole("tab", { name: "PIX" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Recibos" })).toBeInTheDocument();
   });
 

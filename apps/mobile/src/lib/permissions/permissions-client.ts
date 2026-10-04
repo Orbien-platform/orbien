@@ -1,5 +1,5 @@
 // PermissionsClient — busca `GET /me/permissions`, mesmo contrato que
-// `apps/web/src/lib/session.ts:fetchAreas` já consome. Único consumidor
+// `apps/web/src/lib/session.ts:fetchPermissions` já consome. Único consumidor
 // mobile até aqui é o gate da aba Escala (design.md).
 import { authenticatedRequest } from "../auth/auth-client";
 

@@ -6,6 +6,7 @@ import { NotificationsService } from './notifications.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { asaasPaymentsEnabled } from '../financial/asaas-payments.flag';
 
 const ALLOWED_MEDIA_MIME_TYPES = [
   'application/pdf',
@@ -383,5 +384,10 @@ function assertRegistrationPricePlan(price: number | undefined, plan: string | u
   if (price === undefined) return;
   if (plan !== undefined && plan !== 'premium') {
     throw new ForbiddenException('Inscrição paga em evento exige o plano Premium');
+  }
+  // Evento pago cobra pela Asaas na inscrição; com a trava desligada a
+  // cobrança responderia 503 a todo inscrito. Melhor não deixar nascer.
+  if (price > 0 && !asaasPaymentsEnabled()) {
+    throw new BadRequestException('Inscrição paga em evento ainda não está disponível');
   }
 }

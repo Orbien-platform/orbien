@@ -121,6 +121,14 @@ export interface SessionUser {
    */
   areas: string[] | null;
   /**
+   * Trava de pagamentos pela Asaas (PIX dinâmico, recorrente, inscrição paga),
+   * segundo `GET /me/permissions` → `features.asaas_payments`. Ausente ou
+   * `false` esconde o que depende dela — **fail-closed**, ao contrário de
+   * `areas`: mostrar um recurso que vai responder 503 é pior do que
+   * escondê-lo. Hoje desligada para todo tenant (PROD-28, `docs/PLANO.md`).
+   */
+  asaas_payments?: boolean;
+  /**
    * `exp` do token, em segundos. A faixa de suporte conta o tempo que resta
    * com isto: a sessão de suporte dura 5 minutos e não se renova, então
    * chegar ao fim sem aviso é perder o que estava sendo feito.
@@ -137,7 +145,8 @@ export interface SessionUser {
 export function buildSessionUser(
   payload: JwtPayload,
   identity: Identity,
-  areas: string[] | null = null
+  areas: string[] | null = null,
+  asaasPayments = false
 ): SessionUser {
   return {
     id: payload.sub,
@@ -150,8 +159,15 @@ export function buildSessionUser(
     support_tenant_name: identity.tenantName ?? null,
     plan: payload.plan,
     areas,
+    asaas_payments: asaasPayments,
     expires_at: payload.exp,
   };
+}
+
+/** O que `GET /me/permissions` responde, como a sessão o guarda. */
+export interface SessionPermissions {
+  areas: string[] | null;
+  asaasPayments: boolean;
 }
 
 /**
@@ -162,23 +178,27 @@ export function buildSessionUser(
  * era o que `lib/permissions.ts` fazia, e é a cópia que esta chamada existe
  * para apagar.
  *
- * **Nunca lança.** Token vencido (401), API fora, rede caída: tudo vira
+ * **Nunca lança.** Token vencido (401), API fora, rede caída: `areas` vira
  * `null`, que a barra lateral lê como "não sei" e trata desenhando todos os
- * links. Falhar aqui não pode derrubar a montagem da sessão — o token ainda é
+ * links; `asaasPayments` vira `false` (fail-closed, ver `SessionUser`).
+ * Falhar aqui não pode derrubar a montagem da sessão — o token ainda é
  * legível, a tela ainda sobe, e quem nega o acesso de verdade é a API.
  */
-export async function fetchAreas(accessToken: string): Promise<string[] | null> {
+export async function fetchPermissions(accessToken: string): Promise<SessionPermissions> {
   try {
     const res = await fetch(`${BACKEND_URL}/me/permissions`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { areas: null, asaasPayments: false };
 
-    const body = (await res.json()) as { areas?: unknown };
-    return Array.isArray(body.areas) ? (body.areas as string[]) : null;
+    const body = (await res.json()) as { areas?: unknown; features?: { asaas_payments?: unknown } };
+    return {
+      areas: Array.isArray(body.areas) ? (body.areas as string[]) : null,
+      asaasPayments: body.features?.asaas_payments === true,
+    };
   } catch {
-    return null;
+    return { areas: null, asaasPayments: false };
   }
 }
 

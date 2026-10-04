@@ -499,6 +499,9 @@ function harness(opts: Opts = {}) {
     service: new PixService(prisma, http, donationReceiptService as unknown as DonationReceiptService),
     cap,
     donationReceiptService,
+    prisma: prisma as unknown as {
+      client: { pixSubscription: { create: (args: unknown) => Promise<unknown> } };
+    },
   };
 }
 
@@ -648,6 +651,18 @@ describe('PixService', () => {
     beforeEach(() => {
       process.env['ASAAS_API_KEY'] = 'chave-asaas';
       process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+      process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
+    });
+
+    it('com a trava de pagamentos desligada, responde 503 e não chama a Asaas', async () => {
+      delete process.env['ASAAS_PAYMENTS_ENABLED'];
+      const { service, cap } = harness();
+
+      await expect(service.createDynamic(dto, user)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(cap.posts).toEqual([]);
+      expect(cap.pixPayments).toEqual([]);
     });
 
     it('sem chave da Asaas configurada, responde 503 antes de tocar no banco', async () => {
@@ -859,6 +874,17 @@ describe('PixService', () => {
     beforeEach(() => {
       process.env['ASAAS_API_KEY'] = 'chave-asaas';
       process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+      process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
+    });
+
+    it('com a trava de pagamentos desligada, responde 503 e não chama a Asaas', async () => {
+      delete process.env['ASAAS_PAYMENTS_ENABLED'];
+      const { service, cap } = harness();
+
+      await expect(
+        service.createForEventRegistration('t1', 'c1', 30, 'Inscrição — Retiro'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(cap.posts).toEqual([]);
     });
 
     it('devolve o QR e grava o pagamento no cenário `event_registration`', async () => {
@@ -945,6 +971,7 @@ describe('PixService', () => {
     beforeEach(() => {
       process.env['ASAAS_API_KEY'] = 'chave-asaas';
       process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+      process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
     });
 
     it('sem chave da Asaas configurada, responde 503 antes de tocar no banco', async () => {
@@ -955,6 +982,75 @@ describe('PixService', () => {
         ServiceUnavailableException,
       );
       expect(cap.pixSubscriptions).toEqual([]);
+    });
+
+    it('com a trava de pagamentos desligada, responde 503 sem chamar a Asaas — mesmo com chave configurada', async () => {
+      delete process.env['ASAAS_PAYMENTS_ENABLED'];
+      const { service, cap } = harness();
+
+      await expect(service.createSubscription(dto, user)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(cap.posts).toEqual([]);
+      expect(cap.pixSubscriptions).toEqual([]);
+    });
+
+    it('gravação que falha depois da Asaas desfaz a assinatura lá (não deixa cobrança órfã)', async () => {
+      const { service, cap, prisma } = harness();
+      prisma.client.pixSubscription.create = () => Promise.reject(new Error('banco caiu'));
+
+      await expect(service.createSubscription(dto, user)).rejects.toThrow('banco caiu');
+      expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_novo']);
+    });
+
+    it('gravação falha E o desfazer na Asaas também falha: loga a órfã com o id e propaga o erro original', async () => {
+      const { service, cap, prisma } = harness({ httpDeleteFails: true });
+      prisma.client.pixSubscription.create = () => Promise.reject(new Error('banco caiu'));
+      const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.createSubscription(dto, user)).rejects.toThrow('banco caiu');
+
+      expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_novo']);
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining('sub_asaas_novo'),
+        expect.any(Error),
+      );
+    });
+
+    it('unique "uma ativa contratada pelo doador" vira 409 e desfaz a assinatura aberta na Asaas', async () => {
+      const { service, cap, prisma } = harness();
+      prisma.client.pixSubscription.create = () =>
+        Promise.reject(
+          new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            code: 'P2002',
+            clientVersion: 'test',
+          }),
+        );
+
+      await expect(service.createSubscription(dto, user)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_novo']);
+    });
+
+    it('grava a versão e a hora do aceite quando quem cria é o próprio doador', async () => {
+      const { service, cap } = harness();
+
+      await service.createSubscriptionFor(
+        { donorPersonId: 'donor-1', amount: 80, consentVersion: 'dizimo-automatico-v1' },
+        user,
+      );
+
+      expect(cap.pixSubscriptions[0]).toMatchObject({ consent_version: 'dizimo-automatico-v1' });
+      expect(cap.pixSubscriptions[0]['consent_accepted_at']).toBeInstanceOf(Date);
+    });
+
+    it('criada pelo tesoureiro, não grava aceite nenhum', async () => {
+      const { service, cap } = harness();
+
+      await service.createSubscription(dto, user);
+
+      expect(cap.pixSubscriptions[0]).not.toHaveProperty('consent_version');
     });
 
     it('igreja sem chave PIX configurada vira 400', async () => {
@@ -1071,6 +1167,7 @@ describe('PixService', () => {
     beforeEach(() => {
       process.env['ASAAS_API_KEY'] = 'chave-asaas';
       process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+      process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
     });
 
     it('assinatura inexistente (ou de outro tenant/congregação) vira 404', async () => {
@@ -1109,6 +1206,35 @@ describe('PixService', () => {
         ServiceUnavailableException,
       );
       expect(cap.deletes).toHaveLength(1);
+    });
+
+    it('Asaas responde 404 (já não existe lá): marca cancelada, em vez de 503 para sempre', async () => {
+      const { service } = harness({ httpDeleteStatus: 404 });
+
+      const result = await service.cancelSubscription('sub-1', user);
+
+      expect(result).toMatchObject({ status: 'cancelled' });
+    });
+
+    it('Asaas responde outro erro HTTP (500): 503, e a linha segue ativa', async () => {
+      const { service } = harness({ httpDeleteStatus: 500 });
+
+      await expect(service.cancelSubscription('sub-1', user)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      await expect(service.listSubscriptions(user)).resolves.toEqual([
+        expect.objectContaining({ status: 'active' }),
+      ]);
+    });
+
+    it('com a trava de pagamentos desligada, cancelar continua funcionando', async () => {
+      delete process.env['ASAAS_PAYMENTS_ENABLED'];
+      const { service, cap } = harness();
+
+      const result = await service.cancelSubscription('sub-1', user);
+
+      expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_1']);
+      expect(result).toMatchObject({ status: 'cancelled' });
     });
   });
 
@@ -1177,6 +1303,20 @@ describe('PixService', () => {
       beforeEach(() => {
         process.env['ASAAS_API_KEY'] = 'chave-asaas';
         process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+        process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
+      });
+
+      it('com a trava de pagamentos desligada, Premium recebe a chave estática como o Starter — sem motivo de fallback e sem chamar a Asaas', async () => {
+        delete process.env['ASAAS_PAYMENTS_ENABLED'];
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', pix_key: 'chave@igreja.test' });
+        expect(result).not.toHaveProperty('fallback_reason');
+        expect(cap.posts).toEqual([]);
+        // A intenção continua gravada, para a baixa manual da tesouraria.
+        expect(cap.pixPayments).toHaveLength(1);
       });
 
       it('cria a cobrança na Asaas e devolve o QR, o copia-e-cola, o payment_id e a validade de 24h', async () => {

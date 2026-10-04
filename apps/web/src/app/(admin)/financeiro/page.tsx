@@ -175,6 +175,10 @@ export default function FinanceiroPage() {
   // Abas Premium: a claim `plan` só decide se a aba aparece — quem nega de
   // verdade é o `PlanGuard` da API, e os painéis tratam o 403.
   const showPremiumTabs = canManageCategories && user?.plan === "premium";
+  // PIX (QR dinâmico e recorrente) cobra pela Asaas, e a trava de pagamentos
+  // está desligada para todo tenant até a subconta por igreja existir
+  // (PROD-28, AD-009). Recibos e carnê não cobram nada e seguem no Premium.
+  const showPixTab = showPremiumTabs && user?.asaas_payments === true;
 
   const [activeTab, setActiveTab] = useState<TabValue>("overview");
   const [categoriesOpen, setCategoriesOpen] = useState(false);
@@ -603,7 +607,7 @@ export default function FinanceiroPage() {
               Doações públicas
             </Tabs.Tab>
           )}
-          {showPremiumTabs && (
+          {showPixTab && (
             <Tabs.Tab value="pix" className={tabBtn(activeTab === "pix")}>
               PIX
             </Tabs.Tab>
@@ -997,7 +1001,7 @@ export default function FinanceiroPage() {
         )}
 
         {/* ── PIX (Premium) ──────────────────────────────────────────────────── */}
-        {showPremiumTabs && (
+        {showPixTab && (
           <Tabs.Panel value="pix" className="pt-5">
             <div className="space-y-6">
               <PixSubscriptionsPanel />

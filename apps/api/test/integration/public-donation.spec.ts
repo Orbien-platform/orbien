@@ -104,10 +104,19 @@ const txsOf = (tenant: TestTenant) =>
     where: { tenant_id: tenant.tenantId, source: 'pix_webhook', created_at: { gte: startedAt } },
   });
 
+// A suíte de integração roda num processo só (`--runInBand`): a trava ligada
+// aqui não pode vazar para as suítes seguintes.
+let paymentsFlagBefore: string | undefined;
+
 beforeAll(async () => {
   process.env['ASAAS_API_KEY'] = 'chave-asaas-teste';
   process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
   process.env['ASAAS_WEBHOOK_TOKEN'] = WEBHOOK_TOKEN;
+  // O QR dinâmico da doação pública está atrás da trava de cobranças Asaas
+  // (PROD-28, AD-010); esta suíte prova o caminho com ela ligada. Desligada,
+  // Premium cai para a chave estática — coberto em `pix.service.spec.ts`.
+  paymentsFlagBefore = process.env['ASAAS_PAYMENTS_ENABLED'];
+  process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
 
   premium = await loadTestTenant(admin, 'teste2-church');
   starter = await loadTestTenant(admin, 'teste1-church');
@@ -134,6 +143,8 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  if (paymentsFlagBefore === undefined) delete process.env['ASAAS_PAYMENTS_ENABLED'];
+  else process.env['ASAAS_PAYMENTS_ENABLED'] = paymentsFlagBefore;
   const ids = { in: [premium.tenantId, starter.tenantId] };
   await admin.donationReceipt.deleteMany({ where: { tenant_id: ids, created_at: { gte: startedAt } } });
   await admin.financialTransaction.deleteMany({

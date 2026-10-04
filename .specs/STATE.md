@@ -179,3 +179,113 @@ lançamento mesmo que o plano tenha mudado no meio.
 visitante guarda o snapshot na linha da operação, com aceite versionado
 (`legal/consent-terms/`), e só cria/vincula `Person` num fluxo que verifique o
 titular. Recibo/documento para quem não é `Person` usa `recipient_*`.
+
+### AD-008 — Taxa da Asaas é do tenant; 1% de split vai para a Orbien, em toda cobrança
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-03 (avaliação `pix-recorrente-doador-mobile`)
+
+Para **toda e qualquer** cobrança criada na Asaas — hoje `POST /payments`
+(PIX dinâmico, inscrição de evento) e `POST /subscriptions` (PIX recorrente),
+amanhã qualquer novo cenário ou meio de pagamento — vale uma regra só:
+
+1. **A tarifa da Asaas é custo do tenant** (a igreja é a dona da cobrança e
+   absorve a tarifa). Nunca repassada à Orbien, nunca somada ao doador.
+2. **A Orbien recebe 1% por split** da própria cobrança (`split` da Asaas para
+   a wallet da Orbien), não por repasse manual nem por fatura posterior.
+3. **Um único ponto monta a cobrança.** Nenhum serviço chama
+   `asaasPost('/payments'|'/subscriptions', …)` com corpo próprio: todos passam
+   pelo mesmo montador, que injeta o split e é o único lugar que conhece o
+   percentual e a wallet (configuração, não literal espalhado).
+4. **Cobrança sem split não existe.** Wallet/percentual ausentes → a criação
+   falha (503 "serviço PIX indisponível" + log), em vez de cobrar sem a parte
+   da Orbien. Teste de unidade falha se algum POST de cobrança sair sem
+   `split`.
+
+**Motivo**: o pricing já descreve "1% retido via split + ~1% da Asaas" como
+custo efetivo ~2% para a igreja (`pricing-church-platform.md` §79-84, ADR-007),
+mas o código não tem nenhum `split` (verificado em 2026-10-03: três pontos de
+cobrança em `pix.service.ts`, nenhum com `split`/`walletId`). Sem um ponto
+único, cada cenário novo (como a recorrente do doador) reimplementaria — ou
+esqueceria — a regra.
+
+**Consequência prática**: uma feature nova de pagamento **não** decide taxa nem
+split; ela chama o montador. Mudar o percentual ou o provedor (ADR-007) é uma
+mudança num lugar. **Pré-requisito em aberto (DEC-07/PEND-17)**: hoje há uma só
+`ASAAS_API_KEY` e um cliente Asaas por tenant — para a tarifa ser do tenant e o
+split sair da cobrança dele, a cobrança precisa ser criada na conta Asaas do
+tenant (subconta/wallet por tenant). Ver `.specs/features/asaas-taxa-e-split-padrao/`.
+
+### AD-009 — Cobrança nasce na subconta Asaas do tenant, criada pela Orbien; só tenant com CNPJ
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-03 (fecha `DEC-07`; complementa AD-008)
+
+Como cumprir o AD-008 ("tarifa do tenant, 1% para a Orbien"):
+
+1. **A cobrança é emitida na conta do tenant, nunca na da Orbien.** Para cada
+   igreja a Orbien cria uma **subconta Asaas** com a chave raiz da Orbien
+   (`POST /accounts`). A cobrança (`/payments`, `/subscriptions`) sai com a
+   `apiKey` **da subconta**, e o `split` leva o 1% para o `walletId` da Orbien.
+   O PIX mostra a igreja como recebedora; o valor bruto, a tarifa, o estorno e a
+   contestação são da igreja. A Orbien só recebe a parte dela — que é o que
+   torna demonstrável que o dinheiro não é da Orbien.
+2. **Rejeitado**: cobrança na conta da Orbien com split de ~99% para a igreja.
+   O doador veria "Orbien" no PIX e a cobrança bruta seria da Orbien — o risco
+   tributário e de custódia que motivou esta decisão.
+3. **A igreja nunca manuseia chave.** A `apiKey` da subconta vem uma única vez,
+   na resposta de criação; a Orbien a guarda **cifrada na aplicação** (chave
+   mestra fora do banco), nunca em log, nunca no front, lida só pelo montador
+   de cobrança do AD-008. A chave raiz da Orbien e o `walletId` da Orbien ficam
+   em variável de ambiente, nunca no banco.
+4. **Só tenant com CNPJ.** Sem CNPJ não há subconta nem cobrança Asaas: a
+   igreja expõe só a própria chave PIX (copiar ou QR) e a contribuição acontece
+   no banco do doador, fora do app — é o Cenário 1 que já existe
+   (`PixService.createManual`, página `/doar/{slug}`). Sem confirmação
+   automática, sem recibo, sem recorrente, sem split. Conta em nome do CPF do
+   pastor/responsável **não** é alternativa.
+5. **Enquanto a subconta não está aprovada** (documentos pendentes, em análise,
+   recusada) vale o mesmo Cenário 1; os recursos que dependem da Asaas aparecem
+   como "ative os recebimentos", não como erro.
+
+**Consequência prática**: nenhum código cria cobrança com a chave raiz da
+Orbien. A chave raiz só cria e consulta subcontas. Base do 1%: o split da Asaas
+incide sobre o **valor líquido** (após a tarifa) — o 1% é do líquido.
+Em aberto (perguntar à Asaas, não bloqueia o modelo): se a subconta tem acesso
+ao painel ou saque automático para o banco da igreja (subconta BaaS não tem
+painel — a Orbien **não** deve operar saque de dinheiro do tenant), custo de
+criação, e como "organização religiosa" é tratada no KYC (associação pede ata).
+
+### AD-010 — Toda cobrança Asaas nasce atrás de `ASAAS_PAYMENTS_ENABLED`; ver e cancelar, nunca
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-03 (PROD-28)
+
+Os pagamentos pela Asaas ficam prontos e desligados até o lançamento. Regra
+para todo código que cria cobrança na Asaas — o que existe hoje e o que vier:
+
+1. **Criar cobrança** chama `assertAsaasPaymentsEnabled()`
+   (`apps/api/src/financial/asaas-payments.flag.ts`) antes de qualquer
+   consulta ou chamada à Asaas — 503 com a mensagem da trava. Onde já existe
+   um caminho sem Asaas, ele é tomado em vez do 503: o QR dinâmico da doação
+   pública Premium consulta `asaasPaymentsEnabled()` e cai para a chave
+   estática, como o Starter. A checagem fica no serviço que cobra
+   (`PixService`), não só no controller, para que todo caminho (inclusive o
+   de inscrição de evento, que vem de `content/`) passe por ela. O que só
+   *prepara* uma cobrança (ex.: evento com preço) é barrado também, com 400.
+2. **Nunca travar**: listar, cancelar, webhook. Cobrança emitida precisa ser
+   confirmada, e quem é cobrado precisa poder parar.
+3. Só o literal `true` liga. Valor esquecido ou digitado errado = desligado.
+4. Os fronts leem `GET /me/permissions` → `features.asaas_payments` com
+   **falha fechada** (sem resposta = escondido), ao contrário de `areas`
+   (falha aberta). Esconder é UX; quem nega é a API.
+
+**Rota de dinheiro self-service** (também desta feature): rota que um
+`member` usa para mexer em dinheiro dele deriva a pessoa
+(`user_accounts.person_id`) e o plano (`tenant_plans`) **do banco**, nunca do
+corpo nem da claim; responde 404 para linha de outra pessoa; e barra sessão de
+suporte. Modelo: `DonorPixSubscriptionsService`.
+
+**Consequência prática**: ligar pagamentos em produção é mudar uma env — e
+isso só depois de `AD-008`/`AD-009` no código (`PROD-28`, "O que falta").
+

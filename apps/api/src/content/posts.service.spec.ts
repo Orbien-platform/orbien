@@ -621,6 +621,38 @@ describe('PostsService — campos de evento (PROD-16)', () => {
  * `assertEventFields` acima.
  */
 describe('PostsService — preço de inscrição exige Premium (PROD-24)', () => {
+  // Evento pago cobra pela Asaas: com a trava desligada não nasce (abaixo).
+  // Aqui, a regra de plano — com a trava ligada.
+  const flagOriginal = process.env['ASAAS_PAYMENTS_ENABLED'];
+  beforeEach(() => {
+    process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
+  });
+  afterEach(() => {
+    if (flagOriginal === undefined) delete process.env['ASAAS_PAYMENTS_ENABLED'];
+    else process.env['ASAAS_PAYMENTS_ENABLED'] = flagOriginal;
+  });
+
+  it('com a trava de pagamentos desligada, nem o Premium cria evento pago — e o gratuito segue', async () => {
+    delete process.env['ASAAS_PAYMENTS_ENABLED'];
+    const client = clientWith();
+    client.contentPost.create.mockResolvedValue({ id: 'p1' });
+    const { service } = serviceWith(client);
+
+    await expect(
+      service.create(
+        't1',
+        'g1',
+        'u1',
+        { type: 'event', title: 'Acampamento', registration_price: 50 } as never,
+        'premium',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(client.contentPost.create).not.toHaveBeenCalled();
+
+    await service.create('t1', 'g1', 'u1', { type: 'event', title: 'Culto' } as never, 'premium');
+    expect(client.contentPost.create).toHaveBeenCalledTimes(1);
+  });
+
   it('cria evento pago quando o plano é premium', async () => {
     const client = clientWith();
     client.contentPost.create.mockResolvedValue({ id: 'p1' });
