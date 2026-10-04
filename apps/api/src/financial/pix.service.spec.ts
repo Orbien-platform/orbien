@@ -27,6 +27,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -863,6 +864,20 @@ describe('PixService', () => {
 
       await expect(service.createSubscription(dto, user)).rejects.toThrow('banco caiu');
       expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_novo']);
+    });
+
+    it('gravação falha E o desfazer na Asaas também falha: loga a órfã com o id e propaga o erro original', async () => {
+      const { service, cap, prisma } = harness({ httpDeleteFails: true });
+      prisma.client.pixSubscription.create = () => Promise.reject(new Error('banco caiu'));
+      const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.createSubscription(dto, user)).rejects.toThrow('banco caiu');
+
+      expect(cap.deletes).toEqual(['https://asaas.test/v3/subscriptions/sub_asaas_novo']);
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining('sub_asaas_novo'),
+        expect.any(Error),
+      );
     });
 
     it('unique "uma ativa contratada pelo doador" vira 409 e desfaz a assinatura aberta na Asaas', async () => {
