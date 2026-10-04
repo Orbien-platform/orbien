@@ -16,14 +16,14 @@ interface DateBlockProps {
 }
 
 export function DateBlock({ iso }: DateBlockProps) {
-  const { colors, primaryColor } = useTheme();
+  const { colors, brandInk } = useTheme();
   const parts = formatDayMonth(iso);
 
   if (!parts) return null;
 
   return (
     <View style={[styles.block, { backgroundColor: colors.bgSubtle }]}>
-      <Text style={[typography.h3, { color: primaryColor }]}>{parts.day}</Text>
+      <Text style={[typography.h3, { color: brandInk }]}>{parts.day}</Text>
       <Text style={[typography.caption, { color: colors.textSecondary }]}>
         {parts.month.toUpperCase()}
       </Text>

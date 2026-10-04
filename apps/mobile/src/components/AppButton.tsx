@@ -54,7 +54,7 @@ export function AppButton({
   icon: Icon,
   style,
 }: AppButtonProps) {
-  const { primaryColor, colors } = useTheme();
+  const { primaryColor, brandInk, colors } = useTheme();
   const isInactive = disabled || loading;
 
   // `disabled` do guia: fundo `bg-subtle`, texto `text-tertiary` — em vez
@@ -62,19 +62,21 @@ export function AppButton({
   // tenant.
   const surface: Record<Variant, string> = {
     primary: disabled ? colors.bgSubtle : primaryColor,
-    secondary: colors.bgSurface,
+    // Órbita: o secundário é pill de borda forte, sem cor de marca — a cor
+    // pura da igreja sumiria no fundo noturno.
+    secondary: "transparent",
     danger: disabled ? colors.bgSubtle : colors.danger,
     ghost: "transparent",
   };
   const label: Record<Variant, string> = {
     primary: disabled ? colors.textTertiary : colors.textOnBrand,
-    secondary: disabled ? colors.textTertiary : primaryColor,
+    secondary: disabled ? colors.textTertiary : colors.textPrimary,
     danger: disabled ? colors.textTertiary : colors.textOnBrand,
-    ghost: disabled ? colors.textTertiary : primaryColor,
+    ghost: disabled ? colors.textTertiary : brandInk,
   };
   const outline: Record<Variant, string> = {
     primary: "transparent",
-    secondary: disabled ? colors.border : primaryColor,
+    secondary: disabled ? colors.border : colors.borderStrong,
     danger: "transparent",
     ghost: "transparent",
   };

@@ -1,41 +1,36 @@
-// Tab bar (MOB-06) — introduzida nesta rodada porque o segundo módulo de
-// domínio (Conteúdo) justifica o custo, conforme já previsto no design.md
-// da Rodada 2. `expo-router/js-tabs`, não `expo-router` (export
-// deprecated) — ver AGENTS.md do mobile, Expo mudou entre versões.
+// Tab bar (MOB-06; v2 "Órbita") — `expo-router/js-tabs`, não `expo-router`
+// (export deprecated) — ver AGENTS.md do mobile, Expo mudou entre versões.
 //
-// 4 abas (Home, Grupos, Conteúdo, Perfil), Home primeiro — MHR-01/02
-// (.specs/features/mobile-home-redesign/): Escala e Celebrações saíram
-// daqui para rotas empilhadas (`src/app/escala.tsx`,
-// `src/app/celebracoes.tsx`), alcançadas a partir de CTAs na própria Home,
-// não mais abas fixas. O gate de permissão que decidia mostrar a aba
-// Escala (`areas.includes("volunteers")`) também saiu — passa a viver
-// dentro da Home. 5 → 4 abas mantém a base bem abaixo do máximo de 5 do
+// 5 abas, na ordem da v2 (docs/design/orbita-v2/README.md, "App mobile:
+// navegação"): Início · Conteúdo · Bíblia · {termo} · Mais. O {termo} é
+// como a igreja chama o pequeno grupo (célula, PG, GC — `useGroupTerm`). O
+// resto (escalas, celebrações, contribuir, notificações, perfil, cadastro
+// de visitante) são pilhas abertas a partir de Mais. Cinco é o máximo do
 // §7 do STYLE-GUIDE.md.
 //
-// Visual conforme §7 ("Bottom tab bar"): altura 56 + safe area inferior,
-// ícone lucide de 22px inativo / 28px ativo (§5), label no token `label`
-// de 11px.
+// Visual: altura 56 + safe area inferior, ícone de 22px inativo / 28px
+// ativo (§5), traço mais grosso na ativa, label no token `label`.
 //
 // A aba ativa usa `accentReadable` (theme-provider.tsx), não `accentColor`
-// cru: o §5 pede o accent do tenant, mas o §8 exige AA, e o teal default
-// dá ~2.4:1 sobre superfície branca — com label de 11px. `accentReadable`
-// é o accent quando ele passa AA e o primary quando não passa, então a
-// paleta da plataforma resolve para navy e uma versão personalizada com
-// accent de contraste próprio passa a usá-lo sem tocar neste arquivo.
+// cru: no escuro (padrão) é o teal brilhante da Orbien, que passa AA sobre a
+// superfície noturna; um accent da igreja sem contraste cai no primary.
 import { Tabs } from "expo-router/js-tabs";
 import type { ComponentType } from "react";
 import { StyleSheet, View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  CircleUser,
+  BookOpen,
   Home,
-  Newspaper,
+  LayoutGrid,
+  Megaphone,
   Users,
   type IconProps,
 } from "../../lib/theme/icons";
+import { useGroupTerm } from "../../lib/theme/terminology";
 import { useTheme } from "../../lib/theme/theme-provider";
 import {
+  fontFamily,
   ICON_STROKE_WIDTH,
   iconSize,
   spacing,
@@ -43,6 +38,8 @@ import {
 } from "../../lib/theme/tokens";
 
 const TAB_BAR_HEIGHT = 56;
+/** A aba ativa engrossa o traço, como no protótipo (2 contra 1.6). */
+const ACTIVE_STROKE_WIDTH = 2;
 
 /** Ícone da aba no tamanho que o §5 do guia define por estado.
  *
@@ -62,7 +59,7 @@ function tabIcon(Icon: ComponentType<IconProps>) {
       <Icon
         size={focused ? iconSize.emphasis : iconSize.tabInactive}
         color={color as string}
-        strokeWidth={ICON_STROKE_WIDTH}
+        strokeWidth={focused ? ACTIVE_STROKE_WIDTH : ICON_STROKE_WIDTH}
       />
     );
   };
@@ -71,6 +68,7 @@ function tabIcon(Icon: ComponentType<IconProps>) {
 export default function TabsLayout() {
   const { accentReadable, colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const groupTerm = useGroupTerm();
 
   return (
     // As abas rodam sem o header do Stack (src/app/_layout.tsx), então não
@@ -97,25 +95,31 @@ export default function TabsLayout() {
             paddingBottom: insets.bottom,
             paddingTop: spacing.sm,
           },
-          tabBarLabelStyle: typography.label,
+          // O rótulo da aba é Geist, não o mono caixa-alta do `label`: são
+          // nomes de lugar, lidos de relance.
+          tabBarLabelStyle: { ...typography.caption, fontFamily: fontFamily.medium },
           tabBarItemStyle: { paddingVertical: 0 },
         }}
       >
         <Tabs.Screen
           name="index"
-          options={{ title: "Home", tabBarIcon: tabIcon(Home) }}
-        />
-        <Tabs.Screen
-          name="grupos"
-          options={{ title: "Grupos", tabBarIcon: tabIcon(Users) }}
+          options={{ title: "Início", tabBarIcon: tabIcon(Home) }}
         />
         <Tabs.Screen
           name="conteudo"
-          options={{ title: "Conteúdo", tabBarIcon: tabIcon(Newspaper) }}
+          options={{ title: "Conteúdo", tabBarIcon: tabIcon(Megaphone) }}
         />
         <Tabs.Screen
-          name="perfil"
-          options={{ title: "Perfil", tabBarIcon: tabIcon(CircleUser) }}
+          name="biblia"
+          options={{ title: "Bíblia", tabBarIcon: tabIcon(BookOpen) }}
+        />
+        <Tabs.Screen
+          name="grupos"
+          options={{ title: groupTerm.plural, tabBarIcon: tabIcon(Users) }}
+        />
+        <Tabs.Screen
+          name="mais"
+          options={{ title: "Mais", tabBarIcon: tabIcon(LayoutGrid) }}
         />
       </Tabs>
     </View>

@@ -18,4 +18,10 @@ export interface Branding {
    * (ver `resolveBrandTheme`/`BrandLogo`). */
   logo_url_dark?: string | null;
   splash_url: string | null;
+  /** Como a igreja chama o pequeno grupo ("Célula", "PG", "GC"). Os dois
+   * andam juntos (CHECK `branding_configs_group_term_pair_chk` na API);
+   * nulo é o termo padrão do produto. Opcionais pela mesma razão de
+   * `accent_color`: cache gravado antes de a API expor o campo. */
+  group_term_singular?: string | null;
+  group_term_plural?: string | null;
 }

@@ -30,7 +30,7 @@ function repliesLabel(count: number): string {
 }
 
 export function BibleMarkSocialBar({ mark, onLikeChange, onOpenReplies }: BibleMarkSocialBarProps) {
-  const { colors, primaryColor } = useTheme();
+  const { colors, brandInk } = useTheme();
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
 
@@ -52,7 +52,7 @@ export function BibleMarkSocialBar({ mark, onLikeChange, onOpenReplies }: BibleM
     }
   }
 
-  const likeColor = mark.liked_by_me ? primaryColor : colors.textSecondary;
+  const likeColor = mark.liked_by_me ? brandInk : colors.textSecondary;
 
   return (
     <View style={styles.row}>
@@ -67,7 +67,7 @@ export function BibleMarkSocialBar({ mark, onLikeChange, onOpenReplies }: BibleM
         <Heart
           size={iconSize.inline}
           color={likeColor}
-          fill={mark.liked_by_me ? primaryColor : "none"}
+          fill={mark.liked_by_me ? brandInk : "none"}
           strokeWidth={ICON_STROKE_WIDTH}
         />
         <Text

@@ -1,4 +1,4 @@
-import { Stack, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
@@ -20,8 +20,11 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 SplashScreen.setOptions({ duration: 300, fade: true });
 
-// Shell autenticado (T16, MOB-03): aplica primaryColor do tenant no header
-// do Expo Router.
+// Shell autenticado (T16, MOB-03; v2 "Órbita"). O header das pilhas fica
+// sobre o fundo da tela, como no protótipo v2 (`AppHeader`): título em
+// texto principal e o voltar em `brandInk`, a cor da igreja legível no
+// modo ativo. Antes ele era uma barra pintada com a cor da marca — no fundo
+// noturno da Órbita isso virava um bloco de cor solto no topo de toda tela.
 //
 // O header é das telas de DETALHE, não das abas (`headerShown: false` em
 // `(tabs)`): a barra repetia a marca em toda tela e cobrava 56px + safe
@@ -53,14 +56,10 @@ function ThemedShell() {
   const { status } = useAuth();
   const theme = useTheme();
   const fontsReady = useAppFonts();
-  const segments = useSegments();
   const isAuthenticated = status === "authenticated";
   const isBooting = status === "loading" || !fontsReady;
   const [splashFinished, setSplashFinished] = useState(() => !isBooting);
   const finishSplash = useCallback(() => setSplashFinished(true), []);
-  // Só as telas de detalhe desenham o header pintado com a cor da marca; as
-  // abas e o login mostram a status bar sobre `bgBase`.
-  const onBrandHeader = isAuthenticated && segments.length > 0 && segments[0] !== "(tabs)";
 
   // A splash nativa some quando a animada já está desenhada — daí o
   // `onLayout`, e não um efeito de mount: no layout o primeiro frame do JS
@@ -79,18 +78,17 @@ function ThemedShell() {
 
   return (
     <>
-      {/* §8 do guia. Sob o header pintado com a cor da marca (escura) a
-          status bar é sempre clara, nos dois modos; nas abas e no login,
-          que rodam sem header, ela fica sobre `bgBase` e segue o modo
-          ativo — no claro, `light` deixaria a hora invisível. */}
-      <StatusBar style={onBrandHeader || theme.isDark ? "light" : "dark"} />
+      {/* Toda tela, com header ou sem, desenha a status bar sobre `bgBase`:
+          ela segue o modo ativo — no claro, `light` deixaria a hora
+          invisível. */}
+      <StatusBar style={theme.isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: theme.primaryColor },
-          headerTintColor: theme.colors.textOnBrand,
+          headerStyle: { backgroundColor: theme.colors.bgBase },
+          headerTintColor: theme.brandInk,
           headerTitleAlign: "center",
-          // A sombra padrão do header desenha uma linha cinza sobre a cor
-          // da marca — some com ela e deixa o contraste do fundo separar.
+          // Sem filete: o header e a tela são o mesmo fundo, a Órbita não
+          // separa os dois.
           headerShadowVisible: false,
           contentStyle: { backgroundColor: theme.colors.bgBase },
           // O título é o nome da TELA, não a marca (que já aparece no topo
@@ -99,6 +97,7 @@ function ThemedShell() {
           headerTitleStyle: {
             fontFamily: typography.h3.fontFamily,
             fontSize: typography.h3.fontSize,
+            color: theme.colors.textPrimary,
           },
           // Sem isto o iOS escreve o nome da rota anterior ao lado da seta
           // — e a rota anterior é o grupo de abas, então o botão de voltar
@@ -119,12 +118,15 @@ function ThemedShell() {
               `biblia/index`/`indisponibilidade` abaixo. */}
           <Stack.Screen name="escala" options={{ title: "Escala" }} />
           <Stack.Screen name="celebracoes" options={{ title: "Celebrações" }} />
-          <Stack.Screen name="biblia/index" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/[book]/[chapter]" options={{ title: "Bíblia" }} />
           <Stack.Screen name="biblia/feed" options={{ title: "Feed da Bíblia" }} />
           <Stack.Screen name="biblia/marcacao/[id]" options={{ title: "Respostas" }} />
           <Stack.Screen name="indisponibilidade" options={{ title: "Indisponibilidade" }} />
           <Stack.Screen name="notificacoes" options={{ title: "Notificações" }} />
+          {/* Perfil e Cadastrar visitante (v2): pilhas abertas a partir da
+              aba Mais. */}
+          <Stack.Screen name="perfil" options={{ title: "Meu perfil" }} />
+          <Stack.Screen name="visitante" options={{ title: "Cadastrar visitante" }} />
           {/* PROD-28: só alcançável com a trava de pagamentos ligada na API
               (a Home esconde a entrada); por deep link, a tela mostra
               "indisponível". */}

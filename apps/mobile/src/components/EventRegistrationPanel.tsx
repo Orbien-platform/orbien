@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   pixCode: {
-    borderRadius: radius.btn,
+    borderRadius: radius.input,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },

@@ -116,7 +116,12 @@ export default function ConteudoScreen() {
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          posts && posts.length > 0 ? <SectionLabel>Publicações</SectionLabel> : null
+          <View>
+            <Text style={[typography.h1, styles.title, { color: colors.textPrimary }]}>
+              Conteúdo
+            </Text>
+            {posts && posts.length > 0 ? <SectionLabel>Publicações</SectionLabel> : null}
+          </View>
         }
         renderItem={({ item }) => (
           <Card
@@ -171,10 +176,11 @@ export default function ConteudoScreen() {
 }
 
 const styles = StyleSheet.create({
+  title: { marginBottom: spacing.lg },
   thumb: {
     width: "100%",
     height: 140,
-    borderRadius: radius.btn,
+    borderRadius: radius.input,
     marginBottom: spacing.md,
   },
   cardRow: {

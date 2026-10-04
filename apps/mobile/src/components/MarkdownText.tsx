@@ -19,7 +19,7 @@ interface MarkdownTextProps {
 }
 
 export function MarkdownText({ testID, children }: MarkdownTextProps) {
-  const { colors, primaryColor } = useTheme();
+  const { colors, brandInk } = useTheme();
   const blocks = parseMarkdown(children);
 
   function renderSpans(spans: InlineSpan[]) {
@@ -30,7 +30,7 @@ export function MarkdownText({ testID, children }: MarkdownTextProps) {
           span.bold && { fontFamily: fontFamily.semibold },
           span.italic && styles.italic,
           span.strike && styles.strike,
-          span.href && [styles.link, { color: primaryColor }],
+          span.href && [styles.link, { color: brandInk }],
         ]}
         onPress={
           span.href

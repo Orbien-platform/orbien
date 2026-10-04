@@ -40,7 +40,7 @@ interface HeroSliderProps {
 }
 
 export function HeroSlider({ posts, onPressPost }: HeroSliderProps) {
-  const { colors, primaryColor } = useTheme();
+  const { colors, primaryColor, brandInk } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const padding = useScreenPadding();
   const [activeIndex, setActiveIndex] = useState(0);
@@ -114,7 +114,7 @@ export function HeroSlider({ posts, onPressPost }: HeroSliderProps) {
               style={[
                 styles.dot,
                 index === activeIndex && styles.dotActive,
-                { backgroundColor: index === activeIndex ? primaryColor : colors.border },
+                { backgroundColor: index === activeIndex ? brandInk : colors.border },
               ]}
             />
           ))}

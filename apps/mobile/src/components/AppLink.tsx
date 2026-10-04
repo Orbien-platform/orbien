@@ -28,8 +28,8 @@ interface AppLinkProps {
 }
 
 export function AppLink({ testID, onPress, disabled, icon: Icon, style, children }: AppLinkProps) {
-  const { primaryColor, colors } = useTheme();
-  const color = disabled ? colors.textTertiary : primaryColor;
+  const { brandInk, colors } = useTheme();
+  const color = disabled ? colors.textTertiary : brandInk;
 
   return (
     <Pressable

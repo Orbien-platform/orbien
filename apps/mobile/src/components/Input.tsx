@@ -39,7 +39,7 @@ export function Input({
   trailingAccessibilityLabel,
   ...inputProps
 }: InputProps) {
-  const { primaryColor, colors } = useTheme();
+  const { brandInk, colors } = useTheme();
   const [focused, setFocused] = useState(false);
 
   return (
@@ -52,14 +52,14 @@ export function Input({
           styles.field,
           {
             backgroundColor: colors.bgSurface,
-            borderColor: focused ? primaryColor : colors.border,
+            borderColor: focused ? brandInk : colors.border,
           },
         ]}
       >
         {Icon ? (
           <Icon
             size={iconSize.inline}
-            color={focused ? primaryColor : colors.textTertiary}
+            color={focused ? brandInk : colors.textTertiary}
             strokeWidth={ICON_STROKE_WIDTH}
           />
         ) : null}

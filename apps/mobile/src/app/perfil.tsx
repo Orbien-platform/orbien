@@ -19,28 +19,18 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AppButton } from "../../components/AppButton";
-import { Avatar } from "../../components/Avatar";
-import { Card } from "../../components/Card";
-import { Screen } from "../../components/Screen";
-import { SectionLabel } from "../../components/SectionLabel";
-import { useAuth } from "../../lib/auth/auth-provider";
-import { decodeJwtPayload } from "../../lib/auth/jwt";
-import { Bell, BookOpen, CircleUser, LogOut, Moon, Smartphone, Sun } from "../../lib/theme/icons";
-import { useTheme, type ThemePreference } from "../../lib/theme/theme-provider";
-import { radius, spacing, touchTarget, typography } from "../../lib/theme/tokens";
+import { AppButton } from "../components/AppButton";
+import { Avatar } from "../components/Avatar";
+import { Card } from "../components/Card";
+import { Screen } from "../components/Screen";
+import { SectionLabel } from "../components/SectionLabel";
+import { useAuth } from "../lib/auth/auth-provider";
+import { decodeJwtPayload } from "../lib/auth/jwt";
+import { roleLabel } from "../lib/auth/roles";
+import { Bell, BookOpen, CircleUser, LogOut, Moon, Smartphone, Sun } from "../lib/theme/icons";
+import { useTheme, type ThemePreference } from "../lib/theme/theme-provider";
+import { radius, spacing, touchTarget, typography } from "../lib/theme/tokens";
 
-const ROLE_LABELS: Record<string, string> = {
-  tenant_admin: "Administrador",
-  admin_congregation: "Admin. da congregação",
-  pastor: "Pastor",
-  secretary: "Secretaria",
-  ministry_leader: "Líder de ministério",
-  cell_leader: "Líder de célula",
-  volunteer: "Voluntário",
-  member: "Membro",
-  platform_support: "Suporte da plataforma",
-};
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Claro", icon: Sun },
@@ -96,7 +86,7 @@ export default function PerfilScreen() {
             testID="perfil-roles"
             style={[typography.bodyMedium, styles.roles, { color: colors.textSecondary }]}
           >
-            {roles.map((role) => ROLE_LABELS[role] ?? role).join(" · ")}
+            {roles.map(roleLabel).join(" · ")}
           </Text>
         ) : null}
       </Card>

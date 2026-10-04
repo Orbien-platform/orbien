@@ -35,7 +35,7 @@ jest.mock("../../../components/BookChapterPickerModal", () => {
   };
 });
 
-import BibliaScreen from "../../../app/biblia/index";
+import BibliaScreen from "../../../app/(tabs)/biblia";
 
 describe("BibliaScreen", () => {
   beforeEach(() => {

@@ -46,6 +46,11 @@ export interface BrandTheme {
    * runtime (`GET /settings`) — `null` até o login resolver, mesma
    * justificativa de `logoUrl`/`appName` na camada de build. */
   tenantSlug: string | null;
+  /** Termo da igreja para o pequeno grupo, no singular e no plural (ver
+   * `Branding.group_term_*`). Nulo é "Grupo"/"Grupos". Quem lê usa
+   * `groupTerm()` de ./terminology.ts, não o campo cru. */
+  groupTermSingular: string | null;
+  groupTermPlural: string | null;
 }
 
 /** Camada parcial da cadeia. `undefined` significa "não opina"; para
@@ -63,6 +68,8 @@ export const PLATFORM_THEME: BrandTheme = {
   logoUrlDark: null,
   appName: Constants.expoConfig?.name ?? "",
   tenantSlug: null,
+  groupTermSingular: null,
+  groupTermPlural: null,
 };
 
 /** Camada 2: a paleta embutida na build. Numa build genérica isto devolve
@@ -119,6 +126,14 @@ export function brandingLayer(
     logoUrlDark: branding.logo_url_dark ?? undefined,
     appName: branding.app_name ?? undefined,
     tenantSlug: tenantSlug ?? undefined,
+    // Só o par completo opina: um termo sem o outro deixaria "Célula" no
+    // título e "Grupos" na contagem.
+    ...(branding.group_term_singular && branding.group_term_plural
+      ? {
+          groupTermSingular: branding.group_term_singular,
+          groupTermPlural: branding.group_term_plural,
+        }
+      : {}),
   };
 }
 
@@ -140,6 +155,8 @@ export function preLoginLayer(layer: BrandThemeLayer): BrandThemeLayer {
     logoUrl: layer.logoUrl,
     logoUrlDark: layer.logoUrlDark,
     appName: layer.appName,
+    groupTermSingular: layer.groupTermSingular,
+    groupTermPlural: layer.groupTermPlural,
   };
 }
 
@@ -154,6 +171,8 @@ export function resolveBrandTheme(...layers: BrandThemeLayer[]): BrandTheme {
       logoUrlDark: layer.logoUrlDark ?? resolved.logoUrlDark,
       appName: layer.appName ?? resolved.appName,
       tenantSlug: layer.tenantSlug ?? resolved.tenantSlug,
+      groupTermSingular: layer.groupTermSingular ?? resolved.groupTermSingular,
+      groupTermPlural: layer.groupTermPlural ?? resolved.groupTermPlural,
     };
   }, PLATFORM_THEME);
 }

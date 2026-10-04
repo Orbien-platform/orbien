@@ -22,6 +22,7 @@ import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error
 import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
 import { ChevronRight, CircleAlert, Clock, RefreshCw, Users, WifiOff } from "../../lib/theme/icons";
+import { useGroupTerm } from "../../lib/theme/terminology";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
@@ -44,6 +45,7 @@ const ROLE_TONES: Record<SmallGroupMine["role"], BadgeTone> = {
 export default function GruposScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const groupTerm = useGroupTerm();
   const [groups, setGroups] = useState<SmallGroupMine[] | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -108,9 +110,18 @@ export default function GruposScreen() {
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          groups && groups.length > 0 ? (
-            <SectionLabel trailing={String(groups.length)}>Meus grupos</SectionLabel>
-          ) : null
+          <View>
+            {/* Título da aba no termo da igreja (v2): "Células", "PGs"… */}
+            <Text
+              testID="grupos-title"
+              style={[typography.h1, styles.title, { color: colors.textPrimary }]}
+            >
+              {groupTerm.plural}
+            </Text>
+            {groups && groups.length > 0 ? (
+              <SectionLabel trailing={String(groups.length)}>Meus grupos</SectionLabel>
+            ) : null}
+          </View>
         }
         renderItem={({ item }) => (
           <Card
@@ -155,6 +166,7 @@ export default function GruposScreen() {
 }
 
 const styles = StyleSheet.create({
+  title: { marginBottom: spacing.lg },
   cardRow: {
     flexDirection: "row",
     alignItems: "center",
