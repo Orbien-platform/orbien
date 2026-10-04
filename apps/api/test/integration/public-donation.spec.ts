@@ -287,13 +287,18 @@ describe('dados do doador (DPUB-22, DPUB-23)', () => {
     });
 
   it('e-mail sem aceite: 400 e nenhuma linha nova', async () => {
-    const antes = await admin.pixPayment.count({ where: { tenant_id: starter.tenantId, scenario: 'public' } });
+    // Contar todas as doações públicas do Starter corria contra outras suítes:
+    // o `test:cov` roda o projeto `integration` em paralelo, e
+    // `public-intents.spec.ts` grava no mesmo tenant. O valor é único nesta
+    // execução, então só uma linha desta requisição o teria.
+    const desde = new Date();
+    const desta = { tenant_id: starter.tenantId, scenario: 'public' as const, amount: '20.17', created_at: { gte: desde } };
 
-    const res = await post({ tenant_slug: 'teste1-church', amount: 20, donor_email: 'ana@teste.com' });
+    const res = await post({ tenant_slug: 'teste1-church', amount: 20.17, donor_email: 'ana@teste.com' });
 
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body)).toContain('Aceite o uso do e-mail');
-    expect(await admin.pixPayment.count({ where: { tenant_id: starter.tenantId, scenario: 'public' } })).toBe(antes);
+    expect(await admin.pixPayment.count({ where: desta })).toBe(0);
   });
 
   it('com aceite: grava nome, e-mail em minúsculas e o aceite; a resposta não os devolve', async () => {
