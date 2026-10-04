@@ -148,13 +148,18 @@ describe("MaisScreen", () => {
     expect(screen.queryByTestId("mais-dizimo-automatico")).toBeNull();
   });
 
-  it("perfil abre a pilha de perfil e Sair encerra a sessão", async () => {
+  it("perfil e privacidade abrem as pilhas, e Sair encerra a sessão", async () => {
     await renderMais();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("mais-perfil"));
     });
     expect(mockPush).toHaveBeenCalledWith("/perfil");
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mais-privacidade"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/privacidade");
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("mais-sair"));

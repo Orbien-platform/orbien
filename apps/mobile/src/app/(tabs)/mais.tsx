@@ -2,9 +2,8 @@
 //
 // É a porta das pilhas que não cabem na tab bar: Minhas escalas,
 // Celebrações, Contribuir, Notificações e Perfil — e, para a liderança, o
-// cadastro de visitante. "Privacidade e meus dados" fica de fora até a API
-// ter as rotas do titular (`CONF-03` em docs/PLANO.md): sem elas a tela só
-// teria texto.
+// cadastro de visitante. "Privacidade e meus dados" abre os direitos do
+// titular da LGPD (`CONF-03`), para qualquer papel.
 //
 // Cada linha aparece só para quem pode usá-la (README da v2, "Papéis":
 // esconder a ação que o papel não pode fazer):
@@ -40,6 +39,7 @@ import {
   CircleUser,
   HandHeart,
   LogOut,
+  ShieldCheck,
   UserPlus,
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
@@ -157,6 +157,13 @@ export default function MaisScreen() {
     : [];
 
   const account: ListGroupItem[] = [
+    {
+      key: "privacidade",
+      testID: "mais-privacidade",
+      label: "Privacidade e meus dados",
+      icon: ShieldCheck,
+      onPress: () => router.push("/privacidade"),
+    },
     {
       key: "sair",
       testID: "mais-sair",

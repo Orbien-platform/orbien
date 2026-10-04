@@ -140,6 +140,7 @@ function ThemedShell() {
               aba Mais. */}
           <Stack.Screen name="perfil" options={{ title: "Meu perfil" }} />
           <Stack.Screen name="visitante" options={{ title: "Cadastrar visitante" }} />
+          <Stack.Screen name="privacidade" options={{ title: "Privacidade" }} />
           {/* PROD-28: só alcançável com a trava de pagamentos ligada na API
               (a Home esconde a entrada); por deep link, a tela mostra
               "indisponível". */}
