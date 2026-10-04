@@ -34,4 +34,19 @@ describe('VisitorPublicController', () => {
     expect(limit).toBe(20);
     expect(ttl).toBe(3600000);
   });
+
+  it('describeQr delega ao service e tem limite próprio, maior que o do cadastro', async () => {
+    const info = { church_name: 'Igreja de Teste 1', origin: 'service', label: null };
+    const visitorService = {
+      describeQr: jest.fn().mockResolvedValue(info),
+    } as unknown as jest.Mocked<VisitorService>;
+    const controller = new VisitorPublicController(visitorService);
+
+    await expect(controller.describeQr('tok')).resolves.toEqual(info);
+    expect(visitorService.describeQr).toHaveBeenCalledWith('tok');
+
+    const reflector = new Reflector();
+    expect(reflector.get<number>('THROTTLER:LIMITdefault', VisitorPublicController.prototype.describeQr)).toBe(120);
+    expect(reflector.get<number>('THROTTLER:TTLdefault', VisitorPublicController.prototype.describeQr)).toBe(3600000);
+  });
 });

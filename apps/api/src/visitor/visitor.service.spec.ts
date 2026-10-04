@@ -49,6 +49,46 @@ function serviceWith() {
 }
 
 describe('VisitorService', () => {
+  describe('describeQr (PROD-34)', () => {
+    it('devolve só o nome da igreja, a origem e o rótulo do QR ativo', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue({
+        is_active: true,
+        origin: 'service',
+        label: 'Culto da manhã',
+        congregation: { name: 'Igreja de Teste 1' },
+      });
+
+      await expect(service.describeQr('tok')).resolves.toEqual({
+        church_name: 'Igreja de Teste 1',
+        origin: 'service',
+        label: 'Culto da manhã',
+      });
+      expect(qrTokenClient.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { token: 'tok' } }),
+      );
+      // A leitura não conta como cadastro.
+      expect(qrTokenClient.update).not.toHaveBeenCalled();
+    });
+
+    it('QR inexistente é 404', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue(null);
+      await expect(service.describeQr('nope')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('QR desativado é o mesmo 404 — não diz que o token existe', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue({
+        is_active: false,
+        origin: 'service',
+        label: null,
+        congregation: { name: 'Igreja de Teste 1' },
+      });
+      await expect(service.describeQr('tok')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('registerViaQr', () => {
     it('lança NotFoundException quando o QR não existe', async () => {
       const { service, qrTokenClient } = serviceWith();
