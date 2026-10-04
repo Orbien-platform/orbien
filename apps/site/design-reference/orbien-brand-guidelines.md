@@ -126,7 +126,7 @@ Igrejas de pequeno e médio porte no Brasil são mal atendidas por software de g
 | Família | Uso | Import |
 |---|---|---|
 | **DM Sans** | Todo o produto — display, headings, body, labels, botões | Google Fonts |
-| **DM Mono** | Dados técnicos, IDs, valores monetários formatados, labels de sistema | Google Fonts |
+| **DM Mono** | Dados técnicos, IDs, valores monetários formatados | Google Fonts |
 
 #### Escala tipográfica
 
@@ -139,12 +139,24 @@ Igrejas de pequeno e médio porte no Brasil são mal atendidas por software de g
 | Heading 3 | DM Sans | 500 | 18px | −1% | Subtítulo de seção |
 | Body | DM Sans | 300 | 15–16px | 0 | Texto corrido |
 | Body Medium | DM Sans | 400 | 14–15px | 0 | Texto de formulário, descrições |
-| Label | DM Sans | 500 | 11–12px | +10% | Labels de campo, categorias (caps) |
+| Label | DM Sans | 500 | 12px | 0 | Labels de campo, cabeçalho de tabela, categorias |
+| Section Label | DM Sans | 500 | 14px | 0 | Rótulo que abre uma seção dentro de card, folha ou modal |
 | Caption | DM Sans | 400 | 11px | +4% | Meta informações, timestamps |
 | Mono | DM Mono | 400 | 12–13px | +4% | IDs, códigos, valores técnicos |
-| Mono Label | DM Mono | 500 | 10–11px | +12% | Labels de seção (caps) |
 
 #### Regras tipográficas
+- **Sem caixa alta em rótulo.** Label, cabeçalho de tabela e rótulo de seção
+  vão em caixa de frase ("Dados pessoais", não "DADOS PESSOAIS"). Maiúscula
+  espaçada em rótulo pequeno é o tratamento padrão de interface genérica — não
+  distingue a Orbien de nada — e custa leitura: tira o contorno das palavras,
+  que é o que o olho reconhece. A hierarquia vem de tamanho, peso e cor.
+- **Mono é para dado, não para rótulo.** DM Mono entra onde o conteúdo é
+  técnico (ID, código, valor); o nome que identifica esse dado vai em DM Sans.
+- **Mínimo de 11px** em qualquer texto, inclusive caption. A exceção é a
+  miniatura de tela do produto (os mockups de painel e celular dos heros do
+  site): ali o texto é ilustração em escala reduzida, não texto para ler, e
+  pode ir a 10px. O que o visitante lê como texto da página não entra na
+  exceção.
 - Nunca usar peso 400 onde 300 ou 500 funcionam — o contraste de peso é a principal ferramenta expressiva
 - Texto de botão: sempre DM Sans 500, nunca 600
 - Valores monetários (R$ 12.400): DM Mono 500 para o número, DM Sans 400 para o símbolo

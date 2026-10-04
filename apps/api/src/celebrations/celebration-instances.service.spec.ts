@@ -125,6 +125,36 @@ describe('CelebrationInstancesService', () => {
     });
   });
 
+  describe('findUpcoming', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('filtra pela congregação do usuário, a partir de hoje, sem canceladas, só com a projeção da agenda', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-25T15:00:00Z'));
+      const client = clientWith();
+      client.celebrationInstance.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      await service.findUpcoming('t1', 'g1');
+
+      expect(client.celebrationInstance.findMany).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          scheduled_date: { gte: new Date('2026-09-25T00:00:00.000Z') },
+          status: { not: 'cancelled' },
+          celebration: { is_active: true },
+        },
+        orderBy: { scheduled_date: 'asc' },
+        take: 50,
+        select: {
+          id: true,
+          scheduled_date: true,
+          celebration: { select: { id: true, name: true, type: true, start_time: true } },
+        },
+      });
+    });
+  });
+
   describe('findOne', () => {
     it('retorna a instância quando encontrada', async () => {
       const client = clientWith();

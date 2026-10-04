@@ -14,19 +14,23 @@
 // que o PROD-24 passou a devolver não tinha onde aparecer.
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, StyleSheet, Text, View } from "react-native";
 
+import { AppLink } from "../../components/AppLink";
 import { EventRegistrationPanel } from "../../components/EventRegistrationPanel";
+import { MarkdownText } from "../../components/MarkdownText";
 import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
 import { getPost } from "../../lib/content/content-client";
+import { isImageUrl } from "../../lib/content/media";
 import type { Post } from "../../lib/content/types";
 import { formatDateTime } from "../../lib/format/date";
 import {
   CalendarDays,
   CircleAlert,
+  ExternalLink,
   MapPin,
   Newspaper,
   WifiOff,
@@ -87,12 +91,17 @@ export default function PostScreen() {
     return <StatusMessage testID="post-loading" icon={Newspaper} message="Carregando…" />;
   }
 
+  const hasImage = isImageUrl(post.media_url);
+
   return (
     <Screen scroll testID="post-detail">
-      {post.media_url ? (
+      {/* Só imagem vira capa. PDF, áudio, vídeo e link externo também moram
+          em `media_url`, e num <Image> apareciam como um retângulo vazio —
+          esses viram um link "Abrir anexo" abaixo do corpo. */}
+      {hasImage ? (
         <Image
           testID="post-media"
-          source={{ uri: post.media_url }}
+          source={{ uri: post.media_url! }}
           style={styles.media}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
@@ -140,10 +149,18 @@ export default function PostScreen() {
           ) : null}
         </View>
       ) : null}
-      {post.body ? (
-        <Text testID="post-body" style={[typography.body, { color: colors.textSecondary }]}>
-          {post.body}
-        </Text>
+      {post.body ? <MarkdownText testID="post-body">{post.body}</MarkdownText> : null}
+      {post.media_url && !hasImage ? (
+        <AppLink
+          testID="post-attachment"
+          icon={ExternalLink}
+          onPress={() => {
+            Linking.openURL(post.media_url!).catch(() => undefined);
+          }}
+          style={styles.attachment}
+        >
+          Abrir anexo
+        </AppLink>
       ) : null}
       {/* Montado para todo post de evento, não só quando
           `registration_enabled` está ligado: o organizador pode desligar as
@@ -161,9 +178,11 @@ export default function PostScreen() {
 }
 
 const styles = StyleSheet.create({
+  // 16:9, o mesmo recorte do carrossel da home: a foto que a igreja
+  // escolheu para o destaque aparece inteira aqui também.
   media: {
     width: "100%",
-    height: 200,
+    aspectRatio: 16 / 9,
     borderRadius: radius.card,
     marginBottom: spacing.lg,
   },
@@ -172,4 +191,5 @@ const styles = StyleSheet.create({
   eventLine: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   eventText: { flex: 1 },
   registration: { marginTop: spacing.xl },
+  attachment: { marginTop: spacing.md },
 });

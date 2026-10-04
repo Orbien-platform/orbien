@@ -58,6 +58,59 @@ describe("DataTable", () => {
     expect(onRowClick).toHaveBeenCalledWith(rows[0]);
   });
 
+  it("abre a linha clicável pelo teclado (Tab + Enter ou Espaço)", async () => {
+    const onRowClick = vi.fn();
+    const rows: Row[] = [{ id: "1", name: "Ana" }];
+    render(
+      <DataTable columns={columns} rows={rows} getRowKey={(r) => r.id} onRowClick={onRowClick} />
+    );
+    await userEvent.tab();
+    expect(screen.getByText("Ana").closest("tr")).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(" ");
+    expect(onRowClick).toHaveBeenCalledTimes(2);
+    expect(onRowClick).toHaveBeenCalledWith(rows[0]);
+  });
+
+  it("não abre a linha quando a tecla é de um botão dentro dela", async () => {
+    const onRowClick = vi.fn();
+    const onAction = vi.fn();
+    const withAction: Column<Row>[] = [
+      ...columns,
+      {
+        key: "acao",
+        header: "Ação",
+        render: () => (
+          <button type="button" onClick={(e) => { e.stopPropagation(); onAction(); }}>
+            Remover
+          </button>
+        ),
+      },
+    ];
+    render(
+      <DataTable columns={withAction} rows={[{ id: "1", name: "Ana" }]} getRowKey={(r) => r.id} onRowClick={onRowClick} />
+    );
+    screen.getByRole("button", { name: "Remover" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("outra tecla na linha focada não a abre", async () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable columns={columns} rows={[{ id: "1", name: "Ana" }]} getRowKey={(r) => r.id} onRowClick={onRowClick} />
+    );
+    await userEvent.tab();
+    await userEvent.keyboard("a{ArrowDown}{Escape}");
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("linha sem onRowClick não entra na ordem de Tab", () => {
+    render(<DataTable columns={columns} rows={[{ id: "1", name: "Ana" }]} getRowKey={(r) => r.id} />);
+    expect(screen.getByText("Ana").closest("tr")).not.toHaveAttribute("tabindex");
+  });
+
   it("mostra o erro em vez do estado vazio quando o carregamento falha", () => {
     render(
       <DataTable

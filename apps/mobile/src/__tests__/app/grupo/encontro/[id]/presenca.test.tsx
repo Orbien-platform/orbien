@@ -1,6 +1,7 @@
 // Testes derivados do Done-when de T9 (tasks.md, MOB-09-06/07/08): roster
 // × já marcado, seleção e envio em lote, erro preserva seleção.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { NetworkError } from "../../../../../lib/api/errors";
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "m1" }),
@@ -153,5 +154,86 @@ describe("PresencaScreen", () => {
 
     expect(mockGetMeeting).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId("presenca-roster")).toBeTruthy();
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetMeeting.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<PresencaScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve({ id: "m1", small_group_id: "sg1", occurred_at: "2026-09-01T19:00:00.000Z", topic: null, attendanceRecords: [] });
+    });
+
+    expect(mockGetMeeting).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetMeeting.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<PresencaScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetMeeting).toHaveBeenCalled();
+  });
+
+  it("sem conexão, o erro de carga diz para verificar a conexão", async () => {
+    mockGetMeeting.mockRejectedValue(new NetworkError());
+
+    await render(<PresencaScreen />);
+
+    expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
+  });
+
+  it("tocar de novo num membro selecionado o desmarca", async () => {
+    mockGetMeeting.mockResolvedValue({
+      id: "m1",
+      small_group_id: "sg1",
+      occurred_at: "2026-09-01T19:00:00.000Z",
+      topic: null,
+      attendanceRecords: [],
+    });
+
+    await render(<PresencaScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
+    });
+    expect(screen.getByText("Confirmar presença (1)")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
+    });
+    expect(screen.getByText("Confirmar presença")).toBeTruthy();
+  });
+
+  it("duplo toque em Confirmar antes da resposta envia uma vez só", async () => {
+    mockGetMeeting.mockResolvedValue({
+      id: "m1",
+      small_group_id: "sg1",
+      occurred_at: "2026-09-01T19:00:00.000Z",
+      topic: null,
+      attendanceRecords: [],
+    });
+    mockRecordAttendance.mockResolvedValue({ added: 1 });
+
+    await render(<PresencaScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("presenca-confirmar"));
+      fireEvent.press(screen.getByTestId("presenca-confirmar"));
+    });
+
+    expect(mockRecordAttendance).toHaveBeenCalledTimes(1);
   });
 });

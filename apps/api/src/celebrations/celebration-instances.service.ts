@@ -55,11 +55,42 @@ export class CelebrationInstancesService {
       },
       orderBy: { scheduled_date: 'asc' },
       include: {
-        celebration: { select: { id: true, name: true, type: true } },
+        celebration: { select: { id: true, name: true, type: true, start_time: true } },
         serviceOrder: { select: { id: true, title: true, published_at: true } },
         // Permite saber se a instância já tem escala e em que estado,
         // sem uma chamada por instância.
         schedule: { select: { id: true, status: true } },
+      },
+    });
+  }
+
+  /**
+   * A agenda dos próximos cultos da congregação, para qualquer membro.
+   *
+   * Projeção mínima de propósito: nome, data e horário. OC, escala e notas
+   * ficam de fora — quem está escalado chega à OC pela própria escala
+   * (`/volunteers/my-celebration-assignments`), e quem gere usa `findAll`.
+   *
+   * Aqui o `congregation_id` vai no `where`, ao contrário de `findAll`: a RLS
+   * de `celebration_instances` é só por tenant, e um membro vê a agenda da
+   * congregação dele, não a de todas as congregações da denominação.
+   */
+  async findUpcoming(tenantId: string, congregationId: string) {
+    const today = this.toUtcDateOnly(new Date());
+    return this.prisma.client.celebrationInstance.findMany({
+      where: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        scheduled_date: { gte: today },
+        status: { not: 'cancelled' },
+        celebration: { is_active: true },
+      },
+      orderBy: { scheduled_date: 'asc' },
+      take: 50,
+      select: {
+        id: true,
+        scheduled_date: true,
+        celebration: { select: { id: true, name: true, type: true, start_time: true } },
       },
     });
   }

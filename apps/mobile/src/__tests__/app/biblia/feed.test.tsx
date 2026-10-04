@@ -7,20 +7,39 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
-jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
+const mockNavigate = jest.fn();
+// `useFocusEffect` roda o callback ao montar e o guarda em `mockFocusRuns`,
+// para o teste simular "voltar para a tela" chamando o callback de novo.
+const mockFocusRuns: Array<() => void | (() => void)> = [];
+jest.mock("expo-router", () => {
+  const { useEffect } = jest.requireActual("react");
+  return {
+    useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      useEffect(() => {
+        mockFocusRuns.push(callback);
+        return callback();
+      }, [callback]);
+    },
+  };
+});
 
 const mockGetFeed = jest.fn();
 const mockUpdateMark = jest.fn();
 const mockDeleteMark = jest.fn();
+const mockLikeMark = jest.fn();
+const mockUnlikeMark = jest.fn();
 jest.mock("../../../lib/bible/bible-client", () => ({
   getFeed: (...args: unknown[]) => mockGetFeed(...args),
   updateMark: (...args: unknown[]) => mockUpdateMark(...args),
   deleteMark: (...args: unknown[]) => mockDeleteMark(...args),
+  likeMark: (...args: unknown[]) => mockLikeMark(...args),
+  unlikeMark: (...args: unknown[]) => mockUnlikeMark(...args),
+  getBooks: () =>
+    Promise.resolve([{ code: "JHN", name: "João", testament: "NT", chapters: 21 }]),
 }));
 
-import { HttpError } from "../../../lib/api/errors";
+import { HttpError, NetworkError } from "../../../lib/api/errors";
 import BibliaFeedScreen from "../../../app/biblia/feed";
 import type { BibleVerseMark } from "../../../lib/bible/types";
 
@@ -37,6 +56,9 @@ function mark(overrides: Partial<BibleVerseMark> = {}): BibleVerseMark {
     person: { id: "p1", full_name: "Fulano" },
     is_mine: false,
     can_delete: false,
+    like_count: 0,
+    liked_by_me: false,
+    reply_count: 0,
     ...overrides,
   };
 }
@@ -44,6 +66,81 @@ function mark(overrides: Partial<BibleVerseMark> = {}): BibleVerseMark {
 describe("BibliaFeedScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFocusRuns.length = 0;
+  });
+
+  it("ao voltar o foco, recarrega o feed e mostra a contagem nova de respostas", async () => {
+    mockGetFeed.mockResolvedValueOnce({ items: [mark({ reply_count: 0 })], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-1"));
+    expect(mockGetFeed).toHaveBeenCalledTimes(1);
+
+    mockGetFeed.mockResolvedValueOnce({
+      items: [mark({ reply_count: 3, like_count: 2 })],
+      nextCursor: null,
+    });
+    await act(async () => {
+      mockFocusRuns[mockFocusRuns.length - 1]!();
+    });
+
+    expect(mockGetFeed).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("3 respostas")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+  });
+
+  it("re-renderizar sem mudar o foco não recarrega o feed", async () => {
+    mockGetFeed.mockResolvedValue({ items: [mark()], nextCursor: null });
+
+    const view = await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-1"));
+    await view.rerender(<BibliaFeedScreen />);
+
+    expect(mockGetFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha ao recarregar no foco mantém a lista que já estava na tela", async () => {
+    mockGetFeed.mockResolvedValueOnce({ items: [mark()], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-1"));
+
+    mockGetFeed.mockRejectedValueOnce(new Error("falha de rede"));
+    await act(async () => {
+      mockFocusRuns[mockFocusRuns.length - 1]!();
+    });
+
+    expect(screen.getByTestId("biblia-feed-item-mark-1")).toBeTruthy();
+    expect(screen.queryByTestId("biblia-feed-error")).toBeNull();
+  });
+
+  it("depois de paginar, o foco atualiza a primeira página e preserva as antigas e o cursor", async () => {
+    mockGetFeed.mockResolvedValueOnce({ items: [mark({ id: "mark-1" })], nextCursor: "c1" });
+    mockGetFeed.mockResolvedValueOnce({ items: [mark({ id: "mark-2" })], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-load-more"));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-load-more"));
+    });
+    await waitFor(() => screen.getByTestId("biblia-feed-item-mark-2"));
+
+    mockGetFeed.mockResolvedValueOnce({
+      items: [mark({ id: "mark-1", reply_count: 5 })],
+      nextCursor: "c1",
+    });
+    await act(async () => {
+      mockFocusRuns[mockFocusRuns.length - 1]!();
+    });
+
+    expect(screen.getByText("5 respostas")).toBeTruthy();
+    expect(screen.getByTestId("biblia-feed-item-mark-2")).toBeTruthy();
   });
 
   it("carrega e lista as marcações da congregação (BIB-06)", async () => {
@@ -59,7 +156,7 @@ describe("BibliaFeedScreen", () => {
     });
     expect(mockGetFeed).toHaveBeenCalledWith();
     expect(screen.getByText("Deus amou o mundo.")).toBeTruthy();
-    expect(screen.getByText("JHN 3:16-18")).toBeTruthy();
+    expect(await screen.findByText("João 3:16-18")).toBeTruthy();
   });
 
   it("feed vazio mostra estado vazio explícito, não erro (BIB-06 AC5)", async () => {
@@ -73,6 +170,12 @@ describe("BibliaFeedScreen", () => {
       expect(screen.getByTestId("biblia-feed-empty")).toBeTruthy();
     });
     expect(screen.queryByTestId("biblia-feed-error")).toBeNull();
+
+    // O vazio aponta o caminho: é lendo um capítulo que se comenta.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-empty-open-bible"));
+    });
+    expect(mockNavigate).toHaveBeenCalledWith("/biblia");
   });
 
   it("erro de rede no load inicial mostra estado de erro visível, não lista vazia", async () => {
@@ -305,5 +408,204 @@ describe("BibliaFeedScreen", () => {
     expect(mockUpdateMark).not.toHaveBeenCalled();
     expect(screen.queryByTestId("biblia-feed-edit-form-mark-1")).toBeNull();
     expect(screen.getByText("Original.")).toBeTruthy();
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetFeed.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<BibliaFeedScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve({ items: [mark()], nextCursor: null });
+    });
+
+    expect(mockGetFeed).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetFeed.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<BibliaFeedScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetFeed).toHaveBeenCalled();
+  });
+
+  it("sem conexão, o erro de carga diz para verificar a conexão", async () => {
+    mockGetFeed.mockRejectedValue(new NetworkError());
+
+    await render(<BibliaFeedScreen />);
+
+    expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
+  });
+
+  it("versículo único não repete o número; autor sem nome vira 'Alguém'; data ilegível some", async () => {
+    mockGetFeed.mockResolvedValue({
+      items: [mark({ verse_start: 16, verse_end: 16, person: null, created_at: "sem data" })],
+      nextCursor: null,
+    });
+
+    await render(<BibliaFeedScreen />);
+
+    expect(await screen.findByText("João 3:16")).toBeTruthy();
+    expect(screen.getByText("Alguém")).toBeTruthy();
+  });
+
+  it("duplo toque em 'Carregar mais' busca a próxima página uma vez só", async () => {
+    mockGetFeed
+      .mockResolvedValueOnce({ items: [mark()], nextCursor: "cursor-1" })
+      .mockResolvedValueOnce({ items: [mark({ id: "mark-2" })], nextCursor: null });
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-load-more"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-load-more"));
+      fireEvent.press(screen.getByTestId("biblia-feed-load-more"));
+    });
+
+    expect(mockGetFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it("editar só troca o item editado; falha 5xx na edição mostra a mensagem genérica", async () => {
+    const own = mark({ id: "mark-1", is_mine: true, can_delete: false, comment: "Original." });
+    const other = mark({ id: "mark-2", comment: "De outra pessoa." });
+    mockGetFeed.mockResolvedValue({ items: [own, other], nextCursor: null });
+    mockUpdateMark
+      .mockRejectedValueOnce(new HttpError(500, { message: "detalhe interno" }))
+      .mockResolvedValueOnce({ ...own, comment: "Editado." });
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-edit-mark-1"));
+    expect(screen.queryByTestId("biblia-feed-delete-mark-1")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-mark-1"));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("biblia-feed-edit-input-mark-1"), "Editado.");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-save-mark-1"));
+    });
+    expect(screen.getByTestId("biblia-feed-edit-error-mark-1").props.children).toBe(
+      "Não foi possível salvar a edição. Tente novamente.",
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-edit-save-mark-1"));
+    });
+    await waitFor(() => expect(screen.getByText("Editado.")).toBeTruthy());
+    expect(screen.getByText("De outra pessoa.")).toBeTruthy();
+  });
+
+  it("apagar outro item enquanto um apagamento está em andamento não dispara segunda chamada", async () => {
+    const first = mark({ id: "mark-1", can_delete: true });
+    const second = mark({ id: "mark-2", can_delete: true, comment: "Outro." });
+    mockGetFeed.mockResolvedValue({ items: [first, second], nextCursor: null });
+    let resolveDelete!: () => void;
+    mockDeleteMark.mockReturnValue(new Promise<void>((r) => (resolveDelete = r)));
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-feed-delete-mark-2"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-delete-mark-1"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-feed-delete-mark-2"));
+    });
+    await act(async () => {
+      resolveDelete();
+    });
+
+    expect(mockDeleteMark).toHaveBeenCalledTimes(1);
+    expect(mockDeleteMark).toHaveBeenCalledWith("mark-1");
+    expect(screen.getByTestId("biblia-feed-item-mark-2")).toBeTruthy();
+  });
+
+  it("curtir muda o coração na hora e fica com a contagem que a API devolve", async () => {
+    mockGetFeed.mockResolvedValue({ items: [mark({ like_count: 2 })], nextCursor: null });
+    let resolveLike: (v: { liked: boolean; like_count: number }) => void = () => {};
+    mockLikeMark.mockReturnValue(new Promise((r) => (resolveLike = r)));
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-mark-like-mark-1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-mark-like-mark-1"));
+    });
+    // Otimista: antes da resposta, já curtido e com +1.
+    expect(screen.getByTestId("biblia-mark-like-mark-1").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-mark-like-count-mark-1")).toHaveTextContent("3");
+    expect(mockLikeMark).toHaveBeenCalledWith("mark-1");
+
+    await act(async () => {
+      resolveLike({ liked: true, like_count: 5 });
+    });
+    expect(screen.getByTestId("biblia-mark-like-count-mark-1")).toHaveTextContent("5");
+  });
+
+  it("curtida que falha volta ao estado anterior", async () => {
+    mockGetFeed.mockResolvedValue({
+      items: [mark({ like_count: 1, liked_by_me: true })],
+      nextCursor: null,
+    });
+    mockUnlikeMark.mockRejectedValue(new Error("rede"));
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-mark-like-mark-1"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-mark-like-mark-1"));
+    });
+
+    expect(mockUnlikeMark).toHaveBeenCalledWith("mark-1");
+    expect(screen.getByTestId("biblia-mark-like-mark-1").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("biblia-mark-like-count-mark-1")).toHaveTextContent("1");
+  });
+
+  it("o contador de respostas abre a marcação com as respostas", async () => {
+    mockGetFeed.mockResolvedValue({ items: [mark({ reply_count: 2 })], nextCursor: null });
+
+    await act(async () => {
+      render(<BibliaFeedScreen />);
+    });
+    await waitFor(() => screen.getByTestId("biblia-mark-replies-mark-1"));
+
+    expect(screen.getByTestId("biblia-mark-replies-mark-1")).toHaveTextContent("2 respostas");
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-mark-replies-mark-1"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/biblia/marcacao/mark-1");
+  });
+  it("curtir uma marcação não mexe nas outras do feed", async () => {
+    mockGetFeed.mockResolvedValue({
+      items: [mark({ id: "mark-1" }), mark({ id: "mark-2", like_count: 4 })],
+      nextCursor: null,
+    });
+    mockLikeMark.mockResolvedValue({ liked: true, like_count: 1 });
+
+    await render(<BibliaFeedScreen />);
+    await waitFor(() => screen.getByTestId("biblia-mark-like-mark-1"));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-mark-like-mark-1"));
+    });
+
+    expect(screen.getByTestId("biblia-mark-like-count-mark-1")).toHaveTextContent("1");
+    expect(screen.getByTestId("biblia-mark-like-count-mark-2")).toHaveTextContent("4");
   });
 });

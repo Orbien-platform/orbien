@@ -19,14 +19,14 @@ jest.mock("../../lib/notifications/onesignal-client", () => ({
 
 import NotificacoesScreen from "../../app/notificacoes";
 
-const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true };
+const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true };
 
 describe("NotificacoesScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it("mount sem preferência salva mostra as 4 categorias ligadas (AC1)", async () => {
+  it("mount sem preferência salva mostra as 5 categorias ligadas (AC1)", async () => {
     mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
 
     await act(async () => {
@@ -37,6 +37,8 @@ describe("NotificacoesScreen", () => {
     expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
     expect(screen.getByTestId("switch-eventos").props.value).toBe(true);
     expect(screen.getByTestId("switch-devocional").props.value).toBe(true);
+    expect(screen.getByTestId("switch-biblia").props.value).toBe(true);
+    expect(screen.getByText("Respostas na Bíblia")).toBeTruthy();
   });
 
   it("desligar uma categoria persiste otimisticamente, chama PATCH da categoria isolada e sincroniza a tag ao suceder (AC2)", async () => {
@@ -62,6 +64,29 @@ describe("NotificacoesScreen", () => {
     await waitFor(() => {
       expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(updated);
     });
+  });
+
+  it("desligar as respostas na Bíblia manda só { biblia: false } e sincroniza pref_biblia", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    const updated = { ...ALL_ON, biblia: false };
+    mockUpdateNotificationPreferences.mockResolvedValue(updated);
+
+    await act(async () => {
+      render(<NotificacoesScreen />);
+    });
+    await waitFor(() => screen.getByTestId("switch-biblia"));
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-biblia"), "valueChange", false);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith({ biblia: false });
+    });
+    await waitFor(() => {
+      expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(updated);
+    });
+    expect(screen.getByTestId("switch-biblia").props.value).toBe(false);
   });
 
   it("toggle com falha reverte o estado visual e mostra erro, sem deixar a UI divergir do servidor (AC3)", async () => {
@@ -166,5 +191,74 @@ describe("NotificacoesScreen", () => {
     await waitFor(() => {
       expect(screen.getByTestId("load-error")).toBeTruthy();
     });
+  });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetNotificationPreferences.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<NotificacoesScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(ALL_ON);
+    });
+
+    expect(mockGetNotificationPreferences).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetNotificationPreferences.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<NotificacoesScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetNotificationPreferences).toHaveBeenCalled();
+  });
+
+  it("dois toques seguidos na mesma categoria: a resposta do primeiro não sobrescreve o segundo", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    mockUpdateNotificationPreferences
+      .mockResolvedValueOnce({ ...ALL_ON, oracao: false })
+      .mockResolvedValueOnce(ALL_ON);
+
+    await render(<NotificacoesScreen />);
+    await waitFor(() => screen.getByTestId("switch-oracao"));
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", false);
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", true);
+    });
+
+    await waitFor(() => expect(mockUpdateNotificationPreferences).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledTimes(1));
+    expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(ALL_ON);
+    expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
+  });
+
+  it("dois toques seguidos na mesma categoria: a falha do primeiro não reverte o segundo", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    mockUpdateNotificationPreferences
+      .mockRejectedValueOnce(new Error("falha de rede"))
+      .mockResolvedValueOnce(ALL_ON);
+
+    await render(<NotificacoesScreen />);
+    await waitFor(() => screen.getByTestId("switch-oracao"));
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", false);
+      fireEvent(screen.getByTestId("switch-oracao"), "valueChange", true);
+    });
+
+    await waitFor(() => expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(ALL_ON));
+    expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
+    expect(screen.queryByText(/Não foi possível salvar/)).toBeNull();
   });
 });

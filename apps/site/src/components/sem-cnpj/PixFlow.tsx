@@ -19,7 +19,7 @@ function FlowDiagram() {
         </div>
         <div>
           <p className="text-[13px] font-medium" style={{ color: "var(--ink)" }}>Membro faz doação</p>
-          <p className="font-mono text-[10px] mt-0.5" style={{ color: "var(--muted)" }}>via PIX · qualquer banco</p>
+          <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>via PIX · qualquer banco</p>
         </div>
         <span
           className="ml-auto font-mono text-[11px] font-medium"
@@ -36,7 +36,7 @@ function FlowDiagram() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--navy-accent)" }}>
             <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
           </svg>
-          <span className="font-mono text-[9px] uppercase tracking-[.08em] whitespace-nowrap" style={{ color: "var(--muted)" }}>
+          <span className="text-xs whitespace-nowrap" style={{ color: "var(--muted)" }}>
             vai direto
           </span>
         </div>
@@ -58,10 +58,10 @@ function FlowDiagram() {
         </div>
         <div>
           <p className="text-[13px] font-semibold" style={{ color: "var(--navy-accent)" }}>Chave PIX da Igreja</p>
-          <p className="font-mono text-[10px] mt-0.5" style={{ color: "var(--navy-accent)", opacity: 0.7 }}>CPF · telefone · e-mail</p>
+          <p className="text-[11px] mt-0.5" style={{ color: "var(--navy-accent)", opacity: 0.7 }}>CPF · telefone · e-mail</p>
         </div>
         <span
-          className="ml-auto font-mono text-[11px] font-medium px-2.5 py-1 rounded-pill"
+          className="ml-auto text-[11px] font-medium px-2.5 py-1 rounded-pill"
           style={{ background: "var(--navy-accent)", color: "#fff" }}
         >
           ✓ recebido

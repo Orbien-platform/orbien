@@ -6,11 +6,15 @@ import { ContentPostType } from '@prisma/client';
  * (`NotificationsService.notifyPost`) — as duas leem daqui, nunca duplicam o
  * mapeamento.
  *
+ * `biblia` não vem de tipo de post: cobre o aviso de resposta a uma marcação
+ * do feed da Bíblia (`BibleMarkInteractionsService`), por isso fica fora de
+ * `CATEGORY_BY_POST_TYPE`.
+ *
  * Ver `.specs/features/preferencias-notificacao-mobile/spec.md` (Assumptions)
  * para a decisão dos 4 grupos e o motivo (usuário quis oração separada de
  * avisos).
  */
-export const NOTIFICATION_CATEGORIES = ['avisos', 'oracao', 'eventos', 'devocional'] as const;
+export const NOTIFICATION_CATEGORIES = ['avisos', 'oracao', 'eventos', 'devocional', 'biblia'] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 

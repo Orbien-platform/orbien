@@ -15,15 +15,22 @@ jest.mock("../../../components/BookChapterPickerModal", () => {
   return {
     BookChapterPickerModal: ({
       visible,
+      onClose,
       onSelect,
     }: {
       visible: boolean;
+      onClose: () => void;
       onSelect: (bookCode: string, chapter: number) => void;
     }) =>
       visible ? (
-        <Pressable testID="mock-picker" onPress={() => onSelect("JHN", 3)}>
-          <Text>picker aberto</Text>
-        </Pressable>
+        <>
+          <Pressable testID="mock-picker" onPress={() => onSelect("JHN", 3)}>
+            <Text>picker aberto</Text>
+          </Pressable>
+          <Pressable testID="mock-picker-close" onPress={onClose}>
+            <Text>fechar</Text>
+          </Pressable>
+        </>
       ) : null,
   };
 });
@@ -77,5 +84,17 @@ describe("BibliaScreen", () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith("/biblia/feed");
+  });
+  it("fechar o picker o esconde sem navegar", async () => {
+    await render(<BibliaScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("biblia-open-picker"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("mock-picker-close"));
+    });
+
+    expect(screen.queryByTestId("mock-picker")).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

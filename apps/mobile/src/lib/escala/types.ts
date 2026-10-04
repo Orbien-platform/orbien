@@ -22,7 +22,8 @@ export interface Assignment {
   notified_at: string | null;
   responded_at: string | null;
   checked_in_at: string | null;
-  celebration: { id: string; name: string };
+  /** `start_time` ("HH:MM") é o horário do culto; `scheduled_date` é só o dia. */
+  celebration: { id: string; name: string; start_time?: string };
   ministry: { id: string; name: string };
   scheduled_date: string;
   /** id da Ordem de Culto da celebração, ou `null` se ainda não existir (MOB-08-07). */

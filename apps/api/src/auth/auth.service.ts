@@ -12,6 +12,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { PLATFORM_MAIL_BRAND, TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import {
   LoginRateLimitService,
   LOGIN_POLICY,
@@ -24,6 +25,7 @@ import { ImpersonateDto } from './dto/impersonate.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { adminUrl, frontendUrl } from '../common/urls/frontend-url';
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -299,7 +301,23 @@ export class AuthService {
     const newRaw = randomBytes(64).toString('hex');
     const newHash = this.hashToken(newRaw);
 
-    await this.prisma.$transaction(async (tx) => {
+    // Reivindica o token com um UPDATE condicional (`revoked_at: null` no
+    // WHERE), não com o SELECT lá em cima + um UPDATE incondicional. Entre a
+    // leitura e este ponto, outra chamada com o mesmo refresh token — duas
+    // abas que a trava de `navigator.locks` do web não alcança porque uma é
+    // o app mobile, ou duas chamadas de fato simultâneas — pode ter revogado
+    // este token primeiro. Sem a condição no WHERE, as duas rotacionariam
+    // "com sucesso", bifurcando a família em silêncio e sem o alarme de
+    // reuso que existe exatamente para isto. `count` é quem decide quem
+    // venceu a corrida.
+    const rotated = await this.prisma.$transaction(async (tx) => {
+      const reivindicado = await tx.refreshToken.updateMany({
+        where: { id: stored.id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      });
+
+      if (reivindicado.count === 0) return null;
+
       const created = await tx.refreshToken.create({
         data: {
           user_account_id: stored.user_account_id,
@@ -310,9 +328,37 @@ export class AuthService {
 
       await tx.refreshToken.update({
         where: { id: stored.id },
-        data: { revoked_at: new Date(), replaced_by_id: created.id },
+        data: { replaced_by_id: created.id },
       });
+
+      return created;
     });
+
+    if (!rotated) {
+      // Perdeu a corrida: trata como o reuso detectado logo no topo deste
+      // método — a família inteira cai, sem distinguir "duas chamadas
+      // legítimas colidiram" de "alguém reusou um token roubado". É essa
+      // ambiguidade que o design de rotação de refresh token já aceitava
+      // antes desta mudança (mesma resposta na detecção de reuso lá em
+      // cima); o que muda aqui é só que ela agora é DETECTADA — antes, sob
+      // corrida de verdade, nenhum dos dois lados via `revoked_at` setado a
+      // tempo, e as duas rotações "davam certo" em silêncio, bifurcando a
+      // família sem alarme nenhum.
+      //
+      // Isto revoga a família inteira, o que inclui o token que o lado
+      // vencedor acabou de criar (ele nasceu com `revoked_at: null`, então
+      // este `updateMany` o alcança também) — quem venceu a reivindicação
+      // recebe 200 e grava cookies novos, mas eles já nascem mortos. Não dá
+      // para evitar isto sem enfraquecer a detecção de reuso: o único sinal
+      // que o lado perdedor tem é "este id já estava revogado", e é
+      // exatamente esse sinal que soa alarme quando é theft de verdade —
+      // amaciar a resposta aqui teria o mesmo efeito para as duas causas.
+      await this.prisma.refreshToken.updateMany({
+        where: { user_account_id: stored.user_account_id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      });
+      throw new UnauthorizedException('Sessão encerrada por segurança. Faça login novamente.');
+    }
 
     const { userAccount } = stored;
     const roles = rolesForToken(userAccount.roleAssignments, userAccount.congregation_id);
@@ -405,7 +451,30 @@ export class AuthService {
     return { access_token, expires_in: IMPERSONATE_EXPIRES_IN };
   }
 
+  /**
+   * Redefinição pedida pelo web ou pelo app. O e-mail sai com a marca da igreja
+   * do tenant da conta, e o link abre o `/redefinir-senha` do web.
+   */
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    return this.issuePasswordReset(dto.email, 'tenant');
+  }
+
+  /**
+   * Redefinição pedida pelo console — fluxo separado do web, como o login.
+   * Só conta com `platform_support` em `role_assignments` recebe o e-mail; o
+   * resto recebe a mesma resposta genérica, sem e-mail nenhum, pelo mesmo
+   * motivo do 401 de `platformLogin`: quem digita aqui um e-mail de
+   * `tenant_admin` não deve descobrir que ele serve em outro lugar. O e-mail
+   * sai com a marca da Orbien, e o link abre o `/redefinir-senha` do admin.
+   */
+  async platformForgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    return this.issuePasswordReset(dto.email, 'platform');
+  }
+
+  private async issuePasswordReset(
+    email: string,
+    scope: 'tenant' | 'platform',
+  ): Promise<{ message: string }> {
     const genericResponse = {
       message: 'Se o email estiver cadastrado, você receberá um link de redefinição.',
     };
@@ -415,18 +484,26 @@ export class AuthService {
     // A resposta segue genérica: dizer "muitas tentativas" contaria que alguém
     // andou pedindo redefinição para este e-mail. Chave só por e-mail, mesmo
     // princípio de `login()`: `user_accounts.email` é único em todo o banco,
-    // não há mais tenant a incluir na chave.
-    const limitKey = LoginRateLimitService.key('reset', dto.email);
+    // não há mais tenant a incluir na chave. Console e web têm chaves
+    // separadas, como os dois logins.
+    const limitKey = LoginRateLimitService.key(scope === 'platform' ? 'platform-reset' : 'reset', email);
     if (!(await this.rateLimit.check(limitKey, PASSWORD_RESET_POLICY))) {
       return genericResponse;
     }
     await this.rateLimit.register(limitKey, PASSWORD_RESET_POLICY);
 
     const user = await this.prisma.system.userAccount.findUnique({
-      where: { email: dto.email },
-      include: { person: { select: { full_name: true } } },
+      where: { email },
+      include: {
+        person: { select: { full_name: true } },
+        tenant: { select: TENANT_MAIL_BRAND_SELECT },
+        roleAssignments: { select: { role_code: true } },
+      },
     });
     if (!user || !user.is_active) return genericResponse;
+    if (scope === 'platform' && !user.roleAssignments?.some((ra) => ra.role_code === PLATFORM_ROLE)) {
+      return genericResponse;
+    }
 
     // Invalidate any existing unused tokens for this user
     await this.prisma.system.passwordResetToken.updateMany({
@@ -441,11 +518,12 @@ export class AuthService {
       data: { user_id: user.id, token: rawToken, expires_at: expiresAt },
     });
 
-    const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
-    const resetUrl = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
+    const baseUrl = scope === 'platform' ? adminUrl() : frontendUrl();
+    const resetUrl = `${baseUrl}/redefinir-senha?token=${rawToken}`;
     const userName = user.person?.full_name?.split(' ')[0] ?? '';
+    const brand = scope === 'platform' ? PLATFORM_MAIL_BRAND : tenantMailBrand(user.tenant);
 
-    await this.mail.sendPasswordReset(user.email, resetUrl, userName);
+    await this.mail.sendPasswordReset(user.email, resetUrl, userName, brand);
 
     return genericResponse;
   }

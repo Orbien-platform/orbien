@@ -50,6 +50,7 @@ export function PresencaPanel() {
           {/* Right — mockup + next/image placeholder */}
           <Reveal>
             <div
+              aria-hidden="true"
               className="rounded-[14px] overflow-hidden border"
               style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-md)" }}
             >
@@ -58,10 +59,10 @@ export function PresencaPanel() {
                 className="flex items-center justify-between px-5 py-3.5 border-b"
                 style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
               >
-                <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+                <span className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
                   Radar de Presença
                 </span>
-                <span className="font-mono text-[10px]" style={{ color: "var(--navy-accent)" }}>Esta semana</span>
+                <span className="text-[10px]" style={{ color: "var(--navy-accent)" }}>Esta semana</span>
               </div>
 
               {/* List rows */}
@@ -74,7 +75,7 @@ export function PresencaPanel() {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium" style={{ color: "var(--ink)" }}>{name}</p>
-                      <p className="font-mono text-[10px] mt-0.5" style={{ color: "var(--muted)" }}>{detail}</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: "var(--muted)" }}>{detail}</p>
                     </div>
                     <span
                       className="text-[11px] font-medium px-2.5 py-1 rounded-btn flex-shrink-0"
@@ -102,7 +103,7 @@ export function PresencaPanel() {
                   style={{ background: "linear-gradient(to bottom, transparent 40%, var(--surface))" }}
                 >
                   <span
-                    className="font-mono text-[10px] uppercase tracking-[.12em] px-3 py-1.5 rounded-pill"
+                    className="text-xs font-medium px-3 py-1.5 rounded-pill"
                     style={{ background: "var(--subtle)", color: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     Screenshot real em breve

@@ -9,10 +9,12 @@ import * as XLSX from 'xlsx';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
 import { MailService } from '../../mail/mail.service';
+import { MailBrand, TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../../mail/mail-brand';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { ImportConfirmDto } from '../dto/import-confirm.dto';
 import { ImportPreviewDto, SuggestedMapping } from '../dto/import-preview.dto';
 import { writeAuditLog } from '../../common/audit/write-audit-log';
+import { frontendUrl } from '../../common/urls/frontend-url';
 
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -213,6 +215,9 @@ export class PersonsImportService {
     // novos estourar o timeout da requisição HTTP esperando o Resend linha
     // a linha.
     const pendingInvites: Promise<unknown>[] = [];
+    // Marca do tenant para os convites — lida uma vez, no primeiro convite,
+    // e não por linha.
+    let inviteBrand: MailBrand | undefined;
 
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2; // 1-indexed, header = row 1
@@ -336,10 +341,16 @@ export class PersonsImportService {
           // promise entra em `pendingInvites` só para ganhar uma chance de
           // terminar antes da função retornar (ver o `Promise.allSettled`
           // depois do loop).
-          const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3001';
-          const inviteUrl = `${frontendUrl}/redefinir-senha?token=${created.rawToken}`;
+          const inviteUrl = `${frontendUrl()}/redefinir-senha?token=${created.rawToken}`;
+          // Falha ao ler a marca não derruba a linha — a conta já existe; o
+          // convite sai com a marca padrão.
+          inviteBrand ??= tenantMailBrand(
+            await db.tenant
+              .findUnique({ where: { id: tenantId }, select: TENANT_MAIL_BRAND_SELECT })
+              .catch(() => null),
+          );
           pendingInvites.push(
-            this.mail.sendInvite(email!, inviteUrl).catch((err: unknown) => {
+            this.mail.sendInvite(email!, inviteUrl, inviteBrand).catch((err: unknown) => {
               this.logger.error(
                 `Falha ao enviar convite de acesso para ${email} (linha ${rowNum}): ${
                   err instanceof Error ? err.message : String(err)

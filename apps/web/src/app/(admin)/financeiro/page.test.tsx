@@ -105,12 +105,34 @@ vi.mock("@/components/financial/CostCentersModal", () => ({
       </div>
     ) : null,
 }));
+// KPIs, gráfico semanal e forecast saíram de FinanceiroPage para componentes
+// próprios (cada um com seus próprios testes, incluindo os 403 de
+// dashboard/forecast) — aqui só interessa que a aba Visão Geral os monta.
+vi.mock("@/components/financial/WeeklyDashboardCard", () => ({
+  WeeklyDashboardCard: () => <div data-testid="weekly-dashboard-card" />,
+}));
+vi.mock("@/components/financial/ForecastCard", () => ({
+  ForecastCard: () => <div data-testid="forecast-card" />,
+}));
+vi.mock("@/components/financial/BankReconciliationPanel", () => ({
+  BankReconciliationPanel: () => <div data-testid="bank-reconciliation-panel" />,
+}));
+vi.mock("@/components/financial/DonationBookletPanel", () => ({
+  DonationBookletPanel: () => <div data-testid="donation-booklet-panel" />,
+}));
+vi.mock("@/components/financial/PublicIntentsPanel", () => ({
+  PublicIntentsPanel: ({ onSettled }: { onSettled?: () => void }) => (
+    <div data-testid="public-intents-panel">
+      <button onClick={onSettled}>simular baixa</button>
+    </div>
+  ),
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseRouter = vi.mocked(useRouter);
 
-function setup(roles: string[] = ["tenant_admin"]) {
+function setup(roles: string[] = ["tenant_admin"], plan: string = "starter") {
   const replace = vi.fn();
   mockedUseRouter.mockReturnValue({ replace } as unknown as ReturnType<typeof useRouter>);
   mockedUseAuth.mockReturnValue({
@@ -123,6 +145,7 @@ function setup(roles: string[] = ["tenant_admin"]) {
       congregation_id: "c1",
       support_session: false,
       support_tenant_name: null,
+      plan,
       areas: null,
       expires_at: Math.floor(Date.now() / 1000) + 300,
     },
@@ -283,18 +306,6 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByRole("tab", { name: "Lançamentos" })).toBeInTheDocument();
   });
 
-  it("mostra o resultado em vermelho quando é negativo", async () => {
-    setup();
-    mockApi({
-      transactions: [
-        tx({ id: "1", type: "expense", amount: "900", occurred_at: "2026-02-02T00:00:00Z" }),
-        tx({ id: "2", type: "income", amount: "100", occurred_at: "2026-02-02T00:00:00Z" }),
-      ],
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText("-R$ 800,00")).toBeInTheDocument();
-  });
-
   it("redireciona secretary para /dashboard", async () => {
     const { replace } = setup(["secretary"]);
     mockApi({});
@@ -302,33 +313,42 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
   });
 
-  it("mostra KPIs de receitas/despesas/resultado e o gráfico semanal", async () => {
-    setup();
-    mockApi({
-      transactions: [
-        tx({ id: "1", type: "income", amount: "1000", occurred_at: "2026-02-02T00:00:00Z" }),
-        tx({ id: "2", type: "expense", amount: "300", occurred_at: "2026-02-09T00:00:00Z" }),
-      ],
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText("R$ 700,00")).toBeInTheDocument();
-  });
-
-  it("mostra estado vazio do gráfico quando não há lançamentos", async () => {
+  it("monta o dashboard semanal e o forecast na aba Visão Geral", async () => {
     setup();
     mockApi({});
     render(<FinanceiroPage />);
-    expect(await screen.findByText("Sem lançamentos no período.")).toBeInTheDocument();
+    expect(await screen.findByTestId("weekly-dashboard-card")).toBeInTheDocument();
+    expect(screen.getByTestId("forecast-card")).toBeInTheDocument();
   });
 
-  it("esconde abas Lançamentos/Recorrentes e a coluna Total do DRE para pastor", async () => {
+  it("esconde abas Lançamentos/Recorrentes/Conciliação/Carnê do dizimista e a coluna Total do DRE para pastor", async () => {
     setup(["pastor"]);
     mockApi({});
     render(<FinanceiroPage />);
     await screen.findByText("Visão Geral");
     expect(screen.queryByRole("tab", { name: "Lançamentos" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Recorrentes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Conciliação" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Carnê do dizimista" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "DRE" })).toBeInTheDocument();
+  });
+
+  it("monta o BankReconciliationPanel na aba Conciliação para quem não é pastor", async () => {
+    const user = userEvent.setup();
+    setup();
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "Conciliação" }));
+    expect(await screen.findByTestId("bank-reconciliation-panel")).toBeInTheDocument();
+  });
+
+  it("monta o DonationBookletPanel na aba Carnê do dizimista para quem não é pastor", async () => {
+    const user = userEvent.setup();
+    setup();
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "Carnê do dizimista" }));
+    expect(await screen.findByTestId("donation-booklet-panel")).toBeInTheDocument();
   });
 
   it("não mostra o botão de categorias para quem não pode gerenciar", async () => {
@@ -371,41 +391,8 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
-  it("mostra a barra de progresso do forecast e 'sem dados' quando não há período anterior", async () => {
-    setup();
-    mockApi({ dre: dre({ revenue: { categories: [], total: 500 } }) });
-    render(<FinanceiroPage />);
-    expect(
-      await screen.findByText("Sem dados do período anterior para comparar")
-    ).toBeInTheDocument();
-  });
-
-  it("mostra o percentual do forecast e 'superou' quando ultrapassa o período anterior", async () => {
-    setup();
-    mockApi({
-      dre: dre({
-        revenue: { categories: [], total: 1200 },
-        previous_period: { revenue_total: 1000, expenses_total: 0, net_result: 1000 },
-      }),
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText(/100% do período anterior/)).toBeInTheDocument();
-    expect(screen.getByText("✓ Superou o período anterior")).toBeInTheDocument();
-  });
-
-  it("mostra 'faltam X%' quando ainda não alcançou o período anterior", async () => {
-    setup();
-    mockApi({
-      dre: dre({
-        revenue: { categories: [], total: 400 },
-        previous_period: { revenue_total: 1000, expenses_total: 0, net_result: 1000 },
-      }),
-    });
-    render(<FinanceiroPage />);
-    expect(await screen.findByText(/faltam 60% para igualar/)).toBeInTheDocument();
-  });
-
   it("guarda contra a dupla invocação de efeito do StrictMode ao carregar lançamentos", async () => {
+    const user = userEvent.setup();
     setup();
     mockApi({});
     render(
@@ -413,7 +400,8 @@ describe("FinanceiroPage — visão geral e permissões", () => {
         <FinanceiroPage />
       </StrictMode>
     );
-    await screen.findByText("Sem lançamentos no período.");
+    await user.click(await screen.findByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Nenhum lançamento registrado.");
     expect(
       mockedApi.get.mock.calls.filter(([u]) => u.startsWith("/financial/transactions")).length
     ).toBe(1);
@@ -866,7 +854,7 @@ describe("FinanceiroPage — aba DRE", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "DRE" }));
-    await screen.findByText("RECEITAS");
+    await screen.findByRole("cell", { name: "Receitas" });
     const callsBefore = mockedApi.get.mock.calls.filter((c) => (c[0] as string).startsWith("/financial/dre")).length;
 
     const dateInputs = document.querySelectorAll('input[type="date"]');
@@ -914,7 +902,7 @@ describe("FinanceiroPage — aba DRE", () => {
     expect(screen.getByText("Aluguel")).toBeInTheDocument();
     expect(screen.getByText("100.0%")).toBeInTheDocument(); // receita subiu 100% vs 500
     expect(screen.getByText("50.0%")).toBeInTheDocument(); // despesa caiu 50% vs 800
-    expect(screen.getByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Resultado líquido" })).toBeInTheDocument();
   });
 
   it("mostra 'sem lançamentos' quando uma categoria não tem entradas, e '—' quando não há período anterior para o delta", async () => {
@@ -923,7 +911,7 @@ describe("FinanceiroPage — aba DRE", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "DRE" }));
-    await screen.findByText("RECEITAS");
+    await screen.findByRole("cell", { name: "Receitas" });
     expect(screen.getAllByText("Sem lançamentos").length).toBe(2);
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
   });
@@ -943,6 +931,17 @@ describe("FinanceiroPage — aba DRE", () => {
     expect(screen.queryByText("Total")).not.toBeInTheDocument();
   });
 
+  it("mostra 'sem lançamentos' com o colSpan de pastor (3 colunas) quando não há categorias", async () => {
+    setup(["pastor"]);
+    mockApi({ dre: dre() });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "DRE" }));
+    await screen.findByRole("cell", { name: "Receitas" });
+    const [semLancamentos] = screen.getAllByText("Sem lançamentos");
+    expect(semLancamentos.closest("td")).toHaveAttribute("colspan", "3");
+  });
+
   it("mostra o ExportButton com o período correto para quem não é pastor", async () => {
     setup();
     mockApi({ dre: dre() });
@@ -958,19 +957,19 @@ describe("FinanceiroPage — aba DRE", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "DRE" }));
-    expect(await screen.findByText("RESULTADO LÍQUIDO")).toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "Resultado líquido" })).toBeInTheDocument();
     expect(screen.getByText("-R$ 50,00")).toBeInTheDocument();
   });
 });
 
 describe("FinanceiroPage — aba Balancete", () => {
-  it("mostra o placeholder quando ainda não há balancete carregado", async () => {
+  it("mostra o erro quando o balancete falha ao carregar", async () => {
     setup();
     mockApi({ balanceteError: true });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Balancete" }));
-    expect(await screen.findByText("Selecione um período para ver o balancete.")).toBeInTheDocument();
+    expect(await screen.findByText("Erro ao carregar o balancete. Tente de novo.")).toBeInTheDocument();
   });
 
   it("mostra o skeleton de carregamento antes da resposta chegar", async () => {
@@ -1049,7 +1048,7 @@ describe("FinanceiroPage — aba Balancete", () => {
     await user.click(screen.getByRole("tab", { name: "Balancete" }));
     expect(await screen.findByText("Missões")).toBeInTheDocument();
     expect(screen.getByText("Sem centro de custo")).toBeInTheDocument();
-    expect(screen.getByText("TOTAL")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Total" })).toBeInTheDocument();
     expect(screen.getByText("-R$ 150,00")).toBeInTheDocument();
     expect(screen.getByText("R$ 650,00")).toBeInTheDocument();
   });
@@ -1067,7 +1066,7 @@ describe("FinanceiroPage — aba Balancete", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Balancete" }));
-    const totalCell = (await screen.findByText("TOTAL")).closest("tr")!;
+    const totalCell = (await screen.findByRole("cell", { name: "Total" })).closest("tr")!;
     expect(totalCell).toHaveTextContent("-R$ 200,00");
   });
 
@@ -1343,5 +1342,79 @@ describe("FinanceiroPage — corridas e casos-limite", () => {
     expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "simular criação" }));
     expect(screen.getByTestId("view-tx-modal")).toBeInTheDocument();
+  });
+});
+
+describe("FinanceiroPage — abas Premium (PIX e Recibos)", () => {
+  it("esconde PIX e Recibos no plano Starter", () => {
+    setup(["tenant_admin"], "starter");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.queryByRole("tab", { name: "PIX" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Recibos" })).not.toBeInTheDocument();
+  });
+
+  it("mostra PIX e Recibos no plano Premium para o tesoureiro", () => {
+    setup(["treasurer"], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.getByRole("tab", { name: "PIX" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recibos" })).toBeInTheDocument();
+  });
+
+  it("esconde PIX e Recibos do pastor, mesmo no Premium", () => {
+    setup(["pastor"], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+    expect(screen.queryByRole("tab", { name: "PIX" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Recibos" })).not.toBeInTheDocument();
+  });
+});
+
+describe("FinanceiroPage — aba Doações públicas (PEND-14, todos os planos)", () => {
+  it.each([
+    ["Starter", "starter"],
+    ["Premium", "premium"],
+  ])("o tesoureiro vê a aba no plano %s e ela monta o painel", async (_nome, plano) => {
+    const user = userEvent.setup();
+    setup(["treasurer"], plano);
+    mockApi({});
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Doações públicas" }));
+
+    expect(await screen.findByTestId("public-intents-panel")).toBeInTheDocument();
+  });
+
+  it("o administrador do tenant também vê", () => {
+    setup(["tenant_admin"], "starter");
+    mockApi({});
+    render(<FinanceiroPage />);
+
+    expect(screen.getByRole("tab", { name: "Doações públicas" })).toBeInTheDocument();
+  });
+
+  it.each([["pastor"], ["secretary"]])("quem tem o papel %s não vê a aba", (papel) => {
+    setup([papel], "premium");
+    mockApi({});
+    render(<FinanceiroPage />);
+
+    expect(screen.queryByRole("tab", { name: "Doações públicas" })).not.toBeInTheDocument();
+  });
+
+  it("depois de uma baixa, os lançamentos são recarregados — a receita nova aparece sem trocar de tela", async () => {
+    const user = userEvent.setup();
+    setup(["treasurer"], "starter");
+    mockApi({});
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Doações públicas" }));
+    await screen.findByTestId("public-intents-panel");
+    const txCalls = () =>
+      mockedApi.get.mock.calls.filter(([url]) => String(url).startsWith("/financial/transactions")).length;
+    const antes = txCalls();
+
+    await user.click(screen.getByRole("button", { name: "simular baixa" }));
+
+    await waitFor(() => expect(txCalls()).toBe(antes + 1));
   });
 });

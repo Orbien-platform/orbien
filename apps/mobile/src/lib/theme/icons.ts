@@ -31,6 +31,7 @@ export { default as Eye } from "lucide-react-native/icons/eye";
 export { default as EyeOff } from "lucide-react-native/icons/eye-off";
 export { default as FileText } from "lucide-react-native/icons/file-text";
 export { default as HandHeart } from "lucide-react-native/icons/hand-heart";
+export { default as Heart } from "lucide-react-native/icons/heart";
 export { default as Highlighter } from "lucide-react-native/icons/highlighter";
 // A tab de Home usa o ícone "house" do pacote: a versão instalada renomeou
 // `home` -> `house` (lucide-react-native@1.43); o alias abaixo mantém o

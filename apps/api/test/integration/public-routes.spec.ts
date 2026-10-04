@@ -32,6 +32,7 @@ let congregationId: string;
 let qrToken: string;
 let publicGroupId: string;
 let privateGroupId: string;
+let ofertaCategoryId: string;
 
 beforeAll(async () => {
   const tenant = await admin.tenant.create({ data: { slug, name: 'Tenant Público' } });
@@ -94,6 +95,20 @@ beforeAll(async () => {
   });
   privateGroupId = privateGroup.id;
 
+  // Doação pública (PROD-04): chave PIX no branding e a categoria de receita
+  // que o provisionamento cria (DT-04). A de despesa com o mesmo nome prova
+  // que a busca fica em `income`.
+  await admin.brandingConfig.create({
+    data: { tenant_id: tenantId, pix_key: `chave-${ts}@publico.test` },
+  });
+  const oferta = await admin.financialCategory.create({
+    data: { tenant_id: tenantId, congregation_id: congregationId, name: 'Oferta', type: 'income' },
+  });
+  ofertaCategoryId = oferta.id;
+  await admin.financialCategory.create({
+    data: { tenant_id: tenantId, congregation_id: congregationId, name: 'Oferta devolvida', type: 'expense' },
+  });
+
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   app = moduleRef.createNestApplication();
   app.useGlobalPipes(
@@ -109,6 +124,10 @@ afterAll(async () => {
   await admin.waitlistSubscriber.deleteMany({ where: { email: { contains: String(ts) } } });
   await admin.qrToken.deleteMany({ where: { tenant_id: tenantId } });
   await admin.smallGroupVisitRequest.deleteMany({ where: { tenant_id: tenantId } });
+  await admin.pixPayment.deleteMany({ where: { tenant_id: tenantId } });
+  await admin.financialTransaction.deleteMany({ where: { tenant_id: tenantId } });
+  await admin.financialCategory.deleteMany({ where: { tenant_id: tenantId } });
+  await admin.brandingConfig.deleteMany({ where: { tenant_id: tenantId } });
   await admin.smallGroup.deleteMany({ where: { tenant_id: tenantId } });
   await admin.person.deleteMany({ where: { tenant_id: tenantId } });
   await admin.tenant.deleteMany({ where: { id: tenantId } });
@@ -288,5 +307,76 @@ describe('POST /api/public/small-groups/:id/visit-request', () => {
       where: { visitor_name: `Robô ${ts}` },
     });
     expect(saved).toHaveLength(0);
+  });
+});
+
+/**
+ * PROD-04 — doação pública (a página `/doar/[tenant_slug]` que o botão de
+ * Contribuição do mobile abre). A rota respondia "Categoria de receita não
+ * encontrada" para toda igreja: sem JWT não há contexto de tenant, e
+ * `financial_categories` só é visível com `app.tenant_id` fixado. O teste
+ * unitário usa Prisma mockado e nunca viu isso.
+ */
+describe('POST /api/financial/pix/public-donation', () => {
+  it('grava a intenção em pix_payments e devolve a chave PIX com a referência', async () => {
+    const res = await http()
+      .post('/api/financial/pix/public-donation')
+      .send({ tenant_slug: slug, amount: 42.5, donor_name: `Doadora ${ts}` })
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      pix_key: `chave-${ts}@publico.test`,
+      amount: 42.5,
+      church_name: 'Tenant Público',
+    });
+    expect(res.body.transaction_ref).toMatch(/^PIX-[0-9A-F]{8}$/);
+
+    const pagamentos = await admin.pixPayment.findMany({
+      where: { tenant_id: tenantId, scenario: 'public' },
+    });
+    expect(pagamentos).toHaveLength(1);
+    expect(pagamentos[0]).toMatchObject({
+      congregation_id: congregationId,
+      category_id: ofertaCategoryId,
+      status: 'pending',
+      transaction_id: null,
+    });
+    expect(pagamentos[0].id.slice(0, 8).toUpperCase()).toBe(res.body.transaction_ref.slice(4));
+  });
+
+  it('não lança receita no livro — dinheiro prometido não é dinheiro recebido', async () => {
+    // DRE e dashboard somam `financial_transactions` sem olhar status: um
+    // lançamento criado aqui deixaria qualquer visitante inflar a receita da
+    // igreja sem pagar nada.
+    const lancamentos = await admin.financialTransaction.count({ where: { tenant_id: tenantId } });
+    expect(lancamentos).toBe(0);
+  });
+
+  it('404 para igreja que não existe', async () => {
+    await http()
+      .post('/api/financial/pix/public-donation')
+      .send({ tenant_slug: `nao-existe-${ts}`, amount: 10 })
+      .expect(404);
+  });
+});
+
+describe('POST /api/financial/pix', () => {
+  it('grava o PIX manual com a categoria de receita da igreja', async () => {
+    const res = await http()
+      .post('/api/financial/pix')
+      .send({ tenant_slug: slug, amount: 15 })
+      .expect(200);
+
+    expect(res.body).toEqual({
+      pix_key: `chave-${ts}@publico.test`,
+      amount: 15,
+      church_name: 'Tenant Público',
+    });
+
+    const manuais = await admin.pixPayment.findMany({
+      where: { tenant_id: tenantId, scenario: 'manual' },
+    });
+    expect(manuais).toHaveLength(1);
+    expect(manuais[0].category_id).toBe(ofertaCategoryId);
   });
 });

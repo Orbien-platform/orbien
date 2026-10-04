@@ -320,4 +320,76 @@ describe("CelebracaoScreen", () => {
     await waitFor(() => expect(screen.getByTestId("celebracao-title")).toBeTruthy());
     expect(mockGetServiceOrder).toHaveBeenCalledTimes(2);
   });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetServiceOrder.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<CelebracaoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve(BASE_ORDER);
+    });
+
+    expect(mockGetServiceOrder).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockGetServiceOrder.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<CelebracaoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetServiceOrder).toHaveBeenCalled();
+  });
+
+  it("etapa em hora cheia mostra só as horas; sem responsável não mostra a linha; música sem tom não mostra o tom", async () => {
+    mockGetServiceOrder.mockResolvedValue({
+      ...BASE_ORDER,
+      items: [
+        {
+          id: "item1",
+          sequence: 1,
+          name: "Louvor",
+          type: "worship",
+          start_offset_minutes: 60,
+          duration_minutes: 20,
+          responsible_type: "free_text",
+          person: null,
+          ministry: null,
+          responsible_label: null,
+          notes: null,
+          setlist: {
+            songs: [
+              {
+                id: "sg1",
+                sequence: 1,
+                title: "Sem tom definido",
+                key: null,
+                key_alt: null,
+                bpm: null,
+                link: null,
+                youtube_link: null,
+                spotify_link: null,
+                cifra_club_link: null,
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    await render(<CelebracaoScreen />);
+
+    expect(await screen.findByText("Sem tom definido")).toBeTruthy();
+    expect(screen.getByTestId("celebracao-item-item1-horario").props.children).toBe("1h · 20min");
+  });
 });

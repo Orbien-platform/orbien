@@ -120,7 +120,7 @@ export function FinanceiroCapabilities() {
                   </p>
                 </div>
                 <span
-                  className="font-mono text-[10px] font-medium px-2.5 py-1 rounded-pill w-fit"
+                  className="text-[11px] font-medium px-2.5 py-1 rounded-pill w-fit"
                   style={{ background: planBg, color: planColor }}
                 >
                   {plan}

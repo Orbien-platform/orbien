@@ -87,13 +87,13 @@ afterAll(async () => {
   await app?.close();
 }, 60_000);
 
-it('GET sem preferência salva devolve as 4 categorias ligadas (AC1)', async () => {
+it('GET sem preferência salva devolve as 5 categorias ligadas (AC1)', async () => {
   const res = await request(app.getHttpServer())
     .get('/api/me/notification-preferences')
     .set('Authorization', `Bearer ${tokenA}`);
 
   expect(res.status).toBe(200);
-  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true });
+  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
 });
 
 it('PATCH persiste a mudança e o GET seguinte reflete (AC2, AC4)', async () => {
@@ -108,6 +108,7 @@ it('PATCH persiste a mudança e o GET seguinte reflete (AC2, AC4)', async () => 
     oracao: false,
     eventos: true,
     devocional: true,
+    biblia: true,
   });
 
   const getRes = await request(app.getHttpServer())
@@ -120,6 +121,7 @@ it('PATCH persiste a mudança e o GET seguinte reflete (AC2, AC4)', async () => 
     oracao: false,
     eventos: true,
     devocional: true,
+    biblia: true,
   });
 });
 
@@ -133,7 +135,7 @@ it('conta B nunca lê a preferência da conta A — a rota é sempre "a própria
     .set('Authorization', `Bearer ${tokenB}`);
 
   expect(res.status).toBe(200);
-  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true });
+  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
 });
 
 it('PATCH da conta B não altera a preferência da conta A', async () => {
@@ -148,6 +150,7 @@ it('PATCH da conta B não altera a preferência da conta A', async () => {
     oracao: true,
     eventos: false,
     devocional: true,
+    biblia: true,
   });
 
   const getAResAfter = await request(app.getHttpServer())
@@ -159,5 +162,6 @@ it('PATCH da conta B não altera a preferência da conta A', async () => {
     oracao: false,
     eventos: true,
     devocional: true,
+    biblia: true,
   });
 });

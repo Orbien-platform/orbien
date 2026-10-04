@@ -6,7 +6,7 @@ import TenantsPage from "./page";
 import api from "@/lib/api";
 import { openSupportSession } from "@/lib/support-session";
 
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), patch: vi.fn() } }));
+vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() } }));
 vi.mock("@/lib/support-session", () => ({ openSupportSession: vi.fn() }));
 
 // O `SearchInput` real tem debounce de 300ms e dispara `onSearch("")` na
@@ -64,8 +64,31 @@ vi.mock("@/components/tenants/EditTenantModal", () => ({
   ),
 }));
 
+vi.mock("@/components/tenants/ChangePlanModal", () => ({
+  ChangePlanModal: ({
+    open,
+    onOpenChange,
+    onChanged,
+    tenant,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onChanged: () => void;
+    tenant: { name: string } | null;
+  }) => (
+    <div>
+      <span>
+        mudar-plano:{open ? "aberto" : "fechado"}:{tenant?.name ?? ""}
+      </span>
+      <button onClick={onChanged}>avisar plano mudado</button>
+      <button onClick={() => onOpenChange(false)}>fechar plano via X do modal</button>
+    </div>
+  ),
+}));
+
 const getMock = vi.mocked(api.get);
 const patchMock = vi.mocked(api.patch);
+const postMock = vi.mocked(api.post);
 const abrirSessao = vi.mocked(openSupportSession);
 
 function tenant(overrides: Record<string, unknown> = {}) {
@@ -109,6 +132,7 @@ beforeEach(() => {
   respondeCom([tenant()]);
   abrirSessao.mockReset().mockResolvedValue(undefined);
   patchMock.mockReset().mockResolvedValue({ data: {} } as never);
+  postMock.mockReset().mockResolvedValue({ data: {} } as never);
 });
 
 describe("TenantsPage", () => {
@@ -363,6 +387,43 @@ describe("TenantsPage — sessão de suporte", () => {
   });
 });
 
+describe("TenantsPage — mudar plano", () => {
+  it("abre o modal de plano com o tenant clicado e recarrega ao mudar", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: /Mudar plano/ }));
+    expect(
+      screen.getByText("mudar-plano:aberto:Doca Church")
+    ).toBeInTheDocument();
+
+    const antes = getMock.mock.calls.length;
+    await user.click(
+      screen.getByRole("button", { name: "avisar plano mudado" })
+    );
+
+    await waitFor(() => expect(getMock.mock.calls.length).toBe(antes + 1));
+  });
+
+  it("fechar o modal de plano pelo X limpa o tenant selecionado", async () => {
+    const user = userEvent.setup();
+    render(<TenantsPage />);
+    await screen.findByText("Doca Church");
+
+    await user.click(screen.getByRole("button", { name: /Mudar plano/ }));
+    expect(
+      screen.getByText("mudar-plano:aberto:Doca Church")
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "fechar plano via X do modal" })
+    );
+
+    expect(screen.getByText("mudar-plano:fechado:")).toBeInTheDocument();
+  });
+});
+
 describe("TenantsPage — editar e inativar", () => {
   it("mostra Bloqueado para tenant inativo", async () => {
     respondeCom([tenant({ is_active: false })]);
@@ -537,5 +598,49 @@ describe("TenantsPage — editar e inativar", () => {
     expect(
       screen.queryByRole("dialog", { name: "Inativar tenant?" })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("TenantsPage — cancelar e reativar plano", () => {
+  it("plano ativo oferece só Cancelar plano, e o modal exige o nome", async () => {
+    const user = userEvent.setup();
+    respondeCom([tenant({ slug: "teste1-church", name: "Teste1 Church" })]);
+    render(<TenantsPage />);
+    await screen.findByText("Teste1 Church");
+
+    expect(screen.queryByRole("button", { name: "Reativar plano" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Cancelar plano" }));
+    const dialog = await screen.findByRole("dialog", { name: "Cancelar plano?" });
+    await user.type(
+      within(dialog).getByLabelText("Nome do tenant para confirmar"),
+      "Teste1 Church"
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar plano" }));
+
+    await waitFor(() =>
+      expect(postMock).toHaveBeenCalledWith("/platform/tenants/t-1/cancel")
+    );
+    // Recarrega a lista depois de cancelar.
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("plano cancelado oferece só Reativar plano e reativa após confirmação", async () => {
+    const user = userEvent.setup();
+    respondeCom([
+      tenant({ slug: "teste2-church", name: "Teste2 Church", plan_status: "cancelled" }),
+    ]);
+    render(<TenantsPage />);
+    await screen.findByText("Teste2 Church");
+
+    expect(screen.getByText("Cancelado")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancelar plano" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Reativar plano" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reativar plano?" });
+    await user.click(within(dialog).getByRole("button", { name: "Reativar plano" }));
+
+    await waitFor(() =>
+      expect(postMock).toHaveBeenCalledWith("/platform/tenants/t-1/reactivate")
+    );
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
   });
 });

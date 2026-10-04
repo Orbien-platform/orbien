@@ -6,7 +6,14 @@
 // não com string ISO em UTC: as funções leem `getDate`/`getHours`, que são
 // locais, então uma string em Z faria a asserção depender do fuso da
 // máquina que roda o teste.
-import { formatDateTime, formatDayMonth, formatLongDate, formatMonthYear, getGreeting } from "./date";
+import {
+  formatDateTime,
+  formatDayMonth,
+  formatLongDate,
+  formatMonthYear,
+  getGreeting,
+  localWhen,
+} from "./date";
 
 function localIso(
   year: number,
@@ -85,5 +92,22 @@ describe("getGreeting", () => {
   it("a partir das 18h é boa noite", () => {
     expect(getGreeting(new Date(2026, 8, 13, 18, 0))).toBe("Boa noite");
     expect(getGreeting(new Date(2026, 8, 13, 23, 59))).toBe("Boa noite");
+  });
+});
+
+describe("localWhen", () => {
+  it("lê a meia-noite UTC de scheduled_date como o próprio dia, com o horário da celebração", () => {
+    const when = localWhen("2026-09-27T00:00:00.000Z", "19:00");
+    expect(when).toBe("2026-09-27T19:00:00");
+    // Independe do fuso da máquina: é domingo, 27, às 19:00 em qualquer um.
+    expect(formatDateTime(when)).toBe("dom, 27 set · 19:00");
+  });
+
+  it("sem horário, fica só o dia — sem hora inventada", () => {
+    expect(formatDateTime(localWhen("2026-09-27T00:00:00.000Z"))).toBe("dom, 27 set");
+  });
+
+  it("data que já tem hora passa intacta", () => {
+    expect(localWhen("2026-09-13T13:00:00.000Z", "19:00")).toBe("2026-09-13T13:00:00.000Z");
   });
 });

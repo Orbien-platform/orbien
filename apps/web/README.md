@@ -87,13 +87,16 @@ capturas em `e2e/screenshots/`:
 A partir da raiz do monorepo:
 
 ```bash
-E2E_EMAIL=fvargaspf+teste1@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste1-church \
+E2E_EMAIL=fvargaspf+teste2@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste2-church \
   npm run e2e -w orbien-web
 ```
 
-O tenant é `teste1-church` (ou `teste2-church`), **nunca** `doca-church` nem
+O tenant é `teste1-church` ou `teste2-church`, **nunca** `doca-church` nem
 qualquer outro: teste não roda sobre dado de igreja real. A regra e os dois
-slugs estão em [`docs/AMBIENTES.md`](../../docs/AMBIENTES.md).
+slugs estão em [`docs/AMBIENTES.md`](../../docs/AMBIENTES.md) — `teste2-church`
+é o padrão porque é o tenant Premium (`teste1-church` virou Starter): specs
+como `financeiro.spec.ts` e o módulo de Celebrações inteiro não têm ramo para
+403/NoAccessState.
 
 `suporte.spec.ts` precisa de duas variáveis a mais, porque monta o handoff de
 verdade — login de plataforma, listar tenants, `impersonate` — em vez de
@@ -142,7 +145,7 @@ Funciona contra qualquer ambiente:
 ```bash
 E2E_BASE_URL=https://web.useorbien.com \
 E2E_API_URL=https://orbien-api.onrender.com/api \
-E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste1-church npm run e2e -w orbien-web
+E2E_EMAIL=... E2E_PASSWORD=... E2E_TENANT=teste2-church npm run e2e -w orbien-web
 ```
 
 `E2E_API_URL` vai **direto na API**, não em `/api-proxy`: as fixtures montam e

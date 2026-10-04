@@ -10,6 +10,7 @@ import {
   cancelMyEventRegistration,
   getEventRegistrationSummary,
   getMyEventRegistration,
+  getHighlights,
   getPost,
   getPosts,
   isPaidRegistration,
@@ -22,12 +23,12 @@ describe("ContentClient", () => {
   });
 
   describe("getPosts", () => {
-    it("chama GET /content/posts sem query quando nenhum argumento é informado", async () => {
+    it("pede só publicados mesmo sem argumento — rascunho não vai para o app", async () => {
       mockAuthenticatedRequest.mockResolvedValue({ data: [], total: 0 });
 
       await getPosts();
 
-      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts");
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts?published=true");
     });
 
     it("monta a query ?page=2&limit=10 quando page e limit são informados", async () => {
@@ -35,7 +36,7 @@ describe("ContentClient", () => {
 
       await getPosts(2, 10);
 
-      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts?page=2&limit=10");
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts?published=true&page=2&limit=10");
     });
 
     it("retorna o PostsPage resolvido pelo authenticatedRequest", async () => {
@@ -45,6 +46,17 @@ describe("ContentClient", () => {
       const result = await getPosts(1, 20);
 
       expect(result).toEqual(page);
+    });
+  });
+
+  describe("getHighlights", () => {
+    it("chama GET /content/posts/highlights", async () => {
+      mockAuthenticatedRequest.mockResolvedValue([{ id: "p1" }]);
+
+      const result = await getHighlights();
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/posts/highlights");
+      expect(result).toEqual([{ id: "p1" }]);
     });
   });
 

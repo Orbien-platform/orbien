@@ -48,6 +48,7 @@ export function RelatorioSemanal() {
           {/* Right — report card mockup */}
           <Reveal>
             <div
+              aria-hidden="true"
               className="rounded-[14px] overflow-hidden border"
               style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-md)" }}
             >
@@ -79,7 +80,7 @@ export function RelatorioSemanal() {
               <div className="grid grid-cols-2 gap-px" style={{ background: "var(--border)" }}>
                 {REPORT_ITEMS.map(({ label, value, delta }) => (
                   <div key={label} className="px-5 py-4" style={{ background: "var(--surface)" }}>
-                    <p className="font-mono text-[9px] uppercase tracking-[.06em] mb-1" style={{ color: "var(--muted)" }}>{label}</p>
+                    <p className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</p>
                     <p className="font-mono text-[16px] font-medium tracking-[-0.02em]" style={{ color: "var(--ink)" }}>{value}</p>
                     <p className="font-mono text-[9px] mt-0.5" style={{ color: "#00B8A2" }}>{delta}</p>
                   </div>
@@ -102,7 +103,7 @@ export function RelatorioSemanal() {
                   style={{ background: "linear-gradient(to bottom, transparent 30%, var(--surface))" }}
                 >
                   <span
-                    className="font-mono text-[10px] uppercase tracking-[.12em] px-3 py-1.5 rounded-pill"
+                    className="text-xs font-medium px-3 py-1.5 rounded-pill"
                     style={{ background: "var(--subtle)", color: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     Gráfico de arrecadação
@@ -112,8 +113,8 @@ export function RelatorioSemanal() {
 
               {/* Footer */}
               <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
-                <span className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>Gerado automaticamente toda segunda-feira</span>
-                <span className="font-mono text-[10px] font-medium" style={{ color: "var(--navy-accent)" }}>Exportar PDF</span>
+                <span className="text-[10px]" style={{ color: "var(--muted)" }}>Gerado automaticamente toda segunda-feira</span>
+                <span className="text-[10px] font-medium" style={{ color: "var(--navy-accent)" }}>Exportar PDF</span>
               </div>
             </div>
           </Reveal>

@@ -5,6 +5,7 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 function DashboardMockup() {
   return (
     <div
+      aria-hidden="true"
       className="absolute overflow-hidden flex flex-col"
       style={{
         top: "8%", left: 0, right: "14%", bottom: "14%",
@@ -34,7 +35,7 @@ function DashboardMockup() {
         {/* Header row */}
         <div className="flex items-center justify-between">
           <div>
-            <div className="font-mono text-[9px] uppercase tracking-[.08em] mb-0.5" style={{ color: "var(--muted)" }}>
+            <div className="text-[10px] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
               Painel · Esta semana
             </div>
             <div className="text-[13px] font-medium tracking-[-0.01em]" style={{ color: "var(--ink)" }}>
@@ -42,7 +43,7 @@ function DashboardMockup() {
             </div>
           </div>
           <span
-            className="font-mono text-[9px] px-2 py-1 rounded-pill tracking-[.06em]"
+            className="text-[9px] px-2 py-1 rounded-pill"
             style={{ background: "var(--teal-dim)", color: "#00B8A2" }}
           >
             ● Ao vivo
@@ -61,7 +62,7 @@ function DashboardMockup() {
               className="rounded-btn p-2.5 border"
               style={{ background: "var(--subtle)", borderColor: "var(--border)" }}
             >
-              <div className="font-mono text-[9px] uppercase tracking-[.06em] mb-1" style={{ color: "var(--muted)" }}>
+              <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>
                 {label}
               </div>
               <div className="text-base font-semibold tracking-[-0.02em]" style={{ color: "var(--ink)" }}>
@@ -83,7 +84,7 @@ function DashboardMockup() {
           }}
         >
           <div
-            className="absolute left-2.5 top-2 font-mono text-[9px] uppercase tracking-[.08em]"
+            className="absolute left-2.5 top-2 text-[10px] font-medium"
             style={{ color: "var(--navy-accent)" }}
           >
             Doações · últimos 7 dias
@@ -122,7 +123,7 @@ function DashboardMockup() {
             <div className="text-[11px] font-medium" style={{ color: "var(--ink)" }}>
               Marina Rodrigues
             </div>
-            <div className="font-mono text-[9px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
+            <div className="text-[9px]" style={{ color: "var(--muted)" }}>
               3ª visita · sem célula
             </div>
           </div>
@@ -141,6 +142,7 @@ function DashboardMockup() {
 function PhoneMockup() {
   return (
     <div
+      aria-hidden="true"
       className="absolute right-0 bottom-0 w-[38%]"
       style={{
         aspectRatio: "9/19",
@@ -167,7 +169,7 @@ function PhoneMockup() {
           className="pt-9 px-3.5 pb-3 border-b flex-shrink-0"
           style={{ background: "var(--bg)", borderColor: "var(--border)" }}
         >
-          <div className="font-mono text-[8px] uppercase tracking-[.12em] mb-1" style={{ color: "var(--muted)" }}>
+          <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted)" }}>
             Igreja Doca · Visitantes
           </div>
           <h4 className="text-sm font-semibold tracking-[-0.02em]" style={{ color: "var(--ink)" }}>
@@ -191,7 +193,7 @@ function PhoneMockup() {
                 boxShadow: focus ? "0 0 0 3px var(--navy-dim)" : undefined,
               }}
             >
-              <div className="font-mono text-[8px] uppercase tracking-[.06em] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
+              <div className="text-[10px] font-medium mb-0.5" style={{ color: "var(--muted)" }}>
                 {label}
               </div>
               <div className="text-[11px] font-medium" style={{ color: "var(--ink)" }}>
@@ -276,8 +278,8 @@ export function Hero() {
             </div>
 
             {/* Meta badges */}
-            <div className="flex gap-5 flex-wrap font-mono text-[12px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
-              {["SEM CNPJ", "SEM CARTÃO", "5 MIN PARA COMEÇAR"].map((label) => (
+            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+              {["Sem CNPJ", "Sem cartão", "5 min para começar"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
                   {label}

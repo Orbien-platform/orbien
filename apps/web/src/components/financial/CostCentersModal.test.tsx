@@ -245,11 +245,16 @@ describe("CostCentersModal", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Excluir centro de custo" })[0]);
     expect(await screen.findByText("Excluir centro de custo?")).toBeInTheDocument();
+    // O diálogo move o foco para dentro de si ao abrir (base-ui autofocus,
+    // assíncrono) — esperar isso garante que o listener de Escape do
+    // diálogo certo já está ativo antes de disparar a tecla.
+    await waitFor(() => expect(document.activeElement?.closest('[role="dialog"]')).toBeTruthy());
 
     await user.keyboard("{Escape}");
 
-    await waitFor(() =>
-      expect(screen.queryByText("Excluir centro de custo?")).not.toBeInTheDocument()
+    await waitFor(
+      () => expect(screen.queryByText("Excluir centro de custo?")).not.toBeInTheDocument(),
+      { timeout: 3000 }
     );
   });
 

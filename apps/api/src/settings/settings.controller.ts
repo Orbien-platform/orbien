@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -41,6 +43,7 @@ export class SettingsController {
       user.roles,
       dto,
       user.plan,
+      user.impersonated_by ?? user.sub,
     );
   }
 
@@ -52,7 +55,16 @@ export class SettingsController {
   uploadLogo(
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: JwtPayload,
+    @Query('variant') variant?: string,
   ) {
-    return this.settingsService.uploadLogo(user.tenant_id, user.congregation_id, file);
+    if (variant !== undefined && variant !== 'light' && variant !== 'dark') {
+      throw new BadRequestException('variant deve ser "light" ou "dark".');
+    }
+    return this.settingsService.uploadLogo(
+      user.tenant_id,
+      user.congregation_id,
+      file,
+      variant === 'dark' ? 'dark' : 'light',
+    );
   }
 }

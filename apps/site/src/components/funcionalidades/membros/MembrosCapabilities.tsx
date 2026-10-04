@@ -110,7 +110,7 @@ export function MembrosCapabilities() {
                   </p>
                 </div>
                 <p
-                  className="font-mono text-[10px] uppercase tracking-[.08em]"
+                  className="text-xs font-medium"
                   style={{ color: "var(--navy-accent)" }}
                 >
                   {highlight}

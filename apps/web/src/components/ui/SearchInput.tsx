@@ -21,10 +21,19 @@ export function SearchInput({
 }: SearchInputProps) {
   const [value, setValue] = useState(defaultValue);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Último valor entregue ao pai — começa no `defaultValue`, que o pai já tem.
+  // Sem isto o debounce emitia o valor inicial 300ms após montar, e quem
+  // reseta a página no `onSearch` (Pessoas, Grupos) desfazia a navegação
+  // feita nesse intervalo.
+  const emittedRef = useRef(defaultValue);
 
   useEffect(() => {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => onSearch(value), debounce);
+    if (value === emittedRef.current) return;
+    timerRef.current = setTimeout(() => {
+      emittedRef.current = value;
+      onSearch(value);
+    }, debounce);
     return () => { clearTimeout(timerRef.current); };
   }, [value, debounce, onSearch]);
 

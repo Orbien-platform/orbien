@@ -2,6 +2,7 @@
 // abre a lista de livros, seleciona livro → lista de capítulos, confirma o
 // callback `onSelect(bookCode, chapter)` com os valores certos.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { NetworkError } from "../../lib/api/errors";
 
 const mockGetBooks = jest.fn();
 jest.mock("../../lib/bible/bible-client", () => ({
@@ -67,5 +68,68 @@ describe("BookChapterPickerModal", () => {
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+  it("fechado, não busca os livros", async () => {
+    await render(<BookChapterPickerModal visible={false} onClose={jest.fn()} onSelect={jest.fn()} />);
+
+    expect(mockGetBooks).not.toHaveBeenCalled();
+  });
+
+  it("'Voltar' na lista de capítulos volta para a lista de livros", async () => {
+    await render(<BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />);
+    await waitFor(() => screen.getByTestId("picker-book-JHN"));
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("picker-book-JHN"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("picker-back"));
+    });
+
+    expect(screen.getByTestId("picker-book-GEN")).toBeTruthy();
+  });
+
+  it("sem conexão mostra o erro de conexão; outro erro mostra o genérico", async () => {
+    mockGetBooks.mockRejectedValue(new NetworkError());
+    const offline = await render(
+      <BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />,
+    );
+    expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
+    await act(async () => {
+      offline.unmount();
+    });
+
+    mockGetBooks.mockRejectedValue(new Error("500"));
+    await render(<BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />);
+    expect(await screen.findByTestId("picker-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+
+  it("ignora livros e falhas que chegam depois de o modal desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetBooks.mockReturnValue(new Promise((r) => (resolve = r)));
+    const first = await render(
+      <BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />,
+    );
+    await act(async () => {
+      first.unmount();
+    });
+    await act(async () => {
+      resolve(BOOKS);
+    });
+
+    let reject!: (reason: unknown) => void;
+    mockGetBooks.mockReturnValue(new Promise((_, r) => (reject = r)));
+    const second = await render(
+      <BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />,
+    );
+    await act(async () => {
+      second.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockGetBooks).toHaveBeenCalledTimes(2);
   });
 });

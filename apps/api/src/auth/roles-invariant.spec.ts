@@ -42,6 +42,13 @@ const ALLOWLIST = new Set([
   // precisa saber que não enxerga nada. O `JwtAuthGuard` continua valendo.
   'auth/me.controller.ts',
   'content/notification-preferences.controller.ts',
+  // Domínio próprio: `.../resolve` é lido pelo middleware de host do
+  // `apps/web` antes de qualquer tenant estar identificado — é o que
+  // resolve QUAL tenant é o domínio. `.../cloudflare/callback` é o
+  // navegador do tenant voltando do redirect da Cloudflare, sem
+  // Authorization header nenhum; quem autentica ali é o `state` assinado
+  // (`SignedState`), não papel.
+  'domain-provisioning/public-domain.controller.ts',
 ]);
 
 function findControllerFiles(dir: string): string[] {

@@ -140,7 +140,7 @@ export function NavDropdown() {
             className="flex items-center justify-between px-4 py-3 border-t"
             style={{ background: "var(--bg)", borderColor: "var(--border)" }}
           >
-            <span className="font-mono text-[10px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>
+            <span className="text-xs" style={{ color: "var(--muted)" }}>
               4 módulos disponíveis
             </span>
             <Link

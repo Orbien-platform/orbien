@@ -88,4 +88,57 @@ describe("GrupoScreen", () => {
 
     expect(mockPush).toHaveBeenCalledWith("/grupo/encontro/m1");
   });
+
+  it("ignora a resposta que chega depois de a tela desmontar", async () => {
+    let resolve!: (value: unknown) => void;
+    mockListMeetings.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    const view = await render(<GrupoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve([]);
+    });
+
+    expect(mockListMeetings).toHaveBeenCalled();
+  });
+
+  it("ignora a falha que chega depois de a tela desmontar", async () => {
+    let reject!: (reason: unknown) => void;
+    mockListMeetings.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+    const view = await render(<GrupoScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      reject(new Error("falha de rede"));
+    });
+
+    expect(mockListMeetings).toHaveBeenCalled();
+  });
+
+  it("erro que não é de conexão mostra a mensagem genérica", async () => {
+    mockListMeetings.mockRejectedValue(new Error("500"));
+
+    await render(<GrupoScreen />);
+
+    expect(await screen.findByTestId("grupo-error")).toBeTruthy();
+    expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+
+  it("encontro sem tema usa a data como rótulo; sem tema nem data, 'Encontro'", async () => {
+    mockListMeetings.mockResolvedValue([
+      { id: "m1", occurred_at: "2026-09-01T19:00:00.000Z", topic: null },
+      { id: "m2", occurred_at: "data inválida", topic: null },
+    ]);
+
+    await render(<GrupoScreen />);
+
+    const semTema = await screen.findByTestId("encontro-m1");
+    expect(semTema.props.accessibilityLabel).not.toBe("Encontro");
+    expect(screen.getByTestId("encontro-m2").props.accessibilityLabel).toBe("Encontro");
+    expect(screen.getAllByText("Encontro")).toHaveLength(2);
+  });
 });

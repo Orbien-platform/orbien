@@ -11,7 +11,7 @@ export function Credibility() {
           <span style={{ color: "var(--navy-accent)", fontWeight: 600 }}>&quot;</span>
         </p>
         <span
-          className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[.14em]"
+          className="inline-flex items-center gap-2.5 text-sm font-medium"
           style={{ color: "var(--stone)" }}
         >
           <span className="w-5 h-px" style={{ background: "var(--stone)" }} />

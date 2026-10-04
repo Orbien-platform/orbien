@@ -28,8 +28,18 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  // O upload de mídia do web é a única chamada cross-origin (ver
+  // `apps/web/src/hooks/useFileUpload.ts`), então um erro aqui só aparece
+  // nela. O navegador compara a origem byte a byte e ela nunca tem barra no
+  // fim nem espaço — "https://web.useorbien.com/" no painel do Render bastaria
+  // para bloquear todo upload. Normaliza em vez de confiar na digitação.
+  const allowedOrigins = (process.env['ALLOWED_ORIGINS'] ?? 'http://localhost:3001')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
   app.enableCors({
-    origin: process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:3001'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

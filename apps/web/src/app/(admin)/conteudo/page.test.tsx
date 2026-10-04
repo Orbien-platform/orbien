@@ -56,6 +56,11 @@ vi.mock("@/components/content/CreateSegmentModal", () => ({
       </div>
     ) : null,
 }));
+vi.mock("@/components/content/AppHighlightsPanel", () => ({
+  AppHighlightsPanel: ({ canEdit }: { canEdit: boolean }) => (
+    <div data-testid="app-highlights-panel">{canEdit ? "pode editar" : "só leitura"}</div>
+  ),
+}));
 vi.mock("@/components/content/SendNotificationModal", () => ({
   SendNotificationModal: ({
     open,
@@ -299,6 +304,19 @@ describe("ConteudoPage", () => {
     await screen.findByText("Nenhum post encontrado.");
     await user.click(screen.getByRole("tab", { name: "Segmentos" }));
     expect(await screen.findByText("Do Envelope")).toBeInTheDocument();
+  });
+
+  it("aba Destaques no app só monta o painel quando aberta, com a permissão de quem vê", async () => {
+    setup(["member"]);
+    mockedApi.get.mockResolvedValue({ data: [] });
+    const user = userEvent.setup();
+    render(<ConteudoPage />);
+    await screen.findByText("Nenhum post encontrado.");
+    expect(screen.queryByTestId("app-highlights-panel")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Destaques no app" }));
+
+    expect(await screen.findByTestId("app-highlights-panel")).toHaveTextContent("só leitura");
   });
 
   it("mostra e usa a aba Notificações: estado vazio, envio e taxa de abertura", async () => {

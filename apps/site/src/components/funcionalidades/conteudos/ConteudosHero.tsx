@@ -5,6 +5,7 @@ import { CheckIcon } from "@/components/ui/CheckIcon";
 function AppFeedMockup() {
   return (
     <div
+      aria-hidden="true"
       className="mx-auto"
       style={{
         width: "260px",
@@ -32,7 +33,7 @@ function AppFeedMockup() {
           style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         >
           <div>
-            <p className="font-mono text-[8px] uppercase tracking-[.1em]" style={{ color: "var(--muted)" }}>Igreja da Graça</p>
+            <p className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>Igreja da Graça</p>
             <p className="text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--ink)" }}>Início</p>
           </div>
           <div
@@ -68,14 +69,14 @@ function AppFeedMockup() {
             style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
             <div className="px-3 py-2 border-b" style={{ background: "var(--teal-dim)", borderColor: "var(--border)" }}>
-              <p className="font-mono text-[8px] uppercase tracking-[.1em]" style={{ color: "#00B8A2" }}>Devocional · Hoje</p>
+              <p className="text-[10px] font-medium" style={{ color: "#00B8A2" }}>Devocional · Hoje</p>
             </div>
             <div className="px-3 py-2.5">
               <p className="text-[11px] font-semibold mb-1" style={{ color: "var(--ink)" }}>Salmos 23 — O Senhor é meu pastor</p>
               <p className="text-[9px] font-light leading-relaxed" style={{ color: "var(--stone)" }}>
                 &quot;O Senhor é o meu pastor, nada me faltará.&quot; Uma meditação sobre confiar no cuidado de Deus...
               </p>
-              <p className="font-mono text-[8px] mt-1.5" style={{ color: "var(--navy-accent)" }}>Ler mais →</p>
+              <p className="text-[8px] mt-1.5" style={{ color: "var(--navy-accent)" }}>Ler mais →</p>
             </div>
           </div>
 
@@ -106,13 +107,13 @@ function AppFeedMockup() {
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#C0392B" }}>
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
-              <p className="font-mono text-[8px] uppercase tracking-[.08em]" style={{ color: "var(--muted)" }}>Pedido de oração</p>
+              <p className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>Pedido de oração</p>
             </div>
             <p className="text-[10px] font-light leading-snug" style={{ color: "var(--stone)" }}>
               Marina R. pede oração pela recuperação da mãe.
             </p>
             <div className="flex items-center gap-2 mt-2">
-              <span className="font-mono text-[8px] px-2 py-0.5 rounded-pill" style={{ background: "var(--navy-dim)", color: "var(--navy-accent)" }}>
+              <span className="text-[8px] px-2 py-0.5 rounded-pill" style={{ background: "var(--navy-dim)", color: "var(--navy-accent)" }}>
                 12 orando
               </span>
             </div>
@@ -174,8 +175,8 @@ export function ConteudosHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap font-mono text-[11.5px] tracking-[.04em]" style={{ color: "var(--muted)" }}>
-              {["PUSH NATIVO", "DEVOCIONAIS DIÁRIOS", "PEDIDOS DE ORAÇÃO"].map((label) => (
+            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+              {["Push nativo", "Devocionais diários", "Pedidos de oração"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
                   {label}

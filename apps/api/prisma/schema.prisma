@@ -51,6 +51,8 @@ model Tenant {
   prayerRequests            PrayerRequest[]
   groupMessages             GroupMessage[]
   bibleVerseMarks           BibleVerseMark[]
+  bibleVerseMarkLikes       BibleVerseMarkLike[]
+  bibleVerseMarkReplies     BibleVerseMarkReply[]
   studyMaterials            StudyMaterial[]
   studyMaterialVersions     StudyMaterialVersion[]
   materialOpenRecords       MaterialOpenRecord[]
@@ -61,6 +63,7 @@ model Tenant {
   transactionAttachments    TransactionAttachment[]
   recurringRules            RecurringRule[]
   pixPayments               PixPayment[]
+  pixSubscriptions          PixSubscription[]
   donationReceipts          DonationReceipt[]
   contentPosts              ContentPost[]
   eventRegistrations        EventRegistration[]
@@ -97,6 +100,10 @@ model Congregation {
   email         String?
   phone         String?
   logo_url      String?
+  /// Logotipo em variante para modo escuro — par de `logo_url` (o claro).
+  /// Nulo cai para `logo_url` nos dois modos, mesma lógica de degradação
+  /// de `BrandingConfig.logo_url_dark`.
+  logo_url_dark String?
   primary_color String?
   /// Cor de destaque (accent) da congregação — o par de `primary_color`,
   /// com a mesma semântica de override: se nula, cai na do tenant, que é
@@ -126,12 +133,15 @@ model Congregation {
   prayerRequests            PrayerRequest[]
   groupMessages             GroupMessage[]
   bibleVerseMarks           BibleVerseMark[]
+  bibleVerseMarkLikes       BibleVerseMarkLike[]
+  bibleVerseMarkReplies     BibleVerseMarkReply[]
   studyMaterials            StudyMaterial[]
   financialCategories       FinancialCategory[]
   costCenters               CostCenter[]
   financialTransactions     FinancialTransaction[]
   recurringRules            RecurringRule[]
   pixPayments               PixPayment[]
+  pixSubscriptions          PixSubscription[]
   contentPosts              ContentPost[]
   eventRegistrations        EventRegistration[]
   audienceSegments          AudienceSegment[]
@@ -161,28 +171,50 @@ model Congregation {
 }
 
 model BrandingConfig {
-  id              String   @id @default(uuid())
-  tenant_id       String   @unique
-  primary_color   String?
+  id                                 String    @id @default(uuid())
+  tenant_id                          String    @unique
+  primary_color                      String?
   /// Cor de destaque (accent) do tenant. O nome da coluna é anterior ao
   /// design system, que chama este papel de `accent` — a API expõe o campo
   /// como `accent_color` em `GET /settings` e é assim que o front o
   /// conhece. Renomear a coluna é migration própria; não misturar.
-  secondary_color String?
-  logo_url        String?
-  app_name        String?
-  splash_url      String?
-  pix_key         String?
-  /// PROD-19 — domínio próprio do tenant (Premium). Só o registro; apontar o
-  /// domínio de fato (DNS/CNAME, certificado) é passo de infra fora deste
-  /// schema — ver docs/PLANO.md.
-  custom_domain   String?  @unique
+  secondary_color                    String?
+  logo_url                           String?
+  /// Logotipo em variante para modo escuro — par de `logo_url` (o claro).
+  /// Nulo cai para `logo_url` nos dois modos: um tenant que só cadastrou um
+  /// logo continua vendo-o em qualquer tema, em vez de ficar sem logo no
+  /// escuro.
+  logo_url_dark                      String?
+  app_name                           String?
+  splash_url                         String?
+  pix_key                            String?
+  /// PROD-19 — domínio próprio do tenant (Premium).
+  custom_domain                      String?   @unique
+  /// Provisionamento de fato do `custom_domain` (ver `docs/PLANO.md`):
+  /// "pending" enquanto o DNS não aponta/o cert não saiu, "verified" quando
+  /// a Vercel confirma o domínio, "failed" quando a última tentativa de
+  /// verificação não achou o registro esperado. Sem `custom_domain`, o
+  /// valor fica em "pending" e não significa nada — não há coluna própria
+  /// para "sem domínio configurado" porque o próprio `custom_domain IS NULL`
+  /// já diz isso.
+  custom_domain_status               String    @default("pending")
+  /// Access/refresh token da conexão OAuth com a conta Cloudflare do tenant,
+  /// cifrados com `SecretCipher` (AES-256-GCM, `DOMAIN_SECRETS_ENCRYPTION_KEY`)
+  /// — nunca em texto claro, porque dão acesso de edição de DNS na zona do
+  /// tenant. Nulos = tenant não conectou Cloudflare (caminho manual).
+  cloudflare_access_token_encrypted  String?
+  cloudflare_refresh_token_encrypted String?
+  cloudflare_token_expires_at        DateTime?
+  /// Zona Cloudflare onde o registro de `custom_domain` foi criado —
+  /// guardada para não precisar redescobrir a zona a cada verificação.
+  cloudflare_zone_id                 String?
+  cloudflare_connected_at            DateTime?
   /// PROD-19 — termos de uso próprios do tenant (Premium), como URL para o
   /// documento (mesmo padrão de `logo_url`/`splash_url`: link, não conteúdo
   /// inline).
-  terms_url       String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  terms_url                          String?
+  created_at                         DateTime  @default(now())
+  updated_at                         DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
@@ -375,12 +407,15 @@ model Person {
   prayerRequests          PrayerRequest[]
   groupMessages           GroupMessage[]
   bibleVerseMarks         BibleVerseMark[]
+  bibleVerseMarkLikes     BibleVerseMarkLike[]
+  bibleVerseMarkReplies   BibleVerseMarkReply[]
   materialOpenRecords     MaterialOpenRecord[]
   ledSmallGroups          SmallGroup[]            @relation("GroupLeader")
   ledNetworks             Network[]               @relation("NetworkLeader")
   donorTransactions       FinancialTransaction[]  @relation("TransactionDonor")
   donationReceipts        DonationReceipt[]
   pixDonations            PixPayment[]            @relation("PixDonor")
+  pixSubscriptions        PixSubscription[]       @relation("PixSubscriptionDonor")
   volunteerProfile        VolunteerProfile?
   serviceOrderItems       ServiceOrderItem[]
   eventRegistrations      EventRegistration[]
@@ -790,28 +825,77 @@ model GroupMessage {
 /// capítulo — não uma lista arbitrária nem um range cross-capítulo (spec.md,
 /// Assumptions).
 model BibleVerseMark {
-  id                    String    @id @default(uuid())
-  tenant_id             String
-  congregation_id       String
-  person_id             String
-  version               String    @default("NVI")
-  book_code             String
-  chapter               Int
-  verse_start           Int
-  verse_end             Int
-  comment               String
-  deleted_at            DateTime?
-  deleted_by_person_id  String?
-  created_at            DateTime  @default(now())
-  updated_at            DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  person_id            String
+  version              String    @default("NVI")
+  book_code            String
+  chapter              Int
+  verse_start          Int
+  verse_end            Int
+  comment              String
+  deleted_at           DateTime?
+  deleted_by_person_id String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
+  tenant       Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  person       Person                @relation(fields: [person_id], references: [id], onDelete: Cascade)
+  likes        BibleVerseMarkLike[]
+  replies      BibleVerseMarkReply[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id, created_at])
   @@map("bible_verse_marks")
+}
+
+/// Curtida de uma marcação do feed da Bíblia — uma por pessoa por marcação
+/// (`@@unique`), então curtir de novo é no-op e descurtir apaga a linha.
+/// Carrega tenant_id+congregation_id próprios, copiados da marcação, para a
+/// RLS de `022_rls_bible_verse_mark_interactions.sql` isolar sem JOIN.
+model BibleVerseMarkLike {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  mark_id         String
+  person_id       String
+  created_at      DateTime @default(now())
+
+  tenant       Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation   @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  mark         BibleVerseMark @relation(fields: [mark_id], references: [id], onDelete: Cascade)
+  person       Person         @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([mark_id, person_id])
+  @@index([tenant_id, congregation_id])
+  @@map("bible_verse_mark_likes")
+}
+
+/// Resposta a uma marcação do feed da Bíblia. Lista simples, sem resposta de
+/// resposta e sem edição — o autor apaga a própria, a moderação apaga
+/// qualquer uma da congregação (soft delete, mesma distinção de
+/// `deleted_by_person_id` que `BibleVerseMark` faz).
+model BibleVerseMarkReply {
+  id                   String    @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  mark_id              String
+  person_id            String
+  comment              String
+  deleted_at           DateTime?
+  deleted_by_person_id String?
+  created_at           DateTime  @default(now())
+
+  tenant       Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation   @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  mark         BibleVerseMark @relation(fields: [mark_id], references: [id], onDelete: Cascade)
+  person       Person         @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([mark_id, created_at])
+  @@index([tenant_id, congregation_id])
+  @@map("bible_verse_mark_replies")
 }
 
 /// Cache do texto de um capítulo da NVI, buscado da API bíblica externa na
@@ -970,8 +1054,9 @@ model FinancialCategory {
   parent       FinancialCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
   children     FinancialCategory[] @relation("CategoryHierarchy")
 
-  transactions FinancialTransaction[]
-  pixPayments  PixPayment[]
+  transactions     FinancialTransaction[]
+  pixPayments      PixPayment[]
+  pixSubscriptions PixSubscription[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1079,48 +1164,99 @@ model RecurringRule {
 }
 
 model PixPayment {
-  id               String      @id @default(uuid())
-  tenant_id        String
-  congregation_id  String
-  scenario         PixScenario
-  transaction_id   String?     @unique
-  asaas_payment_id String?
-  amount           Decimal     @db.Decimal(12, 2)
-  donor_person_id  String?
-  category_id      String
-  status           PixStatus
-  pix_key          String?
-  qr_code          String?
-  paid_at          DateTime?
-  created_at       DateTime    @default(now())
-  updated_at       DateTime    @updatedAt
+  id                    String      @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  scenario              PixScenario
+  transaction_id        String?     @unique
+  asaas_payment_id      String?     @unique
+  pix_subscription_id   String?
+  amount                Decimal     @db.Decimal(12, 2)
+  donor_person_id       String?
+  category_id           String
+  status                PixStatus
+  pix_key               String?
+  qr_code               String?
+  paid_at               DateTime?
+  /// Doação pública (Cenário 3): quem o próprio doador disse ser. É declaração
+  /// sem verificação — nunca vira `donor_person_id` automaticamente (um
+  /// terceiro digitaria o e-mail de um membro). `donor_email` só existe com o
+  /// aceite de `donor_consent_version` registrado em `donor_consented_at`.
+  donor_name            String?     @db.VarChar(120)
+  donor_email           String?     @db.VarChar(254)
+  donor_consent_version String?     @db.VarChar(40)
+  donor_consented_at    DateTime?
+  created_at            DateTime    @default(now())
+  updated_at            DateTime    @updatedAt
 
   tenant            Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation      Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   transaction       FinancialTransaction? @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
   donorPerson       Person?               @relation("PixDonor", fields: [donor_person_id], references: [id], onDelete: SetNull)
   category          FinancialCategory     @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  subscription      PixSubscription?      @relation(fields: [pix_subscription_id], references: [id], onDelete: SetNull)
   eventRegistration EventRegistration?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, status])
+  @@index([pix_subscription_id])
   @@map("pix_payments")
 }
 
+/**
+ * PIX recorrente — dízimo automático mensal via PIX Automático da Asaas
+ * (PROD-27, Premium). Cada linha é a assinatura em si; os pagamentos gerados
+ * a cada ciclo chegam via webhook e viram `PixPayment` com `scenario:
+ * recurring` e `pix_subscription_id` apontando pra cá — mesma tabela que já
+ * registra os cenários 1/2/3, sem duplicar o caminho de confirmação →
+ * `FinancialTransaction` que `PixService.handleWebhook` já resolve.
+ */
+model PixSubscription {
+  id                    String                @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  donor_person_id       String
+  category_id           String
+  amount                Decimal               @db.Decimal(12, 2)
+  description           String?
+  asaas_subscription_id String                @unique
+  status                PixSubscriptionStatus @default(active)
+  created_by_user_id    String
+  cancelled_at          DateTime?
+  created_at            DateTime              @default(now())
+  updated_at            DateTime              @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation      @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  donorPerson  Person            @relation("PixSubscriptionDonor", fields: [donor_person_id], references: [id], onDelete: Restrict)
+  category     FinancialCategory @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  payments     PixPayment[]
+
+  @@index([tenant_id, id])
+  @@index([tenant_id, congregation_id])
+  @@index([tenant_id, status])
+  @@map("pix_subscriptions")
+}
+
 model DonationReceipt {
-  id             String   @id @default(uuid())
-  tenant_id      String
-  transaction_id String
-  person_id      String
-  receipt_url    String
-  generated_at   DateTime @default(now())
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenant_id       String
+  transaction_id  String
+  /// Nulo no recibo de doação pública: o doador não é `Person`, só deixou nome
+  /// e e-mail (`recipient_*`). Uma das duas formas de identificar é obrigatória
+  /// — CHECK `donation_receipts_recipient_chk` na migration.
+  person_id       String?
+  recipient_name  String?  @db.VarChar(120)
+  recipient_email String?  @db.VarChar(254)
+  receipt_url     String
+  generated_at    DateTime @default(now())
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   tenant      Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   transaction FinancialTransaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
-  person      Person               @relation(fields: [person_id], references: [id], onDelete: Cascade)
+  person      Person?              @relation(fields: [person_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id, transaction_id])
   @@index([person_id])
@@ -1165,6 +1301,13 @@ model ContentPost {
   // bloco (`PROD-24`).
   registration_price    Decimal?  @db.Decimal(12, 2)
 
+  // --- Destaque no app ---
+  // Posição no carrossel da home do mobile, escolhida no web. NULL é "não
+  // está em destaque"; o carrossel lista os não nulos em ordem crescente.
+  // `PUT /content/posts/highlights` regrava a lista inteira de uma vez, então
+  // não há dois posts disputando a mesma posição.
+  app_highlight_position Int?
+
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   createdBy    UserAccount  @relation(fields: [created_by_user_id], references: [id], onDelete: Restrict)
@@ -1177,6 +1320,7 @@ model ContentPost {
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, published_at])
+  @@index([tenant_id, congregation_id, app_highlight_position])
   @@map("content_posts")
 }
 
@@ -1540,6 +1684,7 @@ model NotificationPreference {
   oracao          Boolean  @default(true)
   eventos         Boolean  @default(true)
   devocional      Boolean  @default(true)
+  biblia          Boolean  @default(true)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
@@ -1819,12 +1964,21 @@ enum PixScenario {
   dynamic
   public
   event_registration
+  recurring
 }
 
 enum PixStatus {
   pending
   confirmed
   failed
+}
+
+// PIX recorrente (PROD-27, Premium): estado da assinatura em si, não de cada
+// pagamento gerado por ela — esses continuam em `PixStatus`, como qualquer
+// outro `PixPayment`.
+enum PixSubscriptionStatus {
+  active
+  cancelled
 }
 
 // --- Conteúdo ---

@@ -44,6 +44,7 @@ describe("NotificationsProvider", () => {
       oracao: true,
       eventos: true,
       devocional: true,
+      biblia: true,
     });
   });
 
@@ -95,7 +96,7 @@ describe("NotificationsProvider", () => {
   });
 
   it("sessão presente: busca preferências e sincroniza as tags com o resultado (MOB-10b, AC2)", async () => {
-    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false };
+    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false, biblia: false };
     mockGetNotificationPreferences.mockResolvedValue(prefs);
     mockUseAuth.mockReturnValue({
       session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
@@ -163,7 +164,7 @@ describe("NotificationsProvider", () => {
     expect(mockUnregisterDevice).toHaveBeenCalled();
   });
 
-  it("clique em push com post_id navega para /post/:id", async () => {
+  it("clique em push navega para a rota que o cliente resolveu", async () => {
     mockUseAuth.mockReturnValue({ session: null });
 
     await act(async () => {
@@ -175,7 +176,7 @@ describe("NotificationsProvider", () => {
     });
 
     const clickHandler = mockOnNotificationClick.mock.calls[0]![0];
-    clickHandler("post-1");
+    clickHandler("/post/post-1");
 
     expect(mockPush).toHaveBeenCalledWith("/post/post-1");
   });

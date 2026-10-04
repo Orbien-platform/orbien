@@ -31,10 +31,18 @@ export default defineConfig({
       // Sobe por caminho a cada fase concluída; a Fase 13 troca por 100
       // global. O piso nunca desce.
       thresholds: {
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
+        // Piso global medido em 2026-09-25: 99,4 statements / 97,02
+        // branches / 99,81 functions / 99,93 lines, 115 arquivos e 1344
+        // testes. Antes era 0 — só os caminhos listados abaixo eram
+        // cobrados, e arquivo fora de todos eles (o ponto cego que
+        // `components/repertorio/**` e o `src/platform/` da API tiveram)
+        // não reprovava nada. O `global` fecha esse buraco e garante a meta
+        // de 96% do app inteiro; os pisos por caminho continuam, mais
+        // estritos onde já estavam. O piso nunca desce.
+        statements: 99,
+        branches: 97,
+        functions: 99,
+        lines: 99,
         // Fase 7
         "src/lib/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/hooks/**": { statements: 100, branches: 100, functions: 100, lines: 100 },

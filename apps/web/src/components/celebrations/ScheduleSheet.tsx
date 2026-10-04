@@ -12,6 +12,7 @@ import {
   Loader2,
   Plus,
   Send,
+  Sparkles,
   Trash2,
   UserPlus,
   Users,
@@ -29,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
+import { ScheduleSuggestions, type AppliedResult } from "@/components/celebrations/ScheduleSuggestions";
 import type { ScheduleTemplate } from "@/components/celebrations/TemplatesPanel";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -143,6 +145,8 @@ export function ScheduleSheet({
 
   // Seleção de voluntários — por CelebrationMinistry.id
   const [openPicker, setOpenPicker] = useState<string | null>(null);
+  // Sugestões automáticas — também por CelebrationMinistry.id; exclusivo com o seletor.
+  const [openSuggest, setOpenSuggest] = useState<string | null>(null);
   const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
   const [availLoading, setAvailLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -207,6 +211,7 @@ export function ScheduleSheet({
       setNotice(null);
       setAddMinOpen(false);
       setOpenPicker(null);
+      setOpenSuggest(null);
     }
     onOpenChange(next);
   }
@@ -297,6 +302,7 @@ export function ScheduleSheet({
       setOpenPicker(null);
       return;
     }
+    setOpenSuggest(null);
     setOpenPicker(cm.id);
     setAvailability([]);
     setAvailLoading(true);
@@ -314,24 +320,36 @@ export function ScheduleSheet({
   }
 
   // A rota de atribuição recebe CelebrationMinistry.id (o vínculo), não Ministry.id.
+  // A API aceita a atribuição mas sinaliza estes dois casos — vale mostrar.
+  function noticeForAssignment(data: AppliedResult | undefined) {
+    const warnings: string[] = [];
+    if (data?.overbooked) warnings.push("acima do número de vagas");
+    if (data?.unavailable_on_date) warnings.push("voluntário marcou indisponibilidade nesta data");
+    setNotice(warnings.length > 0 ? `Atribuído, mas ${warnings.join(" e ")}.` : null);
+  }
+
+  async function handleSuggestionApplied(result: AppliedResult) {
+    noticeForAssignment(result);
+    await load();
+    onChanged?.();
+  }
+
+  function toggleSuggest(cm: ScheduleMinistry) {
+    setOpenPicker(null);
+    setOpenSuggest(openSuggest === cm.id ? null : cm.id);
+  }
+
   async function assign(cm: ScheduleMinistry, profileId: string) {
     if (!instanceId) return;
     setBusyId(profileId);
     setError(null);
     setNotice(null);
     try {
-      const { data } = await api.post<{
-        overbooked?: boolean;
-        unavailable_on_date?: boolean;
-      }>(
+      const { data } = await api.post<AppliedResult>(
         `/celebrations/instances/${instanceId}/schedule/ministries/${cm.id}/assignments`,
         { volunteer_profile_id: profileId }
       );
-      // A API aceita a atribuição mas sinaliza estes dois casos — vale mostrar.
-      const warnings: string[] = [];
-      if (data?.overbooked) warnings.push("acima do número de vagas");
-      if (data?.unavailable_on_date) warnings.push("voluntário marcou indisponibilidade nesta data");
-      if (warnings.length > 0) setNotice(`Atribuído, mas ${warnings.join(" e ")}.`);
+      noticeForAssignment(data);
       await load();
       onChanged?.();
     } catch (err) {
@@ -485,6 +503,7 @@ export function ScheduleSheet({
                     const short = cm.assigned_count < cm.slots;
                     const over = cm.assigned_count > cm.slots;
                     const pickerOpen = openPicker === cm.id;
+                    const suggestOpen = openSuggest === cm.id;
 
                     return (
                       <div
@@ -564,19 +583,40 @@ export function ScheduleSheet({
                         ) : null}
 
                         {/* Seletor de voluntários */}
-                        <button
-                          type="button"
-                          onClick={() => togglePicker(cm)}
-                          className="mt-3 flex items-center gap-1 text-xs text-navy hover:underline"
-                        >
-                          <UserPlus size={12} strokeWidth={1.5} />
-                          Adicionar voluntário
-                          <ChevronDown
-                            size={12}
-                            strokeWidth={1.5}
-                            className={cn("transition-transform", pickerOpen && "rotate-180")}
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <button
+                            type="button"
+                            onClick={() => togglePicker(cm)}
+                            className="flex items-center gap-1 text-xs text-navy hover:underline"
+                          >
+                            <UserPlus size={12} strokeWidth={1.5} />
+                            Adicionar voluntário
+                            <ChevronDown
+                              size={12}
+                              strokeWidth={1.5}
+                              className={cn("transition-transform", pickerOpen && "rotate-180")}
+                            />
+                          </button>
+                          {!isArchived ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSuggest(cm)}
+                              aria-expanded={suggestOpen}
+                              className="flex items-center gap-1 text-xs text-navy hover:underline"
+                            >
+                              <Sparkles size={12} strokeWidth={1.5} />
+                              Sugerir
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {suggestOpen ? (
+                          <ScheduleSuggestions
+                            instanceId={instanceId!}
+                            celebrationMinistryId={cm.id}
+                            onApplied={handleSuggestionApplied}
                           />
-                        </button>
+                        ) : null}
 
                         {pickerOpen ? (
                           <div className="mt-2 rounded-[8px] border border-[var(--border-default)] p-2">

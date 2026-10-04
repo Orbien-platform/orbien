@@ -55,8 +55,12 @@ jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
 // "Avisos recentes" (HOME-03, os 3 primeiros do mesmo resultado) — uma
 // chamada só, ver nota em (tabs)/index.tsx.
 const mockGetPosts = jest.fn();
+// Destaques escolhidos no web: quando vêm, o hero é deles; vazio (ou falha),
+// o hero cai no getPosts(1, 5).
+const mockGetHighlights = jest.fn();
 jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
+  getHighlights: (...args: unknown[]) => mockGetHighlights(...args),
 }));
 
 import { palettes } from "../../../lib/theme/tokens";
@@ -108,6 +112,7 @@ describe("HomeScreen", () => {
     jest.clearAllMocks();
     mockListMyGroups.mockResolvedValue([]);
     mockPosts();
+    mockGetHighlights.mockResolvedValue([]);
     mockUseAuth.mockReturnValue({ areas: null });
     mockUseTheme.mockReturnValue(themeValue());
     mockOpenBrowserAsync.mockResolvedValue({ type: "dismiss" });
@@ -141,6 +146,29 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/post/hero-1");
   });
 
+  it("com destaques escolhidos no web, o hero mostra só eles, na ordem da API", async () => {
+    mockPosts([makePost({ id: "recente" })]);
+    mockGetHighlights.mockResolvedValue([
+      makePost({ id: "dest-2", title: "Retiro" }),
+      makePost({ id: "dest-1", title: "Culto" }),
+    ]);
+
+    await renderHome();
+
+    await waitFor(() => screen.getByTestId("hero-slide-dest-2"));
+    expect(screen.getByTestId("hero-slide-dest-1")).toBeTruthy();
+    expect(screen.queryByTestId("hero-slide-recente")).toBeNull();
+  });
+
+  it("destaques falhando não somem com o hero: cai nos últimos publicados", async () => {
+    mockPosts([makePost({ id: "recente" })]);
+    mockGetHighlights.mockRejectedValue(new Error("offline"));
+
+    await renderHome();
+
+    await waitFor(() => screen.getByTestId("hero-slide-recente"));
+  });
+
   // MHR-06: degradação silenciosa do hero.
   it("hero ausente quando getPosts(1,5) retorna lista vazia, sem travar a Home (MHR-06)", async () => {
     mockPosts([]);
@@ -160,7 +188,7 @@ describe("HomeScreen", () => {
     expect(screen.queryByTestId("hero-slider")).toBeNull();
   });
 
-  // MHR-07: CTAs Bíblia / Contribuição / Todos os conteúdos sempre presentes.
+  // MHR-07: CTAs Bíblia / Contribua sempre presentes.
   it("mostra o CTA de Bíblia e navega para /biblia ao tocar (MHR-07)", async () => {
     await renderHome();
 
@@ -169,12 +197,16 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/biblia");
   });
 
-  it("mostra o CTA de 'Ver todos os conteúdos' e navega para a aba /conteudo ao tocar (MHR-07)", async () => {
+  it("não tem CTA de 'Ver todos os conteúdos' — a tab bar já leva à aba Conteúdo", async () => {
     await renderHome();
 
-    expect(screen.getByTestId("quick-action-conteudo")).toBeTruthy();
-    fireEvent.press(screen.getByTestId("quick-action-conteudo"));
-    expect(mockPush).toHaveBeenCalledWith("/conteudo");
+    expect(screen.queryByTestId("quick-action-conteudo")).toBeNull();
+  });
+
+  it("CTA de contribuição se chama 'Contribua'", async () => {
+    await renderHome();
+
+    expect(screen.getByText("Contribua")).toBeTruthy();
   });
 
   it("CTA de Contribuição habilitado abre WEB_URL/doar/{tenant_slug} em browser in-app (MHR-07)", async () => {
@@ -322,5 +354,62 @@ describe("HomeScreen", () => {
     fireEvent.press(screen.getByTestId("home-post-p1"));
 
     expect(mockPush).toHaveBeenCalledWith("/post/p1");
+  });
+  it("respostas que chegam depois de a Home desmontar são ignoradas (sucesso e falha)", async () => {
+    let resolveGroups!: (value: unknown) => void;
+    let resolvePosts!: (value: unknown) => void;
+    let resolveHighlights!: (value: unknown) => void;
+    mockListMyGroups.mockReturnValue(new Promise((r) => (resolveGroups = r)));
+    mockGetPosts.mockReturnValue(new Promise((r) => (resolvePosts = r)));
+    mockGetHighlights.mockReturnValue(new Promise((r) => (resolveHighlights = r)));
+
+    const view = await render(<HomeScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolveGroups([]);
+      resolvePosts({ data: [makePost()], total: 1 });
+      resolveHighlights([makePost()]);
+    });
+
+    let rejectHighlights!: (reason: unknown) => void;
+    mockGetHighlights.mockReturnValue(new Promise((_, r) => (rejectHighlights = r)));
+    const second = await render(<HomeScreen />);
+    await act(async () => {
+      second.unmount();
+    });
+    await act(async () => {
+      rejectHighlights(new Error("offline"));
+    });
+
+    expect(mockGetHighlights).toHaveBeenCalledTimes(2);
+  });
+
+  it("CTA de Contribuição sem WEB_URL configurada não abre nada", async () => {
+    const extra = jest.requireMock<{ default: { expoConfig: { extra: { webUrl?: string } } } }>(
+      "expo-constants",
+    ).default.expoConfig.extra;
+    const original = extra.webUrl;
+    extra.webUrl = undefined;
+    try {
+      await renderHome();
+      fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
+      expect(mockOpenBrowserAsync).not.toHaveBeenCalled();
+    } finally {
+      extra.webUrl = original;
+    }
+  });
+
+  it("CTA de Contribuição sem navegador disponível não derruba a tela", async () => {
+    mockOpenBrowserAsync.mockRejectedValue(new Error("sem navegador"));
+
+    await renderHome();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
+    });
+
+    expect(mockOpenBrowserAsync).toHaveBeenCalled();
+    expect(screen.getByTestId("home-greeting")).toBeTruthy();
   });
 });

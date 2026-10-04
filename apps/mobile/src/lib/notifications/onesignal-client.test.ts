@@ -90,12 +90,13 @@ describe("onesignal-client", () => {
   });
 
   describe("syncNotificationPreferenceTags", () => {
-    it("chama addTags com as 4 chaves pref_* como string, nunca boolean", () => {
+    it("chama addTags com as 5 chaves pref_* como string, nunca boolean", () => {
       syncNotificationPreferenceTags({
         avisos: true,
         oracao: false,
         eventos: true,
         devocional: false,
+        biblia: false,
       });
 
       expect(mockAddTags).toHaveBeenCalledWith({
@@ -103,6 +104,7 @@ describe("onesignal-client", () => {
         pref_oracao: "false",
         pref_eventos: "true",
         pref_devocional: "false",
+        pref_biblia: "false",
       });
     });
   });
@@ -116,17 +118,27 @@ describe("onesignal-client", () => {
   });
 
   describe("onNotificationClick", () => {
-    it("chama o handler com o post_id do evento", () => {
+    it("post_id abre o post", () => {
       const handler = jest.fn();
       onNotificationClick(handler);
 
       const listener = mockAddEventListener.mock.calls[0]![1];
       listener({ notification: { additionalData: { post_id: "post-1" } } });
 
-      expect(handler).toHaveBeenCalledWith("post-1");
+      expect(handler).toHaveBeenCalledWith("/post/post-1");
     });
 
-    it("não chama o handler quando o evento não tem post_id", () => {
+    it("bible_mark_id (resposta a uma marcação) abre a marcação", () => {
+      const handler = jest.fn();
+      onNotificationClick(handler);
+
+      const listener = mockAddEventListener.mock.calls[0]![1];
+      listener({ notification: { additionalData: { type: "bible_mark_reply", bible_mark_id: "m1" } } });
+
+      expect(handler).toHaveBeenCalledWith("/biblia/marcacao/m1");
+    });
+
+    it("não chama o handler quando o evento não aponta para nada", () => {
       const handler = jest.fn();
       onNotificationClick(handler);
 
@@ -147,6 +159,30 @@ describe("onesignal-client", () => {
         "click",
         mockAddEventListener.mock.calls[0]![1],
       );
+    });
+  });
+
+  describe("configuração e tokens incompletos", () => {
+    it("sem oneSignalAppId configurado, falha alto em vez de inicializar vazio", () => {
+      const extra = jest.requireMock<{ default: { expoConfig: { extra: { oneSignalAppId?: string } } } }>(
+        "expo-constants",
+      ).default.expoConfig.extra;
+      const original = extra.oneSignalAppId;
+      extra.oneSignalAppId = "";
+      try {
+        expect(() => initializeOneSignal()).toThrow(/oneSignalAppId não configurado/);
+        expect(mockInitialize).not.toHaveBeenCalled();
+      } finally {
+        extra.oneSignalAppId = original;
+      }
+    });
+
+    it("token sem papel manda a tag role vazia", () => {
+      registerDevice(
+        makeToken({ sub: "user-1", tenant_id: "t1", congregation_id: "c1", roles: [], exp: 1893456000 }),
+      );
+
+      expect(mockAddTags).toHaveBeenCalledWith({ tenant_id: "t1", congregation_id: "c1", role: "" });
     });
   });
 });

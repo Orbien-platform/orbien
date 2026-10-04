@@ -2,15 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
 import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye, Settings2, Layers } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
@@ -22,6 +13,15 @@ import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financ
 import { ExportButton } from "@/components/financial/ExportButton";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { CostCentersModal } from "@/components/financial/CostCentersModal";
+import { WeeklyDashboardCard } from "@/components/financial/WeeklyDashboardCard";
+import { ForecastCard } from "@/components/financial/ForecastCard";
+import { BankReconciliationPanel } from "@/components/financial/BankReconciliationPanel";
+import { DonationBookletPanel } from "@/components/financial/DonationBookletPanel";
+import { BalancetePanel } from "@/components/financial/BalancetePanel";
+import { DynamicPixPanel } from "@/components/financial/DynamicPixPanel";
+import { PublicIntentsPanel } from "@/components/financial/PublicIntentsPanel";
+import { PixSubscriptionsPanel } from "@/components/financial/PixSubscriptionsPanel";
+import { DonationReceiptsPanel } from "@/components/financial/DonationReceiptsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -80,23 +80,6 @@ interface DRE {
   };
 }
 
-interface BalanceteLine {
-  cost_center_id: string | null;
-  cost_center_name: string;
-  revenue_total: number;
-  expenses_total: number;
-  net_result: number;
-  count: number;
-}
-
-interface Balancete {
-  period: { start: string; end: string };
-  lines: BalanceteLine[];
-  revenue_total: number;
-  expenses_total: number;
-  net_result: number;
-}
-
 function frequencyLabel(freq: "weekly" | "monthly" | "yearly"): string {
   return freq === "weekly" ? "Semanal" : freq === "monthly" ? "Mensal" : "Anual";
 }
@@ -111,7 +94,17 @@ function statusBadgeClass(status: Transaction["status"]): string {
   return "bg-blue-100 text-blue-700";
 }
 
-type TabValue = "overview" | "transactions" | "recurring" | "dre" | "balancete";
+type TabValue =
+  | "overview"
+  | "transactions"
+  | "recurring"
+  | "dre"
+  | "balancete"
+  | "conciliacao"
+  | "carne-dizimista"
+  | "doacoes-publicas"
+  | "pix"
+  | "recibos";
 const TX_PAGE_SIZE = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -146,48 +139,7 @@ function firstOfMonthIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-function buildWeeklyChart(txs: Transaction[]): { week: string; Entradas: number; Saídas: number }[] {
-  const map = new Map<number, { i: number; e: number }>();
-  for (const tx of txs) {
-    const week = Math.ceil(new Date(tx.occurred_at).getDate() / 7);
-    const entry = map.get(week) ?? { i: 0, e: 0 };
-    if (tx.type === "income") entry.i += Number(tx.amount);
-    else entry.e += Number(tx.amount);
-    map.set(week, entry);
-  }
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([w, d]) => ({ week: `Sem ${w}`, Entradas: d.i, Saídas: d.e }));
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function KpiCard({
-  label,
-  value,
-  loading,
-  variant,
-}: {
-  label: string;
-  value: number;
-  loading: boolean;
-  variant: "positive" | "negative";
-}) {
-  // Só é chamado com "positive" ou "negative" nas três chamadas da Visão
-  // Geral — um terceiro ramo "default" nunca era alcançado. Branch morto,
-  // removido ao fechar a Fase 10 (docs/TESTES.md tem o registro).
-  const color = variant === "positive" ? "text-teal" : "text-crimson";
-  return (
-    <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-stone">{label}</p>
-      {loading ? (
-        <Skeleton className="mt-2 h-7 w-28" />
-      ) : (
-        <p className={cn("mt-1 text-2xl font-medium tabular-nums", color)}>{fmt(value)}</p>
-      )}
-    </div>
-  );
-}
 
 function DeltaCell({ current, previous }: { current: number; previous: number }) {
   const delta = deltaPercent(current, previous);
@@ -220,6 +172,10 @@ export default function FinanceiroPage() {
     user?.roles?.includes("tenant_admin") ||
     false;
 
+  // Abas Premium: a claim `plan` só decide se a aba aparece — quem nega de
+  // verdade é o `PlanGuard` da API, e os painéis tratam o 403.
+  const showPremiumTabs = canManageCategories && user?.plan === "premium";
+
   const [activeTab, setActiveTab] = useState<TabValue>("overview");
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [costCentersOpen, setCostCentersOpen] = useState(false);
@@ -237,13 +193,6 @@ export default function FinanceiroPage() {
   const [dreEnd, setDreEnd] = useState(todayIso);
   const [dre, setDre] = useState<DRE | null>(null);
   const [loadingDre, setLoadingDre] = useState(false);
-
-  // Balancete state
-  const [balanceteStart, setBalanceteStart] = useState(firstOfMonthIso);
-  const [balanceteEnd, setBalanceteEnd] = useState(todayIso);
-  const [balancete, setBalancete] = useState<Balancete | null>(null);
-  const [loadingBalancete, setLoadingBalancete] = useState(false);
-  const prevBalanceteKey = useRef("");
   const prevDreKey = useRef("");
 
   // Lançamentos filters (client-side)
@@ -407,47 +356,19 @@ export default function FinanceiroPage() {
 
   // ── Fetch DRE ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab !== "dre" && activeTab !== "overview") return;
-    // For overview use current month; for dre tab use user-selected period
-    const start = activeTab === "overview" ? firstOfMonthIso() : dreStart;
-    const end = activeTab === "overview" ? todayIso() : dreEnd;
-    const key = `${start}|${end}`;
+    if (activeTab !== "dre") return;
+    const key = `${dreStart}|${dreEnd}`;
     if (prevDreKey.current === key) return;
     prevDreKey.current = key;
     setLoadingDre(true);
     api
-      .get<DRE>(`/financial/dre?period_start=${start}&period_end=${end}`)
+      .get<DRE>(`/financial/dre?period_start=${dreStart}&period_end=${dreEnd}`)
       .then((r) => setDre(r.data))
       .catch(() => {})
       .finally(() => setLoadingDre(false));
   }, [activeTab, dreStart, dreEnd]);
 
-  // ── Fetch Balancete ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (activeTab !== "balancete") return;
-    const key = `${balanceteStart}|${balanceteEnd}`;
-    if (prevBalanceteKey.current === key) return;
-    prevBalanceteKey.current = key;
-    setLoadingBalancete(true);
-    api
-      .get<Balancete>(`/financial/balancete?period_start=${balanceteStart}&period_end=${balanceteEnd}`)
-      .then((r) => setBalancete(r.data))
-      .catch(() => {})
-      .finally(() => setLoadingBalancete(false));
-  }, [activeTab, balanceteStart, balanceteEnd]);
-
   // ── Computed ─────────────────────────────────────────────────────────────────
-  const kpiIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-  const kpiExpense = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
-  const kpiResult = kpiIncome - kpiExpense;
-  const chartData = buildWeeklyChart(transactions);
-
-  const forecastPct = dre
-    ? dre.previous_period.revenue_total > 0
-      ? Math.min(100, Math.round((dre.revenue.total / dre.previous_period.revenue_total) * 100))
-      : 100
-    : null;
-
   const filteredTx = transactions.filter((t) => {
     if (txType && t.type !== txType) return false;
     if (txCatId && t.category_id !== txCatId) return false;
@@ -603,7 +524,7 @@ export default function FinanceiroPage() {
   // ── Tab button style ─────────────────────────────────────────────────────────
   const tabBtn = (active: boolean) =>
     cn(
-      "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none",
+      "relative px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50",
       active
         ? "text-navy dark:text-white after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:bg-navy"
         : "text-stone hover:text-ink dark:hover:text-white"
@@ -667,78 +588,38 @@ export default function FinanceiroPage() {
           <Tabs.Tab value="balancete" className={tabBtn(activeTab === "balancete")}>
             Balancete
           </Tabs.Tab>
+          {!isPastor && (
+            <Tabs.Tab value="conciliacao" className={tabBtn(activeTab === "conciliacao")}>
+              Conciliação
+            </Tabs.Tab>
+          )}
+          {!isPastor && (
+            <Tabs.Tab value="carne-dizimista" className={tabBtn(activeTab === "carne-dizimista")}>
+              Carnê do dizimista
+            </Tabs.Tab>
+          )}
+          {canManageCategories && (
+            <Tabs.Tab value="doacoes-publicas" className={tabBtn(activeTab === "doacoes-publicas")}>
+              Doações públicas
+            </Tabs.Tab>
+          )}
+          {showPremiumTabs && (
+            <Tabs.Tab value="pix" className={tabBtn(activeTab === "pix")}>
+              PIX
+            </Tabs.Tab>
+          )}
+          {showPremiumTabs && (
+            <Tabs.Tab value="recibos" className={tabBtn(activeTab === "recibos")}>
+              Recibos
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         {/* ── Visão Geral ────────────────────────────────────────────────────── */}
         <Tabs.Panel value="overview" className="pt-5">
           <div className="space-y-5">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <KpiCard label="Receitas" value={kpiIncome} loading={loadingTx} variant="positive" />
-              <KpiCard label="Despesas" value={kpiExpense} loading={loadingTx} variant="negative" />
-              <KpiCard label="Resultado" value={kpiResult} loading={loadingTx} variant={kpiResult >= 0 ? "positive" : "negative"} />
-            </div>
-
-            <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-              <p className="mb-4 text-sm font-medium text-ink dark:text-white">Lançamentos por semana</p>
-              {loadingTx ? (
-                <Skeleton className="h-48 w-full" />
-              ) : chartData.length === 0 ? (
-                <p className="py-10 text-center text-sm text-stone">Sem lançamentos no período.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={chartData} barGap={4}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
-                    <XAxis dataKey="week" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`}
-                    />
-                    <Tooltip
-                      formatter={(value) => [fmt(Number(value))]}
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "1px solid var(--border-default)",
-                        background: "var(--surface-card)",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar dataKey="Entradas" fill="#00b8a2" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Saídas" fill="#c0392b" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] p-4">
-              <p className="text-sm font-medium text-ink dark:text-white">Receitas vs período anterior</p>
-              {loadingDre || forecastPct === null ? (
-                <Skeleton className="mt-3 h-2.5 w-full rounded-full" />
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-stone">
-                    {dre && dre.previous_period.revenue_total > 0
-                      ? `${forecastPct}% do período anterior (${fmt(dre.previous_period.revenue_total)})`
-                      : "Sem dados do período anterior para comparar"}
-                  </p>
-                  <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-                    <div
-                      className="h-full rounded-full bg-teal transition-all duration-500"
-                      style={{ width: `${forecastPct}%` }}
-                    />
-                  </div>
-                  {dre && (
-                    <div className="mt-2 flex items-center justify-between text-xs text-stone">
-                      <span>{fmt(dre.revenue.total)} este mês</span>
-                      <span className={forecastPct >= 100 ? "text-teal font-medium" : ""}>
-                        {forecastPct >= 100 ? "✓ Superou o período anterior" : `faltam ${100 - forecastPct}% para igualar`}
-                      </span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <WeeklyDashboardCard />
+            <ForecastCard />
           </div>
         </Tabs.Panel>
 
@@ -865,12 +746,12 @@ export default function FinanceiroPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Descrição</th>
-                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Tipo</th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">Valor</th>
-                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Frequência</th>
-                      <th className="py-2.5 pr-4 text-left text-xs font-medium uppercase tracking-wide text-stone">Próxima ocorrência</th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">Ações</th>
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium text-stone">Descrição</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium text-stone">Tipo</th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">Valor</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium text-stone">Frequência</th>
+                      <th className="py-2.5 pr-4 text-left text-xs font-medium text-stone">Próxima ocorrência</th>
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -994,18 +875,18 @@ export default function FinanceiroPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pl-4 text-left text-xs font-medium text-stone">
                         Conta
                       </th>
                       {!isPastor && (
-                        <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                        <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                           Total
                         </th>
                       )}
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Qtd
                       </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
+                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
                         Δ período ant.
                       </th>
                     </tr>
@@ -1013,7 +894,7 @@ export default function FinanceiroPage() {
                   <tbody>
                     {/* RECEITAS group */}
                     <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-2.5 pl-4 text-xs font-semibold uppercase tracking-wider text-stone">RECEITAS</td>
+                      <td className="py-2.5 pl-4 text-xs font-semibold text-stone">Receitas</td>
                       {!isPastor && (
                         <td className="py-2.5 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
                           {fmt(dre.revenue.total)}
@@ -1043,7 +924,7 @@ export default function FinanceiroPage() {
 
                     {/* DESPESAS group */}
                     <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-2.5 pl-4 text-xs font-semibold uppercase tracking-wider text-stone">DESPESAS</td>
+                      <td className="py-2.5 pl-4 text-xs font-semibold text-stone">Despesas</td>
                       {!isPastor && (
                         <td className="py-2.5 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
                           {fmt(dre.expenses.total)}
@@ -1073,7 +954,7 @@ export default function FinanceiroPage() {
 
                     {/* Resultado líquido */}
                     <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">RESULTADO LÍQUIDO</td>
+                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">Resultado líquido</td>
                       {!isPastor && (
                         <td className={cn("py-3 pr-4 text-right text-sm font-semibold tabular-nums", dre.net_result >= 0 ? "text-teal" : "text-crimson")}>
                           {fmt(dre.net_result)}
@@ -1091,99 +972,46 @@ export default function FinanceiroPage() {
 
         {/* ── Balancete ──────────────────────────────────────────────────────── */}
         <Tabs.Panel value="balancete" className="pt-5">
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
-                value={balanceteStart}
-                onChange={(e) => { setBalanceteStart(e.target.value); prevBalanceteKey.current = ""; }}
-                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-              />
-              <span className="text-xs text-stone">até</span>
-              <input
-                type="date"
-                value={balanceteEnd}
-                onChange={(e) => { setBalanceteEnd(e.target.value); prevBalanceteKey.current = ""; }}
-                className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-              />
-            </div>
-
-            {loadingBalancete ? (
-              <div className="space-y-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
-                ))}
-              </div>
-            ) : !balancete ? (
-              <p className="py-10 text-center text-sm text-stone">
-                Selecione um período para ver o balancete.
-              </p>
-            ) : (
-              <div className="overflow-hidden rounded-[12px] border border-[var(--border-default)]">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium uppercase tracking-wide text-stone">
-                        Centro de custo
-                      </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
-                        Receitas
-                      </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
-                        Despesas
-                      </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
-                        Resultado
-                      </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium uppercase tracking-wide text-stone">
-                        Qtd
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {balancete.lines.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-6 pl-4 text-xs text-stone">Sem lançamentos no período</td>
-                      </tr>
-                    ) : (
-                      balancete.lines.map((line) => (
-                        <tr
-                          key={line.cost_center_id ?? "__none__"}
-                          className="border-t border-[var(--border-default)] hover:bg-[var(--surface-subtle)] transition-colors"
-                        >
-                          <td className="py-2.5 pl-4 text-sm text-ink dark:text-white">{line.cost_center_name}</td>
-                          <td className="py-2.5 pr-4 text-right text-sm tabular-nums text-ink dark:text-white">
-                            {fmt(line.revenue_total)}
-                          </td>
-                          <td className="py-2.5 pr-4 text-right text-sm tabular-nums text-ink dark:text-white">
-                            {fmt(line.expenses_total)}
-                          </td>
-                          <td className={cn("py-2.5 pr-4 text-right text-sm tabular-nums font-medium", line.net_result >= 0 ? "text-teal" : "text-crimson")}>
-                            {fmt(line.net_result)}
-                          </td>
-                          <td className="py-2.5 pr-4 text-right text-xs text-stone">{line.count}</td>
-                        </tr>
-                      ))
-                    )}
-                    <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">TOTAL</td>
-                      <td className="py-3 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
-                        {fmt(balancete.revenue_total)}
-                      </td>
-                      <td className="py-3 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
-                        {fmt(balancete.expenses_total)}
-                      </td>
-                      <td className={cn("py-3 pr-4 text-right text-sm font-semibold tabular-nums", balancete.net_result >= 0 ? "text-teal" : "text-crimson")}>
-                        {fmt(balancete.net_result)}
-                      </td>
-                      <td className="py-3 pr-4 text-right text-xs text-stone">—</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <BalancetePanel />
         </Tabs.Panel>
+
+        {/* ── Conciliação ────────────────────────────────────────────────────── */}
+        {!isPastor && (
+          <Tabs.Panel value="conciliacao" className="pt-5">
+            <BankReconciliationPanel />
+          </Tabs.Panel>
+        )}
+
+        {/* ── Carnê do dizimista ─────────────────────────────────────────────── */}
+        {!isPastor && (
+          <Tabs.Panel value="carne-dizimista" className="pt-5">
+            <DonationBookletPanel />
+          </Tabs.Panel>
+        )}
+
+        {/* ── Doações públicas (todos os planos) ─────────────────────────────── */}
+        {canManageCategories && (
+          <Tabs.Panel value="doacoes-publicas" className="pt-5">
+            <PublicIntentsPanel onSettled={refreshTx} />
+          </Tabs.Panel>
+        )}
+
+        {/* ── PIX (Premium) ──────────────────────────────────────────────────── */}
+        {showPremiumTabs && (
+          <Tabs.Panel value="pix" className="pt-5">
+            <div className="space-y-6">
+              <PixSubscriptionsPanel />
+              <DynamicPixPanel />
+            </div>
+          </Tabs.Panel>
+        )}
+
+        {/* ── Recibos (Premium) ──────────────────────────────────────────────── */}
+        {showPremiumTabs && (
+          <Tabs.Panel value="recibos" className="pt-5">
+            <DonationReceiptsPanel />
+          </Tabs.Panel>
+        )}
       </Tabs.Root>
 
       <NewTransactionModal

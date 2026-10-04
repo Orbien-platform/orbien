@@ -62,7 +62,7 @@ Mesma lógica de peso do web (contraste 300/500 é a ferramenta expressiva), com
 | `h3` | 500 | 16px | 22px | Subtítulo, título de list item |
 | `body` | 300 | 15px | 22px | Texto corrido |
 | `body-medium` | 400 | 14px | 20px | Formulário, descrição |
-| `label` | 500 | 11px | 14px | Label de campo, categoria (caps, +10% tracking) |
+| `label` | 500 | 12px | 16px | Label de campo, categoria, rótulo de seção — sem caixa alta, sem tracking (ver §3.3 do guia de marca) |
 | `caption` | 400 | 11px | 14px | Timestamp, meta info |
 | `mono` | 400 | 13px | 18px | Valores monetários, IDs |
 | `button` | 500 | 15px | — | Sempre 500, nunca 600 (idêntico ao web) |

@@ -17,7 +17,7 @@ import { HomeQuickActions, type QuickAction } from "../../components/HomeQuickAc
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { useAuth } from "../../lib/auth/auth-provider";
-import { getPosts } from "../../lib/content/content-client";
+import { getHighlights, getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
 import { formatDateTime, getGreeting } from "../../lib/format/date";
 import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
@@ -39,8 +39,8 @@ const MAX_HOME_GROUPS = 2;
 // HOME-03: mesmo limite já pedido à API — evita truncar client-side algo
 // que o backend já poderia ter paginado menor.
 const MAX_HOME_POSTS = 3;
-// MHR-05: hero mostra os últimos 5 conteúdos publicados (design.md,
-// HeroSlider).
+// MHR-05: sem destaque escolhido no web, o hero cai nos últimos 5
+// publicados (design.md, HeroSlider).
 const MAX_HERO_POSTS = 5;
 
 export default function HomeScreen() {
@@ -54,6 +54,9 @@ export default function HomeScreen() {
   // MAX_HERO_POSTS (5) já cobre MAX_HOME_POSTS (3): uma chamada só, "Avisos
   // recentes" recorta os 3 primeiros do mesmo resultado.
   const [posts, setPosts] = useState<Post[] | null>(null);
+  // Destaques escolhidos no web (aba "Destaques no app"), já na ordem. Vazio
+  // é "ninguém escolheu", e o hero usa `posts`.
+  const [highlights, setHighlights] = useState<Post[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,11 +75,26 @@ export default function HomeScreen() {
       })
       .catch(() => undefined);
 
+    getHighlights()
+      .then((result) => {
+        if (cancelled) return;
+        setHighlights(result);
+      })
+      // Falhou: segue como "ninguém escolheu", e o hero usa os últimos
+      // publicados em vez de sumir.
+      .catch(() => {
+        if (!cancelled) setHighlights([]);
+      });
+
     return () => {
       cancelled = true;
     };
   }, []);
   const greeting = getGreeting(new Date());
+  // Enquanto os destaques não chegam, não desenha o fallback: ele trocaria de
+  // conteúdo debaixo do dedo de quem já começou a deslizar.
+  const heroPosts =
+    highlights === null ? [] : highlights.length > 0 ? highlights : (posts ?? []);
 
   const webUrl = Constants.expoConfig?.extra?.webUrl as string | undefined;
 
@@ -89,7 +107,7 @@ export default function HomeScreen() {
     },
     {
       key: "contribuicao",
-      label: "Contribuição",
+      label: "Contribua",
       icon: HandHeart,
       disabled: !tenantSlug,
       onPress: () => {
@@ -99,12 +117,6 @@ export default function HomeScreen() {
           // mesmo padrão de Linking.openURL em grupo/encontro/[id].tsx.
         });
       },
-    },
-    {
-      key: "conteudo",
-      label: "Ver todos os conteúdos",
-      icon: Newspaper,
-      onPress: () => router.push("/conteudo"),
     },
     ...(areas === null || areas.includes("volunteers")
       ? [
@@ -134,8 +146,8 @@ export default function HomeScreen() {
         {greeting}
       </Text>
 
-      {posts && posts.length > 0 ? (
-        <HeroSlider posts={posts} onPressPost={(id) => router.push(`/post/${id}`)} />
+      {heroPosts.length > 0 ? (
+        <HeroSlider posts={heroPosts} onPressPost={(id) => router.push(`/post/${id}`)} />
       ) : null}
 
       <HomeQuickActions items={quickActions} />

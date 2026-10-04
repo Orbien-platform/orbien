@@ -22,7 +22,7 @@ describe('NotificationPreferencesService', () => {
 
       const result = await service.get('user-1');
 
-      expect(result).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true });
+      expect(result).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
       expect(client.notificationPreference.upsert).not.toHaveBeenCalled();
     });
 
@@ -37,12 +37,13 @@ describe('NotificationPreferencesService', () => {
         oracao: false,
         eventos: true,
         devocional: true,
+        biblia: true,
       });
       const service = serviceWith(client);
 
       const result = await service.get('user-1');
 
-      expect(result).toEqual({ avisos: true, oracao: false, eventos: true, devocional: true });
+      expect(result).toEqual({ avisos: true, oracao: false, eventos: true, devocional: true, biblia: true });
     });
 
     it('consulta pelo user_account_id recebido', async () => {
@@ -70,6 +71,7 @@ describe('NotificationPreferencesService', () => {
         oracao: false,
         eventos: true,
         devocional: true,
+        biblia: true,
       });
       const service = serviceWith(client);
 
@@ -85,6 +87,7 @@ describe('NotificationPreferencesService', () => {
           oracao: false,
           eventos: true,
           devocional: true,
+          biblia: true,
         },
         update: { oracao: false },
       });
@@ -101,6 +104,7 @@ describe('NotificationPreferencesService', () => {
         oracao: true,
         eventos: true,
         devocional: true,
+        biblia: true,
       });
       const service = serviceWith(client);
 
@@ -109,7 +113,7 @@ describe('NotificationPreferencesService', () => {
       expect(client.notificationPreference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ update: { avisos: false } }),
       );
-      expect(result).toEqual({ avisos: false, oracao: true, eventos: true, devocional: true });
+      expect(result).toEqual({ avisos: false, oracao: true, eventos: true, devocional: true, biblia: true });
     });
   });
 });

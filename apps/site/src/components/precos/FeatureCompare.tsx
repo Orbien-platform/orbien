@@ -81,7 +81,7 @@ function Cell({ value, variant, mobileLabel }: { value: CellValue; variant: "sta
     >
       {/* Mobile prefix */}
       <span
-        className="md:hidden font-mono text-[10px] uppercase tracking-[.1em] mr-1 shrink-0"
+        className="md:hidden text-xs font-medium mr-1 shrink-0"
         style={{ color: isPremium ? "var(--navy-accent)" : "var(--muted)" }}
       >
         {mobileLabel} ·{" "}
@@ -90,7 +90,7 @@ function Cell({ value, variant, mobileLabel }: { value: CellValue; variant: "sta
       {value.type === "check" && <CheckIcon />}
       {value.type === "dash" && <span style={{ color: "var(--muted)" }}>—</span>}
       {value.type === "qual" && (
-        <span className="font-mono text-[12px] tracking-[.02em]" style={{ color: "var(--stone)" }}>
+        <span className="text-[13px]" style={{ color: "var(--stone)" }}>
           {value.text}
         </span>
       )}
@@ -131,13 +131,13 @@ export function FeatureCompare() {
                   className="px-5 md:px-7 py-4 grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr]"
                   style={{ background: "var(--subtle)" }}
                 >
-                  <div className="font-mono text-[11px] uppercase tracking-[.14em] font-medium" style={{ color: "var(--stone)" }}>
+                  <div className="text-sm font-medium" style={{ color: "var(--stone)" }}>
                     {group.heading}
                   </div>
-                  <div className="hidden md:block font-mono text-[11px] uppercase tracking-[.14em] font-medium" style={{ color: "var(--stone)" }}>
+                  <div className="hidden md:block text-sm font-medium" style={{ color: "var(--stone)" }}>
                     Starter
                   </div>
-                  <div className="hidden md:block font-mono text-[11px] uppercase tracking-[.14em] font-medium" style={{ color: "var(--navy-accent)" }}>
+                  <div className="hidden md:block text-sm font-medium" style={{ color: "var(--navy-accent)" }}>
                     Premium
                   </div>
                 </div>

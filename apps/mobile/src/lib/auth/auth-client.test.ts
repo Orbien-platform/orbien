@@ -21,7 +21,7 @@ jest.mock("../api/client", () => ({
 }));
 
 import { HttpError } from "../api/errors";
-import { login, logout, getSession } from "./auth-client";
+import { forgotPassword, login, logout, getSession } from "./auth-client";
 
 // Mesmo helper de jwt.test.ts — o token aqui não é decodificado por
 // AuthClient.login, só guardado como string, mas encoder um payload
@@ -148,6 +148,26 @@ describe("AuthClient", () => {
       await expect(logout()).resolves.toBeUndefined();
 
       expect(mockDeleteItemAsync).toHaveBeenCalledWith("orbien.session");
+    });
+  });
+
+  describe("forgotPassword", () => {
+    it("chama POST /auth/forgot-password com o e-mail informado, sem tocar em SecureStore", async () => {
+      mockPost.mockResolvedValue(undefined);
+
+      await forgotPassword("a@b.com");
+
+      expect(mockPost).toHaveBeenCalledWith("/auth/forgot-password", {
+        body: { email: "a@b.com" },
+      });
+      expect(mockSetItemAsync).not.toHaveBeenCalled();
+      expect(mockDeleteItemAsync).not.toHaveBeenCalled();
+    });
+
+    it("propaga erro de rede/API para quem chamou decidir o que mostrar", async () => {
+      mockPost.mockRejectedValue(new Error("Erro de rede"));
+
+      await expect(forgotPassword("a@b.com")).rejects.toThrow("Erro de rede");
     });
   });
 });

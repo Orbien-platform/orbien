@@ -91,7 +91,15 @@ function serviceWith(prismaOverrides: Record<string, unknown>, mail = mailMock()
   const prisma = {
     tenant: { findUnique: jest.fn() },
     userAccount: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
-    refreshToken: { findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
+    refreshToken: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      // Default "ganhou a corrida" — os testes de rotação bem-sucedida não
+      // mockam isto explicitamente; o que testa o caminho de perda é
+      // `AuthService.refresh` mais abaixo, sobrescrevendo por chamada.
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn(),
+    },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     system: {
       tenant: { findUnique: jest.fn() },
@@ -401,9 +409,53 @@ describe('AuthService.refresh', () => {
     const result = await service.refresh({ refresh_token: 'rt' });
 
     expect(result).toEqual({ access_token: 'signed-token', refresh_token: expect.any(String), expires_in: 900 });
+    // A reivindicação é condicional (`revoked_at: null` no WHERE) — é o que
+    // decide, sob corrida, quem rotaciona de verdade. Ver o teste de "perdeu
+    // a corrida" logo abaixo.
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { id: 'rtk-1', revoked_at: null },
+      data: { revoked_at: expect.any(Date) },
+    });
     expect(prisma.refreshToken.update).toHaveBeenCalledWith({
       where: { id: 'rtk-1' },
-      data: { revoked_at: expect.any(Date), replaced_by_id: 'rtk-2' },
+      data: { replaced_by_id: 'rtk-2' },
+    });
+  });
+
+  it('perdeu a corrida da reivindicação: trata como reuso, revoga a família e não cria token novo', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rtk-1',
+      user_account_id: 'u1',
+      revoked_at: null,
+      expires_at: new Date('2999-01-01'),
+      userAccount: {
+        id: 'u1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        is_active: true,
+        roleAssignments: [{ role_code: 'tenant_admin', congregation_id: 'c1' }],
+        tenant: { tenantPlan: { plan: 'premium' }, is_active: true },
+      },
+    });
+    // A leitura lá em cima ainda viu `revoked_at: null`, mas outra chamada —
+    // duas abas, ou o mobile e o web ao mesmo tempo — já reivindicou este
+    // token entre a leitura e a tentativa de rotação. `count: 0` é essa
+    // corrida perdida.
+    (prisma.refreshToken.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 });
+
+    await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+
+    // A família cai inteira, como em qualquer reuso — inclusive o token que
+    // "ganhou" em algum outro lugar concorrente: o cliente reage do mesmo
+    // jeito (login de novo) nos dois lados.
+    expect(prisma.refreshToken.updateMany).toHaveBeenLastCalledWith({
+      where: { user_account_id: 'u1', revoked_at: null },
+      data: { revoked_at: expect.any(Date) },
     });
   });
 
@@ -762,7 +814,90 @@ describe('AuthService.forgotPassword', () => {
       data: { used_at: expect.any(Date) },
     });
     expect(prisma.system.passwordResetToken.create).toHaveBeenCalled();
-    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.stringContaining('/redefinir-senha?token='), 'Ana');
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.stringContaining('/redefinir-senha?token='), 'Ana', expect.objectContaining({ kind: expect.any(String) }));
+  });
+
+  it('pedido do web/app sai com a marca da igreja do tenant da conta', async () => {
+    const { service, prisma, mail } = serviceWith({});
+    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      is_active: true,
+      person: { full_name: 'Ana Silva' },
+      tenant: {
+        name: 'Igreja Teste 1',
+        brandingConfig: { primary_color: '#7A1F2B', secondary_color: null, logo_url: null },
+      },
+    });
+
+    await service.forgotPassword({ email: 'a@b.com' });
+
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.any(String),
+      'Ana',
+      expect.objectContaining({ kind: 'tenant', name: 'Igreja Teste 1', primaryColor: '#7A1F2B' }),
+    );
+  });
+
+  describe('platformForgotPassword (console)', () => {
+    const ORIGINAL_ADMIN_URL = process.env['ADMIN_URL'];
+
+    afterEach(() => {
+      if (ORIGINAL_ADMIN_URL === undefined) delete process.env['ADMIN_URL'];
+      else process.env['ADMIN_URL'] = ORIGINAL_ADMIN_URL;
+    });
+
+    const platformAccount = (role_code: string) => ({
+      id: 'u1',
+      email: 'a@b.com',
+      is_active: true,
+      person: { full_name: 'Ana Silva' },
+      tenant: { name: 'Igreja Teste 1', brandingConfig: null },
+      roleAssignments: [{ role_code }],
+    });
+
+    it('conta com platform_support recebe o e-mail com a marca da Orbien e o link do admin', async () => {
+      process.env['ADMIN_URL'] = 'https://admin.useorbien.com';
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(platformAccount('platform_support'));
+
+      const result = await service.platformForgotPassword({ email: 'a@b.com' });
+
+      expect(result.message).toMatch(/Se o email estiver cadastrado/);
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringMatching(/^https:\/\/admin\.useorbien\.com\/redefinir-senha\?token=/),
+        'Ana',
+        expect.objectContaining({ kind: 'platform', name: 'Orbien' }),
+      );
+    });
+
+    it('conta sem platform_support recebe a mesma resposta genérica e nenhum e-mail', async () => {
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(platformAccount('tenant_admin'));
+
+      const result = await service.platformForgotPassword({ email: 'a@b.com' });
+
+      expect(result.message).toMatch(/Se o email estiver cadastrado/);
+      expect(prisma.system.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(mail.sendPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('cai no admin local (3003) quando ADMIN_URL não está definida', async () => {
+      delete process.env['ADMIN_URL'];
+      const { service, prisma, mail } = serviceWith({});
+      (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue(platformAccount('platform_support'));
+
+      await service.platformForgotPassword({ email: 'a@b.com' });
+
+      expect(mail.sendPasswordReset).toHaveBeenCalledWith(
+        'a@b.com',
+        expect.stringMatching(/^http:\/\/localhost:3003\/redefinir-senha\?token=/),
+        'Ana',
+        expect.anything(),
+      );
+    });
   });
 
   describe('FRONTEND_URL no link de redefinição', () => {
@@ -792,6 +927,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringContaining('https://web.useorbien.com/redefinir-senha?token='),
         'Ana',
+        expect.anything(),
       );
     });
 
@@ -811,6 +947,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringContaining('http://localhost:3001/redefinir-senha?token='),
         'Ana',
+        expect.anything(),
       );
     });
   });
@@ -826,7 +963,7 @@ describe('AuthService.forgotPassword', () => {
 
     await service.forgotPassword({ email: 'a@b.com' });
 
-    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.any(String), '');
+    expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.any(String), '', expect.anything());
   });
 
   it('usa FRONTEND_URL do ambiente quando definida, em vez do default de localhost', async () => {
@@ -847,6 +984,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringMatching(/^https:\/\/app\.orbien\.com\.br\/redefinir-senha\?token=/),
         '',
+        expect.anything(),
       );
     } finally {
       if (original === undefined) delete process.env['FRONTEND_URL'];
@@ -872,6 +1010,7 @@ describe('AuthService.forgotPassword', () => {
         'a@b.com',
         expect.stringMatching(/^http:\/\/localhost:3001\/redefinir-senha\?token=/),
         '',
+        expect.anything(),
       );
     } finally {
       if (original === undefined) delete process.env['FRONTEND_URL'];

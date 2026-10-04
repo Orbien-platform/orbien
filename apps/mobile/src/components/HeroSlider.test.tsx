@@ -66,3 +66,50 @@ describe("HeroSlider", () => {
     expect(onPressPost).toHaveBeenCalledWith("post-2");
   });
 });
+
+describe("HeroSlider — imagem", () => {
+  it("post com imagem mostra a foto; sem imagem (ou com PDF) fica só o título", async () => {
+    const posts = [
+      makePost({ id: "com-foto", media_url: "https://cdn/x/banner.jpg" }),
+      makePost({ id: "com-pdf", media_url: "https://cdn/x/boletim.pdf" }),
+      makePost({ id: "sem-midia" }),
+    ];
+    await act(async () => {
+      render(<HeroSlider posts={posts} onPressPost={jest.fn()} />);
+    });
+
+    expect(screen.getByTestId("hero-slide-image-com-foto")).toBeTruthy();
+    expect(screen.queryByTestId("hero-slide-image-com-pdf")).toBeNull();
+    expect(screen.queryByTestId("hero-slide-image-sem-midia")).toBeNull();
+    expect(screen.getAllByText("Título do post")).toHaveLength(3);
+  });
+
+  it("deslizar até o segundo slide acende o segundo ponto; medida zerada não mexe no ponto", async () => {
+    await render(
+      <HeroSlider
+        posts={[makePost({ id: "post-1" }), makePost({ id: "post-2" })]}
+        onPressPost={jest.fn()}
+      />,
+    );
+    const list = screen.getByTestId("hero-slider").children[0] as Parameters<typeof fireEvent>[0];
+    const dots = () =>
+      screen.getByTestId("hero-slider-dots").children.map(
+        (dot) => (dot as unknown as { props: { style: unknown } }).props.style,
+      );
+    const before = JSON.stringify(dots());
+
+    await act(async () => {
+      fireEvent(list, "momentumScrollEnd", {
+        nativeEvent: { contentOffset: { x: 300 }, layoutMeasurement: { width: 0 } },
+      });
+    });
+    expect(JSON.stringify(dots())).toBe(before);
+
+    await act(async () => {
+      fireEvent(list, "momentumScrollEnd", {
+        nativeEvent: { contentOffset: { x: 300 }, layoutMeasurement: { width: 300 } },
+      });
+    });
+    expect(JSON.stringify(dots())).not.toBe(before);
+  });
+});

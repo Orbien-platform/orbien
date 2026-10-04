@@ -77,6 +77,11 @@ evento), no `apps/mobile`. Com o `PROD-25`,
 `POST .../registrations/me` deixa de ser rota sem consumidor e o QR do PIX
 que o `PROD-24` devolve passa a ter onde aparecer.
 
+Em **2026-09-30** o `PROD-25` ganhou a metade do `apps/web`: o membro se
+inscreve, vê o estado e cancela pelo `PostDetailSheet` de `/conteudo` — nota
+"Também no `apps/web`" na seção 6. Sem mudança de backend; o `PEND-07` segue
+aberto.
+
 Em **2026-09-19** fechou `PROD-23` (tela da liderança para os pedidos de
 visita, `apps/web`) — nota na seção 6 — e nasceu já decidida a `DEC-06`
 (seção 9), que fixa os tenants de teste e o que pode rodar contra produção.
@@ -114,6 +119,105 @@ mesmo motivo do `PROD-25`. `PEND-08` nasceu na mesma rodada, sobre um alerta
 de `pre-push.sh` que não reconhecia arquivo dedicado — fechada no mesmo dia,
 ver `PENDENCIAS.md`.
 
+Em **2026-09-24** fechou `PROD-26` (recuperação de senha por e-mail no app
+mobile) — nota completa na seção 5.
+
+Em **2026-09-25** fechou a lacuna que o próprio `PROD-19` (2026-09-13) tinha
+declarado em aberto — "apontar o domínio de fato... é passo de infra que
+este PR não faz". Domínio próprio virou provisionamento de verdade, dois
+caminhos:
+
+- **Manual** — `GET /settings/branding/domain` devolve o registro DNS
+  (CNAME para `cname.vercel-dns.com`, com a alternativa A para domínio raiz)
+  e `POST .../verify` confere contra a API da Vercel.
+- **Cloudflare, por OAuth** — sem colar API token: `GET
+  .../cloudflare/authorize-url` manda o tenant para
+  `dash.cloudflare.com/oauth2/auth`, ele aprova, `GET
+  .../cloudflare/callback` (rota pública, autenticada só pelo `state`
+  assinado — `SignedState`, HMAC-SHA256) troca o código por
+  access/refresh token, cifrados em repouso (`SecretCipher`, AES-256-GCM) e
+  usados para achar a zona certa (tentando o hostname inteiro e cortando um
+  rótulo por vez, sem lista de sufixo público) e criar o CNAME com
+  `proxied: false` — com o proxy laranja ligado a Vercel não emite
+  certificado.
+
+Módulo novo, `apps/api/src/domain-provisioning/`, no mesmo padrão de módulo
+próprio do `PixModule`. `BrandingConfig` ganhou `custom_domain_status`
+(`pending`/`verified`/`failed`) e os campos da conexão Cloudflare —
+migration comum, sem RLS novo: a tabela já tinha `tenant_isolation` (001) e
+`orbien_app_auth ... USING (true)` (017) para o login, e é essa segunda
+policy — a mesma que já deixava `resolveTenant(slug)` do `PixService` ler
+`branding_configs` sem contexto — que também cobre a leitura pública por
+`custom_domain` em `resolveTenantSlugByHost`, sem policy adicional.
+
+**O roteamento por host, que não existia em lugar nenhum, entrou junto.**
+`apps/web/src/middleware.ts` é novo: fora dos hosts conhecidos
+(`NEXT_PUBLIC_WEB_HOST`, `localhost`, `*.vercel.app`), chama `GET
+/public/domains/resolve?host=` e reescreve para a rota `[tenant_slug]`
+existente — só `/` → `/doar/{slug}` e `/celulas` → `/celulas/{slug}`,
+decisão de escopo declarada (são as duas páginas públicas que hoje existem;
+qualquer outro caminho cai no 404 normal). `resolveTenantSlugByHost` só
+resolve domínio `custom_domain_status = 'verified'` — um `pending` não serve
+tenant nenhum, para não expor conteúdo antes do dono confirmar o domínio.
+
+**Decisão que ficou de fora, registrada, não esquecida**: o app OAuth em
+`dash.cloudflare.com/oauth2` precisa ser cadastrado manualmente pela
+operação (gera `CLOUDFLARE_OAUTH_CLIENT_ID`/`_SECRET`) — nenhuma sessão de
+código cadastra isso sozinha, é o mesmo tipo de passo de infra que
+`VERCEL_API_TOKEN`/`VERCEL_WEB_PROJECT_ID` já eram. Os nomes exatos dos
+escopos OAuth (`CLOUDFLARE_OAUTH_SCOPES`) também dependem do catálogo atual
+da Cloudflare no momento do cadastro — configurável por env de propósito,
+não hardcoded.
+
+Em **2026-09-26**, auditoria pedida contra a promessa de `/precos` ("Financeiro
+e contabilidade") achou que os quatro recursos já existiam no backend,
+corretamente gateados por plano (`PlanGuard`/`@RequiresPlan('premium')`), mas
+três não tinham tela no `apps/web` — forecast (`PROD-07`/`ForecastService`
+sem consumidor), exportação OFX/SPED (`PROD-07`, exportação em si já
+entregue, sem botão) e carnê do dizimista (`PROD-08`, "só backend" desde
+2026-09-20). Fechado nesta rodada, feature `financeiro-ui-premium`
+(`.specs/features/financeiro-ui-premium/`): `WeeklyDashboardCard` (dashboard
+semanal migrado para `GET /financial/dashboard/weekly`, endpoint dedicado,
+substituindo o cálculo duplicado que a Visão Geral fazia a partir de
+`/financial/transactions`), `ForecastCard`, botões OFX/SPED no
+`ExportButton` (SPED via `pollExportJob`, job assíncrono), aba nova
+"Conciliação" (`BankReconciliationPanel`, import de OFX) e aba nova "Carnê
+do dizimista" (`DonationBookletPanel`). Achado à parte, corrigido no mesmo
+lote: teste intermitente pré-existente em `CostCentersModal.test.tsx`
+("dismisses the delete confirmation on escape"), sem relação com esta
+feature. Geração em lote do carnê continua fora do escopo (mesma decisão do
+`PROD-08` original).
+
+Ainda em **2026-09-26**, a mesma auditoria contra `/precos` chegou em
+"Pequenos grupos" e "Doações e PIX". Os dois recursos de pequenos grupos
+(cadastro/materiais nos dois planos, semáforo de saúde só Premium) já
+batiam com o código. Em "Doações e PIX", achou uma lacuna real: **"PIX
+recorrente (dízimo automático)"** era promessa ativa na tabela do site e em
+três documentos de produto (`adrs-architecture-decisions.md`,
+`church-platform-documentos-legais.md`, `produto-gestao-igrejas-mvp.md`),
+mas não tinha nenhum código, e não estava registrada nesta lista. Fechou
+`PROD-27` (nota completa na seção 6) — assinatura PIX Automático via Asaas,
+`@RequiresPlan('premium')` como o resto do módulo Premium de `financial`.
+
+Em **2026-09-30**, feature `feat/web-financeiro-premium-pix-recibos`: as
+telas Premium do módulo financeiro que a API já tinha e o `apps/web` não
+mostrava entraram em `(admin)/financeiro` — abas **PIX** (assinaturas
+recorrentes, `PROD-27`, e QR dinâmico do tesoureiro, Cenário 2), **Recibos**
+(`PROD-03`) e o **Balancete** por centro de custo (`PROD-02`) extraído para
+componente próprio. Detalhe e a decisão sobre a tela do doador em `PROD-27`
+(seção 6).
+
+Em **2026-09-28**, limpeza pré-go-live de tenants (nota completa em `DEC-06`,
+seção 9): `teste1-church` passou a nascer no plano Starter e `teste2-church`
+no Premium, os dois com dado em todos os módulos — servem agora também de
+demonstração comercial, não só de teste. Consequência: os tenants de teste
+deixam de ser intercambiáveis para specs Premium-only (`financeiro.spec.ts`,
+o módulo de Celebrações), então o e2e (`e2e`/`e2e-prod` em
+`.github/workflows/ci.yml`) passou a apontar para `teste2-church` por
+padrão. Também nesta rodada: `scripts/remover-tenants-nao-permitidos.sh`,
+para apagar por inteiro tenant de teste antigo fora da lista permitida
+(`docs/AMBIENTES.md` §8).
+
 ---
 
 ## 1. Visão do produto
@@ -144,7 +248,7 @@ foi retomado — cinco no total.
 | Módulo 3 — Pequenos Grupos | Entregue — cadastro, hierarquia, reuniões, presença, biblioteca de materiais agendados, indicador de abertura, histórico de versões de materiais, pedidos de oração da célula |
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
-| Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan` (sem tela) |
+| Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan`, com tela no console |
 | Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
 | App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
@@ -288,6 +392,44 @@ granularidade de channel quando existir build própria por tenant
 por profile já cobre o que existe; channel por tenant é pergunta em aberto,
 ver `DEC-05`.
 
+### ~~PROD-26 · Recuperação de senha por e-mail no app mobile~~ · fechado
+
+Entregue em 2026-09-24, no `apps/mobile`. **Nada de backend nesta
+entrega**: `POST /auth/forgot-password` e `POST /auth/reset-password` já
+existiam prontos (migration `20260614001415_add_password_reset_tokens`,
+antiga) e já serviam `apps/web` (`/esqueci-senha`, `/redefinir-senha`) —
+só faltava o consumo pelo app.
+
+- `src/app/esqueci-senha.tsx`: tela nova, fora de `(tabs)` (mesmo padrão de
+  `login.tsx`, sem header próprio), pede o e-mail e chama
+  `forgotPassword` (`lib/auth/auth-client.ts`, função nova). Mesmo
+  princípio de não vazar informação do login (AC 2, MOB-01): mostra a
+  mesma mensagem de sucesso tenha o e-mail conta ou não, e mesmo se a
+  chamada rejeitar por erro de rede — não há como distinguir os dois casos
+  sem abrir a brecha que o backend já fecha.
+- `src/app/login.tsx` ganhou o link "Esqueci minha senha" (`AppLink`,
+  componente já existente, reaproveitado — não criei nada novo ali).
+- **Redefinição continua na página web.** O e-mail que `forgotPassword`
+  do backend envia aponta para `${FRONTEND_URL}/redefinir-senha?token=…`
+  — decisão de não mexer nisso agora: abrir um deep link nativo
+  (`orbien://redefinir-senha`) exigiria mudança de backend (config de
+  scheme, ou um campo de "origem" no `ForgotPasswordDto` para decidir a
+  URL do e-mail) e navegação nativa própria para o formulário de nova
+  senha, escopo maior que "dar acesso ao fluxo que já existe". Hoje o
+  usuário troca a senha no navegador (o link abre fora do app) e volta a
+  entrar pelo app com a senha nova — funciona, só não é a UX ideal de um
+  app nativo. Registrado aqui como próximo passo, não como pendência: não
+  há nada quebrado, é decisão de escopo.
+- `src/app/_layout.tsx`: rota nova entra no mesmo `Stack.Protected
+  guard={!isAuthenticated}` do login — sem isso ficaria fora de qualquer
+  guarda e alcançável por deep link mesmo autenticado (é o que
+  `protected-routes.test.ts` existe para pegar; o teste "só o login fica
+  fora da guarda" virou "só login e esqueci-senha").
+- Testes: `esqueci-senha.test.tsx` novo (sucesso, mesma mensagem com
+  chamada rejeitando, navegação de volta), `auth-client.test.ts` ganhou
+  `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
+  mock de `expo-router` (a tela passou a navegar).
+
 ---
 
 ## 6. Plano de produto sem código
@@ -318,6 +460,9 @@ completo em 2026-09-12**, as três tabelas que a lista tinha:
 > (lançamento avulso e edição); lançamentos parcelados/fixos não o suportam
 > ainda porque `create-recurring-rule.dto.ts` não tem o campo — decisão de
 > escopo, não esquecimento.
+> **Balancete em componente próprio (2026-09-30):** a aba já existia inline em
+> `financeiro/page.tsx`, engolindo erro (403 virava "Selecione um período").
+> Virou `BalancetePanel`, com 403 → `NoAccessState` e erro de carga explícito.
 >
 > `PROD-03` (`donation_receipts`) **fechou em 2026-09-12**. Recibo é gerado a
 > partir de `PixService.handleWebhook` — quando a Asaas confirma um PIX com
@@ -337,6 +482,11 @@ completo em 2026-09-12**, as três tabelas que a lista tinha:
 > regressão introduzida aqui). O recibo não é documento fiscal — o schema não
 > modela CNPJ/razão social da igreja, então o PDF traz doador, valor, data e
 > igreja pelo nome, sem se apresentar como nota fiscal.
+>
+> **Tela dos recibos (2026-09-30):** aba "Recibos" no `(admin)/financeiro`
+> (`DonationReceiptsPanel`, Premium): lista paginada e download por link
+> assinado pedido a cada clique (`.../:id/download`), aberto em nova aba —
+> o link vale 1h e nunca fica guardado na tela.
 
 Cada uma é uma decisão de duas pontas: **construir** a funcionalidade ou
 **derrubar** a tabela. Manter tabela morta no schema é o que faz a próxima
@@ -377,7 +527,16 @@ transação de negócio, best-effort (mesmo princípio do `AuditInterceptor`,
 ver `AD-004` em `.specs/STATE.md`) — uma falha ao auditar não desfaz a
 transferência já confirmada.
 
-Sem tela ainda no `apps/admin` — só a rota da API. Ver
+Tela no `apps/admin` em `/contas` (`app/(platform)/contas/page.tsx` +
+`components/accounts/TransferAccountModal.tsx`): formulário → modal de
+confirmação que lista as consequências (sessões derrubadas, papéis do tenant
+de origem apagados, rastro em `audit_logs`) → PATCH, com a mensagem da API
+nos erros 400/404. **Lacuna que a tela expõe:** a API de plataforma não tem
+busca/listagem de contas nem de congregações — só `GET /platform/tenants`.
+Por isso o ID da conta e o ID da congregação de destino são digitados; só o
+tenant de destino é escolhido de uma lista. Uma rota de busca de contas e
+outra de congregações por tenant (ambas `@PlatformRoute()`) tirariam o
+operador do banco; não foram criadas aqui. Ver
 `.specs/features/login-email-global/design.md` para o desenho completo;
 testes em `apps/api/src/platform/transfer-user-account.service.spec.ts`,
 `apps/api/src/platform/platform.controller.spec.ts` e RLS em
@@ -581,6 +740,9 @@ organizador em evento pago (com a nota de que só o inscrito paga), e
 A tela de member (provavelmente `apps/mobile`, que é onde o membro consome
 conteúdo) é trabalho novo, não coberto aqui.
 
+*Atualização:* o mobile fechou no `PROD-25`; o web ganhou o equivalente
+depois — ver a nota "Também no `apps/web`" do `PROD-25`.
+
 Testes: `event-registrations.service.spec.ts` (reserva/hold/24h, recusa de
 organizador em evento pago, desfazer reserva em falha da Asaas),
 `pix.service.spec.ts` (`createForEventRegistration`, webhook com
@@ -593,6 +755,93 @@ só coluna em tabela existente (`event_registrations`), a policy de
 roda sem alteração (a suíte inteira fecha hoje em 125 testes — a contagem
 citada aqui na redação original, 118, era a de antes do `networks.spec.ts`
 que o `PROD-20` trouxe no mesmo dia).
+
+### ~~PROD-27 · PIX recorrente — dízimo automático via Asaas (Premium)~~ · fechado (backend + painel do tesoureiro)
+
+Entregue em 2026-09-26. Achado pela auditoria da mesma data contra `/precos`
+("Doações e PIX"): a linha existia na tabela do site e em três documentos de
+produto como âncora comercial do Premium, mas `PixService` só tinha os
+cenários 1/2/3 — nenhuma assinatura, nenhuma integração com `/subscriptions`
+da Asaas.
+
+`PixSubscription` é tabela nova (`pix_subscriptions`) — a assinatura em si,
+não cada cobrança gerada por ela. Isso porque a Asaas gera um `payment` novo
+sozinha a cada ciclo (`cycle: MONTHLY`) e dispara o mesmo webhook que os
+cenários 2/3 já usam; diferente deles, não há como pré-criar o `PixPayment`
+de uma cobrança futura (não se sabe o `asaas_payment_id` antes de existir).
+Por isso `PixScenario` ganhou `recurring`, e `handleWebhook` ganhou um
+fallback: quando `asaas_payment_id` não bate com nenhum `PixPayment`
+existente, olha `payload.payment.subscription` contra `pix_subscriptions` e
+materializa a linha ali, na hora — dali em diante é o mesmo caminho de
+sempre (`pending → confirmed` por `updateMany` condicional, idempotente à
+reentrega). `pix_payments.asaas_payment_id` ganhou `@unique` para essa
+criação reativa não duplicar sob entrega concorrente (a `create` reativa
+trata a violação como "outra entrega já criou", e recarrega em vez de
+falhar o webhook).
+
+- `POST /financial/pix/subscriptions` (criar), `GET .../subscriptions`
+  (listar), `PATCH .../subscriptions/:id/cancel` — mesmo trio de guardas do
+  resto do Premium em `financial` (`JwtAuthGuard, RolesGuard, PlanGuard` +
+  `@RequiresPlan('premium')`), mesmos papéis de `createDynamic`
+  (`admin_congregation`/`treasurer`/`tenant_admin`).
+- **Escopo é o da sessão** (`user.tenant_id` + `user.congregation_id`), não a
+  "primeira congregação do tenant" que `resolveTenantFromUser` usa para o
+  cenário 2 — decisão deliberada, porque aqui `listSubscriptions`/
+  `cancelSubscription` precisam achar depois a mesma linha que `create`
+  gravou, e a sessão de quem cria é o dado estável.
+- Cancelar chama `DELETE /subscriptions/:id` na Asaas antes de marcar
+  `status: cancelled` — cancelar sem confirmar na Asaas deixaria a igreja
+  achando que parou de cobrar e o doador continuando a ser cobrado. Cancelar
+  duas vezes é no-op (não rechama a Asaas).
+- **Sem tela de member self-service**, mesma decisão de escopo do `PROD-16`/
+  `PROD-24`: quem cria a assinatura hoje é o tesoureiro/admin em nome do
+  doador (`donor_person_id` já precisa existir como `Person`), não o próprio
+  doador. Tela do doador — `apps/web` ou `apps/mobile` — é trabalho novo,
+  não coberto aqui.
+- RLS em `023_rls_pix_subscriptions.sql`: `tenant_congregation_isolation`
+  (AD-001) — diferente de `pix_payments`, que é de `001_rls_setup.sql` e
+  ficou só no isolamento de tenant; tabela nova segue o padrão atual, não o
+  histórico da tabela irmã. `bootstrap-db.sh` ganhou o script no passo 3 (na
+  ordem, depois de 022) e a checagem nomeada no passo 7.
+
+Testes: `pix.service.spec.ts` (`createSubscription`/`listSubscriptions`/
+`cancelSubscription`, mais o bloco de webhook "PIX recorrente" — criação
+reativa a partir de `payment.subscription`, assinatura cancelada não gera
+lançamento, `subscription` desconhecida é ignorada como pagamento
+desconhecido, idempotência ao reenvio), `pix.controller.spec.ts` (papel e
+`@RequiresPlan('premium')` das três rotas novas). Migration
+`add_pix_subscriptions` (Prisma) + `023_rls_pix_subscriptions.sql` (fora do
+histórico do Prisma, como os demais) — geradas numa sessão em que
+`prisma migrate deploy` caiu no portão de aprovação do ambiente
+("Production Deploy"), e aplicadas com sucesso (`bootstrap-db.sh` completo,
+passo 7 verde) na sessão seguinte, via `npm run dev`/hook de start.
+
+**Tela do tesoureiro — entregue em 2026-09-30**, no `apps/web`
+(`(admin)/financeiro`, aba "PIX", só para `plan === 'premium'` e papéis
+`admin_congregation`/`treasurer`/`tenant_admin`). Nada de rota nova:
+`PixSubscriptionsPanel` usa `POST`/`GET`/`PATCH .../cancel` como estão. Criar
+exige doador já cadastrado (`DonorPicker`, busca em `GET /persons`). Cancelar
+abre diálogo de confirmação explícita, porque chama a Asaas e não reativa; se a
+Asaas falhar, o diálogo fica aberto e diz que a assinatura continua ativa.
+Única mudança na API: `listSubscriptions` passou a incluir
+`donorPerson.full_name` (antes a lista só tinha UUIDs) — sem migration, sem RLS.
+A aba "PIX" traz também o `DynamicPixPanel` (QR dinâmico do Cenário 2: QR,
+copia-e-cola, validade). A claim `plan` do token entrou em `SessionUser` só
+para esconder/mostrar as abas; quem nega é o `PlanGuard`, e os painéis tratam
+o 403.
+
+**Tela do doador (self-service) — decisão: não construída no web; é do
+`apps/mobile`.** Verificado: a API só deixa o tesoureiro criar/cancelar
+(`FINANCIAL_ROLES`), e `member` não tem rota de assinatura. Uma tela do doador
+exigiria rota `/me` nova em `financial/pix` (plano lido do banco, não do token;
+escopo pelo `person_id` do `UserAccount`, que é nulável) **e** uma área de
+membro no `apps/web`, que não existe — o web é só `(admin)` e `(public)`, e o
+mesmo raciocínio já levou `PROD-25` ao mobile, onde o membro consome conteúdo.
+Fazer a rota sem a tela deixaria rota sem consumidor, o que a auditoria de
+2026-09-26 tratou como lacuna. Fica como trabalho de produto para o mobile
+(rota `/me` + tela), a decidir junto com a política de quem pode criar
+cobrança recorrente em nome próprio (teto de valor, confirmação por e-mail);
+sem ID novo aqui, porque a decisão é registrar o porquê, não abrir item.
 
 ### Funcionalidade prevista, sem código
 
@@ -781,6 +1030,47 @@ produção** desde o MOB-08 pelo mesmo motivo, mostrando erro de carga no lugar
 do estado vazio. O client agora lê o corpo como texto e devolve `undefined`
 quando ele é vazio; 204 segue sem ler corpo nenhum.
 
+**Também no `apps/web`** — o `apps/web` não tinha nenhuma chamada a
+`.../registrations/me`, só o painel do organizador. Fechado na branch
+`feat/web-inscricao-de-membro-em-evento`, sobre a mesma API, **sem nenhuma
+mudança de backend**.
+
+*Decisão de encaixe.* A nota acima dizia que o web "não tem área de membro
+nenhuma" e que criar uma seria maior que a tela. O que muda a conta: o papel
+`member` **já lê a área `content`** (`PRODUCT_AREA_READ_ROLES.content` na
+API), então `canAccessRoute` já deixa `/conteudo` — e só ela — na barra
+lateral dele. A superfície existe; o que faltava era o post de evento, aberto
+no `PostDetailSheet`, oferecer a inscrição a quem não organiza. Não se criou
+grupo de rota, layout nem guard novos.
+
+- `EventRegistrationPanel` (`components/content/`) espelha o painel do
+  mobile: bate em `.../registrations/summary` e `.../registrations/me`
+  (GET/POST/DELETE) e **em nenhum momento** na raiz `GET .../registrations`,
+  que é do organizador e responde 403 para `member`. Mesmas regras de
+  estado: lotado e gratuito oferece "Entrar na fila de espera"; lotado e pago
+  não oferece botão (a API responde 400); prazo vencido esconde "Inscrever-se"
+  e mantém "Cancelar inscrição". Status como ícone + texto (inscrito, fila,
+  aguardando pagamento); `cancelled` não aparece porque o `GET` não o devolve.
+- O `PostDetailSheet` escolhe o painel por `canEdit` — o mesmo recorte de
+  `ORGANIZER_ROLES` do controller (`admin_congregation`, `pastor`,
+  `tenant_admin`): organizador vê a lista (`EventRegistrationsPanel`), o resto
+  vê a própria inscrição. O painel do membro só monta com
+  `registration_enabled`, como no mobile.
+- **Plano.** Não há `PlanGuard` em `registrations/me`: quem exige Premium é a
+  escrita do preço no post (`assertRegistrationPricePlan`). A tela não
+  replica o gate — evento pago só existe em tenant Premium, e um evento
+  gratuito segue Starter para o membro.
+- Evento pago: QR como `<img src="data:image/png;base64,…">` sobre fundo
+  branco fixo (QR no tema escuro não lê), copia-e-cola em `<code>` com
+  botão "Copiar código PIX" via `navigator.clipboard`, validade de 24h dita em
+  tela. Sem dependência nova.
+- **`PEND-07` continua valendo, igual ao mobile**: o QR só existe na resposta
+  do `POST`. Quem fecha o post antes de pagar perde o código, e a nota abaixo
+  do QR manda cancelar e se inscrever de novo. A API não foi tocada.
+- Testes ao lado do componente (`EventRegistrationPanel.test.tsx`) e dois
+  casos novos no `PostDetailSheet.test.tsx` (membro vê o painel próprio e não
+  pede a lista do organizador; sem inscrição ligada não faz chamada).
+
 **Achados de revisão corrigidos antes do PR** (`/code-review` + `pr-review`,
 dimensões B e C — A não se aplica, não há `apps/api/**` no diff): além do bug
 acima, o painel era montado só com `registration_enabled`, e desligar as
@@ -872,6 +1162,23 @@ em 43 suítes**, com a cobertura acima do piso do `jest.config.js`
 > do Cenário 3 Premium (ADR-007) segue sem tela, porque exige o fluxo
 > autenticado de `POST /financial/pix/dynamic`, que essa página pública não
 > usa.
+> *Atualização 2026-09-30:* o fluxo autenticado de `POST
+> /financial/pix/dynamic` ganhou tela para o **tesoureiro** (`DynamicPixPanel`,
+> aba "PIX" do financeiro). A página pública `/doar/[tenant_slug]` continua
+> só Starter: o QR dinâmico para doador anônimo ainda não tem rota pública.
+> *Atualização 2026-10-03:* a página pública ganhou o **Cenário 3 Premium**
+> (ADR-007). `POST /financial/pix/public-donation` lê o plano do tenant do slug
+> **no banco** (nunca do corpo): Premium `active`/`trial` recebe QR dinâmico +
+> copia-e-cola, com polling até "Doação recebida"; Starter segue na chave
+> estática, com o contrato anterior preservado (o mobile abre esta mesma
+> página). Se a Asaas falhar, faltar `ASAAS_API_KEY` ou a igreja passar de 60
+> cobranças pendentes na hora, cai para a chave estática com aviso. O lançamento
+> só nasce quando o webhook confirma. Valor entre R$ 5,00 e R$ 50.000,00 (limites
+> da Asaas por cobrança), limite de requisições por igreja + origem e 404
+> idêntico para slug inexistente ou sem chave. Cobrança abandonada é cancelada
+> na Asaas por um job diário (`PublicDonationExpiryScheduler`, 4h) — o status
+> já vira `expirado` por leitura, então a página não depende do job (`PEND-13`).
+> Ver `PEND-14` e `PEND-16`.
 
 > `PROD-09` (chat fechado por célula, Módulo 3, Starter) **fechou em
 > 2026-09-14**. Tabela nova `group_messages`
@@ -1140,12 +1447,26 @@ existia:
   com `eligible_count` informando o total elegível — evita payload grande
   em ministério com dezenas de voluntários; quem decide de fato escalar usa
   o `POST .../assignments` que já existia, então o teto não bloqueia nada.
-- **Sem tela no `apps/web`**: o padrão de UI de escala
-  (`AssignmentsPanel`/equivalente) já existe, mas encaixar "sugerir e um
-  clique aplica" nele é decisão de fluxo (lista simples? um botão por
-  função? aplica direto ou só preenche o formulário?) que vale ficar para
-  quem for desenhar a tela, não decidida aqui às pressas. Fica como API
-  pronta, mesmo padrão do `PROD-23`.
+- **Tela no `apps/web` (2026-09-30)**: `ScheduleSuggestions.tsx`, dentro do
+  `ScheduleSheet` (o painel de escala que já existia em Celebrações). Decisão
+  de fluxo: **um botão "Sugerir" por função**, ao lado de "Adicionar
+  voluntário" (abrir um fecha o outro). Ele abre uma lista curta, na ordem do
+  rodízio, com "N de `eligible_count` disponíveis", as vagas que faltam e, em
+  cada linha, o critério que a API devolve (`times_served` e
+  `last_served_at`: "Serviu 3 vezes · última em 02/08/2026" ou "Nunca serviu
+  nesta função") — a API não devolve um motivo textual, então o motivo é o
+  próprio dado do rodízio. **Um clique numa linha escala só aquela pessoa**,
+  pelo `POST .../assignments` que já existia; nada é aplicado em lote nem ao
+  abrir. Depois de aplicar, a escala e a lista de sugestões são recarregadas
+  (quem acabou de entrar sai da lista) e os avisos `overbooked`/
+  `unavailable_on_date` do POST aparecem como nos demais caminhos. Estados:
+  carregando, vazio (ninguém elegível, apontando para "Adicionar voluntário"),
+  erro com "Tentar de novo", e conflito — 409 ao aplicar avisa que a pessoa já
+  está na função e recarrega a lista. Quando `eligible_count` passa do teto de
+  10, a tela diz que mostra as primeiras e manda para "Adicionar voluntário"
+  para o resto (paginar a sugestão segue fora de escopo). Só `apps/web`, a rota
+  `GET .../schedule/suggest` foi usada como estava. Testes:
+  `ScheduleSuggestions.test.tsx` e um caso em `ScheduleSheet.test.tsx`.
 
 Testes: `celebration-schedule-suggestion.service.spec.ts` (instância
 inexistente, sem escala, sem ministério, já atribuído, sem disponibilidade
@@ -1268,8 +1589,9 @@ Fechado em 2026-09-13: os seis literais de `apps/admin/src/app/(platform)/tenant
 rótulo anterior para esse valor, porque ele nunca tinha renderizado direito.
 `page.test.tsx` ajustado para os literais corretos.
 
-O botão de cancelar/reativar no console e o teste que trava o mapa contra o
-enum (como `permissions.test.ts` faz no web) ficaram de fora — não é o mesmo
+O botão de cancelar/reativar no console passou a existir depois (modais
+`CancelTenantModal`/`ReactivateTenantModal` em `apps/admin`). O teste que trava
+o mapa contra o enum (como `permissions.test.ts` faz no web) ficaram de fora — não é o mesmo
 achado, é trabalho novo; abrir como pendência própria se for para frente.
 
 ### ~~PEND-03 · O front duplica as listas de papéis da API~~ · fechado
@@ -1478,7 +1800,227 @@ Fechar antes de abrir a feature para usuário de verdade — hoje ela ainda não
 está exposta a tráfego real, então não é um incidente em produção, é uma
 pendência conhecida de pré-lançamento.
 
+### ~~PEND-10 · Upload de mídia do web bloqueado por CORS em produção~~ · fechado
+
+Sintoma (2026-09-24): no cadastro de notícia, `POST /api/content/posts/:id/upload`
+direto para `orbien-api.onrender.com` falhava no navegador como erro de CORS; o
+`upload-ticket`, que passa pelo `/api-proxy`, respondia normalmente. O upload é
+a **única** chamada cross-origin do `web` (ver `useFileUpload.ts`), então era o
+único lugar onde uma `ALLOWED_ORIGINS` errada aparecia.
+
+Causa: a variável no painel do Render ainda com o domínio antigo
+`web.useorbien.com.br`. O `render.yaml` foi corrigido para `.com` em 2026-09-20
+(`0d04119`), mas o serviço `orbien-api` não é gerenciado por Blueprint — foi
+criado pelo dashboard (ver `DEPLOY.md`, seção 1.1) — então `value:` do arquivo
+nunca chega ao serviço sozinho; a variável do painel só muda por edição manual.
+
+**Fechado em 2026-09-24, por ação no painel do Render (fora do repo, sem
+commit associado):** `ALLOWED_ORIGINS` corrigida para `https://web.useorbien.com`
+em `orbien-api` → Environment, com redeploy em seguida. Confirmado pelo dev
+(não houve como esta sessão rodar o preflight abaixo — egress deste ambiente
+para `onrender.com` bloqueado por política da organização):
+
+```bash
+curl -si -X OPTIONS https://orbien-api.onrender.com/api/content/posts/x/upload \
+  -H 'Origin: https://web.useorbien.com' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization' | grep -i access-control-allow-origin
+```
+
+### ~~PEND-11 · Site ainda fora de duas regras novas do guia de marca~~ · fechado
+
+O §3.3 de `apps/site/design-reference/orbien-brand-guidelines.md` ganhou, em
+2026-09-25, três regras: rótulo sem caixa alta, mono só para dado, mínimo de
+11px. A de caixa alta entrou nos quatro fronts no mesmo PR; as outras duas, que
+no `apps/site` pedem decisão caso a caso, foram fechadas depois:
+
+- **Mono só para dado.** Cada `font-mono` foi lido no contexto. Virou DM Sans o
+  que é rótulo ou texto: selos de plano e de disponibilidade, "Mais escolhido",
+  "Exportar", "Ver todos →", "Esta semana", "+ Novo grupo", dias da semana,
+  linhas de meta do rodapé, do contato e do Sobre, legendas dos fluxos PIX.
+  Ficou em DM Mono o que é dado: preços, valores, deltas, horários, contagens,
+  e-mail e URL, numeração de passos.
+- **Mínimo de 11px.** Os textos abaixo disso fora das miniaturas subiram para
+  11px (selos de `precos/TierTable`, legendas de `PixFlow`, `EstagioAtual`,
+  `ConteudosCapabilities`, `TiposConteudo`, `MemberLifecycle`, `PGCapabilities`
+  e também `FuncionalizadesHub`, `PixCenarios`, `FinanceiroCapabilities`,
+  `UpgradePath`). Conferido em 390px e 1440px: sem overflow horizontal. A
+  miniatura de tela segue a 8–10px, dispensada pelo guia.
+- **Acessibilidade.** As miniaturas dos seis heros (home, Sem CNPJ, Conteúdos,
+  Membros, Pequenos Grupos, Financeiro) agora levam `aria-hidden="true"`.
+
+Os painéis de tela fora do hero (`AlcanceSection`, `PresencaPanel`,
+`RelatorioSemanal` e `LiderMobile`) receberam o mesmo `aria-hidden="true"`.
+
+### ~~PEND-12 · A Escala do mobile mostra o culto um dia antes~~ · fechado
+
+`scheduled_date` é data sem hora, gravada como meia-noite UTC. `escala.tsx`
+passava o valor cru para `DateBlock` e `formatDateTime`, que leem em hora
+local — em Brasília, o culto de domingo aparecia como "sáb, 26 set · 21:00".
+
+Fechado com `localWhen` (`apps/mobile/src/lib/format/date.ts`), o mesmo da
+tela Celebrações: o dia volta a ser só o dia e ganha o horário da celebração.
+Para isso `GET /volunteers/my-celebration-assignments` passou a trazer
+`celebration.start_time`. O `CelebrationDetailSheet` do web não tinha o
+problema — já formata com `formatCivilDate`.
+
+### PEND-13 · Os outros `@Cron` da API não rodam com o serviço dormindo · dívida
+
+A API está no plano free do Render, que dorme após 15 min sem tráfego, e
+`@nestjs/schedule` só dispara com o processo acordado. A geração de
+instâncias de celebração foi contornada rodando também na subida do processo
+(`CelebrationSchedulerService.onApplicationBootstrap`). Os demais seguem
+expostos a perder execução em silêncio: expurgos de retenção
+(`persons-retention.scheduler.ts`, 3h–6h UTC — obrigação da seção 5 do
+`CONF-02`), lembrete de anfitrião às 8h UTC, recorrências financeiras à
+meia-noite, alerta de ausência de célula, publicação agendada de conteúdo.
+Saídas: plano pago no Render (processo sempre ativo) ou gatilho externo
+(Render Cron Job / GitHub Actions) chamando rotas internas — esta exige
+credencial de serviço guardada no agendador, decisão que ainda não foi tomada.
+
+**Mitigado em 2026-09-25:** um monitor do UptimeRobot bate em `/api/health` a
+cada 5 minutos e mantém o serviço acordado, então os `@Cron` voltam a rodar no
+horário. Detalhes e limites (cota de 750 h do free tier, execução perdida em
+reinício ou deploy) em `DEPLOY.md`, seção 1.6. Segue como dívida até a API ir
+para plano pago ou ganhar gatilho externo.
+
+### ~~PEND-14 · A doação pública guarda a intenção, mas o tesoureiro não a vê~~ · fechado
+
+Nasceu em 2026-09-25, junto com a correção de `POST
+/financial/pix/public-donation` e `POST /financial/pix` (a página
+`/doar/[tenant_slug]`, que o botão de Contribuição do mobile abre). As duas
+respondiam "Categoria de receita não encontrada" para **toda** igreja: rota
+pública não tem JWT, o `TenantContextInterceptor` não fixa contexto, e
+`financial_categories` fica invisível. O `PixService` agora fixa
+`app.tenant_id`/`app.congregation_id` a partir do slug resolvido no servidor
+(mesmo padrão de `public-small-groups.service.ts`), sem script de RLS novo, e
+`test/integration/public-routes.spec.ts` cobre as duas rotas contra o banco.
+
+Na mesma correção a doação pública **deixou de criar lançamento** em
+`financial_transactions`. Só grava a intenção em `pix_payments`
+(`scenario = public`, `pending`). DRE e dashboard somam lançamentos sem olhar
+`status`, e a chave é paga fora da API, sem confirmação. Com o lançamento,
+qualquer visitante inflaria a receita da igreja sem pagar nada. A referência
+que o doador vê (`PIX-` + 8 dígitos) são os primeiros dígitos do id do
+`pix_payments`.
+
+O que fica em aberto:
+
+- `donor_name`/`donor_email` são pedidos pelo formulário, mas não são
+  gravados: `pix_payments` não tem coluna para eles. Antes só entravam na
+  descrição do lançamento, que nunca chegou a ser gravado em produção.
+- Não há tela que liste os `pix_payments` pendentes para o tesoureiro casar
+  com o extrato (a conciliação de `PROD-07` casa extrato com lançamento, não
+  com intenção de PIX).
+
+As duas coisas são o mesmo trabalho: uma migration com os dados do doador em
+`pix_payments` e uma tela de intenções pendentes que vire lançamento ao ser
+confirmada.
+
+> **Fechado em 2026-10-03** (spec `.specs/features/doacao-publica-premium-qr-dinamico/`).
+> As duas pontas que o texto acima deixou em aberto:
+>
+> - **`donor_name`/`donor_email` gravados.** Migration
+>   `20261003191848_doacao_publica_dados_do_doador`: `pix_payments.donor_name`,
+>   `donor_email`, `donor_consent_version` e `donor_consented_at`. E-mail só com
+>   o aceite de `donor_consent_v1` (texto versionado em
+>   `legal/consent-terms/`, **rascunho aguardando a revisão jurídica de
+>   `CONF-01`**); sem aceite, 400 no DTO e no service. IP e user-agent **não** são
+>   guardados (minimização) e nada vira `Person` — o e-mail digitado é declaração
+>   sem verificação, e vincular por ele atribuiria a doação (e o recibo, e o
+>   carnê de IR de `PROD-08`) ao membro errado. Retenção: a linha é dado
+>   financeiro/de doação e **fica** (decisão do dono do produto); não há job que
+>   apague `donor_*` de intenção abandonada.
+> - **Tela do tesoureiro.** Aba "Doações públicas" no financeiro
+>   (`PublicIntentsPanel`), em **todos os planos** — o Starter é quem mais
+>   precisa. `GET /financial/pix/public-intents` lista; `POST
+>   /financial/pix/public-intents/:id/settle` dá a baixa da chave estática:
+>   confirma por `updateMany` condicional, cria 1 lançamento `manual`, audita
+>   (`pix.settled_manually`) e, se Premium e o doador declarou e-mail com aceite,
+>   emite o recibo. QR dinâmico responde 409: quem o confirma é o webhook.
+>
+> Fechou junto, no mesmo PR, o Cenário 3 **Premium** do ADR-007 — ver `PROD-04`
+> e `PEND-16`.
+
 ---
+
+### ~~PEND-16 · O webhook da Asaas não enxergava `pix_payments` sob RLS~~ · fechado
+
+Achado em 2026-10-03, ao desenhar a doação pública Premium. `POST
+/financial/pix/webhook` é rota pública: roda como `orbien_app`, sem
+`app.tenant_id`, e `pix_payments` (`FORCE ROW LEVEL SECURITY`, policy `TO
+app_user` por tenant + congregação) devolvia **zero linhas**. `handleWebhook`
+respondia 200 com `PixPayment não encontrado` e **nenhuma confirmação** — QR do
+tesoureiro (Cenário 2), inscrição paga (`PROD-24`) e PIX recorrente (`PROD-27`) —
+virava lançamento. Mesmo que a leitura passasse, o `INSERT` em
+`financial_transactions` e o recibo falhariam na RLS. Nenhum teste via isso:
+`pix.service.spec.ts` mocka o Prisma e nada em `test/` tocava o webhook (a mesma
+família de `8a623ac`, auditoria que "nunca gravou no banco").
+
+Evidência: sonda no banco local (transação com `ROLLBACK`) — sem contexto,
+`orbien_app` lê 0 linhas; com contexto, 1. E o teste novo
+`test/integration/pix-webhook.spec.ts` contra o código anterior: **6 de 10
+falham**; com a correção, passam. **Produção não foi verificada** — o que se
+sabe é o código e a RLS; vale conferir o log da Render por `PixPayment não
+encontrado` em confirmações reais.
+
+Fechado:
+
+- `024_rls_pix_webhook_scope.sql`: `pix_webhook_scope()` — `SECURITY DEFINER`,
+  `search_path` fixo, `EXECUTE` só para `orbien_app`, devolve **só**
+  `tenant_id` e `congregation_id` (nunca a linha). Mesmo padrão de
+  `audit_insert()`/`resolve_actor_name()`. Entra no `bootstrap-db.sh` e ganhou a
+  verificação do passo 7. Nenhuma policy foi tocada.
+- `PixService.handleWebhook` resolve o escopo pelo id da Asaas (nunca pelo
+  payload) e roda tudo numa transação com `app.tenant_id`/`app.congregation_id`
+  da linha. A cobrança recorrente nova usa `ON CONFLICT DO NOTHING` — um P2002
+  abortaria a transação. O recibo recebe o mesmo escopo.
+- Token do webhook comparado em tempo constante; o payload da Asaas (nome/CPF do
+  pagador) não vai mais para o log.
+
+---
+
+### ~~PEND-15 · Push de resposta na Bíblia sem opção de desligar~~ · fechado
+
+> Nasceu como um segundo `PEND-12`, ID que a escala do mobile já usava
+> (fechada, acima). Renumerado para `PEND-15`, o próximo livre; `PEND-12` fica
+> só com a escala, sem reciclagem.
+
+Responder a uma marcação do feed da Bíblia avisa o autor por push
+(`BibleMarkInteractionsService.createReply`, filtro pela tag `person_id`, o
+mesmo do aviso de escala), e as preferências de notificação tinham quatro
+categorias (`avisos`, `oracao`, `eventos`, `devocional`) sem nenhuma que
+cobrisse esse aviso. Curtida não gera push, de propósito — segue assim.
+
+Fechado com uma quinta categoria, `biblia` ("Respostas na Bíblia" na tela),
+no mesmo desenho das outras:
+
+- **Banco:** coluna `notification_preferences.biblia BOOLEAN NOT NULL DEFAULT
+  true` (migration `20260929120000_add_biblia_to_notification_preferences`).
+  Quem já tinha linha, ou não tem, continua recebendo — o comportamento atual
+  é o default. A policy de RLS não mudou (a tabela é a mesma), então
+  `008_rls_notification_preferences.sql` e o `bootstrap-db.sh` ficaram como
+  estavam.
+- **API:** `biblia` em `NOTIFICATION_CATEGORIES`, no DTO de atualização e no
+  default do serviço de preferências. `notifyAuthor` passou a mandar o filtro
+  `pref_biblia != false` junto do `person_id`. A categoria não entra em
+  `CATEGORY_BY_POST_TYPE`: não vem de tipo de post.
+- **Mobile:** o toggle "Respostas na Bíblia" em `notificacoes.tsx`, o campo em
+  `NotificationPreferenceValues` e a tag `pref_biblia` em
+  `syncNotificationPreferenceTags`, sincronizada a cada login e a cada toque.
+
+Atenção na virada: a tag `pref_biblia` só passa a existir no aparelho depois
+que o app novo sincroniza. Como o filtro é `!= false`, aparelho sem a tag
+continua recebendo — ninguém perde o aviso por causa do deploy, e quem
+desligar depois é respeitado.
+
+O feed (`biblia/feed.tsx`) também deixou de carregar uma vez só: recarrega a
+primeira página quando a tela volta ao foco (`useFocusEffect`), então
+responder ou curtir em `biblia/marcacao/[id]` e voltar mostra a contagem
+nova. A primeira carga mostra erro de tela; as seguintes são silenciosas e
+não trocam a lista que já está visível por uma tela de erro. Se a pessoa já
+tinha paginado, a primeira página nova entra por id e as mais antigas, com o
+cursor que ela tinha, ficam.
 
 ## 8. Ajustes — documento, rótulo e portão
 
@@ -1625,6 +2167,17 @@ Três consequências que já entraram:
   congregações, plano de contas de sistema e as contas indicadas, com a mesma
   senha). O segundo descobre as tabelas do catálogo, não de lista escrita à
   mão: são 66 tabelas com `tenant_id` hoje e a lista cresce a cada migration.
+
+**Ajuste em 2026-09-28**: `teste1-church` passou a nascer no plano Starter e
+`teste2-church` no Premium (`apps/api/prisma/seed.ts`), para que os dois
+sirvam também de demonstração comercial dos dois planos, não só de teste —
+os dois ganharam dado em todos os módulos por isso. Consequência direta: os
+dois tenants deixam de ser intercambiáveis para specs Premium-only, porque
+`DEC-01` não deu ramo de 403/`NoAccessState` a `financeiro.spec.ts` nem ao
+módulo de Celebrações. `E2E_EMAIL`/`E2E_TENANT` do job `e2e` e do `e2e-prod`
+(`.github/workflows/ci.yml`) passaram de `teste1-church` para `teste2-church`
+por isso — `teste1-church` continua disponível para quem precisar exercitar
+o comportamento Starter na mão. Detalhe em `docs/AMBIENTES.md` §3–§5.
 
 ### ~~DEC-01 · Gating por plano~~ · decidido e executado
 

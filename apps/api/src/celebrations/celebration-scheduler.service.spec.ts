@@ -324,4 +324,104 @@ describe('CelebrationSchedulerService', () => {
       expect(result).toEqual({ instances_checked: 0, sent: 0, errors: 0 });
     });
   });
+  describe('generateUpcomingFor', () => {
+    function withClient(celebration: unknown) {
+      const client = {
+        celebration: { findFirst: jest.fn().mockResolvedValue(celebration) },
+        celebrationInstance: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      };
+      const prisma = { system: systemWith(), client } as unknown as PrismaService;
+      const service = new CelebrationSchedulerService(prisma, {} as NotificationsService);
+      return { service, client };
+    }
+
+    it('gera a janela da celebração recém-criada pelo client do request, não pelo system', async () => {
+      const { service, client } = withClient({
+        id: 'c1',
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        day_of_week: 0,
+        recurrence: 'weekly',
+        is_active: true,
+        created_at: new Date('2026-09-01T09:00:00Z'),
+        instances: [],
+      });
+
+      const created = await service.generateUpcomingFor('t1', 'c1');
+
+      // today=2026-09-01 (terça): domingos 06 e 13.
+      expect(created).toBe(2);
+      expect(client.celebration.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'c1', tenant_id: 't1' } }),
+      );
+      expect(client.celebrationInstance.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ scheduled_date: new Date('2026-09-06T00:00:00.000Z') }),
+      });
+      expect(client.celebrationInstance.findFirst).toHaveBeenCalledWith({
+        where: {
+          celebration_id: 'c1',
+          scheduled_date: {
+            gte: new Date('2026-09-06T00:00:00.000Z'),
+            lt: new Date('2026-09-07T00:00:00.000Z'),
+          },
+        },
+      });
+    });
+
+    it('não gera nada para celebração avulsa ou inativa', async () => {
+      for (const celebration of [
+        { id: 'c1', recurrence: 'none', is_active: true, day_of_week: 0, instances: [] },
+        { id: 'c1', recurrence: 'weekly', is_active: false, day_of_week: 0, instances: [] },
+      ]) {
+        const { service, client } = withClient(celebration);
+        await expect(service.generateUpcomingFor('t1', 'c1')).resolves.toBe(0);
+        expect(client.celebrationInstance.create).not.toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('onApplicationBootstrap', () => {
+    const originalEnv = process.env['NODE_ENV'];
+    afterEach(() => {
+      process.env['NODE_ENV'] = originalEnv;
+    });
+
+    it('gera as instâncias na subida, sem esperar o cron', () => {
+      process.env['NODE_ENV'] = 'production';
+      const system = systemWith();
+      system.celebration.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(system);
+
+      service.onApplicationBootstrap();
+
+      expect(system.celebration.findMany).toHaveBeenCalled();
+    });
+
+    it('falha na subida vira log de erro, sem derrubar o boot', async () => {
+      process.env['NODE_ENV'] = 'production';
+      const system = systemWith();
+      system.celebration.findMany.mockRejectedValue(new Error('db indisponível'));
+      const { service } = serviceWith(system);
+      const errorSpy = jest
+        .spyOn((service as unknown as { logger: { error: (m: string) => void } }).logger, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => service.onApplicationBootstrap()).not.toThrow();
+      // A promessa roda solta; drena a fila de microtasks antes de conferir
+      // (a suíte usa fake timers, então nada de nextTick/setTimeout aqui).
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      expect(errorSpy).toHaveBeenCalledWith('Boot run failed: Error: db indisponível');
+    });
+
+    it('não roda em teste', () => {
+      process.env['NODE_ENV'] = 'test';
+      const system = systemWith();
+      const { service } = serviceWith(system);
+
+      service.onApplicationBootstrap();
+
+      expect(system.celebration.findMany).not.toHaveBeenCalled();
+    });
+  });
 });

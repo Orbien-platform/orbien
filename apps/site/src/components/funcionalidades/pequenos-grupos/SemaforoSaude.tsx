@@ -80,7 +80,7 @@ export function SemaforoSaude() {
                     style={{ background: dot, boxShadow: `0 0 0 4px ${dotShadow}` }}
                   />
                   <span
-                    className="font-mono text-[11px] font-medium px-2.5 py-1 rounded-pill"
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-pill"
                     style={{ background: labelBg, color: labelColor }}
                   >
                     {label}
@@ -98,7 +98,7 @@ export function SemaforoSaude() {
 
                 {/* Triggers */}
                 <div className="flex flex-col gap-2">
-                  <p className="font-mono text-[10px] uppercase tracking-[.1em] mb-1" style={{ color: "var(--muted)" }}>
+                  <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>
                     Critérios
                   </p>
                   {triggers.map((t) => (
