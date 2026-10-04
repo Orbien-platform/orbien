@@ -1669,7 +1669,7 @@ não-membro com token válido e não-duplicação) e `meetings.controller.spec.t
 (gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
 Nenhuma suíte existente mudou de comportamento.
 
-### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel começado, app não começado
+### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel e app começados
 
 Handoff de design em `docs/design/orbita-v2/README.md`: nova identidade
 noturna (fundo `#05070F`, teal `#00E5C7` da Orbien, `--brand` da igreja,
@@ -1689,8 +1689,15 @@ está.
   seções (`src/lib/navigation.ts`), identidade da igreja no menu e cor da
   igreja em `--brand` (`ChurchIdentityProvider`). Faltam as telas da v2 e o
   header completo.
-- **App (`apps/mobile`) — não começado.** Tokens, fontes (build nativa, não
-  OTA), navegação em cinco abas e as telas.
+- **App (`apps/mobile`) — começado (2026-10-04).** Tokens e fontes da
+  Órbita (escuro como padrão; Geist, Geist Mono e Instrument Serif — sai por
+  build nativa, não OTA), `STYLE-GUIDE.md` reescrito, navegação em cinco abas
+  (Início · Conteúdo · Bíblia · {termo} · Mais), aba Mais, cadastro de
+  visitante, presença já marcada, transição de entrada na cor da igreja e
+  selo "Destaque" no hero. Faltam, entre outros: Privacidade (depende do
+  `CONF-03`), QR de check-in e de autocadastro, Contribuir nativo (atrás do
+  `PROD-28`), blocos por papel no Início e o modo ao vivo da celebração —
+  lista em `PROJETO.md` §4.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
   painel, decisão de 2026-10-04: o pacote v2 não o desenha.

@@ -128,7 +128,7 @@ function ThemedShell() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           {/* Escala e Celebrações (MHR-03/04, redesenho da Home): saíram do
               menu inferior para rotas empilhadas, mesmo padrão de
-              `biblia/index`/`indisponibilidade` abaixo. */}
+              `indisponibilidade` abaixo. */}
           <Stack.Screen name="escala" options={{ title: "Escala" }} />
           <Stack.Screen name="celebracoes" options={{ title: "Celebrações" }} />
           <Stack.Screen name="biblia/[book]/[chapter]" options={{ title: "Bíblia" }} />

@@ -8,6 +8,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
   continua sendo a fonte única do que falta; este arquivo detalha o item.
 - **Atualizado em:** 2026-10-04.
 - **Branch da primeira entrega:** `feat/orbita-v2-tokens-e-menu`.
+- **Branch da primeira entrega do app:** `claude/optimistic-davinci-q37vdu`.
 
 ## Resumo
 
@@ -15,7 +16,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 |---|---|---|---|
 | Site (`apps/site`) | **Entregue** | As 8 páginas da v2 e as 5 de apoio (hub de funcionalidades, contato, LGPD, login e 404), só no tema escuro, com tokens, fontes, títulos, CTAs, órbita no hero e brilho do CTA final | Itens menores em [§2.3](#23-o-que-ficou-de-fora) |
 | Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em serifa, menu em seções, identidade da igreja no menu, caminho no topo e anéis no fundo | Todas as telas da v2 e o header completo — [§3.2](#32-o-que-falta) |
-| App (`apps/mobile`) | **Não começado** | — | Tokens, fontes, navegação em 5 abas e as telas — [§4](#4-app-apps-mobile) |
+| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante, presença já marcada, transição de entrada, login e destaque da v2 | Privacidade, QRs, Contribuir nativo, blocos por papel no Início e o resto das telas — [§4.2](#42-o-que-falta) |
 | Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em serifa, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
 
 ---
@@ -257,43 +258,83 @@ na tela "em breve" do site.
 
 ## 4. App (`apps/mobile`)
 
-Nada da Órbita foi aplicado ainda. O app segue a v1:
-- DM Sans e DM Mono por `@expo-google-fonts`;
-- tokens em `src/lib/theme/tokens.ts`, a partir do `STYLE-GUIDE.md`.
+### 4.1 O que foi feito (2026-10-04)
 
 **Tokens e base**
-- [ ] Trocar as primitivas de `src/lib/theme/tokens.ts` pelos valores da
-  Órbita e manter o tema da igreja em runtime. O teal fica fixo; `--brand` é
-  da igreja.
-- [ ] Fontes:
-  - instalar `@expo-google-fonts/geist`, `@expo-google-fonts/geist-mono` e
-    `@expo-google-fonts/instrument-serif` pela raiz, por peso, e conferir
-    antes se os pacotes existem nessas versões;
-  - fonte nova exige build nativa, não OTA.
-- [ ] Atualizar `apps/mobile/STYLE-GUIDE.md`, que hoje deriva do guia v1.
-- [ ] Estado **sem conexão**, além dos quatro estados obrigatórios.
+- [x] **Tokens da Órbita** em `src/lib/theme/tokens.ts`, com o tema da
+  igreja em runtime. Nome antigo, valor novo, como no web: fundo `#05070F`,
+  superfícies `#0B0F1D`/`#121729`, texto `#F2F1EE`/`#A9AEBD`/`#6C7286`,
+  bordas a 8% e 16%, amber e crimson funcionais. Escuro é o padrão; claro e
+  "seguir o sistema" ficam no Perfil.
+  - O teal é da Orbien e tem um tom por modo (`#00E5C7` no escuro, `#007F70`
+    no claro); `--brand` é da igreja.
+  - `brandInk` (`brand 45%` com branco, no escuro) para texto e ícone na cor
+    da igreja e `brandSoft` (`brand 28%` com o fundo) para o fundo suave —
+    `mixHex` em `color.ts` faz o `color-mix()` que o RN não tem. Todo texto
+    e ícone que usava a cor pura passou a `brandInk`.
+  - Forma: botão em pill, card 18px, modal 20px, campo 10px; elevação por
+    borda no escuro (sombra só no que flutua). Ícones com traço 1.6.
+- [x] **Fontes:** `@expo-google-fonts/geist`, `geist-mono` e
+  `instrument-serif`, importadas por peso; DM Sans e DM Mono saíram. Títulos
+  (`display`, `h1`, `h2`) em Instrument Serif; `label` em Geist Mono caixa
+  alta com tracking .14em. **Fonte nova exige build nativa, não OTA.**
+  Conferido no `expo export` de Android: as 8 fontes empacotadas.
+- [x] **`apps/mobile/STYLE-GUIDE.md`** reescrito para a Órbita (v0.2).
+- [x] **Estado sem conexão:** já existia — `describeLoadError` distingue
+  "sem resposta do servidor" e as telas desenham o ícone de wifi com
+  "Tentar novamente". O que a v2 pede a mais (a tela atualizar sozinha
+  quando a conexão volta) precisa de `@react-native-community/netinfo` e
+  ficou em §4.2.
 
-**Navegação.** As abas passam a ser **Início · Conteúdo · Bíblia · {termo} ·
-Mais**. Hoje são Home · Grupos · Conteúdo · Perfil, e a Bíblia não é aba.
+**Navegação**
+- [x] Abas **Início · Conteúdo · Bíblia · {termo} · Mais**. A Bíblia virou
+  aba (`(tabs)/biblia.tsx`, a rota continua `/biblia`) e o Perfil virou
+  pilha (`/perfil`), aberta pela Mais.
+- [x] **{termo}:** o `GET /settings` já devolve
+  `branding.group_term_singular`/`_plural`; o app lê por `useGroupTerm()`
+  na aba e no título da tela de grupos. Mesma fronteira do painel: frases
+  com artigo ficam em "grupo".
+- [x] **Header das pilhas** sobre o fundo da tela (como o `AppHeader` do
+  protótipo), voltar em `brandInk` — antes era uma barra na cor da marca.
 
-**Telas** (protótipo em `produto/proto/app-*.jsx`):
+**Telas**
 
-| Grupo | Tela | Hoje no app |
+| Grupo | Tela | Estado |
 |---|---|---|
-| Acesso | Login com transição que aplica cor e logo da igreja (sem biometria) | `login.tsx` |
-| Abas | Início: destaque em carrossel, blocos por papel, escalas, grupos, avisos | `(tabs)/index.tsx` |
-| Abas | Conteúdo e detalhe da publicação | `(tabs)/conteudo.tsx`, `post/[id].tsx` |
-| Abas | Bíblia | `biblia/*` |
-| Abas | {termo}: a célula | `(tabs)/grupos.tsx`, `grupo/*` |
-| Abas | Mais | novo |
-| Célula | Presença (líder): todos marcados como presentes, toque desmarca | `grupo/encontro/[id]/presenca.tsx` |
-| Célula | QR de check-in (líder) e leitura do QR (membro) | novo — a leitura pede câmera, ver `PROD-12` |
-| Serviço | Minhas escalas, pedir troca, indisponibilidade | `escala.tsx`, `indisponibilidade.tsx` |
-| Serviço | Celebração (OC, setlist, minha função; modo ao vivo do Host) | `celebracao/[id].tsx` (o modo ao vivo é `PROPOSTA`) |
-| Pessoal | Contribuir (PIX; Starter = chave, Premium = QR + recorrente) | `dizimo-automatico.tsx` (atrás de `PROD-28`) |
-| Pessoal | Notificações (central + preferências) | `notificacoes.tsx` |
-| Pessoal | Meu perfil e Privacidade (LGPD) | `(tabs)/perfil.tsx`; a LGPD depende de `CONF-03` |
-| Liderança | Cadastro de visitante (deduplicação por telefone) e QR de autocadastro | novo (`API`) |
+| Acesso | Login (sem escolher igreja, sem biometria) | [x] Título em serifa e "Sua conta já sabe qual é" |
+| Acesso | Transição que aplica cor e logo da igreja | [x] `ChurchWelcome`: só depois de um login, até o `GET /settings` resolver (900 ms a 3 s) |
+| Abas | Início: destaque | [x] Selo "Destaque" quando os posts foram escolhidos no painel; saudação em serifa |
+| Abas | Conteúdo, Bíblia, {termo} | [x] Título da aba em serifa; o resto herda os tokens |
+| Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Sair |
+| Célula | Presença (líder): todos marcados, toque desmarca | [x] Na primeira chamada do encontro; com presença já registrada, ninguém vem pré-marcado. Falha mantém as marcações |
+| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] `POST /persons` como visitante; mostra quem já tem o mesmo telefone. Só para os papéis que a rota aceita (`tenant_admin`, `admin_congregation`, `pastor`, `secretary`) |
+
+### 4.2 O que falta
+
+- [ ] **Início por papel:** encontro de hoje (líder), celebração do domingo
+  (líder de ministério), semáforo (pastor), minhas escalas com
+  confirmar/recusar e avisos de evento. Hoje o Início tem destaque, atalhos,
+  meus grupos e avisos.
+- [ ] **Privacidade (LGPD)** na Mais: depende das rotas do titular
+  (`CONF-03`). Saiu da Mais até elas existirem.
+- [ ] **QR de check-in** (líder) e **leitura do QR** (membro): pede lib de QR
+  e câmera (`PROD-12`).
+- [ ] **QR de autocadastro** (liderança): a rota `admin/visitor/qr` existe,
+  falta a lib de QR no app.
+- [ ] **Cadastro de visitante pelo líder de célula:** a v2 mostra a seção
+  Liderança para o líder; `POST /persons` não aceita `cell_leader`. Decisão
+  de produto antes de abrir a rota.
+- [ ] **Contribuir nativo** (Starter = chave PIX, Premium = QR + recorrente):
+  hoje a Mais abre a página de doação do web; o nativo está atrás do
+  `PROD-28`.
+- [ ] **Minhas escalas:** pedir troca e perfil de voluntário na mesma pilha.
+- [ ] **Celebração:** minha função em destaque já existe; o modo ao vivo do
+  Host é `PROPOSTA`.
+- [ ] **Notificações:** central + preferências em abas (segmentado).
+- [ ] **Sem conexão** que atualiza sozinho (`netinfo`).
+- [ ] **Transições** fade + translateY(3px), 180 ms, entre telas.
+- [ ] **Convite Premium** ("Disponível no plano Premium" + "Conhecer o
+  Premium") onde o app hoje esconde o recurso.
 
 ---
 
