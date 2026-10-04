@@ -28,6 +28,11 @@ function mockApiGet(overrides: { costCenters?: unknown[] } = {}) {
 }
 
 async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
+  // Espera a resposta de categorias virar opção do select — não só a chamada
+  // ao mock. Quem chama costuma ter feito `waitFor(api.get chamado)`, que
+  // libera antes do render seguinte; em runner lento o select ainda estava
+  // só com "— Selecione —" (falhou no CI do PR #154).
+  await screen.findByRole("option", { name: "Dízimos" });
   await user.selectOptions(screen.getAllByRole("combobox")[0], "c1");
   await user.type(screen.getByLabelText(/Valor/), "1000");
   await user.type(screen.getByLabelText(/Descrição/), "Dízimos do culto");
