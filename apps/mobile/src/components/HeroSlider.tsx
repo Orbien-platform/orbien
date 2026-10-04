@@ -28,18 +28,33 @@ import {
 import { isImageUrl } from "../lib/content/media";
 import type { Post } from "../lib/content/types";
 import { useTheme } from "../lib/theme/theme-provider";
-import { pagerDot, pressedImageOpacity, radius, scrim, spacing, typography } from "../lib/theme/tokens";
+import { Star } from "../lib/theme/icons";
+import {
+  fontFamily,
+  ICON_STROKE_WIDTH,
+  pagerDot,
+  pressedImageOpacity,
+  radius,
+  scrim,
+  spacing,
+  typography,
+} from "../lib/theme/tokens";
 import { useScreenPadding } from "./Screen";
 
 /** 16:9 — o formato de banner que a igreja já produz para telão e redes. */
 const ASPECT_RATIO = 16 / 9;
+const BADGE_ICON_SIZE = 12;
 
 interface HeroSliderProps {
   posts: Post[];
   onPressPost: (id: string) => void;
+  /** Os posts foram marcados como destaque no painel (v2): cada slide ganha
+   * o selo "Destaque". O fallback dos últimos publicados não ganha — não foi
+   * escolha de ninguém. */
+  featured?: boolean;
 }
 
-export function HeroSlider({ posts, onPressPost }: HeroSliderProps) {
+export function HeroSlider({ posts, onPressPost, featured = false }: HeroSliderProps) {
   const { colors, primaryColor, brandInk } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const padding = useScreenPadding();
@@ -86,7 +101,24 @@ export function HeroSlider({ posts, onPressPost }: HeroSliderProps) {
           />
         ) : null}
         <View style={[styles.caption, hasImage && { backgroundColor: scrim }]}>
-          <Text style={[typography.h3, { color: colors.textOnBrand }]} numberOfLines={2}>
+          {featured ? (
+            <View
+              testID={`hero-slide-destaque-${item.id}`}
+              style={[styles.badge, { backgroundColor: colors.textOnBrand }]}
+            >
+              <Star
+                size={BADGE_ICON_SIZE}
+                color={primaryColor}
+                strokeWidth={ICON_STROKE_WIDTH}
+              />
+              <Text
+                style={[typography.caption, styles.badgeText, { color: primaryColor }]}
+              >
+                Destaque
+              </Text>
+            </View>
+          ) : null}
+          <Text style={[typography.h2, { color: colors.textOnBrand }]} numberOfLines={2}>
             {item.title}
           </Text>
         </View>
@@ -136,6 +168,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginBottom: spacing.sm,
+  },
+  badgeText: { fontFamily: fontFamily.medium },
   dots: {
     flexDirection: "row",
     justifyContent: "center",

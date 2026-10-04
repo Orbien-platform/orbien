@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
+import { ChurchWelcome } from "../components/ChurchWelcome";
 import { AuthProvider, useAuth } from "../lib/auth/auth-provider";
 import { NotificationsProvider } from "../lib/notifications/notifications-provider";
 import { AnimatedSplash } from "../lib/splash/animated-splash";
@@ -60,6 +61,18 @@ function ThemedShell() {
   const isBooting = status === "loading" || !fontsReady;
   const [splashFinished, setSplashFinished] = useState(() => !isBooting);
   const finishSplash = useCallback(() => setSplashFinished(true), []);
+  // Transição de entrada da v2 (ChurchWelcome): só quando a sessão nasce de
+  // um login nesta execução — `unauthenticated` → `authenticated`. Quem abre
+  // o app já logado (`loading` → `authenticated`) vai direto, sem a tela.
+  // Estado derivado do status anterior em render, e não em efeito, para a
+  // tela já sair no mesmo frame em que as abas montam.
+  const [prevStatus, setPrevStatus] = useState(status);
+  const [welcoming, setWelcoming] = useState(false);
+  if (status !== prevStatus) {
+    setPrevStatus(status);
+    setWelcoming(prevStatus === "unauthenticated" && status === "authenticated");
+  }
+  const finishWelcome = useCallback(() => setWelcoming(false), []);
 
   // A splash nativa some quando a animada já está desenhada — daí o
   // `onLayout`, e não um efeito de mount: no layout o primeiro frame do JS
@@ -145,6 +158,7 @@ function ThemedShell() {
           <Stack.Screen name="esqueci-senha" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>
+      {welcoming ? <ChurchWelcome onFinish={finishWelcome} /> : null}
       {splashFinished ? null : (
         <AnimatedSplash onReady={hideNativeSplash} done={!isBooting} onFinish={finishSplash} />
       )}

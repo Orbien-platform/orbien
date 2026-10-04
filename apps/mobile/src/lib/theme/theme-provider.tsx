@@ -86,6 +86,10 @@ export interface ThemeValue extends ThemeBranding {
   /** Fundo suave da marca (chip ativo, selo, destaque). No escuro é
    * `color-mix(brand 28%, fundo)`; no claro, a marca a 12% sobre branco. */
   brandSoft: string;
+  /** `true` quando o `GET /settings` desta sessão já respondeu (com
+   * sucesso). É o que a transição de entrada espera para pintar a tela com
+   * a cor e o logo da igreja (ChurchWelcome). */
+  brandingResolved: boolean;
   /** Modo efetivamente ativo, já resolvido (`system` virou claro ou escuro). */
   scheme: ColorScheme;
   isDark: boolean;
@@ -117,6 +121,7 @@ const FALLBACK: ThemeValue = {
   accentReadable: brand.tealDark,
   brandInk: mixHex(DEFAULT_THEME.primaryColor, "#FFFFFF", 0.45),
   brandSoft: mixHex(DEFAULT_THEME.primaryColor, brand.night, 0.28),
+  brandingResolved: false,
   scheme: "dark",
   isDark: true,
   preference: "dark",
@@ -142,8 +147,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     token: null,
     layer: {},
   });
-  const runtimeLayer =
-    runtime.token && runtime.token === session?.accessToken ? runtime.layer : NO_LAYER;
+  const brandingResolved = Boolean(runtime.token && runtime.token === session?.accessToken);
+  const runtimeLayer = brandingResolved ? runtime.layer : NO_LAYER;
   const [preference, setPreferenceState] = useState<ThemePreference>("dark");
 
   useEffect(() => {
@@ -261,6 +266,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       brandSoft: isDark
         ? mixHex(branding.primaryColor, palette.bgBase, 0.28)
         : mixHex(branding.primaryColor, "#FFFFFF", 0.12),
+      brandingResolved,
       scheme,
       isDark,
       preference,
@@ -276,7 +282,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       },
       shadow: shadows(isDark),
     };
-  }, [session, cachedLayer, runtimeLayer, preference, systemScheme, setPreference]);
+  }, [
+    session,
+    cachedLayer,
+    runtimeLayer,
+    brandingResolved,
+    preference,
+    systemScheme,
+    setPreference,
+  ]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

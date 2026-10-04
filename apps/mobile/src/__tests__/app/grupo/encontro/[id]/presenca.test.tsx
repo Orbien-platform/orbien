@@ -46,11 +46,12 @@ describe("PresencaScreen", () => {
     expect(mockGetGroupRoster).toHaveBeenCalledWith("sg1");
     expect(screen.getByTestId("roster-p1-marcado")).toBeTruthy();
     expect(screen.queryByTestId("roster-p1-toggle")).toBeNull();
-    expect(screen.getByTestId("roster-p2-toggle")).toBeTruthy();
-    expect(screen.getByTestId("roster-p3-toggle")).toBeTruthy();
+    // A chamada já foi feita: quem ficou de fora não vem pré-marcado.
+    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Faltou");
+    expect(screen.getByTestId("roster-p3-toggle")).toHaveTextContent("Faltou");
   });
 
-  it("encontro sem nenhum AttendanceRecord mostra todo o roster não marcado, sem erro (edge case)", async () => {
+  it("encontro sem nenhum AttendanceRecord abre com todo o roster marcado como presente (v2)", async () => {
     mockGetMeeting.mockResolvedValue({
       id: "m1",
       small_group_id: "sg1",
@@ -64,12 +65,13 @@ describe("PresencaScreen", () => {
     });
 
     expect(screen.queryByTestId("presenca-error")).toBeNull();
-    expect(screen.getByTestId("roster-p1-toggle")).toBeTruthy();
-    expect(screen.getByTestId("roster-p2-toggle")).toBeTruthy();
-    expect(screen.getByTestId("roster-p3-toggle")).toBeTruthy();
+    expect(screen.getByTestId("roster-p1-toggle")).toHaveTextContent("Presente");
+    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Presente");
+    expect(screen.getByTestId("roster-p3-toggle")).toHaveTextContent("Presente");
+    expect(screen.getByText("Confirmar presença (3)")).toBeTruthy();
   });
 
-  it("selecionar membros e confirmar chama recordAttendance com os person_ids marcados e reflete sem reload manual (MOB-09-07)", async () => {
+  it("desmarcar quem faltou e confirmar envia só os presentes e reflete sem reload manual (MOB-09-07)", async () => {
     mockGetMeeting.mockResolvedValue({
       id: "m1",
       small_group_id: "sg1",
@@ -84,10 +86,7 @@ describe("PresencaScreen", () => {
     });
 
     await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
-    });
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p3-toggle"));
+      fireEvent.press(screen.getByTestId("roster-p1-toggle"));
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
@@ -113,15 +112,17 @@ describe("PresencaScreen", () => {
     });
 
     await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
+      fireEvent.press(screen.getByTestId("roster-p1-toggle"));
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
     });
 
     expect(screen.getByTestId("presenca-submit-error")).toBeTruthy();
-    // Seleção preservada: p2 continua "Selecionado", não some nem vira "Presente".
-    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Selecionado");
+    // Marcações preservadas: p1 continua desmarcado, p2 continua marcado e
+    // nenhum dos dois vira "já registrado".
+    expect(screen.getByTestId("roster-p1-toggle")).toHaveTextContent("Faltou");
+    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Presente");
     expect(screen.queryByTestId("roster-p2-marcado")).toBeNull();
   });
 
@@ -194,7 +195,7 @@ describe("PresencaScreen", () => {
     expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
   });
 
-  it("tocar de novo num membro selecionado o desmarca", async () => {
+  it("tocar de novo num membro desmarcado o marca outra vez", async () => {
     mockGetMeeting.mockResolvedValue({
       id: "m1",
       small_group_id: "sg1",
@@ -207,12 +208,12 @@ describe("PresencaScreen", () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId("roster-p2-toggle"));
     });
-    expect(screen.getByText("Confirmar presença (1)")).toBeTruthy();
+    expect(screen.getByText("Confirmar presença (2)")).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("roster-p2-toggle"));
     });
-    expect(screen.getByText("Confirmar presença")).toBeTruthy();
+    expect(screen.getByText("Confirmar presença (3)")).toBeTruthy();
   });
 
   it("duplo toque em Confirmar antes da resposta envia uma vez só", async () => {
@@ -226,9 +227,6 @@ describe("PresencaScreen", () => {
     mockRecordAttendance.mockResolvedValue({ added: 1 });
 
     await render(<PresencaScreen />);
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
-    });
     await act(async () => {
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
