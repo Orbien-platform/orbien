@@ -292,7 +292,7 @@ export default function ConteudoPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-medium text-ink dark:text-white">Conteúdo</h1>
+        <h1 className="page-title">Publicações</h1>
       </div>
 
       <Tabs.Root value={activeTab} onValueChange={handleTabChange}>

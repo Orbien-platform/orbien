@@ -249,7 +249,7 @@ export default function RedesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-medium text-ink dark:text-white">Redes</h1>
+          <h1 className="page-title">Redes</h1>
           <p className="mt-0.5 text-sm text-stone">
             {networks.length > 0 ? `${networks.length} rede${networks.length !== 1 ? "s" : ""}` : "Nenhuma rede"}
           </p>

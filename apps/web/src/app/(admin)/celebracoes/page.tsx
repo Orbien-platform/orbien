@@ -206,7 +206,7 @@ export default function CelebracoesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-medium text-ink dark:text-white">Celebrações</h1>
+        <h1 className="page-title">Celebrações</h1>
       </div>
 
       <Tabs.Root value={activeTab} onValueChange={handleTabChange}>

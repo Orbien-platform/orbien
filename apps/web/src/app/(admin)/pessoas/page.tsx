@@ -156,7 +156,7 @@ export default function PessoasPage() {
       {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-medium text-ink dark:text-white">Pessoas</h1>
+          <h1 className="page-title">Pessoas</h1>
           {total > 0 && (
             <p className="mt-0.5 text-sm text-stone">
               {total} pessoa{total !== 1 ? "s" : ""} cadastrada{total !== 1 ? "s" : ""}
