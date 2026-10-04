@@ -1164,22 +1164,30 @@ model RecurringRule {
 }
 
 model PixPayment {
-  id                  String      @id @default(uuid())
-  tenant_id           String
-  congregation_id     String
-  scenario            PixScenario
-  transaction_id      String?     @unique
-  asaas_payment_id    String?     @unique
-  pix_subscription_id String?
-  amount              Decimal     @db.Decimal(12, 2)
-  donor_person_id     String?
-  category_id         String
-  status              PixStatus
-  pix_key             String?
-  qr_code             String?
-  paid_at             DateTime?
-  created_at          DateTime    @default(now())
-  updated_at          DateTime    @updatedAt
+  id                    String      @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  scenario              PixScenario
+  transaction_id        String?     @unique
+  asaas_payment_id      String?     @unique
+  pix_subscription_id   String?
+  amount                Decimal     @db.Decimal(12, 2)
+  donor_person_id       String?
+  category_id           String
+  status                PixStatus
+  pix_key               String?
+  qr_code               String?
+  paid_at               DateTime?
+  /// Doação pública (Cenário 3): quem o próprio doador disse ser. É declaração
+  /// sem verificação — nunca vira `donor_person_id` automaticamente (um
+  /// terceiro digitaria o e-mail de um membro). `donor_email` só existe com o
+  /// aceite de `donor_consent_version` registrado em `donor_consented_at`.
+  donor_name            String?     @db.VarChar(120)
+  donor_email           String?     @db.VarChar(254)
+  donor_consent_version String?     @db.VarChar(40)
+  donor_consented_at    DateTime?
+  created_at            DateTime    @default(now())
+  updated_at            DateTime    @updatedAt
 
   tenant            Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation      Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -1241,18 +1249,23 @@ model PixSubscription {
 }
 
 model DonationReceipt {
-  id             String   @id @default(uuid())
-  tenant_id      String
-  transaction_id String
-  person_id      String
-  receipt_url    String
-  generated_at   DateTime @default(now())
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenant_id       String
+  transaction_id  String
+  /// Nulo no recibo de doação pública: o doador não é `Person`, só deixou nome
+  /// e e-mail (`recipient_*`). Uma das duas formas de identificar é obrigatória
+  /// — CHECK `donation_receipts_recipient_chk` na migration.
+  person_id       String?
+  recipient_name  String?  @db.VarChar(120)
+  recipient_email String?  @db.VarChar(254)
+  receipt_url     String
+  generated_at    DateTime @default(now())
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   tenant      Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   transaction FinancialTransaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
-  person      Person               @relation(fields: [person_id], references: [id], onDelete: Cascade)
+  person      Person?              @relation(fields: [person_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id, transaction_id])
   @@index([person_id])

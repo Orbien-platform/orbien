@@ -33,6 +33,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { AxiosError } from 'axios';
 import { of, throwError } from 'rxjs';
 import { Prisma } from '@prisma/client';
 import { PixService } from './pix.service';
@@ -69,9 +70,9 @@ type Opts = {
   httpPost?: (url: string, body: unknown) => unknown;
   httpDelete?: (url: string) => unknown;
   httpFails?: boolean;
+  /** Só o GET cuja URL contém este trecho falha (ex.: `pixQrCode`, depois de a cobrança já existir). */
+  httpGetFailsFor?: string;
   httpDeleteFails?: boolean;
-  /** O DELETE falha com este status HTTP, como o axios falharia (`err.response.status`). */
-  httpDeleteStatus?: number;
   auditThrows?: boolean;
   /**
    * Simula a corrida: o `findFirst` devolve `pending`, mas a linha vira
@@ -92,6 +93,26 @@ type Opts = {
   receiptRejects?: boolean;
   /** `count` que `tx.eventRegistration.updateMany` devolve (PROD-24). */
   eventRegistrationFinalizeCount?: number;
+  /**
+   * O que `pix_webhook_scope()` devolve (024). Sem isto, o fake resolve o
+   * escopo `t1/c1` quando há `PixPayment` ou uma assinatura que casa com
+   * `payment.subscription` — e `[]` quando o id da Asaas é desconhecido.
+   */
+  webhookScope?: { scope_tenant_id: string; scope_congregation_id: string }[];
+  /** Plano do tenant do slug (doação pública). Default: Starter ativo. */
+  tenantPlan?: { plan: 'starter' | 'premium'; status: 'active' | 'trial' | 'suspended' | 'cancelled' } | null;
+  /** Cobranças dinâmicas públicas pendentes na última hora (teto por tenant). */
+  pendingDynamicCount?: number;
+  /** A gravação de `asaas_payment_id`/`qr_code` na linha falha (banco). */
+  linkChargeFails?: boolean;
+  /** Cobranças públicas abandonadas que o `prisma.system` devolve para a limpeza. */
+  abandoned?: { id: string; asaas_payment_id: string }[];
+  /** Status HTTP com que o `DELETE` na Asaas falha (404 = cobrança já não existe). */
+  httpDeleteStatus?: number;
+  /** Linhas que `pixPayment.findMany` devolve na lista de intenções da tesouraria. */
+  intents?: Record<string, unknown>[];
+  /** Total que `pixPayment.count` devolve para a mesma lista. */
+  intentsTotal?: number;
 };
 
 function harness(opts: Opts = {}) {
@@ -105,10 +126,33 @@ function harness(opts: Opts = {}) {
     posts: [] as { url: string; body: unknown }[],
     gets: [] as string[],
     receiptCalls: [] as string[],
+    /** Escopo de RLS que o webhook repassa ao recibo (roda depois do commit, sem contexto). */
+    receiptScopes: [] as unknown[],
+    /** Doador declarado (doação pública) que o webhook repassa ao recibo. */
+    receiptDonors: [] as unknown[],
     eventRegistrationUpdates: [] as Record<string, unknown>[],
     contexts: [] as unknown[][],
     pixSubscriptions: [] as Record<string, unknown>[],
     deletes: [] as string[],
+    /** Argumentos de cada chamada a `pix_webhook_scope(paymentId, subscriptionId)`. */
+    scopeQueries: [] as unknown[][],
+    /** Quantos `set_config` já tinham rodado quando cada leitura de `pix_payments` aconteceu. */
+    contextsAtRead: [] as number[],
+    /** Argumentos de cada `pixPayment.findFirst` (filtros e `select`). */
+    findFirstArgs: [] as Record<string, unknown>[],
+    /** Chamadas a `pixPayment.count` (teto de cobranças públicas) e os filtros usados. */
+    countWheres: [] as Record<string, unknown>[],
+    /** Gravações de `asaas_payment_id`/`qr_code` na linha da doação pública. */
+    chargeLinks: [] as Record<string, unknown>[],
+    /** Argumentos de `pixPayment.findMany` / `count` da lista de intenções. */
+    intentsFindMany: undefined as Record<string, unknown> | undefined,
+    intentsCountWhere: undefined as Record<string, unknown> | undefined,
+    /** Consulta da limpeza (`prisma.system.pixPayment.findMany`). */
+    abandonedQuery: undefined as Record<string, unknown> | undefined,
+    /** `updateMany` da limpeza que marca a linha `failed`. */
+    closed: [] as Record<string, unknown>[],
+    /** Ordem dos efeitos externos da limpeza: `delete:<url>` e `close:<id>`. */
+    order: [] as string[],
   };
 
   let catCall = 0;
@@ -199,8 +243,15 @@ function harness(opts: Opts = {}) {
         cap.updates.push(args);
 
         const alvo = registro ?? novoPagamento;
+        // `status: { in: [...] }` é o `WHERE status IN (...)` do serviço (o
+        // webhook também confirma uma linha `failed`); o resto é igualdade.
         const casa =
-          alvo !== null && Object.entries(args.where).every(([k, v]) => alvo[k] === v);
+          alvo !== null &&
+          Object.entries(args.where).every(([k, v]) =>
+            v !== null && typeof v === 'object' && 'in' in v
+              ? (v as { in: unknown[] }).in.includes(alvo[k])
+              : alvo[k] === v,
+          );
 
         if (!casa) return Promise.resolve({ count: 0 });
 
@@ -242,31 +293,59 @@ function harness(opts: Opts = {}) {
             opts.assignment === undefined ? { user_account_id: 'admin-1' } : opts.assignment,
           ),
       },
+      tenantPlan: {
+        findUnique: () =>
+          Promise.resolve(
+            opts.tenantPlan === undefined ? { plan: 'starter', status: 'active' } : opts.tenantPlan,
+          ),
+      },
       pixPayment: {
         create: (args: { data: Record<string, unknown> }) => {
-          // Reativo (PROD-27): só entra aqui quando não havia `registro`
-          // (cenário 2/3 sempre pré-criam a linha antes do webhook).
-          if (registro === null) {
-            if (opts.reactiveCreateThrowsUnknownError) {
-              return Promise.reject(new Error('disco cheio'));
-            }
-            if (
-              novoPagamento !== null &&
-              novoPagamento['asaas_payment_id'] === args.data['asaas_payment_id']
-            ) {
-              return Promise.reject(
-                new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-                  code: 'P2002',
-                  clientVersion: 'test',
-                }),
-              );
-            }
-            novoPagamento = { id: 'pix-1', status: 'pending', ...args.data };
-          }
           cap.pixPayments.push(args.data);
           return Promise.resolve({ id: 'pix-1', ...args.data });
         },
-        findFirst: () => {
+        // `count` serve a duas consultas: o teto de cobranças pendentes e o total
+        // da lista de intenções — esta é a que filtra por congregação.
+        count: (args: { where: Record<string, unknown> }) => {
+          if ('congregation_id' in args.where) {
+            cap.intentsCountWhere = args.where;
+            return Promise.resolve(opts.intentsTotal ?? opts.intents?.length ?? 0);
+          }
+          cap.countWheres.push(args.where);
+          return Promise.resolve(opts.pendingDynamicCount ?? 0);
+        },
+        findMany: (args: Record<string, unknown>) => {
+          cap.intentsFindMany = args;
+          return Promise.resolve(opts.intents ?? []);
+        },
+        updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          if (opts.linkChargeFails) return Promise.reject(new Error('banco fora do ar'));
+          cap.chargeLinks.push(args);
+          return Promise.resolve({ count: 1 });
+        },
+        // Reativo (PROD-27): `ON CONFLICT DO NOTHING` — o webhook roda dentro
+        // de uma transação, onde um P2002 abortaria tudo. Só entra aqui
+        // quando não havia `registro` (cenário 2/3 sempre pré-criam a linha
+        // antes do webhook). Segunda inserção do mesmo `asaas_payment_id`
+        // devolve `count: 0`, como o Postgres com `skipDuplicates`.
+        createMany: (args: { data: Record<string, unknown>[]; skipDuplicates?: boolean }) => {
+          const [dados] = args.data;
+          if (opts.reactiveCreateThrowsUnknownError) {
+            return Promise.reject(new Error('disco cheio'));
+          }
+          if (
+            novoPagamento !== null &&
+            novoPagamento['asaas_payment_id'] === dados['asaas_payment_id']
+          ) {
+            return Promise.resolve({ count: 0 });
+          }
+          novoPagamento = { id: 'pix-1', status: 'pending', ...dados };
+          cap.pixPayments.push(dados);
+          return Promise.resolve({ count: 1 });
+        },
+        findFirst: (args?: Record<string, unknown>) => {
+          cap.findFirstArgs.push(args ?? {});
+          cap.contextsAtRead.push(cap.contexts.length);
           if (registro === null) {
             // Corrida (raceOnReactiveCreate): a PRIMEIRA leitura ainda não
             // vê a linha que a "outra entrega" só grava entre esta chamada e
@@ -329,6 +408,33 @@ function harness(opts: Opts = {}) {
       });
       return Promise.resolve(1);
     },
+    system: {
+      pixPayment: {
+        findMany: (args: Record<string, unknown>) => {
+          cap.abandonedQuery = args;
+          return Promise.resolve(opts.abandoned ?? []);
+        },
+        updateMany: (args: { where: { id: string } }) => {
+          cap.closed.push(args as unknown as Record<string, unknown>);
+          cap.order.push(`close:${args.where.id}`);
+          return Promise.resolve({ count: 1 });
+        },
+      },
+    },
+    // `pix_webhook_scope()` (024): o webhook só conhece o id da Asaas.
+    $queryRaw: (_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      cap.scopeQueries.push(valores);
+      if (opts.webhookScope) return Promise.resolve(opts.webhookScope);
+      const [, subscriptionId] = valores;
+      const achou =
+        registro !== null ||
+        (typeof subscriptionId === 'string' &&
+          assinatura !== null &&
+          assinatura['asaas_subscription_id'] === subscriptionId);
+      return Promise.resolve(
+        achou ? [{ scope_tenant_id: 't1', scope_congregation_id: 'c1' }] : [],
+      );
+    },
     runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   } as unknown as PrismaService;
 
@@ -336,6 +442,9 @@ function harness(opts: Opts = {}) {
     get: (url: string) => {
       cap.gets.push(url);
       if (opts.httpFails) return throwError(() => new Error('asaas fora do ar'));
+      if (opts.httpGetFailsFor && url.includes(opts.httpGetFailsFor)) {
+        return throwError(() => new Error('qr indisponível'));
+      }
       return of({
         data:
           opts.httpGet?.(url) ??
@@ -363,21 +472,25 @@ function harness(opts: Opts = {}) {
     },
     delete: (url: string) => {
       cap.deletes.push(url);
-      if (opts.httpDeleteFails) return throwError(() => new Error('asaas fora do ar'));
+      cap.order.push(`delete:${url}`);
       if (opts.httpDeleteStatus) {
-        return throwError(() =>
-          Object.assign(new Error(`status ${opts.httpDeleteStatus}`), {
-            response: { status: opts.httpDeleteStatus },
-          }),
+        return throwError(
+          () =>
+            new AxiosError('recusado', 'ERR_BAD_REQUEST', undefined, undefined, {
+              status: opts.httpDeleteStatus,
+            } as never),
         );
       }
+      if (opts.httpDeleteFails) return throwError(() => new Error('asaas fora do ar'));
       return of({ data: opts.httpDelete?.(url) ?? {} });
     },
   } as unknown as HttpService;
 
   const donationReceiptService = {
-    generateForTransaction: jest.fn((id: string) => {
+    generateForTransaction: jest.fn((id: string, scope?: unknown, declared?: unknown) => {
       cap.receiptCalls.push(id);
+      cap.receiptScopes.push(scope);
+      cap.receiptDonors.push(declared);
       return opts.receiptRejects ? Promise.reject(new Error('recibo falhou')) : Promise.resolve(undefined);
     }),
   };
@@ -560,6 +673,30 @@ describe('PixService', () => {
         ServiceUnavailableException,
       );
       expect(cap.pixPayments).toEqual([]);
+    });
+
+    it('o customer da igreja é lembrado: a segunda cobrança não volta a consultar a Asaas por ele', async () => {
+      // A doação pública chama isto sem login, a cada tentativa — cada GET
+      // /customers é cota da Asaas gasta por um visitante.
+      const { service, cap } = harness({ categories: [{ id: 'cat-1' }, { id: 'cat-2' }] });
+
+      await service.createDynamic(dto, user);
+      await service.createDynamic(dto, user);
+
+      expect(cap.gets.filter((u) => u.includes('/customers'))).toHaveLength(1);
+      expect(cap.posts.filter((p) => p.url.endsWith('/payments'))).toHaveLength(2);
+    });
+
+    it('o customer criado na primeira vez também é lembrado — sem segundo POST /customers', async () => {
+      const { service, cap } = harness({
+        categories: [{ id: 'cat-1' }, { id: 'cat-2' }],
+        httpGet: (url) => (url.includes('/customers') ? { data: [] } : undefined),
+      });
+
+      await service.createDynamic(dto, user);
+      await service.createDynamic(dto, user);
+
+      expect(cap.posts.filter((p) => p.url.endsWith('/customers'))).toHaveLength(1);
     });
 
     it('devolve o QR e grava o pagamento com o id da Asaas', async () => {
@@ -1160,6 +1297,399 @@ describe('PixService', () => {
       expect(cap.pixPayments).toEqual([]);
     });
 
+    describe('QR dinâmico — igreja Premium (DPUB-01…05, 08, 10, 13, 14)', () => {
+      const premium = { plan: 'premium', status: 'active' } as const;
+
+      beforeEach(() => {
+        process.env['ASAAS_API_KEY'] = 'chave-asaas';
+        process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+        process.env['ASAAS_PAYMENTS_ENABLED'] = 'true';
+      });
+
+      it('com a trava de pagamentos desligada, Premium recebe a chave estática como o Starter — sem motivo de fallback e sem chamar a Asaas', async () => {
+        delete process.env['ASAAS_PAYMENTS_ENABLED'];
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', pix_key: 'chave@igreja.test' });
+        expect(result).not.toHaveProperty('fallback_reason');
+        expect(cap.posts).toEqual([]);
+        // A intenção continua gravada, para a baixa manual da tesouraria.
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('cria a cobrança na Asaas e devolve o QR, o copia-e-cola, o payment_id e a validade de 24h', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+        const antes = Date.now();
+
+        const result = await service.createPublicDonation(manualDto);
+
+        const id = String(cap.pixPayments[0]?.['id']);
+        expect(result).toMatchObject({
+          mode: 'dynamic',
+          pix_key: 'chave@igreja.test',
+          amount: 50,
+          church_name: 'App da Igreja',
+          transaction_ref: `PIX-${id.slice(0, 8).toUpperCase()}`,
+          payment_id: id,
+          qr_code: '00020126...br.gov.bcb.pix',
+          qr_code_image: 'iVBORw0KG',
+        });
+        const expiraEm = new Date((result as { expires_at: string }).expires_at).getTime();
+        expect(expiraEm).toBeGreaterThanOrEqual(antes + 24 * 60 * 60 * 1000);
+        expect(expiraEm).toBeLessThanOrEqual(Date.now() + 24 * 60 * 60 * 1000);
+        expect(result).not.toHaveProperty('fallback_reason');
+      });
+
+      it('a cobrança leva o valor, PIX, o id da linha como referência externa e descrição sem dado do doador', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        await service.createPublicDonation({
+          ...manualDto,
+          amount: 80.5,
+          donor_name: 'Fulano de Tal',
+          donor_email: 'fulano@teste.com',
+          donor_consent: true,
+        });
+
+        const cobranca = cap.posts.find((p) => p.url.endsWith('/payments'));
+        const id = String(cap.pixPayments[0]?.['id']);
+        expect(cobranca?.body).toMatchObject({
+          customer: 'cus_1',
+          billingType: 'PIX',
+          value: 80.5,
+          description: 'Doação via Orbien',
+          externalReference: id,
+        });
+        // Minimização: nome e e-mail do doador não vão para a Asaas.
+        expect(JSON.stringify(cap.posts)).not.toContain('Fulano');
+        expect(JSON.stringify(cap.posts)).not.toContain('fulano@teste.com');
+      });
+
+      it('grava a linha ANTES de falar com a Asaas — se o processo cair depois da cobrança, o webhook ainda a acha', async () => {
+        let linhasQuandoACobrancaFoiCriada = -1;
+        const { service, cap } = harness({
+          tenantPlan: premium,
+          httpPost: (url) => {
+            if (url.endsWith('/payments')) linhasQuandoACobrancaFoiCriada = cap.pixPayments.length;
+            return undefined;
+          },
+        });
+
+        await service.createPublicDonation(manualDto);
+
+        expect(linhasQuandoACobrancaFoiCriada).toBe(1);
+      });
+
+      it('amarra o id da Asaas e o QR à linha, sob o contexto da igreja', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        await service.createPublicDonation(manualDto);
+
+        const id = String(cap.pixPayments[0]?.['id']);
+        expect(cap.chargeLinks).toEqual([
+          {
+            where: { id },
+            data: { asaas_payment_id: 'pay_123', qr_code: '00020126...br.gov.bcb.pix' },
+          },
+        ]);
+        expect(cap.contexts).toEqual([
+          ['t1', 'c1'],
+          ['t1', 'c1'],
+        ]);
+      });
+
+      it('a linha nasce no cenário `public`, pendente, e nenhum lançamento é criado (DPUB-08)', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        await service.createPublicDonation(manualDto);
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          scenario: 'public',
+          status: 'pending',
+          category_id: 'cat-oferta',
+          pix_key: 'chave@igreja.test',
+        });
+        expect(cap.transactions).toEqual([]);
+      });
+
+      it('plano em período de teste (`trial`) também recebe o QR', async () => {
+        const { service } = harness({ tenantPlan: { plan: 'premium', status: 'trial' } });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'dynamic' });
+      });
+
+      it.each(['suspended', 'cancelled'] as const)(
+        'Premium %s não gera cobrança nova: chave estática, Asaas intocada',
+        async (status) => {
+          const { service, cap } = harness({ tenantPlan: { plan: 'premium', status } });
+
+          const result = await service.createPublicDonation(manualDto);
+
+          expect(result).toMatchObject({ mode: 'static', pix_key: 'chave@igreja.test' });
+          expect(result).not.toHaveProperty('fallback_reason');
+          expect(cap.gets).toEqual([]);
+          expect(cap.posts).toEqual([]);
+        },
+      );
+
+      it('Starter: chave estática, sem fallback_reason, Asaas e teto intocados (DPUB-02)', async () => {
+        const { service, cap } = harness({ tenantPlan: { plan: 'starter', status: 'active' } });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', pix_key: 'chave@igreja.test', amount: 50 });
+        expect(result).not.toHaveProperty('fallback_reason');
+        expect(result).not.toHaveProperty('payment_id');
+        expect(cap.gets).toEqual([]);
+        expect(cap.posts).toEqual([]);
+        expect(cap.countWheres).toEqual([]);
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('tenant sem registro de plano é tratado como Starter', async () => {
+        const { service, cap } = harness({ tenantPlan: null });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static' });
+        expect(cap.posts).toEqual([]);
+      });
+
+      it('sem ASAAS_API_KEY no ambiente, cai para a chave estática com o motivo e sem chamar a Asaas', async () => {
+        delete process.env['ASAAS_API_KEY'];
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(cap.gets).toEqual([]);
+        expect(cap.posts).toEqual([]);
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('Asaas fora do ar: chave estática com o motivo, a intenção fica gravada, sem lançamento', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, httpFails: true });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({
+          mode: 'static',
+          pix_key: 'chave@igreja.test',
+          fallback_reason: 'provider_unavailable',
+        });
+        expect(result).not.toHaveProperty('qr_code');
+        expect(cap.pixPayments).toHaveLength(1);
+        expect(cap.chargeLinks).toEqual([]);
+        expect(cap.transactions).toEqual([]);
+        // A cobrança nem chegou a existir: não há o que cancelar.
+        expect(cap.deletes).toEqual([]);
+      });
+
+      it('cobrança criada mas QR indisponível: cancela a cobrança na Asaas e cai para a chave estática', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, httpGetFailsFor: 'pixQrCode' });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(cap.deletes).toEqual(['https://asaas.test/v3/payments/pay_123']);
+        expect(cap.chargeLinks).toEqual([]);
+      });
+
+      it('cobrança criada mas a linha não pôde ser atualizada: cancela a cobrança e cai para a chave estática', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, linkChargeFails: true });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(cap.deletes).toEqual(['https://asaas.test/v3/payments/pay_123']);
+      });
+
+      it('se nem o cancelamento da cobrança órfã der certo, o doador ainda recebe a chave estática', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const { service } = harness({
+          tenantPlan: premium,
+          httpGetFailsFor: 'pixQrCode',
+          httpDeleteFails: true,
+        });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'provider_unavailable' });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('pay_123'));
+      });
+
+      it('teto de cobranças pendentes na última hora: acima dele, chave estática com o motivo e Asaas intocada', async () => {
+        const { service, cap } = harness({ tenantPlan: premium, pendingDynamicCount: 60 });
+
+        const result = await service.createPublicDonation(manualDto);
+
+        expect(result).toMatchObject({ mode: 'static', fallback_reason: 'cap_reached' });
+        expect(cap.posts).toEqual([]);
+        expect(cap.pixPayments).toHaveLength(1);
+      });
+
+      it('um abaixo do teto ainda cobra', async () => {
+        const { service } = harness({ tenantPlan: premium, pendingDynamicCount: 59 });
+
+        expect(await service.createPublicDonation(manualDto)).toMatchObject({ mode: 'dynamic' });
+      });
+
+      it('o teto conta só pendentes públicas com cobrança, deste tenant, da última hora', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+        const antes = Date.now();
+
+        await service.createPublicDonation(manualDto);
+
+        const where = cap.countWheres[0] as {
+          tenant_id: string;
+          scenario: string;
+          status: string;
+          asaas_payment_id: unknown;
+          created_at: { gte: Date };
+        };
+        expect(where).toMatchObject({
+          tenant_id: 't1',
+          scenario: 'public',
+          status: 'pending',
+          asaas_payment_id: { not: null },
+        });
+        expect(where.created_at.gte.getTime()).toBeGreaterThanOrEqual(antes - 60 * 60 * 1000 - 1);
+        expect(where.created_at.gte.getTime()).toBeLessThanOrEqual(Date.now() - 60 * 60 * 1000 + 1);
+      });
+
+      it('o plano nunca vem do corpo: um `plan` forjado no DTO não abre cobrança para o Starter', async () => {
+        const { service, cap } = harness({ tenantPlan: { plan: 'starter', status: 'active' } });
+        const forjado = { ...manualDto, plan: 'premium', mode: 'dynamic' } as unknown as typeof manualDto;
+
+        const result = await service.createPublicDonation(forjado);
+
+        expect(result).toMatchObject({ mode: 'static' });
+        expect(cap.posts).toEqual([]);
+      });
+
+      it('honeypot: nem consulta plano nem fala com a Asaas', async () => {
+        const { service, cap } = harness({ tenantPlan: premium });
+
+        const result = await service.createPublicDonation({ ...manualDto, website: 'http://spam' });
+
+        expect(result).toEqual({ pix_key: '', amount: 50, church_name: '', transaction_ref: '' });
+        expect(cap.posts).toEqual([]);
+        expect(cap.pixPayments).toEqual([]);
+      });
+    });
+
+    describe('dados declarados pelo doador (DPUB-22, DPUB-23)', () => {
+      it('nome e e-mail ficam na linha, normalizados, com a versão do termo e o instante do aceite', async () => {
+        const { service, cap } = harness();
+        const antes = Date.now();
+
+        await service.createPublicDonation({
+          ...manualDto,
+          donor_name: '  Ana Silva  ',
+          donor_email: '  Ana@Igreja.COM ',
+          donor_consent: true,
+        });
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          donor_name: 'Ana Silva',
+          donor_email: 'ana@igreja.com',
+          donor_consent_version: 'donor_consent_v1',
+        });
+        const quando = (cap.pixPayments[0]?.['donor_consented_at'] as Date).getTime();
+        expect(quando).toBeGreaterThanOrEqual(antes);
+        expect(quando).toBeLessThanOrEqual(Date.now());
+      });
+
+      it('só o nome: grava o nome, sem e-mail e sem aceite (não há o que consentir)', async () => {
+        const { service, cap } = harness();
+
+        await service.createPublicDonation({ ...manualDto, donor_name: 'Ana' });
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          donor_name: 'Ana',
+          donor_email: null,
+          donor_consent_version: null,
+          donor_consented_at: null,
+        });
+      });
+
+      it('anônimo: tudo nulo', async () => {
+        const { service, cap } = harness();
+
+        await service.createPublicDonation(manualDto);
+
+        expect(cap.pixPayments[0]).toMatchObject({
+          donor_name: null,
+          donor_email: null,
+          donor_consent_version: null,
+          donor_consented_at: null,
+        });
+      });
+
+      it('nome e e-mail só com espaços contam como não informados', async () => {
+        const { service, cap } = harness();
+
+        await service.createPublicDonation({ ...manualDto, donor_name: '   ', donor_email: '  ' });
+
+        expect(cap.pixPayments[0]).toMatchObject({ donor_name: null, donor_email: null });
+      });
+
+      it('e-mail sem aceite é recusado e nada é gravado (guarda do service, além do DTO)', async () => {
+        const { service, cap } = harness();
+
+        await expect(
+          service.createPublicDonation({ ...manualDto, donor_email: 'ana@igreja.com' }),
+        ).rejects.toThrow('Aceite o uso do e-mail para receber o recibo');
+        await expect(
+          service.createPublicDonation({ ...manualDto, donor_email: 'ana@igreja.com', donor_consent: false }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(cap.pixPayments).toEqual([]);
+      });
+
+      it('a resposta não devolve nome nem e-mail', async () => {
+        const { service } = harness();
+
+        const result = await service.createPublicDonation({
+          ...manualDto,
+          donor_name: 'Ana',
+          donor_email: 'ana@igreja.com',
+          donor_consent: true,
+        });
+
+        expect(JSON.stringify(result)).not.toContain('Ana');
+        expect(JSON.stringify(result)).not.toContain('ana@igreja.com');
+      });
+    });
+
+    it('sem `app_name` no branding, o nome da igreja cai para o nome do tenant', async () => {
+      const { service } = harness({ branding: { pix_key: 'chave@igreja.test', app_name: null } });
+
+      const result = await service.createPublicDonation(manualDto);
+
+      expect(result).toMatchObject({ church_name: 'Igreja Central' });
+    });
+
+    describe('slug sem resposta distinguível (DPUB-14)', () => {
+      it.each([
+        ['slug inexistente', { tenant: null }],
+        ['igreja sem branding', { branding: null }],
+        ['branding sem chave PIX', { branding: { pix_key: null, app_name: 'X' } }],
+        ['tenant sem congregação', { congregation: null }],
+      ] as const)('%s: o MESMO 404, sem revelar o estado da configuração', async (_nome, opts) => {
+        const { service, cap } = harness(opts);
+
+        const erro = await service.createPublicDonation(manualDto).catch((e: unknown) => e);
+
+        expect(erro).toBeInstanceOf(NotFoundException);
+        expect((erro as NotFoundException).message).toBe('Igreja não encontrada');
+        expect(cap.pixPayments).toEqual([]);
+      });
+    });
+
     it('sem categoria de receita, vira 400 e não grava nada', async () => {
       const { service, cap } = harness({ categories: [] });
 
@@ -1167,6 +1697,485 @@ describe('PixService', () => {
         'Categoria de receita não encontrada',
       );
       expect(cap.pixPayments).toEqual([]);
+    });
+  });
+
+  describe('getPublicDonationStatus (DPUB-15, 16, 19, 20)', () => {
+    const ID = '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11';
+    const HORA = 60 * 60 * 1000;
+    const linha = (status: string, idadeMs: number) => ({
+      id: ID,
+      status,
+      created_at: new Date(Date.now() - idadeMs),
+    });
+
+    it('pendente e recente: `pending`, com a validade de 24h contada da criação', async () => {
+      const criada = new Date(Date.now() - 2 * HORA);
+      const { service } = harness({ pixPayment: { id: ID, status: 'pending', created_at: criada } });
+
+      const result = await service.getPublicDonationStatus('igreja-central', ID);
+
+      expect(result).toEqual({
+        status: 'pending',
+        expires_at: new Date(criada.getTime() + 24 * HORA).toISOString(),
+      });
+    });
+
+    it('confirmada: `confirmed`', async () => {
+      const { service } = harness({ pixPayment: linha('confirmed', HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('confirmed');
+    });
+
+    it('confirmada há mais de 24h continua `confirmed` — pago não "expira"', async () => {
+      const { service } = harness({ pixPayment: linha('confirmed', 30 * HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('confirmed');
+    });
+
+    it('pendente há mais de 24h: `expired`, sem gravar nada (expiração é lida, não escrita)', async () => {
+      const { service, cap } = harness({ pixPayment: linha('pending', 25 * HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('expired');
+      expect(cap.updates).toEqual([]);
+      expect(cap.transactions).toEqual([]);
+    });
+
+    it('`failed` (marcada pela limpeza): `expired`', async () => {
+      const { service } = harness({ pixPayment: linha('failed', HORA) });
+
+      expect((await service.getPublicDonationStatus('igreja-central', ID)).status).toBe('expired');
+    });
+
+    it('devolve só `status` e `expires_at` — nada de valor, chave, nome, e-mail ou id de tenant', async () => {
+      const { service } = harness({
+        pixPayment: {
+          ...linha('pending', HORA),
+          amount: new Prisma.Decimal('50.00'),
+          pix_key: 'chave@igreja.test',
+          tenant_id: 't1',
+          donor_email: 'a@b.com',
+        },
+      });
+
+      const result = await service.getPublicDonationStatus('igreja-central', ID);
+
+      expect(Object.keys(result).sort()).toEqual(['expires_at', 'status']);
+    });
+
+    it('lê sob o contexto do slug e filtra por id, tenant e cenário `public` — pede só status e criação', async () => {
+      const { service, cap } = harness({ pixPayment: linha('pending', HORA) });
+
+      await service.getPublicDonationStatus('igreja-central', ID);
+
+      expect(cap.contexts).toEqual([['t1', 'c1']]);
+      expect(cap.contextsAtRead).toEqual([1]);
+      expect(cap.findFirstArgs[0]).toEqual({
+        where: { id: ID, tenant_id: 't1', scenario: 'public' },
+        select: { status: true, created_at: true },
+      });
+    });
+
+    it('id que a RLS não deixa ver (outra igreja) e id inexistente: o MESMO 404', async () => {
+      const { service } = harness({ pixPayment: null, pixSubscription: null });
+
+      const erro = await service.getPublicDonationStatus('igreja-central', ID).catch((e: unknown) => e);
+
+      expect(erro).toBeInstanceOf(NotFoundException);
+      expect((erro as NotFoundException).message).toBe('Doação não encontrada');
+    });
+
+    it.each([
+      ['slug inexistente', { tenant: null }],
+      ['igreja sem chave PIX', { branding: { pix_key: null, app_name: null } }],
+    ] as const)('%s: o mesmo 404 do id desconhecido', async (_nome, opts) => {
+      const { service, cap } = harness(opts);
+
+      const erro = await service.getPublicDonationStatus('qualquer', ID).catch((e: unknown) => e);
+
+      expect(erro).toBeInstanceOf(NotFoundException);
+      expect((erro as NotFoundException).message).toBe('Doação não encontrada');
+      expect(cap.findFirstArgs).toEqual([]);
+    });
+
+    it('erro que não é 404 ao resolver a igreja não é mascarado como 404', async () => {
+      const { service } = harness();
+      (service as unknown as { prisma: { client: { tenant: { findUnique: () => Promise<never> } } } }).prisma.client.tenant.findUnique =
+        () => Promise.reject(new Error('banco fora do ar'));
+
+      await expect(service.getPublicDonationStatus('igreja-central', ID)).rejects.toThrow(
+        'banco fora do ar',
+      );
+    });
+  });
+
+  describe('expireAbandonedPublicDonations (DPUB-27, DPUB-09)', () => {
+    const abandoned = [
+      { id: 'pix-a', asaas_payment_id: 'pay_a' },
+      { id: 'pix-b', asaas_payment_id: 'pay_b' },
+    ];
+
+    beforeEach(() => {
+      process.env['ASAAS_API_KEY'] = 'chave-asaas';
+      process.env['ASAAS_API_URL'] = 'https://asaas.test/v3';
+    });
+
+    it('cancela cada cobrança na Asaas e SÓ DEPOIS marca a linha `failed` — a ordem evita perder dinheiro', async () => {
+      const { service, cap } = harness({ abandoned });
+
+      const result = await service.expireAbandonedPublicDonations();
+
+      expect(result).toEqual({ cancelled: 2, kept: 0 });
+      expect(cap.order).toEqual([
+        'delete:https://asaas.test/v3/payments/pay_a',
+        'close:pix-a',
+        'delete:https://asaas.test/v3/payments/pay_b',
+        'close:pix-b',
+      ]);
+      expect(cap.closed[0]).toEqual({
+        where: { id: 'pix-a', status: 'pending' },
+        data: { status: 'failed' },
+      });
+    });
+
+    it('só pega pendentes públicas COM cobrança, com mais de 48h, em lote limitado, das mais antigas', async () => {
+      const { service, cap } = harness();
+      const antes = Date.now();
+
+      await service.expireAbandonedPublicDonations();
+
+      const where = cap.abandonedQuery?.['where'] as {
+        scenario: string;
+        status: string;
+        asaas_payment_id: unknown;
+        created_at: { lt: Date };
+      };
+      expect(where).toMatchObject({ scenario: 'public', status: 'pending', asaas_payment_id: { not: null } });
+      expect(where.created_at.lt.getTime()).toBeLessThanOrEqual(antes - 48 * 60 * 60 * 1000 + 1);
+      expect(where.created_at.lt.getTime()).toBeGreaterThanOrEqual(Date.now() - 48 * 60 * 60 * 1000 - 1);
+      expect(cap.abandonedQuery).toMatchObject({ take: 100, orderBy: { created_at: 'asc' } });
+    });
+
+    it('sem nada abandonado, não fala com a Asaas nem grava', async () => {
+      const { service, cap } = harness({ abandoned: [] });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 0 });
+      expect(cap.deletes).toEqual([]);
+      expect(cap.closed).toEqual([]);
+    });
+
+    it('cancelamento recusado (cobrança talvez já paga, webhook perdido): a linha FICA pending e o caso vai para o log', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({ abandoned, httpDeleteStatus: 400 });
+
+      const result = await service.expireAbandonedPublicDonations();
+
+      expect(result).toEqual({ cancelled: 0, kept: 2 });
+      expect(cap.closed).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('pay_a'));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('pix-a'));
+    });
+
+    it('Asaas fora do ar (erro sem status): mantém pending, tenta de novo no dia seguinte', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({ abandoned, httpDeleteFails: true });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 2 });
+      expect(cap.closed).toEqual([]);
+    });
+
+    it('404 (a cobrança já não existe na Asaas): nada a cancelar, marca `failed`', async () => {
+      const { service, cap } = harness({ abandoned: [abandoned[0]], httpDeleteStatus: 404 });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 1, kept: 0 });
+      expect(cap.closed).toHaveLength(1);
+    });
+
+    it('uma falha não impede as demais cobranças do lote', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({
+        abandoned,
+        httpDelete: (url) => {
+          if (url.endsWith('pay_a')) throw new Error('falhou só esta');
+          return {};
+        },
+      });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 1, kept: 1 });
+      expect(cap.closed.map((c) => (c as { where: { id: string } }).where.id)).toEqual(['pix-b']);
+    });
+
+    it('sem ASAAS_API_KEY, pula a limpeza sem consultar o banco', async () => {
+      delete process.env['ASAAS_API_KEY'];
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({ abandoned });
+
+      expect(await service.expireAbandonedPublicDonations()).toEqual({ cancelled: 0, kept: 0 });
+      expect(cap.abandonedQuery).toBeUndefined();
+      expect(cap.deletes).toEqual([]);
+    });
+  });
+
+  describe('listPublicIntents (DPUB-26)', () => {
+    const intent = (extra: Record<string, unknown> = {}) => ({
+      id: '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11',
+      amount: new Prisma.Decimal('50.00'),
+      status: 'pending',
+      created_at: new Date('2026-10-01T12:00:00Z'),
+      paid_at: null,
+      donor_name: 'Ana',
+      donor_email: 'ana@igreja.com',
+      asaas_payment_id: null,
+      category: { name: 'Oferta' },
+      ...extra,
+    });
+    const query = { page: 1, page_size: 20 };
+
+    it('devolve referência, valor, estado, doador declarado e categoria, mais o total', async () => {
+      const { service } = harness({ intents: [intent()], intentsTotal: 7 });
+
+      const result = await service.listPublicIntents(user, query);
+
+      expect(result.total).toBe(7);
+      expect(result.data).toEqual([
+        {
+          id: '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11',
+          reference: 'PIX-8C9F9A52',
+          amount: '50',
+          status: 'pending',
+          mode: 'static',
+          donor_name: 'Ana',
+          donor_email: 'ana@igreja.com',
+          category_name: 'Oferta',
+          created_at: new Date('2026-10-01T12:00:00Z'),
+          paid_at: null,
+        },
+      ]);
+    });
+
+    it('com cobrança na Asaas a intenção é `dynamic`; sem, `static`', async () => {
+      const { service } = harness({
+        intents: [intent({ asaas_payment_id: 'pay_1' }), intent({ asaas_payment_id: null })],
+      });
+
+      const result = await service.listPublicIntents(user, query);
+
+      expect(result.data.map((r) => r.mode)).toEqual(['dynamic', 'static']);
+    });
+
+    it('só lista o cenário `public` da tenant e da congregação da sessão, tanto nas linhas quanto no total', async () => {
+      const { service, cap } = harness();
+
+      await service.listPublicIntents(user, query);
+
+      const esperado = { tenant_id: 't1', congregation_id: 'c1', scenario: 'public' };
+      expect(cap.intentsFindMany?.['where']).toEqual(esperado);
+      expect(cap.intentsCountWhere).toEqual(esperado);
+    });
+
+    it('filtra por estado quando pedido', async () => {
+      const { service, cap } = harness();
+
+      await service.listPublicIntents(user, { ...query, status: 'pending' as never });
+
+      expect(cap.intentsFindMany?.['where']).toEqual({
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        scenario: 'public',
+        status: 'pending',
+      });
+      expect(cap.intentsCountWhere).toMatchObject({ status: 'pending' });
+    });
+
+    it('as mais novas primeiro, paginadas', async () => {
+      const { service, cap } = harness();
+
+      await service.listPublicIntents(user, { page: 3, page_size: 10 });
+
+      expect(cap.intentsFindMany).toMatchObject({
+        orderBy: { created_at: 'desc' },
+        skip: 20,
+        take: 10,
+      });
+    });
+
+    it('lista vazia: data vazia e total zero', async () => {
+      const { service } = harness();
+
+      expect(await service.listPublicIntents(user, query)).toEqual({ data: [], total: 0 });
+    });
+  });
+
+  describe('settlePublicIntent — baixa manual da chave estática (DPUB-26)', () => {
+    const ID = '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11';
+    const estatica = (extra: Record<string, unknown> = {}) => ({
+      id: ID,
+      tenant_id: 't1',
+      congregation_id: 'c1',
+      amount: new Prisma.Decimal('50.00'),
+      status: 'pending',
+      category_id: 'cat-oferta',
+      asaas_payment_id: null,
+      donor_name: null,
+      donor_email: null,
+      donor_consent_version: null,
+      ...extra,
+    });
+
+    it('intenção inexistente (ou de outra igreja/congregação): 404 e nada é criado', async () => {
+      const { service, cap } = harness({ pixPayment: null });
+
+      await expect(service.settlePublicIntent(ID, user)).rejects.toBeInstanceOf(NotFoundException);
+      expect(cap.transactions).toEqual([]);
+    });
+
+    it('procura só no cenário `public`, na tenant e na congregação da sessão', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.findFirstArgs[0]).toMatchObject({
+        where: { id: ID, tenant_id: 't1', congregation_id: 'c1', scenario: 'public' },
+      });
+    });
+
+    it('intenção com cobrança na Asaas: 409 — quem confirma é o webhook; nenhum lançamento', async () => {
+      const { service, cap } = harness({ pixPayment: estatica({ asaas_payment_id: 'pay_1' }) });
+
+      await expect(service.settlePublicIntent(ID, user)).rejects.toBeInstanceOf(ConflictException);
+      expect(cap.transactions).toEqual([]);
+      expect(cap.updates).toEqual([]);
+    });
+
+    it('pendente: confirma e cria 1 lançamento de receita manual, na categoria da linha, por quem deu a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      const result = await service.settlePublicIntent(ID, user);
+
+      expect(result).toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.updates[0]).toMatchObject({
+        where: { id: ID, status: { in: ['pending', 'failed'] } },
+        data: { status: 'confirmed' },
+      });
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.transactions[0]).toMatchObject({
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        type: 'income',
+        source: 'manual',
+        category_id: 'cat-oferta',
+        created_by_user_id: 'user-1',
+        description: 'Doação pública via PIX (baixa manual)',
+      });
+      expect(String(cap.transactions[0]?.['amount'])).toBe('50');
+    });
+
+    it('linha `failed` (limpeza já rodou) também aceita a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica({ status: 'failed' }) });
+
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('já confirmada: devolve o estado, sem lançamento, sem auditoria nova', async () => {
+      const { service, cap } = harness({ pixPayment: estatica({ status: 'confirmed' }) });
+
+      const result = await service.settlePublicIntent(ID, user);
+
+      expect(result).toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.transactions).toEqual([]);
+      expect(cap.audits).toEqual([]);
+    });
+
+    it('duas baixas: a segunda não cria outro lançamento', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, user);
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('perdeu a corrida (outra baixa confirmou entre a leitura e a escrita): sem lançamento e sem auditoria', async () => {
+      const { service, cap } = harness({ pixPayment: estatica(), perdeCorrida: true });
+
+      const result = await service.settlePublicIntent(ID, user);
+
+      expect(result).toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.transactions).toEqual([]);
+      expect(cap.audits).toEqual([]);
+    });
+
+    it('deixa rastro em audit_logs, em nome de quem deu a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, user);
+
+      expect(cap.audits).toEqual([
+        {
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          actor_user_id: 'user-1',
+          entity: 'pix_payment',
+          action: 'pix.settled_manually',
+          after: { pix_payment_id: ID, transaction_id: 'tx-1' },
+        },
+      ]);
+    });
+
+    it('sessão de suporte: o autor da auditoria é quem impersonou', async () => {
+      const { service, cap } = harness({ pixPayment: estatica() });
+
+      await service.settlePublicIntent(ID, { ...user, impersonated_by: 'suporte-9' });
+
+      expect(cap.audits[0]).toMatchObject({ actor_user_id: 'suporte-9' });
+    });
+
+    it('falha da auditoria não desfaz a baixa', async () => {
+      const { service, cap } = harness({ pixPayment: estatica(), auditThrows: true });
+
+      await expect(service.settlePublicIntent(ID, user)).resolves.toEqual({ id: ID, status: 'confirmed' });
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    describe('recibo', () => {
+      it('doador declarou e-mail com aceite: o recibo é pedido com o doador declarado, no request', async () => {
+        const { service, cap } = harness({
+          pixPayment: estatica({
+            donor_name: 'Ana',
+            donor_email: 'ana@igreja.com',
+            donor_consent_version: 'donor_consent_v1',
+          }),
+        });
+
+        await service.settlePublicIntent(ID, user);
+
+        expect(cap.receiptCalls).toEqual(['tx-1']);
+        expect(cap.receiptDonors).toEqual([{ name: 'Ana', email: 'ana@igreja.com' }]);
+        // Já está dentro da transação do request: não repassa escopo de RLS.
+        expect(cap.receiptScopes).toEqual([undefined]);
+      });
+
+      it('e-mail sem aceite gravado: pede o recibo sem doador declarado (anônimo)', async () => {
+        const { service, cap } = harness({
+          pixPayment: estatica({ donor_name: 'Ana', donor_email: 'ana@igreja.com' }),
+        });
+
+        await service.settlePublicIntent(ID, user);
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+
+      it('falha do recibo (e-mail fora do ar) não desfaz a baixa', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const { service, cap } = harness({ pixPayment: estatica(), receiptRejects: true });
+
+        await expect(service.settlePublicIntent(ID, user)).resolves.toEqual({ id: ID, status: 'confirmed' });
+
+        expect(cap.transactions).toHaveLength(1);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('tx-1'));
+      });
     });
   });
 
@@ -1211,6 +2220,122 @@ describe('PixService', () => {
       ).rejects.toThrow();
       expect(cap.transactions).toEqual([]);
       expect(cap.updates).toEqual([]);
+    });
+  });
+
+  describe('handleWebhook — escopo de RLS (DPUB-06)', () => {
+    beforeEach(() => {
+      process.env['ASAAS_WEBHOOK_TOKEN'] = 'segredo';
+    });
+
+    it('pede o escopo à função SQL pelo id do pagamento, sem assinatura quando o payload não traz', async () => {
+      const { service, cap } = harness();
+
+      await service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo');
+
+      expect(cap.scopeQueries).toEqual([['pay_123', null]]);
+    });
+
+    it('passa também a assinatura quando o payload a traz (cobrança recorrente nova)', async () => {
+      const { service, cap } = harness({ pixPayment: null });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_novo', subscription: 'sub_asaas_1' } },
+        'segredo',
+      );
+
+      expect(cap.scopeQueries).toEqual([['pay_novo', 'sub_asaas_1']]);
+    });
+
+    it('fixa app.tenant_id e app.congregation_id com o escopo devolvido, ANTES de ler a linha', async () => {
+      const { service, cap } = harness({
+        webhookScope: [{ scope_tenant_id: 'tenant-dono', scope_congregation_id: 'cong-dona' }],
+      });
+
+      await service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo');
+
+      expect(cap.contexts[0]).toEqual(['tenant-dono', 'cong-dona']);
+      expect(cap.contextsAtRead[0]).toBe(1);
+    });
+
+    it('id da Asaas sem escopo: 200, nenhum contexto fixado, nada lido nem lançado', async () => {
+      const { service, cap } = harness({ webhookScope: [] });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_de_outro_ambiente' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.contexts).toEqual([]);
+      expect(cap.contextsAtRead).toEqual([]);
+      expect(cap.transactions).toEqual([]);
+    });
+
+    it('escopo achado, mas a linha sumiu e o payload não traz assinatura: 200, nada lançado', async () => {
+      // Entre a função SQL e a leitura sob contexto a linha pode ter sido
+      // removida (ou o id é de outra igreja que a RLS esconde): nada a confirmar.
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service, cap } = harness({
+        pixPayment: null,
+        pixSubscription: null,
+        webhookScope: [{ scope_tenant_id: 't1', scope_congregation_id: 'c1' }],
+      });
+
+      const result = await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_sumiu' } },
+        'segredo',
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(cap.transactions).toEqual([]);
+      expect(warn).toHaveBeenCalledWith('PixPayment não encontrado para asaas_id=pay_sumiu');
+    });
+
+    it('o contexto vem da função SQL, nunca do payload — tenant forjado no corpo é ignorado', async () => {
+      const { service, cap } = harness({
+        webhookScope: [{ scope_tenant_id: 'tenant-dono', scope_congregation_id: 'cong-dona' }],
+      });
+
+      await service.handleWebhook(
+        {
+          event: 'PAYMENT_CONFIRMED',
+          tenant_id: 'tenant-forjado',
+          payment: { id: 'pay_123', externalReference: 'tenant-forjado' },
+        },
+        'segredo',
+      );
+
+      expect(cap.contexts[0]).toEqual(['tenant-dono', 'cong-dona']);
+    });
+
+    it('o aviso de "sem payment.id" não despeja o payload (nome/CPF do pagador) no log', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service } = harness();
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { customer: { name: 'Fulano', cpfCnpj: '12345678900' } } },
+        'segredo',
+      );
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]).toEqual(['Webhook sem payment.id (event=PAYMENT_CONFIRMED)']);
+    });
+
+    it('token com o mesmo tamanho do segredo, mas diferente, é 401', async () => {
+      const { service } = harness();
+
+      await expect(
+        service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredx'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('token válido mas de tamanho diferente do segredo não lança erro de buffer — é 401', async () => {
+      const { service } = harness();
+
+      await expect(
+        service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo-bem-mais-longo'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 
@@ -1505,6 +2630,82 @@ describe('PixService', () => {
       expect(cap.receiptCalls).toEqual(['tx-1']);
     });
 
+    it('repassa ao recibo o tenant e a congregação da LINHA — o recibo roda depois do commit, sem contexto', async () => {
+      const { service, cap } = harness({
+        webhookScope: [{ scope_tenant_id: 'tenant-dono', scope_congregation_id: 'cong-dona' }],
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } },
+        'segredo',
+      );
+      await Promise.resolve();
+
+      expect(cap.receiptScopes).toEqual([{ tenantId: 'tenant-dono', congregationId: 'cong-dona' }]);
+    });
+
+    describe('recibo da doação pública: só com e-mail + aceite gravados na linha (DPUB-25)', () => {
+      const publicaPaga = (extra: Record<string, unknown>) => ({
+        id: 'pix-1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        amount: new Prisma.Decimal('50.00'),
+        category_id: 'cat-oferta',
+        status: 'pending',
+        donor_person_id: null,
+        scenario: 'public',
+        donor_name: null,
+        donor_email: null,
+        donor_consent_version: null,
+        ...extra,
+      });
+
+      const confirma = async (extra: Record<string, unknown>) => {
+        const { service, cap } = harness({ pixPayment: publicaPaga(extra) });
+        await service.handleWebhook({ event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } }, 'segredo');
+        await Promise.resolve();
+        return cap;
+      };
+
+      it('e-mail + aceite: repassa nome e e-mail declarados ao recibo', async () => {
+        const cap = await confirma({
+          donor_name: 'Ana',
+          donor_email: 'ana@igreja.com',
+          donor_consent_version: 'donor_consent_v1',
+        });
+
+        expect(cap.receiptDonors).toEqual([{ name: 'Ana', email: 'ana@igreja.com' }]);
+      });
+
+      it('e-mail sem nome: repassa nome nulo', async () => {
+        const cap = await confirma({ donor_email: 'ana@igreja.com', donor_consent_version: 'donor_consent_v1' });
+
+        expect(cap.receiptDonors).toEqual([{ name: null, email: 'ana@igreja.com' }]);
+      });
+
+      it('e-mail SEM aceite gravado não vira destinatário', async () => {
+        const cap = await confirma({ donor_name: 'Ana', donor_email: 'ana@igreja.com' });
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+
+      it('só o nome, sem e-mail: anônimo para fins de recibo', async () => {
+        const cap = await confirma({ donor_name: 'Ana', donor_consent_version: 'donor_consent_v1' });
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+
+      it('fora do cenário público, o doador declarado nunca é repassado', async () => {
+        const cap = await confirma({
+          scenario: 'dynamic',
+          donor_email: 'ana@igreja.com',
+          donor_consent_version: 'donor_consent_v1',
+        });
+
+        expect(cap.receiptDonors).toEqual([undefined]);
+      });
+    });
+
     it('não aciona o recibo quando a confirmação perde a corrida', async () => {
       const { service, cap } = harness({ perdeCorrida: true });
 
@@ -1681,6 +2882,82 @@ describe('PixService', () => {
 
       expect(cap.eventRegistrationUpdates).toEqual([]);
       expect(cap.receiptCalls).toEqual(['tx-1']);
+    });
+
+    it('doação pública (cenário `public`): lança com descrição própria e sem doador — o nome declarado não vira vínculo', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'pending',
+          donor_person_id: null,
+          scenario: 'public',
+        },
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123', value: 50 } },
+        'segredo',
+      );
+
+      expect(cap.transactions).toHaveLength(1);
+      expect(cap.transactions[0]).toMatchObject({
+        type: 'income',
+        source: 'pix_webhook',
+        description: 'Doação pública via PIX',
+        category_id: 'cat-oferta',
+        donor_person_id: null,
+      });
+    });
+
+    it('linha `failed` (limpeza já rodou, mas o dinheiro entrou) é confirmada e lançada — o pagamento real prevalece (DPUB-09)', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'failed',
+          donor_person_id: null,
+          scenario: 'public',
+        },
+      });
+
+      await service.handleWebhook(
+        { event: 'PAYMENT_RECEIVED', payment: { id: 'pay_123', value: 50 } },
+        'segredo',
+      );
+
+      expect(cap.updates[0]).toMatchObject({
+        where: { id: 'pix-1', status: { in: ['pending', 'failed'] } },
+        data: { status: 'confirmed' },
+      });
+      expect(cap.transactions).toHaveLength(1);
+    });
+
+    it('linha `failed` reentregue depois de confirmada não duplica o lançamento', async () => {
+      const { service, cap } = harness({
+        pixPayment: {
+          id: 'pix-1',
+          tenant_id: 't1',
+          congregation_id: 'c1',
+          amount: new Prisma.Decimal('50.00'),
+          category_id: 'cat-oferta',
+          status: 'failed',
+          donor_person_id: null,
+          scenario: 'public',
+        },
+      });
+      const evento = { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_123' } };
+
+      await service.handleWebhook(evento, 'segredo');
+      await service.handleWebhook({ event: 'PAYMENT_RECEIVED', payment: { id: 'pay_123' } }, 'segredo');
+
+      expect(cap.transactions).toHaveLength(1);
     });
 
     it('pagamento que já chegou `confirmed` do banco é ignorado de saída', async () => {

@@ -1,9 +1,14 @@
 import { Reflector } from '@nestjs/core';
 import { PixController } from './pix.controller';
+import { PublicDonationThrottlerGuard } from '../common/guards/public-donation-throttler.guard';
 import { PixService } from './pix.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { REQUIRES_PLAN_KEY } from '../auth/decorators/requires-plan.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+
+// Chaves de metadata do `@Throttle` (`throttler.constants`, não exportadas pelo pacote).
+const THROTTLER_LIMIT = 'THROTTLER:LIMIT';
+const THROTTLER_TTL = 'THROTTLER:TTL';
 
 const DYNAMIC_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 
@@ -37,6 +42,9 @@ describe('PixController', () => {
       listSubscriptions: jest.fn(),
       cancelSubscription: jest.fn(),
       createPublicDonation: jest.fn(),
+      getPublicDonationStatus: jest.fn(),
+      listPublicIntents: jest.fn(),
+      settlePublicIntent: jest.fn(),
       handleWebhook: jest.fn(),
     } as unknown as jest.Mocked<PixService>;
 
@@ -108,6 +116,76 @@ describe('PixController', () => {
 
     expect(pixService.createPublicDonation).toHaveBeenCalledWith({ tenant_slug: 'x' });
     expect(result).toEqual({ pix_key: 'k' });
+  });
+
+  it('getPublicDonationStatus (público) delega ao service com slug e payment_id', async () => {
+    pixService.getPublicDonationStatus.mockResolvedValue({ status: 'pending' } as never);
+
+    const result = await controller.getPublicDonationStatus(
+      'igreja-x',
+      '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11',
+    );
+
+    expect(pixService.getPublicDonationStatus).toHaveBeenCalledWith(
+      'igreja-x',
+      '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11',
+    );
+    expect(result).toEqual({ status: 'pending' });
+  });
+
+  it('o status da doação pública nunca é cacheado e não exige papel nem plano', () => {
+    const handler = PixController.prototype.getPublicDonationStatus;
+
+    expect(Reflect.getMetadata('__headers__', handler)).toEqual([
+      { name: 'Cache-Control', value: 'no-store' },
+    ]);
+    expect(rolesFor('getPublicDonationStatus')).toBeUndefined();
+    expect(requiredPlanFor('getPublicDonationStatus')).toBeUndefined();
+  });
+
+  it('criação e status da doação pública usam o balde por igreja + origem; criação: 30/min', () => {
+    const guards = (m: keyof PixController) =>
+      Reflect.getMetadata('__guards__', PixController.prototype[m]) as unknown[];
+
+    expect(guards('createPublicDonation')).toEqual([PublicDonationThrottlerGuard]);
+    expect(guards('getPublicDonationStatus')).toEqual([PublicDonationThrottlerGuard]);
+    expect(
+      Reflect.getMetadata(`${THROTTLER_LIMIT}default`, PixController.prototype.createPublicDonation),
+    ).toBe(30);
+  });
+
+  it('o polling tem limite mais folgado que a criação da doação pública', () => {
+    const limite = (m: keyof PixController) =>
+      Reflect.getMetadata(`${THROTTLER_LIMIT}default`, PixController.prototype[m]) as number;
+    const ttl = (m: keyof PixController) =>
+      Reflect.getMetadata(`${THROTTLER_TTL}default`, PixController.prototype[m]) as number;
+
+    expect(limite('getPublicDonationStatus')).toBe(120);
+    expect(ttl('getPublicDonationStatus')).toBe(60_000);
+    expect(limite('getPublicDonationStatus')).toBeGreaterThan(limite('createPublicDonation'));
+  });
+
+  it('listPublicIntents delega ao service, exige papel financeiro e NÃO exige plano (o Starter é quem mais precisa)', async () => {
+    pixService.listPublicIntents.mockResolvedValue({ data: [], total: 0 } as never);
+    const query = { page: 1, page_size: 20 };
+
+    const result = await controller.listPublicIntents(query as never, user);
+
+    expect(pixService.listPublicIntents).toHaveBeenCalledWith(user, query);
+    expect(result).toEqual({ data: [], total: 0 });
+    expect(rolesFor('listPublicIntents')).toEqual(DYNAMIC_ROLES);
+    expect(requiredPlanFor('listPublicIntents')).toBeUndefined();
+  });
+
+  it('settlePublicIntent delega ao service, exige papel financeiro e NÃO exige plano', async () => {
+    pixService.settlePublicIntent.mockResolvedValue({ id: 'i1', status: 'confirmed' } as never);
+
+    const result = await controller.settlePublicIntent('i1', user);
+
+    expect(pixService.settlePublicIntent).toHaveBeenCalledWith('i1', user);
+    expect(result).toEqual({ id: 'i1', status: 'confirmed' });
+    expect(rolesFor('settlePublicIntent')).toEqual(DYNAMIC_ROLES);
+    expect(requiredPlanFor('settlePublicIntent')).toBeUndefined();
   });
 
   it('handleWebhook (público) delega ao service com body e token', async () => {

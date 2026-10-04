@@ -36,7 +36,7 @@ problema de LGPD/consumidor (cancelar tem que ser tão fácil quanto contratar).
 | E6 | `tenant_congregation_isolation` (023) isola por tenant + congregação; `app_congregation_allowed` = `congregation == sessão OR tenant_admin` (`003:30-36`). **Não distingue pessoa**: qualquer `member` da congregação passa no RLS para as assinaturas de todos os outros doadores dela. | `023_rls_pix_subscriptions.sql` |
 | E7 | `createSubscription` não tem idempotência: chama a Asaas **antes** de gravar a linha (falha no `create` local deixa assinatura ativa e cobrando sem registro) e dois toques criam duas assinaturas. `amount` só tem `@IsPositive` (sem mínimo/máximo); `description` é texto livre enviado à Asaas. | `pix.service.ts:378-410`, `create-pix-subscription.dto.ts` |
 | E8 | Cancelar já confirma na Asaas antes de marcar `cancelled`, e cancelar duas vezes é no-op; webhook de assinatura cancelada é ignorado. Correto — é o desenho a reaproveitar. Mas 404 da Asaas (já removida) hoje vira 503 e a assinatura nunca fecha localmente. | `pix.service.ts:422-443`, `:577-580` |
-| E9 | **Decidido (AD-006, 2026-10-03)**: a tarifa Asaas é do tenant e a Orbien recebe 1% por split em toda cobrança. Hoje nenhuma cobrança leva `split` (nem a recorrente, nem as de `/payments`) e a conta é única — o padrão ainda não está no código. A assinatura do doador **deve** nascer pelo montador único de `asaas-taxa-e-split-padrao`, não com corpo próprio. | `.specs/STATE.md` AD-006; `.specs/features/asaas-taxa-e-split-padrao/` |
+| E9 | **Decidido (AD-008, 2026-10-03)**: a tarifa Asaas é do tenant e a Orbien recebe 1% por split em toda cobrança. Hoje nenhuma cobrança leva `split` (nem a recorrente, nem as de `/payments`) e a conta é única — o padrão ainda não está no código. A assinatura do doador **deve** nascer pelo montador único de `asaas-taxa-e-split-padrao`, não com corpo próprio. | `.specs/STATE.md` AD-008; `.specs/features/asaas-taxa-e-split-padrao/` |
 | E10 | Recibo (PROD-03) já sai do webhook para `PixPayment` com `donor_person_id` + tenant Premium (do banco) + doador **com e-mail**; o `PixPayment` recorrente já carrega `donor_person_id` (`:585-593`), então recibo e carnê anual (PROD-08) funcionam sem mudança. Não há rota de recibo para o próprio doador (`/financial/donation-receipts` é do tesoureiro). | PLANO PROD-03/08 |
 | E11 | No mobile, "Contribua" abre `${webUrl}/doar/{slug}` no navegador (doação avulsa pública) (`(tabs)/index.tsx:108-119`). Não há tela financeira autenticada. O padrão de QR/copia-e-cola dentro do app existe em `EventRegistrationPanel.tsx`. O plano chega no JWT do mobile (`jwt.ts`), só como dica de UI. | |
 | E12 | A restrição do piso (`restricao-acesso-piso-member`) bloqueia `member` no web — o app é o único cliente do doador `member`. | `.specs/features/restricao-acesso-piso-member` |
@@ -48,7 +48,7 @@ problema de LGPD/consumidor (cancelar tem que ser tão fácil quanto contratar).
 - [ ] Cancelar nunca diz "cancelado" ao doador sem a Asaas ter confirmado.
 - [ ] Plano Premium e identidade do doador vêm sempre do banco, nunca da claim nem do corpo.
 - [ ] O doador recebe, de verdade, o meio de pagar cada ciclo (ou autoriza o débito) — **P0, pré-requisito**.
-- [ ] A assinatura é criada pelo montador único de cobrança (tarifa do tenant + split de 1% para a Orbien, AD-006) — **PRD-DONOR-12, pré-requisito**.
+- [ ] A assinatura é criada pelo montador único de cobrança (tarifa do tenant + split de 1% para a Orbien, AD-008) — **PRD-DONOR-12, pré-requisito**.
 
 ## Out of Scope
 
@@ -188,7 +188,7 @@ ninguém paga — e o fluxo do tesoureiro já sofre o mesmo.
 | PRD-DONOR-09 | P2: recibo/e-mail ausente | - | Pending |
 | PRD-DONOR-10 | P2: estados e falhas no app | Execute | Implemented |
 | PRD-DONOR-11 | P3: lembretes por push | - | Pending |
-| PRD-DONOR-12 | Pré-requisito: criar pelo montador único com split (AD-006) | Design | Pending — entregue por `asaas-taxa-e-split-padrao` |
+| PRD-DONOR-12 | Pré-requisito: criar pelo montador único com split (AD-008) | Design | Pending — entregue por `asaas-taxa-e-split-padrao` |
 
 **Coverage:** 12 total, 11 mapeados em tasks (PRD-DONOR-12 via T3b), 1 (PRD-DONOR-11) adiado de propósito.
 
@@ -218,7 +218,7 @@ ninguém paga — e o fluxo do tesoureiro já sofre o mesmo.
 
 **Construir depois — e não por falta de valor.**
 
-0. **Regra de taxa/split decidida (AD-006)**: tarifa do tenant e 1% por split valem para esta feature como para todas; o código ainda não cumpre (nenhum `split`, conta Asaas única). Isso vira segundo pré-requisito, junto do P0.
+0. **Regra de taxa/split decidida (AD-008)**: tarifa do tenant e 1% por split valem para esta feature como para todas; o código ainda não cumpre (nenhum `split`, conta Asaas única). Isso vira segundo pré-requisito, junto do P0.
 1. **Valor é real**: dízimo automático é a "âncora comercial" do Premium (ADR, pricing §134); o doador hoje não consegue parar sozinho; o custo marginal da tela é baixo porque RLS 023, webhook, recibo (PROD-03) e carnê (PROD-08) já funcionam para `PixPayment` recorrente (E10).
 2. **Mas o motor não está pronto**: E1–E3 mostram que a assinatura é criada no cliente-Asaas da igreja e **ninguém entrega o PIX do ciclo ao doador**. Uma tela de auto-serviço em cima disso cria assinaturas que não cobram — e hoje não há evidência de uso real do fluxo do tesoureiro com cobrança efetivamente paga. Construir o app antes é construir a parte fácil e herdar o furo.
 3. **Risco financeiro/legal sobe** quando o doador contrata sozinho: consentimento recorrente, cancelamento garantido, idempotência (E7) e plano do banco (E5) viram requisitos — todos viáveis, nenhum "grátis".
@@ -235,5 +235,5 @@ ninguém paga — e o fluxo do tesoureiro já sofre o mesmo.
 | Q5 | Aceita o isolamento por pessoa só no serviço (+ testes), ou quer policy RLS por pessoa (exige `app.person_id` no interceptor, mudança transversal)? Recomendação: serviço + teste agora; policy se mais rotas `/me` financeiras surgirem. | Defesa em profundidade vs. custo. |
 | Q6 | Quem redige/aprova o texto de consentimento recorrente (`donor_recurring_consent_v1`)? | LGPD map só tem `donor_consent_v1` (avulsa). |
 | Q7 | Recibos do próprio doador (`/me/receipts`) entram junto ou depois? | Fecha o ciclo "dizimei → tenho comprovante" no app. |
-| ~~Q8~~ | **Respondida em 2026-10-03 (AD-006):** tarifa Asaas é do tenant; 1% por split para a Orbien em toda transação, inclusive a recorrente. Modelo de conta decidido em AD-007 (subconta da igreja criada pela Orbien, só CNPJ). Com isso o doador passa a ser cliente da **subconta da igreja**, o que também resolve E1: a cobrança do ciclo é da igreja para o doador. | Fechada. |
+| ~~Q8~~ | **Respondida em 2026-10-03 (AD-008):** tarifa Asaas é do tenant; 1% por split para a Orbien em toda transação, inclusive a recorrente. Modelo de conta decidido em AD-009 (subconta da igreja criada pela Orbien, só CNPJ). Com isso o doador passa a ser cliente da **subconta da igreja**, o que também resolve E1: a cobrança do ciclo é da igreja para o doador. | Fechada. |
 | Q9 | Alguma igreja Premium real (tenant pagante) quer isso agora? | Valida prioridade contra o backlog. |

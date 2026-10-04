@@ -2,9 +2,9 @@
 
 Escopo **Medium/Large** (transversal, dinheiro). Avaliação e plano — nada
 implementado. Origem: decisão do dono do produto em 2026-10-03, registrada como
-`AD-006` e `AD-007` (`.specs/STATE.md`), `PEND-16` e `DEC-07` (`docs/PLANO.md`).
+`AD-008` e `AD-009` (`.specs/STATE.md`), `PEND-17` e `DEC-07` (`docs/PLANO.md`).
 
-**Modelo decidido (AD-007, 2026-10-03)**: subconta Asaas por igreja criada pela
+**Modelo decidido (AD-009, 2026-10-03)**: subconta Asaas por igreja criada pela
 Orbien com a chave raiz; cobrança emitida na subconta com a `apiKey` dela; 1% por
 split para o `walletId` da Orbien; só tenant com CNPJ; sem CNPJ ou subconta não
 aprovada → só a chave PIX da igreja (Cenário 1).
@@ -28,7 +28,7 @@ Asaas cai na conta única da `ASAAS_API_KEY`, não no tenant.
 ## Goals
 
 - [ ] Toda cobrança Asaas é montada por um único ponto, com split de 1% para a wallet da Orbien.
-- [ ] A tarifa Asaas é do tenant: a cobrança é criada na subconta do tenant (AD-007), nunca com a chave raiz da Orbien.
+- [ ] A tarifa Asaas é do tenant: a cobrança é criada na subconta do tenant (AD-009), nunca com a chave raiz da Orbien.
 - [ ] Igreja com CNPJ ativa os recebimentos sem sair do Orbien (dados → subconta criada → documentos pelo link da Asaas → aprovada), sem manusear chave.
 - [ ] Cobrança sem split é impossível de criar e há teste que prova.
 - [ ] Percentual e wallet são configuração, não literal.
@@ -38,7 +38,7 @@ Asaas cai na conta única da `ASAAS_API_KEY`, não no tenant.
 | Item | Motivo |
 |---|---|
 | PIX manual (Cenário 1) | Não usa Asaas; sem tarifa nem split. |
-| Repassar tarifa ao doador | Decisão é tarifa do tenant (AD-006). |
+| Repassar tarifa ao doador | Decisão é tarifa do tenant (AD-008). |
 | Troca de provedor | ADR-007 já isola a lógica; este padrão só garante um ponto de mudança. |
 | Cobrar retroativamente o 1% de cobranças passadas | Fora; nenhuma foi feita com split. |
 
@@ -47,23 +47,23 @@ Asaas cai na conta única da `ASAAS_API_KEY`, não no tenant.
 | Decisão | Default | Rationale | Confirmado? |
 |---|---|---|---|
 | Base do 1% | Sobre o **valor líquido** (é como o split da Asaas calcula) | Doc da Asaas: split incide sobre `netValue` | y — confirmado pela doc; avisar o pricing |
-| Falha fechada | Wallet/percentual ausentes → 503 + log; não cobra | AD-006 item 4 | y (decisão do dono) |
-| Montador | `AsaasChargeService.buildCharge(kind, input)` em `financial/`, usado por `PixService` e por qualquer serviço novo | AD-006 item 3 | y |
+| Falha fechada | Wallet/percentual ausentes → 503 + log; não cobra | AD-008 item 4 | y (decisão do dono) |
+| Montador | `AsaasChargeService.buildCharge(kind, input)` em `financial/`, usado por `PixService` e por qualquer serviço novo | AD-008 item 3 | y |
 | Configuração | `ASAAS_PLATFORM_WALLET_ID`, `ASAAS_PLATFORM_FEE_PERCENT` (padrão 1) em env; validadas no boot | Nada literal espalhado | n |
-| Tenant sem subconta aprovada ou sem CNPJ | Cobrança Asaas indisponível com mensagem "ative os recebimentos"; Cenário 1 segue | AD-007 | y |
-| Credencial da subconta | `apiKey` cifrada na aplicação (AES-GCM, chave mestra em env), coluna nunca selecionada fora do montador | AD-007 item 3 | y |
+| Tenant sem subconta aprovada ou sem CNPJ | Cobrança Asaas indisponível com mensagem "ative os recebimentos"; Cenário 1 segue | AD-009 | y |
+| Credencial da subconta | `apiKey` cifrada na aplicação (AES-GCM, chave mestra em env), coluna nunca selecionada fora do montador | AD-009 item 3 | y |
 
 **Open questions (dono do produto / spike):**
 
 | # | Pergunta |
 |---|---|
 | ~~Q-S1~~ | Respondida: o split da Asaas incide sobre o valor líquido (`netValue`), com `split[].walletId` + `percentualValue`. Resta decidir se o pricing passa a dizer "1% do líquido". |
-| ~~Q-S2~~ | Respondida (AD-007): subconta criada pela Orbien; KYC pela igreja via `onboardingUrl` da Asaas (análise em até 48 h). |
+| ~~Q-S2~~ | Respondida (AD-009): subconta criada pela Orbien; KYC pela igreja via `onboardingUrl` da Asaas (análise em até 48 h). |
 | Q-S6 | (Asaas) A subconta tem painel ou saque automático para o banco da igreja? A Orbien não deve operar saque. |
 | Q-S7 | (Asaas) Custo de criação/manutenção da subconta; exigência de contrato de parceria. |
 | Q-S8 | (Asaas) KYC de organização religiosa: entra como associação (exige ata de eleição)? |
-| ~~Q-S3~~ | Respondida (AD-007): cifrada na aplicação, chave mestra em env. |
-| ~~Q-S4~~ | Respondida (AD-007): sem ponte pela conta única; até aprovar, só Cenário 1. |
+| ~~Q-S3~~ | Respondida (AD-009): cifrada na aplicação, chave mestra em env. |
+| ~~Q-S4~~ | Respondida (AD-009): sem ponte pela conta única; até aprovar, só Cenário 1. |
 | Q-S5 | Assinaturas recorrentes já criadas (se houver em produção) sem split: recriar ou aceitar até cancelar? |
 
 ## User Stories
@@ -117,7 +117,7 @@ cifrada nunca é devolvida por rota). Script de RLS novo entra no
 | ASAAS-02 | Split em toda cobrança | Pending |
 | ASAAS-03 | Falha fechada | Pending |
 | ASAAS-04 | Trava de regressão (teste) | Pending |
-| ASAAS-05 | Cobrança na subconta do tenant (AD-007) | Pending |
+| ASAAS-05 | Cobrança na subconta do tenant (AD-009) | Pending |
 | ASAAS-07 | Ativar recebimentos: criar subconta, onboarding, estados | Pending — Q-S6..Q-S8 com a Asaas |
 | ASAAS-06 | Visibilidade da tarifa/split | Pending (P2) |
 
@@ -142,6 +142,6 @@ Gates: `npm run test:unit -w orbien-backend`, `npm run test:rls -w orbien-backen
 
 Fazer **antes** do PROD-27 do doador e **independente dele**: A1–A5 são pequenos
 (≈1–2 dias) e já fecham o desvio entre pricing e código para os dois cenários que
-existem. A6–A6d (subconta por tenant, AD-007) é a parte grande; o modelo está
+existem. A6–A6d (subconta por tenant, AD-009) é a parte grande; o modelo está
 decidido e faltam só Q-S6..Q-S8 com a Asaas antes de estimar. Atenção: A1–A5
 sozinhos ainda cobrariam na conta raiz — só vão para produção junto com A6c.

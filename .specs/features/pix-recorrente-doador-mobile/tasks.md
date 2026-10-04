@@ -17,14 +17,14 @@ without it.**
 **Status**: Executado em parte, **atrás da trava `ASAAS_PAYMENTS_ENABLED`**
 (desligada para todo tenant) — decisão do dono do produto em 2026-10-03:
 "deixar minimamente pronto, mas não disponível nem para Premium nem para
-Starter, e lançar depois do produto no mercado" (`PROD-28`, `AD-008`).
+Starter, e lançar depois do produto no mercado" (`PROD-28`, `AD-010`).
 
 **Progresso de Execute (2026-10-03, branch `docs/spec-pix-recorrente-doador-mobile`):**
 
 | Task | Estado | Nota |
 |---|---|---|
 | T1, T2, T3 (Fase 0 / P0) | **não feito** | Spike Asaas e entrega da cobrança do ciclo ao doador seguem abertos (`PROD-28`, "O que falta" 3) |
-| T3b (split, AD-006/AD-007) | **não feito** | Depende de `asaas-taxa-e-split-padrao` |
+| T3b (split, AD-008/AD-009) | **não feito** | Depende de `asaas-taxa-e-split-padrao` |
 | T4 | parcial | Migration `add_pix_subscription_consent`: `consent_version`, `consent_accepted_at`. **Sem** status `pending` nem `idempotency_key` (ver desvio 1) |
 | T5 | feito | Unique parcial `pix_subscriptions_one_active_per_donor`; bootstrap/RLS 023 sem mudança |
 | T6 | feito | `PixService.createSubscriptionFor` / `cancelSubscriptionRow`, tesoureiro intacto |
@@ -92,7 +92,7 @@ Fase 0 (spike + P0) → Fase 1 (modelo) → Fase 2 (API doador) → Fase 3 (test
 |---|---|---|---|---|
 | T1 | Spike em sandbox Asaas: o que `billingType:PIX` + `MONTHLY` gera; como obter `invoiceUrl`/QR do ciclo; se existe PIX Automático com autorização do doador. Registrar em `context.md` | — | none (pesquisa) | Q1 respondida com evidência da doc/sandbox |
 | T2 | Dono decide Q1–Q3 e Q8; registrar em `context.md` | T1 | none | Decisões gravadas |
-| T3b | Criar a assinatura pelo `AsaasChargeService` (AD-006): split de 1% e credencial do tenant; depende de `asaas-taxa-e-split-padrao` A3–A6 | T2, A4 | unit: corpo da assinatura contém `split`; sem config → 503 | PRD-DONOR-12 |
+| T3b | Criar a assinatura pelo `AsaasChargeService` (AD-008): split de 1% e credencial do tenant; depende de `asaas-taxa-e-split-padrao` A3–A6 | T2, A4 | unit: corpo da assinatura contém `split`; sem config → 503 | PRD-DONOR-12 |
 | T3 | `asaasGet` + método `getCurrentCharge(subscription)` no `PixService` (QR/copia-e-cola do ciclo em aberto) | T2 | unit (Asaas mockado: aberto, nenhum, erro) | PRD-DONOR-01 coberto; fluxo do tesoureiro também pode usar |
 
 ### Fase 1 — Modelo de dados

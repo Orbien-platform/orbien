@@ -180,6 +180,15 @@ fi
 if [ -f prisma/migrations/023_rls_pix_subscriptions.sql ]; then
   run_sql_file prisma/migrations/023_rls_pix_subscriptions.sql
 fi
+# `pix_webhook_scope()` (webhook da Asaas, doação pública Premium): função
+# SECURITY DEFINER, não policy — o webhook roda como `orbien_app` sem contexto
+# e só conhece o id da Asaas; a função devolve tenant+congregação para o service
+# fixar o contexto. Precisa de `pix_payments` e `pix_subscriptions` (passo 2) e
+# do role `orbien_app` (passo 1). Não mexe em policy, então a ordem em relação
+# ao passo 4 é indiferente.
+if [ -f prisma/migrations/024_rls_pix_webhook_scope.sql ]; then
+  run_sql_file prisma/migrations/024_rls_pix_webhook_scope.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -588,6 +597,24 @@ BEGIN
   RAISE NOTICE 'pix_subscriptions com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em pix_subscriptions, encontrei % — 023_rls_pix_subscriptions.sql rodou?', n;
+  END IF;
+
+  -- 024: pix_webhook_scope() — o webhook da Asaas não tem contexto de tenant e
+  -- só acha a linha por esta função. Sem SECURITY DEFINER (ou sem o
+  -- search_path fixo, ou com EXECUTE aberto a app_user/PUBLIC) ela deixa de
+  -- ser a fronteira que o desenho promete.
+  SELECT count(*) INTO n
+    FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+   WHERE p.proname = 'pix_webhook_scope'
+     AND p.prosecdef
+     AND p.proconfig IS NOT NULL
+     AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+     AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE');
+  RAISE NOTICE 'pix_webhook_scope SECURITY DEFINER conforme: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava pix_webhook_scope() SECURITY DEFINER com search_path fixo e EXECUTE so para orbien_app, encontrei % — 024_rls_pix_webhook_scope.sql rodou?', n;
   END IF;
 
   -- 021: bible_chapter_cache (AD-005) — o caso OPOSTO aos anteriores: RLS

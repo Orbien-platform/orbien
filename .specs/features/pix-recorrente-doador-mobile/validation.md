@@ -49,7 +49,7 @@ precisavam da trava ligada ganharam `ASAAS_PAYMENTS_ENABLED=true` no
 | P1-cancelar 4: 404 Asaas | marca `cancelled` | `pix.service.spec.ts:1059` | ✅ |
 | P1-cancelar 5: idempotente | no-op | `pix.service.spec.ts` "já cancelada: não chama a Asaas de novo" (pré-existente) | ✅ |
 | Edge: sessão de suporte | 403 criar/cancelar | unit `:173`, `:252` | ✅ |
-| Trava (AD-008) | criar → 503 em todo caminho; ver/cancelar livres; fronts escondem | `pix.service.spec.ts:543`, `:742`, `:849`, `:1078`; `posts.service.spec.ts` (evento pago → 400); integração `:157`, `:177`; web `financeiro/page.test.tsx` (aba PIX some), `CreatePostModal.test.tsx` (sem campo de preço); app `(tabs)/index.test.tsx` (sem entrada), `dizimo-automatico.test.tsx:59` | ✅ |
+| Trava (AD-010) | criar → 503 em todo caminho; ver/cancelar livres; fronts escondem | `pix.service.spec.ts:543`, `:742`, `:849`, `:1078`; `posts.service.spec.ts` (evento pago → 400); integração `:157`, `:177`; web `financeiro/page.test.tsx` (aba PIX some), `CreatePostModal.test.tsx` (sem campo de preço); app `(tabs)/index.test.tsx` (sem entrada), `dizimo-automatico.test.tsx:59` | ✅ |
 | P2: consentimento versionado | versão + hora gravadas | `pix.service.spec.ts` "grava a versão e a hora do aceite"; integração `:199` | ✅ |
 | P2: estados e falhas no app | indisponível, ativa, sem pagamentos, erro | `dizimo-automatico.test.tsx:59`–`:180` | ✅ |
 
@@ -82,6 +82,6 @@ reexecutada verde (119/119 unit; 11/11 integração).
 
 1. P0: o doador não recebe a cobrança do ciclo (sem QR/link no app; cliente
    Asaas ainda é a igreja na conta raiz). `PROD-28`, "O que falta" 3.
-2. PRD-DONOR-12: cobrança sem split e na conta raiz (`AD-006`/`AD-007`).
+2. PRD-DONOR-12: cobrança sem split e na conta raiz (`AD-008`/`AD-009`).
 3. Idempotência por chave e saga `pending` (desvio 1).
 4. Verifier independente não rodou (autor = verificador).

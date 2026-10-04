@@ -129,7 +129,58 @@ RLS (o que o alerta do pre-push aceitaria em silêncio, mas deixa a
 intenção implícita) ou de ganhar `tenant_id` que não tem dono nenhum para
 apontar.
 
-### AD-006 — Taxa da Asaas é do tenant; 1% de split vai para a Orbien, em toda cobrança
+### AD-006 — Rota pública que acha linha por id externo resolve o escopo por função SQL `SECURITY DEFINER`
+
+**Status**: active
+**Origem**: feature `doacao-publica-premium-qr-dinamico`, fase Execute, 2026-10-03
+
+Rota sem JWT roda como `orbien_app` e **não** tem `app.tenant_id`: as tabelas com
+RLS por tenant+congregação (`pix_payments`, `pix_subscriptions`,
+`financial_transactions`) devolvem zero linhas para ela. O webhook da Asaas
+descartava toda confirmação por isso (ver `PEND-16`) — e só conhece o id da Asaas.
+
+O caminho "id externo → escopo" é uma função `SECURITY DEFINER`, com
+`search_path` fixo, `EXECUTE` só para `orbien_app`, que devolve **somente**
+`tenant_id` e `congregation_id` — nunca a linha
+(`pix_webhook_scope()`, `024_rls_pix_webhook_scope.sql`; mesmo padrão de
+`audit_insert()`, AD-004). Com o escopo, o service abre a transação, fixa
+`app.tenant_id`/`app.congregation_id` e o resto roda sob a RLS normal. O escopo
+vem do banco, **nunca** do payload: tenant forjado no corpo é ignorado.
+
+Não usar `prisma.system` (BYPASSRLS) em handler de requisição — `prisma.service.ts`
+reserva o client privilegiado a schedulers. Não criar policy para `orbien_app`
+em tabela de dado de igreja: afrouxa a fronteira que a função mantém estreita.
+
+**Consequência prática**: nova rota pública que precise achar uma linha de tenant
+por um id que só o terceiro conhece ganha uma função irmã (`0NN_rls_*.sql`, no
+`bootstrap-db.sh`, com a verificação no passo 7), nunca uma policy nova.
+Escrita sem JWT a partir de um slug resolvido no servidor continua sendo
+`runInPublicContext` (sem script de RLS novo).
+
+### AD-007 — O que o doador público declara nunca vira `Person`, e o plano é lido do banco do slug
+
+**Status**: active
+**Origem**: feature `doacao-publica-premium-qr-dinamico`, fase Design/Execute, 2026-10-03
+
+Na doação pública, nome e e-mail são **declaração sem verificação**. Gravam-se na
+própria linha de `pix_payments` (`donor_*`, com o aceite do termo) e o recibo
+(`PROD-03`) vai para o e-mail declarado (`donation_receipts.recipient_*`,
+`person_id` nulo). **Nenhuma** `Person` é criada nem vinculada por e-mail: quem
+digitasse o e-mail de um membro atribuiria a doação — e o recibo, e o carnê de IR
+de `PROD-08` — a ele. `Person` vinculada (doador cadastrado) sempre vence o
+declarado.
+
+O plano que decide QR dinâmico × chave estática é o `TenantPlan` do tenant
+resolvido pelo slug, lido no banco; um `plan`/`mode` no corpo é 400. O plano gateia
+a **criação** da cobrança, não a confirmação: o dinheiro que entrou vira
+lançamento mesmo que o plano tenha mudado no meio.
+
+**Consequência prática**: nova rota pública que receba dado de identificação do
+visitante guarda o snapshot na linha da operação, com aceite versionado
+(`legal/consent-terms/`), e só cria/vincula `Person` num fluxo que verifique o
+titular. Recibo/documento para quem não é `Person` usa `recipient_*`.
+
+### AD-008 — Taxa da Asaas é do tenant; 1% de split vai para a Orbien, em toda cobrança
 
 **Status**: active
 **Origem**: decisão do dono do produto, 2026-10-03 (avaliação `pix-recorrente-doador-mobile`)
@@ -160,17 +211,17 @@ esqueceria — a regra.
 
 **Consequência prática**: uma feature nova de pagamento **não** decide taxa nem
 split; ela chama o montador. Mudar o percentual ou o provedor (ADR-007) é uma
-mudança num lugar. **Pré-requisito em aberto (DEC-07/PEND-16)**: hoje há uma só
+mudança num lugar. **Pré-requisito em aberto (DEC-07/PEND-17)**: hoje há uma só
 `ASAAS_API_KEY` e um cliente Asaas por tenant — para a tarifa ser do tenant e o
 split sair da cobrança dele, a cobrança precisa ser criada na conta Asaas do
 tenant (subconta/wallet por tenant). Ver `.specs/features/asaas-taxa-e-split-padrao/`.
 
-### AD-007 — Cobrança nasce na subconta Asaas do tenant, criada pela Orbien; só tenant com CNPJ
+### AD-009 — Cobrança nasce na subconta Asaas do tenant, criada pela Orbien; só tenant com CNPJ
 
 **Status**: active
-**Origem**: decisão do dono do produto, 2026-10-03 (fecha `DEC-07`; complementa AD-006)
+**Origem**: decisão do dono do produto, 2026-10-03 (fecha `DEC-07`; complementa AD-008)
 
-Como cumprir o AD-006 ("tarifa do tenant, 1% para a Orbien"):
+Como cumprir o AD-008 ("tarifa do tenant, 1% para a Orbien"):
 
 1. **A cobrança é emitida na conta do tenant, nunca na da Orbien.** Para cada
    igreja a Orbien cria uma **subconta Asaas** com a chave raiz da Orbien
@@ -185,7 +236,7 @@ Como cumprir o AD-006 ("tarifa do tenant, 1% para a Orbien"):
 3. **A igreja nunca manuseia chave.** A `apiKey` da subconta vem uma única vez,
    na resposta de criação; a Orbien a guarda **cifrada na aplicação** (chave
    mestra fora do banco), nunca em log, nunca no front, lida só pelo montador
-   de cobrança do AD-006. A chave raiz da Orbien e o `walletId` da Orbien ficam
+   de cobrança do AD-008. A chave raiz da Orbien e o `walletId` da Orbien ficam
    em variável de ambiente, nunca no banco.
 4. **Só tenant com CNPJ.** Sem CNPJ não há subconta nem cobrança Asaas: a
    igreja expõe só a própria chave PIX (copiar ou QR) e a contribuição acontece
@@ -205,7 +256,7 @@ ao painel ou saque automático para o banco da igreja (subconta BaaS não tem
 painel — a Orbien **não** deve operar saque de dinheiro do tenant), custo de
 criação, e como "organização religiosa" é tratada no KYC (associação pede ata).
 
-### AD-008 — Toda cobrança Asaas nasce atrás de `ASAAS_PAYMENTS_ENABLED`; ver e cancelar, nunca
+### AD-010 — Toda cobrança Asaas nasce atrás de `ASAAS_PAYMENTS_ENABLED`; ver e cancelar, nunca
 
 **Status**: active
 **Origem**: decisão do dono do produto, 2026-10-03 (PROD-28)
@@ -215,11 +266,13 @@ para todo código que cria cobrança na Asaas — o que existe hoje e o que vier
 
 1. **Criar cobrança** chama `assertAsaasPaymentsEnabled()`
    (`apps/api/src/financial/asaas-payments.flag.ts`) antes de qualquer
-   consulta ou chamada à Asaas — 503 com a mensagem da trava. A checagem fica
-   no serviço que cobra (`PixService`), não só no controller, para que todo
-   caminho (inclusive o de inscrição de evento, que vem de `content/`) passe
-   por ela. O que só *prepara* uma cobrança (ex.: evento com preço) é barrado
-   também, com 400.
+   consulta ou chamada à Asaas — 503 com a mensagem da trava. Onde já existe
+   um caminho sem Asaas, ele é tomado em vez do 503: o QR dinâmico da doação
+   pública Premium consulta `asaasPaymentsEnabled()` e cai para a chave
+   estática, como o Starter. A checagem fica no serviço que cobra
+   (`PixService`), não só no controller, para que todo caminho (inclusive o
+   de inscrição de evento, que vem de `content/`) passe por ela. O que só
+   *prepara* uma cobrança (ex.: evento com preço) é barrado também, com 400.
 2. **Nunca travar**: listar, cancelar, webhook. Cobrança emitida precisa ser
    confirmada, e quem é cobrado precisa poder parar.
 3. Só o literal `true` liga. Valor esquecido ou digitado errado = desligado.
@@ -234,5 +287,5 @@ corpo nem da claim; responde 404 para linha de outra pessoa; e barra sessão de
 suporte. Modelo: `DonorPixSubscriptionsService`.
 
 **Consequência prática**: ligar pagamentos em produção é mudar uma env — e
-isso só depois de `AD-006`/`AD-007` no código (`PROD-28`, "O que falta").
+isso só depois de `AD-008`/`AD-009` no código (`PROD-28`, "O que falta").
 

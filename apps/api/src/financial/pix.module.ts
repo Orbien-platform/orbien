@@ -5,6 +5,7 @@ import { StorageModule } from '../storage/storage.module';
 import { MailModule } from '../mail/mail.module';
 import { PixController } from './pix.controller';
 import { PixService } from './pix.service';
+import { PublicDonationExpiryScheduler } from './public-donation-expiry.scheduler';
 import { DonationReceiptsController } from './donation-receipts.controller';
 import { DonationReceiptService } from './donation-receipts.service';
 import { AnnualDonationReportService } from './annual-donation-report.service';
@@ -27,6 +28,7 @@ import { DonorPixSubscriptionsService } from './donor-pix-subscriptions.service'
     PixService,
     DonationReceiptService,
     AnnualDonationReportService,
+    PublicDonationExpiryScheduler,
     DonorPixSubscriptionsService,
   ],
   exports: [PixService],
