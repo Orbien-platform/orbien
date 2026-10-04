@@ -339,6 +339,11 @@ autosserviço do mapeamento (seção 4), todas sobre a pessoa da conta do token
 - `POST`/`DELETE /me/deletion-request` — pedido de exclusão, cancelável: marca
   `deleted_at`, e o job diário que já existia (`purgeExpiredSoftDeletes`)
   anonimiza em 30 dias.
+  O titular só desfaz o que **ele** pediu: a remoção feita pelo admin grava o
+  mesmo `deleted_at`, e quem diz a origem é a última entre
+  `person.deletion_requested` e `person.deleted` em `audit_logs` — gravadas
+  na transação, para que o registro não se perca (decisão de 2026-10-04,
+  achado da revisão).
 
 O app ganhou a tela **Privacidade e meus dados** (aba Mais) sobre essas rotas.
 Testes de unidade (100% do módulo) e de integração em `teste1-church`
@@ -488,7 +493,7 @@ mesmo formato de `/doar/{tenant_slug}` e o mesmo que `signupUrl` monta no app.
   com "Tentar de novo", 404 no envio (QR desativado no meio), 429 e erro de
   validação da API. Sucesso mostra a mensagem da igreja, com "Que bom te ver
   de novo" para quem já tinha visitado.
-- O que ficou de fora virou `PEND-18` a `PEND-20`.
+- O que ficou de fora virou `PEND-18` e `PEND-19`.
 
 ---
 
@@ -1785,7 +1790,7 @@ está.
   para a liderança projetar no culto, com a página pública que esse QR abre
   no `apps/web` (`PROD-34`, fechado). Ficam pendentes `PROD-30` (Início por
   papel), `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
-  recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` a `PEND-20` —
+  recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
   lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
@@ -2286,17 +2291,7 @@ entra. Quem usa dados móveis não é afetado. Opções a decidir: limite por
 token do QR em vez de por IP, ou um teto por IP maior só nesta rota. Não foi
 mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 
-### PEND-19 · Piso de cobertura do `apps/mobile` não atingido · dívida
-
-O `jest --coverage` do mobile fica abaixo do piso de `jest.config.js`
-(99/97/98/99). Já estava assim na base da v2 (`claude/optimistic-davinci-q37vdu`:
-98,53 / 95,85 / 97,47 / 99,24) antes dos QRs; com eles ficou em
-98,55 / 95,58 / 96,88 / 99,15. Os arquivos dos QRs estão em 100%; o que falta
-está em telas e componentes anteriores (`visitante.tsx`, `ChurchWelcome.tsx`,
-linhas de dízimo e notificações em `(tabs)/mais.tsx`, `ListGroup.tsx`, entre
-outros). O piso não desce: o caminho é testar esses arquivos.
-
-### PEND-20 · QRs do app: o que ficou fora da primeira entrega · aberto
+### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
 
 - **Teste em aparelho**: câmera, brilho e tela acesa só foram exercitados com
   mocks. Falta rodar numa build nativa (os três módulos são nativos — não

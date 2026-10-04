@@ -130,7 +130,7 @@ describe('GET /me/personal-data', () => {
     expect(res.body.person.id).toBe(anaPersonId);
     expect(res.body.consents).toHaveLength(1);
     expect(res.body.consents[0].version).toBe('member_consent_v1');
-    expect(res.body.deletion).toEqual({ requested_at: null, anonymize_after: null });
+    expect(res.body.deletion).toEqual({ requested_at: null, anonymize_after: null, cancellable: false });
   });
 
   it('conta sem pessoa vinculada recebe 404', async () => {
@@ -231,6 +231,7 @@ describe('pedido de exclusão', () => {
       .set('Authorization', `Bearer ${tokenBea}`);
 
     expect(res.status).toBe(200);
+    expect(res.body.cancellable).toBe(true);
     const requested = new Date(res.body.requested_at).getTime();
     const after = new Date(res.body.anonymize_after).getTime();
     expect(Math.round((after - requested) / 86_400_000)).toBe(30);
@@ -255,9 +256,34 @@ describe('pedido de exclusão', () => {
       .set('Authorization', `Bearer ${tokenBea}`);
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ requested_at: null, anonymize_after: null });
+    expect(res.body).toEqual({ requested_at: null, anonymize_after: null, cancellable: false });
     const bea = await admin.person.findUniqueOrThrow({ where: { id: beaPersonId } });
     expect(bea.deleted_at).toBeNull();
+  });
+
+  it('remoção feita pela igreja não se desfaz pelo titular: 409', async () => {
+    // Como o `PersonsService.remove` faz: marca deleted_at e registra
+    // `person.deleted` em audit_logs, pelo audit_insert().
+    await admin.person.update({ where: { id: beaPersonId }, data: { deleted_at: new Date() } });
+    await admin.$executeRaw`
+      SELECT audit_insert(
+        ${tenant.tenantId}::text, ${tenant.congregationId}::text, ${accountIds[0]}::text,
+        ${beaPersonId}::text, 'person'::text, 'person.deleted'::text,
+        NULL::jsonb, NULL::jsonb, NULL::text, NULL::text, NULL::text
+      )
+    `;
+
+    const data = await api().get('/api/me/personal-data').set('Authorization', `Bearer ${tokenBea}`);
+    expect(data.body.deletion.cancellable).toBe(false);
+
+    const res = await api()
+      .delete('/api/me/deletion-request')
+      .set('Authorization', `Bearer ${tokenBea}`);
+    expect(res.status).toBe(409);
+    const bea = await admin.person.findUniqueOrThrow({ where: { id: beaPersonId } });
+    expect(bea.deleted_at).not.toBeNull();
+
+    await admin.person.update({ where: { id: beaPersonId }, data: { deleted_at: null } });
   });
 
   it('cancelar sem pedido em aberto responde 404', async () => {

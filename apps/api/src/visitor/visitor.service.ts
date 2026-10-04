@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaClient, QrToken } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificationService } from '../persons/classification.service';
@@ -7,6 +7,8 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { RegisterVisitorDto } from './dto/register-visitor.dto';
 import { CreateQrTokenDto } from './dto/create-qr-token.dto';
 import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto';
+import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
+import { writeAuditLog } from '../common/audit/write-audit-log';
 
 type PrismaTx = Omit<
   PrismaClient,
@@ -15,10 +17,22 @@ type PrismaTx = Omit<
 
 export interface DuplicateMatch {
   id: string;
+  /** Completo para quem lê pessoas; mascarado ("André C.") para os demais. */
   full_name: string;
-  classification: string;
+  /** Nulo para quem não lê pessoas — o líder de célula. */
+  classification: string | null;
   visits: number;
   last_visit_at: Date | null;
+}
+
+/**
+ * "André da Costa" → "André C.". O líder precisa reconhecer a pessoa que
+ * está à sua frente, não ler o cadastro de quem tem aquele telefone.
+ */
+export function maskName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
 }
 
 export type LeaderRegisterResult =
@@ -51,6 +65,8 @@ type RegisterResult =
 
 @Injectable()
 export class VisitorService {
+  private readonly logger = new Logger(VisitorService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly classificationService: ClassificationService,
@@ -223,6 +239,11 @@ export class VisitorService {
     dto: RegisterVisitorByLeaderDto,
     user: JwtPayload,
   ): Promise<LeaderRegisterResult> {
+    // Quem não lê a área de pessoas (o líder de célula) recebe o duplicado
+    // reduzido: nome mascarado e sem classificação. Sem isso a rota viraria
+    // uma busca de cadastro por telefone para um papel que não lê pessoas.
+    const personsReaders: readonly string[] = PRODUCT_AREA_READ_ROLES.persons;
+    const readsPersons = user.roles.some((role) => personsReaders.includes(role));
     if (dto.origin === 'small_group' && !dto.small_group_id) {
       throw new BadRequestException('small_group_id é obrigatório quando origin = small_group');
     }
@@ -258,12 +279,26 @@ export class VisitorService {
         },
       });
       if (found.length > 0) {
+        // Toda consulta que revela alguém fica registrada — com quem foi
+        // achado, não com o telefone digitado.
+        await writeAuditLog(
+          this.prisma,
+          {
+            tenant_id: user.tenant_id,
+            congregation_id: user.congregation_id,
+            actor_user_id: user.sub,
+            entity: 'person',
+            action: 'visitor.duplicate_lookup',
+            after: { matched_person_ids: found.map((p) => p.id), masked: !readsPersons },
+          },
+          this.logger,
+        );
         return {
           status: 'duplicate',
           matches: found.map((p) => ({
             id: p.id,
-            full_name: p.full_name,
-            classification: p.classification,
+            full_name: readsPersons ? p.full_name : maskName(p.full_name),
+            classification: readsPersons ? p.classification : null,
             visits: p._count.visitRecords,
             last_visit_at: p.visitRecords[0]?.visited_at ?? null,
           })),

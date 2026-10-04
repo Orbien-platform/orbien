@@ -43,7 +43,7 @@ import {
   type VisitorGender,
 } from "../lib/visitantes/visitantes-client";
 
-const CLASSIFICATION_LABELS: Record<DuplicateMatch["classification"], string> = {
+const CLASSIFICATION_LABELS: Record<NonNullable<DuplicateMatch["classification"]>, string> = {
   visitor: "Visitante",
   attendee: "Frequentador",
   member: "Membro",
@@ -188,7 +188,7 @@ export default function VisitanteScreen() {
                 <Text style={[typography.h3, { color: colors.textPrimary }]}>{dup.full_name}</Text>
                 <Text style={[typography.caption, { color: colors.textTertiary }]}>
                   {[
-                    CLASSIFICATION_LABELS[dup.classification],
+                    dup.classification ? CLASSIFICATION_LABELS[dup.classification] : null,
                     `${dup.visits} ${dup.visits === 1 ? "visita" : "visitas"}`,
                     dup.last_visit_at ? `última em ${formatLongDate(dup.last_visit_at)}` : null,
                   ]

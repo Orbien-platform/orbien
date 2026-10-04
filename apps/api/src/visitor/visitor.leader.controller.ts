@@ -7,6 +7,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -30,8 +31,11 @@ export const VISITOR_LEADER_ROLES = [
   'cell_leader',
 ];
 
+// Throttle baixo: a resposta de duplicado revela quem tem um telefone, e um
+// recepcionista não cadastra mais que alguns visitantes por minuto.
 @Controller('visitors')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ThrottlerGuard)
+@Throttle({ default: { limit: 20, ttl: 60000 } })
 @UseInterceptors(TenantContextInterceptor)
 export class VisitorLeaderController {
   constructor(private readonly visitorService: VisitorService) {}

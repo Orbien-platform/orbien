@@ -308,7 +308,7 @@ na tela "em breve" do site.
 | Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Privacidade, Sair |
 | Pessoal | Privacidade e meus dados (LGPD) | [x] Meus dados com correção, consentimentos com revogação, exportação pela folha de compartilhamento, pedido de exclusão cancelável (30 dias). API nova: rotas `/me` do `CONF-03` |
 | Célula | Presença (líder): todos marcados, toque desmarca | [x] Na primeira chamada do encontro; com presença já registrada, ninguém vem pré-marcado. Falha mantém as marcações |
-| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] Fluxo da v2: sexo, origem, consentimento obrigatório; telefone repetido mostra quem o tem **antes** de criar ("registrar nova visita" ou "é outra pessoa"). API nova `POST /visitors`, aberta ao **líder de célula** |
+| Liderança | Cadastro de visitante (deduplicação por telefone) | [x] Fluxo da v2: sexo, origem, consentimento obrigatório; telefone repetido mostra quem o tem **antes** de criar ("registrar nova visita" ou "é outra pessoa"). API nova `POST /visitors`, aberta ao **líder de célula**. Para quem não lê pessoas (o líder), o duplicado vem reduzido — nome mascarado ("André C."), sem classificação — e toda consulta que acha alguém fica em `audit_logs` (decisão de 2026-10-04) |
 | Célula | QR de check-in (líder) | [x] Do encontro e da presença; tela cheia, brilho máximo e tela acesa, validade e contagem regressiva, presenças relidas a cada 15 s, "Renovar código". As 4h e as 24h são da API; o 409 vira "passou há mais de 24 horas" com atalho para a lista. Abrir a tela gera o código (a API não lê o vigente) |
 | Célula | Leitura do QR (membro) | [x] `/checkin` com `expo-camera`: permissão pedida, negada e bloqueada (abre os ajustes); ignora QR que não é de check-in; 404 "expirou ou foi renovado", 403 "não está neste grupo", sem conexão reenvia o mesmo código. Entrada no grupo e no encontro |
 | Liderança | QR de autocadastro | [x] Mais › Liderança, mesmos papéis de `admin/visitor/qr`. Lista os ativos e projeta o escolhido em tela cheia; sem nenhum, cria o do culto. O QR abre a página pública `/visitante/{slug}/{token}` do web (`PROD-34`) |
@@ -327,7 +327,7 @@ na tela "em breve" do site.
   (`PROD-34`).
 - [ ] **QRs — o que ficou de fora:** limite do autocadastro por IP no wi-fi da
   igreja (`PEND-18`), teste em aparelho, gerenciar QR de autocadastro e
-  leitura do código vigente (`PEND-20`).
+  leitura do código vigente (`PEND-19`).
 - [x] **Cadastro de visitante pelo líder de célula** — feito (2026-10-04),
   `POST /visitors`.
 - [ ] **Contribuir nativo** (`PROD-31`; o QR dinâmico e o recorrente dependem

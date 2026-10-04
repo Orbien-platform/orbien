@@ -1,13 +1,20 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { normalizePhone, VisitorService } from './visitor.service';
+import { maskName, normalizePhone, VisitorService } from './visitor.service';
 import { VisitorLeaderController, VISITOR_LEADER_ROLES } from './visitor.leader.controller';
 import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificationService } from '../persons/classification.service';
 import { VisitsService } from '../persons/visits.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+
+const mockWriteAuditLog = jest.fn();
+jest.mock('../common/audit/write-audit-log', () => ({
+  writeAuditLog: (...args: unknown[]) => mockWriteAuditLog(...args),
+}));
+
+beforeEach(() => mockWriteAuditLog.mockReset().mockResolvedValue(undefined));
 
 const leader: JwtPayload = {
   sub: 'user-1',
@@ -48,6 +55,13 @@ describe('normalizePhone', () => {
   });
 });
 
+describe('maskName', () => {
+  it('primeiro nome e a inicial do último', () => {
+    expect(maskName('André da Costa')).toBe('André C.');
+    expect(maskName('  Ana  ')).toBe('Ana');
+  });
+});
+
 describe('VisitorService.registerByLeader', () => {
   it('origem small_group sem grupo: 400', async () => {
     const { service } = setup();
@@ -56,7 +70,27 @@ describe('VisitorService.registerByLeader', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('telefone repetido devolve os duplicados sem criar', async () => {
+  it('para a secretaria, o duplicado vem completo', async () => {
+    const { service, client } = setup();
+    client.person.findMany.mockResolvedValue([
+      { id: 'p0', full_name: 'Ana Souza', classification: 'member', _count: { visitRecords: 2 }, visitRecords: [] },
+    ]);
+    const result = await service.registerByLeader(
+      { ...base, phone: '119' } as never,
+      { ...leader, roles: ['secretary'] },
+    );
+    expect(result).toEqual({
+      status: 'duplicate',
+      matches: [{ id: 'p0', full_name: 'Ana Souza', classification: 'member', visits: 2, last_visit_at: null }],
+    });
+    expect(mockWriteAuditLog).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ after: { matched_person_ids: ['p0'], masked: false } }),
+      expect.anything(),
+    );
+  });
+
+  it('para o líder de célula, telefone repetido devolve o duplicado reduzido, auditado, sem criar', async () => {
     const { service, client, tx } = setup();
     const last = new Date('2026-09-01');
     client.person.findMany.mockResolvedValue([
@@ -80,11 +114,20 @@ describe('VisitorService.registerByLeader', () => {
     expect(result).toEqual({
       status: 'duplicate',
       matches: [
-        { id: 'p0', full_name: 'Ana S.', classification: 'attendee', visits: 4, last_visit_at: last },
-        { id: 'p9', full_name: 'Ana T.', classification: 'visitor', visits: 0, last_visit_at: null },
+        { id: 'p0', full_name: 'Ana S.', classification: null, visits: 4, last_visit_at: last },
+        { id: 'p9', full_name: 'Ana T.', classification: null, visits: 0, last_visit_at: null },
       ],
     });
     expect(tx.person.create).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'visitor.duplicate_lookup',
+        actor_user_id: 'user-1',
+        after: { matched_person_ids: ['p0', 'p9'], masked: true },
+      }),
+      expect.anything(),
+    );
   });
 
   it('sem duplicado, cria visitante com consentimento, visita e reclassificação', async () => {

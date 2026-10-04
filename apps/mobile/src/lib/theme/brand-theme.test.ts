@@ -343,3 +343,30 @@ describe("build com paleta malformada", () => {
     expect(theme.accentColor).toBe("#F59E0B");
   });
 });
+
+describe("brandingLayer — bordas", () => {
+  it("sem branding, só o slug opina (ou nada)", () => {
+    mockExpoConfig.mockReturnValue(GENERIC_BUILD);
+    const { brandingLayer } = load();
+    expect(brandingLayer(null, "igreja")).toEqual({ tenantSlug: "igreja" });
+    expect(brandingLayer(undefined)).toEqual({ tenantSlug: undefined });
+  });
+
+  it("termo do grupo só entra com o par completo", () => {
+    mockExpoConfig.mockReturnValue(GENERIC_BUILD);
+    const { brandingLayer, resolveBrandTheme } = load();
+    const base = { app_name: null, primary_color: null, logo_url: null, splash_url: null };
+
+    const completo = brandingLayer({
+      ...base,
+      group_term_singular: "Célula",
+      group_term_plural: "Células",
+    });
+    expect(completo).toMatchObject({ groupTermSingular: "Célula", groupTermPlural: "Células" });
+    expect(resolveBrandTheme(completo)).toMatchObject({ groupTermSingular: "Célula" });
+
+    const pelaMetade = brandingLayer({ ...base, group_term_singular: "Célula", group_term_plural: null });
+    expect(pelaMetade).not.toHaveProperty("groupTermSingular");
+    expect(resolveBrandTheme(pelaMetade)).toMatchObject({ groupTermSingular: null, groupTermPlural: null });
+  });
+});

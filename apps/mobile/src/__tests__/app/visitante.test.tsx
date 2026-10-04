@@ -189,4 +189,49 @@ describe("VisitanteScreen", () => {
     await press("visitante-outro");
     expect(screen.getByTestId("visitante-nome").props.value).toBe("");
   });
+
+  it("duplicado reduzido (líder): sem classificação, só visitas", async () => {
+    mockRegister.mockResolvedValue({
+      status: "duplicate",
+      matches: [{ id: "p0", full_name: "André C.", classification: null, visits: 2, last_visit_at: null }],
+    });
+    await fill();
+    await press("visitante-enviar");
+    expect(screen.getByText("André C.")).toBeTruthy();
+    expect(screen.getByText("2 visitas")).toBeTruthy();
+  });
+
+  it("sem conseguir ler os grupos, segue sem a origem do grupo", async () => {
+    mockListMyGroups.mockRejectedValue(new NetworkError());
+    await fill();
+    expect(screen.queryByTestId("visitante-origem-small_group")).toBeNull();
+    expect(screen.getByTestId("visitante-form")).toBeTruthy();
+  });
+
+  it("grupos que chegam depois de sair da tela são ignorados", async () => {
+    let resolve!: (value: unknown) => void;
+    mockListMyGroups.mockReturnValue(new Promise((r) => (resolve = r)));
+    const view = await render(<VisitanteScreen />);
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolve([{ id: "g", name: "N", role: "leader", meeting_time: null }]);
+    });
+    expect(mockListMyGroups).toHaveBeenCalled();
+  });
+
+  it("falha ao criar 'outra pessoa' avisa na própria tela do duplicado", async () => {
+    mockRegister.mockResolvedValue({
+      status: "duplicate",
+      matches: [{ id: "p0", full_name: "X", classification: "visitor", visits: 1, last_visit_at: null }],
+    });
+    mockAnyway.mockRejectedValue(new NetworkError());
+    await fill();
+    await press("visitante-enviar");
+    await press("visitante-outra-pessoa");
+
+    expect(screen.getByTestId("visitante-duplicados")).toBeTruthy();
+    expect(screen.getByTestId("visitante-erro").props.children).toMatch(/Sem conexão/);
+  });
 });

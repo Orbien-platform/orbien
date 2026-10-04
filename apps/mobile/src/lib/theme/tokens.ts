@@ -270,17 +270,16 @@ function shadow(
   ios: { height: number; opacity: number; radius: number },
   androidElevation: number,
 ): ViewStyle {
-  return (
-    Platform.select<ViewStyle>({
-      ios: {
-        shadowColor: "#000000",
-        shadowOffset: { width: 0, height: ios.height },
-        shadowOpacity: ios.opacity,
-        shadowRadius: ios.radius,
-      },
-      default: { elevation: androidElevation },
-    }) ?? {}
-  );
+  // Com `default`, o `select` sempre devolve um dos dois.
+  return Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: ios.height },
+      shadowOpacity: ios.opacity,
+      shadowRadius: ios.radius,
+    },
+    default: { elevation: androidElevation },
+  })!;
 }
 
 /** `sm` em card de lista, `md` em modal/bottom sheet, `lg` só no FAB. */
