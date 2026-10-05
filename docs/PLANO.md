@@ -1804,8 +1804,8 @@ está.
   `feat/qr-checkin-e-autocadastro`):** check-in do encontro (líder mostra,
   membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
   para a liderança projetar no culto, com a página pública que esse QR abre
-  no `apps/web` (`PROD-34`, fechado). Ficam pendentes `PROD-30` (Início por
-  papel), `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
+  no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
+  2026-10-05. Ficam pendentes `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
   recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
   lista completa em `PROJETO.md` §4.2.
 
