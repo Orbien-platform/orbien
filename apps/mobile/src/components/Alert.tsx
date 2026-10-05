@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing.sm,
-    borderRadius: radius.btn,
+    borderRadius: radius.input,
     padding: spacing.md,
     marginBottom: spacing.md,
   },

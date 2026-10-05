@@ -18,6 +18,7 @@ export { default as Building2 } from "lucide-react-native/icons/building-2";
 export { default as CalendarCheck } from "lucide-react-native/icons/calendar-check";
 export { default as CalendarDays } from "lucide-react-native/icons/calendar-days";
 export { default as CalendarOff } from "lucide-react-native/icons/calendar-off";
+export { default as Camera } from "lucide-react-native/icons/camera";
 export { default as Check } from "lucide-react-native/icons/check";
 export { default as ChevronRight } from "lucide-react-native/icons/chevron-right";
 export { default as Church } from "lucide-react-native/icons/church";
@@ -33,32 +34,43 @@ export { default as FileText } from "lucide-react-native/icons/file-text";
 export { default as HandHeart } from "lucide-react-native/icons/hand-heart";
 export { default as Heart } from "lucide-react-native/icons/heart";
 export { default as Highlighter } from "lucide-react-native/icons/highlighter";
-// A tab de Home usa o ícone "house" do pacote: a versão instalada renomeou
-// `home` -> `house` (lucide-react-native@1.43); o alias abaixo mantém o
-// nome que o app usa (tab "Home") sem acoplar telas ao nome do pacote.
 export { default as Home } from "lucide-react-native/icons/house";
 export { default as Inbox } from "lucide-react-native/icons/inbox";
+export { default as LayoutGrid } from "lucide-react-native/icons/layout-grid";
 export { default as ListMusic } from "lucide-react-native/icons/list-music";
 export { default as Lock } from "lucide-react-native/icons/lock";
 export { default as LogOut } from "lucide-react-native/icons/log-out";
 export { default as Mail } from "lucide-react-native/icons/mail";
 export { default as MapPin } from "lucide-react-native/icons/map-pin";
+export { default as Megaphone } from "lucide-react-native/icons/megaphone";
 export { default as MessageSquare } from "lucide-react-native/icons/message-square";
 export { default as Moon } from "lucide-react-native/icons/moon";
 export { default as Music } from "lucide-react-native/icons/music";
 export { default as Newspaper } from "lucide-react-native/icons/newspaper";
 export { default as Pencil } from "lucide-react-native/icons/pencil";
+export { default as Phone } from "lucide-react-native/icons/phone";
+export { default as Plus } from "lucide-react-native/icons/plus";
+export { default as QrCode } from "lucide-react-native/icons/qr-code";
 export { default as RefreshCw } from "lucide-react-native/icons/refresh-cw";
+export { default as ScanLine } from "lucide-react-native/icons/scan-line";
+export { default as Settings } from "lucide-react-native/icons/settings";
+export { default as ShieldCheck } from "lucide-react-native/icons/shield-check";
 export { default as Smartphone } from "lucide-react-native/icons/smartphone";
 export { default as Square } from "lucide-react-native/icons/square";
 export { default as SquareCheck } from "lucide-react-native/icons/square-check";
+export { default as Star } from "lucide-react-native/icons/star";
 export { default as Sun } from "lucide-react-native/icons/sun";
 export { default as Ticket } from "lucide-react-native/icons/ticket";
+export { default as Timer } from "lucide-react-native/icons/timer";
 export { default as Trash } from "lucide-react-native/icons/trash";
 export { default as UserCheck } from "lucide-react-native/icons/user-check";
+export { default as UserPlus } from "lucide-react-native/icons/user-plus";
 export { default as Users } from "lucide-react-native/icons/users";
 export { default as WifiOff } from "lucide-react-native/icons/wifi-off";
 export { default as X } from "lucide-react-native/icons/x";
+// A tab de Home usa o ícone "house" do pacote: a versão instalada renomeou
+// `home` -> `house` (lucide-react-native@1.43); o alias abaixo mantém o
+// nome que o app usa (tab "Home") sem acoplar telas ao nome do pacote.
 
 /** Forma mínima que os componentes do app esperam de um ícone lucide —
  * evita cada componente redeclarar as três props que usa. */

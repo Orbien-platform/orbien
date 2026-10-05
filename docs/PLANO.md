@@ -319,26 +319,38 @@ do escopo daquela entrega:
 - retenção de **logs de acesso e auditoria** (2 anos, Marco Civil Art. 15);
 - retenção de **registros de consentimento** (5 anos após a revogação).
 
-### CONF-03 · Direitos do titular (Art. 18) — nenhum endpoint existe · dívida
+### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
-O `me.controller.ts` existe desde o PR #75, mas responde **uma** rota só —
-`GET /me/permissions`, que é de autorização, não de LGPD. O mapeamento (seção
-4) especifica quatro rotas de autosserviço do titular, e nenhuma delas existe;
-a matriz de pricing vende isso nos **dois** planos ("LGPD — consentimento,
-histórico, exportação de dados pessoais"):
+Fechado em 2026-10-04: módulo `apps/api/src/privacy/` com as rotas de
+autosserviço do mapeamento (seção 4), todas sobre a pessoa da conta do token
+(`user_accounts.person_id`, resolvida no banco — nunca um id da requisição):
 
-- `GET /me/personal-data` — confirmação e acesso (Art. 18, I e II);
-- `GET /me/export` — portabilidade em ZIP, com `person.json`, `consents.json`,
-  `groups.json`, `donations.json` e fotos (Art. 18, V);
-- `POST /me/revoke-consent` — revogação por versão do termo (Art. 18, IX);
-- `PATCH /me` — correção pelo próprio titular (Art. 18, III).
+- `GET /me/personal-data` — confirmação e acesso (I e II): cadastro,
+  consentimentos, histórico de classificação, grupos, visitas e doações
+  próprias (as anônimas ficam de fora);
+- `GET /me/export` — portabilidade (V): o mesmo conteúdo num documento
+  versionado (`orbien.personal-data.v1`), como anexo JSON, com auditoria.
+  **Desvio do mapeamento**, que pede ZIP com fotos: a Orbien não guarda
+  arquivo de foto (só `photo_url`), e um documento é o que o app compartilha
+  sem dependência nativa nova;
+- `PATCH /me` — correção (III) de nome, telefone, nascimento e endereço, com
+  antes/depois em `audit_logs`. E-mail e dado eclesiástico seguem com o admin;
+- `POST /me/revoke-consent` — revogação (IX) por versão do termo;
+- `POST`/`DELETE /me/deletion-request` — pedido de exclusão, cancelável: marca
+  `deleted_at`, e o job diário que já existia (`purgeExpiredSoftDeletes`)
+  anonimiza em 30 dias.
+  O titular só desfaz o que **ele** pediu: a remoção feita pelo admin grava o
+  mesmo `deleted_at`, e quem diz a origem é a última entre
+  `person.deletion_requested` e `person.deleted` em `audit_logs` — gravadas
+  na transação, para que o registro não se perca (decisão de 2026-10-04,
+  achado da revisão).
 
-O lado de dentro existe: `consent_records` é escrito no cadastro de visitante e
-na importação, e a anonimização revoga os consentimentos da pessoa. O titular é
-que não tem por onde pedir nada — hoje depende de um admin.
+O app ganhou a tela **Privacidade e meus dados** (aba Mais) sobre essas rotas.
+Testes de unidade (100% do módulo) e de integração em `teste1-church`
+(`test/integration/me-privacy.spec.ts`).
 
-É o item de conformidade mais próximo de virar código, e o checklist de
-pré-go-live do CONF-01 cobra exatamente a exportação que não existe.
+Continua manual, como o mapeamento prevê: o pedido de quem **não tem conta**
+(visitante), pelo canal do encarregado.
 
 ---
 
@@ -429,6 +441,59 @@ só faltava o consumo pelo app.
   chamada rejeitando, navegação de volta), `auth-client.test.ts` ganhou
   `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
   mock de `expo-router` (a tela passou a navegar).
+
+### PROD-30 · Início por papel no app (v2) · aberto
+
+O Início da v2 (`HomeApp` em `docs/design/orbita-v2/produto/proto/app-shell.jsx`)
+muda de bloco conforme o papel: encontro de hoje com "Registrar presença" e
+"Mostrar QR" (líder de célula), celebração do domingo com OC e vagas (líder de
+ministério), semáforo dos grupos (pastor, Premium), "Minhas próximas escalas"
+com confirmar/recusar/trocar e eventos em que a pessoa se inscreveu. Hoje o
+Início tem destaque, atalhos, meus grupos e avisos (`PROJETO.md` §4.2).
+
+### PROD-31 · Contribuir nativo no app · aberto, depende de `PROD-28`
+
+Na v2, Contribuir escolhe categoria, anônima ou identificada, e paga por PIX:
+no Starter, a chave copia-e-cola; no Premium, QR dinâmico e recorrente. Hoje a
+Mais abre a página de doação do web (`/doar/{slug}`). O QR dinâmico e o
+recorrente são cobrança Asaas, atrás da trava `ASAAS_PAYMENTS_ENABLED` — a
+variante Starter (chave PIX) não depende dela.
+
+### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · aberto
+
+A v2 pede, além do erro com "Tentar novamente" que já existe
+(`describeLoadError`), que a tela atualize sozinha quando a conexão volta.
+Precisa de `@react-native-community/netinfo` (dependência nativa: sai por
+build, não por OTA).
+
+### PROD-33 · Transições entre telas no app (v2) · aberto
+
+Fade + translateY(3px), 180 ms ease-out, no lugar do padrão do Expo Router.
+Respeitar "reduzir movimento".
+
+### ~~PROD-34 · Página pública de autocadastro de visitante no web~~ · fechado
+
+Entregue em 2026-10-04, na branch `feat/qr-checkin-e-autocadastro`. O QR de
+autocadastro que a liderança projeta pelo app (`PROD-29`, aba Mais) abre
+`/visitante/{tenant_slug}/{token}` — `apps/web/src/app/(public)/visitante/`,
+mesmo formato de `/doar/{tenant_slug}` e o mesmo que `signupUrl` monta no app.
+
+- **API — `GET /public/visitor/qr/:token`** (`VisitorService.describeQr`):
+  devolve só `church_name` (nome da congregação), `origin` e `label`; QR
+  inexistente ou desativado é o mesmo 404, sem dizer qual dos dois. Serve para
+  a página mostrar de qual igreja é o QR e recusar um QR desativado antes de a
+  pessoa digitar tudo. Mesma leitura sem contexto de tenant que `registerViaQr`
+  já fazia; não conta como cadastro (`scan_count` só sobe no envio). Limite de
+  120 por hora por IP, maior que os 20 do cadastro. Testes no service, no
+  controller e em `test/integration/public-routes.spec.ts`.
+- **Página**: nome (obrigatório), WhatsApp, e-mail e sexo opcionais e o aceite
+  `visitor_consent_v1`, cujo texto foi escrito agora em
+  `legal/consent-terms/visitor_consent_v1.md` (rascunho, `CONF-01`). Telefone
+  normalizado como no app. Estados: carregando, QR inativo, falha ao abrir
+  com "Tentar de novo", 404 no envio (QR desativado no meio), 429 e erro de
+  validação da API. Sucesso mostra a mensagem da igreja, com "Que bom te ver
+  de novo" para quem já tinha visitado.
+- O que ficou de fora virou `PEND-18` e `PEND-19`.
 
 ---
 
@@ -1669,7 +1734,31 @@ não-membro com token válido e não-duplicação) e `meetings.controller.spec.t
 (gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
 Nenhuma suíte existente mudou de comportamento.
 
-### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel começado, app não começado
+**Lado do membro, no `apps/mobile` — 2026-10-04** (branch
+`feat/qr-checkin-e-autocadastro`, junto com a v2 do `PROD-29`). A pergunta
+"digitar o código ou apontar a câmera" foi respondida pela câmera:
+`expo-camera` (SDK 57, plugin com permissão de câmera e **sem** microfone —
+módulo nativo, sai por build, não OTA). O QR é desenhado com
+`qrcode-generator` (JS puro) sobre `react-native-svg`.
+
+- **Líder:** "Mostrar QR de check-in" no encontro e na presença abre
+  `grupo/encontro/[id]/qr` em tela cheia, com brilho no máximo e a tela
+  acesa (`expo-brightness`, `expo-keep-awake`), validade, contagem
+  regressiva, presenças relidas a cada 15 s e "Renovar código". Abrir a tela
+  **gera** o código — a API só tem o `upsert`, não a leitura do token
+  vigente; documentado no cabeçalho da tela. O 409 das 24h vira "passou há
+  mais de 24 horas" com atalho para a lista de presença, que é relida na
+  volta do QR.
+- **Membro:** "Fazer check-in" no grupo e no encontro abre `/checkin`. O QR
+  carrega `orbien:checkin:{token}` para o leitor recusar na hora código que
+  não é de check-in; o UUID puro que o painel mostra também é aceito.
+  Permissão pedida, negada e bloqueada (abre os ajustes); 404, 403 e sem
+  conexão (reenvia o mesmo token) têm estado próprio.
+- **API:** a regra da v2 (4h de validade, gerar até 24h depois do encontro)
+  já era a dela. Ganhou só teste que fixa os dois limites
+  (`meetings.service.spec.ts`, "janelas da regra da v2").
+
+### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel e app começados
 
 Handoff de design em `docs/design/orbita-v2/README.md`: nova identidade
 noturna (fundo `#05070F`, teal `#00E5C7` da Orbien, `--brand` da igreja,
@@ -1689,8 +1778,20 @@ está.
   seções (`src/lib/navigation.ts`), identidade da igreja no menu e cor da
   igreja em `--brand` (`ChurchIdentityProvider`). Faltam as telas da v2 e o
   header completo.
-- **App (`apps/mobile`) — não começado.** Tokens, fontes (build nativa, não
-  OTA), navegação em cinco abas e as telas.
+- **App (`apps/mobile`) — começado (2026-10-04).** Tokens e fontes da
+  Órbita (escuro como padrão; Geist, Geist Mono e Instrument Serif — sai por
+  build nativa, não OTA), `STYLE-GUIDE.md` reescrito, navegação em cinco abas
+  (Início · Conteúdo · Bíblia · {termo} · Mais), aba Mais, cadastro de
+  visitante (aberto ao líder de célula, `POST /visitors`), Privacidade e meus
+  dados (`CONF-03`), presença já marcada, transição de entrada na cor da
+  igreja e selo "Destaque" no hero. **QRs (2026-10-04, branch
+  `feat/qr-checkin-e-autocadastro`):** check-in do encontro (líder mostra,
+  membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
+  para a liderança projetar no culto, com a página pública que esse QR abre
+  no `apps/web` (`PROD-34`, fechado). Ficam pendentes `PROD-30` (Início por
+  papel), `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
+  recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
+  lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
   painel, decisão de 2026-10-04: o pacote v2 não o desenha.
@@ -2179,6 +2280,30 @@ tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: mon
 único de cobrança + split + falha fechada, e a subconta Asaas por tenant
 (`DEC-07`, decidido: `AD-009`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
 Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
+
+### PEND-18 · Limite do autocadastro por IP é baixo para o wi-fi da igreja · aberto
+
+`POST /public/visitor/register` aceita 20 envios por hora **por IP**
+(`visitor.public.controller.ts`). Com o QR projetado no culto (`PROD-34`), os
+visitantes na rede da igreja saem pelo mesmo IP: o 21º cadastro da hora
+recebe 429 — a página explica e mantém o que foi digitado, mas o cadastro não
+entra. Quem usa dados móveis não é afetado. Opções a decidir: limite por
+token do QR em vez de por IP, ou um teto por IP maior só nesta rota. Não foi
+mexido porque o limite é a defesa contra spam numa rota sem autenticação.
+
+### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
+
+- **Teste em aparelho**: câmera, brilho e tela acesa só foram exercitados com
+  mocks. Falta rodar numa build nativa (os três módulos são nativos — não
+  saem por OTA), nos tenants `teste1-church`/`teste2-church`.
+- **Gerenciar QR de autocadastro pelo app**: o app só cria o do culto (estado
+  vazio). Criar QR de grupo ou evento, renomear e desativar não têm tela em
+  lugar nenhum — nem no painel; as rotas existem (`admin/visitor/qr`).
+- **QR de check-in não lê o código vigente**: abrir a tela gera um código
+  novo (a API só tem o `upsert`). Uma leitura do token vigente evitaria
+  invalidar o código que outro líder já está mostrando.
+- **Marca da igreja na página pública**: a página mostra o nome da igreja,
+  mas não a cor nem o logo — não há rota pública de identidade por slug.
 
 ## 8. Ajustes — documento, rótulo e portão
 

@@ -57,6 +57,7 @@ jest.mock("expo-router", () => {
   const Stack = (props: {
     screenOptions?: {
       headerStyle?: { backgroundColor?: string };
+      headerTintColor?: string;
       headerBackButtonDisplayMode?: string;
     };
     children?: React.ReactNode;
@@ -64,7 +65,7 @@ jest.mock("expo-router", () => {
     return (
       <>
         <Text testID="shell-placeholder">shell</Text>
-        <Text testID="header-color">{props.screenOptions?.headerStyle?.backgroundColor ?? ""}</Text>
+        <Text testID="header-color">{props.screenOptions?.headerTintColor ?? ""}</Text>
         <Text testID="header-back-display">
           {props.screenOptions?.headerBackButtonDisplayMode ?? ""}
         </Text>
@@ -96,6 +97,7 @@ jest.mock("expo-router", () => {
 });
 
 import RootLayout from "../../app/_layout";
+import { mixHex } from "../../lib/theme/color";
 
 describe("RootLayout — guarda de navegação", () => {
   beforeEach(() => {
@@ -174,8 +176,32 @@ describe("RootLayout — guarda de navegação", () => {
     expect(screen.getByTestId("header-back-display").props.children).toBe("minimal");
   });
 
+  it("login nesta execução mostra a transição na cor da igreja; boot já logado não", async () => {
+    const session = { accessToken: "token-w", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 };
+    mockUseAuth.mockReturnValue({ status: "unauthenticated" });
+
+    const { rerender } = await act(async () => render(<RootLayout />));
+    expect(screen.queryByTestId("church-welcome")).toBeNull();
+
+    mockUseAuth.mockReturnValue({ status: "authenticated", session });
+    await act(async () => {
+      rerender(<RootLayout />);
+    });
+    expect(screen.getByTestId("church-welcome")).toBeTruthy();
+  });
+
+  it("abrir o app já logado não mostra a transição", async () => {
+    mockUseAuth.mockReturnValue({ status: "authenticated" });
+
+    await act(async () => {
+      render(<RootLayout />);
+    });
+
+    expect(screen.queryByTestId("church-welcome")).toBeNull();
+  });
+
   describe("T16: wiring do ThemeProvider — dois tenants, dois temas", () => {
-    it("tenant A: aplica a cor primária de A no header do shell", async () => {
+    it("tenant A: o voltar do header sai da cor de A (brandInk, no escuro)", async () => {
       mockUseAuth.mockReturnValue({
         status: "authenticated",
         session: { accessToken: "token-a", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
@@ -195,7 +221,7 @@ describe("RootLayout — guarda de navegação", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByTestId("header-color").props.children).toBe("#111111");
+        expect(screen.getByTestId("header-color").props.children).toBe(mixHex("#111111", "#FFFFFF", 0.45));
       });
 
     });
@@ -220,9 +246,9 @@ describe("RootLayout — guarda de navegação", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByTestId("header-color").props.children).toBe("#222222");
+        expect(screen.getByTestId("header-color").props.children).toBe(mixHex("#222222", "#FFFFFF", 0.45));
       });
-      expect(screen.getByTestId("header-color").props.children).not.toBe("#111111");
+      expect(screen.getByTestId("header-color").props.children).not.toBe(mixHex("#111111", "#FFFFFF", 0.45));
     });
 
     it("tenant sem branding customizado: header cai no default (AC 2)", async () => {

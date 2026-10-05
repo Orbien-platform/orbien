@@ -171,6 +171,20 @@ describe('POST /api/public/waitlist', () => {
   });
 });
 
+// PROD-34 — a página pública de autocadastro lê o QR ao abrir. Mesmo caminho
+// sem contexto de tenant do cadastro: a leitura de qr_tokens e da congregação
+// precisa passar pela RLS sem JWT.
+describe('GET /api/public/visitor/qr/:token', () => {
+  it('QR ativo devolve só o nome da congregação, a origem e o rótulo', async () => {
+    const res = await http().get(`/api/public/visitor/qr/${qrToken}`).expect(200);
+    expect(res.body).toEqual({ church_name: 'Público — Sede', origin: 'service', label: null });
+  });
+
+  it('QR inexistente responde 404', async () => {
+    await http().get('/api/public/visitor/qr/token-que-nao-existe').expect(404);
+  });
+});
+
 describe('POST /api/public/visitor/register', () => {
   it('QR inválido responde 404 — e chega até a consulta para saber disso', async () => {
     // Este é o teste que teria pego o bug do `client`: a primeira linha do

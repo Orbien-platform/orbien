@@ -112,4 +112,17 @@ describe("HeroSlider — imagem", () => {
     });
     expect(JSON.stringify(dots())).not.toBe(before);
   });
+
+  it("destaque escolhido no painel ganha o selo; o fallback não (v2)", async () => {
+    const post = makePost();
+    await act(async () => {
+      render(<HeroSlider posts={[post]} featured onPressPost={jest.fn()} />);
+    });
+    expect(screen.getByTestId(`hero-slide-destaque-${post.id}`)).toBeTruthy();
+
+    await act(async () => {
+      render(<HeroSlider posts={[post]} onPressPost={jest.fn()} />);
+    });
+    expect(screen.queryByTestId(`hero-slide-destaque-${post.id}`)).toBeNull();
+  });
 });

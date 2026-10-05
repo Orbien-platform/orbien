@@ -1,8 +1,14 @@
 // Tela de presença (MOB-09) — roster do grupo × quem já está marcado no
-// encontro; líder seleciona quem mais esteve presente e confirma em lote.
-// Só adiciona, nunca remove (Out of Scope da spec) — quem já tinha
-// AttendanceRecord aparece marcado desde a abertura, sem opção de
-// desmarcar.
+// encontro; o líder confirma em lote. Só adiciona, nunca remove (Out of
+// Scope da spec) — quem já tinha AttendanceRecord aparece marcado desde a
+// abertura, sem opção de desmarcar.
+//
+// Regra da v2 ("Presença (líder)"): na primeira chamada do encontro todos
+// vêm marcados como presentes e o líder toca para desmarcar quem faltou —
+// num grupo de doze, marcar a exceção é um toque, marcar a regra eram doze.
+// Se o encontro já tem presença registrada, a chamada já foi feita: quem
+// ficou de fora ficou de propósito, e ninguém vem pré-marcado. Se o envio
+// falhar, as marcações ficam como estavam.
 //
 // Visual conforme STYLE-GUIDE.md: a linha vira o card de lista do §7 com
 // avatar de iniciais e checkbox, e o alvo de toque passa a ser o card
@@ -10,8 +16,8 @@
 // do §3) — marcar dez pessoas era dez toques de precisão. O texto do
 // estado continua em tela, ao lado do checkbox, porque é ele que diz o que
 // vai acontecer ao confirmar.
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../../../components/Alert";
@@ -30,6 +36,7 @@ import type { GroupRosterMember } from "../../../../lib/pequenos-grupos/types";
 import {
   CircleAlert,
   CircleCheck,
+  QrCode,
   RefreshCw,
   Square,
   SquareCheck,
@@ -43,7 +50,8 @@ const SUBMIT_ERROR_MESSAGE = "Não foi possível registrar a presença. Tente no
 
 export default function PresencaScreen() {
   const { id: meetingId } = useLocalSearchParams<{ id: string }>();
-  const { primaryColor, colors } = useTheme();
+  const router = useRouter();
+  const { primaryColor, brandInk, colors } = useTheme();
   const [roster, setRoster] = useState<GroupRosterMember[] | null>(null);
   const [alreadyMarked, setAlreadyMarked] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -52,6 +60,17 @@ export default function PresencaScreen() {
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  // Quem fez check-in pelo QR enquanto a tela dele estava aberta já tem
+  // presença gravada: na volta, a lista é relida para aparecer marcada.
+  const openedQrRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!openedQrRef.current) return;
+      openedQrRef.current = false;
+      setRetryCount((n) => n + 1);
+    }, []),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +80,15 @@ export default function PresencaScreen() {
         getGroupRoster(meeting.small_group_id).then((members) => {
           if (cancelled) return;
           setRoster(members);
-          setAlreadyMarked(new Set(meeting.attendanceRecords.map((a) => a.person_id)));
+          const marked = new Set(meeting.attendanceRecords.map((a) => a.person_id));
+          setAlreadyMarked(marked);
+          if (marked.size === 0) {
+            setSelected(new Set(members.map((member) => member.person_id)));
+          } else {
+            // Releitura depois do QR: quem já entrou pelo check-in sai da
+            // seleção, senão contaria duas vezes no "Confirmar (n)".
+            setSelected((current) => new Set([...current].filter((id) => !marked.has(id))));
+          }
         }),
       )
       .catch((err: unknown) => {
@@ -132,6 +159,20 @@ export default function PresencaScreen() {
         <Alert messageTestID="presenca-submit-error" message={submitError} />
       ) : null}
 
+      {/* PROD-12: quem tem o app marca a si mesmo pelo QR; a lista fica para
+          quem não tem. */}
+      <AppButton
+        testID="presenca-mostrar-qr"
+        title="Mostrar QR de check-in"
+        icon={QrCode}
+        variant="secondary"
+        onPress={() => {
+          openedQrRef.current = true;
+          router.push(`/grupo/encontro/${meetingId}/qr`);
+        }}
+        style={styles.qrButton}
+      />
+
       <FlatList
         testID="presenca-roster"
         data={roster ?? []}
@@ -181,8 +222,8 @@ export default function PresencaScreen() {
                 ) : (
                   // O testID fica na View, não num Pressable próprio: quem
                   // recebe o toque é o card inteiro (§7). O teste desta
-                  // tela lê o texto daqui ("Selecionado"/"Marcar
-                  // presença"), que continua sendo o estado visível.
+                  // tela lê o texto daqui ("Presente"/"Faltou"), que
+                  // continua sendo o estado visível.
                   <View
                     testID={`roster-${item.person_id}-toggle`}
                     accessibilityState={{ checked: isSelected }}
@@ -191,7 +232,7 @@ export default function PresencaScreen() {
                     {isSelected ? (
                       <SquareCheck
                         size={iconSize.action}
-                        color={primaryColor}
+                        color={brandInk}
                         strokeWidth={ICON_STROKE_WIDTH}
                       />
                     ) : (
@@ -204,10 +245,10 @@ export default function PresencaScreen() {
                     <Text
                       style={[
                         typography.label,
-                        { color: isSelected ? primaryColor : colors.textTertiary },
+                        { color: isSelected ? brandInk : colors.textTertiary },
                       ]}
                     >
-                      {isSelected ? "Selecionado" : "Marcar presença"}
+                      {isSelected ? "Presente" : "Faltou"}
                     </Text>
                   </View>
                 )}
@@ -246,4 +287,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   confirmButton: { marginTop: spacing.md },
+  qrButton: { marginBottom: spacing.lg },
 });

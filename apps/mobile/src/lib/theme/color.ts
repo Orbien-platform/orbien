@@ -79,3 +79,22 @@ export function readableOn(background: string): string {
     ? brand.surface
     : brand.ink;
 }
+
+/**
+ * Mistura duas cores hex no espaço sRGB: `weight` é a fração de `a` (0–1).
+ *
+ * É o `color-mix()` que o painel usa em CSS e o RN não tem. A Órbita deriva
+ * dele, no escuro, o texto em cor da marca (`brand 45%` com branco) e o
+ * fundo suave da marca (`brand 28%` com o fundo da página).
+ */
+export function mixHex(a: string, b: string, weight: number): string {
+  if (!isValidHexColor(a) || !isValidHexColor(b)) return a;
+  const ca = toChannels(a);
+  const cb = toChannels(b);
+  const w = Math.min(1, Math.max(0, weight));
+  const mix = (x: number, y: number) =>
+    Math.round(x * w + y * (1 - w))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${mix(ca.r, cb.r)}${mix(ca.g, cb.g)}${mix(ca.b, cb.b)}`.toUpperCase();
+}

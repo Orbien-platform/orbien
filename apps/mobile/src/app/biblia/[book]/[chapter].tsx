@@ -99,7 +99,7 @@ function nextRange(current: VerseRange | null, verseNumber: number): VerseRange 
 
 export default function BibliaChapterScreen() {
   const router = useRouter();
-  const { colors, primaryColor } = useTheme();
+  const { colors, brandInk } = useTheme();
   const insets = useSafeAreaInsets();
   const horizontalPadding = useScreenPadding();
   const bookNames = useBookNames();
@@ -264,7 +264,7 @@ export default function BibliaChapterScreen() {
                 accessibilityState={{ selected }}
                 style={[
                   styles.verseRow,
-                  selected && { backgroundColor: colors.bgSubtle, borderColor: primaryColor },
+                  selected && { backgroundColor: colors.bgSubtle, borderColor: brandInk },
                 ]}
               >
                 <Text style={[typography.caption, styles.verseNumber, { color: colors.textTertiary }]}>
@@ -357,7 +357,7 @@ export default function BibliaChapterScreen() {
             >
               <View
                 testID="biblia-comment-quote"
-                style={[styles.quote, { borderLeftColor: primaryColor }]}
+                style={[styles.quote, { borderLeftColor: brandInk }]}
               >
                 {quotedVerses.map((v) => (
                   <Text key={v.number} style={[typography.body, { color: colors.textSecondary }]}>
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing.sm,
-    borderRadius: radius.btn,
+    borderRadius: radius.input,
     borderWidth: 1,
     borderColor: "transparent",
     paddingVertical: spacing.xs,

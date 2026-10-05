@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -16,6 +18,16 @@ import { RegisterVisitorDto } from './dto/register-visitor.dto';
 @UseGuards(ThrottlerGuard)
 export class VisitorPublicController {
   constructor(private readonly visitorService: VisitorService) {}
+
+  // PROD-34: a página pública lê o QR ao abrir. Limite maior que o do
+  // cadastro — abrir a página não grava nada, e num culto muita gente lê o
+  // mesmo QR pela mesma rede —, mas ainda limitado: o token é a única coisa
+  // que separa a rota de uma enumeração de igrejas.
+  @Throttle({ default: { limit: 120, ttl: 3600000 } })
+  @Get('qr/:token')
+  describeQr(@Param('token') token: string) {
+    return this.visitorService.describeQr(token);
+  }
 
   @Throttle({ default: { limit: 20, ttl: 3600000 } })
   @Post('register')

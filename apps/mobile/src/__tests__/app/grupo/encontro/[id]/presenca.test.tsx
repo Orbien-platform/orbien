@@ -3,9 +3,23 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { NetworkError } from "../../../../../lib/api/errors";
 
-jest.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({ id: "m1" }),
-}));
+const mockPush = jest.fn();
+// `useFocusEffect` roda no primeiro foco, como na navegação real; o teste
+// chama `mockRefocus()` para simular a volta de outra tela.
+let mockRefocus: () => void = () => undefined;
+jest.mock("expo-router", () => {
+  const { useEffect } = jest.requireActual("react");
+  return {
+    useLocalSearchParams: () => ({ id: "m1" }),
+    useRouter: () => ({ push: mockPush }),
+    useFocusEffect: (callback: () => void) => {
+      useEffect(() => {
+        mockRefocus = callback;
+        callback();
+      }, [callback]);
+    },
+  };
+});
 
 const mockGetMeeting = jest.fn();
 const mockGetGroupRoster = jest.fn();
@@ -46,11 +60,12 @@ describe("PresencaScreen", () => {
     expect(mockGetGroupRoster).toHaveBeenCalledWith("sg1");
     expect(screen.getByTestId("roster-p1-marcado")).toBeTruthy();
     expect(screen.queryByTestId("roster-p1-toggle")).toBeNull();
-    expect(screen.getByTestId("roster-p2-toggle")).toBeTruthy();
-    expect(screen.getByTestId("roster-p3-toggle")).toBeTruthy();
+    // A chamada já foi feita: quem ficou de fora não vem pré-marcado.
+    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Faltou");
+    expect(screen.getByTestId("roster-p3-toggle")).toHaveTextContent("Faltou");
   });
 
-  it("encontro sem nenhum AttendanceRecord mostra todo o roster não marcado, sem erro (edge case)", async () => {
+  it("encontro sem nenhum AttendanceRecord abre com todo o roster marcado como presente (v2)", async () => {
     mockGetMeeting.mockResolvedValue({
       id: "m1",
       small_group_id: "sg1",
@@ -64,12 +79,13 @@ describe("PresencaScreen", () => {
     });
 
     expect(screen.queryByTestId("presenca-error")).toBeNull();
-    expect(screen.getByTestId("roster-p1-toggle")).toBeTruthy();
-    expect(screen.getByTestId("roster-p2-toggle")).toBeTruthy();
-    expect(screen.getByTestId("roster-p3-toggle")).toBeTruthy();
+    expect(screen.getByTestId("roster-p1-toggle")).toHaveTextContent("Presente");
+    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Presente");
+    expect(screen.getByTestId("roster-p3-toggle")).toHaveTextContent("Presente");
+    expect(screen.getByText("Confirmar presença (3)")).toBeTruthy();
   });
 
-  it("selecionar membros e confirmar chama recordAttendance com os person_ids marcados e reflete sem reload manual (MOB-09-07)", async () => {
+  it("desmarcar quem faltou e confirmar envia só os presentes e reflete sem reload manual (MOB-09-07)", async () => {
     mockGetMeeting.mockResolvedValue({
       id: "m1",
       small_group_id: "sg1",
@@ -84,10 +100,7 @@ describe("PresencaScreen", () => {
     });
 
     await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
-    });
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p3-toggle"));
+      fireEvent.press(screen.getByTestId("roster-p1-toggle"));
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
@@ -113,15 +126,17 @@ describe("PresencaScreen", () => {
     });
 
     await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
+      fireEvent.press(screen.getByTestId("roster-p1-toggle"));
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
     });
 
     expect(screen.getByTestId("presenca-submit-error")).toBeTruthy();
-    // Seleção preservada: p2 continua "Selecionado", não some nem vira "Presente".
-    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Selecionado");
+    // Marcações preservadas: p1 continua desmarcado, p2 continua marcado e
+    // nenhum dos dois vira "já registrado".
+    expect(screen.getByTestId("roster-p1-toggle")).toHaveTextContent("Faltou");
+    expect(screen.getByTestId("roster-p2-toggle")).toHaveTextContent("Presente");
     expect(screen.queryByTestId("roster-p2-marcado")).toBeNull();
   });
 
@@ -194,7 +209,7 @@ describe("PresencaScreen", () => {
     expect(await screen.findByText(/Verifique sua conexão/)).toBeTruthy();
   });
 
-  it("tocar de novo num membro selecionado o desmarca", async () => {
+  it("tocar de novo num membro desmarcado o marca outra vez", async () => {
     mockGetMeeting.mockResolvedValue({
       id: "m1",
       small_group_id: "sg1",
@@ -207,12 +222,12 @@ describe("PresencaScreen", () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId("roster-p2-toggle"));
     });
-    expect(screen.getByText("Confirmar presença (1)")).toBeTruthy();
+    expect(screen.getByText("Confirmar presença (2)")).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("roster-p2-toggle"));
     });
-    expect(screen.getByText("Confirmar presença")).toBeTruthy();
+    expect(screen.getByText("Confirmar presença (3)")).toBeTruthy();
   });
 
   it("duplo toque em Confirmar antes da resposta envia uma vez só", async () => {
@@ -227,13 +242,77 @@ describe("PresencaScreen", () => {
 
     await render(<PresencaScreen />);
     await act(async () => {
-      fireEvent.press(screen.getByTestId("roster-p2-toggle"));
-    });
-    await act(async () => {
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
       fireEvent.press(screen.getByTestId("presenca-confirmar"));
     });
 
     expect(mockRecordAttendance).toHaveBeenCalledTimes(1);
+  });
+
+  describe("QR de check-in (PROD-12)", () => {
+    it("abre o QR do encontro", async () => {
+      mockGetMeeting.mockResolvedValue({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [],
+      });
+      await act(async () => {
+        render(<PresencaScreen />);
+      });
+
+      fireEvent.press(screen.getByTestId("presenca-mostrar-qr"));
+
+      expect(mockPush).toHaveBeenCalledWith("/grupo/encontro/m1/qr");
+    });
+
+    it("voltar de outra tela sem ter aberto o QR não relê nada", async () => {
+      mockGetMeeting.mockResolvedValue({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [],
+      });
+      await act(async () => {
+        render(<PresencaScreen />);
+      });
+      await act(async () => {
+        mockRefocus();
+      });
+
+      expect(mockGetMeeting).toHaveBeenCalledTimes(1);
+    });
+    it("na volta do QR relê a lista: quem fez check-in aparece presente e sai da seleção", async () => {
+      mockGetMeeting.mockResolvedValueOnce({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [],
+      });
+      await act(async () => {
+        render(<PresencaScreen />);
+      });
+      expect(screen.getByTestId("presenca-confirmar")).toHaveTextContent("Confirmar presença (3)");
+
+      fireEvent.press(screen.getByTestId("presenca-mostrar-qr"));
+      mockGetMeeting.mockResolvedValueOnce({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [{ person_id: "p2" }],
+      });
+      await act(async () => {
+        mockRefocus();
+      });
+
+      expect(mockGetMeeting).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(screen.getByTestId("roster-p2-marcado")).toBeTruthy());
+      expect(screen.getByTestId("presenca-confirmar")).toHaveTextContent("Confirmar presença (2)");
+    });
+
   });
 });

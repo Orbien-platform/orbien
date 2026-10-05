@@ -162,13 +162,17 @@ export default function HomeScreen() {
       <BrandHeader />
       <Text
         testID="home-greeting"
-        style={[typography.h2, styles.greeting, { color: colors.textPrimary }]}
+        style={[typography.h1, styles.greeting, { color: colors.textPrimary }]}
       >
         {greeting}
       </Text>
 
       {heroPosts.length > 0 ? (
-        <HeroSlider posts={heroPosts} onPressPost={(id) => router.push(`/post/${id}`)} />
+        <HeroSlider
+          posts={heroPosts}
+          featured={highlights !== null && highlights.length > 0}
+          onPressPost={(id) => router.push(`/post/${id}`)}
+        />
       ) : null}
 
       <HomeQuickActions items={quickActions} />

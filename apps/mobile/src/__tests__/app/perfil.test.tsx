@@ -13,23 +13,23 @@ jest.mock("expo-router", () => ({
 
 const mockLogout = jest.fn();
 const mockUseAuth = jest.fn();
-jest.mock("../../../lib/auth/auth-provider", () => ({
+jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
 const mockSetPreference = jest.fn();
 const mockUseTheme = jest.fn();
-jest.mock("../../../lib/theme/theme-provider", () => ({
+jest.mock("../../lib/theme/theme-provider", () => ({
   useTheme: () => mockUseTheme(),
 }));
 
 const mockDecodeJwtPayload = jest.fn();
-jest.mock("../../../lib/auth/jwt", () => ({
+jest.mock("../../lib/auth/jwt", () => ({
   decodeJwtPayload: (...args: unknown[]) => mockDecodeJwtPayload(...args),
 }));
 
-import { palettes } from "../../../lib/theme/tokens";
-import PerfilScreen from "../../../app/(tabs)/perfil";
+import { palettes } from "../../lib/theme/tokens";
+import PerfilScreen from "../../app/perfil";
 
 function themeValue(preference = "system") {
   return {

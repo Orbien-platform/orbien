@@ -60,7 +60,7 @@ function toNumber(value: string | number): number {
 }
 
 export default function DizimoAutomaticoScreen() {
-  const { colors, primaryColor } = useTheme();
+  const { colors, brandInk } = useTheme();
   const [subscriptions, setSubscriptions] = useState<DonorPixSubscription[] | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
@@ -297,7 +297,7 @@ export default function DizimoAutomaticoScreen() {
         >
           <ConsentIcon
             size={iconSize.action}
-            color={consented ? primaryColor : colors.textTertiary}
+            color={consented ? brandInk : colors.textTertiary}
             strokeWidth={ICON_STROKE_WIDTH}
           />
           <Text style={[typography.bodyMedium, styles.consentText, { color: colors.textPrimary }]}>

@@ -30,7 +30,7 @@ import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../lib
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const { colors, isDark, primaryColor } = useTheme();
+  const { colors, isDark, brandInk } = useTheme();
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
@@ -63,7 +63,7 @@ export default function ForgotPasswordScreen() {
 
         {sent ? (
           <View style={styles.success}>
-            <Mail size={iconSize.emphasis} color={primaryColor} strokeWidth={ICON_STROKE_WIDTH} />
+            <Mail size={iconSize.emphasis} color={brandInk} strokeWidth={ICON_STROKE_WIDTH} />
             <Text
               testID="forgot-password-success"
               style={[typography.body, styles.successText, { color: colors.textPrimary }]}

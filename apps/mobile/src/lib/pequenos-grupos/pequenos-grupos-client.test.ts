@@ -6,6 +6,8 @@ jest.mock("../auth/auth-client", () => ({
 }));
 
 import {
+  checkIn,
+  createCheckinToken,
   getGroupRoster,
   getMeeting,
   listMaterials,
@@ -101,6 +103,33 @@ describe("PequenosGruposClient", () => {
         { body: { person_ids: ["p1", "p2"] } },
       );
       expect(result).toEqual({ added: 2 });
+    });
+  });
+
+  describe("createCheckinToken (PROD-12)", () => {
+    it("chama POST /small-groups/meetings/:id/checkin-token", async () => {
+      const token = { token: "t", expires_at: "2026-10-04T23:00:00.000Z" };
+      mockAuthenticatedRequest.mockResolvedValue(token);
+
+      await expect(createCheckinToken("m1")).resolves.toEqual(token);
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
+        "post",
+        "/small-groups/meetings/m1/checkin-token",
+      );
+    });
+  });
+
+  describe("checkIn (PROD-12)", () => {
+    it("manda o token no corpo de POST /small-groups/meetings/checkin", async () => {
+      const result = { status: "checked_in", group_meeting_id: "m1" };
+      mockAuthenticatedRequest.mockResolvedValue(result);
+
+      await expect(checkIn("tok")).resolves.toEqual(result);
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
+        "post",
+        "/small-groups/meetings/checkin",
+        { body: { token: "tok" } },
+      );
     });
   });
 });

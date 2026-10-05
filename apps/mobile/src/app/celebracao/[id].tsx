@@ -53,7 +53,7 @@ function formatOffset(minutes: number): string {
 }
 
 export default function CelebracaoScreen() {
-  const { primaryColor, colors } = useTheme();
+  const { brandInk, colors } = useTheme();
   const { id, ministryId } = useLocalSearchParams<{ id: string; ministryId?: string }>();
   const [order, setOrder] = useState<ServiceOrder | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
@@ -143,7 +143,7 @@ export default function CelebracaoScreen() {
           <Card
             key={item.id}
             testID={isMine ? `celebracao-item-${item.id}-mine` : `celebracao-item-${item.id}`}
-            highlightColor={isMine ? primaryColor : undefined}
+            highlightColor={isMine ? brandInk : undefined}
           >
             <View style={styles.itemHeader}>
               <Text style={[typography.h3, styles.itemName, { color: colors.textPrimary }]}>
