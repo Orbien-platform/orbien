@@ -4,8 +4,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { NetworkError } from "../../../lib/api/errors";
 
 const mockPush = jest.fn();
+let mockParams: { id: string; role?: string } = { id: "sg1" };
 jest.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({ id: "sg1" }),
+  useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: mockPush }),
 }));
 
@@ -19,6 +20,7 @@ import GrupoScreen from "../../../app/grupo/[id]";
 describe("GrupoScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockParams = { id: "sg1" };
   });
 
   it("lista os encontros ordenados por occurred_at desc (MOB-09-03)", async () => {
@@ -140,5 +142,29 @@ describe("GrupoScreen", () => {
     expect(semTema.props.accessibilityLabel).not.toBe("Encontro");
     expect(screen.getByTestId("encontro-m2").props.accessibilityLabel).toBe("Encontro");
     expect(screen.getAllByText("Encontro")).toHaveLength(2);
+  });
+
+  describe("Fazer check-in (PROD-12)", () => {
+    const MEETINGS = [{ id: "m1", occurred_at: "2026-09-01T19:00:00.000Z", topic: "Estudo" }];
+
+    it("membro vê o atalho, que abre o leitor", async () => {
+      mockParams = { id: "sg1", role: "member" };
+      mockListMeetings.mockResolvedValue(MEETINGS);
+      await act(async () => {
+        render(<GrupoScreen />);
+      });
+
+      fireEvent.press(screen.getByTestId("grupo-fazer-checkin"));
+      expect(mockPush).toHaveBeenCalledWith("/checkin");
+    });
+
+    it("quem lidera o grupo não vê — mostra o QR pelo encontro", async () => {
+      mockParams = { id: "sg1", role: "leader" };
+      mockListMeetings.mockResolvedValue(MEETINGS);
+      await act(async () => {
+        render(<GrupoScreen />);
+      });
+      expect(screen.queryByTestId("grupo-fazer-checkin")).toBeNull();
+    });
   });
 });

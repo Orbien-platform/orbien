@@ -3,9 +3,23 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { NetworkError } from "../../../../../lib/api/errors";
 
-jest.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({ id: "m1" }),
-}));
+const mockPush = jest.fn();
+// `useFocusEffect` roda no primeiro foco, como na navegação real; o teste
+// chama `mockRefocus()` para simular a volta de outra tela.
+let mockRefocus: () => void = () => undefined;
+jest.mock("expo-router", () => {
+  const { useEffect } = jest.requireActual("react");
+  return {
+    useLocalSearchParams: () => ({ id: "m1" }),
+    useRouter: () => ({ push: mockPush }),
+    useFocusEffect: (callback: () => void) => {
+      useEffect(() => {
+        mockRefocus = callback;
+        callback();
+      }, [callback]);
+    },
+  };
+});
 
 const mockGetMeeting = jest.fn();
 const mockGetGroupRoster = jest.fn();
@@ -233,5 +247,72 @@ describe("PresencaScreen", () => {
     });
 
     expect(mockRecordAttendance).toHaveBeenCalledTimes(1);
+  });
+
+  describe("QR de check-in (PROD-12)", () => {
+    it("abre o QR do encontro", async () => {
+      mockGetMeeting.mockResolvedValue({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [],
+      });
+      await act(async () => {
+        render(<PresencaScreen />);
+      });
+
+      fireEvent.press(screen.getByTestId("presenca-mostrar-qr"));
+
+      expect(mockPush).toHaveBeenCalledWith("/grupo/encontro/m1/qr");
+    });
+
+    it("voltar de outra tela sem ter aberto o QR não relê nada", async () => {
+      mockGetMeeting.mockResolvedValue({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [],
+      });
+      await act(async () => {
+        render(<PresencaScreen />);
+      });
+      await act(async () => {
+        mockRefocus();
+      });
+
+      expect(mockGetMeeting).toHaveBeenCalledTimes(1);
+    });
+    it("na volta do QR relê a lista: quem fez check-in aparece presente e sai da seleção", async () => {
+      mockGetMeeting.mockResolvedValueOnce({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [],
+      });
+      await act(async () => {
+        render(<PresencaScreen />);
+      });
+      expect(screen.getByTestId("presenca-confirmar")).toHaveTextContent("Confirmar presença (3)");
+
+      fireEvent.press(screen.getByTestId("presenca-mostrar-qr"));
+      mockGetMeeting.mockResolvedValueOnce({
+        id: "m1",
+        small_group_id: "sg1",
+        occurred_at: "2026-09-01T19:00:00.000Z",
+        topic: null,
+        attendanceRecords: [{ person_id: "p2" }],
+      });
+      await act(async () => {
+        mockRefocus();
+      });
+
+      expect(mockGetMeeting).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(screen.getByTestId("roster-p2-marcado")).toBeTruthy());
+      expect(screen.getByTestId("presenca-confirmar")).toHaveTextContent("Confirmar presença (2)");
+    });
+
   });
 });

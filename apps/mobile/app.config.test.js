@@ -111,6 +111,21 @@ describe("app.config.js", () => {
     });
   });
 
+  it("liga a câmera para o QR de check-in, sem pedir microfone (PROD-12)", () => {
+    const resolved = loadConfig()({ config: {} });
+
+    const camera = resolved.plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === "expo-camera",
+    );
+    expect(camera[1]).toEqual(
+      expect.objectContaining({
+        cameraPermission: expect.stringContaining("QR de check-in"),
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      }),
+    );
+  });
+
   it("resolve o plugin do OneSignal em modo development por padrão (fora de EAS)", () => {
     delete process.env.EAS_BUILD_PROFILE;
     const withDefaults = loadConfig();

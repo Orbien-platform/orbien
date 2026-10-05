@@ -471,6 +471,30 @@ build, não por OTA).
 Fade + translateY(3px), 180 ms ease-out, no lugar do padrão do Expo Router.
 Respeitar "reduzir movimento".
 
+### ~~PROD-34 · Página pública de autocadastro de visitante no web~~ · fechado
+
+Entregue em 2026-10-04, na branch `feat/qr-checkin-e-autocadastro`. O QR de
+autocadastro que a liderança projeta pelo app (`PROD-29`, aba Mais) abre
+`/visitante/{tenant_slug}/{token}` — `apps/web/src/app/(public)/visitante/`,
+mesmo formato de `/doar/{tenant_slug}` e o mesmo que `signupUrl` monta no app.
+
+- **API — `GET /public/visitor/qr/:token`** (`VisitorService.describeQr`):
+  devolve só `church_name` (nome da congregação), `origin` e `label`; QR
+  inexistente ou desativado é o mesmo 404, sem dizer qual dos dois. Serve para
+  a página mostrar de qual igreja é o QR e recusar um QR desativado antes de a
+  pessoa digitar tudo. Mesma leitura sem contexto de tenant que `registerViaQr`
+  já fazia; não conta como cadastro (`scan_count` só sobe no envio). Limite de
+  120 por hora por IP, maior que os 20 do cadastro. Testes no service, no
+  controller e em `test/integration/public-routes.spec.ts`.
+- **Página**: nome (obrigatório), WhatsApp, e-mail e sexo opcionais e o aceite
+  `visitor_consent_v1`, cujo texto foi escrito agora em
+  `legal/consent-terms/visitor_consent_v1.md` (rascunho, `CONF-01`). Telefone
+  normalizado como no app. Estados: carregando, QR inativo, falha ao abrir
+  com "Tentar de novo", 404 no envio (QR desativado no meio), 429 e erro de
+  validação da API. Sucesso mostra a mensagem da igreja, com "Que bom te ver
+  de novo" para quem já tinha visitado.
+- O que ficou de fora virou `PEND-18` e `PEND-19`.
+
 ---
 
 ## 6. Plano de produto sem código
@@ -1710,6 +1734,30 @@ não-membro com token válido e não-duplicação) e `meetings.controller.spec.t
 (gera e renova, erro de rede sem travar a tela, botão ausente sem `canEdit`).
 Nenhuma suíte existente mudou de comportamento.
 
+**Lado do membro, no `apps/mobile` — 2026-10-04** (branch
+`feat/qr-checkin-e-autocadastro`, junto com a v2 do `PROD-29`). A pergunta
+"digitar o código ou apontar a câmera" foi respondida pela câmera:
+`expo-camera` (SDK 57, plugin com permissão de câmera e **sem** microfone —
+módulo nativo, sai por build, não OTA). O QR é desenhado com
+`qrcode-generator` (JS puro) sobre `react-native-svg`.
+
+- **Líder:** "Mostrar QR de check-in" no encontro e na presença abre
+  `grupo/encontro/[id]/qr` em tela cheia, com brilho no máximo e a tela
+  acesa (`expo-brightness`, `expo-keep-awake`), validade, contagem
+  regressiva, presenças relidas a cada 15 s e "Renovar código". Abrir a tela
+  **gera** o código — a API só tem o `upsert`, não a leitura do token
+  vigente; documentado no cabeçalho da tela. O 409 das 24h vira "passou há
+  mais de 24 horas" com atalho para a lista de presença, que é relida na
+  volta do QR.
+- **Membro:** "Fazer check-in" no grupo e no encontro abre `/checkin`. O QR
+  carrega `orbien:checkin:{token}` para o leitor recusar na hora código que
+  não é de check-in; o UUID puro que o painel mostra também é aceito.
+  Permissão pedida, negada e bloqueada (abre os ajustes); 404, 403 e sem
+  conexão (reenvia o mesmo token) têm estado próprio.
+- **API:** a regra da v2 (4h de validade, gerar até 24h depois do encontro)
+  já era a dela. Ganhou só teste que fixa os dois limites
+  (`meetings.service.spec.ts`, "janelas da regra da v2").
+
 ### PROD-29 · Direção visual Órbita v2 — site e console entregues, painel e app começados
 
 Handoff de design em `docs/design/orbita-v2/README.md`: nova identidade
@@ -1736,11 +1784,14 @@ está.
   (Início · Conteúdo · Bíblia · {termo} · Mais), aba Mais, cadastro de
   visitante (aberto ao líder de célula, `POST /visitors`), Privacidade e meus
   dados (`CONF-03`), presença já marcada, transição de entrada na cor da
-  igreja e selo "Destaque" no hero. Os QRs de check-in e de autocadastro
-  estão em sessão própria (branch `feat/qr-checkin-e-autocadastro`). Ficam
-  pendentes `PROD-30` (Início por papel), `PROD-31` (Contribuir nativo),
-  `PROD-32` (sem conexão que se recupera) e `PROD-33` (transições) — lista
-  completa em `PROJETO.md` §4.2.
+  igreja e selo "Destaque" no hero. **QRs (2026-10-04, branch
+  `feat/qr-checkin-e-autocadastro`):** check-in do encontro (líder mostra,
+  membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
+  para a liderança projetar no culto, com a página pública que esse QR abre
+  no `apps/web` (`PROD-34`, fechado). Ficam pendentes `PROD-30` (Início por
+  papel), `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
+  recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
+  lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
   painel, decisão de 2026-10-04: o pacote v2 não o desenha.
@@ -2229,6 +2280,30 @@ tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: mon
 único de cobrança + split + falha fechada, e a subconta Asaas por tenant
 (`DEC-07`, decidido: `AD-009`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
 Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
+
+### PEND-18 · Limite do autocadastro por IP é baixo para o wi-fi da igreja · aberto
+
+`POST /public/visitor/register` aceita 20 envios por hora **por IP**
+(`visitor.public.controller.ts`). Com o QR projetado no culto (`PROD-34`), os
+visitantes na rede da igreja saem pelo mesmo IP: o 21º cadastro da hora
+recebe 429 — a página explica e mantém o que foi digitado, mas o cadastro não
+entra. Quem usa dados móveis não é afetado. Opções a decidir: limite por
+token do QR em vez de por IP, ou um teto por IP maior só nesta rota. Não foi
+mexido porque o limite é a defesa contra spam numa rota sem autenticação.
+
+### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
+
+- **Teste em aparelho**: câmera, brilho e tela acesa só foram exercitados com
+  mocks. Falta rodar numa build nativa (os três módulos são nativos — não
+  saem por OTA), nos tenants `teste1-church`/`teste2-church`.
+- **Gerenciar QR de autocadastro pelo app**: o app só cria o do culto (estado
+  vazio). Criar QR de grupo ou evento, renomear e desativar não têm tela em
+  lugar nenhum — nem no painel; as rotas existem (`admin/visitor/qr`).
+- **QR de check-in não lê o código vigente**: abrir a tela gera um código
+  novo (a API só tem o `upsert`). Uma leitura do token vigente evitaria
+  invalidar o código que outro líder já está mostrando.
+- **Marca da igreja na página pública**: a página mostra o nome da igreja,
+  mas não a cor nem o logo — não há rota pública de identidade por slug.
 
 ## 8. Ajustes — documento, rótulo e portão
 

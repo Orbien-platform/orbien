@@ -15,3 +15,8 @@ const ROLE_LABELS: Record<string, string> = {
 export function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
 }
+
+/** Quem gerencia QR de autocadastro — espelho de `MANAGE_ROLES` em
+ * apps/api/src/visitor/visitor.admin.controller.ts. A API é quem nega; aqui
+ * é só para esconder a entrada de quem não pode. */
+export const SIGNUP_QR_ROLES = ["tenant_admin", "admin_congregation", "pastor", "secretary"];

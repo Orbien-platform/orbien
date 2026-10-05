@@ -4,10 +4,13 @@ jest.mock("../auth/auth-client", () => ({
 }));
 
 import {
+  createSignupQr,
+  listSignupQrs,
   normalizePhone,
   recordVisitForExisting,
   registerVisitor,
   registerVisitorAnyway,
+  signupUrl,
 } from "./visitantes-client";
 
 describe("normalizePhone", () => {
@@ -71,5 +74,29 @@ describe("visitantes-client", () => {
     expect(mockAuthenticatedRequest).toHaveBeenLastCalledWith("post", "/visitors", {
       body: { existing_person_id: "p0", origin: "small_group", lgpd_consent: true, small_group_id: "g1" },
     });
+  });
+});
+
+describe("QR de autocadastro", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("lista por GET /admin/visitor/qr", async () => {
+    mockAuthenticatedRequest.mockResolvedValue([]);
+    await listSignupQrs();
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/admin/visitor/qr");
+  });
+
+  it("cria com origem e rótulo", async () => {
+    mockAuthenticatedRequest.mockResolvedValue({ id: "q1" });
+    await createSignupQr("service", "Culto");
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/admin/visitor/qr", {
+      body: { origin: "service", label: "Culto" },
+    });
+  });
+
+  it("monta a URL da página pública com slug e token", () => {
+    expect(signupUrl("https://app.orbien.app/", "teste1-church", "abc")).toBe(
+      "https://app.orbien.app/visitante/teste1-church/abc",
+    );
   });
 });

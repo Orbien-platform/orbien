@@ -224,4 +224,31 @@ describe("EncontroScreen", () => {
     expect(await screen.findByTestId("encontro-materials-empty")).toBeTruthy();
     expect(screen.queryByTestId("registrar-presenca-link")).toBeNull();
   });
+
+  describe("QR de check-in (PROD-12)", () => {
+    beforeEach(() => {
+      mockListMaterials.mockResolvedValue([]);
+    });
+
+    it("liderança abre o QR do encontro", async () => {
+      mockUseAuth.mockReturnValue(sessionWithRoles(["cell_leader"]));
+      await act(async () => {
+        render(<EncontroScreen />);
+      });
+
+      expect(screen.queryByTestId("encontro-fazer-checkin")).toBeNull();
+      fireEvent.press(screen.getByTestId("encontro-mostrar-qr"));
+      expect(mockPush).toHaveBeenCalledWith("/grupo/encontro/m1/qr");
+    });
+
+    it("membro abre o leitor para fazer o próprio check-in", async () => {
+      await act(async () => {
+        render(<EncontroScreen />);
+      });
+
+      expect(screen.queryByTestId("encontro-mostrar-qr")).toBeNull();
+      fireEvent.press(screen.getByTestId("encontro-fazer-checkin"));
+      expect(mockPush).toHaveBeenCalledWith("/checkin");
+    });
+  });
 });

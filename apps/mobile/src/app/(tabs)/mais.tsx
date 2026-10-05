@@ -15,6 +15,9 @@
 //   (`VISITOR_LEADER_ROLES` em apps/api/src/visitor/visitor.leader.controller.ts),
 //   o líder de célula incluso. Aqui o gate é fail-closed: sem papel legível
 //   no token, a linha não aparece;
+// - QR de autocadastro segue `MANAGE_ROLES` de `admin/visitor/qr`
+//   (`SIGNUP_QR_ROLES` em src/lib/auth/roles.ts), também fail-closed —
+//   o líder de célula não está nele;
 // - Dízimo automático só com a trava `ASAAS_PAYMENTS_ENABLED` ligada e
 //   tenant Premium (PROD-28), como na Home.
 import Constants from "expo-constants";
@@ -30,7 +33,7 @@ import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { useAuth } from "../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../lib/auth/jwt";
-import { roleLabel } from "../../lib/auth/roles";
+import { roleLabel, SIGNUP_QR_ROLES } from "../../lib/auth/roles";
 import { fetchAsaasPaymentsEnabled } from "../../lib/pix-recorrente/pix-recorrente-client";
 import {
   Bell,
@@ -40,6 +43,7 @@ import {
   CircleUser,
   HandHeart,
   LogOut,
+  QrCode,
   ShieldCheck,
   UserPlus,
 } from "../../lib/theme/icons";
@@ -67,6 +71,7 @@ export default function MaisScreen() {
   const isPremium = payload?.plan === "premium";
   const canServe = areas === null || areas.includes("volunteers");
   const canRegisterVisitor = roles.some((role) => VISITOR_WRITE_ROLES.includes(role));
+  const canShowSignupQr = roles.some((role) => SIGNUP_QR_ROLES.includes(role));
   const webUrl = Constants.expoConfig?.extra?.webUrl as string | undefined;
 
   useEffect(() => {
@@ -150,18 +155,32 @@ export default function MaisScreen() {
     },
   ];
 
-  const leadership: ListGroupItem[] = canRegisterVisitor
-    ? [
-        {
-          key: "visitante",
-          testID: "mais-visitante",
-          label: "Cadastrar visitante",
-          sub: "Quem chegou hoje",
-          icon: UserPlus,
-          onPress: () => router.push("/visitante"),
-        },
-      ]
-    : [];
+  const leadership: ListGroupItem[] = [
+    ...(canRegisterVisitor
+      ? [
+          {
+            key: "visitante",
+            testID: "mais-visitante",
+            label: "Cadastrar visitante",
+            sub: "Quem chegou hoje",
+            icon: UserPlus,
+            onPress: () => router.push("/visitante"),
+          },
+        ]
+      : []),
+    ...(canShowSignupQr
+      ? [
+          {
+            key: "autocadastro",
+            testID: "mais-autocadastro",
+            label: "QR de autocadastro",
+            sub: "Para projetar no culto",
+            icon: QrCode,
+            onPress: () => router.push("/autocadastro"),
+          },
+        ]
+      : []),
+  ];
 
   const account: ListGroupItem[] = [
     {

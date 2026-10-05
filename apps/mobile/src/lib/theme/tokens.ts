@@ -308,3 +308,30 @@ export const orbit = {
   /** 26s por volta, linear, infinito — mesma cadência do site e do painel. */
   periodMs: 26000,
 } as const;
+
+/** QR na tela (check-in e autocadastro). Módulo escuro sobre placa branca
+ * nos dois modos: câmera de celular lê mal QR invertido (claro sobre
+ * escuro), então a placa não segue o tema. `quietZone` é a margem em
+ * módulos que a norma do QR pede em volta do código (4). */
+export const qr = {
+  plate: brand.surface,
+  module: brand.ink,
+  quietZone: 4,
+  /** Lado máximo do QR, em px: em tablet ou projetado, maior não lê melhor. */
+  maxSize: 340,
+  /** Moldura do leitor: o quadro onde o membro encaixa o QR do líder. */
+  scanFrame: 240,
+  scanFrameBorder: 3,
+  /** Véu escuro em volta da moldura, sobre a imagem da câmera. */
+  scanScrim: "rgba(5, 7, 15, 0.6)",
+  /** Texto e moldura sobre a imagem da câmera: claro nos dois modos, como
+   * o texto sobre foto do carrossel. */
+  scanInk: brand.snow,
+} as const;
+
+/** Barra de tempo restante do QR de check-in. */
+export const progressBarHeight = 6;
+
+/** Selo de "deu certo" em tela inteira (check-in confirmado): o círculo e
+ * o ícone dentro dele. */
+export const successMark = { halo: 72, icon: 36 } as const;

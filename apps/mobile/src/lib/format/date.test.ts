@@ -11,6 +11,7 @@ import {
   formatDayMonth,
   formatLongDate,
   formatMonthYear,
+  formatTime,
   getGreeting,
   localWhen,
 } from "./date";
@@ -109,5 +110,15 @@ describe("localWhen", () => {
 
   it("data que já tem hora passa intacta", () => {
     expect(localWhen("2026-09-13T13:00:00.000Z", "19:00")).toBe("2026-09-13T13:00:00.000Z");
+  });
+});
+
+describe("formatTime", () => {
+  it("hora local com dois dígitos", () => {
+    expect(formatTime(new Date(2026, 9, 4, 7, 5).toISOString())).toBe("07:05");
+  });
+
+  it("ISO inválido devolve null", () => {
+    expect(formatTime("nope")).toBeNull();
   });
 });

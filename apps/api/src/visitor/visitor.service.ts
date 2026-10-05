@@ -51,6 +51,14 @@ export function normalizePhone(raw: string): string {
 /** Quantos possíveis duplicados a tela mostra — é uma escolha, não uma busca. */
 const MAX_DUPLICATE_MATCHES = 5;
 
+/** O que a página pública de autocadastro pode saber do QR antes do envio:
+ * de qual igreja ele é e de onde veio. Nada de id, tenant ou contagem. */
+export type PublicQrInfo = {
+  church_name: string;
+  origin: QrToken['origin'];
+  label: string | null;
+};
+
 type RegisterResult =
   | { status: 'registered'; message: string }
   | { status: 'visit_recorded'; message: string };
@@ -64,6 +72,35 @@ export class VisitorService {
     private readonly classificationService: ClassificationService,
     private readonly visitsService: VisitsService,
   ) {}
+
+  /**
+   * PROD-34: a página pública de autocadastro mostra o nome da igreja antes
+   * de o visitante preencher, e recusa logo um QR desativado — em vez de
+   * deixar a pessoa digitar tudo para só então ouvir "inválido". Mesma leitura
+   * sem contexto de tenant que `registerViaQr` já faz; devolve só o que a
+   * página precisa mostrar.
+   */
+  async describeQr(token: string): Promise<PublicQrInfo> {
+    const qrToken = await this.prisma.client.qrToken.findUnique({
+      where: { token },
+      select: {
+        is_active: true,
+        origin: true,
+        label: true,
+        congregation: { select: { name: true } },
+      },
+    });
+
+    if (!qrToken || !qrToken.is_active) {
+      throw new NotFoundException('QR code inválido ou expirado');
+    }
+
+    return {
+      church_name: qrToken.congregation.name,
+      origin: qrToken.origin,
+      label: qrToken.label,
+    };
+  }
 
   async registerViaQr(
     dto: RegisterVisitorDto,

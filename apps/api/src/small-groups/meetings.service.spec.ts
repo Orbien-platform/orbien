@@ -492,6 +492,62 @@ describe('MeetingsService', () => {
       );
       expect(result).toEqual({ token: 'tok-123', expires_at: expect.any(Date) });
     });
+
+    // Regra da v2 (README da Órbita, "QR de check-in"): o QR vale 4h a partir
+    // de quando é gerado, e gerar ainda é permitido até 24h depois do
+    // encontro. Os dois limites ficam presos aqui para o app e a API não
+    // divergirem em silêncio.
+    describe('janelas da regra da v2', () => {
+      const NOW = new Date('2026-10-04T20:00:00.000Z').getTime();
+      const HOUR = 60 * 60 * 1000;
+
+      beforeEach(() => {
+        jest.useFakeTimers({ now: NOW });
+      });
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
+      function meetingAt(occurred_at: Date) {
+        const client = clientWith();
+        client.groupMeeting.findUnique.mockResolvedValue({
+          id: 'meet1',
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          occurred_at,
+        });
+        client.meetingCheckinToken.upsert.mockImplementation(
+          ({ create }: { create: { token: string; expires_at: Date } }) =>
+            Promise.resolve({ token: create.token, expires_at: create.expires_at }),
+        );
+        return client;
+      }
+
+      it('o token expira exatamente 4h depois de gerado', async () => {
+        const client = meetingAt(new Date(NOW - HOUR));
+        const result = await serviceWith(client).createCheckinToken('meet1', USER);
+
+        expect(result.expires_at.getTime()).toBe(NOW + 4 * HOUR);
+        const { create, update } = client.meetingCheckinToken.upsert.mock.calls[0][0];
+        expect(create.expires_at.getTime()).toBe(NOW + 4 * HOUR);
+        // Renovar também reabre as 4h inteiras, não soma à validade antiga.
+        expect(update.expires_at.getTime()).toBe(NOW + 4 * HOUR);
+      });
+
+      it('ainda gera 23h59 depois do encontro', async () => {
+        const client = meetingAt(new Date(NOW - 24 * HOUR + 60_000));
+        await expect(serviceWith(client).createCheckinToken('meet1', USER)).resolves.toEqual(
+          expect.objectContaining({ token: expect.any(String) }),
+        );
+      });
+
+      it('recusa 24h e 1 min depois do encontro', async () => {
+        const client = meetingAt(new Date(NOW - 24 * HOUR - 60_000));
+        await expect(serviceWith(client).createCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+      });
+    });
   });
 
   describe('checkin', () => {
