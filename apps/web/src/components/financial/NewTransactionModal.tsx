@@ -409,7 +409,7 @@ export function NewTransactionModal({
                 type="button"
                 variant="outline"
                 className="flex-1 rounded-[8px]"
-                onClick={() => onOpenChange(false)}
+                onClick={() => { reset(); onOpenChange(false); }}
               >
                 Fechar
               </Button>
@@ -419,7 +419,7 @@ export function NewTransactionModal({
                   type="button"
                   variant="outline"
                   className="flex-1 rounded-[8px]"
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => { reset(); onOpenChange(false); }}
                   disabled={isSubmitting}
                 >
                   Cancelar

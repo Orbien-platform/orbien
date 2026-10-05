@@ -7,6 +7,7 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TransactionSource, TransactionType } from '@prisma/client';
@@ -15,8 +16,11 @@ export class CreateTransactionDto {
   @IsEnum(TransactionType, { message: 'Tipo deve ser income ou expense' })
   type!: TransactionType;
 
-  @IsNumber({}, { message: 'Valor deve ser um número' })
+  // `amount` é Decimal(12,2): mais de duas casas seriam arredondadas em
+  // silêncio, e acima de 10 dígitos inteiros o INSERT estoura em 500.
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Valor deve ser um número com até 2 casas decimais' })
   @IsPositive({ message: 'Valor deve ser positivo' })
+  @Max(9_999_999_999.99, { message: 'Valor acima do limite permitido' })
   amount!: number;
 
   @IsNotEmpty()
