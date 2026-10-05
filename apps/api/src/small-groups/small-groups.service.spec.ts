@@ -812,6 +812,31 @@ describe('SmallGroupsService', () => {
     });
   });
 
+  describe('getHealthSummary', () => {
+    it('PROD-30: sem célula nenhuma, zera tudo e nem consulta encontros', async () => {
+      const client = clientWith();
+      client.smallGroup.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      expect(await service.getHealthSummary()).toEqual({ green: 0, yellow: 0, red: 0, total: 0 });
+      expect(client.groupMeeting.groupBy).not.toHaveBeenCalled();
+    });
+
+    it('PROD-30: conta cada célula na cor de classifyHealth, e quem nunca se reuniu é red', async () => {
+      const client = clientWith();
+      client.smallGroup.findMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]);
+      const day = 24 * 60 * 60 * 1000;
+      client.groupMeeting.groupBy.mockResolvedValue([
+        { small_group_id: 'a', _max: { occurred_at: new Date() } },
+        { small_group_id: 'b', _max: { occurred_at: new Date(Date.now() - 20 * day) } },
+        { small_group_id: 'c', _max: { occurred_at: new Date(Date.now() - 40 * day) } },
+      ]);
+      const service = serviceWith(client);
+
+      expect(await service.getHealthSummary()).toEqual({ green: 1, yellow: 1, red: 2, total: 4 });
+    });
+  });
+
   describe('getAncestors', () => {
     // Formato bruto que o Prisma devolve (com o `leader` aninhado) — o que o
     // método expõe já achata para `leader_person_name` (ver `mapped`).

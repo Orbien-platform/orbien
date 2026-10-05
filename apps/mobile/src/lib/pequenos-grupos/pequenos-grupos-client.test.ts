@@ -9,6 +9,7 @@ import {
   checkIn,
   createCheckinToken,
   getGroupRoster,
+  getHealthSummary,
   getMeeting,
   listMaterials,
   listMeetings,
@@ -30,6 +31,18 @@ describe("PequenosGruposClient", () => {
 
       expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/small-groups/mine");
       expect(result).toEqual(groups);
+    });
+  });
+
+  describe("getHealthSummary", () => {
+    it("chama GET /small-groups/health-summary", async () => {
+      const summary = { green: 3, yellow: 2, red: 1, total: 6 };
+      mockAuthenticatedRequest.mockResolvedValue(summary);
+
+      const result = await getHealthSummary();
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/small-groups/health-summary");
+      expect(result).toEqual(summary);
     });
   });
 

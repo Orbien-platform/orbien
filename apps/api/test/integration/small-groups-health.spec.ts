@@ -26,6 +26,7 @@ const admin = new PrismaClient({
 let app: INestApplication;
 let starterToken: string;
 let premiumToken: string;
+let secretaryToken: string;
 let groupId: string;
 const ts = Date.now();
 let tenantId: string;
@@ -81,6 +82,7 @@ beforeAll(async () => {
   };
   starterToken = jwt.sign({ ...base, plan: 'starter' });
   premiumToken = jwt.sign({ ...base, plan: 'premium' });
+  secretaryToken = jwt.sign({ ...base, roles: ['secretary'], plan: 'premium' });
 }, 120_000);
 
 afterAll(async () => {
@@ -109,5 +111,32 @@ describe('GET /small-groups/:id/health — gate de plano (CEL20-04)', () => {
       last_meeting_at: null,
       days_since_last_meeting: null,
     });
+  });
+});
+
+describe('GET /small-groups/health-summary — Início do pastor (PROD-30)', () => {
+  it('tenant Starter leva 403', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/small-groups/health-summary')
+      .set('Authorization', `Bearer ${starterToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('tenant Premium recebe a contagem por cor (a rota literal não cai em :id)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/small-groups/health-summary')
+      .set('Authorization', `Bearer ${premiumToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ green: 0, yellow: 0, red: 1, total: 1 });
+  });
+
+  it('papel de leitura sem gestão (secretary) leva 403', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/small-groups/health-summary')
+      .set('Authorization', `Bearer ${secretaryToken}`);
+
+    expect(res.status).toBe(403);
   });
 });

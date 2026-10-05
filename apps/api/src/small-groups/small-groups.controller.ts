@@ -75,6 +75,16 @@ export class SmallGroupsController {
     return this.smallGroupsService.findMine(user.sub, user.tenant_id, user.congregation_id);
   }
 
+  // Resumo do semáforo para o Início do pastor (PROD-30) — Premium. Antes de
+  // ':id' pelo mesmo motivo de 'mine': é literal. MANAGE_ROLES e não
+  // READ_ROLES: é visão da igreja inteira, não de uma célula.
+  @Get('health-summary')
+  @Roles(...MANAGE_ROLES)
+  @RequiresPlan('premium')
+  getHealthSummary() {
+    return this.smallGroupsService.getHealthSummary();
+  }
+
   // Árvore genealógica (PROD-20, CEL20-06) — Premium.
   @Get(':id/hierarchy')
   @Roles(...READ_ROLES)

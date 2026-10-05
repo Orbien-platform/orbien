@@ -596,6 +596,69 @@ describe('EventRegistrationsService', () => {
     });
   });
 
+  describe('listMine (PROD-30)', () => {
+    const row = (id: string, title: string) => ({
+      id,
+      status: 'confirmed',
+      contentPost: {
+        id: `post-${id}`,
+        title,
+        event_starts_at: new Date('2026-10-30T19:00:00.000Z'),
+        event_location: 'Templo',
+      },
+    });
+
+    it('devolve as inscrições achatadas, do evento mais próximo ao mais distante', async () => {
+      const client = clientWith();
+      client.eventRegistration.findMany.mockResolvedValue([row('r1', 'Conferência')]);
+      const service = serviceWith(client);
+
+      const result = await service.listMine('t1', 'g1', 'user-1');
+
+      expect(result).toEqual([
+        {
+          id: 'r1',
+          status: 'confirmed',
+          post_id: 'post-r1',
+          title: 'Conferência',
+          event_starts_at: new Date('2026-10-30T19:00:00.000Z'),
+          event_location: 'Templo',
+        },
+      ]);
+      const args = client.eventRegistration.findMany.mock.calls[0]![0] as Row;
+      expect(args['orderBy']).toEqual({ contentPost: { event_starts_at: 'asc' } });
+      expect(args['take']).toBe(5);
+    });
+
+    it('filtra pela pessoa do token, só inscrição que vale e só evento que não terminou', async () => {
+      const client = clientWith();
+      client.eventRegistration.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      expect(await service.listMine('t1', 'g1', 'user-1')).toEqual([]);
+
+      const where = (client.eventRegistration.findMany.mock.calls[0]![0] as { where: Row }).where;
+      expect(where).toMatchObject({
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        person_id: 'person-1',
+        status: { in: ['confirmed', 'waitlisted', 'pending_payment'] },
+      });
+      const post = where['contentPost'] as { type: string; OR: Row[] };
+      expect(post.type).toBe('event');
+      expect(post.OR).toHaveLength(2);
+    });
+
+    it('usuário sem vínculo de pessoa recebe 404', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+
+      await expect(serviceWith(client).listMine('t1', 'g1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('summary', () => {
     it('conta confirmadas e em espera, e diz quantas vagas sobraram', async () => {
       const client = clientWith({ ...EVENT, registration_limit: 2 });

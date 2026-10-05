@@ -11,7 +11,7 @@ import { NotificationsController } from './notifications.controller';
 import { SchedulerService } from './scheduler.service';
 import { NotificationPreferencesController } from './notification-preferences.controller';
 import { NotificationPreferencesService } from './notification-preferences.service';
-import { EventRegistrationsController } from './event-registrations.controller';
+import { EventRegistrationsController, MyEventRegistrationsController } from './event-registrations.controller';
 import { EventRegistrationsService } from './event-registrations.service';
 
 @Module({
@@ -26,6 +26,7 @@ import { EventRegistrationsService } from './event-registrations.service';
     NotificationsController,
     NotificationPreferencesController,
     EventRegistrationsController,
+    MyEventRegistrationsController,
   ],
   providers: [
     SegmentsService,

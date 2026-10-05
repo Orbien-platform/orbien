@@ -47,8 +47,21 @@ jest.mock("../../../lib/theme/theme-provider", () => ({
 // (`beforeEach` abaixo), para os testes que não os mencionam não
 // dependerem de setup próprio.
 const mockListMyGroups = jest.fn();
+const mockListMeetings = jest.fn();
 jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
+  listMeetings: (...args: unknown[]) => mockListMeetings(...args),
+  getHealthSummary: jest.fn().mockResolvedValue({ green: 0, yellow: 0, red: 0, total: 0 }),
+}));
+
+// Blocos por papel (PROD-30) têm suíte própria em components/HomeRoleBlocks.test.tsx;
+// aqui só não podem tocar a rede.
+jest.mock("../../../lib/celebracoes/celebracoes-client", () => ({
+  listUpcomingInstances: jest.fn().mockResolvedValue([]),
+}));
+jest.mock("../../../lib/escala/escala-client", () => ({
+  getMyAssignments: jest.fn().mockResolvedValue([]),
+  respondToAssignment: jest.fn(),
 }));
 
 // getPosts(1, 5) alimenta tanto o hero (MHR-05, todos os itens) quanto
@@ -61,6 +74,7 @@ const mockGetHighlights = jest.fn();
 jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
   getHighlights: (...args: unknown[]) => mockGetHighlights(...args),
+  listMyEventRegistrations: jest.fn().mockResolvedValue([]),
 }));
 
 // Dízimo automático (PROD-28): a entrada depende da trava de pagamentos da
@@ -123,6 +137,7 @@ describe("HomeScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockListMyGroups.mockResolvedValue([]);
+    mockListMeetings.mockResolvedValue([]);
     mockPosts();
     mockGetHighlights.mockResolvedValue([]);
     mockUseAuth.mockReturnValue({ areas: null });
@@ -434,6 +449,12 @@ describe("HomeScreen", () => {
     });
 
     expect(mockGetHighlights).toHaveBeenCalledTimes(2);
+  });
+
+  it("o sino do topo leva às notificações", async () => {
+    await renderHome();
+    fireEvent.press(screen.getByTestId("home-notifications"));
+    expect(mockPush).toHaveBeenCalledWith("/notificacoes");
   });
 
   it("CTA de Contribuição sem WEB_URL configurada não abre nada", async () => {
