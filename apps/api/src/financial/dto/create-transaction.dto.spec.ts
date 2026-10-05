@@ -29,6 +29,16 @@ describe('CreateTransactionDto', () => {
     expect(errors.some((e) => e.property === 'amount')).toBe(true);
   });
 
+  it('rejeita amount com mais de 2 casas decimais', async () => {
+    const errors = await errorsFor({ amount: 10.123 });
+    expect(errors.some((e) => e.property === 'amount')).toBe(true);
+  });
+
+  it('aceita amount com 2 casas e rejeita acima do limite do Decimal(12,2)', async () => {
+    expect((await errorsFor({ amount: 10.12 })).some((e) => e.property === 'amount')).toBe(false);
+    expect((await errorsFor({ amount: 1e12 })).some((e) => e.property === 'amount')).toBe(true);
+  });
+
   it('rejeita amount negativo', async () => {
     const errors = await errorsFor({ amount: -10 });
     expect(errors.some((e) => e.property === 'amount')).toBe(true);

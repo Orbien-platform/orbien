@@ -162,8 +162,14 @@ export default function FinanceiroPage() {
   const { user } = useAuth();
   const router = useRouter();
 
-  const isSecretary = user?.roles?.includes("secretary") ?? false;
-  const isPastor = user?.roles?.includes("pastor") ?? false;
+  // Secretário e pastor são os recortes restritos do financeiro. Quem acumula
+  // um papel que administra a igreja (ou o de tesoureiro) não é restrito — a
+  // mesma regra do DRE na API (`isPastor` em `dre.controller.ts`).
+  const managesFinance = (user?.roles ?? []).some((r) =>
+    ["tenant_admin", "admin_congregation", "treasurer"].includes(r)
+  );
+  const isSecretary = (user?.roles?.includes("secretary") ?? false) && !managesFinance;
+  const isPastor = (user?.roles?.includes("pastor") ?? false) && !managesFinance;
   const canDeleteTx =
     user?.roles?.includes("admin_congregation") || user?.roles?.includes("tenant_admin") || false;
   const canManageCategories =

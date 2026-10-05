@@ -39,17 +39,7 @@ export class TransactionsService {
       );
     }
 
-    if (dto.donor_person_id) {
-      const person = await this.prisma.client.person.findFirst({
-        where: {
-          id: dto.donor_person_id,
-          tenant_id: user.tenant_id,
-          congregation_id: user.congregation_id,
-        },
-        select: { id: true },
-      });
-      if (!person) throw new NotFoundException('Doador não encontrado');
-    }
+    await this.assertDonorAndCostCenter(dto.donor_person_id, dto.cost_center_id, user);
 
     const transaction = await this.prisma.client.financialTransaction.create({
       data: {
@@ -84,6 +74,33 @@ export class TransactionsService {
     return transaction;
   }
 
+  // Doador e centro de custo vêm do corpo: sem esta checagem um id de outra
+  // congregação (ou inexistente) chegava ao INSERT e virava 500 por FK, ou —
+  // dentro do mesmo tenant — gravava vínculo com dado de outra congregação.
+  private async assertDonorAndCostCenter(
+    donorPersonId: string | null | undefined,
+    costCenterId: string | null | undefined,
+    user: JwtPayload,
+  ): Promise<void> {
+    const scope = { tenant_id: user.tenant_id, congregation_id: user.congregation_id };
+
+    if (donorPersonId) {
+      const person = await this.prisma.client.person.findFirst({
+        where: { id: donorPersonId, ...scope },
+        select: { id: true },
+      });
+      if (!person) throw new NotFoundException('Doador não encontrado');
+    }
+
+    if (costCenterId) {
+      const costCenter = await this.prisma.client.costCenter.findFirst({
+        where: { id: costCenterId, ...scope },
+        select: { id: true },
+      });
+      if (!costCenter) throw new NotFoundException('Centro de custo não encontrado');
+    }
+  }
+
   async findAll(query: ListTransactionsQueryDto, user: JwtPayload): Promise<PaginatedTransactions> {
     const { type, category_id, donor_person_id, since, until, page, limit } = query;
 
@@ -108,7 +125,9 @@ export class TransactionsService {
         where,
         skip,
         take: limit,
-        orderBy: { occurred_at: 'desc' },
+        // `id` desempata: sem ele, lançamentos do mesmo dia (o caso comum) podem
+        // repetir ou sumir entre uma página e a seguinte.
+        orderBy: [{ occurred_at: 'desc' }, { id: 'asc' }],
         include: {
           category: { select: { id: true, name: true, type: true } },
           donorPerson: { select: { id: true, full_name: true } },
@@ -150,10 +169,15 @@ export class TransactionsService {
       throw new ForbiddenException('Transação já confirmada em uma exportação contábil não pode ser editada');
     }
 
-    if (dto.category_id && dto.category_id !== existing.category_id) {
+    // Trocar só o `type` também pode quebrar o par tipo/categoria: entrada
+    // virando saída na mesma categoria de receita deixaria o lançamento
+    // contado no DRE do lado errado. Revalida quando muda a categoria OU o tipo.
+    const categoryChanged = !!dto.category_id && dto.category_id !== existing.category_id;
+    const typeChanged = !!dto.type && dto.type !== existing.type;
+    if (categoryChanged || typeChanged) {
       const category = await this.prisma.client.financialCategory.findFirst({
         where: {
-          id: dto.category_id,
+          id: dto.category_id ?? existing.category_id,
           tenant_id: user.tenant_id,
           congregation_id: user.congregation_id,
         },
@@ -169,6 +193,8 @@ export class TransactionsService {
         );
       }
     }
+
+    await this.assertDonorAndCostCenter(dto.donor_person_id, dto.cost_center_id, user);
 
     const updated = await this.prisma.client.financialTransaction.update({
       where: { id },

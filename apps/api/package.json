@@ -21,7 +21,7 @@
     "test:unit": "jest --selectProjects unit --passWithNoTests",
     "test:integration": "jest --selectProjects integration --runInBand --forceExit --passWithNoTests",
     "test:rls": "jest --selectProjects rls --runInBand --forceExit",
-    "test:cov": "jest --selectProjects unit integration --coverage --passWithNoTests"
+    "test:cov": "jest --selectProjects unit integration --runInBand --coverage --passWithNoTests"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1061.0",

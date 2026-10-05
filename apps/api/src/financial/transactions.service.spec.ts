@@ -15,6 +15,7 @@ function serviceWith(overrides: Record<string, unknown> = {}) {
   const client = {
     financialCategory: { findFirst: jest.fn() },
     person: { findFirst: jest.fn() },
+    costCenter: { findFirst: jest.fn() },
     financialTransaction: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -77,6 +78,21 @@ describe('TransactionsService', () => {
       await expect(
         service.create({ ...validDto, donor_person_id: 'p1' } as never, user),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejeita centro de custo de outra congregação ou inexistente', async () => {
+      const { service, client } = serviceWith();
+      client.financialCategory.findFirst.mockResolvedValue({ id: 'cat-1', type: 'income' });
+      client.costCenter.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create({ ...validDto, cost_center_id: 'cc-x' } as never, user),
+      ).rejects.toThrow(NotFoundException);
+      expect(client.costCenter.findFirst).toHaveBeenCalledWith({
+        where: { id: 'cc-x', tenant_id: 'tenant-1', congregation_id: 'cong-1' },
+        select: { id: true },
+      });
+      expect(client.financialTransaction.create).not.toHaveBeenCalled();
     });
 
     it('cria a transação, grava auditoria e não propaga falha de auditoria', async () => {
@@ -266,6 +282,40 @@ describe('TransactionsService', () => {
       expect(result).toEqual({ id: 't1', type: 'expense' });
     });
 
+    it('rejeita trocar só o type quando a categoria atual é do outro tipo', async () => {
+      const { service, client } = serviceWith();
+      client.financialTransaction.findFirst.mockResolvedValue({
+        id: 't1',
+        status: 'pending',
+        category_id: 'cat-1',
+        type: 'income',
+      });
+      client.financialCategory.findFirst.mockResolvedValue({ type: 'income' });
+
+      await expect(
+        service.update('t1', { type: 'expense' } as never, user),
+      ).rejects.toThrow(BadRequestException);
+      expect(client.financialCategory.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ id: 'cat-1' }) }),
+      );
+      expect(client.financialTransaction.update).not.toHaveBeenCalled();
+    });
+
+    it('rejeita centro de custo inexistente na edição', async () => {
+      const { service, client } = serviceWith();
+      client.financialTransaction.findFirst.mockResolvedValue({
+        id: 't1',
+        status: 'pending',
+        category_id: 'cat-1',
+        type: 'income',
+      });
+      client.costCenter.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update('t1', { cost_center_id: 'cc-x' } as never, user),
+      ).rejects.toThrow(NotFoundException);
+    });
+
     it('atualiza sem trocar categoria — não valida categoria nova', async () => {
       const { service, client } = serviceWith();
       client.financialTransaction.findFirst.mockResolvedValue({
@@ -309,6 +359,8 @@ describe('TransactionsService', () => {
         type: 'income',
       });
       client.financialTransaction.update.mockResolvedValue({ id: 't1' });
+      client.person.findFirst.mockResolvedValue({ id: 'p1' });
+      client.costCenter.findFirst.mockResolvedValue({ id: 'cc-1' });
 
       await service.update(
         't1',

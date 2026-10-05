@@ -53,7 +53,11 @@ function formatDate(iso: string): string {
 
 export default function PessoasPage() {
   const { user } = useAuth();
-  const isPastor = user?.roles?.includes("pastor") ?? false;
+  // Pastor é o recorte restrito; quem acumula `tenant_admin` ou
+  // `admin_congregation` tem o acesso do papel maior (importar, exportar).
+  const isPastor =
+    (user?.roles?.includes("pastor") ?? false) &&
+    !user?.roles?.some((r) => r === "tenant_admin" || r === "admin_congregation");
 
   const [persons, setPersons] = useState<Person[]>([]);
   const [total, setTotal] = useState(0);
