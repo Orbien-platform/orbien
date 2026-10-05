@@ -99,3 +99,14 @@ export interface PaidEventRegistrationResult {
 }
 
 export type RegisterSelfResult = MyEventRegistration | PaidEventRegistrationResult;
+
+/** Uma inscrição do próprio usuário com o evento que ela reserva
+ * (`GET /content/my-registrations`, Início do app). */
+export interface UpcomingEventRegistration {
+  id: string;
+  status: EventRegistrationStatus;
+  post_id: string;
+  title: string;
+  event_starts_at: string | null;
+  event_location: string | null;
+}

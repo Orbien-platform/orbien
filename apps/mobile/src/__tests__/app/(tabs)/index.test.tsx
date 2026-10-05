@@ -74,6 +74,7 @@ const mockGetHighlights = jest.fn();
 jest.mock("../../../lib/content/content-client", () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
   getHighlights: (...args: unknown[]) => mockGetHighlights(...args),
+  listMyEventRegistrations: jest.fn().mockResolvedValue([]),
 }));
 
 // Dízimo automático (PROD-28): a entrada depende da trava de pagamentos da

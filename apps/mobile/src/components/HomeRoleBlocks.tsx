@@ -16,6 +16,8 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { listMyEventRegistrations } from "../lib/content/content-client";
+import type { UpcomingEventRegistration } from "../lib/content/types";
 import { listUpcomingInstances } from "../lib/celebracoes/celebracoes-client";
 import type { CelebrationInstanceSummary } from "../lib/celebracoes/types";
 import {
@@ -23,19 +25,20 @@ import {
   respondToAssignment,
 } from "../lib/escala/escala-client";
 import type { Assignment } from "../lib/escala/types";
-import { formatDayMonth, formatTime, localWhen } from "../lib/format/date";
+import { formatDateTime, formatDayMonth, formatTime, localWhen } from "../lib/format/date";
 import { getHealthSummary, listMeetings } from "../lib/pequenos-grupos/pequenos-grupos-client";
 import type {
   GroupMeetingSummary,
   HealthSummary,
   SmallGroupMine,
 } from "../lib/pequenos-grupos/types";
-import { CalendarOff, QrCode } from "../lib/theme/icons";
+import { CalendarOff, QrCode, Ticket } from "../lib/theme/icons";
 import { useGroupTerm } from "../lib/theme/terminology";
 import { useTheme } from "../lib/theme/theme-provider";
 import { spacing, typography } from "../lib/theme/tokens";
 import { AppButton } from "./AppButton";
-import { Badge } from "./Badge";
+import { Avatar } from "./Avatar";
+import { Badge, type BadgeTone } from "./Badge";
 import { Card } from "./Card";
 import { SectionLabel } from "./SectionLabel";
 
@@ -84,6 +87,7 @@ export function HomeRoleBlocks({ roles, groups, areas, isPremium }: HomeRoleBloc
       {showHealth ? <HealthTrafficLight /> : null}
       {showCelebration ? <SundayCelebration /> : null}
       {showAssignments ? <NextAssignments /> : null}
+      <MyEvents />
     </>
   );
 }
@@ -215,6 +219,65 @@ function HealthTrafficLight() {
           ))}
         </View>
       </Card>
+    </View>
+  );
+}
+
+const REGISTRATION_BADGE: Record<string, { label: string; tone: BadgeTone }> = {
+  confirmed: { label: "Confirmada", tone: "success" },
+  waitlisted: { label: "Na fila", tone: "info" },
+  pending_payment: { label: "Aguardando pagamento", tone: "neutral" },
+};
+
+/** Eventos em que a pessoa se inscreveu — vale para qualquer papel, então não
+ * passa por gate de papel nem de plano. */
+function MyEvents() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const [items, setItems] = useState<UpcomingEventRegistration[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listMyEventRegistrations()
+      .then((result) => {
+        if (!cancelled) setItems(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <View testID="home-my-events" style={styles.section}>
+      <SectionLabel>Meus eventos</SectionLabel>
+      {items.map((item) => {
+        const badge = REGISTRATION_BADGE[item.status];
+        const when = item.event_starts_at ? formatDateTime(item.event_starts_at) : null;
+        return (
+          <Card
+            key={item.id}
+            testID={`home-event-${item.id}`}
+            onPress={() => router.push(`/post/${item.post_id}`)}
+            accessibilityLabel={item.title}
+          >
+            <View style={styles.row}>
+              <Avatar icon={Ticket} />
+              <View style={styles.grow}>
+                <Text style={[typography.h3, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+                  {[when, item.event_location].filter(Boolean).join(" · ")}
+                </Text>
+              </View>
+              {badge ? <Badge label={badge.label} tone={badge.tone} /> : null}
+            </View>
+          </Card>
+        );
+      })}
     </View>
   );
 }

@@ -31,6 +31,10 @@ const mockListUpcoming = jest.fn();
 jest.mock("../lib/celebracoes/celebracoes-client", () => ({
   listUpcomingInstances: (...a: unknown[]) => mockListUpcoming(...a),
 }));
+const mockListMyEvents = jest.fn();
+jest.mock("../lib/content/content-client", () => ({
+  listMyEventRegistrations: (...a: unknown[]) => mockListMyEvents(...a),
+}));
 const mockGetAssignments = jest.fn();
 const mockRespond = jest.fn();
 jest.mock("../lib/escala/escala-client", () => ({
@@ -82,6 +86,7 @@ describe("HomeRoleBlocks", () => {
     mockListMeetings.mockResolvedValue([]);
     mockHealthSummary.mockResolvedValue({ green: 3, yellow: 2, red: 1, total: 6 });
     mockListUpcoming.mockResolvedValue([]);
+    mockListMyEvents.mockResolvedValue([]);
     mockGetAssignments.mockResolvedValue([]);
   });
 
@@ -161,6 +166,57 @@ describe("HomeRoleBlocks", () => {
       mockHealthSummary.mockRejectedValue(new Error("403"));
       await renderBlocks({ roles: ["pastor"], isPremium: true });
       expect(screen.queryByTestId("home-health")).toBeNull();
+    });
+  });
+
+  describe("meus eventos", () => {
+    const registration = (id: string, status: string) => ({
+      id,
+      status,
+      post_id: `post-${id}`,
+      title: `Evento ${id}`,
+      event_starts_at: "2026-10-30T19:00:00",
+      event_location: "Templo",
+    });
+
+    it("lista as inscrições para qualquer papel, com a situação de cada uma", async () => {
+      mockListMyEvents.mockResolvedValue([
+        registration("a", "confirmed"),
+        registration("b", "waitlisted"),
+        registration("c", "pending_payment"),
+      ]);
+      await renderBlocks();
+
+      expect(screen.getByText("Evento a")).toBeTruthy();
+      expect(screen.getByText("Confirmada")).toBeTruthy();
+      expect(screen.getByText("Na fila")).toBeTruthy();
+      expect(screen.getByText("Aguardando pagamento")).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("home-event-a"));
+      });
+      expect(mockPush).toHaveBeenCalledWith("/post/post-a");
+    });
+
+    it("evento sem data ou com status desconhecido ainda aparece", async () => {
+      mockListMyEvents.mockResolvedValue([
+        { ...registration("x", "confirmed"), event_starts_at: null, event_location: null },
+        registration("y", "algo_novo"),
+      ]);
+      await renderBlocks();
+
+      expect(screen.getByText("Evento x")).toBeTruthy();
+      expect(screen.getByText("Evento y")).toBeTruthy();
+    });
+
+    it("sem inscrição, ou com erro, o bloco some", async () => {
+      await renderBlocks();
+      expect(screen.queryByTestId("home-my-events")).toBeNull();
+    });
+
+    it("erro ao carregar não derruba a Home", async () => {
+      mockListMyEvents.mockRejectedValue(new Error("offline"));
+      await renderBlocks();
+      expect(screen.queryByTestId("home-my-events")).toBeNull();
     });
   });
 

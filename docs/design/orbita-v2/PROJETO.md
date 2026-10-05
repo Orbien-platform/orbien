@@ -321,8 +321,9 @@ na tela "em breve" do site.
 - [x] **Semáforo dos grupos** (pastor, Premium) — feito (2026-10-05):
   `GET /small-groups/health-summary` na API, bloco na Home do app e no Início
   do painel.
-- [ ] **Início — o que ficou de fora:** eventos em que a pessoa se inscreveu
-  (falta a rota do membro) e teste em aparelho.
+- [x] **Eventos em que a pessoa se inscreveu** — feito (2026-10-05):
+  `GET /content/my-registrations` e bloco "Meus eventos" na Home.
+- [ ] **Início — o que ficou de fora:** teste em aparelho.
 - [x] **Privacidade (LGPD)** — feito (2026-10-04), com as rotas do titular
   na API (`CONF-03`).
 - [x] **QR de check-in** (líder) e **leitura do QR** (membro, câmera —

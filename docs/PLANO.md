@@ -442,7 +442,7 @@ só faltava o consumo pelo app.
   `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
   mock de `expo-router` (a tela passou a navegar).
 
-### PROD-30 · Início por papel no app (v2) · parcial, falta um bloco
+### ~~PROD-30 · Início por papel no app (v2)~~ · fechado, falta só o teste em aparelho
 
 Entregue em 2026-10-05 (`components/HomeRoleBlocks.tsx`, na Home): encontro de
 hoje com "Registrar presença" e "Mostrar QR" para quem lidera um grupo,
@@ -458,8 +458,14 @@ vermelho pelo mesmo `classifyHealth` do `PROD-20` (14 e 28 dias). Mobile: bloco
 "Semáforo" na Home, fail-closed (sem Premium ou sem papel, nem busca). Web:
 `GroupHealthSummary` no Início do painel, que some em 403.
 
-**Falta:** os eventos em que a pessoa se inscreveu, no Início do app (a rota
-de inscrições do membro não existe), e o teste em aparelho dos blocos.
+**Eventos em que a pessoa se inscreveu — entregue na mesma branch.** API:
+`GET /content/my-registrations` (qualquer papel que lê conteúdo; recorte pela
+pessoa do token, só inscrição confirmada, em espera ou aguardando pagamento,
+em evento que não terminou, até 5, o mais próximo primeiro). Mobile: bloco
+"Meus eventos" na Home, que abre o post do evento.
+
+**Falta:** o teste em aparelho dos blocos (`PEND` a abrir quando houver
+build de desenvolvimento).
 
 ### PROD-31 · Contribuir nativo no app · aberto, depende de `PROD-28`
 
