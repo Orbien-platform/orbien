@@ -144,6 +144,7 @@ function ThemedShell() {
           {/* PROD-28: só alcançável com a trava de pagamentos ligada na API
               (a Home esconde a entrada); por deep link, a tela mostra
               "indisponível". */}
+          <Stack.Screen name="contribuir" options={{ title: "Contribuir" }} />
           <Stack.Screen name="dizimo-automatico" options={{ title: "Dízimo automático" }} />
           <Stack.Screen name="post/[id]" options={{ title: "Publicação" }} />
           <Stack.Screen name="celebracao/[id]" options={{ title: "Ordem de Culto" }} />

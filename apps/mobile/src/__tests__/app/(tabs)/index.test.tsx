@@ -271,15 +271,13 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Contribua")).toBeTruthy();
   });
 
-  it("CTA de Contribuição habilitado abre WEB_URL/doar/{tenant_slug} em browser in-app (MHR-07)", async () => {
+  it("CTA de Contribuição habilitado abre a tela nativa de contribuir (PROD-31)", async () => {
     mockUseTheme.mockReturnValue(themeValue({ tenantSlug: "igreja-teste" }));
 
     await renderHome();
     fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
 
-    expect(mockOpenBrowserAsync).toHaveBeenCalledWith(
-      "https://web.exemplo.test/doar/igreja-teste",
-    );
+    expect(mockPush).toHaveBeenCalledWith("/contribuir");
   });
 
   // MHR-11: CTA de Contribuição desabilitado sem tenant_slug.
@@ -455,32 +453,5 @@ describe("HomeScreen", () => {
     await renderHome();
     fireEvent.press(screen.getByTestId("home-notifications"));
     expect(mockPush).toHaveBeenCalledWith("/notificacoes");
-  });
-
-  it("CTA de Contribuição sem WEB_URL configurada não abre nada", async () => {
-    const extra = jest.requireMock<{ default: { expoConfig: { extra: { webUrl?: string } } } }>(
-      "expo-constants",
-    ).default.expoConfig.extra;
-    const original = extra.webUrl;
-    extra.webUrl = undefined;
-    try {
-      await renderHome();
-      fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
-      expect(mockOpenBrowserAsync).not.toHaveBeenCalled();
-    } finally {
-      extra.webUrl = original;
-    }
-  });
-
-  it("CTA de Contribuição sem navegador disponível não derruba a tela", async () => {
-    mockOpenBrowserAsync.mockRejectedValue(new Error("sem navegador"));
-
-    await renderHome();
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("quick-action-contribuicao"));
-    });
-
-    expect(mockOpenBrowserAsync).toHaveBeenCalled();
-    expect(screen.getByTestId("home-greeting")).toBeTruthy();
   });
 });

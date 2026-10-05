@@ -20,9 +20,7 @@
 //   o líder de célula não está nele;
 // - Dízimo automático só com a trava `ASAAS_PAYMENTS_ENABLED` ligada e
 //   tenant Premium (PROD-28), como na Home.
-import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -72,7 +70,6 @@ export default function MaisScreen() {
   const canServe = areas === null || areas.includes("volunteers");
   const canRegisterVisitor = roles.some((role) => VISITOR_WRITE_ROLES.includes(role));
   const canShowSignupQr = roles.some((role) => SIGNUP_QR_ROLES.includes(role));
-  const webUrl = Constants.expoConfig?.extra?.webUrl as string | undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +114,7 @@ export default function MaisScreen() {
           },
         ]
       : []),
-    ...(tenantSlug && webUrl
+    ...(tenantSlug
       ? [
           {
             key: "contribuir",
@@ -125,11 +122,7 @@ export default function MaisScreen() {
             label: "Contribuir",
             sub: "Dízimo, oferta e missões",
             icon: HandHeart,
-            onPress: () => {
-              WebBrowser.openBrowserAsync(`${webUrl}/doar/${tenantSlug}`).catch(() => {
-                // sem navegador disponível: nada bloqueante, mesmo padrão da Home.
-              });
-            },
+            onPress: () => router.push("/contribuir"),
           },
         ]
       : []),

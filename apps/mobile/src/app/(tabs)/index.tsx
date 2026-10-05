@@ -4,8 +4,6 @@
 // (HomeQuickActions, T10), "Meus grupos" (HOME-02) e "Avisos recentes"
 // (HOME-03) — as duas últimas preservadas sem mudança de comportamento.
 import { useRouter } from "expo-router";
-import Constants from "expo-constants";
-import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -110,8 +108,6 @@ export default function HomeScreen() {
   const heroPosts =
     highlights === null ? [] : highlights.length > 0 ? highlights : (posts ?? []);
 
-  const webUrl = Constants.expoConfig?.extra?.webUrl as string | undefined;
-
   const quickActions: QuickAction[] = [
     {
       key: "biblia",
@@ -124,13 +120,7 @@ export default function HomeScreen() {
       label: "Contribua",
       icon: HandHeart,
       disabled: !tenantSlug,
-      onPress: () => {
-        if (!tenantSlug || !webUrl) return;
-        WebBrowser.openBrowserAsync(`${webUrl}/doar/${tenantSlug}`).catch(() => {
-          // sem navegador disponível: nenhuma tela de erro bloqueante,
-          // mesmo padrão de Linking.openURL em grupo/encontro/[id].tsx.
-        });
-      },
+      onPress: () => router.push("/contribuir"),
     },
     ...(areas === null || areas.includes("volunteers")
       ? [
