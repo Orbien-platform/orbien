@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import { monthName, todayKey } from "@/lib/period";
 
 interface Category {
   id: string;
@@ -33,6 +35,31 @@ interface EditableTransaction {
   status?: "pending" | "paid" | "confirmed";
 }
 
+/** Quem pode marcar lançamento como pago — a mesma lista de `PATCH :id/status` na API. */
+const PAYMENT_ROLES = ["treasurer", "admin_congregation", "tenant_admin"];
+
+function findCategory(categories: Category[], id: string): Category | undefined {
+  for (const c of categories) {
+    if (c.id === id) return c;
+    const child = findCategory(c.children, id);
+    if (child) return child;
+  }
+  return undefined;
+}
+
+/**
+ * Descrição sugerida: nome da categoria e mês do lançamento ("Dízimos - Outubro").
+ * O mês é o da data escolhida, lido da própria string "YYYY-MM-DD" — sem passar
+ * por `Date`, para o fuso do navegador não mover o mês nas bordas.
+ */
+function suggestedDescription(categoryName: string | undefined, date: string): string {
+  if (!categoryName) return "";
+  const month = Number(date.slice(5, 7));
+  const name = month >= 1 && month <= 12 ? monthName(month - 1) : "";
+  if (!name) return categoryName;
+  return `${categoryName} - ${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+}
+
 function editKindLabel(tx: EditableTransaction): string {
   if (!tx.recurring_rule_id) return "Avulso";
   return /\(\d+\/\d+\)$/.test(tx.description) ? "Parcelado" : "Fixo mensal";
@@ -55,16 +82,20 @@ export function NewTransactionModal({
   scope,
   viewOnly = false,
 }: NewTransactionModalProps) {
+  const { user } = useAuth();
+  const canMarkPaid = (user?.roles ?? []).some((r) => PAYMENT_ROLES.includes(r));
   const isEditing = !!editTransaction;
   const fieldsDisabled = viewOnly;
   const [type, setType] = useState<"income" | "expense">("income");
   const [categoryId, setCategoryId] = useState("");
   const [costCenterId, setCostCenterId] = useState("");
   const [amount, setAmount] = useState(0);
-  const [occurredAt, setOccurredAt] = useState(
-    () => new Date().toISOString().split("T")[0]
-  );
+  const [occurredAt, setOccurredAt] = useState(() => todayKey());
   const [description, setDescription] = useState("");
+  // Enquanto a pessoa não escreve a descrição, ela acompanha categoria e data.
+  // Escreveu algo: é dela, e a sugestão não volta a sobrescrever.
+  const [descriptionEdited, setDescriptionEdited] = useState(false);
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,18 +128,42 @@ export function NewTransactionModal({
     setAmount(Number(editTransaction.amount));
     setOccurredAt(editTransaction.occurred_at.slice(0, 10));
     setDescription(editTransaction.description);
+    setDescriptionEdited(true);
     setEntryMode("single");
   }
 
   const filteredCategories = categories.filter((c) => c.type === type);
+
+  function suggest(nextCategoryId: string, nextDate: string) {
+    if (isEditing || descriptionEdited) return;
+    setDescription(suggestedDescription(findCategory(categories, nextCategoryId)?.name, nextDate));
+  }
+
+  function handleCategoryChange(next: string) {
+    setCategoryId(next);
+    suggest(next, occurredAt);
+  }
+
+  function handleDateChange(next: string) {
+    setOccurredAt(next);
+    suggest(categoryId, next);
+  }
+
+  function handleDescriptionChange(next: string) {
+    setDescription(next);
+    // Apagar tudo devolve a descrição à sugestão.
+    setDescriptionEdited(next !== "");
+  }
 
   function reset() {
     setType("income");
     setCategoryId("");
     setCostCenterId("");
     setAmount(0);
-    setOccurredAt(new Date().toISOString().split("T")[0]);
+    setOccurredAt(todayKey());
     setDescription("");
+    setDescriptionEdited(false);
+    setAlreadyPaid(false);
     setError("");
     setSuccess(false);
     setSuccessMessage("Lançamento registrado!");
@@ -157,8 +212,9 @@ export function NewTransactionModal({
           amount,
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           description: description.trim(),
+          ...(alreadyPaid && canMarkPaid && { status: "paid" }),
         });
-        setSuccessMessage("Lançamento registrado!");
+        setSuccessMessage(alreadyPaid && canMarkPaid ? "Lançamento registrado como pago!" : "Lançamento registrado!");
       } else if (entryMode === "installment") {
         await api.post("/financial/recurring-rules", {
           mode: "installment",
@@ -229,7 +285,7 @@ export function NewTransactionModal({
                 key={t}
                 type="button"
                 disabled={fieldsDisabled}
-                onClick={() => { setType(t); setCategoryId(""); }}
+                onClick={() => { setType(t); handleCategoryChange(""); }}
                 className={`flex-1 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   type === t
                     ? t === "income"
@@ -250,7 +306,7 @@ export function NewTransactionModal({
             </Label>
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => handleCategoryChange(e.target.value)}
               disabled={isSubmitting || fieldsDisabled}
               className="h-9 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
             >
@@ -319,7 +375,7 @@ export function NewTransactionModal({
               id="nt-date"
               type="date"
               value={occurredAt}
-              onChange={(e) => setOccurredAt(e.target.value)}
+              onChange={(e) => handleDateChange(e.target.value)}
               disabled={isSubmitting || fieldsDisabled}
               className="rounded-[8px]"
             />
@@ -334,11 +390,30 @@ export function NewTransactionModal({
               id="nt-desc"
               placeholder="ex: Dízimos do culto de domingo"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
               disabled={isSubmitting || fieldsDisabled}
               className="rounded-[8px]"
             />
           </div>
+
+          {/* Já pago — só no cadastro avulso; parcelas e fixos nascem pendentes */}
+          {!isEditing && entryMode === "single" && canMarkPaid && (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-[8px] border border-[var(--border-default)] px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={alreadyPaid}
+                onChange={(e) => setAlreadyPaid(e.target.checked)}
+                disabled={isSubmitting}
+                className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-teal"
+              />
+              <span className="flex flex-col">
+                <span className="text-sm font-medium text-ink dark:text-white">Já está pago</span>
+                <span className="text-xs text-stone">
+                  Registra o lançamento como pago, sem precisar marcar depois na lista.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Recurrence */}
           {isEditing ? (

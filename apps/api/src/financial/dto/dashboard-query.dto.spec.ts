@@ -20,4 +20,26 @@ describe('DashboardQueryDto', () => {
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'congregation_id')).toBe(true);
   });
+
+  it('aceita período com as duas datas', async () => {
+    const dto = plainToInstance(DashboardQueryDto, {
+      period_start: '2026-10-01',
+      period_end: '2026-10-31',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejeita período com só uma das datas', async () => {
+    const onlyStart = await validate(plainToInstance(DashboardQueryDto, { period_start: '2026-10-01' }));
+    expect(onlyStart.some((e) => e.property === 'period_end')).toBe(true);
+    const onlyEnd = await validate(plainToInstance(DashboardQueryDto, { period_end: '2026-10-31' }));
+    expect(onlyEnd.some((e) => e.property === 'period_start')).toBe(true);
+  });
+
+  it('rejeita data que não é data', async () => {
+    const errors = await validate(
+      plainToInstance(DashboardQueryDto, { period_start: 'ontem', period_end: '2026-10-31' }),
+    );
+    expect(errors.some((e) => e.property === 'period_start')).toBe(true);
+  });
 });

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -43,6 +44,12 @@ export class TransactionsController {
   @Post()
   @Roles(...WRITE_ROLES)
   create(@Body() dto: CreateTransactionDto, @CurrentUser() user: JwtPayload) {
+    // Criar é permitido a mais papéis do que marcar como pago (o secretário cria
+    // e não baixa). Sem esta checagem, `status: 'paid'` no POST seria um atalho
+    // para o que `PATCH :id/status` nega.
+    if (dto.status === 'paid' && !user.roles.some((r) => STATUS_ROLES.includes(r))) {
+      throw new ForbiddenException('Seu papel não pode registrar lançamento já pago');
+    }
     return this.transactionsService.create(dto, user);
   }
 

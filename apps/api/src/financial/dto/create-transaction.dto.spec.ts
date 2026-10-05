@@ -108,4 +108,14 @@ describe('CreateTransactionDto', () => {
     const errors = await errorsFor({ notes: 123 });
     expect(errors.some((e) => e.property === 'notes')).toBe(true);
   });
+
+  it('aceita status pending e paid', async () => {
+    expect(await errorsFor({ status: 'paid' })).toHaveLength(0);
+    expect(await errorsFor({ status: 'pending' })).toHaveLength(0);
+  });
+
+  it('rejeita status confirmed — é do fluxo de exportação, não do cadastro', async () => {
+    const errors = await errorsFor({ status: 'confirmed' });
+    expect(errors.some((e) => e.property === 'status')).toBe(true);
+  });
 });

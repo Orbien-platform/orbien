@@ -14,6 +14,7 @@ import { ExportButton } from "@/components/financial/ExportButton";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { CostCentersModal } from "@/components/financial/CostCentersModal";
 import { WeeklyDashboardCard } from "@/components/financial/WeeklyDashboardCard";
+import { PeriodNavigator } from "@/components/financial/PeriodNavigator";
 import { ForecastCard } from "@/components/financial/ForecastCard";
 import { BankReconciliationPanel } from "@/components/financial/BankReconciliationPanel";
 import { DonationBookletPanel } from "@/components/financial/DonationBookletPanel";
@@ -26,6 +27,8 @@ import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatInstant } from "@/lib/datetime";
+import { monthRangeOf, periodFor, todayKey, type Period } from "@/lib/period";
+import { TX_FETCH_LIMIT, TX_MAX_PAGES, dayRangeBounds, fetchTransactionsInRange } from "@/lib/transactions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,13 +133,13 @@ function deltaPercent(current: number, previous: number): number | null {
   return ((current - previous) / previous) * 100;
 }
 
+// Dia civil de Brasília: `toISOString()` já diria "amanhã" depois das 21h.
 function todayIso(): string {
-  return new Date().toISOString().split("T")[0];
+  return todayKey();
 }
 
 function firstOfMonthIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return monthRangeOf().start;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -153,6 +156,31 @@ function DeltaCell({ current, previous }: { current: number; previous: number })
         {Math.abs(delta).toFixed(1)}%
       </span>
     </td>
+  );
+}
+
+function TotalCard({
+  label,
+  value,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: number;
+  tone: "income" | "expense";
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] px-4 py-3">
+      <p className="text-xs font-medium text-stone">{label}</p>
+      {loading ? (
+        <Skeleton className="mt-1.5 h-6 w-28" />
+      ) : (
+        <p className={cn("mt-0.5 text-xl font-medium tabular-nums", tone === "income" ? "text-teal" : "text-crimson")}>
+          {fmt(value)}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -194,8 +222,9 @@ export default function FinanceiroPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [accessDenied, setAccessDenied] = useState(false);
-  const [loadingTx, setLoadingTx] = useState(true);
-  const hasFetchedTx = useRef(false);
+  // Qual busca já terminou. "Carregando" é derivado (`loadedTxKey !== txKey`) em vez de
+  // um booleano ligado dentro do efeito.
+  const [loadedTxKey, setLoadedTxKey] = useState<string | null>(null);
   const txSeq = useRef(0);
 
   // DRE state
@@ -208,8 +237,13 @@ export default function FinanceiroPage() {
   // Lançamentos filters (client-side)
   const [txType, setTxType] = useState<"" | "income" | "expense">("");
   const [txCatId, setTxCatId] = useState("");
-  const [txFrom, setTxFrom] = useState("");
-  const [txTo, setTxTo] = useState("");
+  // A aba abre no mês corrente: do dia 1 ao último dia. As datas valem no
+  // servidor (a lista e a apuração são do período), não só como filtro de tela.
+  const [txFrom, setTxFrom] = useState(() => monthRangeOf().start);
+  const [txTo, setTxTo] = useState(() => monthRangeOf().end);
+  const [txTruncated, setTxTruncated] = useState(false);
+  const [txLoadError, setTxLoadError] = useState(false);
+  const [overviewPeriod, setOverviewPeriod] = useState<Period>(() => periodFor("month"));
   const [txStatus, setTxStatus] = useState<"" | "pending" | "paid" | "confirmed">("");
   const [txPage, setTxPage] = useState(1);
   const [statusUpdatingIds, setStatusUpdatingIds] = useState<Set<string>>(new Set());
@@ -235,35 +269,58 @@ export default function FinanceiroPage() {
     if (user && isSecretary) router.replace("/dashboard");
   }, [user, isSecretary, router]);
 
-  // ── Fetch transactions + categories ─────────────────────────────────────────
+  // ── Fetch transactions (do período) + categories ────────────────────────────
+  const [txReload, setTxReload] = useState(0);
+  const lastTxKey = useRef("");
+
   const loadTx = useCallback(() => {
-    if (hasFetchedTx.current) return;
-    hasFetchedTx.current = true;
+    // Mesmo período e mesma recarga = mesma busca (StrictMode roda o efeito 2x).
+    const key = `${txFrom}|${txTo}|${txReload}`;
+    if (lastTxKey.current === key) return;
+    lastTxKey.current = key;
+
+    // Intervalo invertido não consulta (a lista some, ver `txRangeInvalid`);
+    // `txSeq` avança para uma resposta ainda em voo não reaparecer depois.
+    if (txFrom && txTo && txFrom > txTo) {
+      ++txSeq.current;
+      return;
+    }
+
     const seq = ++txSeq.current;
-    setLoadingTx(true);
-    Promise.all([
-      api.get<{ data: Transaction[]; total: number }>("/financial/transactions?limit=100"),
-      api.get<Category[]>("/financial/categories"),
-    ])
-      .then(([txRes, catRes]) => {
+    const { since, until } = dayRangeBounds(txFrom, txTo);
+    fetchTransactionsInRange<Transaction>(since, until)
+      .then(({ rows, truncated }) => {
         if (seq !== txSeq.current) return;
-        setTransactions(txRes.data.data ?? []);
-        setCategories(catRes.data ?? []);
+        setTransactions(rows);
+        setTxTruncated(truncated);
         setAccessDenied(false);
+        setTxLoadError(false);
       })
       .catch((error) => {
         if (seq !== txSeq.current) return;
+        // Falhou: as linhas do período anterior não valem para este. Mantê-las
+        // mostraria a tabela e os totais de outro intervalo sob as datas novas.
+        setTransactions([]);
+        setTxTruncated(false);
         // 403 não é lista vazia — ver `NoAccessState`.
-        setAccessDenied(isForbidden(error));
+        const forbidden = isForbidden(error);
+        setAccessDenied(forbidden);
+        setTxLoadError(!forbidden);
       })
-      .finally(() => { if (seq === txSeq.current) setLoadingTx(false); });
-  }, []);
+      .finally(() => { if (seq === txSeq.current) setLoadedTxKey(key); });
+  }, [txFrom, txTo, txReload]);
 
   useEffect(() => { loadTx(); }, [loadTx]);
 
+  useEffect(() => {
+    api
+      .get<Category[]>("/financial/categories")
+      .then((r) => setCategories(r.data ?? []))
+      .catch(() => {});
+  }, []);
+
   function refreshTx() {
-    hasFetchedTx.current = false;
-    loadTx();
+    setTxReload((n) => n + 1);
   }
 
   // ── Fetch recurring rules ────────────────────────────────────────────────────
@@ -379,14 +436,29 @@ export default function FinanceiroPage() {
   }, [activeTab, dreStart, dreEnd]);
 
   // ── Computed ─────────────────────────────────────────────────────────────────
-  const filteredTx = transactions.filter((t) => {
+  const txRangeInvalid = !!txFrom && !!txTo && txFrom > txTo;
+  const loadingTx = !txRangeInvalid && loadedTxKey !== `${txFrom}|${txTo}|${txReload}`;
+  const filteredTx = (txRangeInvalid ? [] : transactions).filter((t) => {
     if (txType && t.type !== txType) return false;
     if (txCatId && t.category_id !== txCatId) return false;
-    if (txFrom && t.occurred_at.slice(0, 10) < txFrom) return false;
-    if (txTo && t.occurred_at.slice(0, 10) > txTo) return false;
     if (txStatus && t.status !== txStatus) return false;
     return true;
   });
+  // Apuração do que a tabela mostra: período + filtros ativos. `Number()` porque
+  // a API devolve o Decimal como string; somar em centavos evita 0,1 + 0,2.
+  const txIncomeCents = filteredTx.reduce(
+    (sum, t) => (t.type === "income" ? sum + Math.round(Number(t.amount) * 100) : sum),
+    0
+  );
+  const txExpenseCents = filteredTx.reduce(
+    (sum, t) => (t.type === "expense" ? sum + Math.round(Number(t.amount) * 100) : sum),
+    0
+  );
+  const txTotals = {
+    income: txIncomeCents / 100,
+    expense: txExpenseCents / 100,
+    net: (txIncomeCents - txExpenseCents) / 100,
+  };
   const txTotalPages = Math.max(1, Math.ceil(filteredTx.length / TX_PAGE_SIZE));
   const txPageData = filteredTx.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
 
@@ -628,7 +700,8 @@ export default function FinanceiroPage() {
         {/* ── Visão Geral ────────────────────────────────────────────────────── */}
         <Tabs.Panel value="overview" className="pt-5">
           <div className="space-y-5">
-            <WeeklyDashboardCard />
+            <PeriodNavigator period={overviewPeriod} onChange={setOverviewPeriod} />
+            <WeeklyDashboardCard period={overviewPeriod} />
             <ForecastCard />
           </div>
         </Tabs.Panel>
@@ -665,6 +738,7 @@ export default function FinanceiroPage() {
                   <input
                     type="date"
                     value={txFrom}
+                    aria-label="Data inicial"
                     onChange={(e) => { setTxFrom(e.target.value); setTxPage(1); }}
                     className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
                   />
@@ -672,6 +746,7 @@ export default function FinanceiroPage() {
                   <input
                     type="date"
                     value={txTo}
+                    aria-label="Data final"
                     onChange={(e) => { setTxTo(e.target.value); setTxPage(1); }}
                     className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
                   />
@@ -698,6 +773,25 @@ export default function FinanceiroPage() {
                 </Button>
               </div>
 
+              {!txLoadError && !accessDenied && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Apuração do período">
+                <TotalCard label="Total de entradas" value={txTotals.income} tone="income" loading={loadingTx} />
+                <TotalCard label="Total de saídas" value={txTotals.expense} tone="expense" loading={loadingTx} />
+                <TotalCard
+                  label="Saldo (entradas − saídas)"
+                  value={txTotals.net}
+                  tone={txTotals.net >= 0 ? "income" : "expense"}
+                  loading={loadingTx}
+                />
+              </div>
+              )}
+              {txTruncated && (
+                <p role="status" className="rounded-[8px] bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Há mais lançamentos do que o limite de {(TX_FETCH_LIMIT * TX_MAX_PAGES).toLocaleString("pt-BR")}{" "}
+                  carregados. Reduza o período para ver os totais completos.
+                </p>
+              )}
+
               <DataTable
                 columns={txCols}
                 rows={txPageData}
@@ -706,10 +800,14 @@ export default function FinanceiroPage() {
                 emptyState={
                   accessDenied ? (
                     <NoAccessState resource="Financeiro" />
-                  ) : txType || txCatId || txFrom || txTo || txStatus ? (
+                  ) : txLoadError ? (
+                    "Erro ao carregar os lançamentos. Tente de novo."
+                  ) : txRangeInvalid ? (
+                    "A data final deve ser igual ou posterior à data inicial."
+                  ) : txType || txCatId || txStatus ? (
                     "Nenhum lançamento com esses filtros."
                   ) : (
-                    "Nenhum lançamento registrado."
+                    "Nenhum lançamento neste período."
                   )
                 }
               />

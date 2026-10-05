@@ -30,6 +30,7 @@ import { GroupHealthSummary } from "@/components/groups/GroupHealthSummary";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import api, { isForbidden } from "@/lib/api";
 import { civilDayKey, formatCivilDate, saoPauloCivilDay, saoPauloDateKey } from "@/lib/datetime";
+import { fetchTransactionsInRange } from "@/lib/transactions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,11 +151,22 @@ export default function DashboardPage() {
     const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
     const iso = (d: Date) => d.toISOString().slice(0, 10);
 
+    // Da segunda de 3 semanas atrás ao fim do domingo desta semana, em Brasília
+    // (UTC-3): o fim vai até 03:00Z do dia seguinte, e o recorte fino é feito
+    // por `saoPauloDateKey` nas contas abaixo.
+    const chartSince = `${weekBounds(3).startKey}T00:00:00.000Z`;
+    const endDay = new Date(`${weekBounds(0).endKey}T00:00:00.000Z`);
+    endDay.setUTCDate(endDay.getUTCDate() + 1);
+    const chartUntil = `${endDay.toISOString().slice(0, 10)}T03:00:00.000Z`;
+
     // allSettled, não all: uma chamada que falha não deve apagar o dashboard
     // inteiro. Cada bloco renderiza o que conseguiu carregar.
     Promise.allSettled([
       api.get<{ data: Person[]; total: number }>("/persons?limit=100"),
-      api.get<{ data: Transaction[]; total: number }>("/financial/transactions?limit=100"),
+      // As 4 semanas do gráfico, inteiras. Sem o intervalo, `limit=100` trazia
+      // as 100 mais recentes por data — lançamento futuro ou um mês movimentado
+      // empurrava semanas para fora e a receita da semana saía menor.
+      fetchTransactionsInRange<Transaction>(chartSince, chartUntil),
       api.get<Celebration[]>("/celebrations"),
       api.get<CelebrationInstance[]>(
         `/celebrations/instances?date_from=${iso(from)}&date_to=${iso(to)}`
@@ -162,7 +174,7 @@ export default function DashboardPage() {
     ])
       .then(([personsRes, txRes, celRes, instRes]) => {
         if (personsRes.status === "fulfilled") setPersons(personsRes.value.data);
-        if (txRes.status === "fulfilled") setTransactions(txRes.value.data.data ?? []);
+        if (txRes.status === "fulfilled") setTransactions(txRes.value.rows);
         if (celRes.status === "fulfilled")
           setCelebrations(Array.isArray(celRes.value.data) ? celRes.value.data : []);
         if (instRes.status === "fulfilled")

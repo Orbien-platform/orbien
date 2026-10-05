@@ -59,6 +59,36 @@ describe('TransactionsController', () => {
     expect(rolesFor('create')).toEqual(WRITE_ROLES);
   });
 
+  describe('create com status paid', () => {
+    it.each(STATUS_ROLES)('%s pode registrar o lançamento já pago', async (role) => {
+      transactionsService.create.mockResolvedValue({ id: 't1' } as never);
+      const payer = { ...user, roles: [role] };
+
+      await controller.create({ amount: 1, status: 'paid' } as never, payer);
+
+      expect(transactionsService.create).toHaveBeenCalledWith({ amount: 1, status: 'paid' }, payer);
+    });
+
+    it('secretary cria, mas não pode criar já pago — o atalho não contorna PATCH :id/status', async () => {
+      const secretary = { ...user, roles: ['secretary'] };
+
+      expect(() => controller.create({ amount: 1, status: 'paid' } as never, secretary)).toThrow(
+        'Seu papel não pode registrar lançamento já pago',
+      );
+      expect(transactionsService.create).not.toHaveBeenCalled();
+    });
+
+    it('secretary segue criando lançamento pendente normalmente', async () => {
+      transactionsService.create.mockResolvedValue({ id: 't1' } as never);
+      const secretary = { ...user, roles: ['secretary'] };
+
+      await controller.create({ amount: 1 } as never, secretary);
+      await controller.create({ amount: 1, status: 'pending' } as never, secretary);
+
+      expect(transactionsService.create).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('findAll delega ao service e exige papel de leitura', async () => {
     transactionsService.findAll.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 } as never);
 

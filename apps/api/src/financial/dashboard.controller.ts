@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { DashboardService } from './dashboard.service';
+import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ForecastService } from './forecast.service';
 
 const DASHBOARD_ROLES = ['admin_congregation', 'pastor', 'treasurer', 'tenant_admin'];
@@ -33,8 +35,8 @@ export class DashboardController {
   // dois planos em `pricing-church-platform.md` §5.2.
   @Get('weekly')
   @Roles(...DASHBOARD_ROLES)
-  getWeekly(@CurrentUser() user: JwtPayload) {
-    return this.dashboardService.getWeeklyDashboard(user);
+  getWeekly(@Query() query: DashboardQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.dashboardService.getWeeklyDashboard(user, query.period_start, query.period_end);
   }
 
   // "Gráfico de forecast" é Premium — mesma seção.

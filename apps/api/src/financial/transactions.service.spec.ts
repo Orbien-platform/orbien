@@ -95,6 +95,18 @@ describe('TransactionsService', () => {
       expect(client.financialTransaction.create).not.toHaveBeenCalled();
     });
 
+    it('grava status paid quando o cadastro pede, e pending quando não pede', async () => {
+      const { service, client } = serviceWith();
+      client.financialCategory.findFirst.mockResolvedValue({ id: 'cat-1', type: 'income' });
+      client.financialTransaction.create.mockResolvedValue({ id: 't1' });
+
+      await service.create({ ...validDto, status: 'paid' } as never, user);
+      expect(client.financialTransaction.create.mock.calls[0][0].data.status).toBe('paid');
+
+      await service.create(validDto as never, user);
+      expect(client.financialTransaction.create.mock.calls[1][0].data.status).toBe('pending');
+    });
+
     it('cria a transação, grava auditoria e não propaga falha de auditoria', async () => {
       const { service, client, auditRaw } = serviceWith();
       client.financialCategory.findFirst.mockResolvedValue({ id: 'cat-1', type: 'income' });
