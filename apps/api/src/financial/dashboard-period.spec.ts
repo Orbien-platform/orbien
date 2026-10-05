@@ -32,6 +32,15 @@ describe('resolvePeriod', () => {
     expect(resolvePeriod('2026-01-01', '2026-12-31').granularity).toBe('month');
   });
 
+  it('rejeita dia que não existe no calendário em vez de rolar para o mês seguinte', () => {
+    expect(() => resolvePeriod('2026-02-30', '2026-03-10')).toThrow('Data inválida');
+    expect(() => resolvePeriod('2026-02-01', '2026-04-31')).toThrow('Data inválida');
+    expect(() => resolvePeriod('2026-13-01', '2026-12-31')).toThrow('Data inválida');
+    // 29/02 só existe em ano bissexto.
+    expect(() => resolvePeriod('2027-02-29', '2027-03-10')).toThrow('Data inválida');
+    expect(dayKey(resolvePeriod('2028-02-29', '2028-03-10').start)).toBe('2028-02-29');
+  });
+
   it('exige as duas datas, em ordem, e até 5 anos', () => {
     expect(() => resolvePeriod('2026-10-01')).toThrow();
     expect(() => resolvePeriod('2026-10-31', '2026-10-01')).toThrow();

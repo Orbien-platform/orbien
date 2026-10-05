@@ -444,13 +444,44 @@ describe("FinanceiroPage — visão geral e permissões", () => {
 });
 
 describe("FinanceiroPage — aba Lançamentos", () => {
-  it("trata falha ao carregar transações/categorias como listas vazias", async () => {
+  it("falha ao carregar mostra erro — não \"nenhum lançamento\" — e esconde a apuração", async () => {
     setup();
     mockApi({ txError: true });
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
-    expect(await screen.findByText("Nenhum lançamento neste período.")).toBeInTheDocument();
+    expect(await screen.findByText("Erro ao carregar os lançamentos. Tente de novo.")).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum lançamento neste período.")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Apuração do período")).not.toBeInTheDocument();
+  });
+
+  it("falha ao carregar um novo período não deixa as linhas e os totais do anterior na tela", async () => {
+    setup();
+    let calls = 0;
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url.startsWith("/financial/transactions")) {
+        calls += 1;
+        return calls === 1
+          ? Promise.resolve({
+              data: { data: [tx({ id: "1", description: "Do mês antigo", type: "income", amount: "500" })], total: 1 },
+            })
+          : Promise.reject(new Error("boom"));
+      }
+      if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+    await screen.findByText("Do mês antigo");
+
+    const from = screen.getByLabelText("Data inicial");
+    await user.clear(from);
+    await user.type(from, "2026-01-01");
+
+    expect(await screen.findByText("Erro ao carregar os lançamentos. Tente de novo.")).toBeInTheDocument();
+    expect(screen.queryByText("Do mês antigo")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Apuração do período")).not.toBeInTheDocument();
   });
 
   it("403 nas transações diz sem-acesso, e não \"nenhum lançamento\"", async () => {

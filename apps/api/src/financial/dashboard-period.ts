@@ -44,8 +44,16 @@ function utcDay(y: number, m: number, d: number): Date {
 }
 
 function parseDay(value: string): Date {
-  const [y, m, d] = value.slice(0, 10).split('-').map(Number);
-  return utcDay(y, m - 1, d);
+  const key = value.slice(0, 10);
+  const [y, m, d] = key.split('-').map(Number);
+  const day = utcDay(y, m - 1, d);
+  // `Date.UTC` rola dia impossível para o mês seguinte (30/02 vira 02/03) e
+  // `IsDateString` aceita a forma, não o calendário. Sem esta volta, o dashboard
+  // responderia um intervalo diferente do pedido.
+  if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== key) {
+    throw new Error(`Data inválida: ${key}`);
+  }
+  return day;
 }
 
 /** "Hoje" no dia civil de Brasília (mesmo critério de `saoPauloDateKey` no web). */

@@ -80,10 +80,14 @@ export function shiftPeriod(period: Period, direction: -1 | 1): Period {
   return periodFor(period.mode, format(next));
 }
 
-/** Troca de modo mantendo, quando dá, o mês em que o usuário estava. */
+/**
+ * Troca de modo mantendo, quando dá, o mês em que o usuário estava. Com a data
+ * inicial apagada (intervalo livre pela metade) não há mês a manter: usa hoje.
+ */
 export function changeMode(period: Period, mode: PeriodMode): Period {
   if (mode === "custom") return { mode, start: period.start, end: period.end };
-  return periodFor(mode, period.start);
+  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(period.start) ? period.start : todayKey();
+  return periodFor(mode, anchor);
 }
 
 const MONTH_NAMES = [

@@ -64,6 +64,14 @@ describe("changeMode", () => {
     expect(changeMode(month, "year")).toMatchObject({ start: "2026-01-01" });
   });
 
+  it("com a data inicial apagada no personalizado, volta ao período de hoje em vez de quebrar", () => {
+    const half = { mode: "custom" as const, start: "", end: "2026-10-19" };
+    const today = todayKey();
+    expect(() => changeMode(half, "month")).not.toThrow();
+    expect(changeMode(half, "month")).toEqual(periodFor("month", today));
+    expect(changeMode(half, "year")).toEqual(periodFor("year", today));
+  });
+
   it("personalizado herda as datas do período atual", () => {
     expect(changeMode(periodFor("month", "2026-08-12"), "custom")).toEqual({
       mode: "custom",

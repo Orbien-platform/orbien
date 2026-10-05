@@ -242,6 +242,7 @@ export default function FinanceiroPage() {
   const [txFrom, setTxFrom] = useState(() => monthRangeOf().start);
   const [txTo, setTxTo] = useState(() => monthRangeOf().end);
   const [txTruncated, setTxTruncated] = useState(false);
+  const [txLoadError, setTxLoadError] = useState(false);
   const [overviewPeriod, setOverviewPeriod] = useState<Period>(() => periodFor("month"));
   const [txStatus, setTxStatus] = useState<"" | "pending" | "paid" | "confirmed">("");
   const [txPage, setTxPage] = useState(1);
@@ -293,11 +294,18 @@ export default function FinanceiroPage() {
         setTransactions(rows);
         setTxTruncated(truncated);
         setAccessDenied(false);
+        setTxLoadError(false);
       })
       .catch((error) => {
         if (seq !== txSeq.current) return;
+        // Falhou: as linhas do período anterior não valem para este. Mantê-las
+        // mostraria a tabela e os totais de outro intervalo sob as datas novas.
+        setTransactions([]);
+        setTxTruncated(false);
         // 403 não é lista vazia — ver `NoAccessState`.
-        setAccessDenied(isForbidden(error));
+        const forbidden = isForbidden(error);
+        setAccessDenied(forbidden);
+        setTxLoadError(!forbidden);
       })
       .finally(() => { if (seq === txSeq.current) setLoadedTxKey(key); });
   }, [txFrom, txTo, txReload]);
@@ -765,6 +773,7 @@ export default function FinanceiroPage() {
                 </Button>
               </div>
 
+              {!txLoadError && !accessDenied && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Apuração do período">
                 <TotalCard label="Total de entradas" value={txTotals.income} tone="income" loading={loadingTx} />
                 <TotalCard label="Total de saídas" value={txTotals.expense} tone="expense" loading={loadingTx} />
@@ -775,6 +784,7 @@ export default function FinanceiroPage() {
                   loading={loadingTx}
                 />
               </div>
+              )}
               {txTruncated && (
                 <p role="status" className="rounded-[8px] bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   Há mais lançamentos do que o limite de {(TX_FETCH_LIMIT * TX_MAX_PAGES).toLocaleString("pt-BR")}{" "}
@@ -790,6 +800,8 @@ export default function FinanceiroPage() {
                 emptyState={
                   accessDenied ? (
                     <NoAccessState resource="Financeiro" />
+                  ) : txLoadError ? (
+                    "Erro ao carregar os lançamentos. Tente de novo."
                   ) : txRangeInvalid ? (
                     "A data final deve ser igual ou posterior à data inicial."
                   ) : txType || txCatId || txStatus ? (

@@ -143,6 +143,9 @@ describe('DashboardService.getWeeklyDashboard', () => {
     await expect(service.getWeeklyDashboard(user, '2000-01-01', '2026-01-01')).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    await expect(service.getWeeklyDashboard(user, '2026-02-30', '2026-03-10')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('vs_previous_pct é null quando não há receita no período anterior', async () => {
