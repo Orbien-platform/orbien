@@ -138,13 +138,13 @@ describe("MaisScreen", () => {
     expect(screen.queryByTestId("mais-autocadastro")).toBeNull();
   });
 
-  it("Contribuir abre a página de doação da igreja", async () => {
+  it("Contribuir abre a tela nativa de contribuir", async () => {
     await renderMais();
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("mais-contribuir"));
     });
-    expect(mockOpenBrowser).toHaveBeenCalledWith("https://app.example/doar/igreja-teste");
+    expect(mockPush).toHaveBeenCalledWith("/contribuir");
   });
 
   it("dízimo automático só com a trava ligada e plano Premium", async () => {
@@ -199,15 +199,6 @@ describe("MaisScreen", () => {
     });
     await renderMais();
     expect(screen.queryByTestId("mais-contribuir")).toBeNull();
-  });
-
-  it("navegador indisponível ao contribuir não quebra a tela", async () => {
-    mockOpenBrowser.mockRejectedValue(new Error("sem navegador"));
-    await renderMais();
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("mais-contribuir"));
-    });
-    expect(screen.getByTestId("mais-screen")).toBeTruthy();
   });
 
   it("dízimo automático e notificações abrem as pilhas", async () => {

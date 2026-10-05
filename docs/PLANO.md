@@ -467,13 +467,26 @@ em evento que não terminou, até 5, o mais próximo primeiro). Mobile: bloco
 **Falta:** o teste em aparelho dos blocos (`PEND` a abrir quando houver
 build de desenvolvimento).
 
-### PROD-31 · Contribuir nativo no app · aberto, depende de `PROD-28`
+### PROD-31 · Contribuir nativo no app · variante Starter entregue, falta o Premium (`PROD-28`)
 
 Na v2, Contribuir escolhe categoria, anônima ou identificada, e paga por PIX:
 no Starter, a chave copia-e-cola; no Premium, QR dinâmico e recorrente. Hoje a
 Mais abre a página de doação do web (`/doar/{slug}`). O QR dinâmico e o
 recorrente são cobrança Asaas, atrás da trava `ASAAS_PAYMENTS_ENABLED` — a
 variante Starter (chave PIX) não depende dela.
+
+**Entregue (2026-10-05) — variante Starter.** Tela `/contribuir` no app
+(`apps/mobile/src/app/contribuir.tsx`), aberta pela aba Mais e pelo "Contribua"
+da Home: categoria (Dízimo, Oferta, Missões), valor (R$ 5 a R$ 50.000),
+anônima ou identificada (só o nome) e "Gerar PIX", que chama a doação pública
+`POST /financial/pix/public-donation` — a mesma do `/doar/{slug}` — e devolve a
+chave para copiar. A categoria vai como palavra-chave em `category_slug`; a API
+cai em "Oferta" quando a igreja não tem categoria com aquele nome.
+
+**Falta:** QR dinâmico e recorrente (Premium, atrás de `ASAAS_PAYMENTS_ENABLED`
+— quando a API devolver `mode: "dynamic"` a tela mostra o copia-e-cola, sem
+QR nem acompanhamento do pagamento); lista de categorias vinda da igreja em
+vez de fixa; e o teste em aparelho.
 
 ### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · aberto
 
@@ -1805,7 +1818,7 @@ está.
   membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
   para a liderança projetar no culto, com a página pública que esse QR abre
   no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
-  2026-10-05. Ficam pendentes `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
+  2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). Ficam pendentes `PROD-32` (sem conexão que se
   recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
   lista completa em `PROJETO.md` §4.2.
 

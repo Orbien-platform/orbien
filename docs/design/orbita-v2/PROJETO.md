@@ -336,8 +336,11 @@ na tela "em breve" do site.
   leitura do código vigente (`PEND-19`).
 - [x] **Cadastro de visitante pelo líder de célula** — feito (2026-10-04),
   `POST /visitors`.
-- [ ] **Contribuir nativo** (`PROD-31`; o QR dinâmico e o recorrente dependem
-  do `PROD-28`): hoje a Mais abre a página de doação do web.
+- [x] **Contribuir nativo — variante Starter** (`PROD-31`, 2026-10-05):
+  categoria, anônima ou identificada e chave PIX para copiar, na tela
+  `/contribuir`.
+- [ ] **Contribuir — o que ficou de fora:** QR dinâmico e recorrente (dependem
+  do `PROD-28`), categorias vindas da igreja e teste em aparelho.
 - [ ] **Minhas escalas:** pedir troca e perfil de voluntário na mesma pilha.
 - [ ] **Celebração:** minha função em destaque já existe; o modo ao vivo do
   Host é `PROPOSTA`.
