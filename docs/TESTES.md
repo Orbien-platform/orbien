@@ -238,12 +238,21 @@ Scripts em `apps/api/package.json`:
 "test:unit": "jest --selectProjects unit --passWithNoTests",
 "test:integration": "jest --selectProjects integration --runInBand --forceExit --passWithNoTests",
 "test:rls": "jest --selectProjects rls --runInBand --forceExit",
-"test:cov": "jest --selectProjects unit integration --coverage --passWithNoTests"
+"test:cov": "jest --selectProjects unit integration --runInBand --coverage --passWithNoTests"
 ```
 
-> **`test:cov` roda a suíte de integração em paralelo** — só `test:integration`
-> e `test:rls` usam `--runInBand`. Consequência prática: fixture compartilhada
-> entre suítes de integração precisa ser criada de forma atômica. Semear papéis
+> **`test:cov` roda tudo num processo só (`--runInBand`), desde 2026-10-05.**
+> Antes rodava a integração em paralelo, e isso quebrava o CI de vez em
+> quando — inclusive no `main`: `public-donation`, `public-intents` e
+> `pix-webhook` escrevem em `teste2-church` e limpam por janela de tempo
+> (`created_at >= startedAt`), então o `afterAll` de uma apagava a linha que a
+> outra ainda usava, e contagens globais (`pixPayment.count`) saíam erradas.
+> Custo: ~2 a 3 minutos a mais no job. Se um dia voltar a paralelo, essas três
+> suítes precisam limpar só o que criaram (por id) antes.
+>
+> Mesmo em série, fixture compartilhada entre suítes de integração deve ser
+> criada de forma atômica — achado de 2026-09-03, quando o paralelo era
+> regra. Semear papéis
 > com `role.upsert()` **não** serve: é find-then-create, e duas workers que não
 > acham a linha criam as duas — a segunda morre com P2002. Use
 > `ensureRole()` de `test/helpers/rls.ts`, que é um
