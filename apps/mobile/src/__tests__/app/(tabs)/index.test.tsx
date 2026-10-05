@@ -47,8 +47,20 @@ jest.mock("../../../lib/theme/theme-provider", () => ({
 // (`beforeEach` abaixo), para os testes que não os mencionam não
 // dependerem de setup próprio.
 const mockListMyGroups = jest.fn();
+const mockListMeetings = jest.fn();
 jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
+  listMeetings: (...args: unknown[]) => mockListMeetings(...args),
+}));
+
+// Blocos por papel (PROD-30) têm suíte própria em components/HomeRoleBlocks.test.tsx;
+// aqui só não podem tocar a rede.
+jest.mock("../../../lib/celebracoes/celebracoes-client", () => ({
+  listUpcomingInstances: jest.fn().mockResolvedValue([]),
+}));
+jest.mock("../../../lib/escala/escala-client", () => ({
+  getMyAssignments: jest.fn().mockResolvedValue([]),
+  respondToAssignment: jest.fn(),
 }));
 
 // getPosts(1, 5) alimenta tanto o hero (MHR-05, todos os itens) quanto
@@ -123,6 +135,7 @@ describe("HomeScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockListMyGroups.mockResolvedValue([]);
+    mockListMeetings.mockResolvedValue([]);
     mockPosts();
     mockGetHighlights.mockResolvedValue([]);
     mockUseAuth.mockReturnValue({ areas: null });
@@ -434,6 +447,12 @@ describe("HomeScreen", () => {
     });
 
     expect(mockGetHighlights).toHaveBeenCalledTimes(2);
+  });
+
+  it("o sino do topo leva às notificações", async () => {
+    await renderHome();
+    fireEvent.press(screen.getByTestId("home-notifications"));
+    expect(mockPush).toHaveBeenCalledWith("/notificacoes");
   });
 
   it("CTA de Contribuição sem WEB_URL configurada não abre nada", async () => {

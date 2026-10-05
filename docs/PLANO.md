@@ -442,14 +442,15 @@ só faltava o consumo pelo app.
   `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
   mock de `expo-router` (a tela passou a navegar).
 
-### PROD-30 · Início por papel no app (v2) · aberto
+### PROD-30 · Início por papel no app (v2) · parcial, falta o semáforo
 
-O Início da v2 (`HomeApp` em `docs/design/orbita-v2/produto/proto/app-shell.jsx`)
-muda de bloco conforme o papel: encontro de hoje com "Registrar presença" e
-"Mostrar QR" (líder de célula), celebração do domingo com OC e vagas (líder de
-ministério), semáforo dos grupos (pastor, Premium), "Minhas próximas escalas"
-com confirmar/recusar/trocar e eventos em que a pessoa se inscreveu. Hoje o
-Início tem destaque, atalhos, meus grupos e avisos (`PROJETO.md` §4.2).
+Entregue em 2026-10-05 (`components/HomeRoleBlocks.tsx`, na Home): encontro de
+hoje com "Registrar presença" e "Mostrar QR" para quem lidera um grupo,
+próxima celebração com a situação da OC para `ministry_leader` e acima,
+"Minhas próximas escalas" com confirmar/recusar e "Informar indisponibilidade"
+na área `volunteers`, e o sino de notificações no topo. Cada bloco some se a
+busca falha ou vem vazia. **Falta:** o semáforo dos grupos (pastor, Premium) —
+a API não expõe esse agregado — e os eventos em que a pessoa se inscreveu.
 
 ### PROD-31 · Contribuir nativo no app · aberto, depende de `PROD-28`
 
