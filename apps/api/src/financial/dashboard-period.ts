@@ -57,7 +57,7 @@ function parseDay(value: string): Date {
 }
 
 /** "Hoje" no dia civil de Brasília (mesmo critério de `saoPauloDateKey` no web). */
-export function todayInSaoPaulo(now: Date = new Date()): Date {
+export function todayInSaoPaulo(now: Date): Date {
   const key = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   return parseDay(key);
 }
@@ -106,9 +106,6 @@ export function resolvePeriod(
     throw new Error('Informe period_start e period_end juntos');
   }
 
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error('Período inválido');
-  }
   if (end < start) throw new Error('period_end deve ser igual ou posterior a period_start');
 
   const days = daysBetween(start, end) + 1;

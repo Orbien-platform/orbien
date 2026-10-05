@@ -41,6 +41,24 @@ describe('resolvePeriod', () => {
     expect(dayKey(resolvePeriod('2028-02-29', '2028-03-10').start)).toBe('2028-02-29');
   });
 
+  it('rejeita texto que não é data', () => {
+    expect(() => resolvePeriod('ontem', '2026-10-31')).toThrow('Data inválida');
+  });
+
+  it('exige as duas datas juntas, qualquer uma que falte', () => {
+    expect(() => resolvePeriod(undefined, '2026-10-31')).toThrow('juntos');
+    expect(() => resolvePeriod('2026-10-01', undefined)).toThrow('juntos');
+  });
+
+  it('sem informar "agora", usa o relógio', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
+    try {
+      expect(dayKey(resolvePeriod().start)).toBe('2026-10-01');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('exige as duas datas, em ordem, e até 5 anos', () => {
     expect(() => resolvePeriod('2026-10-01')).toThrow();
     expect(() => resolvePeriod('2026-10-31', '2026-10-01')).toThrow();
@@ -89,6 +107,12 @@ describe('buildBuckets', () => {
   it('período que termina num domingo não abre uma semana a mais', () => {
     const b = buildBuckets(resolvePeriod('2026-10-05', '2026-10-11'));
     expect(b).toHaveLength(1);
+  });
+
+  it('período que começa num domingo pertence à semana que começou na segunda anterior', () => {
+    // 04/10/2026 é domingo: a semana dele começa em 28/09, seis dias antes.
+    const b = buildBuckets(resolvePeriod('2026-10-04', '2026-10-10'));
+    expect(b.map((x) => dayKey(x.start))).toEqual(['2026-09-28', '2026-10-05']);
   });
 
   it('meses para períodos longos', () => {
