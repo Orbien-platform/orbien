@@ -442,15 +442,24 @@ só faltava o consumo pelo app.
   `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
   mock de `expo-router` (a tela passou a navegar).
 
-### PROD-30 · Início por papel no app (v2) · parcial, falta o semáforo
+### PROD-30 · Início por papel no app (v2) · parcial, falta um bloco
 
 Entregue em 2026-10-05 (`components/HomeRoleBlocks.tsx`, na Home): encontro de
 hoje com "Registrar presença" e "Mostrar QR" para quem lidera um grupo,
 próxima celebração com a situação da OC para `ministry_leader` e acima,
 "Minhas próximas escalas" com confirmar/recusar e "Informar indisponibilidade"
 na área `volunteers`, e o sino de notificações no topo. Cada bloco some se a
-busca falha ou vem vazia. **Falta:** o semáforo dos grupos (pastor, Premium) —
-a API não expõe esse agregado — e os eventos em que a pessoa se inscreveu.
+busca falha ou vem vazia.
+
+**Semáforo dos grupos (pastor, Premium) — entregue na mesma branch.** API:
+`GET /small-groups/health-summary` (`@RequiresPlan('premium')`, só
+`tenant_admin`, `admin_congregation` e `pastor`), contagem verde/amarelo/
+vermelho pelo mesmo `classifyHealth` do `PROD-20` (14 e 28 dias). Mobile: bloco
+"Semáforo" na Home, fail-closed (sem Premium ou sem papel, nem busca). Web:
+`GroupHealthSummary` no Início do painel, que some em 403.
+
+**Falta:** os eventos em que a pessoa se inscreveu, no Início do app (a rota
+de inscrições do membro não existe), e o teste em aparelho dos blocos.
 
 ### PROD-31 · Contribuir nativo no app · aberto, depende de `PROD-28`
 

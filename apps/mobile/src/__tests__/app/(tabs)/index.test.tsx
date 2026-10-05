@@ -51,6 +51,7 @@ const mockListMeetings = jest.fn();
 jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
   listMeetings: (...args: unknown[]) => mockListMeetings(...args),
+  getHealthSummary: jest.fn().mockResolvedValue({ green: 0, yellow: 0, red: 0, total: 0 }),
 }));
 
 // Blocos por papel (PROD-30) têm suíte própria em components/HomeRoleBlocks.test.tsx;

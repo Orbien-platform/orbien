@@ -1,7 +1,7 @@
 // Blocos do Início por papel (PROD-30). Cada bloco busca o que precisa e some
 // se não houver nada — os testes cobrem o gate de papel, o caso feliz e o
 // silêncio em erro.
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush }) }));
@@ -22,8 +22,10 @@ jest.mock("../lib/theme/terminology", () => ({
 }));
 
 const mockListMeetings = jest.fn();
+const mockHealthSummary = jest.fn();
 jest.mock("../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMeetings: (...a: unknown[]) => mockListMeetings(...a),
+  getHealthSummary: (...a: unknown[]) => mockHealthSummary(...a),
 }));
 const mockListUpcoming = jest.fn();
 jest.mock("../lib/celebracoes/celebracoes-client", () => ({
@@ -67,6 +69,7 @@ async function renderBlocks(
         roles={["member"]}
         groups={[]}
         areas={["volunteers"]}
+        isPremium={false}
         {...props}
       />,
     );
@@ -77,6 +80,7 @@ describe("HomeRoleBlocks", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockListMeetings.mockResolvedValue([]);
+    mockHealthSummary.mockResolvedValue({ green: 3, yellow: 2, red: 1, total: 6 });
     mockListUpcoming.mockResolvedValue([]);
     mockGetAssignments.mockResolvedValue([]);
   });
@@ -118,6 +122,45 @@ describe("HomeRoleBlocks", () => {
       mockListMeetings.mockRejectedValue(new Error("offline"));
       await renderBlocks({ groups: [leaderGroup] });
       expect(screen.queryByTestId("home-today-meeting")).toBeNull();
+    });
+  });
+
+  describe("semáforo", () => {
+    it("pastor Premium vê a contagem por cor", async () => {
+      await renderBlocks({ roles: ["pastor"], isPremium: true });
+
+      expect(screen.getByText("6 células")).toBeTruthy();
+      expect(within(screen.getByTestId("home-health-green")).getByText("3")).toBeTruthy();
+      expect(within(screen.getByTestId("home-health-yellow")).getByText("2")).toBeTruthy();
+      expect(within(screen.getByTestId("home-health-red")).getByText("1")).toBeTruthy();
+    });
+
+    it("uma só célula usa o singular do termo da igreja", async () => {
+      mockHealthSummary.mockResolvedValue({ green: 1, yellow: 0, red: 0, total: 1 });
+      await renderBlocks({ roles: ["pastor"], isPremium: true });
+      expect(screen.getByText("1 célula")).toBeTruthy();
+    });
+
+    it("Starter não busca, nem para o pastor", async () => {
+      await renderBlocks({ roles: ["pastor"], isPremium: false });
+      expect(mockHealthSummary).not.toHaveBeenCalled();
+    });
+
+    it("papel sem gestão não busca, mesmo no Premium", async () => {
+      await renderBlocks({ roles: ["cell_leader"], isPremium: true });
+      expect(mockHealthSummary).not.toHaveBeenCalled();
+    });
+
+    it("sem células ou com erro (403), o bloco some", async () => {
+      mockHealthSummary.mockResolvedValue({ green: 0, yellow: 0, red: 0, total: 0 });
+      await renderBlocks({ roles: ["pastor"], isPremium: true });
+      expect(screen.queryByTestId("home-health")).toBeNull();
+    });
+
+    it("erro ao carregar não derruba a Home", async () => {
+      mockHealthSummary.mockRejectedValue(new Error("403"));
+      await renderBlocks({ roles: ["pastor"], isPremium: true });
+      expect(screen.queryByTestId("home-health")).toBeNull();
     });
   });
 

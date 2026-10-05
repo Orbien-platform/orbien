@@ -24,9 +24,10 @@ import {
 } from "../lib/escala/escala-client";
 import type { Assignment } from "../lib/escala/types";
 import { formatDayMonth, formatTime, localWhen } from "../lib/format/date";
-import { listMeetings } from "../lib/pequenos-grupos/pequenos-grupos-client";
+import { getHealthSummary, listMeetings } from "../lib/pequenos-grupos/pequenos-grupos-client";
 import type {
   GroupMeetingSummary,
+  HealthSummary,
   SmallGroupMine,
 } from "../lib/pequenos-grupos/types";
 import { CalendarOff, QrCode } from "../lib/theme/icons";
@@ -48,6 +49,10 @@ export const CELEBRATION_ROLES = [
   "ministry_leader",
 ];
 
+/** Quem lê `GET /small-groups/health-summary` — espelho de `MANAGE_ROLES`
+ * em small-groups.controller.ts. */
+export const HEALTH_SUMMARY_ROLES = ["tenant_admin", "admin_congregation", "pastor"];
+
 /** Mesmo dia no relógio do aparelho — `occurred_at` vem em ISO. */
 function isToday(iso: string, now: Date): boolean {
   const d = new Date(iso);
@@ -63,16 +68,20 @@ interface HomeRoleBlocksProps {
   groups: SmallGroupMine[] | null;
   /** `null` até `GET /me/permissions` responder; aí vale o fail-open da Mais. */
   areas: string[] | null;
+  /** Plano da claim. O semáforo é Premium, então fail-closed: sem `true`, nem busca. */
+  isPremium: boolean;
 }
 
-export function HomeRoleBlocks({ roles, groups, areas }: HomeRoleBlocksProps) {
+export function HomeRoleBlocks({ roles, groups, areas, isPremium }: HomeRoleBlocksProps) {
   const ledGroups = (groups ?? []).filter((g) => g.role === "leader");
   const showCelebration = roles.some((r) => CELEBRATION_ROLES.includes(r));
+  const showHealth = isPremium && roles.some((r) => HEALTH_SUMMARY_ROLES.includes(r));
   const showAssignments = areas === null || areas.includes("volunteers");
 
   return (
     <>
       {ledGroups.length > 0 ? <TodayMeeting groups={ledGroups} /> : null}
+      {showHealth ? <HealthTrafficLight /> : null}
       {showCelebration ? <SundayCelebration /> : null}
       {showAssignments ? <NextAssignments /> : null}
     </>
@@ -158,6 +167,52 @@ function TodayMeeting({ groups }: { groups: SmallGroupMine[] }) {
             onPress={() => router.push(`/grupo/encontro/${meeting.id}/qr`)}
             style={styles.grow}
           />
+        </View>
+      </Card>
+    </View>
+  );
+}
+
+function HealthTrafficLight() {
+  const { colors } = useTheme();
+  const groupTerm = useGroupTerm();
+  const [summary, setSummary] = useState<HealthSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getHealthSummary()
+      .then((result) => {
+        if (!cancelled) setSummary(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!summary || summary.total === 0) return null;
+
+  const columns = [
+    { key: "green", label: "Saudáveis", count: summary.green, color: colors.success },
+    { key: "yellow", label: "Atenção", count: summary.yellow, color: colors.warning },
+    { key: "red", label: "Críticos", count: summary.red, color: colors.danger },
+  ];
+  const term = summary.total === 1 ? groupTerm.singular : groupTerm.plural;
+
+  return (
+    <View testID="home-health" style={styles.section}>
+      <SectionLabel trailing={`${summary.total} ${term.toLowerCase()}`}>Semáforo</SectionLabel>
+      <Card accessibilityLabel={columns.map((c) => `${c.count} ${c.label}`).join(", ")}>
+        <View style={styles.health}>
+          {columns.map((c) => (
+            <View key={c.key} testID={`home-health-${c.key}`} style={styles.grow}>
+              <View style={styles.healthCount}>
+                <View style={[styles.dot, { backgroundColor: c.color }]} />
+                <Text style={[typography.h2, { color: colors.textPrimary }]}>{c.count}</Text>
+              </View>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{c.label}</Text>
+            </View>
+          ))}
         </View>
       </Card>
     </View>
@@ -355,6 +410,9 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   date: { alignItems: "center", minWidth: 44 },
   actions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.md },
+  health: { flexDirection: "row", gap: spacing.md },
+  healthCount: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  dot: { width: spacing.sm, height: spacing.sm, borderRadius: spacing.sm / 2 },
   badges: { flexDirection: "row", marginTop: spacing.md },
   meta: { marginTop: spacing.xs },
 });

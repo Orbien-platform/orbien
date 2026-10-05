@@ -8,6 +8,7 @@ import type {
   GroupMeetingDetail,
   GroupMeetingSummary,
   GroupRosterMember,
+  HealthSummary,
   MeetingMaterial,
   SmallGroupMine,
 } from "./types";
@@ -15,6 +16,11 @@ import type {
 /** `GET /small-groups/mine` (MOB-09-01). */
 export async function listMyGroups(): Promise<SmallGroupMine[]> {
   return authenticatedRequest<SmallGroupMine[]>("get", "/small-groups/mine");
+}
+
+/** `GET /small-groups/health-summary` (PROD-30) — Premium e gestão; 403 fora disso. */
+export async function getHealthSummary(): Promise<HealthSummary> {
+  return authenticatedRequest<HealthSummary>("get", "/small-groups/health-summary");
 }
 
 /** `GET /small-groups/:groupId/meetings` (MOB-09-03). */

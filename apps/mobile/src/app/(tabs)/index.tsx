@@ -191,7 +191,7 @@ export default function HomeScreen() {
         />
       ) : null}
 
-      <HomeRoleBlocks roles={roles} groups={groups} areas={areas} />
+      <HomeRoleBlocks roles={roles} groups={groups} areas={areas} isPremium={isPremium} />
 
       <HomeQuickActions items={quickActions} />
 
