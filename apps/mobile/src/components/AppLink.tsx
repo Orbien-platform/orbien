@@ -42,7 +42,7 @@ export function AppLink({ testID, onPress, disabled, icon: Icon, style, children
       style={({ pressed }) => [styles.pressable, pressed && !disabled && styles.pressed]}
     >
       {Icon ? <Icon size={iconSize.inline} color={color} strokeWidth={ICON_STROKE_WIDTH} /> : null}
-      <Text style={[typography.button, { color }, style]}>{children}</Text>
+      <Text style={[typography.button, styles.text, { color }, style]}>{children}</Text>
     </Pressable>
   );
 }
@@ -56,4 +56,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   pressed: { opacity: 0.6 },
+  // Sem lineHeight explícito a caixa da linha é menor que o glifo e o
+  // Android corta o fim do texto.
+  text: { lineHeight: 22, paddingRight: 2 },
 });
