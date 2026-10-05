@@ -147,6 +147,44 @@ describe("ContribuirScreen", () => {
     expect(screen.getByText(/Aguarde um minuto/)).toBeTruthy();
   });
 
+  it("400 mostra a mensagem que a API devolveu", async () => {
+    mockCreate.mockRejectedValue(new HttpError(400, { message: "O valor mínimo da doação é R$ 5,00" }));
+    await renderScreen();
+    await fill("150");
+    await submit();
+
+    expect(screen.getByText("O valor mínimo da doação é R$ 5,00")).toBeTruthy();
+  });
+
+  it("404 mostra o erro e mantém o formulário", async () => {
+    mockCreate.mockRejectedValue(new HttpError(404, {}));
+    await renderScreen();
+    await fill("150");
+    await submit();
+
+    expect(screen.getByTestId("contribuir-erro")).toBeTruthy();
+    expect(screen.getByTestId("contribuir-valor-input").props.value).toBe("150");
+  });
+
+  it("erro inesperado cai na mensagem genérica, sem número de status", async () => {
+    mockCreate.mockRejectedValue(new HttpError(500, {}));
+    await renderScreen();
+    await fill("150");
+    await submit();
+
+    expect(screen.getByText(/Não foi possível gerar a contribuição/)).toBeTruthy();
+    expect(screen.queryByText(/500/)).toBeNull();
+  });
+
+  it("Concluir fecha a tela", async () => {
+    await renderScreen();
+    await fill("150");
+    await submit();
+    await fireEvent.press(screen.getByTestId("contribuir-concluir"));
+
+    expect(mockBack).toHaveBeenCalled();
+  });
+
   it("fazer outra contribuição volta ao formulário vazio", async () => {
     await renderScreen();
     await fill("150");
