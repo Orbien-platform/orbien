@@ -33,7 +33,7 @@ import { spacing, typography } from "../lib/theme/tokens";
 const GENERIC_ERROR_MESSAGE = "Não foi possível entrar. Confira os dados e tente novamente.";
 
 /** Lado da marca no topo da tela, em dp. */
-const LOGO_SIZE = 32;
+const LOGO_SIZE = 64;
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -78,11 +78,8 @@ export default function LoginScreen() {
             {appName}
           </Text>
         </View>
-        <Text style={[typography.h1, { color: colors.textPrimary }]}>
-          Entre com o e-mail cadastrado na sua igreja
-        </Text>
         <Text style={[typography.body, styles.lead, { color: colors.textSecondary }]}>
-          Não é preciso escolher a igreja. Sua conta já sabe qual é.
+          Tão somente creia
         </Text>
       </View>
 
@@ -139,7 +136,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Coluna única, alinhada à esquerda, com a largura de leitura de um
+  // Coluna única, com a largura de leitura de um
   // celular mesmo num tablet.
   form: {
     width: "100%",
@@ -147,13 +144,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   brand: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.xxxl,
+    gap: spacing.md,
   },
-  appName: { flexShrink: 1 },
-  lead: { marginTop: spacing.sm, marginBottom: spacing.xxl },
+  appName: { flexShrink: 1, textAlign: "center" },
+  lead: { marginTop: spacing.sm, marginBottom: spacing.xxl, textAlign: "center" },
   submit: { marginTop: spacing.xs },
   forgotPassword: { alignItems: "center" },
 });
