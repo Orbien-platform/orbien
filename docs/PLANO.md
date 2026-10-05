@@ -442,14 +442,30 @@ só faltava o consumo pelo app.
   `describe("forgotPassword")`, `login.test.tsx` ganhou o teste do link e
   mock de `expo-router` (a tela passou a navegar).
 
-### PROD-30 · Início por papel no app (v2) · aberto
+### ~~PROD-30 · Início por papel no app (v2)~~ · fechado, falta só o teste em aparelho
 
-O Início da v2 (`HomeApp` em `docs/design/orbita-v2/produto/proto/app-shell.jsx`)
-muda de bloco conforme o papel: encontro de hoje com "Registrar presença" e
-"Mostrar QR" (líder de célula), celebração do domingo com OC e vagas (líder de
-ministério), semáforo dos grupos (pastor, Premium), "Minhas próximas escalas"
-com confirmar/recusar/trocar e eventos em que a pessoa se inscreveu. Hoje o
-Início tem destaque, atalhos, meus grupos e avisos (`PROJETO.md` §4.2).
+Entregue em 2026-10-05 (`components/HomeRoleBlocks.tsx`, na Home): encontro de
+hoje com "Registrar presença" e "Mostrar QR" para quem lidera um grupo,
+próxima celebração com a situação da OC para `ministry_leader` e acima,
+"Minhas próximas escalas" com confirmar/recusar e "Informar indisponibilidade"
+na área `volunteers`, e o sino de notificações no topo. Cada bloco some se a
+busca falha ou vem vazia.
+
+**Semáforo dos grupos (pastor, Premium) — entregue na mesma branch.** API:
+`GET /small-groups/health-summary` (`@RequiresPlan('premium')`, só
+`tenant_admin`, `admin_congregation` e `pastor`), contagem verde/amarelo/
+vermelho pelo mesmo `classifyHealth` do `PROD-20` (14 e 28 dias). Mobile: bloco
+"Semáforo" na Home, fail-closed (sem Premium ou sem papel, nem busca). Web:
+`GroupHealthSummary` no Início do painel, que some em 403.
+
+**Eventos em que a pessoa se inscreveu — entregue na mesma branch.** API:
+`GET /content/my-registrations` (qualquer papel que lê conteúdo; recorte pela
+pessoa do token, só inscrição confirmada, em espera ou aguardando pagamento,
+em evento que não terminou, até 5, o mais próximo primeiro). Mobile: bloco
+"Meus eventos" na Home, que abre o post do evento.
+
+**Falta:** o teste em aparelho dos blocos (`PEND` a abrir quando houver
+build de desenvolvimento).
 
 ### PROD-31 · Contribuir nativo no app · aberto, depende de `PROD-28`
 
@@ -1788,8 +1804,8 @@ está.
   `feat/qr-checkin-e-autocadastro`):** check-in do encontro (líder mostra,
   membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
   para a liderança projetar no culto, com a página pública que esse QR abre
-  no `apps/web` (`PROD-34`, fechado). Ficam pendentes `PROD-30` (Início por
-  papel), `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
+  no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
+  2026-10-05. Ficam pendentes `PROD-31` (Contribuir nativo), `PROD-32` (sem conexão que se
   recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
   lista completa em `PROJETO.md` §4.2.
 

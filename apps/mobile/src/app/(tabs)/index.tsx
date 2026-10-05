@@ -7,12 +7,13 @@ import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Avatar } from "../../components/Avatar";
 import { BrandHeader } from "../../components/BrandHeader";
 import { Card } from "../../components/Card";
 import { HeroSlider } from "../../components/HeroSlider";
+import { HomeRoleBlocks } from "../../components/HomeRoleBlocks";
 import { HomeQuickActions, type QuickAction } from "../../components/HomeQuickActions";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
@@ -27,6 +28,7 @@ import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
 import {
   BookOpen,
   CalendarCheck,
+  Bell,
   Church,
   ChevronRight,
   Clock,
@@ -34,7 +36,7 @@ import {
   Newspaper,
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
-import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
+import { ICON_STROKE_WIDTH, iconSize, spacing, touchTarget, typography } from "../../lib/theme/tokens";
 
 // HOME-02: 2 grupos cabem sem a home virar uma segunda tela de Grupos.
 const MAX_HOME_GROUPS = 2;
@@ -53,6 +55,7 @@ export default function HomeScreen() {
   // E tenant Premium. Fail-closed — até a resposta chegar, a entrada não
   // existe. Hoje a trava está desligada para todos, então nunca aparece.
   const [asaasPaymentsEnabled, setAsaasPaymentsEnabled] = useState(false);
+  const roles = session ? (decodeJwtPayload(session.accessToken)?.roles ?? []) : [];
   const isPremium = session ? decodeJwtPayload(session.accessToken)?.plan === "premium" : false;
   // Destaques da home (HOME-02/03) e hero (MHR-05/06): `null` = ainda não
   // chegou (não desenha nada); erro cai no `catch` sem `setError` — a
@@ -159,7 +162,20 @@ export default function HomeScreen() {
 
   return (
     <Screen scroll>
-      <BrandHeader />
+      <View style={styles.header}>
+        <View style={styles.headerBrand}>
+          <BrandHeader />
+        </View>
+        <Pressable
+          testID="home-notifications"
+          accessibilityRole="button"
+          accessibilityLabel="Notificações"
+          onPress={() => router.push("/notificacoes")}
+          style={styles.bell}
+        >
+          <Bell size={iconSize.action} color={colors.textPrimary} strokeWidth={ICON_STROKE_WIDTH} />
+        </Pressable>
+      </View>
       <Text
         testID="home-greeting"
         style={[typography.h1, styles.greeting, { color: colors.textPrimary }]}
@@ -174,6 +190,8 @@ export default function HomeScreen() {
           onPressPost={(id) => router.push(`/post/${id}`)}
         />
       ) : null}
+
+      <HomeRoleBlocks roles={roles} groups={groups} areas={areas} isPremium={isPremium} />
 
       <HomeQuickActions items={quickActions} />
 
@@ -257,6 +275,15 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerBrand: { flex: 1 },
+  bell: {
+    minWidth: touchTarget,
+    minHeight: touchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.lg,
+  },
   greeting: { marginBottom: spacing.lg },
   section: { marginBottom: spacing.lg },
   highlightRow: {

@@ -7,6 +7,7 @@ jest.mock("../auth/auth-client", () => ({
 }));
 
 import {
+  listMyEventRegistrations,
   cancelMyEventRegistration,
   getEventRegistrationSummary,
   getMyEventRegistration,
@@ -86,6 +87,18 @@ describe("ContentClient", () => {
         "/content/posts/post-1/registrations/summary",
       );
       expect(result).toEqual(summary);
+    });
+  });
+
+  describe("listMyEventRegistrations", () => {
+    it("chama GET /content/my-registrations", async () => {
+      const rows = [{ id: "r1", post_id: "p1", title: "Conferência", status: "confirmed" }];
+      mockAuthenticatedRequest.mockResolvedValue(rows);
+
+      const result = await listMyEventRegistrations();
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/content/my-registrations");
+      expect(result).toEqual(rows);
     });
   });
 

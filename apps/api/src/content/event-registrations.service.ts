@@ -49,6 +49,19 @@ export interface EventRegistrationList extends EventRegistrationSummary {
   data: EventRegistration[];
 }
 
+/** Teto de `listMine`: a Home mostra um punhado de eventos, não uma agenda. */
+const MY_REGISTRATIONS_LIMIT = 5;
+
+/** Uma inscrição do próprio usuário, com o evento que ela reserva. */
+export interface MyEventRegistration {
+  id: string;
+  status: EventRegistrationStatus;
+  post_id: string;
+  title: string;
+  event_starts_at: Date | null;
+  event_location: string | null;
+}
+
 /** O que a fila de espera e a contagem de vagas consideram "ocupando lugar". */
 const ACTIVE: EventRegistrationStatus[] = ['confirmed', 'waitlisted'];
 
@@ -174,6 +187,57 @@ export class EventRegistrationsService {
         status: { in: MINE_VISIBLE },
       },
     });
+  }
+
+  /**
+   * As próximas inscrições do próprio usuário, de todos os eventos, para o
+   * Início do app (PROD-30). Só o que ainda vale: evento que não terminou
+   * (sem `event_ends_at`, o que ainda não começou) e inscrição que ocupa
+   * lugar ou espera pagamento (`MINE_VISIBLE`) — a mesma regra de `findMine`.
+   * Mais próximo primeiro; o teto existe porque a Home mostra um punhado, não
+   * uma agenda.
+   */
+  async listMine(
+    tenantId: string,
+    congregationId: string,
+    userId: string,
+  ): Promise<MyEventRegistration[]> {
+    const personId = await this.requirePersonOf(userId);
+    const now = new Date();
+
+    const rows = await this.prisma.client.eventRegistration.findMany({
+      where: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        person_id: personId,
+        status: { in: MINE_VISIBLE },
+        contentPost: {
+          type: 'event',
+          OR: [
+            { event_ends_at: { gte: now } },
+            { event_ends_at: null, event_starts_at: { gte: now } },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        contentPost: {
+          select: { id: true, title: true, event_starts_at: true, event_location: true },
+        },
+      },
+      orderBy: { contentPost: { event_starts_at: 'asc' } },
+      take: MY_REGISTRATIONS_LIMIT,
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      post_id: r.contentPost.id,
+      title: r.contentPost.title,
+      event_starts_at: r.contentPost.event_starts_at,
+      event_location: r.contentPost.event_location,
+    }));
   }
 
   /**

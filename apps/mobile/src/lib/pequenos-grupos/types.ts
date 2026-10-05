@@ -54,3 +54,11 @@ export interface CheckinResult {
   status: "checked_in" | "already_checked_in";
   group_meeting_id: string;
 }
+
+/** Quantas células há em cada cor do semáforo (`GET /small-groups/health-summary`). */
+export interface HealthSummary {
+  green: number;
+  yellow: number;
+  red: number;
+  total: number;
+}

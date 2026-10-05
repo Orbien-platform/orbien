@@ -140,3 +140,22 @@ export class EventRegistrationsController {
     );
   }
 }
+
+/**
+ * `GET /content/my-registrations` — as próximas inscrições do próprio usuário,
+ * de todos os eventos (PROD-30, Início do app). Controller à parte porque o
+ * caminho não tem `:postId`; o mesmo `ALL_ROLES` das portas `.../me`, e o
+ * recorte por pessoa vem do token, nunca de parâmetro.
+ */
+@Controller('content/my-registrations')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(TenantContextInterceptor)
+export class MyEventRegistrationsController {
+  constructor(private readonly registrations: EventRegistrationsService) {}
+
+  @Get()
+  @Roles(...ALL_ROLES)
+  listMine(@CurrentUser() user: JwtPayload) {
+    return this.registrations.listMine(user.tenant_id, user.congregation_id, user.sub);
+  }
+}

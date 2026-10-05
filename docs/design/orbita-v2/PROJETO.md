@@ -16,7 +16,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 |---|---|---|---|
 | Site (`apps/site`) | **Entregue** | As 8 páginas da v2 e as 5 de apoio (hub de funcionalidades, contato, LGPD, login e 404), só no tema escuro, com tokens, fontes, títulos, CTAs, órbita no hero e brilho do CTA final | Itens menores em [§2.3](#23-o-que-ficou-de-fora) |
 | Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em serifa, menu em seções, identidade da igreja no menu, caminho no topo e anéis no fundo | Todas as telas da v2 e o header completo — [§3.2](#32-o-que-falta) |
-| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante (líder incluso), Privacidade (LGPD), presença já marcada, transição de entrada, login, destaque da v2, QR de check-in (líder e leitor) e QR de autocadastro | Início por papel, Contribuir nativo e o resto das telas — [§4.2](#42-o-que-falta) |
+| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante (líder incluso), Privacidade (LGPD), presença já marcada, transição de entrada, login, destaque da v2, QR de check-in (líder e leitor) e QR de autocadastro | Contribuir nativo e o resto das telas — [§4.2](#42-o-que-falta) |
 | Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em serifa, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
 
 ---
@@ -315,9 +315,15 @@ na tela "em breve" do site.
 
 ### 4.2 O que falta
 
-- [ ] **Início por papel** (`PROD-30`): encontro de hoje (líder),
-  celebração do domingo (líder de ministério), semáforo (pastor), minhas
-  escalas com confirmar/recusar e avisos de evento.
+- [x] **Início por papel** (`PROD-30`) — feito em 2026-10-05: encontro de
+  hoje (líder), próxima celebração (líder de ministério e acima), minhas
+  escalas com confirmar/recusar e sino de notificações.
+- [x] **Semáforo dos grupos** (pastor, Premium) — feito (2026-10-05):
+  `GET /small-groups/health-summary` na API, bloco na Home do app e no Início
+  do painel.
+- [x] **Eventos em que a pessoa se inscreveu** — feito (2026-10-05):
+  `GET /content/my-registrations` e bloco "Meus eventos" na Home.
+- [ ] **Início — o que ficou de fora:** teste em aparelho.
 - [x] **Privacidade (LGPD)** — feito (2026-10-04), com as rotas do titular
   na API (`CONF-03`).
 - [x] **QR de check-in** (líder) e **leitura do QR** (membro, câmera —

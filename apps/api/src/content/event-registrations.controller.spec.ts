@@ -1,5 +1,8 @@
 import { Reflector } from '@nestjs/core';
-import { EventRegistrationsController } from './event-registrations.controller';
+import {
+  EventRegistrationsController,
+  MyEventRegistrationsController,
+} from './event-registrations.controller';
 import { EventRegistrationsService } from './event-registrations.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { REQUIRES_PLAN_KEY } from '../auth/decorators/requires-plan.decorator';
@@ -38,6 +41,7 @@ describe('EventRegistrationsController', () => {
       registerSelf: jest.fn(),
       register: jest.fn(),
       cancelMine: jest.fn(),
+      listMine: jest.fn(),
       cancel: jest.fn(),
     } as unknown as jest.Mocked<EventRegistrationsService>;
     controller = new EventRegistrationsController(service);
@@ -112,5 +116,26 @@ describe('EventRegistrationsController', () => {
     controller.cancel('p1', 'r1', user({ roles: ['tenant_admin'] }));
 
     expect(service.cancel).toHaveBeenCalledWith('t1', 'g1', 'p1', 'r1');
+  });
+});
+
+describe('MyEventRegistrationsController (PROD-30)', () => {
+  it('vale para quem lê conteúdo, `member` incluído, e não é rota Premium', () => {
+    const reflector = new Reflector();
+    expect(reflector.get(ROLES_KEY, MyEventRegistrationsController.prototype.listMine)).toEqual([
+      ...PRODUCT_AREA_READ_ROLES.content,
+    ]);
+    expect(reflector.get(REQUIRES_PLAN_KEY, MyEventRegistrationsController)).toBeUndefined();
+  });
+
+  it('delega ao service com o escopo e o usuário do token', async () => {
+    const service = {
+      listMine: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<EventRegistrationsService>;
+
+    const result = await new MyEventRegistrationsController(service).listMine(user());
+
+    expect(service.listMine).toHaveBeenCalledWith('t1', 'g1', 'user-1');
+    expect(result).toEqual([]);
   });
 });

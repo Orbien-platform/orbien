@@ -538,6 +538,19 @@ export class SmallGroupsService {
     };
   }
 
+  // Quantas células estão em cada cor (PROD-30, Início do pastor). O RLS já
+  // recorta pelas congregações que o token enxerga, então não há filtro de
+  // tenant aqui; a cor é a mesma de `getHealth` e da árvore (`classifyHealth`).
+  async getHealthSummary(): Promise<Record<HealthStatus, number> & { total: number }> {
+    const groups = await this.prisma.client.smallGroup.findMany({ select: { id: true } });
+    const summary = { green: 0, yellow: 0, red: 0, total: groups.length };
+    if (groups.length === 0) return summary;
+
+    const healthByGroupId = await this.buildHealthMap(groups.map((g) => g.id));
+    for (const status of healthByGroupId.values()) summary[status] += 1;
+    return summary;
+  }
+
   // Ancestrais (PROD-20, CEL20-06): cadeia linear subindo por
   // parent_group_id, mais próximo primeiro. Iterativo, não CTE recursiva
   // (design.md, Tech Decisions) — teto de 3 ancestrais, simétrico ao teto de

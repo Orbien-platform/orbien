@@ -59,6 +59,7 @@ describe('SmallGroupsController', () => {
       listVisitRequests: jest.fn(),
       multiply: jest.fn(),
       getHealth: jest.fn(),
+      getHealthSummary: jest.fn(),
     } as unknown as jest.Mocked<SmallGroupsService>;
 
     controller = new SmallGroupsController(service);
@@ -133,6 +134,17 @@ describe('SmallGroupsController', () => {
 
     expect(service.getHealth).toHaveBeenCalledWith('sg1');
     expect(result).toEqual({ status: 'green', last_meeting_at: null, days_since_last_meeting: null });
+  });
+
+  it('getHealthSummary é só da gestão e exige plano Premium (PROD-30)', () => {
+    expect(rolesFor('getHealthSummary')).toEqual(['tenant_admin', 'admin_congregation', 'pastor']);
+    expect(requiredPlanFor('getHealthSummary')).toBe('premium');
+  });
+
+  it('getHealthSummary delega ao service', async () => {
+    service.getHealthSummary.mockResolvedValue({ green: 1, yellow: 0, red: 0, total: 1 });
+
+    expect(await controller.getHealthSummary()).toEqual({ green: 1, yellow: 0, red: 0, total: 1 });
   });
 
   it('listVisitRequests delega ao service', async () => {

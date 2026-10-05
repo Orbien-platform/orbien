@@ -26,6 +26,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { GroupHealthSummary } from "@/components/groups/GroupHealthSummary";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import api, { isForbidden } from "@/lib/api";
 import { civilDayKey, formatCivilDate, saoPauloCivilDay, saoPauloDateKey } from "@/lib/datetime";
@@ -406,6 +407,9 @@ export default function DashboardPage() {
           />
         </div>
       </div>
+
+      {/* Semáforo dos grupos (PROD-30): Premium e gestão; some sozinho fora disso. */}
+      <GroupHealthSummary />
 
       {/* ── Row 2: Charts ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

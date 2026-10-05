@@ -9,6 +9,7 @@ import type {
   Post,
   PostsPage,
   RegisterSelfResult,
+  UpcomingEventRegistration,
 } from "./types";
 
 /**
@@ -51,6 +52,11 @@ export async function getPost(id: string): Promise<Post> {
 // por uma: `.../summary` (vagas e prazo, sem a lista de nomes) e `.../me`
 // (a própria inscrição). A raiz é do organizador e responde 403 aqui — não
 // existe função para ela neste client, de propósito.
+
+/** `GET /content/my-registrations` — as próximas inscrições, de todos os eventos. */
+export async function listMyEventRegistrations(): Promise<UpcomingEventRegistration[]> {
+  return authenticatedRequest<UpcomingEventRegistration[]>("get", "/content/my-registrations");
+}
 
 /** `GET .../registrations/summary` — vagas, prazo e preço do evento. */
 export async function getEventRegistrationSummary(
