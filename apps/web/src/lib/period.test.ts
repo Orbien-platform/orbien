@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   changeMode,
+  monthName,
   isValidRange,
   monthRangeOf,
   periodFor,
@@ -98,5 +99,14 @@ describe("isValidRange", () => {
     expect(isValidRange("2026-10-05", "2026-10-05")).toBe(true);
     expect(isValidRange("2026-10-31", "2026-10-01")).toBe(false);
     expect(isValidRange("", "2026-10-01")).toBe(false);
+  });
+});
+
+describe("monthName", () => {
+  it("nomeia os 12 meses e devolve vazio fora do intervalo", () => {
+    expect(monthName(0)).toBe("janeiro");
+    expect(monthName(11)).toBe("dezembro");
+    expect(monthName(12)).toBe("");
+    expect(monthName(-1)).toBe("");
   });
 });

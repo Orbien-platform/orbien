@@ -71,5 +71,6 @@ describe("dayRangeBounds", () => {
 
   it("deixa sem limite o lado que está vazio", () => {
     expect(dayRangeBounds("", "2026-10-31")).toEqual({ since: undefined, until: "2026-10-31T23:59:59.999Z" });
+    expect(dayRangeBounds("2026-10-01", "")).toEqual({ since: "2026-10-01T00:00:00.000Z", until: undefined });
   });
 });

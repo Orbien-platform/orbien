@@ -598,6 +598,21 @@ describe("FinanceiroPage — aba Lançamentos", () => {
       await waitFor(() => expect(txUrls().some((u) => u.includes("since=2026-09-01"))).toBe(true));
     });
 
+    it("mudar a data final refaz a busca com o novo limite superior", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Nenhum lançamento neste período.");
+
+      const to = screen.getByLabelText("Data final");
+      await user.clear(to);
+      await user.type(to, "2026-10-20");
+
+      await waitFor(() => expect(txUrls().some((u) => u.includes("until=2026-10-20T23%3A59%3A59.999Z"))).toBe(true));
+    });
+
     it("não consulta com o intervalo invertido e mantém a lista vazia", async () => {
       setup();
       mockApi({ transactions: [tx({ id: "1", description: "Algum lançamento" })] });
@@ -634,6 +649,41 @@ describe("FinanceiroPage — aba Lançamentos", () => {
 
       expect(await screen.findByText("1–20 de 130")).toBeInTheDocument();
       expect(txUrls().length).toBe(2);
+    });
+
+    it("avisa que a apuração é parcial quando o período passa do teto de páginas", async () => {
+      setup();
+      mockedApi.get.mockImplementation((url: string) => {
+        if (url.startsWith("/financial/transactions")) {
+          return Promise.resolve({
+            data: { data: Array.from({ length: 100 }, (_, i) => tx({ id: `x${i}-${Math.random()}` })), total: 1_000_000 },
+          });
+        }
+        if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+        return Promise.reject(new Error(`unexpected ${url}`));
+      });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+
+      expect(await screen.findByRole("status")).toHaveTextContent("limite de 5.000");
+      expect(txUrls().length).toBe(50);
+    });
+
+    it("falha ao carregar as categorias não derruba a lista de lançamentos", async () => {
+      setup();
+      mockedApi.get.mockImplementation((url: string) => {
+        if (url.startsWith("/financial/transactions")) {
+          return Promise.resolve({ data: { data: [tx({ id: "1", description: "Segue na tela" })], total: 1 } });
+        }
+        if (url.startsWith("/financial/categories")) return Promise.reject(new Error("boom"));
+        return Promise.reject(new Error(`unexpected ${url}`));
+      });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+
+      expect(await screen.findByText("Segue na tela")).toBeInTheDocument();
     });
 
     it("apura entradas, saídas e saldo dos lançamentos do período", async () => {
