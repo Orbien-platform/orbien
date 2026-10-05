@@ -241,6 +241,29 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("1")).toBeInTheDocument();
   });
 
+  it("pede os lançamentos das 4 semanas do gráfico, não as 100 mais recentes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-07T15:00:00.000Z")); // quarta-feira
+    try {
+      mockedApi.get.mockImplementation((url: string) => {
+        if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [], total: 0 } });
+        if (url.startsWith("/financial/transactions")) return Promise.resolve({ data: { data: [], total: 0 } });
+        if (url === "/celebrations") return Promise.resolve({ data: [] });
+        if (url.startsWith("/celebrations/instances")) return Promise.resolve({ data: [] });
+        return Promise.reject(new Error(`unexpected ${url}`));
+      });
+      render(<DashboardPage />);
+      await screen.findByText("Total de membros");
+
+      const url = mockedApi.get.mock.calls.map(([u]) => u).find((u) => u.startsWith("/financial/transactions"))!;
+      // Segunda de 3 semanas atrás (14/09) até o domingo desta semana (11/10), com a folga de Brasília.
+      expect(url).toContain("since=2026-09-14T00%3A00%3A00.000Z");
+      expect(url).toContain("until=2026-10-12T03%3A00%3A00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("mostra erro só quando todas as quatro chamadas falham", async () => {
     mockedApi.get.mockRejectedValue(new Error("boom"));
     render(<DashboardPage />);

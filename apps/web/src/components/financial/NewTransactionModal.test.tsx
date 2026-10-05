@@ -3,10 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NewTransactionModal } from "./NewTransactionModal";
 import api from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
 }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
+
+function asRoles(roles: string[]) {
+  vi.mocked(useAuth).mockReturnValue({ user: { roles } } as unknown as ReturnType<typeof useAuth>);
+}
 
 const categories = [
   {
@@ -35,6 +41,8 @@ async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole("option", { name: "Dízimos" });
   await user.selectOptions(screen.getAllByRole("combobox")[0], "c1");
   await user.type(screen.getByLabelText(/Valor/), "1000");
+  // A descrição já vem sugerida (categoria + mês); aqui o teste escreve a sua.
+  await user.clear(screen.getByLabelText(/Descrição/));
   await user.type(screen.getByLabelText(/Descrição/), "Dízimos do culto");
 }
 
@@ -42,6 +50,7 @@ describe("NewTransactionModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockApiGet();
+    asRoles(["tenant_admin"]);
   });
 
   it("does not render form fields when closed", () => {
@@ -446,5 +455,180 @@ describe("NewTransactionModal", () => {
     expect(
       await screen.findByText("Erro ao atualizar lançamento. Tente novamente.")
     ).toBeInTheDocument();
+  });
+});
+
+describe("NewTransactionModal — descrição sugerida", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApiGet();
+    asRoles(["tenant_admin"]);
+  });
+
+  async function openAndPick(user: ReturnType<typeof userEvent.setup>, date = "2026-10-12") {
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await screen.findByRole("option", { name: "Dízimos" });
+    const dateInput = screen.getByLabelText(/Data/) as HTMLInputElement;
+    await user.clear(dateInput);
+    await user.type(dateInput, date);
+    await user.selectOptions(screen.getAllByRole("combobox")[0], "c1");
+  }
+
+  it("preenche com o nome da categoria e o mês da data escolhida", async () => {
+    const user = userEvent.setup();
+    await openAndPick(user, "2026-10-12");
+    expect(screen.getByLabelText(/Descrição/)).toHaveValue("Dízimos - Outubro");
+  });
+
+  it("acompanha a data e a categoria enquanto a pessoa não escreveu nada", async () => {
+    const user = userEvent.setup();
+    await openAndPick(user, "2026-10-12");
+
+    const dateInput = screen.getByLabelText(/Data/) as HTMLInputElement;
+    await user.clear(dateInput);
+    await user.type(dateInput, "2026-03-05");
+    expect(screen.getByLabelText(/Descrição/)).toHaveValue("Dízimos - Março");
+
+    await user.selectOptions(screen.getAllByRole("combobox")[0], "c1a");
+    expect(screen.getByLabelText(/Descrição/)).toHaveValue("Dízimo online - Março");
+  });
+
+  it("não sobrescreve o que a pessoa escreveu", async () => {
+    const user = userEvent.setup();
+    await openAndPick(user, "2026-10-12");
+
+    const desc = screen.getByLabelText(/Descrição/);
+    await user.clear(desc);
+    await user.type(desc, "Oferta especial");
+
+    const dateInput = screen.getByLabelText(/Data/) as HTMLInputElement;
+    await user.clear(dateInput);
+    await user.type(dateInput, "2026-11-02");
+    await user.selectOptions(screen.getAllByRole("combobox")[0], "c1a");
+
+    expect(desc).toHaveValue("Oferta especial");
+  });
+
+  it("apagar a descrição devolve a sugestão na próxima mudança", async () => {
+    const user = userEvent.setup();
+    await openAndPick(user, "2026-10-12");
+
+    const desc = screen.getByLabelText(/Descrição/);
+    await user.clear(desc);
+    await user.type(desc, "Algo");
+    await user.clear(desc);
+
+    const dateInput = screen.getByLabelText(/Data/) as HTMLInputElement;
+    await user.clear(dateInput);
+    await user.type(dateInput, "2026-12-01");
+    expect(desc).toHaveValue("Dízimos - Dezembro");
+  });
+
+  it("trocar para saída sem categoria esvazia a sugestão", async () => {
+    const user = userEvent.setup();
+    await openAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Saída" }));
+    expect(screen.getByLabelText(/Descrição/)).toHaveValue("");
+  });
+
+  it("na edição, mantém a descrição existente ao trocar a categoria", async () => {
+    const user = userEvent.setup();
+    render(
+      <NewTransactionModal
+        open={true}
+        onOpenChange={vi.fn()}
+        onCreated={vi.fn()}
+        editTransaction={{
+          id: "t1",
+          type: "income",
+          amount: 100,
+          occurred_at: "2026-02-10T12:00:00Z",
+          description: "Descrição antiga",
+          category_id: "c1",
+        }}
+      />
+    );
+    await screen.findByRole("option", { name: "Dízimos" });
+    await user.selectOptions(screen.getAllByRole("combobox")[0], "c1a");
+    expect(screen.getByLabelText(/Descrição/)).toHaveValue("Descrição antiga");
+  });
+});
+
+describe("NewTransactionModal — já pago no cadastro", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApiGet();
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+  });
+
+  it("mostra a opção para quem pode marcar como pago e envia status paid", async () => {
+    asRoles(["treasurer"]);
+    const user = userEvent.setup();
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await fillRequiredFields(user);
+
+    await user.click(screen.getByRole("checkbox", { name: /Já está pago/ }));
+    await user.click(screen.getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/financial/transactions",
+        expect.objectContaining({ status: "paid" })
+      )
+    );
+    expect(await screen.findByText("Lançamento registrado como pago!")).toBeInTheDocument();
+  });
+
+  it("sem marcar, não manda status e o lançamento nasce pendente", async () => {
+    asRoles(["tenant_admin"]);
+    const user = userEvent.setup();
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(vi.mocked(api.post).mock.calls[0]![1]).not.toHaveProperty("status");
+  });
+
+  it("não mostra a opção ao secretário, que cria mas não baixa lançamento", async () => {
+    asRoles(["secretary"]);
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await screen.findByRole("option", { name: "Dízimos" });
+    expect(screen.queryByRole("checkbox", { name: /Já está pago/ })).not.toBeInTheDocument();
+  });
+
+  it("some em lançamento parcelado ou fixo, que nascem pendentes", async () => {
+    asRoles(["treasurer"]);
+    const user = userEvent.setup();
+    render(<NewTransactionModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    await screen.findByRole("option", { name: "Dízimos" });
+    expect(screen.getByRole("checkbox", { name: /Já está pago/ })).toBeInTheDocument();
+
+    const kind = screen.getAllByRole("combobox").find((el) =>
+      Array.from((el as HTMLSelectElement).options).some((o) => o.text === "Parcelado")
+    )!;
+    await user.selectOptions(kind, "installment");
+    expect(screen.queryByRole("checkbox", { name: /Já está pago/ })).not.toBeInTheDocument();
+  });
+
+  it("não aparece ao editar", async () => {
+    asRoles(["treasurer"]);
+    render(
+      <NewTransactionModal
+        open={true}
+        onOpenChange={vi.fn()}
+        onCreated={vi.fn()}
+        editTransaction={{
+          id: "t1",
+          type: "income",
+          amount: 100,
+          occurred_at: "2026-02-10T12:00:00Z",
+          description: "X",
+          category_id: "c1",
+        }}
+      />
+    );
+    await screen.findByRole("option", { name: "Dízimos" });
+    expect(screen.queryByRole("checkbox", { name: /Já está pago/ })).not.toBeInTheDocument();
   });
 });

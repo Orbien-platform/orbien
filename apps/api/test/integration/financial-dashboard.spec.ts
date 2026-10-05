@@ -109,14 +109,14 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
 
       const result = await service.getWeeklyDashboard(user());
 
-      // As 4 transações caem na semana corrente — soma bate no último slot.
-      const currentWeek = result.weekly[result.weekly.length - 1]!;
-      expect(currentWeek.income).toBe(300);
-      expect(currentWeek.expense).toBe(30);
-      expect(currentWeek.net).toBe(270);
+      // As 4 transações caem no mês corrente — a soma da série bate com os totais.
+      const sum = (k: 'income' | 'expense' | 'net') => result.series.reduce((s, w) => s + w[k], 0);
+      expect(sum('income')).toBe(300);
+      expect(sum('expense')).toBe(30);
+      expect(sum('net')).toBe(270);
 
-      expect(result.current_month.income).toBe(300);
-      expect(result.current_month.expense).toBe(30);
+      expect(result.totals.income).toBe(300);
+      expect(result.totals.expense).toBe(30);
 
       // Duas categorias com receita no mês: Ofertas (200) > Dízimo (100).
       expect(result.top_income_categories[0]).toEqual({ category_name: 'Ofertas', total: 200 });
@@ -128,7 +128,7 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
     });
   }, 30000);
 
-  it('preenche as semanas sem transação com zero', async () => {
+  it('preenche os baldes sem transação com zero', async () => {
     const empty = await prismaAdmin.congregation.create({
       data: { tenant_id: tenantId, name: 'Congregação vazia' },
     });
@@ -145,9 +145,58 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
         plan: 'starter',
       });
 
-      expect(result.weekly).toHaveLength(8);
-      expect(result.weekly.every((w) => w.income === 0 && w.expense === 0)).toBe(true);
+      expect(result.series.length).toBeGreaterThanOrEqual(4);
+      expect(result.series.every((w) => w.income === 0 && w.expense === 0)).toBe(true);
       expect(result.top_income_categories).toEqual([]);
+    });
+  }, 30000);
+
+  it('conta lançamento de hoje depois do horário atual e com data futura no mês (regressão da Visão Geral)', async () => {
+    const empty = await prismaAdmin.congregation.create({
+      data: { tenant_id: tenantId, name: 'Congregação de fronteira' },
+    });
+    const cat = await prismaAdmin.financialCategory.create({
+      data: { tenant_id: tenantId, congregation_id: empty.id, name: 'Ofertas fronteira', type: 'income' },
+    });
+    const create = (amount: string, occurred_at: Date) =>
+      prismaAdmin.financialTransaction.create({
+        data: {
+          tenant_id: tenantId,
+          congregation_id: empty.id,
+          type: TransactionType.income,
+          amount,
+          occurred_at,
+          category_id: cat.id,
+          source: TransactionSource.manual,
+          created_by_user_id: userId,
+        },
+      });
+
+    // Mesmo mês de qualquer dia de execução: dia 15 às 15:00Z (meio-dia em
+    // Brasília, como o web grava) e o último dia do mês às 00:00Z.
+    const today = new Date();
+    const y = today.getUTCFullYear();
+    const m = today.getUTCMonth();
+    await create('10.00', new Date(Date.UTC(y, m, 1, 15)));
+    await create('20.00', new Date(Date.UTC(y, m + 1, 0, 15)));
+    await create('40.00', new Date(Date.UTC(y, m + 1, 0, 0)));
+    // Fora do mês: não entra.
+    await create('999.00', new Date(Date.UTC(y, m + 1, 1, 15)));
+
+    const first = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const last = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+
+    await runAsTenant(tenantId, empty.id, async (dbTx) => {
+      const service = new DashboardService({ client: dbTx } as unknown as PrismaService);
+      const result = await service.getWeeklyDashboard(
+        { sub: userId, tenant_id: tenantId, congregation_id: empty.id, roles: ['treasurer'], plan: 'starter' },
+        first,
+        last,
+      );
+
+      expect(result.totals.income).toBe(70);
+      expect(result.series.reduce((s, w) => s + w.income, 0)).toBe(70);
+      expect(result.top_income_categories).toEqual([{ category_name: 'Ofertas fronteira', total: 70 }]);
     });
   }, 30000);
 
@@ -217,13 +266,9 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
 
         const result = await service.getWeeklyDashboard(user());
 
-        const currentWeek = result.weekly[result.weekly.length - 1]!;
-        expect(currentWeek.income).toBe(300);
-        expect(currentWeek.expense).toBe(30);
-        expect(currentWeek.net).toBe(270);
-
-        expect(result.current_month.income).toBe(300);
-        expect(result.current_month.expense).toBe(30);
+        expect(result.totals.income).toBe(300);
+        expect(result.totals.expense).toBe(30);
+        expect(result.totals.net).toBe(270);
 
         expect(result.top_income_categories).toEqual([
           { category_name: 'Ofertas', total: 200 },
@@ -244,13 +289,9 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
           plan: 'starter',
         });
 
-        const currentWeek = result.weekly[result.weekly.length - 1]!;
-        expect(currentWeek.income).toBe(9000);
-        expect(currentWeek.expense).toBe(3000);
-        expect(currentWeek.net).toBe(6000);
-
-        expect(result.current_month.income).toBe(9000);
-        expect(result.current_month.expense).toBe(3000);
+        expect(result.totals.income).toBe(9000);
+        expect(result.totals.expense).toBe(3000);
+        expect(result.totals.net).toBe(6000);
 
         expect(result.top_income_categories).toEqual([
           { category_name: 'Ofertas — Outro Tenant', total: 9000 },

@@ -54,6 +54,7 @@ export class TransactionsService {
         donor_person_id: dto.donor_person_id,
         source: dto.source ?? TransactionSource.manual,
         notes: dto.notes,
+        status: dto.status ?? 'pending',
         created_by_user_id: user.sub,
       },
     });

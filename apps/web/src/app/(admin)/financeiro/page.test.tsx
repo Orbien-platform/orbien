@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/navigation";
 import { StrictMode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import FinanceiroPage from "./page";
@@ -109,7 +109,11 @@ vi.mock("@/components/financial/CostCentersModal", () => ({
 // próprios (cada um com seus próprios testes, incluindo os 403 de
 // dashboard/forecast) — aqui só interessa que a aba Visão Geral os monta.
 vi.mock("@/components/financial/WeeklyDashboardCard", () => ({
-  WeeklyDashboardCard: () => <div data-testid="weekly-dashboard-card" />,
+  WeeklyDashboardCard: ({ period }: { period: { start: string; end: string } }) => (
+    <div data-testid="weekly-dashboard-card">
+      period:{period.start}:{period.end}
+    </div>
+  ),
 }));
 vi.mock("@/components/financial/ForecastCard", () => ({
   ForecastCard: () => <div data-testid="forecast-card" />,
@@ -322,6 +326,36 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByTestId("forecast-card")).toBeInTheDocument();
   });
 
+  it("a Visão Geral abre no mês corrente e navega por mês, trimestre, ano e período personalizado", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-15T15:00:00.000Z"));
+    try {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+
+      const card = await screen.findByTestId("weekly-dashboard-card");
+      expect(card).toHaveTextContent("period:2026-10-01:2026-10-31");
+
+      await user.click(screen.getByRole("button", { name: "Período anterior" }));
+      expect(card).toHaveTextContent("period:2026-09-01:2026-09-30");
+
+      await user.click(screen.getByRole("button", { name: "Trimestre" }));
+      expect(card).toHaveTextContent("period:2026-07-01:2026-09-30");
+
+      await user.click(screen.getByRole("button", { name: "Ano" }));
+      expect(card).toHaveTextContent("period:2026-01-01:2026-12-31");
+
+      await user.click(screen.getByRole("button", { name: "Personalizado" }));
+      fireEvent.change(screen.getByLabelText("De"), { target: { value: "2026-03-10" } });
+      fireEvent.change(screen.getByLabelText("até"), { target: { value: "2026-03-20" } });
+      expect(card).toHaveTextContent("period:2026-03-10:2026-03-20");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("esconde abas Lançamentos/Recorrentes/Conciliação/Carnê do dizimista e a coluna Total do DRE para pastor", async () => {
     setup(["pastor"]);
     mockApi({});
@@ -402,7 +436,7 @@ describe("FinanceiroPage — visão geral e permissões", () => {
       </StrictMode>
     );
     await user.click(await screen.findByRole("tab", { name: "Lançamentos" }));
-    await screen.findByText("Nenhum lançamento registrado.");
+    await screen.findByText("Nenhum lançamento neste período.");
     expect(
       mockedApi.get.mock.calls.filter(([u]) => u.startsWith("/financial/transactions")).length
     ).toBe(1);
@@ -416,7 +450,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
-    expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum lançamento neste período.")).toBeInTheDocument();
   });
 
   it("403 nas transações diz sem-acesso, e não \"nenhum lançamento\"", async () => {
@@ -427,7 +461,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
 
     expect(await screen.findByText("Você não tem acesso a Financeiro.")).toBeInTheDocument();
-    expect(screen.queryByText("Nenhum lançamento registrado.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nenhum lançamento neste período.")).not.toBeInTheDocument();
   });
 
   it("trata resposta sem `data` como lista vazia (fallback ?? [])", async () => {
@@ -440,7 +474,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
-    expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum lançamento neste período.")).toBeInTheDocument();
   });
 
   it("mostra badges de parcelado e fixo, categoria e travessão quando não há categoria", async () => {
@@ -462,12 +496,12 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("filtra por tipo, categoria, período e status no cliente", async () => {
+  it("filtra por tipo, categoria e status no cliente", async () => {
     setup();
     mockApi({
       transactions: [
-        tx({ id: "1", description: "Dízimo Recebido", type: "income", occurred_at: "2026-02-01T00:00:00Z", category_id: "c1", category: { id: "c1", name: "Dízimos", type: "income" }, status: "paid" }),
-        tx({ id: "2", description: "Pagamento Aluguel", type: "expense", occurred_at: "2026-02-10T00:00:00Z", category_id: "c2", category: { id: "c2", name: "Aluguel", type: "expense" }, status: "pending" }),
+        tx({ id: "1", description: "Dízimo Recebido", type: "income", category_id: "c1", category: { id: "c1", name: "Dízimos", type: "income" }, status: "paid" }),
+        tx({ id: "2", description: "Pagamento Aluguel", type: "expense", category_id: "c2", category: { id: "c2", name: "Aluguel", type: "expense" }, status: "pending" }),
       ],
       categories: [
         { id: "c1", name: "Dízimos", type: "income", children: [] },
@@ -487,17 +521,128 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     expect(screen.queryByText("Dízimo Recebido")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByDisplayValue("Aluguel"), "");
 
-    const dateInputs = document.querySelectorAll('input[type="date"]');
-    await user.type(dateInputs[0] as HTMLInputElement, "2026-02-05");
-    expect(screen.queryByText("Dízimo Recebido")).not.toBeInTheDocument();
-    await user.clear(dateInputs[0] as HTMLInputElement);
-
-    await user.type(dateInputs[1] as HTMLInputElement, "2026-02-05");
-    expect(screen.queryByText("Pagamento Aluguel")).not.toBeInTheDocument();
-    await user.clear(dateInputs[1] as HTMLInputElement);
-
     await user.selectOptions(screen.getByDisplayValue("Todos os status"), "paid");
     expect(screen.queryByText("Pagamento Aluguel")).not.toBeInTheDocument();
+  });
+
+  describe("período e apuração", () => {
+    const txUrls = () =>
+      mockedApi.get.mock.calls.map(([u]) => u).filter((u) => u.startsWith("/financial/transactions"));
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-15T15:00:00.000Z"));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("abre no mês corrente — dia 1 ao último dia — e consulta o servidor por esse período", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Nenhum lançamento neste período.");
+
+      expect(screen.getByLabelText("Data inicial")).toHaveValue("2026-10-01");
+      expect(screen.getByLabelText("Data final")).toHaveValue("2026-10-31");
+      const [url] = txUrls();
+      expect(url).toContain("since=2026-10-01T00%3A00%3A00.000Z");
+      expect(url).toContain("until=2026-10-31T23%3A59%3A59.999Z");
+    });
+
+    it("mudar a data refaz a busca com o novo intervalo", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Nenhum lançamento neste período.");
+
+      const from = screen.getByLabelText("Data inicial");
+      await user.clear(from);
+      await user.type(from, "2026-09-01");
+
+      await waitFor(() => expect(txUrls().some((u) => u.includes("since=2026-09-01"))).toBe(true));
+    });
+
+    it("não consulta com o intervalo invertido e mantém a lista vazia", async () => {
+      setup();
+      mockApi({ transactions: [tx({ id: "1", description: "Algum lançamento" })] });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Algum lançamento");
+      const before = txUrls().length;
+
+      const from = screen.getByLabelText("Data inicial");
+      await user.clear(from);
+      await user.type(from, "2026-12-01");
+
+      await waitFor(() => expect(screen.queryByText("Algum lançamento")).not.toBeInTheDocument());
+      expect(txUrls().filter((u) => u.includes("since=2026-12-01")).length).toBe(0);
+      expect(txUrls().length).toBeGreaterThanOrEqual(before);
+    });
+
+    it("busca todas as páginas do período, não só as primeiras 100", async () => {
+      setup();
+      const first = Array.from({ length: 100 }, (_, i) => tx({ id: `a${i}`, description: `A${i}` }));
+      const second = Array.from({ length: 30 }, (_, i) => tx({ id: `b${i}`, description: `B${i}` }));
+      mockedApi.get.mockImplementation((url: string) => {
+        if (url.startsWith("/financial/transactions")) {
+          const page = new URL(url, "http://x").searchParams.get("page");
+          return Promise.resolve({ data: { data: page === "1" ? first : second, total: 130 } });
+        }
+        if (url.startsWith("/financial/categories")) return Promise.resolve({ data: [] });
+        return Promise.reject(new Error(`unexpected ${url}`));
+      });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+
+      expect(await screen.findByText("1–20 de 130")).toBeInTheDocument();
+      expect(txUrls().length).toBe(2);
+    });
+
+    it("apura entradas, saídas e saldo dos lançamentos do período", async () => {
+      setup();
+      mockApi({
+        transactions: [
+          tx({ id: "1", type: "income", amount: "100.10" }),
+          tx({ id: "2", type: "income", amount: "50.20" }),
+          tx({ id: "3", type: "expense", amount: "30.05" }),
+        ],
+      });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+
+      const group = await screen.findByLabelText("Apuração do período");
+      await waitFor(() => expect(group).toHaveTextContent(/150,30/));
+      expect(group).toHaveTextContent(/Total de entradas\s*R\$\s?150,30/);
+      expect(group).toHaveTextContent(/Total de saídas\s*R\$\s?30,05/);
+      expect(group).toHaveTextContent(/Saldo \(entradas − saídas\)\s*R\$\s?120,25/);
+    });
+
+    it("a apuração acompanha os filtros de tipo da tabela", async () => {
+      setup();
+      mockApi({
+        transactions: [
+          tx({ id: "1", type: "income", amount: "100" }),
+          tx({ id: "2", type: "expense", amount: "40" }),
+        ],
+      });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      const group = await screen.findByLabelText("Apuração do período");
+      await waitFor(() => expect(group).toHaveTextContent(/60,00/));
+
+      await user.selectOptions(screen.getByDisplayValue("Todos os tipos"), "expense");
+      expect(group).toHaveTextContent(/Total de entradas\s*R\$\s?0,00/);
+      expect(group).toHaveTextContent(/Saldo \(entradas − saídas\)\s*-R\$\s?40,00/);
+    });
   });
 
   it("mostra mensagem de filtro vazio quando os filtros não retornam nada", async () => {
@@ -517,7 +662,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
-    expect(await screen.findByText("Nenhum lançamento registrado.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum lançamento neste período.")).toBeInTheDocument();
   });
 
   it("pagina lançamentos quando há mais de 20", async () => {
@@ -542,7 +687,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
-    await screen.findByText("Nenhum lançamento registrado.");
+    await screen.findByText("Nenhum lançamento neste período.");
     await user.click(screen.getByRole("button", { name: "Novo lançamento" }));
     expect(screen.getByTestId("new-tx-modal")).toBeInTheDocument();
     const callsBefore = mockedApi.get.mock.calls.length;

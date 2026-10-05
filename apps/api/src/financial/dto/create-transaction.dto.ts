@@ -1,6 +1,7 @@
 import {
   IsDate,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -50,4 +51,11 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // Cadastro já como pago. Só `paid` e `pending`: `confirmed` é do fluxo de
+  // exportação contábil e não se escolhe aqui. Quem pode pedir `paid` é o mesmo
+  // conjunto de `PATCH :id/status` — a checagem fica no controller.
+  @IsOptional()
+  @IsIn(['pending', 'paid'], { message: 'status deve ser pending ou paid' })
+  status?: 'pending' | 'paid';
 }

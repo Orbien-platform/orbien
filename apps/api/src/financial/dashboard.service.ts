@@ -1,14 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { buildBuckets, dayKey, previousPeriod, resolvePeriod } from './dashboard-period';
 
-type WeeklyRow = {
-  week_start: Date;
-  week_end: Date;
+type SeriesRow = {
+  bucket_start: Date;
   income: Prisma.Decimal | null;
   expense: Prisma.Decimal | null;
-  net: Prisma.Decimal | null;
 };
 
 type ContribRow = {
@@ -24,111 +23,103 @@ function toNum(v: Prisma.Decimal | null | undefined): number {
   return v ? Number(v) : 0;
 }
 
-function monthStart(y: number, m: number): Date {
-  return new Date(Date.UTC(y, m, 1));
-}
-
-function lastMondayOf(d: Date): Date {
-  const copy = new Date(d);
-  copy.setUTCHours(0, 0, 0, 0);
-  const dow = copy.getUTCDay(); // 0=Sun
-  const diff = dow === 0 ? -6 : 1 - dow;
-  copy.setUTCDate(copy.getUTCDate() + diff);
-  return copy;
-}
-
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getWeeklyDashboard(user: JwtPayload) {
+  /**
+   * Os números da Visão Geral do financeiro, para o período pedido (mês
+   * corrente quando não vem nenhum). Fonte única dos cartões e do gráfico: a
+   * lista de Lançamentos e esta resposta somam as mesmas linhas, com a mesma
+   * fronteira de dia (ver `dashboard-period.ts`).
+   */
+  async getWeeklyDashboard(user: JwtPayload, periodStart?: string, periodEnd?: string) {
     const now = new Date();
     const tid = user.tenant_id;
     const cid = user.congregation_id;
 
-    // ── 1. Last 8 weeks ────────────────────────────────────────────────────
-    const currentMonday = lastMondayOf(now);
-    const eightWeeksAgo = new Date(currentMonday);
-    eightWeeksAgo.setUTCDate(currentMonday.getUTCDate() - 7 * 7); // 8 weeks back (current week is week 8)
+    let period;
+    try {
+      period = resolvePeriod(periodStart, periodEnd, now);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+    const { start, endExclusive } = period;
 
-    const weekRows = await this.prisma.client.$queryRaw<WeeklyRow[]>`
+    // ── 1. Série do gráfico: semanas ou meses dentro do período ───────────
+    // `unit` vem de um conjunto fechado de duas strings, nunca de entrada.
+    const unit = Prisma.raw(period.granularity);
+    const seriesRows = await this.prisma.client.$queryRaw<SeriesRow[]>`
       SELECT
-        date_trunc('week', occurred_at)                            AS week_start,
-        date_trunc('week', occurred_at) + INTERVAL '6 days'       AS week_end,
+        date_trunc('${unit}', occurred_at) AS bucket_start,
         SUM(CASE WHEN type = ${TransactionType.income}::\"TransactionType\" THEN amount ELSE 0 END)  AS income,
-        SUM(CASE WHEN type = ${TransactionType.expense}::\"TransactionType\" THEN amount ELSE 0 END) AS expense,
-        SUM(CASE WHEN type = ${TransactionType.income}::\"TransactionType\" THEN amount ELSE -amount END) AS net
+        SUM(CASE WHEN type = ${TransactionType.expense}::\"TransactionType\" THEN amount ELSE 0 END) AS expense
       FROM financial_transactions
       WHERE tenant_id       = ${tid}
         AND congregation_id = ${cid}
-        AND occurred_at    >= ${eightWeeksAgo}
-      GROUP BY date_trunc('week', occurred_at)
-      ORDER BY week_start ASC
+        AND occurred_at    >= ${start}
+        AND occurred_at     < ${endExclusive}
+      GROUP BY 1
+      ORDER BY 1 ASC
     `;
 
-    // Fill all 8 slots with zeros for missing weeks
-    const weekMap = new Map(weekRows.map((r) => [r.week_start.toISOString(), r]));
-    const weekly = Array.from({ length: 8 }, (_, i) => {
-      const ws = new Date(eightWeeksAgo);
-      ws.setUTCDate(eightWeeksAgo.getUTCDate() + i * 7);
-      const we = new Date(ws);
-      we.setUTCDate(ws.getUTCDate() + 6);
-      const row = weekMap.get(ws.toISOString());
+    const rowByBucket = new Map(seriesRows.map((r) => [dayKey(r.bucket_start), r]));
+    const series = buildBuckets(period).map((b) => {
+      const row = rowByBucket.get(dayKey(b.start));
+      const income = toNum(row?.income);
+      const expense = toNum(row?.expense);
       return {
-        week_start: ws,
-        week_end: we,
-        income: toNum(row?.income),
-        expense: toNum(row?.expense),
-        net: toNum(row?.net),
+        // O primeiro e o último balde são recortados no período escolhido.
+        start: dayKey(b.start < period.start ? period.start : b.start),
+        end: dayKey(b.end > period.end ? period.end : b.end),
+        income,
+        expense,
+        net: income - expense,
       };
     });
 
-    // ── 2. Current month vs last month ─────────────────────────────────────
-    const curMonthStart = monthStart(now.getUTCFullYear(), now.getUTCMonth());
-    const lastMonthStart = monthStart(now.getUTCFullYear(), now.getUTCMonth() - 1);
-
-    const baseWhere = (gte: Date, lt: Date) => ({
+    // ── 2. Totais do período e variação contra o período anterior ─────────
+    const previous = previousPeriod(period);
+    const periodWhere = (gte: Date, lt: Date) => ({
       tenant_id: tid,
       congregation_id: cid,
       occurred_at: { gte, lt },
     });
 
-    // Só três agregações: havia uma quarta, de despesa do mês anterior, cujo
-    // resultado era descartado — `vs_last_month_pct` compara receita apenas.
-    // Se a intenção era mostrar variação de despesa também, o cálculo nunca
-    // chegou a existir; a query, sim, e ia ao banco a cada carga do dashboard.
-    const [curInc, curExp, lastInc] = await Promise.all([
+    // Só três agregações: `vs_previous_pct` compara receita apenas.
+    const [curInc, curExp, prevInc] = await Promise.all([
       this.prisma.client.financialTransaction.aggregate({
-        where: { ...baseWhere(curMonthStart, now), type: TransactionType.income },
+        where: { ...periodWhere(start, endExclusive), type: TransactionType.income },
         _sum: { amount: true },
       }),
       this.prisma.client.financialTransaction.aggregate({
-        where: { ...baseWhere(curMonthStart, now), type: TransactionType.expense },
+        where: { ...periodWhere(start, endExclusive), type: TransactionType.expense },
         _sum: { amount: true },
       }),
       this.prisma.client.financialTransaction.aggregate({
-        where: { ...baseWhere(lastMonthStart, curMonthStart), type: TransactionType.income },
+        where: { ...periodWhere(previous.start, previous.endExclusive), type: TransactionType.income },
         _sum: { amount: true },
       }),
     ]);
 
     const curIncome = toNum(curInc._sum.amount);
     const curExpense = toNum(curExp._sum.amount);
-    const lastIncome = toNum(lastInc._sum.amount);
+    const prevIncome = toNum(prevInc._sum.amount);
 
-    const vs_last_month_pct =
-      lastIncome === 0
+    const vs_previous_pct =
+      prevIncome === 0
         ? null
-        : Math.round(((curIncome - lastIncome) / lastIncome) * 100 * 100) / 100;
+        : Math.round(((curIncome - prevIncome) / prevIncome) * 100 * 100) / 100;
 
-    // ── 3. Top 5 income categories (current month) ─────────────────────────
+    // ── 3. Top 5 categorias de receita (período) ──────────────────────────
     const topRaw = await this.prisma.client.$queryRaw<TopCatRow[]>`
       SELECT category_id, SUM(amount) AS total
       FROM financial_transactions
       WHERE tenant_id       = ${tid}
         AND congregation_id = ${cid}
         AND type            = ${TransactionType.income}::\"TransactionType\"
-        AND occurred_at    >= ${curMonthStart}
+        AND occurred_at    >= ${start}
+        AND occurred_at     < ${endExclusive}
       GROUP BY category_id
       ORDER BY total DESC
       LIMIT 5
@@ -148,7 +139,7 @@ export class DashboardService {
       total: toNum(r.total),
     }));
 
-    // ── 4. Average per contributor ─────────────────────────────────────────
+    // ── 4. Média por contribuinte (período) ───────────────────────────────
     const [contribRows] = await this.prisma.client.$queryRaw<ContribRow[]>`
       SELECT
         COALESCE(SUM(amount), 0)                                             AS total,
@@ -157,13 +148,16 @@ export class DashboardService {
       WHERE tenant_id       = ${tid}
         AND congregation_id = ${cid}
         AND type            = ${TransactionType.income}::\"TransactionType\"
-        AND occurred_at    >= ${curMonthStart}
+        AND occurred_at    >= ${start}
+        AND occurred_at     < ${endExclusive}
     `;
     const donorCount = Number(contribRows.donor_count);
     const average_per_contributor =
       donorCount > 0 ? toNum(contribRows.total) / donorCount : 0;
 
-    // ── 5. Tithe active count (last 30 days) ───────────────────────────────
+    // ── 5. Dizimistas ativos: últimos 30 dias a partir de hoje ────────────
+    // Não acompanha o período escolhido de propósito — "ativo" é uma foto do
+    // presente, não do intervalo que se está olhando.
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const dizimo = await this.prisma.client.financialCategory.findFirst({
       where: { tenant_id: tid, congregation_id: cid, name: 'Dízimo' },
@@ -185,12 +179,17 @@ export class DashboardService {
     }
 
     return {
-      weekly,
-      current_month: {
+      period: {
+        start: dayKey(period.start),
+        end: dayKey(period.end),
+        granularity: period.granularity,
+      },
+      series,
+      totals: {
         income: curIncome,
         expense: curExpense,
         net: curIncome - curExpense,
-        vs_last_month_pct,
+        vs_previous_pct,
       },
       top_income_categories,
       average_per_contributor,

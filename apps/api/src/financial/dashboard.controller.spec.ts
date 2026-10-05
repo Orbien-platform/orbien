@@ -33,12 +33,15 @@ describe('DashboardController', () => {
   });
 
   it('getWeekly delega ao DashboardService e exige papel de leitura financeira', async () => {
-    dashboardService.getWeeklyDashboard.mockResolvedValue({ weekly: [] } as never);
+    dashboardService.getWeeklyDashboard.mockResolvedValue({ series: [] } as never);
 
-    const result = await controller.getWeekly(user);
+    const result = await controller.getWeekly(
+      { period_start: '2026-10-01', period_end: '2026-10-31' },
+      user,
+    );
 
-    expect(dashboardService.getWeeklyDashboard).toHaveBeenCalledWith(user);
-    expect(result).toEqual({ weekly: [] });
+    expect(dashboardService.getWeeklyDashboard).toHaveBeenCalledWith(user, '2026-10-01', '2026-10-31');
+    expect(result).toEqual({ series: [] });
     expect(rolesFor('getWeekly')).toEqual(DASHBOARD_ROLES);
   });
 
