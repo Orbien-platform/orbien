@@ -13,6 +13,7 @@ import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financ
 import { ExportButton } from "@/components/financial/ExportButton";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { CostCentersModal } from "@/components/financial/CostCentersModal";
+import { CashBalanceCard } from "@/components/financial/CashBalanceCard";
 import { WeeklyDashboardCard } from "@/components/financial/WeeklyDashboardCard";
 import { PeriodNavigator } from "@/components/financial/PeriodNavigator";
 import { ForecastCard } from "@/components/financial/ForecastCard";
@@ -86,6 +87,9 @@ interface DRE {
 function frequencyLabel(freq: "weekly" | "monthly" | "yearly"): string {
   return freq === "weekly" ? "Semanal" : freq === "monthly" ? "Mensal" : "Anual";
 }
+
+/** Dia civil "AAAA-MM-DD", o formato do `<input type="date">`. */
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 function statusLabel(status: Transaction["status"]): string {
   return status === "pending" ? "Não pago" : status === "paid" ? "Pago" : "Exportado";
@@ -271,6 +275,9 @@ export default function FinanceiroPage() {
 
   // ── Fetch transactions (do período) + categories ────────────────────────────
   const [txReload, setTxReload] = useState(0);
+  // O caixa vem de outro endpoint e recarrega junto de qualquer mudança que
+  // mexa em dinheiro: criar, editar, excluir ou pagar um lançamento.
+  const [cashReload, setCashReload] = useState(0);
   const lastTxKey = useRef("");
 
   const loadTx = useCallback(() => {
@@ -321,6 +328,7 @@ export default function FinanceiroPage() {
 
   function refreshTx() {
     setTxReload((n) => n + 1);
+    setCashReload((n) => n + 1);
   }
 
   // ── Fetch recurring rules ────────────────────────────────────────────────────
@@ -383,6 +391,7 @@ export default function FinanceiroPage() {
 
     try {
       await api.patch(`/financial/transactions/${tx.id}/status`, { status: nextStatus });
+      setCashReload((n) => n + 1);
     } catch {
       setTransactions((prev) =>
         prev.map((t) => (t.id === tx.id ? { ...t, status: previousStatus } : t))
@@ -701,6 +710,10 @@ export default function FinanceiroPage() {
         <Tabs.Panel value="overview" className="pt-5">
           <div className="space-y-5">
             <PeriodNavigator period={overviewPeriod} onChange={setOverviewPeriod} />
+            {/* Intervalo livre sem data final ainda não tem fim para cortar o caixa. */}
+            {DAY_KEY.test(overviewPeriod.end) && (
+              <CashBalanceCard asOf={overviewPeriod.end} reloadKey={cashReload} />
+            )}
             <WeeklyDashboardCard period={overviewPeriod} />
             <ForecastCard />
           </div>
@@ -774,11 +787,14 @@ export default function FinanceiroPage() {
               </div>
 
               {!txLoadError && !accessDenied && (
+                <CashBalanceCard asOf={DAY_KEY.test(txTo) ? txTo : todayKey()} reloadKey={cashReload} />
+              )}
+              {!txLoadError && !accessDenied && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Apuração do período">
                 <TotalCard label="Total de entradas" value={txTotals.income} tone="income" loading={loadingTx} />
                 <TotalCard label="Total de saídas" value={txTotals.expense} tone="expense" loading={loadingTx} />
                 <TotalCard
-                  label="Saldo (entradas − saídas)"
+                  label="Saldo do período"
                   value={txTotals.net}
                   tone={txTotals.net >= 0 ? "income" : "expense"}
                   loading={loadingTx}

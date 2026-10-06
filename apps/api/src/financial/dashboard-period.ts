@@ -162,6 +162,19 @@ export function buildBuckets(period: DashboardPeriod): PeriodBucket[] {
   return buckets;
 }
 
+/**
+ * Data de corte do caixa. Sem data, é hoje em Brasília. O corte é o fim do
+ * dia pedido: `endExclusive` é o dia seguinte, 00:00Z — a mesma fronteira do
+ * dashboard. Data impossível vem como `Error` (o service devolve 400).
+ */
+export function resolveAsOf(
+  asOf?: string,
+  now: Date = new Date(),
+): { asOf: Date; endExclusive: Date } {
+  const day = asOf ? parseDay(asOf) : todayInSaoPaulo(now);
+  return { asOf: day, endExclusive: addDays(day, 1) };
+}
+
 export function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }

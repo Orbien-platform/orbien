@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
-import { buildBuckets, dayKey, previousPeriod, resolvePeriod } from './dashboard-period';
+import { buildBuckets, dayKey, previousPeriod, resolveAsOf, resolvePeriod } from './dashboard-period';
 
 type SeriesRow = {
   bucket_start: Date;
@@ -195,5 +195,43 @@ export class DashboardService {
       average_per_contributor,
       tithe_active_count,
     };
+  }
+
+  /**
+   * Caixa da congregação até o fim do dia `asOf` (hoje, sem data): tudo o que
+   * já entrou menos o que já saiu, desde o primeiro lançamento. Só `paid` e
+   * `confirmed` contam; o `pending` volta à parte, para a tela mostrar o que
+   * ainda vai entrar e sair sem misturar com o dinheiro que existe. Não segue
+   * nenhum outro filtro da lista — o caixa é um fato, não um recorte.
+   */
+  async getCashBalance(user: JwtPayload, asOf?: string) {
+    let cut;
+    try {
+      cut = resolveAsOf(asOf);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+
+    const groups = await this.prisma.client.financialTransaction.groupBy({
+      by: ['type', 'status'],
+      where: {
+        tenant_id: user.tenant_id,
+        congregation_id: user.congregation_id,
+        occurred_at: { lt: cut.endExclusive },
+      },
+      _sum: { amount: true },
+    });
+
+    let income = 0;
+    let expense = 0;
+    const pending = { income: 0, expense: 0 };
+    for (const g of groups) {
+      const value = toNum(g._sum.amount);
+      if (g.status === 'pending') pending[g.type] += value;
+      else if (g.type === TransactionType.income) income += value;
+      else expense += value;
+    }
+
+    return { as_of: dayKey(cut.asOf), balance: income - expense, pending };
   }
 }

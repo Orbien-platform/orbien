@@ -17,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { DashboardService } from './dashboard.service';
+import { CashBalanceQueryDto } from './dto/cash-balance-query.dto';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { ForecastService } from './forecast.service';
 
@@ -37,6 +38,13 @@ export class DashboardController {
   @Roles(...DASHBOARD_ROLES)
   getWeekly(@Query() query: DashboardQueryDto, @CurrentUser() user: JwtPayload) {
     return this.dashboardService.getWeeklyDashboard(user, query.period_start, query.period_end);
+  }
+
+  // Caixa até a data fim da tela: sem gate de plano, como `weekly`.
+  @Get('cash-balance')
+  @Roles(...DASHBOARD_ROLES)
+  getCashBalance(@Query() query: CashBalanceQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.dashboardService.getCashBalance(user, query.as_of);
   }
 
   // "Gráfico de forecast" é Premium — mesma seção.
