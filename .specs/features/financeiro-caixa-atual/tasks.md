@@ -10,7 +10,7 @@ e `TotalCard`/`KpiCard` existentes. Sem migration, sem RLS nova.
 | T3 | Web: componente `CashBalanceCard` (`components/financial/`) + hook de busca com guard de sequência; estados loading/erro/403/negativo; linha "a pagar/receber" | CAIXA-04,07 | Vitest do componente. **Carregar `frontend-design` antes** |
 | T4 | Web Visão Geral: `CashBalanceCard` com `as_of = overviewPeriod.end`, acima do `WeeklyDashboardCard` | CAIXA-04 | `page.test.tsx` |
 | T5 | Web Lançamentos: card ao lado da apuração com `as_of = txTo \|\| todayKey()`; refetch via `txReload` em criar/excluir/status/edição; rótulo do "Saldo" vira "Saldo do período" | CAIXA-05,06 | `page.test.tsx`: filtros não refazem a busca; mutação refaz |
-| T6 | e2e em `teste1-church`: pagar lançamento e ver caixa mudar (`apps/web/e2e/financeiro.spec.ts`) | CAIXA-06 | `playwright` local |
-| T7 | `docs/PLANO.md`: registrar item (`PROD-`), se couber | — | `check-skills`/lint |
+| T6 | e2e em `teste1-church` | CAIXA-06 | **Adiado**: roda só no CI com seed; coberto por teste de página |
+| T7 | `docs/PLANO.md` | — | **Dispensado**: sem pendência nova |
 
 Ordem: T1 → T2 → T3 → (T4 ∥ T5) → T6 → T7. Um commit por tarefa; Verifier fresco ao final.

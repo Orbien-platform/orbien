@@ -120,13 +120,13 @@ financeiro, e hoje exige somar de cabeça ou abrir o DRE de todo o histórico.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| CAIXA-01 | P1 Visão Geral AC1-2 (cálculo, default hoje) | Execute | Pending |
-| CAIXA-02 | P1 Visão Geral AC3 (400) | Execute | Pending |
-| CAIXA-03 | P1 Visão Geral AC4 (pending separado) | Execute | Pending |
-| CAIXA-04 | P1 Visão Geral AC5-7 (card, negativo, estados) | Execute | Pending |
-| CAIXA-05 | P1 Lançamentos AC1-2,6 (card, filtros, rótulos) | Execute | Pending |
-| CAIXA-06 | P1 Lançamentos AC3-5 (refetch, sequência, revert) | Execute | Pending |
-| CAIXA-07 | P2 a pagar/receber | Execute | Pending |
+| CAIXA-01 | P1 Visão Geral AC1-2 (cálculo, default hoje) | Execute | Verified |
+| CAIXA-02 | P1 Visão Geral AC3 (400) | Execute | Verified |
+| CAIXA-03 | P1 Visão Geral AC4 (pending separado) | Execute | Verified |
+| CAIXA-04 | P1 Visão Geral AC5-7 (card, negativo, estados) | Execute | Verified |
+| CAIXA-05 | P1 Lançamentos AC1-2,6 (card, filtros, rótulos) | Execute | Verified |
+| CAIXA-06 | P1 Lançamentos AC3-5 (refetch, sequência, revert) | Execute | Verified |
+| CAIXA-07 | P2 a pagar/receber | Execute | Verified |
 
 ## Success Criteria
 
