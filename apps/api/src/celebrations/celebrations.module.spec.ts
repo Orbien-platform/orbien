@@ -16,6 +16,7 @@ import { CelebrationScheduleService } from './celebration-schedule.service';
 import { CelebrationScheduleSuggestionService } from './celebration-schedule-suggestion.service';
 import { CelebrationAssignmentService } from './celebration-assignment.service';
 import { ScheduleTemplateService } from './schedule-template.service';
+import { CelebrationSwapService } from './celebration-swap.service';
 import { PdfExportService } from './pdf-export.service';
 
 describe('CelebrationsModule', () => {
@@ -34,6 +35,7 @@ describe('CelebrationsModule', () => {
     }).compile();
 
     expect(moduleRef.get(CelebrationsService)).toBeInstanceOf(CelebrationsService);
+    expect(moduleRef.get(CelebrationSwapService)).toBeInstanceOf(CelebrationSwapService);
     expect(moduleRef.get(CelebrationInstancesService)).toBeInstanceOf(CelebrationInstancesService);
     expect(moduleRef.get(ServiceOrdersService)).toBeInstanceOf(ServiceOrdersService);
     expect(moduleRef.get(ServiceOrderItemsService)).toBeInstanceOf(ServiceOrderItemsService);

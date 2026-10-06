@@ -34,3 +34,57 @@ export interface Assignment {
 export interface Unavailability {
   dates: { date: string }[];
 }
+
+// Troca de escala (v2) — espelham `SwapCandidate`/`SwapRequestView` de
+// `apps/api/src/celebrations/celebration-swap.service.ts`.
+
+/** `busy`: já escalado em outro ministério no mesmo culto; `unavailable`: marcou a data. */
+export type CandidateAvailability = "free" | "busy" | "unavailable";
+
+export interface SwapCandidate {
+  volunteer_profile_id: string;
+  full_name: string;
+  availability: CandidateAvailability;
+}
+
+export type SwapRequestStatus = "pending" | "accepted" | "declined" | "cancelled";
+
+export interface SwapPerson {
+  volunteer_profile_id: string;
+  full_name: string;
+}
+
+export interface SwapRequest {
+  id: string;
+  status: SwapRequestStatus;
+  message: string | null;
+  created_at: string;
+  responded_at: string | null;
+  assignment: {
+    id: string;
+    scheduled_date: string;
+    celebration: { name: string; start_time: string };
+    ministry: { id: string; name: string };
+  };
+  requester: SwapPerson;
+  /** `null`: pedido aberto a qualquer um do ministério. */
+  target: SwapPerson | null;
+  accepted_by: SwapPerson | null;
+}
+
+export interface MySwapRequests {
+  incoming: SwapRequest[];
+  outgoing: SwapRequest[];
+}
+
+/** `GET /volunteers/me/profile`. */
+export interface MyVolunteerProfile {
+  id: string;
+  ministries: { id: string; name: string; role: "leader" | "volunteer" }[];
+  skills: string[];
+  /** `{ sunday: ["morning", "evening"], ... }` — o formato de `CreateVolunteerProfileDto`. */
+  availability: Record<string, string[]>;
+  restrictions: string | null;
+  volunteer_since: string;
+  served_count: number;
+}

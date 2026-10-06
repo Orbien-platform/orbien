@@ -524,6 +524,65 @@ mesmo formato de `/doar/{tenant_slug}` e o mesmo que `signupUrl` monta no app.
   de novo" para quem já tinha visitado.
 - O que ficou de fora virou `PEND-18` e `PEND-19`.
 
+### ~~PROD-35 · Troca de escala e perfil de voluntário no app (v2)~~ · fechado
+
+Entregue em 2026-10-06. "Minhas escalas" (`apps/mobile/src/app/escala.tsx`)
+virou três abas na mesma pilha, como o `EscalasScreen` do protótipo:
+Próximas, Trocas e Meu perfil.
+
+- **Troca entre voluntários — API.** Tabela nova `assignment_swap_requests`,
+  com RLS de congregação em `025_rls_assignment_swap_requests.sql`. Ela entra
+  no `bootstrap-db.sh` depois do 024 e tem a sua verificação no passo 7. Um
+  índice parcial deixa só um pedido `pending` por escala. As rotas ficam em
+  `CelebrationSwapController`, com os mesmos papéis e o mesmo plano Premium de
+  `PATCH /assignments/:id/respond`:
+  - `GET /assignments/:id/swap-candidates`: colegas do ministério que podem
+    assumir. Os livres vêm primeiro, depois quem já está em outro ministério no
+    mesmo culto, depois quem marcou indisponibilidade na data.
+  - `POST /assignments/:id/swap-requests`: pede a um colega, ou a qualquer um do
+    ministério quando vai sem destinatário.
+  - `GET /volunteers/my-swap-requests`: os pedidos recebidos e os enviados.
+  - `PATCH /swap-requests/:id/accept|decline|cancel`.
+
+  **Aceitar** é uma transação só: a escala original vira `swapped` e quem
+  aceitou ganha a sua, já `confirmed`. As duas atualizações são condicionais,
+  então quando dois colegas aceitam ao mesmo tempo, o segundo recebe 409.
+  Push para o destinatário, ou para o ministério inteiro, e para quem pediu
+  quando o pedido é aceito ou recusado.
+- **Perfil — API.** `GET /volunteers/me/profile` devolve os ministérios, as
+  habilidades, a disponibilidade semanal, as restrições e as escalas
+  confirmadas de cultos que já passaram. É só leitura: o perfil continua sendo
+  editado pela secretaria (`volunteers/profiles`).
+- **App.**
+  - A aba Trocas mostra os pedidos recebidos (Aceitar; Recusar só quando o
+    pedido é dirigido a quem lê) e os enviados (com status e Cancelar).
+  - "Pedir troca" no card da escala abre `/troca/[id]`.
+  - O componente novo `Segmented` é o `Seg` da v2. A central de Notificações
+    pode usá-lo também.
+- **Testes.**
+  - Unidade da API a 100%.
+  - `test/integration/assignment-swaps.spec.ts`, em `teste2-church`, porque as
+    rotas são Premium.
+  - `test/rls/assignment-swap-requests.spec.ts`, com tenants descartáveis.
+  - No mobile, os arquivos novos estão a 100%, menos um ramo em `escala.tsx`,
+    que fica em 98,57%.
+- O que ficou de fora virou `PROD-36`. Check-in por QR ou localização é
+  `promessa` no protótipo e não entrou.
+
+### PROD-36 · Voluntário edita o próprio perfil e aceita o termo de voluntariado · aberto
+
+"Meu perfil" (`PROD-35`) só lê. O protótipo deixa a disponibilidade semanal
+tocável e mostra o "Termo de voluntariado" com a data do aceite (`promessa`).
+
+Para fazer:
+- uma rota `PATCH /volunteers/me/profile` restrita a `availability`, com
+  auditoria como a do `PATCH /me`;
+- o texto do termo, em `legal/consent-terms/` (revisão em `CONF-01`);
+- o aceite gravado como `consent_records`.
+
+Decisão em aberto: se a habilidade também é editável pelo voluntário, ou se
+continua sendo da liderança.
+
 ---
 
 ## 6. Plano de produto sem código

@@ -341,7 +341,13 @@ na tela "em breve" do site.
   `/contribuir`.
 - [ ] **Contribuir — o que ficou de fora:** QR dinâmico e recorrente (dependem
   do `PROD-28`), categorias vindas da igreja e teste em aparelho.
-- [ ] **Minhas escalas:** pedir troca e perfil de voluntário na mesma pilha.
+- [x] **Minhas escalas** (`PROD-35`, 2026-10-06): Próximas, Trocas e Meu
+  perfil em abas segmentadas na mesma pilha; "Pedir troca" abre os
+  substitutos do ministério (`/troca/[id]`). A API ganhou o pedido de troca
+  (`assignment_swap_requests`, RLS `025`) e `GET /volunteers/me/profile`.
+- [ ] **Minhas escalas — o que ficou de fora:** o voluntário editar a própria
+  disponibilidade e o termo de voluntariado (`PROD-36`), check-in por QR ou
+  localização (`promessa` no protótipo) e teste em aparelho.
 - [ ] **Celebração:** minha função em destaque já existe; o modo ao vivo do
   Host é `PROPOSTA`.
 - [ ] **Notificações:** central + preferências em abas (segmentado).

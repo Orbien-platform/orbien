@@ -7,17 +7,31 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
-jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
+// `useFocusEffect` roda no primeiro foco e devolve a limpeza ao desmontar,
+// como na navegação real.
+jest.mock("expo-router", () => {
+  const { useEffect } = jest.requireActual("react");
+  return {
+    useRouter: () => ({ push: mockPush }),
+    useFocusEffect: (callback: () => () => void) => {
+      useEffect(() => callback(), [callback]);
+    },
+  };
+});
 
 const mockGetMyAssignments = jest.fn();
 const mockRespondToAssignment = jest.fn();
 const mockCheckIn = jest.fn();
+const mockGetMySwapRequests = jest.fn();
+const mockRespondToSwap = jest.fn();
+const mockGetMyVolunteerProfile = jest.fn();
 jest.mock("../../lib/escala/escala-client", () => ({
   getMyAssignments: (...args: unknown[]) => mockGetMyAssignments(...args),
   respondToAssignment: (...args: unknown[]) => mockRespondToAssignment(...args),
   checkIn: (...args: unknown[]) => mockCheckIn(...args),
+  getMySwapRequests: (...args: unknown[]) => mockGetMySwapRequests(...args),
+  respondToSwap: (...args: unknown[]) => mockRespondToSwap(...args),
+  getMyVolunteerProfile: (...args: unknown[]) => mockGetMyVolunteerProfile(...args),
 }));
 
 import { HttpError, NetworkError } from "../../lib/api/errors";
@@ -41,9 +55,27 @@ const CONFIRMED_ASSIGNMENT = {
   status: "confirmed",
 };
 
+const SWAP_REQUEST = {
+  id: "r1",
+  status: "pending",
+  message: null,
+  created_at: "2026-09-01T12:00:00.000Z",
+  responded_at: null,
+  assignment: {
+    id: "a1",
+    scheduled_date: "2026-09-13T00:00:00.000Z",
+    celebration: { name: "Culto de domingo", start_time: "09:30" },
+    ministry: { id: "m1", name: "Louvor" },
+  },
+  requester: { volunteer_profile_id: "vp-me", full_name: "Caio Freitas" },
+  target: null,
+  accepted_by: null,
+};
+
 describe("EscalaScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetMySwapRequests.mockResolvedValue({ incoming: [], outgoing: [] });
   });
 
   it("carrega e lista os assignments retornados por getMyAssignments (AC 1)", async () => {
@@ -314,5 +346,151 @@ describe("EscalaScreen", () => {
       expect(screen.queryByTestId("confirm-a1")).toBeNull();
     });
     expect(screen.getByTestId("assignment-a2")).toBeTruthy();
+  });
+});
+
+describe("EscalaScreen — troca e perfil (v2)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetMySwapRequests.mockResolvedValue({ incoming: [], outgoing: [] });
+  });
+
+  it("escala pendente ou confirmada sem check-in oferece Pedir troca, que abre a pilha com o cabeçalho", async () => {
+    mockGetMyAssignments.mockResolvedValue([
+      { ...PENDING_ASSIGNMENT, scheduled_date: "2026-09-13T00:00:00.000Z", celebration: { id: "c1", name: "Culto", start_time: "09:30" } },
+      CONFIRMED_ASSIGNMENT,
+      { ...CONFIRMED_ASSIGNMENT, id: "a3", checked_in_at: "2026-09-13T12:00:00.000Z" },
+      { ...PENDING_ASSIGNMENT, id: "a4", status: "declined" },
+    ]);
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("swap-a1"));
+
+    expect(screen.getByTestId("swap-a2")).toBeTruthy();
+    expect(screen.queryByTestId("swap-a3")).toBeNull();
+    expect(screen.queryByTestId("swap-a4")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("swap-a1"));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/troca/[id]",
+      params: { id: "a1", ministerio: "Louvor", quando: "dom, 13 set · 09:30" },
+    });
+  });
+
+  it("escala sem data navega com o cabeçalho só do ministério", async () => {
+    mockGetMyAssignments.mockResolvedValue([{ ...CONFIRMED_ASSIGNMENT, scheduled_date: "sem data" }]);
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("swap-a2"));
+    await fireEvent.press(screen.getByTestId("swap-a2"));
+
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.objectContaining({ params: { id: "a2", ministerio: "Louvor", quando: "" } }),
+    );
+  });
+
+  it("escala com pedido em aberto mostra a quem foi pedido no lugar do botão", async () => {
+    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT, CONFIRMED_ASSIGNMENT]);
+    mockGetMySwapRequests.mockResolvedValue({
+      incoming: [],
+      outgoing: [
+        SWAP_REQUEST,
+        {
+          ...SWAP_REQUEST,
+          id: "r2",
+          assignment: { ...SWAP_REQUEST.assignment, id: "a2" },
+          target: { volunteer_profile_id: "vp-bia", full_name: "Bianca Lopes" },
+        },
+        // resolvido: não conta como aberto
+        { ...SWAP_REQUEST, id: "r3", status: "declined", assignment: { ...SWAP_REQUEST.assignment, id: "a9" } },
+      ],
+    });
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("swap-open-a1"));
+
+    expect(screen.getByText("Troca pedida ao ministério")).toBeTruthy();
+    expect(screen.getByText("Troca pedida a Bianca Lopes")).toBeTruthy();
+    expect(screen.queryByTestId("swap-a1")).toBeNull();
+  });
+
+  it("falha ao carregar os pedidos não derruba as escalas, e a aba Trocas mostra os vazios", async () => {
+    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
+    mockGetMySwapRequests.mockRejectedValue(new Error("500"));
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("swap-a1"));
+
+    await fireEvent.press(screen.getByTestId("escala-abas-trocas"));
+    expect(screen.getByTestId("trocas-recebidas-vazio")).toBeTruthy();
+    expect(screen.queryByTestId("escala-list")).toBeNull();
+  });
+
+  it("aba Trocas conta os pedidos recebidos e aceitar recarrega escalas e pedidos", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockGetMySwapRequests.mockResolvedValue({
+      incoming: [{ ...SWAP_REQUEST, requester: { volunteer_profile_id: "vp-ana", full_name: "Ana Souza" } }],
+      outgoing: [],
+    });
+    mockRespondToSwap.mockResolvedValue({ ...SWAP_REQUEST, status: "accepted" });
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByLabelText("Trocas, 1 pendentes"));
+
+    await fireEvent.press(screen.getByTestId("escala-abas-trocas"));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("troca-aceitar-r1"));
+    });
+
+    expect(mockRespondToSwap).toHaveBeenCalledWith("r1", "accept");
+    expect(mockGetMyAssignments).toHaveBeenCalledTimes(2);
+    expect(mockGetMySwapRequests).toHaveBeenCalledTimes(2);
+  });
+
+  it("aba Meu perfil monta o painel do perfil; Próximas volta à lista", async () => {
+    mockGetMyAssignments.mockResolvedValue([]);
+    mockGetMyVolunteerProfile.mockReturnValue(new Promise(() => undefined));
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("escala-empty"));
+
+    await fireEvent.press(screen.getByTestId("escala-abas-perfil"));
+    expect(mockGetMyVolunteerProfile).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("escala-list")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("escala-abas-proximas"));
+    expect(screen.getByTestId("escala-list")).toBeTruthy();
+  });
+
+  it("antes de os pedidos chegarem, a aba Trocas fica vazia e não há botão de troca", async () => {
+    mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
+    mockGetMySwapRequests.mockReturnValue(new Promise(() => undefined));
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("assignment-a1"));
+    expect(screen.queryByTestId("swap-a1")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("escala-abas-trocas"));
+    expect(screen.queryByTestId("trocas")).toBeNull();
+  });
+
+  it("pedidos que chegam depois de a tela desmontar são ignorados, sucesso ou falha", async () => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (reason: unknown) => void;
+    mockGetMyAssignments.mockReturnValue(new Promise(() => undefined));
+    mockGetMySwapRequests
+      .mockReturnValueOnce(new Promise((r) => (resolve = r)))
+      .mockReturnValueOnce(new Promise((_, r) => (reject = r)));
+
+    const first = await render(<EscalaScreen />);
+    await act(async () => first.unmount());
+    const second = await render(<EscalaScreen />);
+    await act(async () => second.unmount());
+    await act(async () => {
+      resolve({ incoming: [], outgoing: [] });
+      reject(new Error("falha"));
+    });
+
+    expect(screen.queryByTestId("escala-abas")).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import { VolunteerMinistriesController } from './volunteer-ministries.controller
 import { VolunteerMinistriesService } from './volunteer-ministries.service';
 import { UnavailabilityController } from './unavailability.controller';
 import { UnavailabilityService } from './unavailability.service';
+import { MyVolunteerProfileController } from './my-volunteer-profile.controller';
 
 @Module({
   imports: [PrismaModule, ContentModule],
@@ -17,6 +18,7 @@ import { UnavailabilityService } from './unavailability.service';
     VolunteerProfilesController,
     VolunteerMinistriesController,
     UnavailabilityController,
+    MyVolunteerProfileController,
   ],
   providers: [
     MinistriesService,
