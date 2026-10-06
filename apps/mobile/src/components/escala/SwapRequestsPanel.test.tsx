@@ -95,6 +95,7 @@ describe("SwapRequestsPanel", () => {
 
   it.each([
     [new HttpError(409, "conflito"), "Este pedido não está mais em aberto.", 1],
+    [new HttpError(422, "rascunho"), "Este pedido não está mais em aberto.", 1],
     [
       new HttpError(403, "proibido"),
       "Você não pode assumir esta escala: não serve no ministério ou já está nela.",

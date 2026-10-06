@@ -79,7 +79,9 @@ export function SwapRequestsPanel({ swaps, onChanged }: SwapRequestsPanelProps) 
       await respondToSwap(id, action);
       onChanged();
     } catch (err) {
-      if (err instanceof HttpError && err.status === 409) {
+      if (err instanceof HttpError && (err.status === 409 || err.status === 422)) {
+        // 409: outro colega aceitou, ou a escala mudou de estado; 422: a
+        // escala voltou a rascunho ou já passou. Nos dois, a lista está velha.
         setError("Este pedido não está mais em aberto.");
         onChanged();
       } else if (err instanceof HttpError && err.status === 403 && action === "accept") {

@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  AssignmentStatus,
   CelebrationAssignment,
   CelebrationInstance,
   CelebrationMinistry,
@@ -51,7 +52,9 @@ export class CelebrationScheduleService {
       ...schedule,
       ministries: schedule.ministries.map((m) => ({
         ...m,
-        assigned_count: m.assignments.length,
+        // `swapped` fica na lista (a liderança vê quem trocou), mas não ocupa
+        // a vaga: quem assumiu tem a própria linha.
+        assigned_count: m.assignments.filter((a) => a.status !== AssignmentStatus.swapped).length,
       })),
     };
   }

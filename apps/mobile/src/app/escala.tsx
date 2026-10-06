@@ -52,7 +52,6 @@ import { useTheme } from "../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../lib/theme/tokens";
 
 const ACTION_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
-const NO_SWAPS: MySwapRequests = { incoming: [], outgoing: [] };
 
 const STATUS_BADGE: Record<AssignmentStatus, { label: string; tone: BadgeTone }> = {
   pending: { label: "Pendente", tone: "info" },
@@ -69,6 +68,8 @@ export default function EscalaScreen() {
   const [tab, setTab] = useState<Tab>("proximas");
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [swaps, setSwaps] = useState<MySwapRequests | null>(null);
+  const [swapsFailed, setSwapsFailed] = useState(false);
+  const hasListRef = useRef(false);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // Guarda contra duplo toque: um id em ação (respond ou check-in) não
@@ -86,21 +87,29 @@ export default function EscalaScreen() {
     getMyAssignments()
       .then((result) => {
         if (cancelled) return;
+        hasListRef.current = true;
+        setError(null);
         setAssignments(result);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(describeLoadError(err, "sua escala"));
+        // Recarga ao voltar para a tela: a lista que já está nela fica. O
+        // erro só toma a tela quando não há nada para mostrar.
+        if (!hasListRef.current) setError(describeLoadError(err, "sua escala"));
       });
 
     // Os pedidos de troca são complemento: se falharem, as escalas continuam
-    // na tela e a aba Trocas mostra o que houver (nada).
+    // na tela com os pedidos que já havia. Sem nenhum carregado, "Pedir
+    // troca" não aparece (não dá para saber se já há pedido em aberto) e a
+    // aba Trocas oferece tentar de novo.
     getMySwapRequests()
       .then((result) => {
-        if (!cancelled) setSwaps(result);
+        if (cancelled) return;
+        setSwaps(result);
+        setSwapsFailed(false);
       })
       .catch(() => {
-        if (!cancelled) setSwaps(NO_SWAPS);
+        if (!cancelled) setSwapsFailed(true);
       });
 
     return () => {
@@ -199,10 +208,25 @@ export default function EscalaScreen() {
         />
       </View>
 
-      {tab === "trocas" ? (
-        swaps ? (
-          <SwapRequestsPanel swaps={swaps} onChanged={load} />
-        ) : null
+      {tab === "trocas" && swaps ? <SwapRequestsPanel swaps={swaps} onChanged={load} /> : null}
+      {tab === "trocas" && !swaps && swapsFailed ? (
+        <View testID="trocas-erro-carga" style={styles.empty}>
+          <CircleAlert
+            size={iconSize.emphasis}
+            color={colors.textTertiary}
+            strokeWidth={ICON_STROKE_WIDTH}
+          />
+          <Text style={[typography.h3, styles.emptyTitle, { color: colors.textPrimary }]}>
+            Não foi possível carregar os pedidos de troca.
+          </Text>
+          <AppButton
+            testID="trocas-tentar"
+            title="Tentar de novo"
+            variant="secondary"
+            onPress={load}
+            style={styles.footer}
+          />
+        </View>
       ) : null}
 
       {tab === "perfil" ? <VolunteerProfilePanel /> : null}

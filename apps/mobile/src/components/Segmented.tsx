@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
   count: {
@@ -99,6 +99,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.xs + 2,
+    paddingHorizontal: spacing.xs,
   },
 });

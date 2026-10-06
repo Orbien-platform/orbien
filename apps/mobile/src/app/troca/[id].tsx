@@ -2,9 +2,8 @@
 // docs/design/orbita-v2/produto/proto/app-screens2.jsx).
 //
 // Lista os colegas do ministério que podem assumir a escala (`GET
-// /assignments/:id/swap-candidates`): livres primeiro, depois quem já está
-// em outro ministério no mesmo culto e quem marcou indisponibilidade na
-// data — a API ordena, a tela só diz o porquê. "Pedir" manda a um colega;
+// /assignments/:id/swap-candidates`): livres primeiro, depois quem não está
+// livre no dia — a API ordena e não diz o motivo. "Pedir" manda a um colega;
 // "Pedir para qualquer um do ministério" manda a todos, e o primeiro que
 // aceitar assume.
 //
@@ -30,10 +29,11 @@ import { CircleAlert, CircleCheck, MessageSquare, Users, WifiOff } from "../../l
 import { useTheme } from "../../lib/theme/theme-provider";
 import { spacing, typography } from "../../lib/theme/tokens";
 
+// Sem o motivo de propósito: se o colega marcou indisponibilidade ou já serve
+// em outro ministério é com a liderança.
 const AVAILABILITY_LABEL: Record<CandidateAvailability, string> = {
   free: "Livre neste dia",
-  busy: "Já escalado em outro ministério neste culto",
-  unavailable: "Marcou indisponibilidade nesta data",
+  unavailable: "Não está livre neste dia",
 };
 
 function describeSendError(error: unknown): string {
@@ -134,7 +134,7 @@ export default function TrocaScreen() {
 
       <SectionLabel>Substitutos do ministério</SectionLabel>
       <Text style={[typography.caption, styles.hint, { color: colors.textTertiary }]}>
-        Quem está livre aparece primeiro, pela indisponibilidade que cada um informou.
+        Quem está livre neste dia aparece primeiro.
       </Text>
 
       {candidates !== null && candidates.length === 0 ? (

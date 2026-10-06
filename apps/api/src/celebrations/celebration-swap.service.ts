@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { AssignmentStatus, Prisma, ScheduleStatus, SwapRequestStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService, type OneSignalFilter } from '../content/notifications.service';
+import { NotificationsService, orGroup, type OneSignalFilter } from '../content/notifications.service';
 import { CreateSwapRequestDto } from './dto/create-swap-request.dto';
 
 /**
@@ -26,12 +26,17 @@ import { CreateSwapRequestDto } from './dto/create-swap-request.dto';
 const SWAPPABLE: AssignmentStatus[] = [AssignmentStatus.pending, AssignmentStatus.confirmed];
 const OUTGOING_WINDOW_DAYS = 30;
 
-export type CandidateAvailability = 'free' | 'busy' | 'unavailable';
+export type CandidateAvailability = 'free' | 'unavailable';
 
 export interface SwapCandidate {
   volunteer_profile_id: string;
   full_name: string;
-  /** `busy`: já escalado em outro ministério no mesmo culto; `unavailable`: marcou a data. */
+  /**
+   * `unavailable` junta, de propósito, "já escalado em outro ministério no
+   * mesmo culto" e "marcou indisponibilidade na data": o voluntário vê que o
+   * colega não está livre, não o motivo. Quem vê a indisponibilidade de cada
+   * um é a liderança (`GET volunteers/ministries/:id/availability`).
+   */
   availability: CandidateAvailability;
 }
 
@@ -126,12 +131,11 @@ function toView(req: RequestWithContext): SwapRequestView {
   };
 }
 
-/** Intercala `OR` entre os filtros de tag, como o OneSignal pede. */
+/** Qualquer uma das pessoas: um filtro de tag por pessoa, intercalados por `OR`. */
 function anyPerson(personIds: string[]): OneSignalFilter[] {
-  return personIds.flatMap((id, i): OneSignalFilter[] => [
-    ...(i > 0 ? [{ operator: 'OR' as const }] : []),
-    { field: 'tag', key: 'person_id', relation: '=', value: id },
-  ]);
+  return orGroup(
+    personIds.map((id): OneSignalFilter => ({ field: 'tag', key: 'person_id', relation: '=', value: id })),
+  );
 }
 
 @Injectable()
@@ -300,7 +304,6 @@ export class CelebrationSwapService {
       sameService.filter((a) => SWAPPABLE.includes(a.status)).map((a) => a.volunteer_profile_id),
     );
     const off = new Set(unavailable.map((u) => u.unavailability.volunteer_profile_id));
-    const rank: Record<CandidateAvailability, number> = { free: 0, busy: 1, unavailable: 2 };
 
     return members
       .filter((m) => !inSlot.has(m.volunteerProfile.id))
@@ -309,12 +312,12 @@ export class CelebrationSwapService {
         return {
           volunteer_profile_id: id,
           full_name: m.volunteerProfile.person.full_name,
-          availability: off.has(id) ? 'unavailable' : busy.has(id) ? 'busy' : 'free',
+          availability: off.has(id) || busy.has(id) ? 'unavailable' : 'free',
         };
       })
       .sort(
         (a, b) =>
-          rank[a.availability] - rank[b.availability] ||
+          Number(a.availability === 'unavailable') - Number(b.availability === 'unavailable') ||
           a.full_name.localeCompare(b.full_name, 'pt-BR'),
       );
   }
@@ -370,10 +373,18 @@ export class CelebrationSwapService {
       ? [created.target!.person.id]
       : (
           await this.prisma.client.volunteerMinistry.findMany({
+            // Os mesmos que veem o pedido em "Recebidos": pessoa não apagada
+            // e ainda fora da vaga.
             where: {
               tenant_id: tenantId,
               ministry_id: assignment.celebrationMinistry.ministry_id,
               volunteer_profile_id: { not: me.id },
+              volunteerProfile: {
+                person: { deleted_at: null },
+                celebrationAssignments: {
+                  none: { celebration_ministry_id: assignment.celebration_ministry_id },
+                },
+              },
             },
             select: { volunteerProfile: { select: { person_id: true } } },
           })
@@ -425,9 +436,16 @@ export class CelebrationSwapService {
               },
             },
           ],
+          // O mesmo que `assertSwappable` exige: o que aparece aqui, o
+          // aceite não recusa por estado da escala.
           assignment: {
+            status: { in: SWAPPABLE },
+            checked_in_at: null,
             celebrationMinistry: {
-              schedule: { celebrationInstance: { scheduled_date: { gte: startOfTodayUtc() } } },
+              schedule: {
+                status: ScheduleStatus.published,
+                celebrationInstance: { scheduled_date: { gte: startOfTodayUtc() } },
+              },
             },
           },
         },
@@ -504,17 +522,26 @@ export class CelebrationSwapService {
       if (claimed.count !== 1 || handedOver.count !== 1) {
         throw new ConflictException('Este pedido de troca não está mais em aberto');
       }
-      await this.prisma.client.celebrationAssignment.create({
-        data: {
-          tenant_id: req.assignment.tenant_id,
-          congregation_id: req.assignment.congregation_id,
-          celebration_ministry_id: req.assignment.celebration_ministry_id,
-          volunteer_profile_id: me.id,
-          status: AssignmentStatus.confirmed,
-          notified_at: now,
-          responded_at: now,
-        },
-      });
+      try {
+        await this.prisma.client.celebrationAssignment.create({
+          data: {
+            tenant_id: req.assignment.tenant_id,
+            congregation_id: req.assignment.congregation_id,
+            celebration_ministry_id: req.assignment.celebration_ministry_id,
+            volunteer_profile_id: me.id,
+            status: AssignmentStatus.confirmed,
+            notified_at: now,
+            responded_at: now,
+          },
+        });
+      } catch (err) {
+        // A liderança me escalou na mesma vaga entre o `canTakeOver` e aqui:
+        // o unique de `celebration_assignments` barra, e a transação volta.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new ConflictException('Você já está nesta escala');
+        }
+        throw err;
+      }
     });
 
     this.notify(

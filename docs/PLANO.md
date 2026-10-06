@@ -537,8 +537,10 @@ Próximas, Trocas e Meu perfil.
   `CelebrationSwapController`, com os mesmos papéis e o mesmo plano Premium de
   `PATCH /assignments/:id/respond`:
   - `GET /assignments/:id/swap-candidates`: colegas do ministério que podem
-    assumir. Os livres vêm primeiro, depois quem já está em outro ministério no
-    mesmo culto, depois quem marcou indisponibilidade na data.
+    assumir, com os livres primeiro. Quem não está livre aparece com um rótulo
+    só, sem o motivo. Decisão de 2026-10-06: se o colega marcou
+    indisponibilidade ou já serve em outro ministério no mesmo culto continua
+    visível apenas para a liderança.
   - `POST /assignments/:id/swap-requests`: pede a um colega, ou a qualquer um do
     ministério quando vai sem destinatário.
   - `GET /volunteers/my-swap-requests`: os pedidos recebidos e os enviados.
@@ -549,6 +551,10 @@ Próximas, Trocas e Meu perfil.
   então quando dois colegas aceitam ao mesmo tempo, o segundo recebe 409.
   Push para o destinatário, ou para o ministério inteiro, e para quem pediu
   quando o pedido é aceito ou recusado.
+
+  Recusar a escala encerra o pedido em aberto dela. A linha `swapped` continua
+  aparecendo para a liderança, mas não ocupa vaga: `assigned_count` e
+  `overbooked` não a contam.
 - **Perfil — API.** `GET /volunteers/me/profile` devolve os ministérios, as
   habilidades, a disponibilidade semanal, as restrições e as escalas
   confirmadas de cultos que já passaram. É só leitura: o perfil continua sendo

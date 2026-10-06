@@ -21,8 +21,7 @@ import TrocaScreen from "../../app/troca/[id]";
 
 const CANDIDATES = [
   { volunteer_profile_id: "vp-bia", full_name: "Bianca Lopes", availability: "free" },
-  { volunteer_profile_id: "vp-tia", full_name: "Thiago Rocha", availability: "busy" },
-  { volunteer_profile_id: "vp-ury", full_name: "Ursula Lima", availability: "unavailable" },
+  { volunteer_profile_id: "vp-tia", full_name: "Thiago Rocha", availability: "unavailable" },
 ];
 
 describe("TrocaScreen", () => {
@@ -31,7 +30,7 @@ describe("TrocaScreen", () => {
     mockParams = { id: "a1", ministerio: "Mídia", quando: "dom, 13 set · 09:30" };
   });
 
-  it("lista os substitutos com o porquê de cada um, sob o cabeçalho da escala", async () => {
+  it("lista os substitutos dizendo quem está livre, sem o motivo de quem não está", async () => {
     mockGetSwapCandidates.mockResolvedValue(CANDIDATES);
     await render(<TrocaScreen />);
 
@@ -39,8 +38,7 @@ describe("TrocaScreen", () => {
     expect(mockGetSwapCandidates).toHaveBeenCalledWith("a1");
     expect(screen.getByText("Mídia · dom, 13 set · 09:30")).toBeTruthy();
     expect(screen.getByText("Livre neste dia")).toBeTruthy();
-    expect(screen.getByText("Já escalado em outro ministério neste culto")).toBeTruthy();
-    expect(screen.getByText("Marcou indisponibilidade nesta data")).toBeTruthy();
+    expect(screen.getByText("Não está livre neste dia")).toBeTruthy();
   });
 
   it("pedir a um colega manda a mensagem e confirma a quem foi", async () => {

@@ -36,6 +36,14 @@ export type OneSignalFilter =
   | { field: 'tag'; key: string; relation: '=' | '!='; value: string }
   | { operator: 'OR' };
 
+/** Interleaves an OR operator between each filter in the array. */
+export function orGroup(filters: OneSignalFilter[]): OneSignalFilter[] {
+  return filters.reduce((acc, f, i) => {
+    if (i === 0) return [f];
+    return [...acc, { operator: 'OR' as const }, f];
+  }, [] as OneSignalFilter[]);
+}
+
 export interface SendPushOpts {
   tenantId: string;
   congregationId: string;
@@ -245,7 +253,7 @@ export class NotificationsService {
 
       if (criteria.congregation_ids?.length) {
         parts.push(
-          this.orGroup(
+          orGroup(
             criteria.congregation_ids.map((id) => ({
               field: 'tag' as const,
               key: 'congregation_id',
@@ -258,7 +266,7 @@ export class NotificationsService {
 
       if (criteria.group_ids?.length) {
         parts.push(
-          this.orGroup(
+          orGroup(
             criteria.group_ids.map((id) => ({
               field: 'tag' as const,
               key: 'pg_ids',
@@ -271,7 +279,7 @@ export class NotificationsService {
 
       if (criteria.roles?.length) {
         parts.push(
-          this.orGroup(
+          orGroup(
             criteria.roles.map((role) => ({
               field: 'tag' as const,
               key: 'role',
@@ -296,14 +304,6 @@ export class NotificationsService {
     return perSegment.reduce((acc, seg, i) => {
       if (i === 0) return seg;
       return [...acc, { operator: 'OR' as const }, ...seg];
-    }, [] as OneSignalFilter[]);
-  }
-
-  /** Interleaves an OR operator between each filter in the array. */
-  private orGroup(filters: OneSignalFilter[]): OneSignalFilter[] {
-    return filters.reduce((acc, f, i) => {
-      if (i === 0) return [f];
-      return [...acc, { operator: 'OR' as const }, f];
     }, [] as OneSignalFilter[]);
   }
 

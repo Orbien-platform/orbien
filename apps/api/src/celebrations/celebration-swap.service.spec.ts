@@ -167,7 +167,7 @@ describe('CelebrationSwapService.getCandidates', () => {
     expect(client.volunteerUnavailabilityDate.findMany).not.toHaveBeenCalled();
   });
 
-  it('tira quem já está na vaga e ordena livres, ocupados no culto e indisponíveis', async () => {
+  it('tira quem já está na vaga e põe os livres primeiro, sem dizer por que o resto não está', async () => {
     const { client, service } = setup();
     client.volunteerMinistry.findMany.mockResolvedValue([
       { volunteerProfile: profile('vp-z', 'p-z', 'Zeca') },
@@ -195,7 +195,7 @@ describe('CelebrationSwapService.getCandidates', () => {
       { volunteer_profile_id: 'vp-b', full_name: 'Bianca', availability: 'free' },
       { volunteer_profile_id: 'vp-r', full_name: 'Rui', availability: 'free' },
       { volunteer_profile_id: 'vp-z', full_name: 'Zeca', availability: 'free' },
-      { volunteer_profile_id: 'vp-t', full_name: 'Thiago', availability: 'busy' },
+      { volunteer_profile_id: 'vp-t', full_name: 'Thiago', availability: 'unavailable' },
       { volunteer_profile_id: 'vp-u', full_name: 'Ursula', availability: 'unavailable' },
     ]);
     expect(client.volunteerMinistry.findMany).toHaveBeenCalledWith(
@@ -234,6 +234,10 @@ describe('CelebrationSwapService.createRequest', () => {
         },
       }),
     );
+    expect(client.volunteerMinistry.findMany.mock.calls[0][0].where.volunteerProfile).toEqual({
+      person: { deleted_at: null },
+      celebrationAssignments: { none: { celebration_ministry_id: 'cm-1' } },
+    });
     expect(notifications.sendPush).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Caio pediu troca de escala',
@@ -389,6 +393,11 @@ describe('CelebrationSwapService.listMine', () => {
     });
     const incomingWhere = client.assignmentSwapRequest.findMany.mock.calls[0][0].where;
     expect(incomingWhere.OR[1].assignment.celebrationMinistry.ministry_id).toEqual({ in: ['min-1'] });
+    expect(incomingWhere.assignment).toMatchObject({
+      status: { in: ['pending', 'confirmed'] },
+      checked_in_at: null,
+      celebrationMinistry: { schedule: { status: 'published' } },
+    });
   });
 });
 
@@ -485,6 +494,22 @@ describe('CelebrationSwapService.accept', () => {
     client.assignmentSwapRequest.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.accept('req-1', ...ctx)).rejects.toBeInstanceOf(ConflictException);
     expect(client.celebrationAssignment.create).not.toHaveBeenCalled();
+  });
+
+  it('a liderança escalou quem aceita na mesma vaga no meio (P2002): 409', async () => {
+    const { client, service } = setup();
+    client.assignmentSwapRequest.findFirst.mockResolvedValue(request());
+    client.celebrationAssignment.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'x' }),
+    );
+    await expect(service.accept('req-1', ...ctx)).rejects.toThrow('Você já está nesta escala');
+  });
+
+  it('outro erro ao criar a escala de quem aceita sobe como veio', async () => {
+    const { client, service } = setup();
+    client.assignmentSwapRequest.findFirst.mockResolvedValue(request());
+    client.celebrationAssignment.create.mockRejectedValue(new Error('conexão caiu'));
+    await expect(service.accept('req-1', ...ctx)).rejects.toThrow('conexão caiu');
   });
 
   it('o titular respondeu a escala no meio: 409 e nada é criado', async () => {

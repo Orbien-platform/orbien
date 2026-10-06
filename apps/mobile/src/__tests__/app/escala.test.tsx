@@ -8,13 +8,17 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 
 const mockPush = jest.fn();
 // `useFocusEffect` roda no primeiro foco e devolve a limpeza ao desmontar,
-// como na navegação real.
+// como na navegação real; `mockRefocus()` simula a volta de outra tela.
+let mockRefocus: () => void = () => undefined;
 jest.mock("expo-router", () => {
   const { useEffect } = jest.requireActual("react");
   return {
     useRouter: () => ({ push: mockPush }),
     useFocusEffect: (callback: () => () => void) => {
-      useEffect(() => callback(), [callback]);
+      useEffect(() => {
+        mockRefocus = callback;
+        return callback();
+      }, [callback]);
     },
   };
 });
@@ -414,16 +418,51 @@ describe("EscalaScreen — troca e perfil (v2)", () => {
     expect(screen.queryByTestId("swap-a1")).toBeNull();
   });
 
-  it("falha ao carregar os pedidos não derruba as escalas, e a aba Trocas mostra os vazios", async () => {
+  it("falha ao carregar os pedidos não derruba as escalas; sem pedidos, não há Pedir troca e a aba oferece tentar de novo", async () => {
     mockGetMyAssignments.mockResolvedValue([PENDING_ASSIGNMENT]);
-    mockGetMySwapRequests.mockRejectedValue(new Error("500"));
+    mockGetMySwapRequests.mockRejectedValueOnce(new Error("500"));
 
     await render(<EscalaScreen />);
-    await waitFor(() => screen.getByTestId("swap-a1"));
+    await waitFor(() => screen.getByTestId("assignment-a1"));
+    expect(screen.queryByTestId("swap-a1")).toBeNull();
 
     await fireEvent.press(screen.getByTestId("escala-abas-trocas"));
-    expect(screen.getByTestId("trocas-recebidas-vazio")).toBeTruthy();
+    expect(screen.getByTestId("trocas-erro-carga")).toBeTruthy();
     expect(screen.queryByTestId("escala-list")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("trocas-tentar"));
+    });
+    expect(screen.getByTestId("trocas-recebidas-vazio")).toBeTruthy();
+  });
+
+  it("recarga ao voltar que falha mantém a lista e os pedidos que já estavam na tela", async () => {
+    mockGetMyAssignments.mockResolvedValueOnce([PENDING_ASSIGNMENT]);
+    mockGetMySwapRequests.mockResolvedValueOnce({ incoming: [], outgoing: [SWAP_REQUEST] });
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("swap-open-a1"));
+
+    mockGetMyAssignments.mockRejectedValueOnce(new NetworkError());
+    mockGetMySwapRequests.mockRejectedValueOnce(new Error("500"));
+    await act(async () => mockRefocus());
+
+    expect(screen.queryByTestId("escala-error")).toBeNull();
+    expect(screen.getByTestId("assignment-a1")).toBeTruthy();
+    expect(screen.getByTestId("swap-open-a1")).toBeTruthy();
+  });
+
+  it("a tela de erro sai quando a recarga seguinte dá certo", async () => {
+    mockGetMyAssignments.mockRejectedValueOnce(new HttpError(500, "erro"));
+
+    await render(<EscalaScreen />);
+    await waitFor(() => screen.getByTestId("escala-error"));
+
+    mockGetMyAssignments.mockResolvedValueOnce([PENDING_ASSIGNMENT]);
+    await act(async () => mockRefocus());
+
+    expect(screen.queryByTestId("escala-error")).toBeNull();
+    expect(screen.getByTestId("assignment-a1")).toBeTruthy();
   });
 
   it("aba Trocas conta os pedidos recebidos e aceitar recarrega escalas e pedidos", async () => {
