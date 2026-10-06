@@ -141,10 +141,12 @@ function ThemedShell() {
           <Stack.Screen name="perfil" options={{ title: "Meu perfil" }} />
           <Stack.Screen name="visitante" options={{ title: "Cadastrar visitante" }} />
           <Stack.Screen name="privacidade" options={{ title: "Privacidade" }} />
+          {/* PROD-31: Contribuir (chave PIX) não depende da trava de
+              pagamentos — vale para todo plano. */}
+          <Stack.Screen name="contribuir" options={{ title: "Contribuir" }} />
           {/* PROD-28: só alcançável com a trava de pagamentos ligada na API
               (a Home esconde a entrada); por deep link, a tela mostra
               "indisponível". */}
-          <Stack.Screen name="contribuir" options={{ title: "Contribuir" }} />
           <Stack.Screen name="dizimo-automatico" options={{ title: "Dízimo automático" }} />
           <Stack.Screen name="post/[id]" options={{ title: "Publicação" }} />
           <Stack.Screen name="celebracao/[id]" options={{ title: "Ordem de Culto" }} />

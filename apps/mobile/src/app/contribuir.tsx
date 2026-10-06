@@ -49,7 +49,11 @@ function describeError(error: unknown): string {
     return "Sem conexão. Os dados continuam aqui — tente de novo quando a conexão voltar.";
   }
   if (error instanceof HttpError) {
-    if (error.status === 404) return "Igreja não encontrada. Saia e entre de novo no app.";
+    // A API responde 404 tanto para igreja desconhecida quanto para igreja sem
+    // chave PIX cadastrada — sair e entrar de novo não resolve nenhum dos dois.
+    if (error.status === 404) {
+      return "Sua igreja ainda não tem uma chave PIX cadastrada. Fale com a secretaria.";
+    }
     if (error.status === 429) return "Muitas tentativas seguidas. Aguarde um minuto e tente de novo.";
     if (error.status === 400) return error.message;
   }
@@ -72,7 +76,10 @@ export default function ContribuirScreen() {
   const amount = parseAmount(amountText);
   const amountInvalid =
     amountText.trim() !== "" && (amount === null || amount < MIN_AMOUNT || amount > MAX_AMOUNT);
-  const canSubmit = !!tenantSlug && amount !== null && !amountInvalid && !submitting;
+  // Identificada sem nome sairia anônima (o cliente descarta o nome vazio), então
+  // o botão só habilita com o nome preenchido.
+  const nameMissing = identity === "named" && name.trim() === "";
+  const canSubmit = !!tenantSlug && amount !== null && !amountInvalid && !nameMissing && !submitting;
 
   async function submit() {
     if (!tenantSlug || amount === null) return;

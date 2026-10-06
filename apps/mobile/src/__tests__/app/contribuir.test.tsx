@@ -103,6 +103,15 @@ describe("ContribuirScreen", () => {
     );
   });
 
+  it("identificada sem nome não envia", async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId("contribuir-identidade-named"));
+    await fill("50");
+    await submit();
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
   it("copia o código PIX e confirma na tela", async () => {
     await renderScreen();
     await fill("150");
@@ -156,13 +165,14 @@ describe("ContribuirScreen", () => {
     expect(screen.getByText("O valor mínimo da doação é R$ 5,00")).toBeTruthy();
   });
 
-  it("404 mostra o erro e mantém o formulário", async () => {
+  it("404 aponta a chave PIX da igreja, não o login, e mantém o formulário", async () => {
     mockCreate.mockRejectedValue(new HttpError(404, {}));
     await renderScreen();
     await fill("150");
     await submit();
 
-    expect(screen.getByTestId("contribuir-erro")).toBeTruthy();
+    expect(screen.getByText(/chave PIX cadastrada/)).toBeTruthy();
+    expect(screen.queryByText(/entre de novo/)).toBeNull();
     expect(screen.getByTestId("contribuir-valor-input").props.value).toBe("150");
   });
 

@@ -488,6 +488,15 @@ cai em "Oferta" quando a igreja não tem categoria com aquele nome.
 QR nem acompanhamento do pagamento); lista de categorias vinda da igreja em
 vez de fixa; e o teste em aparelho.
 
+**Categoria — decisão em aberto (achado da revisão do PR #163).** A API
+resolve `category_slug` por `contains` no nome, com `findFirst` sem ordem
+(`PixService.resolveCategory`). Duas consequências: "oferta" casa com "Oferta",
+"Oferta Missionária" e "Oferta de Construção" do seed e pode lançar a oferta na
+categoria errada; e "dízimo" com acento não casa com uma categoria cadastrada
+como "Dizimo", caindo em "Oferta" sem aviso. O app não resolve sozinho — pede
+ou casar pelo nome exato na API, ou um `slug` de verdade na categoria, ou a
+lista vinda da igreja (o que já está acima).
+
 ### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · aberto
 
 A v2 pede, além do erro com "Tentar novamente" que já existe
