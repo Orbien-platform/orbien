@@ -115,6 +115,15 @@ vi.mock("@/components/financial/WeeklyDashboardCard", () => ({
     </div>
   ),
 }));
+// O cálculo e os estados do caixa têm testes próprios (CashBalanceCard.test);
+// aqui só interessa a data de corte e a chave de recarga que a página passa.
+vi.mock("@/components/financial/CashBalanceCard", () => ({
+  CashBalanceCard: ({ asOf, reloadKey }: { asOf: string; reloadKey?: number }) => (
+    <div data-testid="cash-balance-card">
+      asOf:{asOf} reload:{reloadKey}
+    </div>
+  ),
+}));
 vi.mock("@/components/financial/ForecastCard", () => ({
   ForecastCard: () => <div data-testid="forecast-card" />,
 }));
@@ -556,6 +565,123 @@ describe("FinanceiroPage — aba Lançamentos", () => {
     expect(screen.queryByText("Pagamento Aluguel")).not.toBeInTheDocument();
   });
 
+  describe("caixa atual", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-15T15:00:00.000Z"));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const cashText = () => screen.getByTestId("cash-balance-card").textContent ?? "";
+
+    it("na Visão Geral, o caixa corta no fim do período e acompanha a navegação", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+
+      await screen.findByTestId("cash-balance-card");
+      expect(cashText()).toContain("asOf:2026-10-31");
+
+      await user.click(screen.getByRole("button", { name: "Período anterior" }));
+      expect(cashText()).toContain("asOf:2026-09-30");
+    });
+
+    it("na Visão Geral, intervalo livre sem data final não mostra o caixa", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("button", { name: "Personalizado" }));
+      fireEvent.change(screen.getByLabelText("até"), { target: { value: "" } });
+
+      expect(screen.queryByTestId("cash-balance-card")).not.toBeInTheDocument();
+    });
+
+    it("em Lançamentos, o caixa corta na data final do filtro e muda quando ela muda", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Nenhum lançamento neste período.");
+      expect(cashText()).toContain("asOf:2026-10-31");
+
+      fireEvent.change(screen.getByLabelText("Data final"), { target: { value: "2026-12-15" } });
+      expect(cashText()).toContain("asOf:2026-12-15");
+    });
+
+    it("em Lançamentos, data final vazia corta no dia de hoje (Brasília)", async () => {
+      setup();
+      mockApi({});
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Nenhum lançamento neste período.");
+
+      fireEvent.change(screen.getByLabelText("Data final"), { target: { value: "" } });
+      expect(cashText()).toContain("asOf:2026-10-15");
+    });
+
+    it("em Lançamentos, tipo, categoria, status e data inicial não mexem no caixa", async () => {
+      setup();
+      mockApi({ transactions: [tx({ id: "1", type: "income" }), tx({ id: "2", type: "expense" })] });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByLabelText("Apuração do período");
+      const before = cashText();
+
+      await user.selectOptions(screen.getByDisplayValue("Todos os tipos"), "expense");
+      await user.selectOptions(screen.getByDisplayValue("Todos os status"), "paid");
+      fireEvent.change(screen.getByLabelText("Data inicial"), { target: { value: "2026-10-05" } });
+
+      expect(cashText()).toBe(before);
+    });
+
+    it("criar, excluir e pagar um lançamento recarregam o caixa", async () => {
+      setup();
+      mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "pending" })] });
+      mockedApi.patch.mockResolvedValue({ data: {} });
+      mockedApi.delete.mockResolvedValue({ data: {} });
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Simples");
+      expect(cashText()).toContain("reload:0");
+
+      // pagar
+      await user.click(screen.getByRole("checkbox", { name: "Marcar como pago" }));
+      await waitFor(() => expect(cashText()).toContain("reload:1"));
+
+      // criar
+      await user.click(screen.getByRole("button", { name: "Novo lançamento" }));
+      await user.click(screen.getByRole("button", { name: "simular criação" }));
+      await waitFor(() => expect(cashText()).toContain("reload:2"));
+
+      // excluir
+      await user.click(screen.getByRole("button", { name: "Remover lançamento" }));
+      await user.click(screen.getByRole("button", { name: "Remover" }));
+      await waitFor(() => expect(cashText()).toContain("reload:3"));
+    });
+
+    it("pagamento que falha não recarrega o caixa (nada mudou no servidor)", async () => {
+      setup();
+      mockApi({ transactions: [tx({ id: "1", description: "Simples", status: "pending" })] });
+      mockedApi.patch.mockRejectedValue(new Error("boom"));
+      const user = userEvent.setup({ advanceTimers: () => {} });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Simples");
+
+      await user.click(screen.getByRole("checkbox", { name: "Marcar como pago" }));
+      await screen.findByText("Erro ao atualizar status do lançamento.");
+      expect(cashText()).toContain("reload:0");
+    });
+  });
+
   describe("período e apuração", () => {
     const txUrls = () =>
       mockedApi.get.mock.calls.map(([u]) => u).filter((u) => u.startsWith("/financial/transactions"));
@@ -703,7 +829,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
       await waitFor(() => expect(group).toHaveTextContent(/150,30/));
       expect(group).toHaveTextContent(/Total de entradas\s*R\$\s?150,30/);
       expect(group).toHaveTextContent(/Total de saídas\s*R\$\s?30,05/);
-      expect(group).toHaveTextContent(/Saldo \(entradas − saídas\)\s*R\$\s?120,25/);
+      expect(group).toHaveTextContent(/Saldo do período\s*R\$\s?120,25/);
     });
 
     it("a apuração acompanha os filtros de tipo da tabela", async () => {
@@ -722,7 +848,7 @@ describe("FinanceiroPage — aba Lançamentos", () => {
 
       await user.selectOptions(screen.getByDisplayValue("Todos os tipos"), "expense");
       expect(group).toHaveTextContent(/Total de entradas\s*R\$\s?0,00/);
-      expect(group).toHaveTextContent(/Saldo \(entradas − saídas\)\s*-R\$\s?40,00/);
+      expect(group).toHaveTextContent(/Saldo do período\s*-R\$\s?40,00/);
     });
   });
 

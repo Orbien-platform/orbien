@@ -36,14 +36,38 @@ interface Song extends Identified {
   title: string;
 }
 
+/**
+ * Primeiro dia, a partir de daqui a 28 dias, sem nenhuma instância no tenant.
+ *
+ * `openServiceOrder` acha a instância pela data na aba "Próximas" e abre a
+ * primeira linha que casa. Com data fixa em +28 dias, uma instância que já
+ * existisse nesse dia (celebração semanal que gera instâncias adiante, sobra
+ * de outra execução) ficava na frente da criada pelo teste: o `.first()` abria
+ * uma instância sem a Ordem de Celebração e "Momento de louvor" nunca
+ * aparecia. Dia livre garante que a única linha com essa data é a do teste.
+ */
+async function freeDay(api: Api): Promise<Date> {
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = await api.call<{ scheduled_date?: string }[]>(
+    "GET",
+    `/celebrations/instances?date_from=${today}`
+  );
+  const taken = new Set(existing.map((i) => String(i.scheduled_date ?? "").slice(0, 10)));
+  const date = new Date();
+  date.setDate(date.getDate() + 28);
+  for (let n = 0; n < 365 && taken.has(date.toISOString().slice(0, 10)); n++) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date;
+}
+
 /** Etapa de louvor com setlist vazia numa instância futura, montada via API. */
 async function setupWorship(api: Api): Promise<{ instanceId: string; setlistId: string; date: Date }> {
   const celebrations = await api.call<Identified[]>("GET", "/celebrations");
   if (celebrations.length === 0) {
     throw new Error("Nenhuma celebração cadastrada — impossível criar instância de teste.");
   }
-  const date = new Date();
-  date.setDate(date.getDate() + 28);
+  const date = await freeDay(api);
   const instance = await api.call<Identified>("POST", "/celebrations/instances", {
     celebration_id: celebrations[0].id,
     scheduled_date: date.toISOString().slice(0, 10),
