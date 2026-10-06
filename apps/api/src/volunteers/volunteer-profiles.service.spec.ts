@@ -167,3 +167,90 @@ describe('VolunteerProfilesService', () => {
     });
   });
 });
+
+describe('VolunteerProfilesService.findMine', () => {
+  function mineClient() {
+    return {
+      userAccount: { findUnique: jest.fn().mockResolvedValue({ person_id: 'p1' }) },
+      volunteerProfile: { findFirst: jest.fn() },
+      celebrationAssignment: { count: jest.fn().mockResolvedValue(12) },
+    };
+  }
+  const mineService = (client: ReturnType<typeof mineClient>) =>
+    new VolunteerProfilesService({ client } as unknown as PrismaService);
+
+  it('devolve ministérios, habilidades, disponibilidade e as escalas já servidas', async () => {
+    const client = mineClient();
+    const since = new Date('2024-03-02T00:00:00Z');
+    client.volunteerProfile.findFirst.mockResolvedValue({
+      id: 'vp1',
+      skills: ['ProPresenter', 'OBS'],
+      availability: { sunday: ['morning', 'evening'] },
+      restrictions: null,
+      created_at: since,
+      volunteerMinistries: [{ role: 'volunteer', ministry: { id: 'm1', name: 'Mídia' } }],
+    });
+
+    await expect(mineService(client).findMine('u1', 't1', 'g1')).resolves.toEqual({
+      id: 'vp1',
+      ministries: [{ id: 'm1', name: 'Mídia', role: 'volunteer' }],
+      skills: ['ProPresenter', 'OBS'],
+      availability: { sunday: ['morning', 'evening'] },
+      restrictions: null,
+      volunteer_since: since,
+      served_count: 12,
+    });
+    expect(client.volunteerProfile.findFirst.mock.calls[0][0].where).toEqual({
+      person_id: 'p1',
+      tenant_id: 't1',
+      congregation_id: 'g1',
+    });
+    expect(client.celebrationAssignment.count.mock.calls[0][0].where).toMatchObject({
+      volunteer_profile_id: 'vp1',
+      status: 'confirmed',
+    });
+  });
+
+  it.each([
+    ['nulos', null, null],
+    ['em formato inesperado', 'ProPresenter', ['sunday']],
+  ])('JSON %s viram lista e objeto vazios', async (_label, skills, availability) => {
+    const client = mineClient();
+    client.volunteerProfile.findFirst.mockResolvedValue({
+      id: 'vp1',
+      skills,
+      availability,
+      restrictions: 'Só domingos',
+      created_at: new Date(),
+      volunteerMinistries: [],
+    });
+
+    const mine = await mineService(client).findMine('u1', 't1', 'g1');
+    expect(mine.skills).toEqual([]);
+    expect(mine.availability).toEqual({});
+  });
+
+  it('conta sem pessoa vinculada: 404', async () => {
+    const client = mineClient();
+    client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+    await expect(mineService(client).findMine('u1', 't1', 'g1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('conta inexistente: 404', async () => {
+    const client = mineClient();
+    client.userAccount.findUnique.mockResolvedValue(null);
+    await expect(mineService(client).findMine('u1', 't1', 'g1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('pessoa sem perfil de voluntário: 404', async () => {
+    const client = mineClient();
+    client.volunteerProfile.findFirst.mockResolvedValue(null);
+    await expect(mineService(client).findMine('u1', 't1', 'g1')).rejects.toThrow(
+      'Perfil de voluntário não encontrado',
+    );
+  });
+});

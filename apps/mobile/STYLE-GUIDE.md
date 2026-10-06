@@ -199,6 +199,11 @@ Specs mínimas dos componentes que aparecem em quase toda tela — antes de dese
 - Um card só, linhas de 52px separadas por filete, quadrado de ícone de 32px, título + linha de apoio, chevron quando navega
 - Ação destrutiva (Sair) em `danger`, sem chevron
 
+**Abas segmentadas** (`Segmented` — o `Seg` do protótipo, usado em Minhas escalas)
+- Trilho em `bgSubtle` com o segmento ativo em `bgSurface`; segmentos de largura igual, 36px visíveis, toque completado a 48 por `hitSlop`
+- Troca o conteúdo da mesma tela, sem empilhar rota. Para escolher valor de formulário, `ChoiceChips`
+- Contagem opcional numa pílula na `primaryColor` (pedidos esperando resposta)
+
 **Transição de entrada** (`ChurchWelcome`)
 - Depois do login (não no boot já logado): tela cheia na `primaryColor`, logo e nome da igreja, "Aplicando a identidade da sua igreja…", até o `GET /settings` resolver — mínimo 900 ms, teto 3 s, sai em fade de 180 ms (sem animação com "reduzir movimento")
 
@@ -287,6 +292,7 @@ O guia é a regra; esta seção é o mapa. Mexer em uma coluna sem olhar a outra
 | §7 botão | `src/components/AppButton.tsx` |
 | §7 tab bar | `src/app/(tabs)/_layout.tsx` |
 | §7 lista agrupada | `src/components/ListGroup.tsx` (tela Mais: `src/app/(tabs)/mais.tsx`) |
+| §7 abas segmentadas | `src/components/Segmented.tsx` (Minhas escalas: `src/app/escala.tsx`) |
 | §7 transição de entrada | `src/components/ChurchWelcome.tsx`, ligada em `src/app/_layout.tsx` |
 | §7 header de stack (só no detalhe) | `src/app/_layout.tsx` |
 | §7 marca em tela | `src/components/BrandHeader.tsx`, `BrandLogo.tsx`, `BrandMark.tsx` |

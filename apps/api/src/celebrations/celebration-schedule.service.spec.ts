@@ -89,7 +89,12 @@ describe('CelebrationScheduleService', () => {
       client.celebrationSchedule.findUnique.mockResolvedValue({
         id: 's1',
         ministries: [
-          { id: 'cm1', ministry: { id: 'm1', name: 'Louvor' }, assignments: [{ id: 'a1' }, { id: 'a2' }] },
+          {
+            id: 'cm1',
+            ministry: { id: 'm1', name: 'Louvor' },
+            // `swapped` continua na lista, mas não ocupa a vaga
+            assignments: [{ id: 'a1' }, { id: 'a2' }, { id: 'a3', status: 'swapped' }],
+          },
           { id: 'cm2', ministry: { id: 'm2', name: 'Som' }, assignments: [] },
         ],
       });

@@ -3,7 +3,15 @@
 // `*-client.ts` (lógica) vs. tela (UI) que `auth-client.ts`/
 // `theme-provider.tsx` já seguem. Ver design.md, "Rodada 2 — MOB-04".
 import { authenticatedRequest } from "../auth/auth-client";
-import type { Assignment, AssignmentStatus, Unavailability } from "./types";
+import type {
+  Assignment,
+  AssignmentStatus,
+  MySwapRequests,
+  MyVolunteerProfile,
+  SwapCandidate,
+  SwapRequest,
+  Unavailability,
+} from "./types";
 
 /** `GET /volunteers/my-celebration-assignments` (MOB-04, AC 1). */
 export async function getMyAssignments(includePast?: boolean): Promise<Assignment[]> {
@@ -62,4 +70,47 @@ export async function saveUnavailability(
   return authenticatedRequest<Unavailability>("post", "/volunteers/unavailability", {
     body: { referenceMonth, referenceYear, dates, notes },
   });
+}
+
+/** `GET /assignments/:id/swap-candidates` — colegas do ministério que podem assumir. */
+export async function getSwapCandidates(assignmentId: string): Promise<SwapCandidate[]> {
+  return authenticatedRequest<SwapCandidate[]>(
+    "get",
+    `/assignments/${assignmentId}/swap-candidates`,
+  );
+}
+
+/**
+ * `POST /assignments/:id/swap-requests`. Sem `targetProfileId`, o pedido vai
+ * para qualquer voluntário do ministério.
+ */
+export async function requestSwap(
+  assignmentId: string,
+  targetProfileId?: string,
+  message?: string,
+): Promise<SwapRequest> {
+  return authenticatedRequest<SwapRequest>("post", `/assignments/${assignmentId}/swap-requests`, {
+    body: {
+      ...(targetProfileId ? { target_profile_id: targetProfileId } : {}),
+      ...(message?.trim() ? { message: message.trim() } : {}),
+    },
+  });
+}
+
+/** `GET /volunteers/my-swap-requests` — pedidos para mim e os que enviei. */
+export async function getMySwapRequests(): Promise<MySwapRequests> {
+  return authenticatedRequest<MySwapRequests>("get", "/volunteers/my-swap-requests");
+}
+
+/** `PATCH /swap-requests/:id/{accept|decline|cancel}`. */
+export async function respondToSwap(
+  id: string,
+  action: "accept" | "decline" | "cancel",
+): Promise<SwapRequest> {
+  return authenticatedRequest<SwapRequest>("patch", `/swap-requests/${id}/${action}`);
+}
+
+/** `GET /volunteers/me/profile` — leitura só; quem edita é a secretaria. */
+export async function getMyVolunteerProfile(): Promise<MyVolunteerProfile> {
+  return authenticatedRequest<MyVolunteerProfile>("get", "/volunteers/me/profile");
 }

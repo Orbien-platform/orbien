@@ -11,7 +11,7 @@ import { CelebrationAssignmentService } from './celebration-assignment.service';
 import { RespondCelebrationAssignmentDto } from './dto/respond-celebration-assignment.dto';
 import { MyAssignmentsQueryDto } from './dto/my-assignments-query.dto';
 
-const VOLUNTEER_ROLES = [
+export const VOLUNTEER_ROLES = [
   'volunteer',
   'member',
   'ministry_leader',

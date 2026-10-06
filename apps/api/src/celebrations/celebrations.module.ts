@@ -28,6 +28,8 @@ import {
   CelebrationRespondController,
   CelebrationMyAssignmentsController,
 } from './celebration-volunteer.controller';
+import { CelebrationSwapController } from './celebration-swap.controller';
+import { CelebrationSwapService } from './celebration-swap.service';
 
 @Module({
   imports: [PrismaModule, ContentModule, StorageModule],
@@ -45,6 +47,7 @@ import {
     CelebrationAssignmentController,
     CelebrationRespondController,
     CelebrationMyAssignmentsController,
+    CelebrationSwapController,
     ScheduleTemplateController,
     CelebrationsController,
   ],
@@ -60,6 +63,7 @@ import {
     CelebrationScheduleService,
     CelebrationScheduleSuggestionService,
     CelebrationAssignmentService,
+    CelebrationSwapService,
     PdfExportService,
   ],
   exports: [

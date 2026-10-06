@@ -1497,6 +1497,9 @@ model VolunteerProfile {
   volunteerMinistries    VolunteerMinistry[]
   celebrationAssignments CelebrationAssignment[]
   unavailabilities       VolunteerUnavailability[]
+  swapRequestsSent       AssignmentSwapRequest[]   @relation("SwapRequester")
+  swapRequestsReceived   AssignmentSwapRequest[]   @relation("SwapTarget")
+  swapRequestsAccepted   AssignmentSwapRequest[]   @relation("SwapAcceptedBy")
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1758,13 +1761,45 @@ model CelebrationAssignment {
   created_at              DateTime         @default(now())
   updated_at              DateTime         @updatedAt
 
-  celebrationMinistry CelebrationMinistry @relation(fields: [celebration_ministry_id], references: [id], onDelete: Cascade)
-  volunteerProfile    VolunteerProfile    @relation(fields: [volunteer_profile_id], references: [id], onDelete: Restrict)
+  celebrationMinistry CelebrationMinistry     @relation(fields: [celebration_ministry_id], references: [id], onDelete: Cascade)
+  volunteerProfile    VolunteerProfile        @relation(fields: [volunteer_profile_id], references: [id], onDelete: Restrict)
+  swapRequests        AssignmentSwapRequest[]
 
   @@unique([celebration_ministry_id, volunteer_profile_id])
   @@index([congregation_id])
   @@index([volunteer_profile_id])
   @@map("celebration_assignments")
+}
+
+// Pedido de troca de escala (v2, "Minhas escalas" → Trocas). O voluntário
+// escalado pede a um colega do mesmo ministério (`target_profile_id`) ou a
+// qualquer um dele (`target_profile_id` nulo). Aceitar marca a atribuição
+// original como `swapped` e cria a de quem aceitou, já confirmada.
+// No máximo um pedido `pending` por atribuição (índice parcial na migration).
+model AssignmentSwapRequest {
+  id                     String            @id @default(uuid())
+  tenant_id              String
+  congregation_id        String
+  assignment_id          String
+  requester_profile_id   String
+  target_profile_id      String?
+  accepted_by_profile_id String?
+  status                 SwapRequestStatus @default(pending)
+  message                String?           @db.VarChar(280)
+  responded_at           DateTime?
+  created_at             DateTime          @default(now())
+  updated_at             DateTime          @updatedAt
+
+  assignment CelebrationAssignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  requester  VolunteerProfile      @relation("SwapRequester", fields: [requester_profile_id], references: [id], onDelete: Cascade)
+  target     VolunteerProfile?     @relation("SwapTarget", fields: [target_profile_id], references: [id], onDelete: Cascade)
+  acceptedBy VolunteerProfile?     @relation("SwapAcceptedBy", fields: [accepted_by_profile_id], references: [id], onDelete: SetNull)
+
+  @@index([congregation_id])
+  @@index([assignment_id, status])
+  @@index([requester_profile_id])
+  @@index([target_profile_id, status])
+  @@map("assignment_swap_requests")
 }
 
 model VolunteerUnavailability {
@@ -2059,6 +2094,13 @@ enum AssignmentStatus {
   confirmed
   declined
   swapped
+}
+
+enum SwapRequestStatus {
+  pending
+  accepted
+  declined
+  cancelled
 }
 
 enum VolunteerMinistryRole {

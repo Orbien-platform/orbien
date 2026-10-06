@@ -9,14 +9,51 @@ jest.mock("../auth/auth-client", () => ({
 import {
   checkIn,
   getMyAssignments,
+  getMySwapRequests,
+  getMyVolunteerProfile,
+  getSwapCandidates,
   getUnavailability,
+  requestSwap,
   respondToAssignment,
+  respondToSwap,
   saveUnavailability,
 } from "./escala-client";
 
 describe("EscalaClient", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe("troca de escala e perfil", () => {
+    it("lista os substitutos da escala", async () => {
+      await getSwapCandidates("a1");
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/assignments/a1/swap-candidates");
+    });
+
+    it("pede troca a um colega, com a mensagem aparada", async () => {
+      await requestSwap("a1", "vp2", "  Viagem  ");
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/assignments/a1/swap-requests", {
+        body: { target_profile_id: "vp2", message: "Viagem" },
+      });
+    });
+
+    it("pedido ao ministério vai sem destinatário e sem mensagem em branco", async () => {
+      await requestSwap("a1", undefined, "   ");
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/assignments/a1/swap-requests", {
+        body: {},
+      });
+    });
+
+    it("lista os pedidos, responde e lê o perfil", async () => {
+      await getMySwapRequests();
+      await respondToSwap("r1", "accept");
+      await getMyVolunteerProfile();
+      expect(mockAuthenticatedRequest.mock.calls).toEqual([
+        ["get", "/volunteers/my-swap-requests"],
+        ["patch", "/swap-requests/r1/accept"],
+        ["get", "/volunteers/me/profile"],
+      ]);
+    });
   });
 
   describe("getMyAssignments", () => {

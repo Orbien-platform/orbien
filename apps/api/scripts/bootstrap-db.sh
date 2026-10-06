@@ -189,6 +189,13 @@ fi
 if [ -f prisma/migrations/024_rls_pix_webhook_scope.sql ]; then
   run_sql_file prisma/migrations/024_rls_pix_webhook_scope.sql
 fi
+# `assignment_swap_requests` (pedido de troca de escala, v2): tabela nova, mesmo
+# caso de 020/022/023 — nasce com a policy de congregação e não tem
+# `tenant_isolation` para o passo 4 derrubar. Depende de
+# app_congregation_allowed() (003).
+if [ -f prisma/migrations/025_rls_assignment_swap_requests.sql ]; then
+  run_sql_file prisma/migrations/025_rls_assignment_swap_requests.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -597,6 +604,19 @@ BEGIN
   RAISE NOTICE 'pix_subscriptions com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em pix_subscriptions, encontrei % — 023_rls_pix_subscriptions.sql rodou?', n;
+  END IF;
+
+  -- 025: assignment_swap_requests (troca de escala, v2), mesmo caso de 023 —
+  -- nasceu com a policy de congregação, sem tenant_isolation herdada de 001.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'assignment_swap_requests'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'assignment_swap_requests com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em assignment_swap_requests, encontrei % — 025_rls_assignment_swap_requests.sql rodou?', n;
   END IF;
 
   -- 024: pix_webhook_scope() — o webhook da Asaas não tem contexto de tenant e

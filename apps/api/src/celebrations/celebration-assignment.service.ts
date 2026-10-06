@@ -11,6 +11,7 @@ import {
   CelebrationAssignment,
   CelebrationSchedule,
   ScheduleStatus,
+  SwapRequestStatus,
   VolunteerMinistryRole,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -161,7 +162,10 @@ export class CelebrationAssignmentService {
     });
 
     const [assignedCount, unavailableOnDate] = await Promise.all([
-      this.prisma.client.celebrationAssignment.count({ where: { celebration_ministry_id: cm.id } }),
+      // `swapped` já não serve: quem assumiu tem a própria linha na vaga.
+      this.prisma.client.celebrationAssignment.count({
+        where: { celebration_ministry_id: cm.id, status: { not: AssignmentStatus.swapped } },
+      }),
       this.checkUnavailability(tenantId, cm.schedule.celebrationInstance.scheduled_date, dto.volunteer_profile_id),
     ]);
 
@@ -304,10 +308,21 @@ export class CelebrationAssignmentService {
       throw new ConflictException('Esta atribuição já foi respondida');
     }
 
-    return this.prisma.client.celebrationAssignment.update({
+    const now = new Date();
+    const updated = await this.prisma.client.celebrationAssignment.update({
       where: { id: assignmentId },
-      data: { status: dto.status, responded_at: new Date() },
+      data: { status: dto.status, responded_at: now },
     });
+    // Recusar a escala encerra o pedido de troca que estiver em aberto: a vaga
+    // volta para a liderança, e um colega não pode mais assumi-la. Confirmar
+    // mantém o pedido — a escala segue trocável.
+    if (dto.status === AssignmentStatus.declined) {
+      await this.prisma.client.assignmentSwapRequest.updateMany({
+        where: { assignment_id: assignmentId, status: SwapRequestStatus.pending },
+        data: { status: SwapRequestStatus.cancelled, responded_at: now },
+      });
+    }
+    return updated;
   }
 
   // ── Check-in ───────────────────────────────────────────────────────────────

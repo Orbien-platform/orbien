@@ -295,6 +295,9 @@ describe('CelebrationAssignmentService', () => {
       );
 
       expect(result.overbooked).toBe(true);
+      expect(client.celebrationAssignment.count).toHaveBeenCalledWith({
+        where: { celebration_ministry_id: 'cm1', status: { not: 'swapped' } },
+      });
     });
 
     it('marca unavailable_on_date=true quando o voluntário está indisponível na data', async () => {
@@ -575,6 +578,30 @@ describe('CelebrationAssignmentService', () => {
         data: { status: 'confirmed', responded_at: expect.any(Date) },
       });
       expect(result).toEqual({ id: 'a1', status: 'confirmed' });
+    });
+
+    it('recusar encerra o pedido de troca em aberto da escala; confirmar não', async () => {
+      const swaps = { updateMany: jest.fn().mockResolvedValue({ count: 1 }) };
+      const client = clientWith({ assignmentSwapRequest: swaps });
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'pending',
+        volunteerProfile: { person_id: 'p1' },
+        celebrationMinistry: { schedule: { status: 'published' } },
+      });
+      client.celebrationAssignment.update.mockResolvedValue({ id: 'a1', status: 'declined' });
+      const { service } = serviceWith(client);
+
+      await service.respondToAssignment('a1', 'u1', 't1', { status: 'declined' } as never);
+      expect(swaps.updateMany).toHaveBeenCalledWith({
+        where: { assignment_id: 'a1', status: 'pending' },
+        data: { status: 'cancelled', responded_at: expect.any(Date) },
+      });
+
+      swaps.updateMany.mockClear();
+      await service.respondToAssignment('a1', 'u1', 't1', { status: 'confirmed' } as never);
+      expect(swaps.updateMany).not.toHaveBeenCalled();
     });
   });
 
