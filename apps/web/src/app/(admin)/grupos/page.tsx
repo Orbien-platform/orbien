@@ -183,6 +183,8 @@ export default function GruposPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* A lista some enquanto o detalhe está aberto; o estado (filtros, página) fica montado. */}
+      <div className={sheetOpen ? "hidden" : "flex flex-col gap-6"}>
       {/* Page header */}
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -277,6 +279,8 @@ export default function GruposPage() {
           </div>
         </div>
       )}
+
+      </div>
 
       {/* Detail sheet */}
       <GroupDetailSheet

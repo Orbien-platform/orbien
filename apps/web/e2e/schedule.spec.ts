@@ -31,7 +31,7 @@ test.describe("escala por celebração", () => {
         : `reaproveitando template existente ("${scheduleTemplate.value.name}")`,
     });
 
-    const sheet = page.locator('[data-slot="sheet-content"]');
+    const sheet = page.locator('[data-slot="detail-page-content"], [data-slot="sheet-content"]');
     const createBtn = page.getByRole("button", { name: "Criar escala" });
     const addMinBtn = page.getByRole("button", { name: "Adicionar ministério" });
     const volunteerBtn = page.getByRole("button", { name: /Adicionar voluntário/ }).first();
@@ -80,12 +80,16 @@ test.describe("escala por celebração", () => {
     }
     await shot(page, "03-escala");
 
-    // ── Regressão visual: o Sheet posiciona o botão de fechar em
-    // `absolute top-3 right-3`; o badge de status fica no mesmo canto e já se
-    // sobrepôs a ele. Comparação de bounding boxes porque é colisão de layout,
-    // não de estilo. ──
-    await test.step("botão de fechar não colide com o badge de status", async () => {
-      const closeBtn = sheet.locator('[data-slot="sheet-close"]');
+    // Aceita os dois formatos ("Close" do painel lateral e "Voltar" da página
+    // de detalhe) porque o job contra produção roda esta suíte contra o web já
+    // publicado, que só troca de formato depois do merge. Remover o ramo
+    // "Close" quando a produção já tiver a página de detalhe.
+    // ── Regressão visual: no painel lateral o botão de fechar ficava em
+    // `absolute top-3 right-3` e o badge de status já se sobrepôs a ele. Na
+    // página de detalhe o "Voltar" fica acima do cartão; a checagem de
+    // bounding boxes continua valendo contra uma regressão de layout. ──
+    await test.step("botão de voltar não colide com o badge de status", async () => {
+      const closeBtn = page.getByRole("button", { name: /^(Close|Voltar para )/ });
       const statusBadge = sheet
         .locator("span", { hasText: /^(Rascunho|Publicada|Arquivada)$/ })
         .first();

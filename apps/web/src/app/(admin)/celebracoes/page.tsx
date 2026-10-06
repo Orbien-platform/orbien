@@ -228,6 +228,8 @@ function CelebracoesContent() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* A lista some enquanto o detalhe está aberto; o estado (filtros, página) fica montado. */}
+      <div className={(detailOpen || scheduleOpen) ? "hidden" : "flex flex-col gap-6"}>
       <div>
         <h1 className="page-title">Celebrações</h1>
       </div>
@@ -393,6 +395,8 @@ function CelebracoesContent() {
           <TemplatesPanel canEdit={canEdit} />
         </Tabs.Panel>
       </Tabs.Root>
+
+      </div>
 
       {/* ── Modals / Sheets ── */}
       <CreateCelebrationModal

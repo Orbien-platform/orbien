@@ -157,6 +157,8 @@ export default function PessoasPage() {
 
   return (
     <div className="space-y-5">
+      {/* A lista some enquanto o detalhe está aberto; o estado (filtros, página) fica montado. */}
+      <div className={sheetOpen ? "hidden" : "space-y-5"}>
       {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -271,6 +273,8 @@ export default function PessoasPage() {
           </div>
         </div>
       )}
+
+      </div>
 
       {/* ── Side sheet ── */}
       <PersonSheet

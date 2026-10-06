@@ -197,7 +197,7 @@ describe("PersonSheet", () => {
     render(<PersonSheet personId="p1" open={true} onOpenChange={onOpenChange} onUpdated={vi.fn()} />);
     await screen.findByText("Ana Souza");
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: /^Voltar/ }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

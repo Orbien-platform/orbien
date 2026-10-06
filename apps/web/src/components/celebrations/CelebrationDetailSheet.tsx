@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { Loader2, FileText, Calendar } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  DetailPage,
+  DetailPageContent,
+  DetailPageHeader,
+  DetailPageTitle,
+  DetailPageDescription,
+} from "@/components/ui/detail-page";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import {
   RECURRENCE_LABELS,
@@ -133,22 +133,22 @@ export function CelebrationDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={handleOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
+      <DetailPage open={open} onOpenChange={handleOpenChange} backLabel="Voltar para celebrações">
+        <DetailPageContent>
           {isLoading || !celebration ? (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex min-h-[16rem] items-center justify-center">
               <Loader2 size={24} className="animate-spin text-stone" />
             </div>
           ) : (
             <div className="flex flex-col h-full">
               {/* Header */}
-              <SheetHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
-                <SheetTitle className="text-base font-medium text-ink dark:text-white pr-8">
+              <DetailPageHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
+                <DetailPageTitle className="text-base font-medium text-ink dark:text-white pr-8">
                   {celebration.name}
-                </SheetTitle>
-                <SheetDescription className="mt-1 text-xs text-stone">
+                </DetailPageTitle>
+                <DetailPageDescription className="mt-1 text-xs text-stone">
                   {CELEBRATION_TYPE_LABELS[celebration.type] ?? celebration.type}
-                </SheetDescription>
+                </DetailPageDescription>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                   {celebration.day_of_week != null && (
                     <span className="text-xs text-stone">{WEEKDAY_LABELS[celebration.day_of_week]}</span>
@@ -160,7 +160,7 @@ export function CelebrationDetailSheet({
                     <span className="text-xs text-stone">{recLabel}</span>
                   )}
                 </div>
-              </SheetHeader>
+              </DetailPageHeader>
 
               {/* Instances list */}
               <div className="flex flex-col flex-1 overflow-y-auto">
@@ -211,8 +211,8 @@ export function CelebrationDetailSheet({
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DetailPageContent>
+      </DetailPage>
 
       <ServiceOrderView
         open={soViewOpen}

@@ -11,11 +11,11 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  DetailPage,
+  DetailPageContent,
+  DetailPageHeader,
+  DetailPageTitle,
+} from "@/components/ui/detail-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -293,21 +293,21 @@ export function PostDetailSheet({
 
   return (
     <>
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-[500px] overflow-y-auto p-0">
+    <DetailPage open={open} onOpenChange={handleOpenChange} backLabel="Voltar para conteúdo">
+      <DetailPageContent>
         {isLoading || !post ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex min-h-[16rem] items-center justify-center">
             <Loader2 size={24} className="animate-spin text-stone" />
           </div>
         ) : (
           <div className="flex flex-col h-full">
             {/* Header */}
-            <SheetHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
+            <DetailPageHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
               <div className="flex items-start justify-between gap-3 pr-8">
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
-                  <SheetTitle className="text-base font-medium text-ink dark:text-white leading-tight">
+                  <DetailPageTitle className="text-base font-medium text-ink dark:text-white leading-tight">
                     {post.title}
-                  </SheetTitle>
+                  </DetailPageTitle>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <span className="text-xs text-stone">
                       {POST_TYPE_LABELS[post.type] ?? post.type}
@@ -391,7 +391,7 @@ export function PostDetailSheet({
                   )}
                 </div>
               )}
-            </SheetHeader>
+            </DetailPageHeader>
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-4">
@@ -554,8 +554,8 @@ export function PostDetailSheet({
             </div>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DetailPageContent>
+    </DetailPage>
 
     {toastMsg && (
       <div className="fixed bottom-4 right-4 z-[80] rounded-[8px] bg-ink px-4 py-2.5 text-sm text-white shadow-lg dark:bg-white dark:text-ink">
