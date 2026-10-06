@@ -85,7 +85,7 @@ test.describe("conteúdo", () => {
     await test.step("#1 sheet reabre limpo em outro post", async () => {
       await page.getByRole("cell", { name: rascunho }).click();
       await expect(page.getByRole("heading", { name: rascunho })).toBeVisible();
-      await page.getByRole("button", { name: /^Voltar para / }).click();
+      await page.getByRole("button", { name: /^(Close|Voltar para )/ }).click();
       await expect(page.getByRole("heading", { name: rascunho })).toHaveCount(0);
 
       await page.getByRole("cell", { name: publicado }).click();
@@ -95,7 +95,7 @@ test.describe("conteúdo", () => {
       ).toHaveCount(0);
       await expect(page.getByRole("heading", { name: publicado })).toBeVisible();
       await shot(page, "41-conteudo-sheet");
-      await page.getByRole("button", { name: /^Voltar para / }).click();
+      await page.getByRole("button", { name: /^(Close|Voltar para )/ }).click();
     });
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {
