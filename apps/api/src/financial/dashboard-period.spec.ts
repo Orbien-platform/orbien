@@ -3,6 +3,7 @@ import {
   buildBuckets,
   dayKey,
   previousPeriod,
+  resolveAsOf,
   resolvePeriod,
   todayInSaoPaulo,
 } from './dashboard-period';
@@ -132,5 +133,22 @@ describe('todayInSaoPaulo', () => {
   it('usa o dia de Brasília, não o de UTC', () => {
     expect(dayKey(todayInSaoPaulo(new Date('2026-10-06T01:00:00.000Z')))).toBe('2026-10-05');
     expect(dayKey(addDays(todayInSaoPaulo(new Date('2026-10-06T04:00:00.000Z')), 0))).toBe('2026-10-06');
+  });
+});
+
+describe('resolveAsOf', () => {
+  it('o limite exclusivo é o dia seguinte à data pedida, 00:00Z', () => {
+    const { asOf, endExclusive } = resolveAsOf('2026-10-31');
+    expect(dayKey(asOf)).toBe('2026-10-31');
+    expect(endExclusive.toISOString()).toBe('2026-11-01T00:00:00.000Z');
+  });
+
+  it('sem data, é hoje em Brasília (23h de 31/10 em Brasília já é 01/11 em UTC)', () => {
+    const { asOf } = resolveAsOf(undefined, new Date('2026-11-01T02:00:00.000Z'));
+    expect(dayKey(asOf)).toBe('2026-10-31');
+  });
+
+  it('rejeita dia que não existe no calendário', () => {
+    expect(() => resolveAsOf('2026-02-30')).toThrow('Data inválida');
   });
 });

@@ -233,3 +233,74 @@ describe('DashboardService.getWeeklyDashboard', () => {
     expect(client.$queryRaw).toHaveBeenCalledTimes(4);
   });
 });
+
+describe('DashboardService.getCashBalance', () => {
+  type Group = { type: 'income' | 'expense'; status: 'pending' | 'paid' | 'confirmed'; _sum: { amount: unknown } };
+
+  function cashService(groups: Group[]) {
+    const groupBy = jest.fn().mockResolvedValue(groups);
+    const prisma = { client: { financialTransaction: { groupBy } } } as unknown as PrismaService;
+    return { service: new DashboardService(prisma), groupBy };
+  }
+
+  it('o caixa soma entradas e saídas pagas e exportadas, e deixa o não pago de fora', async () => {
+    const { service } = cashService([
+      { type: 'income', status: 'paid', _sum: { amount: '1000.50' } },
+      { type: 'income', status: 'confirmed', _sum: { amount: '500' } },
+      { type: 'expense', status: 'paid', _sum: { amount: '300.25' } },
+      { type: 'expense', status: 'confirmed', _sum: { amount: '100' } },
+      { type: 'income', status: 'pending', _sum: { amount: '999' } },
+      { type: 'expense', status: 'pending', _sum: { amount: '77' } },
+    ]);
+    const result = await service.getCashBalance(user, '2026-10-31');
+    expect(result.as_of).toBe('2026-10-31');
+    expect(result.balance).toBeCloseTo(1100.25, 2);
+    expect(result.pending).toEqual({ income: 999, expense: 77 });
+  });
+
+  it('sem nenhum lançamento, o caixa é zero', async () => {
+    const { service } = cashService([]);
+    const result = await service.getCashBalance(user, '2026-10-31');
+    expect(result.balance).toBe(0);
+    expect(result.pending).toEqual({ income: 0, expense: 0 });
+  });
+
+  it('saída maior que entrada dá caixa negativo', async () => {
+    const { service } = cashService([
+      { type: 'income', status: 'paid', _sum: { amount: '100' } },
+      { type: 'expense', status: 'paid', _sum: { amount: '250' } },
+    ]);
+    const result = await service.getCashBalance(user, '2026-10-31');
+    expect(result.balance).toBe(-150);
+  });
+
+  it('consulta a congregação do usuário, desde sempre até o fim do dia pedido (exclusivo)', async () => {
+    const { service, groupBy } = cashService([]);
+    await service.getCashBalance(user, '2026-10-31');
+    expect(groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenant_id: 'tenant-1',
+          congregation_id: 'cong-1',
+          occurred_at: { lt: new Date('2026-11-01T00:00:00.000Z') },
+        },
+      }),
+    );
+  });
+
+  it('sem as_of, usa hoje em Brasília', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
+    try {
+      const { service } = cashService([]);
+      const result = await service.getCashBalance(user);
+      expect(result.as_of).toBe('2026-10-15');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('data impossível vira 400', async () => {
+    const { service } = cashService([]);
+    await expect(service.getCashBalance(user, '2026-02-30')).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
