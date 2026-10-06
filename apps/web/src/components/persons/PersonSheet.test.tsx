@@ -364,6 +364,32 @@ describe("PersonSheet", () => {
       });
     }
 
+    it("shows the current role and email instead of the grant button when the person already has access", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["treasurer", "papel_novo"] } },
+      });
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      expect(screen.getByText("Tesoureiro(a), papel_novo")).toBeInTheDocument();
+      expect(screen.getByText("ana@igreja.org")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Conceder acesso/ })).not.toBeInTheDocument();
+    });
+
+    it("shows a dash when the account has no role assigned", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: [] } },
+      });
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      expect(screen.getByText("Papel").nextElementSibling).toHaveTextContent("—");
+    });
+
     it("hides the section for a role without tenant_admin or pastor", async () => {
       vi.mocked(api.get).mockResolvedValue({ data: person });
       render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
