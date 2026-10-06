@@ -88,7 +88,7 @@ export class TransactionsController {
   }
 
   @Delete(':id')
-  @Roles('admin_congregation', 'tenant_admin')
+  @Roles('treasurer', 'admin_congregation', 'tenant_admin')
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('scope') scope: RecurringScope | undefined,

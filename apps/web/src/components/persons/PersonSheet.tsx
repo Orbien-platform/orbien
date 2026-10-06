@@ -45,6 +45,7 @@ interface PersonDetail {
   membership_date?: string;
   gender?: string;
   classification: string;
+  access?: { email: string; role_codes: string[] } | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +86,12 @@ function formatDate(iso: string): string {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function roleLabels(codes: string[]): string {
+  return codes
+    .map((c) => ASSIGNABLE_ROLE_OPTIONS.find((o) => o.value === c)?.label ?? c)
+    .join(", ");
 }
 
 function formatDateOnly(iso?: string): string {
@@ -477,7 +484,15 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                         Acesso ao sistema
                       </p>
 
-                      {!showAccessForm ? (
+                      {person.access ? (
+                        <div className="text-sm">
+                          <p className="text-xs text-stone">Papel</p>
+                          <p className="mt-0.5 text-ink dark:text-white">
+                            {roleLabels(person.access.role_codes) || "—"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-stone">{person.access.email}</p>
+                        </div>
+                      ) : !showAccessForm ? (
                         <Button
                           variant="outline"
                           size="sm"

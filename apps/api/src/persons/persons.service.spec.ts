@@ -183,17 +183,36 @@ describe('PersonsService', () => {
   });
 
   describe('findOne', () => {
-    it('retorna a pessoa com as filiações de família', async () => {
+    it('retorna a pessoa com as filiações de família e sem acesso', async () => {
       const { service, client } = serviceWith();
-      client.person.findUnique.mockResolvedValue({ id: 'p1', householdMemberships: [] });
+      client.person.findUnique.mockResolvedValue({ id: 'p1', householdMemberships: [], userAccounts: [] });
 
       const result = await service.findOne('p1');
 
       expect(client.person.findUnique).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        include: { householdMemberships: true },
+        include: {
+          householdMemberships: true,
+          userAccounts: {
+            where: { is_active: true },
+            select: { email: true, roleAssignments: { select: { role_code: true } } },
+          },
+        },
       });
-      expect(result).toEqual({ id: 'p1', householdMemberships: [] });
+      expect(result).toEqual({ id: 'p1', householdMemberships: [], access: null });
+    });
+
+    it('devolve o papel da conta ativa em `access`', async () => {
+      const { service, client } = serviceWith();
+      client.person.findUnique.mockResolvedValue({
+        id: 'p1',
+        householdMemberships: [],
+        userAccounts: [{ email: 'a@b.c', roleAssignments: [{ role_code: 'treasurer' }] }],
+      });
+
+      const result = await service.findOne('p1');
+
+      expect(result.access).toEqual({ email: 'a@b.c', role_codes: ['treasurer'] });
     });
 
     it('lança NotFoundException quando a pessoa não existe', async () => {
