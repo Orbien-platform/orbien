@@ -74,7 +74,7 @@ test.describe("grupos", () => {
     await test.step("#1/#2 sheet reabre limpo em outro grupo", async () => {
       await page.getByRole("cell", { name: nomeA }).click();
       await expect(page.getByRole("heading", { name: nomeA })).toBeVisible();
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: /^Voltar para / }).click();
       await expect(page.getByRole("heading", { name: nomeA })).toHaveCount(0);
 
       await page.getByRole("cell", { name: nomeB }).click();
@@ -84,7 +84,7 @@ test.describe("grupos", () => {
       ).toHaveCount(0);
       await expect(page.getByRole("heading", { name: nomeB })).toBeVisible();
       await shot(page, "31-grupos-sheet");
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: /^Voltar para / }).click();
     });
 
     await test.step("sem erro de console ou HTTP inesperado", async () => {

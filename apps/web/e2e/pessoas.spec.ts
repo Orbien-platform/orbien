@@ -77,13 +77,13 @@ test.describe("pessoas", () => {
       await page.getByRole("cell", { name: "Carlos Pereira" }).click();
       await expect(page.getByRole("heading", { name: "Carlos Pereira" })).toBeVisible();
 
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: /^Voltar para / }).click();
       await expect(page.getByRole("heading", { name: "Carlos Pereira" })).toHaveCount(0);
 
       await page.getByRole("cell", { name: "Maria Rodrigues" }).click();
       await expect(page.getByRole("heading", { name: "Maria Rodrigues" })).toBeVisible();
       await shot(page, "21-pessoas-sheet");
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: /^Voltar para / }).click();
     });
 
     await test.step("#1 fechar em modo de edição não deixa o sheet sujo", async () => {
@@ -98,7 +98,7 @@ test.describe("pessoas", () => {
       await page.getByRole("button", { name: "Editar" }).click();
       await expect(page.getByRole("button", { name: "Salvar" })).toBeVisible();
 
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: /^Voltar para / }).click();
       await page.getByRole("cell", { name: "Carlos Pereira" }).click();
 
       await expect(
@@ -106,7 +106,7 @@ test.describe("pessoas", () => {
         "o sheet reabriu em modo de edição — o fechamento não resetou"
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Salvar" })).toHaveCount(0);
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: /^Voltar para / }).click();
     });
 
     await test.step("#5 cadastro aparece na lista sem recarregar a página", async () => {
