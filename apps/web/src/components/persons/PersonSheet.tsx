@@ -3,11 +3,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Loader2, Phone, Mail, Calendar, User, Edit2, Check, X, KeyRound } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  DetailPage,
+  DetailPageContent,
+  DetailPageHeader,
+  DetailPageTitle,
+} from "@/components/ui/detail-page";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -238,8 +238,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
   }
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
+    <DetailPage open={open} onOpenChange={handleOpenChange} backLabel="Voltar para pessoas">
+      <DetailPageContent>
         {isLoading ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-6 w-48" />
@@ -251,21 +251,21 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
             </div>
           </div>
         ) : !person ? (
-          <div className="flex h-full items-center justify-center text-sm text-stone">
+          <div className="flex min-h-[16rem] items-center justify-center text-sm text-stone">
             Pessoa não encontrada.
           </div>
         ) : (
           <>
             {/* ── Header ── */}
-            <SheetHeader className="border-b border-[var(--border-default)] p-5 pb-4">
+            <DetailPageHeader className="border-b border-[var(--border-default)] p-5 pb-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-navy-dim text-sm font-medium text-navy">
                   {person.full_name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <SheetTitle className="text-base font-medium text-ink dark:text-white truncate">
+                  <DetailPageTitle className="text-base font-medium text-ink dark:text-white truncate">
                     {person.full_name}
-                  </SheetTitle>
+                  </DetailPageTitle>
                   <div className="mt-1 flex items-center gap-2">
                     <StatusBadge classification={person.classification} />
                     <span className="text-xs text-stone">
@@ -274,7 +274,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                   </div>
                 </div>
               </div>
-            </SheetHeader>
+            </DetailPageHeader>
 
             {/* ── Body ── */}
             <div className="p-5">
@@ -564,8 +564,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
             </div>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DetailPageContent>
+    </DetailPage>
   );
 }
 

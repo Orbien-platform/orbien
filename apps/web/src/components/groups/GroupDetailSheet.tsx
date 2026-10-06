@@ -5,12 +5,12 @@ import { Loader2, Pencil, Users, CalendarDays, MapPin, Clock, ChevronDown, FileT
 import { Tabs } from "@base-ui/react/tabs";
 import { Dialog } from "@base-ui/react/dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  DetailPage,
+  DetailPageContent,
+  DetailPageHeader,
+  DetailPageTitle,
+  DetailPageDescription,
+} from "@/components/ui/detail-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -491,29 +491,29 @@ export function GroupDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={handleOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-[480px] overflow-y-auto p-0">
+      <DetailPage open={open} onOpenChange={handleOpenChange} backLabel="Voltar para grupos">
+        <DetailPageContent>
           {isLoading || !group ? (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex min-h-[16rem] items-center justify-center">
               <Loader2 size={24} className="animate-spin text-stone" />
             </div>
           ) : (
             <div className="flex flex-col h-full">
               {/* Header */}
-              <SheetHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
+              <DetailPageHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
                 <div className="flex items-start justify-between gap-3 pr-8">
                   <div className="flex flex-col gap-1">
-                    <SheetTitle className="flex items-center gap-2 text-base font-medium text-ink dark:text-white leading-tight">
+                    <DetailPageTitle className="flex items-center gap-2 text-base font-medium text-ink dark:text-white leading-tight">
                       {group.name}
                       <GroupHealthBadge groupId={group.id} />
-                    </SheetTitle>
-                    <SheetDescription className="flex items-center gap-1.5 text-xs text-stone">
+                    </DetailPageTitle>
+                    <DetailPageDescription className="flex items-center gap-1.5 text-xs text-stone">
                       <span
                         className="h-2 w-2 flex-shrink-0 rounded-full"
                         style={{ backgroundColor: group.groupType?.color || DEFAULT_GROUP_TYPE_COLOR }}
                       />
                       {group.groupType?.name ?? "—"}
-                    </SheetDescription>
+                    </DetailPageDescription>
                   </div>
                   {canEdit && !editing && (
                     <button
@@ -560,7 +560,7 @@ export function GroupDetailSheet({
                     </Tabs.List>
                   </Tabs.Root>
                 </div>
-              </SheetHeader>
+              </DetailPageHeader>
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto">
@@ -943,8 +943,8 @@ export function GroupDetailSheet({
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DetailPageContent>
+      </DetailPage>
 
       {group && (
         <RegisterMeetingModal

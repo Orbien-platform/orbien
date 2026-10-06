@@ -192,7 +192,7 @@ describe("CelebrationDetailSheet", () => {
 
     expect(await screen.findByText("Culto Domingo")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: /^Voltar/ }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

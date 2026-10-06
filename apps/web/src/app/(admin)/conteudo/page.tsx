@@ -291,6 +291,8 @@ export default function ConteudoPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* A lista some enquanto o detalhe está aberto; o estado (filtros, página) fica montado. */}
+      <div className={postSheetOpen ? "hidden" : "flex flex-col gap-6"}>
       <div>
         <h1 className="page-title">Publicações</h1>
       </div>
@@ -451,6 +453,8 @@ export default function ConteudoPage() {
           )}
         </Tabs.Panel>
       </Tabs.Root>
+
+      </div>
 
       {/* ── Modals / Sheets ── */}
       <CreatePostModal

@@ -13,12 +13,12 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  DetailPage,
+  DetailPageContent,
+  DetailPageHeader,
+  DetailPageTitle,
+  DetailPageDescription,
+} from "@/components/ui/detail-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -522,29 +522,29 @@ export function MinistryDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={handleOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
+      <DetailPage open={open} onOpenChange={handleOpenChange} backLabel="Voltar para voluntários">
+        <DetailPageContent>
           {isLoading || !ministry ? (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex min-h-[16rem] items-center justify-center">
               <Loader2 size={24} className="animate-spin text-stone" />
             </div>
           ) : (
             <div className="flex flex-col h-full">
               {/* Header */}
-              <SheetHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
+              <DetailPageHeader className="px-4 pt-6 pb-4 border-b border-[var(--border-default)]">
                 <div className="flex items-start gap-3 pr-8">
                   <div
                     className="mt-1 h-10 w-1.5 flex-shrink-0 rounded-full"
                     style={{ backgroundColor: dotColor }}
                   />
                   <div className="flex flex-col gap-0.5 flex-1">
-                    <SheetTitle className="text-base font-medium text-ink dark:text-white">
+                    <DetailPageTitle className="text-base font-medium text-ink dark:text-white">
                       {ministry.name}
-                    </SheetTitle>
+                    </DetailPageTitle>
                     {ministry.description && (
-                      <SheetDescription className="text-xs text-stone">
+                      <DetailPageDescription className="text-xs text-stone">
                         {ministry.description}
-                      </SheetDescription>
+                      </DetailPageDescription>
                     )}
                   </div>
                   {canEdit && !editing && (
@@ -558,7 +558,7 @@ export function MinistryDetailSheet({
                     </button>
                   )}
                 </div>
-              </SheetHeader>
+              </DetailPageHeader>
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto">
@@ -697,8 +697,8 @@ export function MinistryDetailSheet({
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DetailPageContent>
+      </DetailPage>
 
       {ministryId && (
         <AddMinistryMemberModal

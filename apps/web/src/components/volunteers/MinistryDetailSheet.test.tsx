@@ -298,7 +298,7 @@ describe("MinistryDetailSheet", () => {
     render(<MinistryDetailSheet open={true} {...baseProps} onOpenChange={onOpenChange} />);
     await screen.findByText("Louvor");
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: /^Voltar/ }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

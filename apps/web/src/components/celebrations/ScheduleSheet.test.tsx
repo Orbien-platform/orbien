@@ -363,7 +363,7 @@ describe("ScheduleSheet", () => {
     render(<ScheduleSheet open={true} {...baseProps} onOpenChange={onOpenChange} onChanged={vi.fn()} />);
 
     await screen.findByText("Louvor");
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: /^Voltar/ }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

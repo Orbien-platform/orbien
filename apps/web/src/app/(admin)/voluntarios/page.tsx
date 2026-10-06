@@ -234,6 +234,8 @@ export default function VoluntariosPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* A lista some enquanto o detalhe está aberto; o estado (filtros, página) fica montado. */}
+      <div className={minSheetOpen ? "hidden" : "flex flex-col gap-6"}>
       {/* Page header */}
       <div>
         <h1 className="page-title">Ministérios</h1>
@@ -430,6 +432,8 @@ export default function VoluntariosPage() {
           <UnavailabilityPanel />
         </Tabs.Panel>
       </Tabs.Root>
+
+      </div>
 
       {/* ── Sheets / Modals ── */}
       <CreateMinistryModal

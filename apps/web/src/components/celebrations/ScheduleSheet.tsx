@@ -19,12 +19,12 @@ import {
   X,
 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  DetailPage,
+  DetailPageContent,
+  DetailPageDescription,
+  DetailPageHeader,
+  DetailPageTitle,
+} from "@/components/ui/detail-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -418,21 +418,21 @@ export function ScheduleSheet({
   );
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-[520px] overflow-y-auto p-0">
-        {/* pr-12: abre espaço para o botão de fechar do Sheet (absolute top-3 right-3) */}
-        <SheetHeader className="border-b border-[var(--border-default)] p-5 pr-12">
+    <DetailPage open={open} onOpenChange={handleOpenChange} backLabel="Voltar para celebrações">
+      <DetailPageContent>
+        {/* pr-12: folga à direita do cabeçalho */}
+        <DetailPageHeader className="border-b border-[var(--border-default)] p-5 pr-12">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <SheetTitle className="truncate text-base">{celebrationName}</SheetTitle>
-              <SheetDescription className="text-xs">
+              <DetailPageTitle className="truncate text-base">{celebrationName}</DetailPageTitle>
+              <DetailPageDescription className="text-xs">
                 Escala ·{" "}
                 {formatInstant(scheduledDate, {
                   day: "2-digit",
                   month: "2-digit",
                   year: "numeric",
                 })}
-              </SheetDescription>
+              </DetailPageDescription>
             </div>
             {schedule ? (
               <span
@@ -449,7 +449,7 @@ export function ScheduleSheet({
               </span>
             ) : null}
           </div>
-        </SheetHeader>
+        </DetailPageHeader>
 
         <div className="flex flex-col gap-4 p-5">
           {error ? (
@@ -831,7 +831,7 @@ export function ScheduleSheet({
             </>
           ) : null}
         </div>
-      </SheetContent>
-    </Sheet>
+      </DetailPageContent>
+    </DetailPage>
   );
 }

@@ -334,7 +334,7 @@ describe("GroupDetailSheet", () => {
     );
 
     expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: /^Voltar/ }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
