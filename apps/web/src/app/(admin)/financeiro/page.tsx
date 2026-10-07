@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Repeat, Loader2, Pencil, Trash2, Eye, Settings2, Layers } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Repeat, Loader2, Pencil, Trash2, Eye, Settings2, Layers } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +10,8 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { NewTransactionModal } from "@/components/financial/NewTransactionModal";
 import { RecurrenceScopeDialog, type RecurrenceScope } from "@/components/financial/RecurrenceScopeDialog";
-import { ExportButton } from "@/components/financial/ExportButton";
+import { DrePanel } from "@/components/financial/DrePanel";
+import { useDreReport } from "@/components/financial/useDreReport";
 import { CategoriesModal } from "@/components/financial/CategoriesModal";
 import { CostCentersModal } from "@/components/financial/CostCentersModal";
 import { CashBalanceCard } from "@/components/financial/CashBalanceCard";
@@ -65,25 +66,6 @@ interface RecurringRule {
   transactions_count: number;
 }
 
-interface DreCategory {
-  category_name: string;
-  total: number;
-  count: number;
-}
-
-interface DRE {
-  period: { start: string; end: string };
-  revenue: { categories: DreCategory[]; total: number };
-  expenses: { categories: DreCategory[]; total: number };
-  net_result: number;
-  previous_period: {
-    period: { start: string; end: string };
-    revenue_total: number;
-    expenses_total: number;
-    net_result: number;
-  };
-}
-
 function frequencyLabel(freq: "weekly" | "monthly" | "yearly"): string {
   return freq === "weekly" ? "Semanal" : freq === "monthly" ? "Mensal" : "Anual";
 }
@@ -132,36 +114,7 @@ function fmtDate(iso: string): string {
   });
 }
 
-function deltaPercent(current: number, previous: number): number | null {
-  if (previous === 0) return null;
-  return ((current - previous) / previous) * 100;
-}
-
-// Dia civil de Brasília: `toISOString()` já diria "amanhã" depois das 21h.
-function todayIso(): string {
-  return todayKey();
-}
-
-function firstOfMonthIso(): string {
-  return monthRangeOf().start;
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function DeltaCell({ current, previous }: { current: number; previous: number }) {
-  const delta = deltaPercent(current, previous);
-  if (delta === null)
-    return <td className="py-2.5 pr-4 text-right text-xs text-stone">—</td>;
-  const pos = delta >= 0;
-  return (
-    <td className="py-2.5 pr-4 text-right">
-      <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium tabular-nums", pos ? "text-teal" : "text-crimson")}>
-        {pos ? <TrendingUp size={11} strokeWidth={2} /> : <TrendingDown size={11} strokeWidth={2} />}
-        {Math.abs(delta).toFixed(1)}%
-      </span>
-    </td>
-  );
-}
 
 function TotalCard({
   label,
@@ -222,6 +175,7 @@ export default function FinanceiroPage() {
   const showPixTab = showPremiumTabs && user?.asaas_payments === true;
 
   const [activeTab, setActiveTab] = useState<TabValue>("overview");
+  const dreModel = useDreReport(activeTab === "dre", isPastor);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [costCentersOpen, setCostCentersOpen] = useState(false);
 
@@ -233,13 +187,6 @@ export default function FinanceiroPage() {
   // um booleano ligado dentro do efeito.
   const [loadedTxKey, setLoadedTxKey] = useState<string | null>(null);
   const txSeq = useRef(0);
-
-  // DRE state
-  const [dreStart, setDreStart] = useState(firstOfMonthIso);
-  const [dreEnd, setDreEnd] = useState(todayIso);
-  const [dre, setDre] = useState<DRE | null>(null);
-  const [loadingDre, setLoadingDre] = useState(false);
-  const prevDreKey = useRef("");
 
   // Lançamentos filters (client-side)
   const [txType, setTxType] = useState<"" | "income" | "expense">("");
@@ -442,20 +389,6 @@ export default function FinanceiroPage() {
       setDeactivatingId(null);
     }
   }
-
-  // ── Fetch DRE ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (activeTab !== "dre") return;
-    const key = `${dreStart}|${dreEnd}`;
-    if (prevDreKey.current === key) return;
-    prevDreKey.current = key;
-    setLoadingDre(true);
-    api
-      .get<DRE>(`/financial/dre?period_start=${dreStart}&period_end=${dreEnd}`)
-      .then((r) => setDre(r.data))
-      .catch(() => {})
-      .finally(() => setLoadingDre(false));
-  }, [activeTab, dreStart, dreEnd]);
 
   // ── Computed ─────────────────────────────────────────────────────────────────
   const txRangeInvalid = !!txFrom && !!txTo && txFrom > txTo;
@@ -984,134 +917,7 @@ export default function FinanceiroPage() {
 
         {/* ── DRE ────────────────────────────────────────────────────────────── */}
         <Tabs.Panel value="dre" className="pt-5">
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={dreStart}
-                  onChange={(e) => { setDreStart(e.target.value); prevDreKey.current = ""; }}
-                  className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-                />
-                <span className="text-xs text-stone">até</span>
-                <input
-                  type="date"
-                  value={dreEnd}
-                  onChange={(e) => { setDreEnd(e.target.value); prevDreKey.current = ""; }}
-                  className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-                />
-              </div>
-              {!isPastor && <ExportButton periodStart={dreStart} periodEnd={dreEnd} />}
-            </div>
-
-            {loadingDre ? (
-              <div className="space-y-2">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
-                ))}
-              </div>
-            ) : !dre ? (
-              <p className="py-10 text-center text-sm text-stone">
-                Selecione um período para ver o DRE.
-              </p>
-            ) : (
-              <div className="overflow-hidden rounded-[12px] border border-[var(--border-default)]">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <th className="py-2.5 pl-4 text-left text-xs font-medium text-stone">
-                        Conta
-                      </th>
-                      {!isPastor && (
-                        <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
-                          Total
-                        </th>
-                      )}
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
-                        Qtd
-                      </th>
-                      <th className="py-2.5 pr-4 text-right text-xs font-medium text-stone">
-                        Δ período ant.
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* RECEITAS group */}
-                    <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-2.5 pl-4 text-xs font-semibold text-stone">Receitas</td>
-                      {!isPastor && (
-                        <td className="py-2.5 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
-                          {fmt(dre.revenue.total)}
-                        </td>
-                      )}
-                      <td className="py-2.5 pr-4 text-right text-xs text-stone">—</td>
-                      <DeltaCell current={dre.revenue.total} previous={dre.previous_period.revenue_total} />
-                    </tr>
-                    {dre.revenue.categories.length === 0 ? (
-                      <tr>
-                        <td colSpan={isPastor ? 3 : 4} className="py-2 pl-8 text-xs text-stone">Sem lançamentos</td>
-                      </tr>
-                    ) : (
-                      dre.revenue.categories.map((cat) => (
-                        <tr key={cat.category_name} className="border-t border-[var(--border-default)] hover:bg-[var(--surface-subtle)] transition-colors">
-                          <td className="py-2.5 pl-8 text-sm text-ink dark:text-white">{cat.category_name}</td>
-                          {!isPastor && (
-                            <td className="py-2.5 pr-4 text-right text-sm tabular-nums text-ink dark:text-white">
-                              {fmt(cat.total)}
-                            </td>
-                          )}
-                          <td className="py-2.5 pr-4 text-right text-xs text-stone">{cat.count}</td>
-                          <td className="py-2.5 pr-4 text-right text-xs text-stone">—</td>
-                        </tr>
-                      ))
-                    )}
-
-                    {/* DESPESAS group */}
-                    <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-2.5 pl-4 text-xs font-semibold text-stone">Despesas</td>
-                      {!isPastor && (
-                        <td className="py-2.5 pr-4 text-right text-sm font-semibold tabular-nums text-ink dark:text-white">
-                          {fmt(dre.expenses.total)}
-                        </td>
-                      )}
-                      <td className="py-2.5 pr-4 text-right text-xs text-stone">—</td>
-                      <DeltaCell current={dre.expenses.total} previous={dre.previous_period.expenses_total} />
-                    </tr>
-                    {dre.expenses.categories.length === 0 ? (
-                      <tr>
-                        <td colSpan={isPastor ? 3 : 4} className="py-2 pl-8 text-xs text-stone">Sem lançamentos</td>
-                      </tr>
-                    ) : (
-                      dre.expenses.categories.map((cat) => (
-                        <tr key={cat.category_name} className="border-t border-[var(--border-default)] hover:bg-[var(--surface-subtle)] transition-colors">
-                          <td className="py-2.5 pl-8 text-sm text-ink dark:text-white">{cat.category_name}</td>
-                          {!isPastor && (
-                            <td className="py-2.5 pr-4 text-right text-sm tabular-nums text-ink dark:text-white">
-                              {fmt(cat.total)}
-                            </td>
-                          )}
-                          <td className="py-2.5 pr-4 text-right text-xs text-stone">{cat.count}</td>
-                          <td className="py-2.5 pr-4 text-right text-xs text-stone">—</td>
-                        </tr>
-                      ))
-                    )}
-
-                    {/* Resultado líquido */}
-                    <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                      <td className="py-3 pl-4 text-sm font-semibold text-ink dark:text-white">Resultado líquido</td>
-                      {!isPastor && (
-                        <td className={cn("py-3 pr-4 text-right text-sm font-semibold tabular-nums", dre.net_result >= 0 ? "text-teal" : "text-crimson")}>
-                          {fmt(dre.net_result)}
-                        </td>
-                      )}
-                      <td className="py-3 pr-4 text-right text-xs text-stone">—</td>
-                      <DeltaCell current={dre.net_result} previous={dre.previous_period.net_result} />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <DrePanel model={dreModel} isPastor={isPastor} />
         </Tabs.Panel>
 
         {/* ── Balancete ──────────────────────────────────────────────────────── */}

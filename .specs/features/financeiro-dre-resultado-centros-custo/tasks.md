@@ -140,12 +140,15 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Depends on**: T6 · **Requirement**: DRE-03, DRE-09
 **Tools**: Skill `frontend-design` (obrigatória antes do 1º Edit)
 **Done when**:
-- [ ] Testes de DRE de `page.test.tsx` passam sem edição
-- [ ] net > 0 → "Lucro do período" com `text-teal`; < 0 → "Prejuízo do período" com `text-crimson`; 0 → "Resultado zerado"
-- [ ] Linha "A realizar" exibe receitas e despesas pendentes e não altera o resultado
-- [ ] Trocar o centro dispara `GET /financial/dre?...&cost_center_id=<id>`; "Todos" omite o parâmetro; resposta antiga ignorada (`requestSeq`)
-- [ ] 403 → `NoAccessState`
+- [x] Testes de DRE de `page.test.tsx` passam sem edição
+- [x] net > 0 → "Lucro do período" com `text-teal`; < 0 → "Prejuízo do período" com `text-crimson`; 0 → "Resultado zerado"
+- [x] Linha "A realizar" exibe receitas e despesas pendentes e não altera o resultado
+- [x] Trocar o centro dispara `GET /financial/dre?...&cost_center_id=<id>`; "Todos" omite o parâmetro; resposta antiga ignorada (`requestSeq`)
+- [x] 403 → `NoAccessState`
 **Tests**: unit · **Gate**: quick (Web)
+**Status**: ✅ Concluída
+
+> Desvio de desenho (não de spec): o estado da aba vive no hook `useDreReport`, chamado na `page.tsx`, e o `DrePanel` é só apresentação. `keepMounted` foi tentado e descartado: deixava os `input[type=date]` do DRE no DOM antes dos do Balancete e quebrava `BalancetePanel` nos testes existentes, que indexam os inputs globalmente.
 
 ### T8: Botão "DRE (PDF)"
 **What**: `DrePdfButton` chamando `POST /financial/dre/export/pdf` e baixando `orbien_dre_*.pdf`; escondido para pastor.
