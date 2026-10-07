@@ -223,6 +223,21 @@ describe('BalanceteService — só lançamentos realizados', () => {
     expect(result.lines[0]?.net_result).toBe(0);
   });
 
+  it('linha do centro em centavos: 0,10 + 0,20 no MESMO centro → 0,3 de receita e de despesa', async () => {
+    const service = new BalanceteService(
+      prismaWith([
+        row('0.10', 'income', 'paid', CC_A),
+        row('0.20', 'income', 'paid', CC_A),
+        row('0.10', 'expense', 'paid', CC_A),
+        row('0.20', 'expense', 'paid', CC_A),
+      ]),
+    );
+
+    const result = await service.build('t1', periodo);
+
+    expect(result.lines[0]).toMatchObject({ revenue_total: 0.3, expenses_total: 0.3 });
+  });
+
   it('totais em centavos: receitas 0,10 + 0,20 de dois centros → 0,3', async () => {
     const service = new BalanceteService(
       prismaWith([

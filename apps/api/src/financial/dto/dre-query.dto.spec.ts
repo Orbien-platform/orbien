@@ -59,6 +59,18 @@ describe('DreQueryDto — cost_center_id e período', () => {
     expect(errors.some((e) => e.property === 'cost_center_id')).toBe(true);
   });
 
+  it.each([
+    ['prefixo em "none"', 'xnone'],
+    ['sufixo em "none"', 'noneX'],
+    ['prefixo no UUID', `x${UUID}`],
+    ['sufixo no UUID', `${UUID}x`],
+    ['espaço depois do UUID', `${UUID} `],
+    ['UUID e "none" colados', `${UUID}none`],
+  ])('rejeita cost_center_id com %s (o padrão é ancorado nas duas pontas)', async (_label, value) => {
+    const errors = await errorsFor({ cost_center_id: value });
+    expect(errors.some((e) => e.property === 'cost_center_id')).toBe(true);
+  });
+
   it('rejeita cost_center_id vazio', async () => {
     const errors = await errorsFor({ cost_center_id: '' });
     expect(errors.some((e) => e.property === 'cost_center_id')).toBe(true);

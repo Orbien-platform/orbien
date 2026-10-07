@@ -182,7 +182,9 @@ describe('DreCostCenterService.build', () => {
   });
 
   it('critério de sucesso: a MESMA massa fecha no DRE, na matriz, no Balancete e na série mensal', async () => {
-    const { prisma } = prismaWith(rows);
+    // `confirmed` entra junto de `paid`: sem uma linha confirmed na massa, um filtro só de `paid` passaria.
+    const massa = [...rows, row('10.00', 'income', 'Doações', MISSOES, { status: 'confirmed' })];
+    const { prisma } = prismaWith(massa);
 
     const dre = await new DreService(prisma).buildDre('t1', 'c1', periodo, false);
     const matriz = await new DreCostCenterService(prisma).build('t1', periodo);
@@ -194,14 +196,14 @@ describe('DreCostCenterService.build', () => {
         mensal.series.flatMap((s) => s.points).reduce((acc, p) => acc + p[campo], 0) * 100,
       ) / 100;
 
-    // massa fixa: 390 de receita, 305,50 de despesa, 84,50 de resultado (pendente e fora do período excluídos)
+    // massa fixa: 400 de receita, 305,50 de despesa, 94,50 de resultado (pendente e fora do período excluídos)
     for (const r of [
       dre.net_result,
       matriz.totals.net_result,
       balancete.net_result,
       somaMensal('net_result'),
     ]) {
-      expect(r).toBe(84.5);
+      expect(r).toBe(94.5);
     }
     for (const r of [
       dre.revenue.total,
@@ -209,7 +211,7 @@ describe('DreCostCenterService.build', () => {
       balancete.revenue_total,
       somaMensal('revenue_total'),
     ]) {
-      expect(r).toBe(390);
+      expect(r).toBe(400);
     }
     for (const r of [
       dre.expenses.total,
@@ -240,6 +242,48 @@ describe('DreCostCenterService.build', () => {
 
     expect(resultado.columns[0]?.net_result).toBe(0.1);
     expect(resultado.totals.net_result).toBe(0.1);
+  });
+
+  it('só paid e confirmed: pede exatamente esses dois status ao banco e conta o confirmed', async () => {
+    const { prisma, wheres } = prismaWith([
+      row('10.00', 'income', 'A', MISSOES, { status: 'paid' }),
+      row('20.00', 'income', 'A', MISSOES, { status: 'confirmed' }),
+      row('999.00', 'income', 'A', MISSOES, { status: 'pending' }),
+    ]);
+
+    const dre = await new DreCostCenterService(prisma).build('t1', periodo);
+
+    expect(wheres[0]?.status).toEqual({ in: ['paid', 'confirmed'] });
+    expect(dre.totals.revenue_total).toBe(30);
+  });
+
+  it('"Sem centro de custo" fica por último mesmo quando é o primeiro a aparecer nos lançamentos', async () => {
+    const dre = await new DreCostCenterService(
+      prismaWith([
+        row('1.00', 'income', 'A', null),
+        row('2.00', 'income', 'A', TEMPLO),
+        row('3.00', 'income', 'A', MISSOES),
+      ]).prisma,
+    ).build('t1', periodo);
+
+    expect(dre.columns.map((c) => c.cost_center_id)).toEqual([MISSOES.id, TEMPLO.id, null]);
+  });
+
+  it('centavos em colunas, células e total da linha: 0,10 + 0,20 na mesma categoria e centro → 0,3', async () => {
+    const dre = await new DreCostCenterService(
+      prismaWith([
+        row('0.10', 'income', 'A', MISSOES),
+        row('0.20', 'income', 'A', MISSOES),
+        row('0.10', 'expense', 'B', MISSOES),
+        row('0.20', 'expense', 'B', MISSOES),
+      ]).prisma,
+    ).build('t1', periodo);
+
+    expect(dre.columns[0]).toMatchObject({ revenue_total: 0.3, expenses_total: 0.3 });
+    expect(dre.revenue[0]?.cells[MISSOES.id]).toBe(0.3);
+    expect(dre.revenue[0]?.total).toBe(0.3);
+    expect(dre.expenses[0]?.cells[MISSOES.id]).toBe(0.3);
+    expect(dre.expenses[0]?.total).toBe(0.3);
   });
 
   it('sem lançamentos realizados: sem colunas, linhas vazias e totais zerados', async () => {

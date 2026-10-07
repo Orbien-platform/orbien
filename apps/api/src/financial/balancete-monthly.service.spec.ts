@@ -253,3 +253,38 @@ describe('BalanceteMonthlyService.build', () => {
     );
   });
 });
+
+describe('BalanceteMonthlyService.build — status e centavos', () => {
+  it('conta lançamento confirmed além de paid, e pede exatamente [paid, confirmed] ao banco', async () => {
+    const { prisma, wheres } = prismaWith([
+      row('10.00', 'income', '2026-01-10', MISSOES, 'paid'),
+      row('20.00', 'income', '2026-01-11', MISSOES, 'confirmed'),
+      row('999.00', 'income', '2026-01-12', MISSOES, 'pending'),
+    ]);
+
+    const result = await new BalanceteMonthlyService(prisma).build('t1', trimestre);
+
+    expect(wheres[0]?.status).toEqual({ in: ['paid', 'confirmed'] });
+    expect(result.series[0]?.points[0]?.revenue_total).toBe(30);
+  });
+
+  it('soma em centavos dentro do mês: receita 0,10 + 0,20 → 0,3 e resultado 0,70 − 0,60 → 0,1', async () => {
+    const soma = await new BalanceteMonthlyService(
+      prismaWith([
+        row('0.10', 'income', '2026-01-05', MISSOES),
+        row('0.20', 'income', '2026-01-06', MISSOES),
+        row('0.10', 'expense', '2026-01-07', MISSOES),
+        row('0.20', 'expense', '2026-01-08', MISSOES),
+      ]).prisma,
+    ).build('t1', trimestre);
+
+    expect(soma.series[0]?.points[0]).toMatchObject({ revenue_total: 0.3, expenses_total: 0.3 });
+
+    const resultado = await new BalanceteMonthlyService(
+      prismaWith([row('0.70', 'income', '2026-01-05', MISSOES), row('0.60', 'expense', '2026-01-06', MISSOES)])
+        .prisma,
+    ).build('t1', trimestre);
+
+    expect(resultado.series[0]?.points[0]?.net_result).toBe(0.1);
+  });
+});

@@ -283,6 +283,34 @@ describe('DreService.buildDre', () => {
       });
     });
 
+    it('três meses que começam no fim de um ano (nov → jan) comparam com ago → out', async () => {
+      // O mês final (1) é menor que o inicial (11): a conta de meses tem que
+      // atravessar a virada de ano, senão o "anterior" sai com meses de menos ou de mais.
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2025-11-01', period_end: '2026-01-31' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2025-08-01',
+        end: '2025-10-31',
+      });
+    });
+
+    it('a consulta do período anterior vai de 00:00:00.000 do primeiro dia a 23:59:59.999 do último', async () => {
+      const { service, wheres } = serviceWith([]);
+
+      await service.buildDre('t1', 'c1', janeiro, false);
+
+      const anterior = wheres[1] as { occurred_at: { gte: Date; lte: Date } };
+      expect(anterior.occurred_at.gte.toISOString()).toBe('2025-12-01T00:00:00.000Z');
+      expect(anterior.occurred_at.lte.toISOString()).toBe('2025-12-31T23:59:59.999Z');
+    });
+
     it('soma receita e despesa do período anterior e devolve o resultado', async () => {
       const { service } = serviceWith(
         [],
