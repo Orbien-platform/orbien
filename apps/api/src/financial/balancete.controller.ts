@@ -8,6 +8,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { BalanceteService } from './balancete.service';
+import { BalanceteMonthlyService } from './balancete-monthly.service';
 import { BalanceteQueryDto } from './dto/balancete-query.dto';
 
 const BALANCETE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_admin'] as const;
@@ -19,11 +20,21 @@ const BALANCETE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_ad
 @UseInterceptors(TenantContextInterceptor)
 @RequiresPlan('premium')
 export class BalanceteController {
-  constructor(private readonly balanceteService: BalanceteService) {}
+  constructor(
+    private readonly balanceteService: BalanceteService,
+    private readonly balanceteMonthlyService: BalanceteMonthlyService,
+  ) {}
 
   @Get()
   @Roles(...BALANCETE_ROLES)
   get(@Query() query: BalanceteQueryDto, @CurrentUser() user: JwtPayload) {
     return this.balanceteService.build(user.tenant_id, query);
+  }
+
+  // Evolução mensal por centro de custo; até 36 meses (acima disso, 400).
+  @Get('monthly')
+  @Roles(...BALANCETE_ROLES)
+  getMonthly(@Query() query: BalanceteQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.balanceteMonthlyService.build(user.tenant_id, query);
   }
 }

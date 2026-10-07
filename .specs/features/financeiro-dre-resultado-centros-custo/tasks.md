@@ -127,11 +127,12 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Where**: `balancete-monthly.service.ts`, `balancete.controller.ts`, `financial.module.ts` (+ specs)
 **Depends on**: T5 · **Requirement**: DRE-17
 **Done when**:
-- [ ] Um ponto por mês de calendário do período, com zeros nos meses sem lançamento
-- [ ] Mais de 36 meses → 400; exatamente 36 → 200
-- [ ] Série por centro inclui "Sem centro de custo"; soma dos meses = total do centro no Balancete
-- [ ] Gate **Build** da fase 2 (`build:api`, lint, todos os testes da API)
+- [x] Um ponto por mês de calendário do período, com zeros nos meses sem lançamento
+- [x] Mais de 36 meses → 400; exatamente 36 → 200
+- [x] Série por centro inclui "Sem centro de custo"; soma dos meses = total do centro no Balancete
+- [x] Gate **Build** da fase 2 (`build:api`, lint, todos os testes da API)
 **Tests**: unit · **Gate**: build
+**Status**: ✅ Concluída
 
 ### T7: Extrair `DrePanel` com Lucro/Prejuízo, A realizar e seletor de centro
 **What**: mover a aba DRE para `DrePanel.tsx`; rótulo Lucro/Prejuízo/zerado com cor e texto; linha "A realizar"; `CostCenterSelect` (Todos, Sem centro de custo, centros) que envia `cost_center_id`.

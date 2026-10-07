@@ -22,6 +22,7 @@ import { CostCentersController } from './cost-centers.controller';
 import { CostCentersService } from './cost-centers.service';
 import { BalanceteController } from './balancete.controller';
 import { BalanceteService } from './balancete.service';
+import { BalanceteMonthlyService } from './balancete-monthly.service';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { PixController } from './pix.controller';
@@ -67,6 +68,7 @@ describe('FinancialModule', () => {
     expect(moduleRef.get(CostCentersService)).toBeInstanceOf(CostCentersService);
     expect(moduleRef.get(BalanceteController)).toBeInstanceOf(BalanceteController);
     expect(moduleRef.get(BalanceteService)).toBeInstanceOf(BalanceteService);
+    expect(moduleRef.get(BalanceteMonthlyService)).toBeInstanceOf(BalanceteMonthlyService);
     expect(moduleRef.get(TransactionsController)).toBeInstanceOf(TransactionsController);
     expect(moduleRef.get(TransactionsService)).toBeInstanceOf(TransactionsService);
     expect(moduleRef.get(PixController)).toBeInstanceOf(PixController);

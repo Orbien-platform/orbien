@@ -9,6 +9,7 @@ import { CostCentersController } from './cost-centers.controller';
 import { CostCentersService } from './cost-centers.service';
 import { BalanceteController } from './balancete.controller';
 import { BalanceteService } from './balancete.service';
+import { BalanceteMonthlyService } from './balancete-monthly.service';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { PixModule } from './pix.module';
@@ -45,6 +46,7 @@ import { OfxImportService } from './import/ofx-import.service';
     CategoriesService,
     CostCentersService,
     BalanceteService,
+    BalanceteMonthlyService,
     TransactionsService,
     ForecastService,
     DashboardService,
