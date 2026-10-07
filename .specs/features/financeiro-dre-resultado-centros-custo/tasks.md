@@ -80,12 +80,13 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Where**: `apps/api/src/financial/dre.service.ts` (+ spec)
 **Depends on**: T1 · **Requirement**: DRE-01, DRE-02, DRE-04, DRE-09, DRE-10, DRE-11
 **Done when**:
-- [ ] Pendente não entra em receitas/despesas/resultado, atual nem anterior
-- [ ] `pending` traz a soma dos pendentes do mesmo recorte
-- [ ] 0,10 + 0,20 − 0,30 → `net_result` 0
-- [ ] Filtro por centro vale para período atual e anterior
-- [ ] Testes existentes de `previousPeriod` e arredondamento por categoria seguem verdes sem edição
+- [x] Pendente não entra em receitas/despesas/resultado, atual nem anterior
+- [x] `pending` traz a soma dos pendentes do mesmo recorte
+- [x] 0,10 + 0,20 − 0,30 → `net_result` 0
+- [x] Filtro por centro vale para período atual e anterior
+- [x] Testes existentes de `previousPeriod` e arredondamento por categoria seguem verdes sem edição
 **Tests**: unit · **Gate**: quick (API)
+**Status**: ✅ Concluída
 
 ### T3: PDF do DRE somente leitura com Lucro/Prejuízo
 **What**: remover o `updateMany`; rótulo "Lucro/Prejuízo do período"/"Resultado zerado"; linha "A realizar"; cabeçalho com o recorte de centro (nome ou "Sem centro de custo"); controller com 400 em período inválido.

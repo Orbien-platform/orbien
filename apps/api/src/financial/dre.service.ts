@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { REALIZED_STATUSES, buildScope, round2 } from './dre-scope';
 
 export interface DreCategoryLine {
   category_name: string;
@@ -15,11 +16,18 @@ export interface DrePeriodSummary {
   net_result: number;
 }
 
+/** Lançamentos `pending` do período: informativo ("A realizar"), fora do resultado. */
+export interface DrePending {
+  revenue_total: number;
+  expenses_total: number;
+}
+
 export interface DreResult {
   period: { start: string; end: string };
   revenue: { categories: DreCategoryLine[]; total: number };
   expenses: { categories: DreCategoryLine[]; total: number };
   net_result: number;
+  pending: DrePending;
   previous_period: DrePeriodSummary;
 }
 
@@ -27,7 +35,10 @@ export interface DreQuery {
   period_start: string;
   period_end: string;
   congregation_id?: string;
+  /** Compatibilidade: filtro por nome. `cost_center_id` vence. */
   cost_center?: string;
+  /** UUID do centro ou `none` (sem centro). */
+  cost_center_id?: string;
 }
 
 @Injectable()
@@ -49,16 +60,15 @@ export class DreService {
     const end = new Date(query.period_end);
     end.setUTCHours(23, 59, 59, 999);
 
-    const where: object = {
-      tenant_id: tenantId,
-      occurred_at: { gte: start, lte: end },
-      ...(query.congregation_id
-        ? { congregation_id: query.congregation_id }
-        : {}),
-      ...(query.cost_center
-        ? { costCenter: { name: query.cost_center } }
-        : {}),
-    };
+    const where = buildScope({
+      tenantId,
+      start,
+      end,
+      congregationId: query.congregation_id,
+      costCenterId: query.cost_center_id,
+      costCenterName: query.cost_center,
+      statuses: REALIZED_STATUSES,
+    });
 
     const transactions = await this.prisma.client.financialTransaction.findMany(
       {
@@ -71,8 +81,8 @@ export class DreService {
 
     const { revenueLines, expenseLines } = this.groupByCategory(transactions);
 
-    const revenueTotal = revenueLines.reduce((s, l) => s + l.total, 0);
-    const expensesTotal = expenseLines.reduce((s, l) => s + l.total, 0);
+    const revenueTotal = round2(revenueLines.reduce((s, l) => s + l.total, 0));
+    const expensesTotal = round2(expenseLines.reduce((s, l) => s + l.total, 0));
 
     // O período anterior usa EXATAMENTE o mesmo escopo de congregação do
     // período atual. Antes caía para a congregação do token quando a query não
@@ -83,11 +93,11 @@ export class DreService {
     const prev = this.previousPeriod(start, end);
     const prevSummary = await this.fetchPeriodSummary(
       tenantId,
-      query.congregation_id,
-      query.cost_center,
+      query,
       prev.start,
       prev.end,
     );
+    const pending = await this.fetchPending(tenantId, query, start, end);
 
     // Pastors see only totals per category (no individual amounts beyond grouping)
     // The grouping itself is already anonymous; no extra redaction needed here.
@@ -100,7 +110,8 @@ export class DreService {
       },
       revenue: { categories: revenueLines, total: revenueTotal },
       expenses: { categories: expenseLines, total: expensesTotal },
-      net_result: revenueTotal - expensesTotal,
+      net_result: round2(revenueTotal - expensesTotal),
+      pending,
       previous_period: prevSummary,
     };
   }
@@ -141,39 +152,67 @@ export class DreService {
 
   private async fetchPeriodSummary(
     tenantId: string,
-    congregationId: string | undefined,
-    costCenter: string | undefined,
+    query: DreQuery,
     start: Date,
     end: Date,
   ): Promise<DrePeriodSummary> {
-    const where: object = {
-      tenant_id: tenantId,
-      occurred_at: { gte: start, lte: end },
-      ...(congregationId ? { congregation_id: congregationId } : {}),
-      ...(costCenter ? { costCenter: { name: costCenter } } : {}),
-    };
-
-    const txs = await this.prisma.client.financialTransaction.findMany({
-      where,
-      include: { category: { select: { type: true } } },
-    });
-
-    let revTotal = 0;
-    let expTotal = 0;
-    for (const tx of txs) {
-      if (tx.category.type === 'income') revTotal += Number(tx.amount);
-      else expTotal += Number(tx.amount);
-    }
+    const { revenue, expenses } = await this.sumByType(
+      tenantId,
+      query,
+      start,
+      end,
+      REALIZED_STATUSES,
+    );
 
     return {
       period: {
         start: start.toISOString().slice(0, 10),
         end: end.toISOString().slice(0, 10),
       },
-      revenue_total: Math.round(revTotal * 100) / 100,
-      expenses_total: Math.round(expTotal * 100) / 100,
-      net_result: Math.round((revTotal - expTotal) * 100) / 100,
+      revenue_total: round2(revenue),
+      expenses_total: round2(expenses),
+      net_result: round2(revenue - expenses),
     };
+  }
+
+  /** "A realizar": só `pending`, mesmo período e mesmo recorte do DRE. */
+  private async fetchPending(
+    tenantId: string,
+    query: DreQuery,
+    start: Date,
+    end: Date,
+  ): Promise<DrePending> {
+    const { revenue, expenses } = await this.sumByType(tenantId, query, start, end, ['pending']);
+    return { revenue_total: round2(revenue), expenses_total: round2(expenses) };
+  }
+
+  private async sumByType(
+    tenantId: string,
+    query: DreQuery,
+    start: Date,
+    end: Date,
+    statuses: Parameters<typeof buildScope>[0]['statuses'],
+  ): Promise<{ revenue: number; expenses: number }> {
+    const txs = await this.prisma.client.financialTransaction.findMany({
+      where: buildScope({
+        tenantId,
+        start,
+        end,
+        congregationId: query.congregation_id,
+        costCenterId: query.cost_center_id,
+        costCenterName: query.cost_center,
+        statuses,
+      }),
+      include: { category: { select: { type: true } } },
+    });
+
+    let revenue = 0;
+    let expenses = 0;
+    for (const tx of txs) {
+      if (tx.category.type === 'income') revenue += Number(tx.amount);
+      else expenses += Number(tx.amount);
+    }
+    return { revenue, expenses };
   }
 
   /**

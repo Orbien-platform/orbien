@@ -8,6 +8,7 @@ function buildDre(overrides: Partial<DreResult> = {}): DreResult {
     revenue: { categories: [{ category_name: 'Dízimos', total: 100, count: 2 }], total: 100 },
     expenses: { categories: [{ category_name: 'Aluguel', total: 40, count: 1 }], total: 40 },
     net_result: 60,
+    pending: { revenue_total: 0, expenses_total: 0 },
     previous_period: {
       period: { start: '2025-12-01', end: '2025-12-31' },
       revenue_total: 90,
