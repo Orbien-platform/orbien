@@ -7,6 +7,7 @@ import { MailService } from '../mail/mail.service';
 import { TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateUserDto, UpdateUserRoleDto } from './dto/create-user.dto';
+import { maxRoleRank, ROLE_RANK } from './role-rank';
 import { frontendUrl } from '../common/urls/frontend-url';
 
 const INVITE_TOKEN_TTL_DAYS = 7;
@@ -26,14 +27,12 @@ export class UsersService {
   /**
    * Concede acesso ao sistema para uma pessoa já cadastrada. Só o dono do
    * tenant (`tenant_admin`) ou `pastor` chamam este método (ver
-   * `@Roles` no controller) — mas nenhum dos dois pode promover alguém a um
-   * papel que eles mesmos não têm: só `tenant_admin` distribui `tenant_admin`.
-   * Sem isso, `pastor` criaria pares no papel mais alto do tenant.
+   * `@Roles` no controller) — mas ninguém concede um papel acima do maior que
+   * ele mesmo tem (ordem em `role-rank.ts`). Sem isso, `pastor` criaria
+   * `admin_congregation` ou `tenant_admin`.
    */
   async create(dto: CreateUserDto, actor: JwtPayload): Promise<CreatedUserAccount> {
-    if (dto.role_code === 'tenant_admin' && !actor.roles.includes('tenant_admin')) {
-      throw new ForbiddenException('Apenas um admin do tenant pode conceder o papel de admin do tenant.');
-    }
+    this.assertCanGrant(dto.role_code, actor);
 
     // A leitura roda em `tx` (app_user, RLS): é ela quem decide se o pedido é
     // autorizado, confirmando que a pessoa está no tenant/congregação do
@@ -116,7 +115,7 @@ export class UsersService {
 
   /**
    * Troca o papel de quem já tem acesso. Mesmas travas do convite: só
-   * `tenant_admin` distribui ou retira `tenant_admin`, e ninguém muda o
+   * ninguém concede papel acima do seu nem mexe em quem está acima, e ninguém muda o
    * próprio papel (evita deixar o tenant sem dono). A leitura roda em `tx`
    * (RLS decide se a pessoa é do tenant/congregação do ator); a escrita vai
    * por `system`, porque `role_assignments` só aceita escrita por ele
@@ -127,10 +126,7 @@ export class UsersService {
     dto: UpdateUserRoleDto,
     actor: JwtPayload,
   ): Promise<{ id: string; role_code: string }> {
-    const actorIsAdmin = actor.roles.includes('tenant_admin');
-    if (dto.role_code === 'tenant_admin' && !actorIsAdmin) {
-      throw new ForbiddenException('Apenas um admin do tenant pode conceder o papel de admin do tenant.');
-    }
+    this.assertCanGrant(dto.role_code, actor);
 
     const account = await this.prisma.runInTx(async (tx) => {
       const person = await tx.person.findUnique({
@@ -156,8 +152,8 @@ export class UsersService {
     if (account.id === actor.sub) {
       throw new ForbiddenException('Você não pode alterar o próprio papel.');
     }
-    if (!actorIsAdmin && account.roleAssignments.some((r) => r.role_code === 'tenant_admin')) {
-      throw new ForbiddenException('Apenas um admin do tenant pode alterar o papel de um admin do tenant.');
+    if (maxRoleRank(account.roleAssignments.map((r) => r.role_code)) > maxRoleRank(actor.roles)) {
+      throw new ForbiddenException('Você não pode alterar o papel de quem tem um nível acima do seu.');
     }
 
     await this.prisma.system.$transaction(async (sysTx) => {
@@ -179,5 +175,11 @@ export class UsersService {
     });
 
     return { id: account.id, role_code: dto.role_code };
+  }
+
+  private assertCanGrant(roleCode: string, actor: JwtPayload): void {
+    if ((ROLE_RANK[roleCode] ?? Infinity) > maxRoleRank(actor.roles)) {
+      throw new ForbiddenException('Você não pode conceder um papel acima do seu nível.');
+    }
   }
 }

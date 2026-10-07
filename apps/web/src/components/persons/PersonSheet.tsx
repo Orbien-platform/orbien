@@ -34,6 +34,25 @@ const ASSIGNABLE_ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "member", label: "Membro" },
 ];
 
+// Mesma ordem de apps/api/src/users/role-rank.ts: quem concede só atribui papel
+// de nível igual ou menor ao maior que tem. A API é quem barra; aqui só se
+// esconde o que ela recusaria.
+const ROLE_RANK: Record<string, number> = {
+  tenant_admin: 7,
+  admin_congregation: 6,
+  pastor: 5,
+  secretary: 4,
+  treasurer: 4,
+  cell_leader: 3,
+  ministry_leader: 3,
+  volunteer: 2,
+  member: 1,
+};
+
+function maxRank(codes: string[] | undefined): number {
+  return (codes ?? []).reduce((m, c) => Math.max(m, ROLE_RANK[c] ?? 0), 0);
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PersonDetail {
@@ -116,6 +135,9 @@ function formatPhone(phone?: string): string {
 export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonSheetProps) {
   const { user } = useAuth();
   const canGrantAccess = user?.roles?.some((r) => r === "tenant_admin" || r === "pastor") ?? false;
+
+  const actorRank = maxRank(user?.roles);
+  const grantableRoles = ASSIGNABLE_ROLE_OPTIONS.filter((o) => (ROLE_RANK[o.value] ?? 0) <= actorRank);
 
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -206,7 +228,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
   }
 
   function startChangeRole(current: string[]) {
-    setNewRole(current[0] ?? "member");
+    const first = current[0];
+    setNewRole(grantableRoles.some((o) => o.value === first) ? first : "member");
     setRoleError("");
     setEditingRole(true);
   }
@@ -529,7 +552,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                           </p>
                           <p className="mt-0.5 text-xs text-stone">{person.access.email}</p>
 
-                          {!editingRole ? (
+                          {maxRank(person.access.role_codes) > actorRank ? null : !editingRole ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -552,7 +575,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                                   disabled={isSavingRole}
                                   className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
                                 >
-                                  {ASSIGNABLE_ROLE_OPTIONS.map((o) => (
+                                  {grantableRoles.map((o) => (
                                     <option key={o.value} value={o.value}>{o.label}</option>
                                   ))}
                                 </select>
@@ -627,7 +650,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                               disabled={isInviting}
                               className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
                             >
-                              {ASSIGNABLE_ROLE_OPTIONS.map((o) => (
+                              {grantableRoles.map((o) => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
                               ))}
                             </select>

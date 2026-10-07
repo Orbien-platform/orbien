@@ -536,5 +536,42 @@ describe("PersonSheet", () => {
 
       expect(await screen.findByText("Você não pode alterar o próprio papel.")).toBeInTheDocument();
     });
+    it("only offers roles up to the logged user's own level", async () => {
+      mockedUseAuth.mockReturnValue({
+        user: { roles: ["pastor"] } as ReturnType<typeof useAuth>["user"],
+        isLoading: false,
+        isAuthenticated: true,
+        login: vi.fn(),
+        logout: vi.fn(),
+      });
+      vi.mocked(api.get).mockResolvedValue({ data: person });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+      await user.click(screen.getByRole("button", { name: /Conceder acesso/ }));
+
+      expect(screen.getByRole("option", { name: "Pastor" })).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Admin do tenant" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Admin da congregação" })).not.toBeInTheDocument();
+    });
+
+    it("hides the role change when the person is above the logged user", async () => {
+      mockedUseAuth.mockReturnValue({
+        user: { roles: ["pastor"] } as ReturnType<typeof useAuth>["user"],
+        isLoading: false,
+        isAuthenticated: true,
+        login: vi.fn(),
+        logout: vi.fn(),
+      });
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["tenant_admin"] } },
+      });
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      expect(screen.queryByRole("button", { name: /Alterar papel/ })).not.toBeInTheDocument();
+    });
   });
 });
