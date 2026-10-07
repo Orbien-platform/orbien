@@ -41,6 +41,14 @@ describe("CostCenterCharts — receitas e despesas por centro", () => {
     ]);
   });
 
+  it("as listas mantêm a semântica de lista: um listitem por centro em cada gráfico", () => {
+    render(<CostCenterCharts lines={lines} />);
+    const compare = within(screen.getByRole("region", { name: "Receitas e despesas por centro" }));
+    const share = within(screen.getByRole("region", { name: "Participação nas despesas" }));
+    expect(compare.getAllByRole("listitem")).toHaveLength(3);
+    expect(share.getAllByRole("listitem")).toHaveLength(3);
+  });
+
   it("largura proporcional ao maior valor de todos os centros (1000 = 100%)", () => {
     render(<CostCenterCharts lines={lines} />);
     const missoes = screen.getByRole("img", { name: /^Missões: receitas/ });

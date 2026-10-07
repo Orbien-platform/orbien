@@ -91,9 +91,14 @@ export function CostCenterTrend({ start, end }: { start: string; end: string }) 
       });
   }, [canFetch, key, start, end]);
 
+  // O centro escolhido pode sumir quando o período muda (outro período, outras séries):
+  // sem isto o select ficaria num valor que não existe mais e o gráfico, vazio.
+  const activeKey =
+    centerKey === ALL || data?.series.some((s) => seriesKey(s) === centerKey) ? centerKey : ALL;
+
   const points: MonthPoint[] = useMemo(() => {
     if (!data) return [];
-    if (centerKey === ALL) {
+    if (activeKey === ALL) {
       return data.months.map((month) => {
         const sum = { month, revenue_total: 0, expenses_total: 0, net_result: 0 };
         for (const s of data.series) {
@@ -111,8 +116,8 @@ export function CostCenterTrend({ start, end }: { start: string; end: string }) 
         };
       });
     }
-    return data.series.find((s) => seriesKey(s) === centerKey)?.points ?? [];
-  }, [data, centerKey]);
+    return data.series.find((s) => seriesKey(s) === activeKey)?.points ?? [];
+  }, [data, activeKey]);
 
   if (!opened) {
     return (
@@ -142,7 +147,7 @@ export function CostCenterTrend({ start, end }: { start: string; end: string }) 
         {data && data.series.length > 0 && (
           <select
             aria-label="Centro de custo da evolução"
-            value={centerKey}
+            value={activeKey}
             onChange={(e) => setCenterKey(e.target.value)}
             className={dateInputClass}
           >
@@ -175,27 +180,29 @@ export function CostCenterTrend({ start, end }: { start: string; end: string }) 
               const half = maxAbs === 0 ? 0 : (Math.abs(p.net_result) / maxAbs) * 100;
               const negative = p.net_result < 0;
               return (
-                <li
-                  key={p.month}
-                  role="img"
-                  aria-label={`${monthLabel(p.month)}: ${resultShortLabel(p.net_result).toLowerCase()} ${fmt(p.net_result)}`}
-                  className="flex w-[4.5rem] flex-col items-stretch gap-1.5 text-center"
-                >
-                  {/* Metade de cima = lucro, metade de baixo = prejuízo; a linha do meio é o zero. */}
-                  <div className="grid h-36 grid-rows-2">
-                    <div className="flex items-end justify-center border-b border-stone/60">
-                      {p.net_result > 0 && (
-                        <div className="w-6 rounded-t-[4px] bg-teal" style={{ height: `${half}%` }} />
-                      )}
+                <li key={p.month} className="w-[4.5rem]">
+                  {/* `role="img"` no <li> apagaria a semântica de lista; fica no bloco de dentro. */}
+                  <div
+                    role="img"
+                    aria-label={`${monthLabel(p.month)}: ${resultShortLabel(p.net_result).toLowerCase()} ${fmt(p.net_result)}`}
+                    className="flex flex-col items-stretch gap-1.5 text-center"
+                  >
+                    {/* Metade de cima = lucro, metade de baixo = prejuízo; a linha do meio é o zero. */}
+                    <div className="grid h-36 grid-rows-2">
+                      <div className="flex items-end justify-center border-b border-stone/60">
+                        {p.net_result > 0 && (
+                          <div className="w-6 rounded-t-[4px] bg-teal" style={{ height: `${half}%` }} />
+                        )}
+                      </div>
+                      <div className="flex items-start justify-center">
+                        {negative && <div className="w-6 rounded-b-[4px] bg-crimson" style={{ height: `${half}%` }} />}
+                      </div>
                     </div>
-                    <div className="flex items-start justify-center">
-                      {negative && <div className="w-6 rounded-b-[4px] bg-crimson" style={{ height: `${half}%` }} />}
-                    </div>
+                    <span className="text-xs text-stone">{monthLabel(p.month)}</span>
+                    <span className={cn("text-xs font-medium tabular-nums", resultToneClass(p.net_result))}>
+                      {fmt(p.net_result)}
+                    </span>
                   </div>
-                  <span className="text-xs text-stone">{monthLabel(p.month)}</span>
-                  <span className={cn("text-xs font-medium tabular-nums", resultToneClass(p.net_result))}>
-                    {fmt(p.net_result)}
-                  </span>
                 </li>
               );
             })}

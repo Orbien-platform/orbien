@@ -74,7 +74,7 @@ Abordagens avaliadas:
 - Período, `CostCenterSelect` (Todos / Sem centro de custo / centros), tabela atual com linha de resultado "Lucro/Prejuízo do período", linha "A realizar", `DrePdfButton`, e `DreCostCenterMatrix` abaixo.
 
 ### `DrePdfButton`, `DreCostCenterMatrix`, `CostCenterCharts`, `CostCenterTrend` (web)
-- Mesma pasta. `DrePdfButton` copia `downloadBlob` do `ExportButton` (POST blob). Gráficos via `recharts`; barras com `aria-label`; participação nas despesas como lista ordenada + barra horizontal (sem pizza — leitura de % por comprimento).
+- Mesma pasta. `DrePdfButton` copia `downloadBlob` do `ExportButton` (POST blob). Gráficos em HTML (largura proporcional, sem `recharts` — ver o desvio registrado na spec); barras com `aria-label` e valor escrito; participação nas despesas como lista ordenada + barra horizontal (sem pizza — leitura de % por comprimento).
 
 ## Data Models
 

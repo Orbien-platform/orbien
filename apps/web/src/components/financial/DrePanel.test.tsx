@@ -69,6 +69,7 @@ describe("DrePanel — lucro e prejuízo", () => {
     mockGet({ dre: () => Promise.resolve({ data: dreWith({ net_result: 0 }) }) });
     render(<Harness />);
     const label = await screen.findByText("Resultado zerado");
+    expect(label).toHaveClass("text-stone");
     expect(label).not.toHaveClass("text-teal");
     expect(label).not.toHaveClass("text-crimson");
   });

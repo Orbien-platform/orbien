@@ -70,7 +70,10 @@ describe("DreCostCenterMatrix", () => {
 
   it("rola na horizontal em tela estreita (contêiner com overflow-x-auto)", () => {
     render(<DreCostCenterMatrix matrix={matrix} loading={false} accessDenied={false} />);
-    expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-auto");
+    const table = screen.getByRole("table");
+    expect(table.parentElement).toHaveClass("overflow-x-auto");
+    expect(table).toHaveClass("min-w-max");
+    expect(screen.getByRole("columnheader", { name: "Categoria" })).toHaveClass("sticky", "left-0");
   });
 
   it("sem colunas: 'Sem lançamentos no período'", () => {
@@ -138,6 +141,28 @@ describe("useDreReport — matriz por centro", () => {
 
     act(() => result.current.setStart("2026-01-01"));
     await waitFor(() => expect(matrixCalls().length).toBe(2));
+  });
+
+  it("ignora a resposta antiga da matriz quando o período muda no meio da requisição", async () => {
+    let resolveOld!: (v: unknown) => void;
+    const old = new Promise((r) => (resolveOld = r));
+    const novaMatriz = { ...matrix, totals: { revenue_total: 1, expenses_total: 2, net_result: -1 } };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/financial/dre/by-cost-center")) {
+        return (url.includes("period_start=2026-01-01") ? Promise.resolve({ data: novaMatriz }) : old) as never;
+      }
+      return Promise.resolve({ data: { net_result: 0 } }) as never;
+    });
+    const { result } = renderHook(() => useDreReport(true, false));
+    await waitFor(() => expect(matrixCalls().length).toBe(1));
+
+    act(() => result.current.setStart("2026-01-01"));
+    await waitFor(() => expect(result.current.matrix?.totals.net_result).toBe(-1));
+
+    await act(async () => {
+      resolveOld({ data: matrix });
+    });
+    expect(result.current.matrix?.totals.net_result).toBe(-1);
   });
 
   it("pastor não busca a matriz", async () => {

@@ -64,7 +64,7 @@ prejuízo para entender a saúde financeira sem interpretar sinal.
 
 1. WHEN `GET /financial/dre` é chamado THEN o sistema SHALL somar só lançamentos com status `paid` ou `confirmed` em receitas, despesas e resultado, no período atual e no anterior.
 2. WHEN há lançamentos `pending` no período THEN a resposta SHALL trazer `pending: { revenue_total, expenses_total }` com a soma deles, fora de `net_result`.
-3. WHEN `net_result` > 0 THEN a tela SHALL rotular "Lucro do período" em `text-teal`; WHEN < 0, "Prejuízo do período" em `text-crimson`; WHEN = 0, "Resultado zerado" em tom neutro.
+3. WHEN `net_result` > 0 THEN a tela SHALL rotular "Lucro do período" em `text-teal`; WHEN < 0, "Prejuízo do período" em `text-crimson`; WHEN = 0, "Resultado zerado" em `text-stone` (cinza neutro do app, nem teal nem crimson).
 4. WHEN receitas e despesas somam com centavos (ex.: 0,10 + 0,20 − 0,30) THEN `net_result` SHALL vir arredondado a 2 casas (sem resíduo de ponto flutuante).
 5. WHEN há pendentes THEN a tela SHALL mostrar a linha "A realizar" com receitas e despesas pendentes, sem somá-las ao resultado.
 
@@ -109,7 +109,7 @@ prejuízo para entender a saúde financeira sem interpretar sinal.
 
 1. WHEN `GET /financial/dre/by-cost-center?period_start&period_end[&congregation_id]` é chamado THEN a resposta SHALL trazer uma coluna por centro com lançamento no período (mais "Sem centro de custo" se houver), linhas de receita e despesa por categoria, e por coluna `revenue_total`, `expenses_total`, `net_result`, além da coluna total geral.
 2. WHEN a soma das colunas é feita THEN ela SHALL fechar com o total geral e com o `net_result` do `GET /financial/dre` do mesmo período/recorte.
-3. WHEN a tela exibe a matriz THEN cada coluna SHALL mostrar Lucro/Prejuízo com a mesma regra de cor do DRE, e a tabela SHALL rolar na horizontal em tela estreita sem quebrar o layout.
+3. WHEN a tela exibe a matriz THEN cada coluna SHALL mostrar Lucro/Prejuízo com a mesma regra de cor do DRE, e a tabela SHALL ficar num contêiner com `overflow-x-auto` e largura mínima própria, de modo que em tela estreita a rolagem seja horizontal e a página não estoure (a primeira coluna fica fixa).
 4. WHEN não há lançamentos realizados THEN a tela SHALL mostrar "Sem lançamentos no período".
 
 ---

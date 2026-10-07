@@ -76,12 +76,13 @@ export function CostCenterCharts({ lines }: { lines: CostCenterChartLine[] }) {
         </div>
         <ul className="space-y-4">
           {lines.map((l) => (
-            <li
-              key={l.cost_center_id ?? "__none__"}
-              role="img"
-              aria-label={`${l.cost_center_name}: receitas ${fmt(l.revenue_total)}, despesas ${fmt(l.expenses_total)}`}
-              className="space-y-1.5"
-            >
+            <li key={l.cost_center_id ?? "__none__"}>
+              {/* `role="img"` no <li> apagaria a semântica de lista; fica no bloco de dentro. */}
+              <div
+                role="img"
+                aria-label={`${l.cost_center_name}: receitas ${fmt(l.revenue_total)}, despesas ${fmt(l.expenses_total)}`}
+                className="space-y-1.5"
+              >
               <p className="text-xs font-medium text-ink dark:text-white">
                 {l.cost_center_name}:{" "}
                 {l.net_result === 0
@@ -106,6 +107,7 @@ export function CostCenterCharts({ lines }: { lines: CostCenterChartLine[] }) {
                   </span>
                 </div>
               ))}
+              </div>
             </li>
           ))}
         </ul>
@@ -121,12 +123,12 @@ export function CostCenterCharts({ lines }: { lines: CostCenterChartLine[] }) {
           </h3>
           <ol className="space-y-3">
             {expenseRows.map(({ line, share }) => (
-              <li
-                key={line.cost_center_id ?? "__none__"}
-                role="img"
-                aria-label={`${line.cost_center_name}: ${share}% das despesas, ${fmt(line.expenses_total)}`}
-                className="space-y-1"
-              >
+              <li key={line.cost_center_id ?? "__none__"}>
+                <div
+                  role="img"
+                  aria-label={`${line.cost_center_name}: ${share}% das despesas, ${fmt(line.expenses_total)}`}
+                  className="space-y-1"
+                >
                 <div className="flex items-baseline justify-between gap-3 text-xs">
                   <span className="font-medium text-ink dark:text-white">
                     {line.cost_center_name}: {share}% das despesas
@@ -135,6 +137,7 @@ export function CostCenterCharts({ lines }: { lines: CostCenterChartLine[] }) {
                 </div>
                 <div className={track}>
                   <div className="h-full rounded-full bg-navy" style={{ width: `${share}%` }} />
+                </div>
                 </div>
               </li>
             ))}

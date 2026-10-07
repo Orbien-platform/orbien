@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CostCenterTrend, monthsTouched } from "./CostCenterTrend";
@@ -157,6 +157,78 @@ describe("CostCenterTrend", () => {
     render(<CostCenterTrend start="2026-07-01" end="2026-09-30" />);
     open();
     expect(await screen.findByText("Erro ao carregar a evolução mensal. Tente de novo.")).toBeInTheDocument();
+  });
+
+  it("ignora a resposta antiga quando o período muda no meio da requisição", async () => {
+    let resolveOld!: (v: unknown) => void;
+    const old = new Promise((r) => (resolveOld = r));
+    const novo = {
+      period: { start: "2026-08-01", end: "2026-09-30" },
+      months: ["2026-08", "2026-09"],
+      series: [
+        {
+          cost_center_id: "cc1",
+          name: "Missões",
+          points: [
+            { month: "2026-08", revenue_total: 0, expenses_total: 0, net_result: 0 },
+            { month: "2026-09", revenue_total: 10, expenses_total: 0, net_result: 10 },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.get).mockImplementation((url: string) =>
+      (url.includes("period_start=2026-08-01") ? Promise.resolve({ data: novo }) : old) as never,
+    );
+    const { rerender } = render(<CostCenterTrend start="2026-07-01" end="2026-09-30" />);
+    open();
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
+
+    rerender(<CostCenterTrend start="2026-08-01" end="2026-09-30" />);
+    await screen.findByRole("img", { name: /^set\/26: lucro R\$\s?10,00$/ });
+
+    await act(async () => {
+      resolveOld({ data: monthly });
+    });
+    expect(screen.getByRole("img", { name: /^set\/26: lucro R\$\s?10,00$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /^jul\/26/ })).not.toBeInTheDocument();
+  });
+
+  it("o centro escolhido que some do novo período volta para 'Todos os centros'", async () => {
+    const semMissoes = {
+      period: { start: "2026-08-01", end: "2026-09-30" },
+      months: ["2026-08", "2026-09"],
+      series: [
+        {
+          cost_center_id: "cc9",
+          name: "Louvor",
+          points: [
+            { month: "2026-08", revenue_total: 0, expenses_total: 5, net_result: -5 },
+            { month: "2026-09", revenue_total: 0, expenses_total: 0, net_result: 0 },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.includes("period_start=2026-08-01") ? semMissoes : monthly }) as never,
+    );
+    const { rerender } = render(<CostCenterTrend start="2026-07-01" end="2026-09-30" />);
+    open();
+    const select = await screen.findByRole("combobox", { name: "Centro de custo da evolução" });
+    fireEvent.change(select, { target: { value: "cc1" } });
+    expect(select).toHaveValue("cc1");
+
+    rerender(<CostCenterTrend start="2026-08-01" end="2026-09-30" />);
+
+    await screen.findByRole("img", { name: /^ago\/26: prejuízo -R\$\s?5,00$/ });
+    expect(screen.getByRole("combobox", { name: "Centro de custo da evolução" })).toHaveValue("__all__");
+  });
+
+  it("os meses continuam sendo itens de lista (listitem)", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: monthly });
+    render(<CostCenterTrend start="2026-07-01" end="2026-09-30" />);
+    open();
+    await screen.findByRole("img", { name: /^jul\/26/ });
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
 
   it("mudar o período com a evolução aberta busca de novo", async () => {
