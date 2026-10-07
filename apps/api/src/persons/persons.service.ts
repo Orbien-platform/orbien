@@ -94,10 +94,34 @@ export class PersonsService {
     return { data, total, page, limit };
   }
 
-  async findOne(id: string): Promise<Person & { householdMemberships: HouseholdMember[] }> {
+  async findOne(id: string): Promise<
+    Person & {
+      householdMemberships: HouseholdMember[];
+      access: { email: string; role_codes: string[] } | null;
+    }
+  > {
+    const { userAccounts, ...person } = await this.findOneWithAccounts(id);
+    // Só a conta ativa interessa: a tela mostra o papel que vale hoje. Quem
+    // não tem login ativo volta `access: null`.
+    const account = userAccounts[0];
+    return {
+      ...person,
+      access: account
+        ? { email: account.email, role_codes: account.roleAssignments.map((r) => r.role_code) }
+        : null,
+    };
+  }
+
+  private async findOneWithAccounts(id: string) {
     const person = await this.prisma.client.person.findUnique({
       where: { id },
-      include: { householdMemberships: true },
+      include: {
+        householdMemberships: true,
+        userAccounts: {
+          where: { is_active: true },
+          select: { email: true, roleAssignments: { select: { role_code: true } } },
+        },
+      },
     });
 
     if (!person) throw new NotFoundException('Pessoa não encontrada');

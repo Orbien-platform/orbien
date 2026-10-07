@@ -8,7 +8,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 const READ_ROLES = ['admin_congregation', 'treasurer', 'tenant_admin'];
 const WRITE_ROLES = ['admin_congregation', 'treasurer', 'secretary', 'tenant_admin'];
 const STATUS_ROLES = ['treasurer', 'admin_congregation', 'tenant_admin'];
-const DELETE_ROLES = ['admin_congregation', 'tenant_admin'];
+const DELETE_ROLES = ['treasurer', 'admin_congregation', 'tenant_admin'];
 
 const user: JwtPayload = {
   sub: 'user-1',

@@ -203,7 +203,10 @@ export default function FinanceiroPage() {
   const isSecretary = (user?.roles?.includes("secretary") ?? false) && !managesFinance;
   const isPastor = (user?.roles?.includes("pastor") ?? false) && !managesFinance;
   const canDeleteTx =
-    user?.roles?.includes("admin_congregation") || user?.roles?.includes("tenant_admin") || false;
+    user?.roles?.includes("treasurer") ||
+    user?.roles?.includes("admin_congregation") ||
+    user?.roles?.includes("tenant_admin") ||
+    false;
   const canManageCategories =
     user?.roles?.includes("treasurer") ||
     user?.roles?.includes("admin_congregation") ||
