@@ -182,8 +182,8 @@ export function CostCenterTrend({ start, end }: { start: string; end: string }) 
                   className="flex w-[4.5rem] flex-col items-stretch gap-1.5 text-center"
                 >
                   {/* Metade de cima = lucro, metade de baixo = prejuízo; a linha do meio é o zero. */}
-                  <div className="grid h-36 grid-rows-2 border-b border-[var(--border-default)]">
-                    <div className="flex items-end justify-center">
+                  <div className="grid h-36 grid-rows-2">
+                    <div className="flex items-end justify-center border-b border-stone/60">
                       {p.net_result > 0 && (
                         <div className="w-6 rounded-t-[4px] bg-teal" style={{ height: `${half}%` }} />
                       )}

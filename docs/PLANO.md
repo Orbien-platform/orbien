@@ -207,6 +207,21 @@ recorrentes, `PROD-27`, e QR dinâmico do tesoureiro, Cenário 2), **Recibos**
 componente próprio. Detalhe e a decisão sobre a tela do doador em `PROD-27`
 (seção 6).
 
+Em **2026-10-07**, feature `financeiro-dre-resultado-centros-custo`
+(`.specs/features/financeiro-dre-resultado-centros-custo/`): o **DRE** passou a
+dizer **Lucro**, **Prejuízo** ou **Resultado zerado** do período e a contar só
+lançamentos realizados (`paid` + `confirmed`), com o pendente numa linha "A
+realizar" fora do resultado (`AD-011`). O botão **DRE (PDF)** entrou na aba DRE
+(a rota `POST /financial/dre/export/pdf` já existia sem tela) e o PDF deixou de
+marcar os lançamentos como `confirmed` — gerar relatório não escreve. Por
+centro de custo: filtro no DRE e no PDF (`cost_center_id`), **DRE comparativo**
+categorias × centros (`GET /financial/dre/by-cost-center`), gráficos no
+Balancete (receita × despesa e participação nas despesas) e **evolução mensal**
+do resultado por centro (`GET /financial/balancete/monthly`, até 36 meses).
+Sem tabela nova, sem migration, sem script de RLS. Ficou de fora, por decisão:
+ação explícita de "confirmar lançamentos do período", PDF do Balancete e rateio
+de despesa entre centros.
+
 Em **2026-09-28**, limpeza pré-go-live de tenants (nota completa em `DEC-06`,
 seção 9): `teste1-church` passou a nascer no plano Starter e `teste2-church`
 no Premium, os dois com dado em todos os módulos — servem agora também de

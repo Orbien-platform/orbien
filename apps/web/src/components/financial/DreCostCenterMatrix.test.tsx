@@ -60,10 +60,10 @@ describe("DreCostCenterMatrix", () => {
 
   it("linhas de seção trazem os totais de receitas e de despesas por coluna", () => {
     render(<DreCostCenterMatrix matrix={matrix} loading={false} accessDenied={false} />);
-    const receitas = within(rowOf("Receitas")).getAllByRole("cell");
+    const receitas = within(rowOf("Total de receitas")).getAllByRole("cell");
     expect(receitas[1]).toHaveTextContent(/R\$\s?1\.000,00/);
     expect(receitas[4]).toHaveTextContent(/R\$\s?1\.100,00/);
-    const despesas = within(rowOf("Despesas")).getAllByRole("cell");
+    const despesas = within(rowOf("Total de despesas")).getAllByRole("cell");
     expect(despesas[2]).toHaveTextContent(/R\$\s?350,00/);
     expect(despesas[4]).toHaveTextContent(/R\$\s?750,00/);
   });

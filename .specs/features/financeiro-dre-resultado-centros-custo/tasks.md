@@ -6,7 +6,7 @@ Implement these tasks with the `fillsd` skill: **activate it by name and follow 
 **If the skill cannot be activated, STOP and tell the user — do not proceed without it.**
 
 **Design**: `.specs/features/financeiro-dre-resultado-centros-custo/design.md`
-**Status**: Approved
+**Status**: Done (aguarda Verifier)
 
 Regras do repo que valem em toda tarefa: branch `feat/dre-lucro-prejuizo-centros-de-custo` (já criada); todo Edit/Write em `apps/web` exige a skill `frontend-design` carregada (hook); gráficos exigem `dataviz`; testes só em `teste1-church`/`teste2-church`; instalar só da raiz; um commit atômico por tarefa, em português, terminando com as linhas de atribuição do harness.
 
@@ -208,9 +208,12 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Where**: `apps/web/e2e/financeiro.spec.ts`, `.specs/STATE.md`, `docs/PLANO.md`, `spec.md`
 **Depends on**: T11 · **Requirement**: DRE-01…DRE-18
 **Done when**:
-- [ ] e2e: caminho feliz da aba DRE + um erro; usa só `teste1-church`/`teste2-church`
-- [ ] `AD-011` escrito (resultado = realizado) e `node scripts/check-skills.mjs` não regride
-- [ ] Gate **Build** final: `build:api`, `build:web`, lint dos dois, testes dos dois
+- [x] e2e: caminho feliz da aba DRE + um erro; usa só `teste1-church`/`teste2-church`
+- [x] `AD-011` escrito (resultado = realizado) e `node scripts/check-skills.mjs` não regride
+- [x] Gate **Build** final: `build:api`, `build:web`, lint dos dois, testes dos dois
+**Status**: ✅ Concluída
+
+> Rodado de verdade: API + web locais, seed, Playwright com o Chromium pré-instalado: 4/4 em `financeiro.spec.ts`. A rodada achou dois problemas que os unitários não pegaram — as linhas "Receitas"/"Despesas" da matriz colidiam com o e2e do DRE (renomeadas para "Total de receitas/despesas") e a linha de zero da evolução mensal estava no fundo do gráfico. Gate de build: `NODE_ENV=production npm run build:web`.
 
 ---
 

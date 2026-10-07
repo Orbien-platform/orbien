@@ -47,7 +47,7 @@ simples), sem gráfico, sem filtro no DRE e sem evolução no tempo.
 | Pastor | Mantém o comportamento atual do DRE (valores ocultos na tela, sem exportar); Balancete e novos gráficos seguem o Balancete atual (mostram valores) | Não muda política de acesso | n |
 | Plano | Todas as rotas novas Premium, mesmos papéis do DRE/Balancete (`treasurer`, `admin_congregation`, `pastor`, `tenant_admin`) | Mesmo padrão | n |
 | Evolução mensal | Um ponto por mês de calendário que o período toca; máximo 36 meses (acima disso 400) | Limita custo da consulta | n |
-| Gráficos | `recharts` (já dependência do web) com a skill `dataviz` | Padrão já usado em `ForecastCard` | n |
+| Gráficos | Barras em HTML (largura proporcional) com `aria-label` e o valor escrito em cada uma, seguindo a skill `dataviz`; `recharts` não foi usado | A tabela do Balancete continua como equivalente textual e os testes existentes do web mockam só parte do `recharts` | y (desvio registrado como `SPEC_DEVIATION` em `CostCenterCharts.tsx`) |
 
 **Open questions:** nenhuma.
 
@@ -165,31 +165,31 @@ prejuízo para entender a saúde financeira sem interpretar sinal.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| DRE-01 | P1 Lucro/prejuízo: só realizados (AC1) | Tasks | Pending |
-| DRE-02 | P1 Lucro/prejuízo: `pending` informativo (AC2, AC5) | Tasks | Pending |
-| DRE-03 | P1 Lucro/prejuízo: rótulo e cor (AC3) | Tasks | Pending |
-| DRE-04 | P1 Lucro/prejuízo: arredondamento (AC4) | Tasks | Pending |
-| DRE-05 | P1 PDF: sem efeito colateral (AC4) | Tasks | Pending |
-| DRE-06 | P1 PDF: conteúdo lucro/prejuízo + A realizar + recorte (AC2, AC3) | Tasks | Pending |
-| DRE-07 | P1 PDF: período inválido 400 (AC7) | Tasks | Pending |
-| DRE-08 | P1 PDF: botão, download, erro, pastor (AC1, AC5, AC6) | Tasks | Pending |
-| DRE-09 | P1 Filtro: seletor e recorte nos dois períodos (AC1, AC4) | Tasks | Pending |
-| DRE-10 | P1 Filtro: `cost_center_id` + compat. por nome (AC1) | Tasks | Pending |
-| DRE-11 | P1 Filtro: isolamento entre tenants (AC3) | Tasks | Pending |
-| DRE-12 | P1 Filtro: validação de `cost_center_id` (AC2) | Tasks | Pending |
-| DRE-13 | P2 Matriz: API (AC1, AC2) | Tasks | Pending |
-| DRE-14 | P2 Matriz: tela (AC3, AC4) | Tasks | Pending |
-| DRE-15 | P2 Gráficos: barras e participação (AC1, AC2, AC4) | Tasks | Pending |
-| DRE-16 | P2 Gráficos: Balancete só realizados (AC3) | Tasks | Pending |
-| DRE-17 | P3 Evolução: API (AC1, AC2) | Tasks | Pending |
-| DRE-18 | P3 Evolução: tela (AC3) | Tasks | Pending |
+| DRE-01 | P1 Lucro/prejuízo: só realizados (AC1) | Execute | Implemented |
+| DRE-02 | P1 Lucro/prejuízo: `pending` informativo (AC2, AC5) | Execute | Implemented |
+| DRE-03 | P1 Lucro/prejuízo: rótulo e cor (AC3) | Execute | Implemented |
+| DRE-04 | P1 Lucro/prejuízo: arredondamento (AC4) | Execute | Implemented |
+| DRE-05 | P1 PDF: sem efeito colateral (AC4) | Execute | Implemented |
+| DRE-06 | P1 PDF: conteúdo lucro/prejuízo + A realizar + recorte (AC2, AC3) | Execute | Implemented |
+| DRE-07 | P1 PDF: período inválido 400 (AC7) | Execute | Implemented |
+| DRE-08 | P1 PDF: botão, download, erro, pastor (AC1, AC5, AC6) | Execute | Implemented |
+| DRE-09 | P1 Filtro: seletor e recorte nos dois períodos (AC1, AC4) | Execute | Implemented |
+| DRE-10 | P1 Filtro: `cost_center_id` + compat. por nome (AC1) | Execute | Implemented |
+| DRE-11 | P1 Filtro: isolamento entre tenants (AC3) | Execute | Implemented |
+| DRE-12 | P1 Filtro: validação de `cost_center_id` (AC2) | Execute | Implemented |
+| DRE-13 | P2 Matriz: API (AC1, AC2) | Execute | Implemented |
+| DRE-14 | P2 Matriz: tela (AC3, AC4) | Execute | Implemented |
+| DRE-15 | P2 Gráficos: barras e participação (AC1, AC2, AC4) | Execute | Implemented |
+| DRE-16 | P2 Gráficos: Balancete só realizados (AC3) | Execute | Implemented |
+| DRE-17 | P3 Evolução: API (AC1, AC2) | Execute | Implemented |
+| DRE-18 | P3 Evolução: tela (AC3) | Execute | Implemented |
 
-**Coverage:** 18 requisitos, 0 mapeados a tarefas até o Tasks ser confirmado.
+**Coverage:** 18 requisitos, 18 implementados (T1–T12); `Verified` só depois do Verifier.
 
 ---
 
 ## Success Criteria
 
 - [ ] Para qualquer período, `net_result` do DRE, soma das colunas da matriz e total do Balancete são iguais.
-- [ ] Gerar o PDF 2× seguidas não altera nenhum registro (verificado por teste).
-- [ ] Testes novos só em `teste1-church`/`teste2-church` (e2e); nada toca `doca-church`.
+- [x] Gerar o PDF 2× seguidas não altera nenhum registro (teste unitário + conferido contra o banco local: 3 `paid` seguem `paid`).
+- [x] Testes novos só em `teste1-church`/`teste2-church` (e2e); nada toca `doca-church`. (e2e roda em `teste2-church`, o tenant Premium.)

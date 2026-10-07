@@ -50,8 +50,8 @@ export function DreCostCenterMatrix({ matrix, loading, accessDenied }: DreCostCe
 
   function sectionRow(title: string, perColumn: (c: DreMatrix["columns"][number]) => number, total: number) {
     return (
-      <tr className="border-t border-[var(--border-default)] bg-[var(--surface-subtle)]">
-        <td className={cn(stickyCell, "bg-[var(--surface-subtle)] py-2.5 pl-4 text-xs font-semibold text-stone")}>{title}</td>
+      <tr className="border-t border-[var(--border-default)] [&>*]:bg-[var(--surface-subtle)]">
+        <td className={cn(stickyCell, "py-2.5 pl-4 text-xs font-semibold text-stone")}>{title}</td>
         {columns.map((c) => (
           <td
             key={c.cost_center_id ?? NONE_KEY}
@@ -94,8 +94,8 @@ export function DreCostCenterMatrix({ matrix, loading, accessDenied }: DreCostCe
         <div className="overflow-x-auto rounded-[12px] border border-[var(--border-default)]">
           <table className="w-full min-w-max text-sm">
             <thead>
-              <tr className="border-b border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                <th className={cn(stickyCell, "bg-[var(--surface-subtle)] py-2.5 pl-4 pr-4 text-left text-xs font-medium text-stone")}>
+              <tr className="border-b border-[var(--border-default)] [&>*]:bg-[var(--surface-subtle)]">
+                <th className={cn(stickyCell, "py-2.5 pl-4 pr-4 text-left text-xs font-medium text-stone")}>
                   Categoria
                 </th>
                 {columns.map((c) => (
@@ -113,12 +113,12 @@ export function DreCostCenterMatrix({ matrix, loading, accessDenied }: DreCostCe
               </tr>
             </thead>
             <tbody>
-              {sectionRow("Receitas", (c) => c.revenue_total, totals.revenue_total)}
+              {sectionRow("Total de receitas", (c) => c.revenue_total, totals.revenue_total)}
               {categoryRows(matrix.revenue)}
-              {sectionRow("Despesas", (c) => c.expenses_total, totals.expenses_total)}
+              {sectionRow("Total de despesas", (c) => c.expenses_total, totals.expenses_total)}
               {categoryRows(matrix.expenses)}
-              <tr className="border-t-2 border-[var(--border-default)] bg-[var(--surface-subtle)]">
-                <td className={cn(stickyCell, "bg-[var(--surface-subtle)] py-3 pl-4 pr-4 text-sm font-semibold text-ink dark:text-white")}>
+              <tr className="border-t-2 border-[var(--border-default)] [&>*]:bg-[var(--surface-subtle)]">
+                <td className={cn(stickyCell, "py-3 pl-4 pr-4 text-sm font-semibold text-ink dark:text-white")}>
                   Resultado
                 </td>
                 {columns.map((c) => (
