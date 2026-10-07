@@ -190,6 +190,6 @@ prejuízo para entender a saúde financeira sem interpretar sinal.
 
 ## Success Criteria
 
-- [ ] Para qualquer período, `net_result` do DRE, soma das colunas da matriz e total do Balancete são iguais.
+- [x] Para qualquer período, `net_result` do DRE, soma das colunas da matriz e total do Balancete são iguais.
 - [x] Gerar o PDF 2× seguidas não altera nenhum registro (teste unitário + conferido contra o banco local: 3 `paid` seguem `paid`).
 - [x] Testes novos só em `teste1-church`/`teste2-church` (e2e); nada toca `doca-church`. (e2e roda em `teste2-church`, o tenant Premium.)

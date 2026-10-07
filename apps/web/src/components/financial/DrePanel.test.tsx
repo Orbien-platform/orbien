@@ -88,6 +88,27 @@ describe("DrePanel — lucro e prejuízo", () => {
     expect(screen.getByText(/R\$\s?600,00/)).toBeInTheDocument();
   });
 
+  it("só despesa pendente (receita 0): a linha 'A realizar' aparece", async () => {
+    mockGet({
+      dre: () => Promise.resolve({ data: dreWith({ pending: { revenue_total: 0, expenses_total: 400 } }) }),
+    });
+    render(<Harness />);
+    await screen.findByText("Lucro do período");
+    expect(screen.getByText("A realizar")).toBeInTheDocument();
+    expect(screen.getByText(/Despesas\s+R\$\s?400,00/)).toBeInTheDocument();
+    expect(screen.getByText(/Receitas\s+R\$\s?0,00/)).toBeInTheDocument();
+  });
+
+  it("só receita pendente (despesa 0): a linha 'A realizar' aparece", async () => {
+    mockGet({
+      dre: () => Promise.resolve({ data: dreWith({ pending: { revenue_total: 250, expenses_total: 0 } }) }),
+    });
+    render(<Harness />);
+    await screen.findByText("Lucro do período");
+    expect(screen.getByText("A realizar")).toBeInTheDocument();
+    expect(screen.getByText(/Receitas\s+R\$\s?250,00/)).toBeInTheDocument();
+  });
+
   it("sem pendentes: não mostra a linha 'A realizar'", async () => {
     mockGet({
       dre: () => Promise.resolve({ data: dreWith({ pending: { revenue_total: 0, expenses_total: 0 } }) }),
