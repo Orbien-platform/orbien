@@ -36,9 +36,14 @@ interface Transaction {
   description: string;
 }
 
-/** Data de hoje em ISO (YYYY-MM-DD), o formato do `<input type="date">`. */
+/**
+ * Data de hoje em ISO (YYYY-MM-DD), o formato do `<input type="date">`, no dia
+ * de Brasília — o mesmo que o DRE usa como fim do período padrão. Com
+ * `toISOString()` o teste lançava "amanhã" a partir das 21h de Brasília e o
+ * lançamento ficava fora do período do relatório.
+ */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 }
 
 /**

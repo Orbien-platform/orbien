@@ -931,7 +931,7 @@ export default function FinanceiroPage() {
 
             {confirmDeactivateId && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
+                <div className="w-full max-w-sm rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-5 shadow-[var(--shadow-lg)]">
                   <p className="text-sm font-medium text-ink dark:text-white">
                     Desativar regra recorrente?
                   </p>
@@ -1195,7 +1195,7 @@ export default function FinanceiroPage() {
 
       {confirmDeleteTxId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-[12px] bg-[var(--surface-card)] p-5">
+          <div className="w-full max-w-sm rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-5 shadow-[var(--shadow-lg)]">
             <p className="text-sm font-medium text-ink dark:text-white">
               Remover lançamento?
             </p>
