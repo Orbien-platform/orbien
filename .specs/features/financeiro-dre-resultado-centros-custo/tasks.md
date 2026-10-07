@@ -156,11 +156,12 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Depends on**: T7 · **Requirement**: DRE-08
 **Tools**: Skill `frontend-design`
 **Done when**:
-- [ ] Clique envia período e `cost_center_id` no corpo e dispara o download
-- [ ] Período vazio: mostra mensagem e não chama a API
-- [ ] Falha: "Erro ao exportar o DRE." e botão reabilitado
-- [ ] Pastor sem outro papel: botão ausente
+- [x] Clique envia período e `cost_center_id` no corpo e dispara o download
+- [x] Período vazio: mostra mensagem e não chama a API
+- [x] Falha: "Erro ao exportar o DRE." e botão reabilitado
+- [x] Pastor sem outro papel: botão ausente
 **Tests**: unit · **Gate**: quick (Web)
+**Status**: ✅ Concluída
 
 ### T9: Matriz DRE por centro de custo (tela)
 **What**: `DreCostCenterMatrix` na aba DRE, consumindo `GET /financial/dre/by-cost-center`.

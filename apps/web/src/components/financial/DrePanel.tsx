@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { ExportButton } from "@/components/financial/ExportButton";
+import { DrePdfButton } from "@/components/financial/DrePdfButton";
 import { cn } from "@/lib/utils";
 import { dateInputClass, fmt, resultLabel, resultToneClass } from "./dreFormat";
 import { ALL_CENTERS, NO_CENTER, type DreModel } from "./useDreReport";
@@ -88,7 +89,12 @@ export function DrePanel({ model, isPastor }: DrePanelProps) {
             </select>
           )}
         </div>
-        {!isPastor && <ExportButton periodStart={start} periodEnd={end} />}
+        {!isPastor && (
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            <DrePdfButton periodStart={start} periodEnd={end} costCenterId={costCenterId} />
+            <ExportButton periodStart={start} periodEnd={end} />
+          </div>
+        )}
       </div>
 
       {loading ? (
