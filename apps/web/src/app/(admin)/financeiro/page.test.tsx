@@ -1584,6 +1584,42 @@ describe("FinanceiroPage — corridas e casos-limite", () => {
     expect(screen.getAllByRole("checkbox", { name: "Marcar como pago" })).toHaveLength(1);
   });
 
+  it("um aviso novo reinicia a contagem: o timer do anterior não apaga o atual", async () => {
+    setup();
+    mockApi({
+      transactions: [
+        tx({ id: "1", description: "Primeiro", status: "pending" }),
+        tx({ id: "2", description: "Segundo", status: "pending" }),
+      ],
+    });
+    mockedApi.patch.mockRejectedValue(new Error("boom"));
+    const msg = "Erro ao atualizar status do lançamento.";
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<FinanceiroPage />);
+      await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
+      await screen.findByText("Primeiro");
+
+      await user.click(screen.getAllByRole("checkbox", { name: "Marcar como pago" })[0]);
+      await waitFor(() => expect(screen.getByText(msg)).toBeInTheDocument());
+
+      await vi.advanceTimersByTimeAsync(2000);
+      await user.click(screen.getAllByRole("checkbox", { name: "Marcar como pago" })[1]);
+      await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledTimes(2));
+
+      // 1,5s depois o timer do primeiro aviso (3s desde o início) já teria vencido.
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(screen.getByText(msg)).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(1600);
+      await waitFor(() => expect(screen.queryByText(msg)).not.toBeInTheDocument());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reverte só o lançamento que falhou quando há mais de um na tabela", async () => {
     setup();
     mockApi({

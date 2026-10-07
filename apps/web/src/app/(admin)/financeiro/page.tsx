@@ -263,6 +263,10 @@ export default function FinanceiroPage() {
   const [scopeDialog, setScopeDialog] = useState<{ mode: "edit" | "delete"; tx: Transaction } | null>(null);
   const [scopeSubmitting, setScopeSubmitting] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Baixas em voo, por id. O estado só pinta a linha; quem barra o segundo
+  // clique é a ref, que já vale no mesmo tick (o estado só vale no próximo render).
+  const statusInFlight = useRef<Set<string>>(new Set());
 
   // Recurring rules
   const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
@@ -357,7 +361,9 @@ export default function FinanceiroPage() {
 
   function showToast(msg: string) {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(""), 3000);
+    // Um aviso novo reinicia a contagem; sem isto o timer do anterior apagava o atual cedo.
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMsg(""), 3000);
   }
 
   async function handleDeleteTx(id: string, scope?: RecurrenceScope) {
@@ -387,6 +393,9 @@ export default function FinanceiroPage() {
     const previousStatus = tx.status;
     const nextStatus: "pending" | "paid" = previousStatus === "pending" ? "paid" : "pending";
 
+    if (statusInFlight.current.has(tx.id)) return;
+    statusInFlight.current.add(tx.id);
+
     setStatusUpdatingIds((prev) => new Set(prev).add(tx.id));
     setTransactions((prev) =>
       prev.map((t) => (t.id === tx.id ? { ...t, status: nextStatus } : t))
@@ -401,6 +410,7 @@ export default function FinanceiroPage() {
       );
       showToast("Erro ao atualizar status do lançamento.");
     } finally {
+      statusInFlight.current.delete(tx.id);
       setStatusUpdatingIds((prev) => {
         const next = new Set(prev);
         next.delete(tx.id);
@@ -550,19 +560,26 @@ export default function FinanceiroPage() {
       render: (r) => (
         <div className="flex items-center gap-1.5">
           {r.status !== "confirmed" && (
-            <input
-              type="checkbox"
-              checked={r.status === "paid"}
-              onChange={() => handleToggleStatus(r)}
-              disabled={statusUpdatingIds.has(r.id)}
-              aria-label={r.status === "pending" ? "Marcar como pago" : "Desfazer pagamento"}
-              title={r.status === "pending" ? "Marcar como pago" : "Desfazer pagamento"}
-              className="h-3.5 w-3.5 cursor-pointer accent-teal disabled:cursor-not-allowed disabled:opacity-50"
-            />
+            // A área clicável é o rótulo inteiro (32px), não os 16px da caixa:
+            // acertar um alvo pequeno em tabela densa era metade da "lentidão".
+            <label className="-m-2 flex cursor-pointer items-center p-2">
+              <input
+                type="checkbox"
+                checked={r.status === "paid"}
+                onChange={() => handleToggleStatus(r)}
+                aria-busy={statusUpdatingIds.has(r.id)}
+                aria-label={r.status === "pending" ? "Marcar como pago" : "Desfazer pagamento"}
+                title={r.status === "pending" ? "Marcar como pago" : "Desfazer pagamento"}
+                className="h-4 w-4 cursor-pointer accent-teal"
+              />
+            </label>
           )}
-          <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", statusBadgeClass(r.status))}>
+          <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors duration-150", statusBadgeClass(r.status))}>
             {statusLabel(r.status)}
           </span>
+          {statusUpdatingIds.has(r.id) && (
+            <Loader2 size={12} aria-hidden="true" className="text-stone motion-safe:animate-spin" />
+          )}
         </div>
       ),
     },
