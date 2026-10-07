@@ -57,6 +57,20 @@ describe("CostCenterCharts — receitas e despesas por centro", () => {
     expect(widthOf(bars[1])).toBe("20%"); // despesas 200
   });
 
+  it("a escala é o maior valor entre receita E despesa: despesa maior que toda receita chega a 100%", () => {
+    render(
+      <CostCenterCharts
+        lines={[
+          { cost_center_id: "a", cost_center_name: "Obra", revenue_total: 100, expenses_total: 600, net_result: -500 },
+        ]}
+      />,
+    );
+    const obra = screen.getByRole("img", { name: /^Obra: receitas/ });
+    const bars = obra.querySelectorAll<HTMLElement>("div.h-full");
+    expect(widthOf(bars[1])).toBe("100%"); // despesas 600 = o maior
+    expect(widthOf(bars[0])).toBe(`${(100 / 600) * 100}%`); // receitas 100
+  });
+
   it("o valor e o resultado ficam escritos, sem depender de cor", () => {
     render(<CostCenterCharts lines={lines} />);
     expect(screen.getByText(/^Missões: lucro R\$\s?800,00$/)).toBeInTheDocument();

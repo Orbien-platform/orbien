@@ -222,6 +222,21 @@ describe("useDreReport", () => {
     expect(result.current.dre).toBeNull();
   });
 
+  it("período com data apagada: não fica em 'carregando' (mostra o pedido de período, não o esqueleto)", async () => {
+    mockGet({});
+    const { result } = renderHook(() => useDreReport(true, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setStart(""));
+    expect(result.current.loading).toBe(false);
+
+    act(() => {
+      result.current.setStart("2026-01-01");
+      result.current.setEnd("");
+    });
+    expect(result.current.loading).toBe(false);
+  });
+
   it("período com data apagada não chama a API", async () => {
     mockGet({});
     const { result } = renderHook(() => useDreReport(true, false));

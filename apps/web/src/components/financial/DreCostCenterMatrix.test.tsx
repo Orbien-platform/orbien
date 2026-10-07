@@ -68,6 +68,23 @@ describe("DreCostCenterMatrix", () => {
     expect(despesas[4]).toHaveTextContent(/R\$\s?750,00/);
   });
 
+  it("a coluna 'Sem centro de custo' lê a célula pela chave __none__, com valor diferente de zero", () => {
+    const comSemCentro: DreMatrix = {
+      ...matrix,
+      revenue: [{ category_name: "Dízimos", cells: { cc1: 1000, cc2: 100, __none__: 40 }, total: 1140 }],
+      expenses: [{ category_name: "Aluguel", cells: { cc1: 400, cc2: 350, __none__: 7 }, total: 757 }],
+    };
+    render(<DreCostCenterMatrix matrix={comSemCentro} loading={false} accessDenied={false} />);
+
+    const dizimos = within(rowOf("Dízimos")).getAllByRole("cell");
+    expect(dizimos[3]).toHaveTextContent(/R\$\s?40,00/); // coluna "Sem centro de custo"
+    const aluguel = within(rowOf("Aluguel")).getAllByRole("cell");
+    expect(aluguel[3]).toHaveTextContent(/R\$\s?7,00/);
+    // e as outras colunas não leem a chave errada
+    expect(dizimos[1]).toHaveTextContent(/R\$\s?1\.000,00/);
+    expect(dizimos[2]).toHaveTextContent(/R\$\s?100,00/);
+  });
+
   it("rola na horizontal em tela estreita (contêiner com overflow-x-auto)", () => {
     render(<DreCostCenterMatrix matrix={matrix} loading={false} accessDenied={false} />);
     const table = screen.getByRole("table");
@@ -163,6 +180,24 @@ describe("useDreReport — matriz por centro", () => {
       resolveOld({ data: matrix });
     });
     expect(result.current.matrix?.totals.net_result).toBe(-1);
+  });
+
+  it("erro ao buscar a matriz do novo período apaga a do período anterior (não deixa número velho na tela)", async () => {
+    let falhar = false;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/financial/dre/by-cost-center")) {
+        return (falhar ? Promise.reject(new Error("boom")) : Promise.resolve({ data: matrix })) as never;
+      }
+      return Promise.resolve({ data: { net_result: 0 } }) as never;
+    });
+    const { result } = renderHook(() => useDreReport(true, false));
+    await waitFor(() => expect(result.current.matrix).toEqual(matrix));
+
+    falhar = true;
+    act(() => result.current.setStart("2026-01-01"));
+
+    await waitFor(() => expect(result.current.matrixLoading).toBe(false));
+    expect(result.current.matrix).toBeNull();
   });
 
   it("pastor não busca a matriz", async () => {

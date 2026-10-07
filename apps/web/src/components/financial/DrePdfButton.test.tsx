@@ -68,6 +68,37 @@ describe("DrePdfButton", () => {
     expect(vi.mocked(api.post).mock.calls[0][1]).toMatchObject({ cost_center_id: "none" });
   });
 
+  it("libera o blob depois do download (revokeObjectURL com a mesma URL)", async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: new Blob(["%PDF"]) });
+    render(<DrePdfButton periodStart="2026-09-01" periodEnd="2026-09-30" costCenterId="" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /DRE \(PDF\)/ }));
+
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:fake"));
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("fim do período vazio: também pede o período e não chama a API", () => {
+    render(<DrePdfButton periodStart="2026-09-01" periodEnd="" costCenterId="" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /DRE \(PDF\)/ }));
+
+    expect(screen.getByText("Selecione o período antes de exportar.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("um novo clique que dá certo apaga o erro anterior", async () => {
+    vi.mocked(api.post).mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce({ data: new Blob(["%PDF"]) });
+    render(<DrePdfButton periodStart="2026-09-01" periodEnd="2026-09-30" costCenterId="" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /DRE \(PDF\)/ }));
+    expect(await screen.findByText("Erro ao exportar o DRE.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /DRE \(PDF\)/ }));
+    await waitFor(() => expect(downloads).toEqual(["orbien_dre_202609.pdf"]));
+    expect(screen.queryByText("Erro ao exportar o DRE.")).not.toBeInTheDocument();
+  });
+
   it("período vazio: pede o período e não chama a API", () => {
     render(<DrePdfButton periodStart="" periodEnd="2026-09-30" costCenterId="" />);
 

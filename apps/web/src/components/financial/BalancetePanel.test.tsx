@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BalancetePanel } from "./BalancetePanel";
@@ -31,6 +31,22 @@ describe("BalancetePanel", () => {
     expect(screen.getByRole("region", { name: "Receitas e despesas por centro" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Participação nas despesas" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /^Missões: receitas/ })).toBeInTheDocument();
+  });
+
+  it("os gráficos seguem a MESMA ordem das linhas da tabela", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Missões");
+    const nomesDaTabela = screen
+      .getAllByRole("row")
+      .slice(1, 3) // cabeçalho fora; as 2 linhas de centro (a de "Total" fica de fora)
+      .map((r) => r.querySelector("td")?.textContent);
+    expect(nomesDaTabela).toEqual(["Missões", "Sem centro de custo"]);
+
+    const compare = within(screen.getByRole("region", { name: "Receitas e despesas por centro" }));
+    const nomesDoGrafico = compare.getAllByRole("img").map((i) => i.getAttribute("aria-label")?.split(":")[0]);
+    expect(nomesDoGrafico).toEqual(nomesDaTabela);
   });
 
   it("oferece a evolução mensal sem buscá-la antes do clique", async () => {

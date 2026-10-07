@@ -130,6 +130,39 @@ describe("CostCenterTrend", () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
+  it("37 meses: bloqueia na tela, sem chamar a API (a fronteira é 36, não 37)", () => {
+    render(<CostCenterTrend start="2023-12-01" end="2026-12-31" />);
+    open();
+    expect(screen.getByRole("alert")).toHaveTextContent("Escolha um período de até 36 meses");
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it("a escala usa o módulo do maior mês: prejuízo de 400 ocupa 100% e o lucro de 100 ocupa 25%", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        period: { start: "2026-07-01", end: "2026-08-31" },
+        months: ["2026-07", "2026-08"],
+        series: [
+          {
+            cost_center_id: "cc1",
+            name: "Missões",
+            points: [
+              { month: "2026-07", revenue_total: 0, expenses_total: 400, net_result: -400 },
+              { month: "2026-08", revenue_total: 100, expenses_total: 0, net_result: 100 },
+            ],
+          },
+        ],
+      },
+    });
+    render(<CostCenterTrend start="2026-07-01" end="2026-08-31" />);
+    open();
+
+    const jul = await screen.findByRole("img", { name: /^jul\/26/ });
+    expect(jul.querySelector<HTMLElement>(".bg-crimson")?.style.height).toBe("100%");
+    const ago = screen.getByRole("img", { name: /^ago\/26/ });
+    expect(ago.querySelector<HTMLElement>(".bg-teal")?.style.height).toBe("25%");
+  });
+
   it("exatamente 36 meses ainda busca", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...monthly, months: [], series: [] } });
     render(<CostCenterTrend start="2024-01-01" end="2026-12-31" />);
