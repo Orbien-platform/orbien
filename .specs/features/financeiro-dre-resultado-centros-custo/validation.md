@@ -317,3 +317,31 @@ Aceitos como não-lacuna: Wn, Wj, Wg (ciclo 2) e os 12 indefinidos/6 equivalente
 **Sensor**: antigos 17 mortos e 3 sobrevivem (Wn, Wj, Wg: aceitos); novas 90 (49 mortas, 41 sobreviveram: 23 lacuna real, 12 indefinido pela spec, 6 equivalente).
 **Gate**: API 311 suítes/3512 testes, web 144 arquivos/1820 testes, lint 0 erros nos dois, `tsc` limpo, `build:web` ok.
 **Banco real**: DRE = matriz = Balancete = série = 150,00; 401 sem token nas 5 rotas; nenhum id de centro de outro tenant; PDF 10x sem alterar lançamento; 400s e limite de 36 meses conforme a spec.
+
+---
+
+## Adendo pós-ciclo 3 (autor, NÃO re-verificado)
+
+O limite de 3 ciclos do Verifier foi atingido com FAIL por lacunas de teste (zero defeito funcional).
+Por decisão do dono do produto ("fechar tudo antes do PR"), as 23 lacunas reais do ciclo 3 foram fechadas
+só com testes — nenhuma linha de produção mudou (`git diff` das fontes de produção contra `fd3246e` é vazio).
+Cada uma foi conferida pelo autor reaplicando o mutante e vendo o teste novo falhar; isso **não** substitui um
+Verifier independente, e este arquivo continua registrando o veredito dele (FAIL, ciclo 3).
+
+| Lacuna | Teste novo | Mutante reaplicado |
+| --- | --- | --- |
+| X01–X07 guards/interceptor dos 2 controllers | `dre.controller.spec.ts`, `balancete.controller.spec.ts` (`__guards__`, `__interceptors__`) | 7/7 mortos |
+| X34, X49, X26 "A realizar" no PDF | `dre-pdf.service.spec.ts` (linhas `Receitas/Despesas pendentes` com valor) | 3/3 mortos |
+| X33 cabeçalho do PDF | `dre-pdf.service.spec.ts` (`Período: 01/01/2026 a 31/01/2026`) | morto |
+| X30 série por nome | `balancete-monthly.service.spec.ts` (dois centros homônimos) | morto |
+| X39 pendente sem congregação | `dre.service.spec.ts` (3 consultas com a mesma congregação) | morto |
+| M1 célula "Sem centro" | `DreCostCenterMatrix.test.tsx` (`__none__` ≠ 0) | morto |
+| T4, T1 evolução | `CostCenterTrend.test.tsx` (módulo do maior mês; 37 meses) | 2/2 mortos |
+| C4 escala dos gráficos | `CostCenterCharts.test.tsx` (despesa maior que receita) | morto |
+| B3 ordem no Balancete | `BalancetePanel.test.tsx` (gráfico = ordem da tabela) | morto |
+| R1w, R3, R5 botão do PDF | `DrePdfButton.test.tsx` | 3/3 mortos |
+| H7, H8 `useDreReport` | `DrePanel.test.tsx`, `DreCostCenterMatrix.test.tsx` | 2/2 mortos |
+
+Gates após o adendo: API 311 suítes / 3518 testes; web 144 arquivos / 1830 testes; lint sem erros; `tsc` limpo.
+Seguem abertos (cosméticos, declarados): primeira coluna da matriz como `<td>` em vez de `<th scope="row">`;
+rótulo "Lançamentos sem centro". O desvio dos gráficos em HTML (em vez de `recharts`) foi **ratificado** pelo dono do produto.
