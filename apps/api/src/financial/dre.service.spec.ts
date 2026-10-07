@@ -554,6 +554,64 @@ describe('DreService.buildDre — só realizado + A realizar', () => {
     expect(dre.net_result).toBe(0);
     expect(dre.previous_period.net_result).toBe(0);
   });
+
+  // 0,10 + 0,20 e 0,70 − 0,60 só dão 0,3 e 0,1 depois de arredondar: em ponto
+  // flutuante saem 0.30000000000000004 e 0.09999999999999998. O caso de cima
+  // (0,10 + 0,20 − 0,30) não separa: lá o resultado cai em zero de qualquer jeito.
+  it('receita e despesa totais fecham em centavos: duas categorias 0,10 + 0,20 → 0,3', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'paid', '2026-01-05', null, 'A'),
+      row('0.20', 'income', 'paid', '2026-01-06', null, 'B'),
+      row('0.10', 'expense', 'paid', '2026-01-07', null, 'C'),
+      row('0.20', 'expense', 'paid', '2026-01-08', null, 'D'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.revenue.total).toBe(0.3);
+    expect(dre.expenses.total).toBe(0.3);
+  });
+
+  it('net_result 0,70 − 0,60 → 0,1, no período atual e no anterior', async () => {
+    const { service } = dbWith([
+      row('0.70', 'income', 'paid', '2026-01-05'),
+      row('0.60', 'expense', 'paid', '2026-01-06'),
+      row('0.70', 'income', 'paid', '2025-12-05'),
+      row('0.60', 'expense', 'paid', '2025-12-06'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.net_result).toBe(0.1);
+    expect(dre.previous_period.net_result).toBe(0.1);
+  });
+
+  it('o período anterior também soma em centavos: 0,10 + 0,20 → 0,3 de receita e de despesa', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'paid', '2025-12-05'),
+      row('0.20', 'income', 'paid', '2025-12-06'),
+      row('0.10', 'expense', 'paid', '2025-12-07'),
+      row('0.20', 'expense', 'paid', '2025-12-08'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.previous_period.revenue_total).toBe(0.3);
+    expect(dre.previous_period.expenses_total).toBe(0.3);
+  });
+
+  it('o A realizar também soma em centavos: 0,10 + 0,20 → 0,3', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'pending', '2026-01-05'),
+      row('0.20', 'income', 'pending', '2026-01-06'),
+      row('0.10', 'expense', 'pending', '2026-01-07'),
+      row('0.20', 'expense', 'pending', '2026-01-08'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.pending).toEqual({ revenue_total: 0.3, expenses_total: 0.3 });
+  });
 });
 
 describe('DreService.buildDre — filtro por centro de custo', () => {

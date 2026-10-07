@@ -7,6 +7,8 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { DreService } from './dre.service';
+import { BalanceteService } from './balancete.service';
+import { BalanceteMonthlyService } from './balancete-monthly.service';
 import { DreCostCenterService, NONE_KEY } from './dre-cost-center.service';
 
 type Row = {
@@ -177,6 +179,67 @@ describe('DreCostCenterService.build', () => {
 
     expect(dre.columns[0]?.net_result).toBe(0);
     expect(dre.totals.net_result).toBe(0);
+  });
+
+  it('critério de sucesso: a MESMA massa fecha no DRE, na matriz, no Balancete e na série mensal', async () => {
+    const { prisma } = prismaWith(rows);
+
+    const dre = await new DreService(prisma).buildDre('t1', 'c1', periodo, false);
+    const matriz = await new DreCostCenterService(prisma).build('t1', periodo);
+    const balancete = await new BalanceteService(prisma).build('t1', periodo);
+    const mensal = await new BalanceteMonthlyService(prisma).build('t1', periodo);
+
+    const somaMensal = (campo: 'revenue_total' | 'expenses_total' | 'net_result') =>
+      Math.round(
+        mensal.series.flatMap((s) => s.points).reduce((acc, p) => acc + p[campo], 0) * 100,
+      ) / 100;
+
+    // massa fixa: 390 de receita, 305,50 de despesa, 84,50 de resultado (pendente e fora do período excluídos)
+    for (const r of [
+      dre.net_result,
+      matriz.totals.net_result,
+      balancete.net_result,
+      somaMensal('net_result'),
+    ]) {
+      expect(r).toBe(84.5);
+    }
+    for (const r of [
+      dre.revenue.total,
+      matriz.totals.revenue_total,
+      balancete.revenue_total,
+      somaMensal('revenue_total'),
+    ]) {
+      expect(r).toBe(390);
+    }
+    for (const r of [
+      dre.expenses.total,
+      matriz.totals.expenses_total,
+      balancete.expenses_total,
+      somaMensal('expenses_total'),
+    ]) {
+      expect(r).toBe(305.5);
+    }
+  });
+
+  it('totais gerais em centavos: 0,10 + 0,20 de dois centros → 0,3; net 0,70 − 0,60 → 0,1', async () => {
+    const soma = await new DreCostCenterService(
+      prismaWith([
+        row('0.10', 'income', 'A', MISSOES),
+        row('0.20', 'income', 'A', TEMPLO),
+        row('0.10', 'expense', 'B', MISSOES),
+        row('0.20', 'expense', 'B', TEMPLO),
+      ]).prisma,
+    ).build('t1', periodo);
+
+    expect(soma.totals.revenue_total).toBe(0.3);
+    expect(soma.totals.expenses_total).toBe(0.3);
+
+    const resultado = await new DreCostCenterService(
+      prismaWith([row('0.70', 'income', 'A', MISSOES), row('0.60', 'expense', 'B', MISSOES)]).prisma,
+    ).build('t1', periodo);
+
+    expect(resultado.columns[0]?.net_result).toBe(0.1);
+    expect(resultado.totals.net_result).toBe(0.1);
   });
 
   it('sem lançamentos realizados: sem colunas, linhas vazias e totais zerados', async () => {

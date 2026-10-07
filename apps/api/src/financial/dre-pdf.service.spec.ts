@@ -118,6 +118,104 @@ async function renderedText(
   }
 }
 
+/**
+ * Todas as linhas de todas as tabelas do docDef, cada linha como a lista dos
+ * textos das suas células. É daqui que as asserções de VALOR saem: procurar um
+ * número solto no JSON do docDef passaria também com o número na linha errada.
+ */
+function pdfTableRows(text: string): string[][] {
+  const rows: string[][] = [];
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (node === null || typeof node !== 'object') return;
+    const obj = node as { table?: { body?: unknown[][] } } & Record<string, unknown>;
+    for (const row of obj.table?.body ?? []) {
+      rows.push(row.map((c) => String((c as { text?: unknown })?.text ?? '')));
+    }
+    Object.values(obj).forEach(walk);
+  };
+  walk(JSON.parse(text));
+  return rows;
+}
+
+describe('DrePdfService — valores nas linhas (DRE-06)', () => {
+  const dre = buildDre({
+    revenue: {
+      categories: [
+        { category_name: 'Dízimos', total: 100, count: 2 },
+        { category_name: 'Ofertas', total: 50, count: 1 },
+      ],
+      total: 150,
+    },
+    expenses: {
+      categories: [
+        { category_name: 'Aluguel', total: 40, count: 1 },
+        { category_name: 'Água', total: 10.5, count: 1 },
+      ],
+      total: 50.5,
+    },
+    net_result: 99.5,
+    // Valores distintos entre si de propósito: um campo trocado por outro não passa.
+    previous_period: {
+      period: { start: '2025-12-01', end: '2025-12-31' },
+      revenue_total: 777,
+      expenses_total: 222,
+      net_result: 55,
+    },
+  });
+
+  it('cada categoria aparece com o seu total, na tabela certa', async () => {
+    const { service } = serviceWith(dre);
+    const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));
+    const rows = pdfTableRows(text);
+
+    expect(rows).toContainEqual(['Dízimos', '100,00']);
+    expect(rows).toContainEqual(['Ofertas', '50,00']);
+    expect(rows).toContainEqual(['Aluguel', '40,00']);
+    expect(rows).toContainEqual(['Água', '10,50']);
+  });
+
+  it('"Total Receitas" mostra o total de receitas e "Total Despesas" o de despesas', async () => {
+    const { service } = serviceWith(dre);
+    const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));
+    const rows = pdfTableRows(text);
+
+    expect(rows).toContainEqual(['Total Receitas', '150,00']);
+    expect(rows).toContainEqual(['Total Despesas', '50,50']);
+  });
+
+  it('o período anterior mostra o RESULTADO dele, não a receita nem a despesa', async () => {
+    const { service } = serviceWith(dre);
+    const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));
+    const rows = pdfTableRows(text);
+
+    expect(rows).toContainEqual(['01/12/2025 a 31/12/2025', '55,00']);
+    expect(text).not.toContain('777,00');
+    expect(text).not.toContain('222,00');
+  });
+
+  it('resultado zero: o rótulo é exatamente "Resultado zerado", sem "do período"', async () => {
+    const { service } = serviceWith(buildDre({ net_result: 0 }));
+    const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));
+    const rows = pdfTableRows(text);
+
+    expect(rows).toContainEqual(['Resultado zerado', '0,00']);
+    expect(text).not.toContain('Resultado zerado do período');
+  });
+
+  it('lucro e prejuízo levam "do período" e o valor na mesma linha', async () => {
+    const lucro = await renderedText(() =>
+      serviceWith(buildDre({ net_result: 1234.5 })).service.generatePdf('t1', 'c1', query),
+    );
+    expect(pdfTableRows(lucro.text)).toContainEqual(['Lucro do período', '1.234,50']);
+
+    const prejuizo = await renderedText(() =>
+      serviceWith(buildDre({ net_result: -20 })).service.generatePdf('t1', 'c1', query),
+    );
+    expect(pdfTableRows(prejuizo.text)).toContainEqual(['Prejuízo do período', '-20,00']);
+  });
+});
+
 describe('DrePdfService — somente leitura (DRE-05)', () => {
   it('não toca em nenhum lançamento: nem leitura nem escrita (update/updateMany/...)', async () => {
     const { service, ftAccess } = serviceWith(buildDre());

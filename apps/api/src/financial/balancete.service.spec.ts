@@ -222,4 +222,31 @@ describe('BalanceteService — só lançamentos realizados', () => {
     expect(result.net_result).toBe(0);
     expect(result.lines[0]?.net_result).toBe(0);
   });
+
+  it('totais em centavos: receitas 0,10 + 0,20 de dois centros → 0,3', async () => {
+    const service = new BalanceteService(
+      prismaWith([
+        row('0.10', 'income', 'paid', CC_A),
+        row('0.20', 'income', 'paid', CC_B),
+        row('0.10', 'expense', 'paid', CC_A),
+        row('0.20', 'expense', 'paid', CC_B),
+      ]),
+    );
+
+    const result = await service.build('t1', periodo);
+
+    expect(result.revenue_total).toBe(0.3);
+    expect(result.expenses_total).toBe(0.3);
+  });
+
+  it('net_result 0,70 − 0,60 → 0,1 no total e na linha do centro', async () => {
+    const service = new BalanceteService(
+      prismaWith([row('0.70', 'income', 'paid', CC_A), row('0.60', 'expense', 'paid', CC_A)]),
+    );
+
+    const result = await service.build('t1', periodo);
+
+    expect(result.net_result).toBe(0.1);
+    expect(result.lines[0]?.net_result).toBe(0.1);
+  });
 });
