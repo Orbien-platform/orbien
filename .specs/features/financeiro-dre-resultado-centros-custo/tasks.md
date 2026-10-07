@@ -68,11 +68,12 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Depends on**: None · **Reuses**: `dto/dre-query.dto.spec.ts`
 **Requirement**: DRE-04, DRE-07, DRE-10, DRE-11, DRE-12
 **Done when**:
-- [ ] `buildScope` com `none` gera `cost_center_id: null`; com UUID, `cost_center_id`; UUID vence nome
-- [ ] `round2(0.1+0.2-0.3) === 0`
-- [ ] DTO rejeita `cost_center_id` inválido e `period_end < period_start`; aceita `none`
-- [ ] Gate quick passa; contagem de testes registrada
+- [x] `buildScope` com `none` gera `cost_center_id: null`; com UUID, `cost_center_id`; UUID vence nome
+- [x] `round2(0.1+0.2-0.3) === 0`
+- [x] DTO rejeita `cost_center_id` inválido e `period_end < period_start`; aceita `none`
+- [x] Gate quick passa; contagem de testes registrada
 **Tests**: unit · **Gate**: quick (API)
+**Status**: ✅ Concluída
 
 ### T2: DreService realizado, A realizar e filtro por id
 **What**: `buildDre` e `fetchPeriodSummary` usam `buildScope` com `REALIZED_STATUSES`; `net_result` arredondado; novo `pending`; `cost_center_id`.
