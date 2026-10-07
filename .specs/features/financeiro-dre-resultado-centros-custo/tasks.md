@@ -197,10 +197,11 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Depends on**: T10 · **Requirement**: DRE-18
 **Tools**: Skills `frontend-design`, `dataviz`
 **Done when**:
-- [ ] Positivo/negativo distinguíveis por mais que a cor (sinal + eixo zero)
-- [ ] Período > 36 meses mostra "Escolha um período de até 36 meses"
-- [ ] 403 → `NoAccessState`
+- [x] Positivo/negativo distinguíveis por mais que a cor (sinal + eixo zero)
+- [x] Período > 36 meses mostra "Escolha um período de até 36 meses"
+- [x] 403 → `NoAccessState`
 **Tests**: unit · **Gate**: quick (Web)
+**Status**: ✅ Concluída
 
 ### T12: e2e, AD-011 e rastreabilidade
 **What**: e2e do DRE (lucro/prejuízo, filtro, download do PDF) em `teste1-church`; registrar `AD-011` em `.specs/STATE.md`; item em `docs/PLANO.md`; status `Verified` na tabela da spec.

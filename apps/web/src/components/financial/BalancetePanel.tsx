@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { CostCenterCharts } from "@/components/financial/CostCenterCharts";
+import { CostCenterTrend } from "@/components/financial/CostCenterTrend";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -203,6 +204,7 @@ export function BalancetePanel() {
             </tbody>
           </table>
         </div>
+        <CostCenterTrend start={start} end={end} />
         </>
       )}
     </div>

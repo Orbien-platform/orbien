@@ -33,6 +33,15 @@ describe("BalancetePanel", () => {
     expect(screen.getByRole("img", { name: /^Missões: receitas/ })).toBeInTheDocument();
   });
 
+  it("oferece a evolução mensal sem buscá-la antes do clique", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Missões");
+    expect(screen.getByRole("button", { name: "Ver evolução mensal" })).toBeInTheDocument();
+    expect(vi.mocked(api.get).mock.calls.map((c) => String(c[0])).some((u) => u.includes("/monthly"))).toBe(false);
+  });
+
   it("sem lançamentos: nenhum gráfico", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...balancete, lines: [], revenue_total: 0, expenses_total: 0, net_result: 0 } });
     render(<BalancetePanel />);
