@@ -255,10 +255,32 @@ describe('UsersService.updateRole', () => {
     await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).resolves.toBeDefined();
   });
 
+  it('quem só tem papel fora da tabela não concede nada', async () => {
+    const { service } = updateWith(target);
+    const supportActor: JwtPayload = { ...actor, roles: ['platform_support'] };
+    await expect(service.updateRole('person-1', { role_code: 'member' }, supportActor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('papel desconhecido nunca é concedido', async () => {
+    const { service } = updateWith(target);
+    await expect(
+      service.updateRole('person-1', { role_code: 'papel_novo' as never }, { ...actor, roles: ['tenant_admin'] }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('ninguém altera o próprio papel', async () => {
     const { service } = updateWith({ ...target, id: actor.sub });
     await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
       ForbiddenException,
+    );
+  });
+
+  it('404 quando a pessoa não existe', async () => {
+    const { service } = updateWith(null);
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
+      NotFoundException,
     );
   });
 
