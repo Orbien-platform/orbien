@@ -133,6 +133,11 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
   const [accessError, setAccessError] = useState("");
   const [accessSent, setAccessSent] = useState(false);
 
+  const [editingRole, setEditingRole] = useState(false);
+  const [newRole, setNewRole] = useState("member");
+  const [isSavingRole, setIsSavingRole] = useState(false);
+  const [roleError, setRoleError] = useState("");
+
   const isLoading = open && personId !== null && loadedFor !== personId;
 
   useEffect(() => {
@@ -162,6 +167,8 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
       setShowAccessForm(false);
       setAccessError("");
       setAccessSent(false);
+      setEditingRole(false);
+      setRoleError("");
     }
     onOpenChange(next);
   }
@@ -195,6 +202,36 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
       }
     } finally {
       setIsInviting(false);
+    }
+  }
+
+  function startChangeRole(current: string[]) {
+    setNewRole(current[0] ?? "member");
+    setRoleError("");
+    setEditingRole(true);
+  }
+
+  async function handleChangeRole(e: FormEvent, person: PersonDetail) {
+    e.preventDefault();
+    setRoleError("");
+    setIsSavingRole(true);
+    try {
+      await api.patch(`/users/by-person/${person.id}/role`, { role_code: newRole });
+      setPerson((prev) =>
+        prev && prev.access ? { ...prev, access: { ...prev.access, role_codes: [newRole] } } : prev,
+      );
+      setEditingRole(false);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        setRoleError(
+          (err.response.data as { message?: string } | undefined)?.message ??
+            "Você não tem permissão para alterar este papel.",
+        );
+      } else {
+        setRoleError("Erro ao alterar o papel. Tente novamente.");
+      }
+    } finally {
+      setIsSavingRole(false);
     }
   }
 
@@ -491,6 +528,65 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                             {roleLabels(person.access.role_codes) || "—"}
                           </p>
                           <p className="mt-0.5 text-xs text-stone">{person.access.email}</p>
+
+                          {!editingRole ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-3 gap-1.5 rounded-[8px]"
+                              onClick={() => startChangeRole(person.access!.role_codes)}
+                            >
+                              <KeyRound size={13} strokeWidth={1.5} />
+                              Alterar papel
+                            </Button>
+                          ) : (
+                            <form
+                              onSubmit={(e) => handleChangeRole(e, person)}
+                              className="mt-3 flex flex-col gap-3"
+                            >
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-medium text-stone">Novo papel</Label>
+                                <select
+                                  value={newRole}
+                                  onChange={(e) => setNewRole(e.target.value)}
+                                  disabled={isSavingRole}
+                                  className="h-8 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
+                                >
+                                  {ASSIGNABLE_ROLE_OPTIONS.map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {roleError && (
+                                <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">
+                                  {roleError}
+                                </p>
+                              )}
+
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 rounded-[8px]"
+                                  onClick={() => setEditingRole(false)}
+                                  disabled={isSavingRole}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  disabled={isSavingRole}
+                                  className="flex-1 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]"
+                                >
+                                  {isSavingRole ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                                  Salvar papel
+                                </Button>
+                              </div>
+                            </form>
+                          )}
                         </div>
                       ) : !showAccessForm ? (
                         <Button

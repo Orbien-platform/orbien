@@ -496,5 +496,45 @@ describe("PersonSheet", () => {
       expect(screen.queryByRole("button", { name: /Enviar convite/ })).not.toBeInTheDocument();
       expect(api.post).not.toHaveBeenCalled();
     });
+    it("changes the role of a person who already has access", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.patch).mockResolvedValue({ data: { id: "u1", role_code: "secretary" } });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Alterar papel/ }));
+      await user.selectOptions(screen.getByRole("combobox"), "secretary");
+      await user.click(screen.getByRole("button", { name: /Salvar papel/ }));
+
+      await waitFor(() =>
+        expect(api.patch).toHaveBeenCalledWith("/users/by-person/p1/role", { role_code: "secretary" })
+      );
+      expect(await screen.findByText("Secretário(a)")).toBeInTheDocument();
+    });
+
+    it("shows the API message when the role change is forbidden", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.patch).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 403, data: { message: "Você não pode alterar o próprio papel." } },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Alterar papel/ }));
+      await user.click(screen.getByRole("button", { name: /Salvar papel/ }));
+
+      expect(await screen.findByText("Você não pode alterar o próprio papel.")).toBeInTheDocument();
+    });
   });
 });

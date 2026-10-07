@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserRoleDto } from './dto/create-user.dto';
 import { frontendUrl } from '../common/urls/frontend-url';
 
 const INVITE_TOKEN_TTL_DAYS = 7;
@@ -112,5 +112,72 @@ export class UsersService {
     await this.mail.sendInvite(user.email, inviteUrl, tenantMailBrand(tenant));
 
     return { id: user.id, email: user.email };
+  }
+
+  /**
+   * Troca o papel de quem já tem acesso. Mesmas travas do convite: só
+   * `tenant_admin` distribui ou retira `tenant_admin`, e ninguém muda o
+   * próprio papel (evita deixar o tenant sem dono). A leitura roda em `tx`
+   * (RLS decide se a pessoa é do tenant/congregação do ator); a escrita vai
+   * por `system`, porque `role_assignments` só aceita escrita por ele
+   * (migration 017).
+   */
+  async updateRole(
+    personId: string,
+    dto: UpdateUserRoleDto,
+    actor: JwtPayload,
+  ): Promise<{ id: string; role_code: string }> {
+    const actorIsAdmin = actor.roles.includes('tenant_admin');
+    if (dto.role_code === 'tenant_admin' && !actorIsAdmin) {
+      throw new ForbiddenException('Apenas um admin do tenant pode conceder o papel de admin do tenant.');
+    }
+
+    const account = await this.prisma.runInTx(async (tx) => {
+      const person = await tx.person.findUnique({
+        where: { id: personId },
+        select: {
+          userAccounts: {
+            where: { is_active: true },
+            select: {
+              id: true,
+              tenant_id: true,
+              congregation_id: true,
+              roleAssignments: { select: { role_code: true } },
+            },
+          },
+        },
+      });
+      if (!person) throw new NotFoundException('Pessoa não encontrada');
+      const found = person.userAccounts[0];
+      if (!found) throw new NotFoundException('Esta pessoa não tem acesso ao sistema.');
+      return found;
+    });
+
+    if (account.id === actor.sub) {
+      throw new ForbiddenException('Você não pode alterar o próprio papel.');
+    }
+    if (!actorIsAdmin && account.roleAssignments.some((r) => r.role_code === 'tenant_admin')) {
+      throw new ForbiddenException('Apenas um admin do tenant pode alterar o papel de um admin do tenant.');
+    }
+
+    await this.prisma.system.$transaction(async (sysTx) => {
+      await sysTx.roleAssignment.deleteMany({
+        where: {
+          user_account_id: account.id,
+          tenant_id: account.tenant_id,
+          role_code: { not: 'platform_support' },
+        },
+      });
+      await sysTx.roleAssignment.create({
+        data: {
+          tenant_id: account.tenant_id,
+          congregation_id: account.congregation_id,
+          user_account_id: account.id,
+          role_code: dto.role_code,
+        },
+      });
+    });
+
+    return { id: account.id, role_code: dto.role_code };
   }
 }
