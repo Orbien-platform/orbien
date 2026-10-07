@@ -183,10 +183,13 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Depends on**: T9 · **Requirement**: DRE-15
 **Tools**: Skills `frontend-design`, `dataviz`
 **Done when**:
-- [ ] Barras na mesma ordem da tabela, cada uma com `aria-label` de centro e valores
-- [ ] Participação soma 100% (arredondamento tratado) e some quando despesas = 0
-- [ ] Tabela existente intacta (testes atuais de `BalancetePanel.test.tsx` verdes sem edição)
+- [x] Barras na mesma ordem da tabela, cada uma com `aria-label` de centro e valores
+- [x] Participação soma 100% (arredondamento tratado) e some quando despesas = 0
+- [x] Tabela existente intacta (testes atuais de `BalancetePanel.test.tsx` verdes sem edição)
 **Tests**: unit · **Gate**: quick (Web)
+**Status**: ✅ Concluída
+
+> Desvio: barras em HTML (largura proporcional, `aria-label` e valor escrito em cada uma) em vez de `recharts`; marcado `SPEC_DEVIATION` no componente. A tabela segue como equivalente textual.
 
 ### T11: Evolução mensal por centro (tela)
 **What**: `CostCenterTrend` com seletor de centro e resultado mês a mês.

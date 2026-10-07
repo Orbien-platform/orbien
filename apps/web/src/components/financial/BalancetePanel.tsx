@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoAccessState } from "@/components/ui/NoAccessState";
+import { CostCenterCharts } from "@/components/financial/CostCenterCharts";
 import api, { isForbidden } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -136,6 +137,8 @@ export function BalancetePanel() {
           Selecione um período para ver o balancete.
         </p>
       ) : (
+        <>
+        <CostCenterCharts lines={data.lines} />
         <div className="overflow-x-auto rounded-[12px] border border-[var(--border-default)]">
           <table className="w-full text-sm">
             <thead>
@@ -200,6 +203,7 @@ export function BalancetePanel() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

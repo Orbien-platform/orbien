@@ -23,6 +23,24 @@ const balancete = {
 describe("BalancetePanel", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("mostra os gráficos por centro de custo junto da tabela", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Missões");
+    expect(screen.getByRole("region", { name: "Receitas e despesas por centro" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Participação nas despesas" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Missões: receitas/ })).toBeInTheDocument();
+  });
+
+  it("sem lançamentos: nenhum gráfico", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...balancete, lines: [], revenue_total: 0, expenses_total: 0, net_result: 0 } });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Sem lançamentos no período");
+    expect(screen.queryByRole("region", { name: "Receitas e despesas por centro" })).not.toBeInTheDocument();
+  });
+
   it("lista uma linha por centro de custo e o total", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: balancete });
     render(<BalancetePanel />);
