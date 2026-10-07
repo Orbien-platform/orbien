@@ -106,9 +106,10 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Where**: `balancete.service.ts` (+ spec)
 **Depends on**: T3 · **Requirement**: DRE-16
 **Done when**:
-- [ ] Lançamento `pending` não entra nas linhas nem nos totais
-- [ ] Para o mesmo conjunto de lançamentos, `net_result` do Balancete = `net_result` do DRE
+- [x] Lançamento `pending` não entra nas linhas nem nos totais
+- [x] Para o mesmo conjunto de lançamentos, `net_result` do Balancete = `net_result` do DRE
 **Tests**: unit · **Gate**: quick (API)
+**Status**: ✅ Concluída
 
 ### T5: DRE comparativo por centro de custo (API)
 **What**: `DreCostCenterService` e `GET /financial/dre/by-cost-center` (Premium, mesmos papéis do DRE).
