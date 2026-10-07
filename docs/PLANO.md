@@ -2408,6 +2408,36 @@ mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 - **Marca da igreja na página pública**: a página mostra o nome da igreja,
   mas não a cor nem o logo — não há rota pública de identidade por slug.
 
+### PEND-20 · 500 intermitente na montagem de dado do E2E de produção · aberto
+
+No job "E2E (produção)" do run 37530228190 (PR #167, 2026-10-06, 21:09–21:38Z)
+duas chamadas de montagem devolveram `500 Internal server error`:
+`POST /celebrations/setlists/songs` (teste "vincula ao catálogo uma música
+digitada avulsa", 1ª tentativa) e `POST /celebrations/instances` (mesmo teste,
+retry). O run seguinte em `main` (37544464239, 23:14Z, `21ef5ea`) passou inteiro
+contra a mesma produção — intermitente. Não é a falha de
+`setlist-repertorio.spec.ts:108` e `:144` (spec sem `freeDay()`, corrigida no
+#168).
+
+**Sem causa confirmada.** O que se descartou lendo o código e reproduzindo
+no Postgres local: `CelebrationInstancesService.create` e
+`SetlistSongsService.create` não têm caminho previsível para 500 (DTO valida
+UUID e data; sem `@@unique` em `celebration_instances` nem `setlist_songs`;
+40 criações concorrentes na mesma data passaram, sem P2002/FK/42501). O que
+resta é infra: o `TenantContextInterceptor` abre `$transaction` com
+`maxWait: 10_000`, e esgotar o pool devolve `P2028`, que o
+`SchemaDriftExceptionFilter` repassa ao Nest — vira 500 genérico (reproduzido
+local com `maxWait` baixo). É hipótese compatível com o sintoma, não prova.
+
+**Rastro adicionado:** `api.call` do e2e (`apps/web/e2e/fixtures.ts`) retenta
+uma vez em 5xx e registra método, rota, status e corpo a cada falha.
+
+**Falta:** log da Render na janela 2026-10-06 21:09–21:38Z, filtrando
+`POST /api/celebrations/instances` e `/celebrations/setlists/songs` — o Nest
+loga a exceção não tratada com stack, que diz se foi `P2028`, queda de conexão
+com o pooler do Supabase ou reinício do serviço. Decisão em aberto: mapear
+`P2028` para 503 (hoje 500).
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
