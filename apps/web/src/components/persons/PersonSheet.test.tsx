@@ -573,5 +573,81 @@ describe("PersonSheet", () => {
 
       expect(screen.queryByRole("button", { name: /Alterar papel/ })).not.toBeInTheDocument();
     });
+    it("shows a generic message when the role change fails without a 403", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.patch).mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Alterar papel/ }));
+      await user.click(screen.getByRole("button", { name: /Salvar papel/ }));
+
+      expect(await screen.findByText("Erro ao alterar o papel. Tente novamente.")).toBeInTheDocument();
+    });
+
+    it("falls back to a default message on a 403 without a body message", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.patch).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 403, data: undefined },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Alterar papel/ }));
+      await user.click(screen.getByRole("button", { name: /Salvar papel/ }));
+
+      expect(await screen.findByText("Você não tem permissão para alterar este papel.")).toBeInTheDocument();
+    });
+
+    it("closes the role form without saving when cancelled", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Alterar papel/ }));
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      expect(screen.queryByRole("button", { name: /Salvar papel/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Alterar papel/ })).toBeInTheDocument();
+      expect(api.patch).not.toHaveBeenCalled();
+    });
+
+    it("preselects member when the current role is above what the user can grant", async () => {
+      // Pastor abrindo uma pessoa de nível superior não vê o botão; aqui o papel
+      // atual (sem registro) não está na lista concedível e cai em "member".
+      mockedUseAuth.mockReturnValue({
+        user: { roles: ["pastor"] } as ReturnType<typeof useAuth>["user"],
+        isLoading: false,
+        isAuthenticated: true,
+        login: vi.fn(),
+        logout: vi.fn(),
+      });
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: [] } },
+      });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+      await user.click(screen.getByRole("button", { name: /Alterar papel/ }));
+
+      expect(screen.getByRole("combobox")).toHaveValue("member");
+    });
   });
 });
