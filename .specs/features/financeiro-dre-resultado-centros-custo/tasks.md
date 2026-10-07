@@ -93,12 +93,13 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Where**: `dre-pdf.service.ts`, `dre.controller.ts` (+ specs)
 **Depends on**: T2 · **Requirement**: DRE-05, DRE-06, DRE-07
 **Done when**:
-- [ ] Teste afirma que `financialTransaction.updateMany`/`update` nunca é chamado
-- [ ] `docDef` contém "Lucro do período" para net > 0, "Prejuízo do período" para net < 0 e "Resultado zerado" para 0
-- [ ] `docDef` contém "A realizar" e o recorte do centro
-- [ ] `DreQueryDto` inválido no export → 400
-- [ ] Gate **Build** da fase 1 (`build:api`, lint, `test:unit` completo da API)
+- [x] Teste afirma que `financialTransaction.updateMany`/`update` nunca é chamado
+- [x] `docDef` contém "Lucro do período" para net > 0, "Prejuízo do período" para net < 0 e "Resultado zerado" para 0
+- [x] `docDef` contém "A realizar" e o recorte do centro
+- [x] `DreQueryDto` inválido no export → 400
+- [x] Gate **Build** da fase 1 (`build:api`, lint, `test:unit` completo da API)
 **Tests**: unit · **Gate**: build
+**Status**: ✅ Concluída
 
 ### T4: Balancete só com realizados
 **What**: `BalanceteService` passa a usar `buildScope` + `REALIZED_STATUSES`.

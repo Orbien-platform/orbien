@@ -1,4 +1,7 @@
+import 'reflect-metadata';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { DreQueryDto } from './dto/dre-query.dto';
 import { DreController } from './dre.controller';
 import { DreService } from './dre.service';
 import { DrePdfService } from './dre-pdf.service';
@@ -100,6 +103,45 @@ describe('DreController', () => {
       expect(res.set).toHaveBeenCalledWith({
         'Content-Type': 'application/pdf',
         'Content-Disposition': 'attachment; filename="orbien_dre_202601_202603.pdf"',
+      });
+    });
+
+    describe('validação do corpo (400)', () => {
+      // Mesma configuração do `main.ts`: o ValidationPipe global é quem
+      // responde 400, usando o tipo declarado no @Body da rota.
+      const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+      const bodyType = () =>
+        (Reflect.getMetadata('design:paramtypes', DreController.prototype, 'exportPdf') as unknown[])[0];
+
+      it('o @Body do export é o DreQueryDto (é ele que o pipe valida)', () => {
+        expect(bodyType()).toBe(DreQueryDto);
+      });
+
+      it('period_end < period_start → 400', async () => {
+        await expect(
+          pipe.transform(
+            { period_start: '2026-02-01', period_end: '2026-01-31' },
+            { type: 'body', metatype: bodyType() as never },
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('cost_center_id inválido → 400', async () => {
+        await expect(
+          pipe.transform(
+            { period_start: '2026-01-01', period_end: '2026-01-31', cost_center_id: 'abc' },
+            { type: 'body', metatype: bodyType() as never },
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('período válido com cost_center_id "none" passa', async () => {
+        await expect(
+          pipe.transform(
+            { period_start: '2026-01-01', period_end: '2026-01-31', cost_center_id: 'none' },
+            { type: 'body', metatype: bodyType() as never },
+          ),
+        ).resolves.toMatchObject({ cost_center_id: 'none' });
       });
     });
   });

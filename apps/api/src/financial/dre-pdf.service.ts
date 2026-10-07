@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DreResult, DreService, DreQuery } from './dre.service';
+import { resultLabel } from './dre-scope';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfmakeLib = require('pdfmake') as {
@@ -42,31 +43,34 @@ export class DrePdfService {
     congregationId: string,
     query: DreQuery,
   ): Promise<Buffer> {
-    const [dre, tenant] = await Promise.all([
+    const [dre, tenant, costCenterLabel] = await Promise.all([
       this.dreService.buildDre(tenantId, congregationId, query, false),
       this.prisma.client.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+      this.costCenterLabel(tenantId, query),
     ]);
-    const buffer = await pdfmakeLib.createPdf(this.buildDocDef(dre, tenant?.name ?? 'Igreja'), {}).getBuffer();
 
-    // The DRE PDF is an accounting export — transactions it covers become 'confirmed'.
-    const start = new Date(query.period_start);
-    const end = new Date(query.period_end);
-    end.setUTCHours(23, 59, 59, 999);
-    await this.prisma.client.financialTransaction.updateMany({
-      where: {
-        tenant_id: tenantId,
-        occurred_at: { gte: start, lte: end },
-        status: 'paid',
-        ...(query.congregation_id ? { congregation_id: query.congregation_id } : {}),
-        ...(query.cost_center ? { costCenter: { name: query.cost_center } } : {}),
-      },
-      data: { status: 'confirmed' },
-    });
-
-    return buffer;
+    // Somente leitura: o PDF não escreve em nenhum lançamento. A confirmação
+    // contábil dos `paid` saiu daqui (spec DRE-05); gerar o relatório N vezes
+    // é idempotente.
+    return pdfmakeLib
+      .createPdf(this.buildDocDef(dre, tenant?.name ?? 'Igreja', costCenterLabel), {})
+      .getBuffer();
   }
 
-  private buildDocDef(dre: DreResult, tenantName: string): object {
+  /** Recorte de centro de custo para o cabeçalho; `undefined` quando não há filtro. */
+  private async costCenterLabel(tenantId: string, query: DreQuery): Promise<string | undefined> {
+    if (query.cost_center_id === 'none') return 'Sem centro de custo';
+    if (query.cost_center_id) {
+      const cc = await this.prisma.client.costCenter.findFirst({
+        where: { id: query.cost_center_id, tenant_id: tenantId },
+        select: { name: true },
+      });
+      return cc?.name ?? 'não encontrado';
+    }
+    return query.cost_center || undefined;
+  }
+
+  private buildDocDef(dre: DreResult, tenantName: string, costCenterLabel?: string): object {
     const periodLabel = `${this.fmtDate(dre.period.start)} a ${this.fmtDate(dre.period.end)}`;
 
     const content: object[] = [
@@ -82,6 +86,9 @@ export class DrePdfService {
               { text: `Emissão: ${this.fmtDate(new Date().toISOString().slice(0, 10))}`, style: 'meta', alignment: 'right' },
             ],
           },
+          ...(costCenterLabel
+            ? [{ text: `Centro de custo: ${costCenterLabel}`, style: 'meta' }]
+            : []),
           {
             canvas: [{ type: 'line', x1: 0, y1: 2, x2: 515, y2: 2, lineWidth: 1, lineColor: HEADER_COLOR }],
             margin: [0, 4, 0, 0] as [number, number, number, number],
@@ -131,21 +138,35 @@ export class DrePdfService {
         layout: 'lightHorizontalLines',
       },
 
-      // ── Resultado líquido ─────────────────────────────────────────────────
+      // ── Resultado do período (lucro / prejuízo / zerado) ─────────────────
       {
         margin: [0, 16, 0, 0] as [number, number, number, number],
         table: {
           widths: ['*', 100],
           body: [[
-            { text: 'Resultado Líquido', bold: true, fontSize: 12, fillColor: HEADER_COLOR, color: 'white' },
+            { text: this.resultText(dre.net_result), bold: true, fontSize: 12, fillColor: HEADER_COLOR, color: 'white' },
             { text: this.fmtMoney(dre.net_result), bold: true, fontSize: 12, alignment: 'right', fillColor: HEADER_COLOR, color: 'white' },
           ]],
         },
         layout: 'noBorders',
       },
 
+      // ── A realizar (pendentes; fora do resultado) ────────────────────────
+      { text: 'A realizar', style: 'sectionHeader', margin: [0, 20, 0, 4] as [number, number, number, number] },
+      {
+        table: {
+          widths: ['*', 100],
+          body: [
+            [{ text: 'Receitas pendentes' }, { text: this.fmtMoney(dre.pending.revenue_total), alignment: 'right' }],
+            [{ text: 'Despesas pendentes' }, { text: this.fmtMoney(dre.pending.expenses_total), alignment: 'right' }],
+          ],
+        },
+        layout: 'lightHorizontalLines',
+      },
+      { text: 'Lançamentos ainda não realizados: não entram no resultado acima.', style: 'meta', margin: [0, 4, 0, 0] as [number, number, number, number] },
+
       // ── Período anterior ──────────────────────────────────────────────────
-      { text: 'Período Anterior', style: 'sectionHeader', margin: [0, 20, 0, 4] as [number, number, number, number] },
+      { text: 'Período Anterior', style: 'sectionHeader', margin: [0, 16, 0, 4] as [number, number, number, number] },
       {
         table: {
           widths: ['*', 100],
@@ -182,6 +203,11 @@ export class DrePdfService {
       },
       defaultStyle: { font: 'Roboto', fontSize: 10 },
     };
+  }
+
+  private resultText(net: number): string {
+    const label = resultLabel(net);
+    return label === 'Resultado zerado' ? label : `${label} do período`;
   }
 
   private fmtDate(s: string): string {
