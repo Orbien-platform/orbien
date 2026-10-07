@@ -32,6 +32,7 @@ import { DashboardService } from './dashboard.service';
 import { DreController } from './dre.controller';
 import { DreService } from './dre.service';
 import { DrePdfService } from './dre-pdf.service';
+import { DreCostCenterService } from './dre-cost-center.service';
 import { ExportController } from './export/export.controller';
 import { ExportService } from './export/export.service';
 import { PdfExportService } from './export/pdf-export.service';
@@ -76,6 +77,7 @@ describe('FinancialModule', () => {
     expect(moduleRef.get(DreController)).toBeInstanceOf(DreController);
     expect(moduleRef.get(DreService)).toBeInstanceOf(DreService);
     expect(moduleRef.get(DrePdfService)).toBeInstanceOf(DrePdfService);
+    expect(moduleRef.get(DreCostCenterService)).toBeInstanceOf(DreCostCenterService);
     expect(moduleRef.get(ExportController)).toBeInstanceOf(ExportController);
     expect(moduleRef.get(ExportService)).toBeInstanceOf(ExportService);
     expect(moduleRef.get(PdfExportService)).toBeInstanceOf(PdfExportService);

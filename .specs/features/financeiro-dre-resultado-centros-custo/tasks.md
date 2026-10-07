@@ -116,10 +116,11 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Where**: `dre-cost-center.service.ts`, `dre.controller.ts`, `financial.module.ts` (+ specs)
 **Depends on**: T4 · **Requirement**: DRE-13
 **Done when**:
-- [ ] Colunas por centro + "Sem centro de custo" quando houver; linhas de receita e despesa por categoria
-- [ ] Soma das colunas = total geral = `net_result` de `buildDre` para o mesmo conjunto
-- [ ] Rota exige `PlanGuard` Premium e papéis do DRE (teste do controller); período inválido → 400
+- [x] Colunas por centro + "Sem centro de custo" quando houver; linhas de receita e despesa por categoria
+- [x] Soma das colunas = total geral = `net_result` de `buildDre` para o mesmo conjunto
+- [x] Rota exige `PlanGuard` Premium e papéis do DRE (teste do controller); período inválido → 400
 **Tests**: unit · **Gate**: quick (API)
+**Status**: ✅ Concluída
 
 ### T6: Evolução mensal por centro (API)
 **What**: `BalanceteMonthlyService` e `GET /financial/balancete/monthly`.

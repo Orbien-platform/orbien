@@ -18,6 +18,7 @@ import { DashboardService } from './dashboard.service';
 import { DreController } from './dre.controller';
 import { DreService } from './dre.service';
 import { DrePdfService } from './dre-pdf.service';
+import { DreCostCenterService } from './dre-cost-center.service';
 import { ExportController } from './export/export.controller';
 import { ExportService } from './export/export.service';
 import { PdfExportService } from './export/pdf-export.service';
@@ -49,6 +50,7 @@ import { OfxImportService } from './import/ofx-import.service';
     DashboardService,
     DreService,
     DrePdfService,
+    DreCostCenterService,
     ExportService,
     PdfExportService,
     ZipExportService,
