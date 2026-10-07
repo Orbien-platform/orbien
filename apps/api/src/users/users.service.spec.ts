@@ -93,6 +93,17 @@ describe('UsersService', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  it.each(['admin_congregation', 'tenant_admin'] as const)('rejeita pastor tentando conceder %s', async (role) => {
+    const { service, roleAssignmentCreate } = serviceWith();
+    await expect(service.create({ ...dto, role_code: role }, actor)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(roleAssignmentCreate).not.toHaveBeenCalled();
+  });
+
+  it('permite pastor conceder papel de mesmo nível (pastor)', async () => {
+    const { service } = serviceWith();
+    await expect(service.create({ ...dto, role_code: 'pastor' }, actor)).resolves.toBeDefined();
+  });
+
   it('permite tenant_admin conceder tenant_admin', async () => {
     const { service } = serviceWith();
     const tenantAdminActor: JwtPayload = { ...actor, roles: ['tenant_admin'] };
@@ -171,5 +182,112 @@ describe('UsersService', () => {
       if (original === undefined) delete process.env['FRONTEND_URL'];
       else process.env['FRONTEND_URL'] = original;
     }
+  });
+});
+
+describe('UsersService.updateRole', () => {
+  function updateWith(account: unknown) {
+    const deleteMany = jest.fn().mockResolvedValue({});
+    const create = jest.fn().mockResolvedValue({});
+    const tx = {
+      person: {
+        findUnique: () => Promise.resolve(account === null ? null : { userAccounts: account ? [account] : [] }),
+      },
+    };
+    const sysTx = { roleAssignment: { deleteMany, create } };
+    const prisma = {
+      runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+      system: { $transaction: (fn: (t: typeof sysTx) => Promise<unknown>) => fn(sysTx) },
+    } as unknown as PrismaService;
+    return { service: new UsersService(prisma, {} as MailService), deleteMany, create };
+  }
+
+  const target = {
+    id: 'user-alvo',
+    tenant_id: 'tenant-1',
+    congregation_id: 'cong-1',
+    roleAssignments: [{ role_code: 'member' }],
+  };
+
+  it('troca o papel: remove os atuais e grava o novo', async () => {
+    const { service, deleteMany, create } = updateWith(target);
+    await expect(service.updateRole('person-1', { role_code: 'secretary' }, actor)).resolves.toEqual({
+      id: 'user-alvo',
+      role_code: 'secretary',
+    });
+    expect(deleteMany).toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ user_account_id: 'user-alvo', role_code: 'secretary' }),
+    });
+  });
+
+  it('pastor não concede tenant_admin', async () => {
+    const { service, create } = updateWith(target);
+    await expect(service.updateRole('person-1', { role_code: 'tenant_admin' }, actor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('pastor não rebaixa um tenant_admin', async () => {
+    const { service } = updateWith({ ...target, roleAssignments: [{ role_code: 'tenant_admin' }] });
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('pastor não concede admin_congregation na troca', async () => {
+    const { service } = updateWith(target);
+    await expect(service.updateRole('person-1', { role_code: 'admin_congregation' }, actor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('pastor não rebaixa um admin_congregation', async () => {
+    const { service } = updateWith({ ...target, roleAssignments: [{ role_code: 'admin_congregation' }] });
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('pastor altera quem tem papel do mesmo nível', async () => {
+    const { service } = updateWith({ ...target, roleAssignments: [{ role_code: 'pastor' }] });
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).resolves.toBeDefined();
+  });
+
+  it('quem só tem papel fora da tabela não concede nada', async () => {
+    const { service } = updateWith(target);
+    const supportActor: JwtPayload = { ...actor, roles: ['platform_support'] };
+    await expect(service.updateRole('person-1', { role_code: 'member' }, supportActor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('papel desconhecido nunca é concedido', async () => {
+    const { service } = updateWith(target);
+    await expect(
+      service.updateRole('person-1', { role_code: 'papel_novo' as never }, { ...actor, roles: ['tenant_admin'] }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('ninguém altera o próprio papel', async () => {
+    const { service } = updateWith({ ...target, id: actor.sub });
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('404 quando a pessoa não existe', async () => {
+    const { service } = updateWith(null);
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('404 quando a pessoa não tem acesso', async () => {
+    const { service } = updateWith(undefined);
+    await expect(service.updateRole('person-1', { role_code: 'member' }, actor)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
