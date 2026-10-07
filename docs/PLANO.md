@@ -2408,6 +2408,36 @@ mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 - **Marca da igreja na página pública**: a página mostra o nome da igreja,
   mas não a cor nem o logo — não há rota pública de identidade por slug.
 
+### PEND-20 · HTTP 500 intermitente da API de produção no e2e (`teste2-church`) · aberto
+
+No job "E2E (produção)" do run `37530228190` (PR #167, 2026-10-06, 21:09–21:38Z),
+duas chamadas de montagem de dado devolveram `500 Internal server error` sem
+corpo útil: `POST /celebrations/setlists/songs` (teste "vincula ao catálogo
+uma música digitada avulsa", 1ª tentativa) e `POST /celebrations/instances`
+(mesmo teste, retry). O run seguinte em `main` (`37544464239`, 23:14Z) passou
+inteiro contra a mesma produção, então é intermitente.
+
+Não é a falha dos outros dois specs do job (`setlist-repertorio.spec.ts:108` e
+`:144`): aquela era a spec antiga, sem `freeDay()`, abrindo a instância errada
+— corrigida no #168 (`f7f9e01`). Os 500 são outra coisa.
+
+O que se sabe: `CelebrationInstancesService.create` é um `findFirst` mais um
+`insert`, e `celebration_instances` não tem `@@unique` — colisão de data não
+explica o erro. O que falta: a causa. Não há como ver pelo CI (o fixture só
+guarda status e corpo genérico) nem pelo sandbox (sem acesso à Render).
+
+A resolver:
+- Ler o log da Render de 2026-10-06 21:09–21:38Z e achar a exceção por trás
+  dos dois 500 (suspeitas: conexão do pooler do Supabase, `SET LOCAL ROLE`/RLS
+  sob carga, cold start da Render).
+- Se a API devolve 500 para erro que é do cliente ou do banco previsível,
+  mapear para o status certo (o `P2002` já é tratado em
+  `celebration-swap.service.ts`; as rotas de celebração não tratam).
+- Fazer a fixture `api.call` (`apps/web/e2e/fixtures.ts`) retentar uma vez em
+  5xx de montagem de dado e registrar o corpo, para o próximo 500 deixar rastro.
+
+Só `teste1-church`/`teste2-church`; nada contra `doca-church`.
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
