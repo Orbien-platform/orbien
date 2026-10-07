@@ -169,10 +169,13 @@ Empacotamento (~7 tarefas por worker, fases inteiras): **Batch 1 = Fases 1+2 (AP
 **Depends on**: T8 · **Requirement**: DRE-14
 **Tools**: Skills `frontend-design`, `dataviz`
 **Done when**:
-- [ ] Colunas por centro, cada uma com Lucro/Prejuízo (texto + cor); rolagem horizontal sem quebrar o layout
-- [ ] Sem lançamentos → "Sem lançamentos no período"; 403 → `NoAccessState`
-- [ ] Gate **Build** da fase 3 (`build:web`, lint, todos os testes do web)
+- [x] Colunas por centro, cada uma com Lucro/Prejuízo (texto + cor); rolagem horizontal sem quebrar o layout
+- [x] Sem lançamentos → "Sem lançamentos no período"; 403 → `NoAccessState`
+- [x] Gate **Build** da fase 3 (`build:web`, lint, todos os testes do web)
 **Tests**: unit · **Gate**: build
+**Status**: ✅ Concluída
+
+> Gate de build: `NODE_ENV=production npm run build:web` (o ambiente de cloud tem `NODE_ENV=development`, o que quebra o prerender de `/_not-found` mesmo em `main`, sem relação com a feature).
 
 ### T10: Gráficos no Balancete
 **What**: barras receita×despesa por centro e participação de cada centro nas despesas.

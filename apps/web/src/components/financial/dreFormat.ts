@@ -24,6 +24,14 @@ export function resultLabel(net: number): string {
   return "Resultado zerado";
 }
 
+/** Forma curta para células estreitas (colunas da matriz por centro). */
+export function resultShortLabel(net: number): string {
+  const kind = resultKind(net);
+  if (kind === "profit") return "Lucro";
+  if (kind === "loss") return "Prejuízo";
+  return "Zerado";
+}
+
 export function resultToneClass(net: number): string {
   const kind = resultKind(net);
   if (kind === "profit") return "text-teal";

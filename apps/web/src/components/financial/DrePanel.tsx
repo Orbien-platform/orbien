@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { ExportButton } from "@/components/financial/ExportButton";
 import { DrePdfButton } from "@/components/financial/DrePdfButton";
+import { DreCostCenterMatrix } from "@/components/financial/DreCostCenterMatrix";
 import { cn } from "@/lib/utils";
 import { dateInputClass, fmt, resultLabel, resultToneClass } from "./dreFormat";
 import { ALL_CENTERS, NO_CENTER, type DreModel } from "./useDreReport";
@@ -41,6 +42,7 @@ interface DrePanelProps {
  */
 export function DrePanel({ model, isPastor }: DrePanelProps) {
   const { start, end, costCenterId, costCenters, dre, loading, accessDenied, setStart, setEnd, setCostCenterId } = model;
+  const { matrix, matrixLoading, matrixDenied } = model;
 
   if (accessDenied) {
     return (
@@ -205,6 +207,8 @@ export function DrePanel({ model, isPastor }: DrePanelProps) {
           </table>
         </div>
       )}
+
+      {!isPastor && <DreCostCenterMatrix matrix={matrix} loading={matrixLoading} accessDenied={matrixDenied} />}
     </div>
   );
 }

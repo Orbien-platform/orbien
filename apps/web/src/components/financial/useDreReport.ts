@@ -25,6 +25,30 @@ export interface DreReport {
   };
 }
 
+export interface DreMatrixColumn {
+  cost_center_id: string | null;
+  name: string;
+  revenue_total: number;
+  expenses_total: number;
+  net_result: number;
+}
+
+export interface DreMatrixRow {
+  category_name: string;
+  /** Por `cost_center_id`; "__none__" é o lançamento sem centro. */
+  cells: Record<string, number>;
+  total: number;
+}
+
+/** `GET /financial/dre/by-cost-center`: categorias × centros, só realizados. */
+export interface DreMatrix {
+  period: { start: string; end: string };
+  columns: DreMatrixColumn[];
+  revenue: DreMatrixRow[];
+  expenses: DreMatrixRow[];
+  totals: { revenue_total: number; expenses_total: number; net_result: number };
+}
+
 export interface CostCenterOption {
   id: string;
   name: string;
@@ -45,6 +69,11 @@ export function useDreReport(active: boolean, isPastor: boolean) {
   const [costCenters, setCostCenters] = useState<CostCenterOption[]>([]);
   const [dre, setDre] = useState<DreReport | null>(null);
   const [loadedKey, setLoadedKey] = useState("");
+  const [matrix, setMatrix] = useState<DreMatrix | null>(null);
+  const [matrixLoadedKey, setMatrixLoadedKey] = useState("");
+  const [matrixDenied, setMatrixDenied] = useState(false);
+  const prevMatrixKey = useRef("");
+  const matrixSeq = useRef(0);
   const [accessDenied, setAccessDenied] = useState(false);
   const prevKey = useRef("");
   const requestSeq = useRef(0);
@@ -87,7 +116,37 @@ export function useDreReport(active: boolean, isPastor: boolean) {
       });
   }, [active, key, start, end, costCenterId]);
 
+  // A matriz já é por centro: o filtro de centro não entra na chave dela.
+  const matrixKey = `${start}|${end}`;
+  const matrixLoading = active && !isPastor && !!start && !!end && matrixLoadedKey !== matrixKey;
+
+  useEffect(() => {
+    if (!active || isPastor || prevMatrixKey.current === matrixKey) return;
+    prevMatrixKey.current = matrixKey;
+    if (!start || !end) return;
+    const seq = ++matrixSeq.current;
+    api
+      .get<DreMatrix>(`/financial/dre/by-cost-center?period_start=${start}&period_end=${end}`)
+      .then((r) => {
+        if (seq !== matrixSeq.current) return;
+        // Resposta sem `columns` não é uma matriz: não fingimos uma.
+        setMatrix(Array.isArray(r.data?.columns) ? r.data : null);
+        setMatrixDenied(false);
+      })
+      .catch((error) => {
+        if (seq !== matrixSeq.current) return;
+        setMatrix(null);
+        if (isForbidden(error)) setMatrixDenied(true);
+      })
+      .finally(() => {
+        if (seq === matrixSeq.current) setMatrixLoadedKey(matrixKey);
+      });
+  }, [active, isPastor, matrixKey, start, end]);
+
   return {
+    matrix,
+    matrixLoading,
+    matrixDenied,
     start,
     end,
     costCenterId,

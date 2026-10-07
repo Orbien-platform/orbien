@@ -32,11 +32,12 @@ function mockGet(handlers: { dre?: (url: string) => Promise<unknown>; centers?: 
   });
 }
 
+/** Chamadas ao DRE em si; a matriz por centro (`/by-cost-center`) é outra rota. */
 function dreCalls(): string[] {
   return vi
     .mocked(api.get)
     .mock.calls.map((c) => String(c[0]))
-    .filter((u) => u.startsWith("/financial/dre"));
+    .filter((u) => u.startsWith("/financial/dre") && !u.includes("/by-cost-center"));
 }
 
 /** Monta o painel ligado ao hook real, como a page faz. */
