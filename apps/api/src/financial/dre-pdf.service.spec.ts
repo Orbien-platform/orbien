@@ -194,6 +194,27 @@ describe('DrePdfService — valores nas linhas (DRE-06)', () => {
     expect(text).not.toContain('222,00');
   });
 
+  it('"A realizar": receitas pendentes e despesas pendentes, cada uma no seu rótulo e com o seu valor', async () => {
+    const { service } = serviceWith(
+      buildDre({ pending: { revenue_total: 230.5, expenses_total: 80.25 } }),
+    );
+    const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));
+    const rows = pdfTableRows(text);
+
+    expect(rows).toContainEqual(['Receitas pendentes', '230,50']);
+    expect(rows).toContainEqual(['Despesas pendentes', '80,25']);
+    expect(rows).not.toContainEqual(['Receitas pendentes', '80,25']);
+    expect(rows).not.toContainEqual(['Despesas pendentes', '230,50']);
+  });
+
+  it('o cabeçalho declara o período do relatório, não o do período anterior', async () => {
+    const { service } = serviceWith(dre);
+    const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));
+
+    expect(text).toContain('"Período: 01/01/2026 a 31/01/2026"');
+    expect(text).not.toContain('"Período: 01/12/2025 a 31/12/2025"');
+  });
+
   it('resultado zero: o rótulo é exatamente "Resultado zerado", sem "do período"', async () => {
     const { service } = serviceWith(buildDre({ net_result: 0 }));
     const { text } = await renderedText(() => service.generatePdf('t1', 'c1', query));

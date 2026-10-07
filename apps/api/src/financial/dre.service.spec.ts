@@ -567,6 +567,16 @@ describe('DreService.buildDre — só realizado + A realizar', () => {
     expect(dre.pending).toEqual({ revenue_total: 0, expenses_total: 0 });
   });
 
+  it('o recorte de congregação vale também para o "A realizar", não só para o realizado', async () => {
+    const { service, wheres } = dbWith([row('50.00', 'income', 'pending', '2026-01-05')]);
+
+    await service.buildDre('t1', 'c1', { ...janeiro, congregation_id: 'cong-9' }, false);
+
+    // atual, anterior e pendente: as TRÊS consultas levam a mesma congregação
+    expect(wheres).toHaveLength(3);
+    for (const w of wheres) expect(w).toMatchObject({ congregation_id: 'cong-9' });
+  });
+
   it('0,10 + 0,20 − 0,30 → net_result 0, sem resíduo de ponto flutuante', async () => {
     const { service } = dbWith([
       row('0.10', 'income', 'paid', '2026-01-05', null, 'A'),

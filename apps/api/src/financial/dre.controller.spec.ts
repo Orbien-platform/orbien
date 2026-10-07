@@ -10,6 +10,10 @@ import { BalanceteQueryDto } from './dto/balancete-query.dto';
 import { REQUIRES_PLAN_KEY } from '../auth/decorators/requires-plan.decorator';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanGuard } from '../auth/guards/plan.guard';
+import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 
 const DRE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_admin'];
 
@@ -76,6 +80,13 @@ describe('DreController', () => {
 
       expect(dreService.buildDre).toHaveBeenCalledWith('tenant-1', 'cong-1', query, true);
     });
+  });
+
+  it('exige JwtAuthGuard, RolesGuard e PlanGuard, nessa ordem, e roda sob o TenantContextInterceptor', () => {
+    // O banco real devolve 401 sem token, mas só este teste vê o decorator sumir:
+    // sem JwtAuthGuard/RolesGuard/PlanGuard/interceptor a rota abre (ou perde o contexto de tenant).
+    expect(Reflect.getMetadata('__guards__', DreController)).toEqual([JwtAuthGuard, RolesGuard, PlanGuard]);
+    expect(Reflect.getMetadata('__interceptors__', DreController)).toEqual([TenantContextInterceptor]);
   });
 
   it('é Premium — @RequiresPlan no controller inteiro (vale para as rotas novas)', () => {

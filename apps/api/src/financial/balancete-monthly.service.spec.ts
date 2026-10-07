@@ -288,3 +288,21 @@ describe('BalanceteMonthlyService.build — status e centavos', () => {
     expect(resultado.series[0]?.points[0]?.net_result).toBe(0.1);
   });
 });
+
+describe('BalanceteMonthlyService.build — identidade do centro', () => {
+  it('dois centros com o MESMO nome e ids diferentes viram duas séries, sem fundir os valores', async () => {
+    // Nome de centro não é único (a spec do filtro por id nasceu disso): chavear por nome somaria os dois.
+    const A = { id: 'cc-a', name: 'Missões' };
+    const B = { id: 'cc-b', name: 'Missões' };
+    const { prisma } = prismaWith([
+      row('10.00', 'income', '2026-01-10', A),
+      row('40.00', 'income', '2026-01-11', B),
+    ]);
+
+    const result = await new BalanceteMonthlyService(prisma).build('t1', trimestre);
+
+    expect(result.series).toHaveLength(2);
+    const porId = Object.fromEntries(result.series.map((s) => [s.cost_center_id, s.points[0]?.revenue_total]));
+    expect(porId).toEqual({ 'cc-a': 10, 'cc-b': 40 });
+  });
+});
