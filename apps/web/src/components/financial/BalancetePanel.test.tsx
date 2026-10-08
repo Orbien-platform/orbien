@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BalancetePanel } from "./BalancetePanel";
@@ -22,6 +22,49 @@ const balancete = {
 
 describe("BalancetePanel", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("mostra os gráficos por centro de custo junto da tabela", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Missões");
+    expect(screen.getByRole("region", { name: "Receitas e despesas por centro" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Participação nas despesas" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Missões: receitas/ })).toBeInTheDocument();
+  });
+
+  it("os gráficos seguem a MESMA ordem das linhas da tabela", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Missões");
+    const nomesDaTabela = screen
+      .getAllByRole("row")
+      .slice(1, 3) // cabeçalho fora; as 2 linhas de centro (a de "Total" fica de fora)
+      .map((r) => r.querySelector("td")?.textContent);
+    expect(nomesDaTabela).toEqual(["Missões", "Sem centro de custo"]);
+
+    const compare = within(screen.getByRole("region", { name: "Receitas e despesas por centro" }));
+    const nomesDoGrafico = compare.getAllByRole("img").map((i) => i.getAttribute("aria-label")?.split(":")[0]);
+    expect(nomesDoGrafico).toEqual(nomesDaTabela);
+  });
+
+  it("oferece a evolução mensal sem buscá-la antes do clique", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: balancete });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Missões");
+    expect(screen.getByRole("button", { name: "Ver evolução mensal" })).toBeInTheDocument();
+    expect(vi.mocked(api.get).mock.calls.map((c) => String(c[0])).some((u) => u.includes("/monthly"))).toBe(false);
+  });
+
+  it("sem lançamentos: nenhum gráfico", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...balancete, lines: [], revenue_total: 0, expenses_total: 0, net_result: 0 } });
+    render(<BalancetePanel />);
+
+    await screen.findByText("Sem lançamentos no período");
+    expect(screen.queryByRole("region", { name: "Receitas e despesas por centro" })).not.toBeInTheDocument();
+  });
 
   it("lista uma linha por centro de custo e o total", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: balancete });

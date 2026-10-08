@@ -10,7 +10,9 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { DreService } from './dre.service';
 import { DrePdfService } from './dre-pdf.service';
+import { DreCostCenterService } from './dre-cost-center.service';
 import { DreQueryDto } from './dto/dre-query.dto';
+import { BalanceteQueryDto } from './dto/balancete-query.dto';
 
 const DRE_ROLES = ['treasurer', 'admin_congregation', 'pastor', 'tenant_admin'] as const;
 
@@ -23,6 +25,7 @@ export class DreController {
   constructor(
     private readonly dreService: DreService,
     private readonly drePdfService: DrePdfService,
+    private readonly dreCostCenterService: DreCostCenterService,
   ) {}
 
   @Get()
@@ -35,6 +38,13 @@ export class DreController {
       query,
       isPastor,
     );
+  }
+
+  // DRE comparativo: categorias × centros de custo. Mesmos papéis e plano do DRE.
+  @Get('by-cost-center')
+  @Roles(...DRE_ROLES)
+  getByCostCenter(@Query() query: BalanceteQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.dreCostCenterService.build(user.tenant_id, query);
   }
 
   @Post('export/pdf')

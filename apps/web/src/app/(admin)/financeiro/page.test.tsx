@@ -377,6 +377,35 @@ describe("FinanceiroPage — visão geral e permissões", () => {
     expect(screen.getByRole("tab", { name: "DRE" })).toBeInTheDocument();
   });
 
+  it("pastor puro não vê resultado, valores, botão DRE (PDF) nem seletor de centro na aba DRE", async () => {
+    const user = userEvent.setup();
+    setup(["pastor"]);
+    mockApi({ dre: dre({ net_result: 100, revenue: { categories: [dreCategory("Dízimos", 100, 1)], total: 100 } }) });
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "DRE" }));
+    await screen.findByText("Dízimos");
+    expect(screen.queryByText("Lucro do período")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /DRE \(PDF\)/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Centro de custo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Total" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["pastor + tesoureiro", ["pastor", "treasurer"]],
+    ["pastor + admin do tenant", ["pastor", "tenant_admin"]],
+    ["pastor + admin da congregação", ["pastor", "admin_congregation"]],
+  ])("%s acumula papel que administra o financeiro: não é restrito na aba DRE", async (_nome, roles) => {
+    const user = userEvent.setup();
+    setup(roles);
+    mockApi({ dre: dre({ net_result: 100, revenue: { categories: [dreCategory("Dízimos", 100, 1)], total: 100 } }) });
+    render(<FinanceiroPage />);
+    await user.click(await screen.findByRole("tab", { name: "DRE" }));
+    expect(await screen.findByText("Lucro do período")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /DRE \(PDF\)/ })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Centro de custo" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Total" })).toBeInTheDocument();
+  });
+
   it("monta o BankReconciliationPanel na aba Conciliação para quem não é pastor", async () => {
     const user = userEvent.setup();
     setup();

@@ -206,11 +206,21 @@ test.describe("financeiro", () => {
     });
 
     await test.step("DRE soma o lançamento na categoria escolhida", async () => {
-      // `page.reload()` e não só a troca de aba: o efeito do DRE guarda o
-      // período já buscado em `prevDreKey` e **não** refaz o fetch ao voltar
-      // para a aba com o mesmo período (financeiro/page.tsx). Sem recarregar,
-      // o teste leria para sempre o agregado anterior ao lançamento — passaria
-      // a afirmar o cache do componente em vez do relatório.
+      // O lançamento nasce `pending` e o DRE só conta realizados (pago ou
+      // confirmado): sem marcar como pago, a Qtd nunca subiria.
+      const recentes = await api.call<{ data: Transaction[] }>(
+        "GET",
+        "/financial/transactions?limit=100",
+      );
+      const criado = recentes.data.find((t) => t.description === descricao);
+      if (!criado) throw new Error("O lançamento criado não veio na listagem da API.");
+      await api.call("PATCH", `/financial/transactions/${criado.id}/status`, { status: "paid" });
+
+      // `page.reload()` e não só a troca de aba: `useDreReport` guarda o
+      // período já buscado e **não** refaz o fetch ao voltar para a aba com o
+      // mesmo período. Sem recarregar, o teste leria para sempre o agregado
+      // anterior ao lançamento — passaria a afirmar o cache do componente em
+      // vez do relatório.
       await page.reload({ waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Financeiro" })).toBeVisible();
 
@@ -243,5 +253,71 @@ test.describe("financeiro", () => {
     );
     const criadoId = lista.data.find((t) => t.description === descricao)?.id ?? null;
     if (criadoId) await api.tryCall("DELETE", `/financial/transactions/${criadoId}`);
+  });
+
+  // DRE é Premium: roda na conta de teste2-church, como o resto desta suíte.
+  test("DRE diz se o período fechou em lucro ou prejuízo e baixa o PDF", async ({ page, errorLog }) => {
+    await page.goto("/financeiro", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Financeiro" })).toBeVisible();
+
+    await test.step("o resultado é rotulado em texto, não só em cor", async () => {
+      await openTab(page, "DRE", async () => {
+        await expect(page.getByRole("cell", { name: "Resultado líquido" })).toBeVisible({ timeout: 3_000 });
+      });
+      await expect(
+        page.getByText(/^(Lucro do período|Prejuízo do período|Resultado zerado)$/),
+        "o DRE não rotulou o resultado como lucro, prejuízo ou zerado",
+      ).toBeVisible();
+      await shot(page, "33-financeiro-dre-lucro-prejuizo");
+    });
+
+    await test.step("filtrar por 'Lançamentos sem centro' refaz o DRE com cost_center_id=none", async () => {
+      const pedido = page.waitForRequest((req) => /\/financial\/dre\?.*cost_center_id=none/.test(req.url()));
+      await page.getByRole("combobox", { name: "Centro de custo" }).selectOption("none");
+      await pedido;
+      await expect(page.getByRole("combobox", { name: "Centro de custo" })).toHaveValue("none");
+      await page.getByRole("combobox", { name: "Centro de custo" }).selectOption("");
+    });
+
+    await test.step("'DRE (PDF)' baixa orbien_dre_AAAAMM.pdf", async () => {
+      const download = page.waitForEvent("download");
+      await page.getByRole("button", { name: /DRE \(PDF\)/ }).click();
+      const arquivo = await download;
+      expect(arquivo.suggestedFilename()).toMatch(/^orbien_dre_\d{6}(_\d{6})?\.pdf$/);
+    });
+
+    await test.step("a matriz por centro de custo carrega, ou diz que não há lançamentos", async () => {
+      await expect(
+        page.getByRole("heading", { name: "Resultado por centro de custo" }),
+        "a matriz por centro de custo não apareceu",
+      ).toBeVisible();
+    });
+
+    await test.step("sem erro de console ou HTTP inesperado", async () => {
+      expect(realConsoleErrors(errorLog), "erros de console no DRE").toEqual([]);
+      expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+    });
+  });
+
+  test("Balancete mostra os gráficos por centro de custo e abre a evolução mensal", async ({ page, errorLog }) => {
+    await page.goto("/financeiro", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Financeiro" })).toBeVisible();
+
+    await openTab(page, "Balancete", async () => {
+      await expect(page.getByRole("button", { name: "Ver evolução mensal" })).toBeVisible({ timeout: 3_000 });
+    });
+
+    await test.step("evolução mensal só busca depois do clique", async () => {
+      const pedido = page.waitForRequest("**/financial/balancete/monthly?**");
+      await page.getByRole("button", { name: "Ver evolução mensal" }).click();
+      await pedido;
+      await expect(page.getByRole("heading", { name: "Evolução mensal do resultado" })).toBeVisible();
+      await shot(page, "34-financeiro-balancete-evolucao");
+    });
+
+    await test.step("sem erro de console ou HTTP inesperado", async () => {
+      expect(realConsoleErrors(errorLog), "erros de console no Balancete").toEqual([]);
+      expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+    });
   });
 });

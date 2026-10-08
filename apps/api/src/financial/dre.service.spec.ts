@@ -283,6 +283,34 @@ describe('DreService.buildDre', () => {
       });
     });
 
+    it('três meses que começam no fim de um ano (nov → jan) comparam com ago → out', async () => {
+      // O mês final (1) é menor que o inicial (11): a conta de meses tem que
+      // atravessar a virada de ano, senão o "anterior" sai com meses de menos ou de mais.
+      const { service } = serviceWith([]);
+
+      const dre = await service.buildDre(
+        't1',
+        'c1',
+        { period_start: '2025-11-01', period_end: '2026-01-31' },
+        false,
+      );
+
+      expect(dre.previous_period.period).toEqual({
+        start: '2025-08-01',
+        end: '2025-10-31',
+      });
+    });
+
+    it('a consulta do período anterior vai de 00:00:00.000 do primeiro dia a 23:59:59.999 do último', async () => {
+      const { service, wheres } = serviceWith([]);
+
+      await service.buildDre('t1', 'c1', janeiro, false);
+
+      const anterior = wheres[1] as { occurred_at: { gte: Date; lte: Date } };
+      expect(anterior.occurred_at.gte.toISOString()).toBe('2025-12-01T00:00:00.000Z');
+      expect(anterior.occurred_at.lte.toISOString()).toBe('2025-12-31T23:59:59.999Z');
+    });
+
     it('soma receita e despesa do período anterior e devolve o resultado', async () => {
       const { service } = serviceWith(
         [],
@@ -405,5 +433,313 @@ describe('DreService.buildDre', () => {
 
       expect(comoPastor).toEqual(comoTesoureiro);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lucro/prejuízo realizado, "A realizar" e filtro por centro (T2 · DRE-01, 02,
+// 04, 09, 10, 11). O fake abaixo se comporta como o banco: aplica o `where`
+// (status, período, centro) sobre uma tabela de lançamentos. Assim os testes
+// afirmam o RESULTADO — o que entra e o que fica de fora — e não só a forma
+// do `where`.
+// ---------------------------------------------------------------------------
+
+type Row = {
+  amount: Decimal;
+  status: 'pending' | 'paid' | 'confirmed';
+  occurred_at: Date;
+  cost_center_id: string | null;
+  category: { name: string; type: string };
+};
+
+function row(
+  amount: string,
+  type: 'income' | 'expense',
+  status: Row['status'],
+  date: string,
+  cost_center_id: string | null = null,
+  name = type === 'income' ? 'Dízimos' : 'Aluguel',
+): Row {
+  return {
+    amount: new Decimal(amount),
+    status,
+    occurred_at: new Date(`${date}T12:00:00.000Z`),
+    cost_center_id,
+    category: { name, type },
+  };
+}
+
+function dbWith(rows: Row[]) {
+  const wheres: Record<string, unknown>[] = [];
+  const prisma = {
+    client: {
+      financialTransaction: {
+        findMany: (args: { where: Record<string, unknown> }) => {
+          const w = args.where as {
+            occurred_at: { gte: Date; lte: Date };
+            status?: { in: string[] };
+            cost_center_id?: string | null;
+          };
+          wheres.push(args.where);
+          return Promise.resolve(
+            rows.filter(
+              (r) =>
+                r.occurred_at >= w.occurred_at.gte &&
+                r.occurred_at <= w.occurred_at.lte &&
+                (w.status === undefined || w.status.in.includes(r.status)) &&
+                (!('cost_center_id' in w) || r.cost_center_id === w.cost_center_id),
+            ),
+          );
+        },
+      },
+    },
+  } as unknown as PrismaService;
+  return { service: new DreService(prisma), wheres };
+}
+
+const CC_A = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+const CC_B = '9b2f8c1e-1d3a-4c55-8a7e-0f6a2b9d4c11';
+
+describe('DreService.buildDre — só realizado + A realizar', () => {
+  it('pending não entra em receitas, despesas nem resultado do período atual', async () => {
+    const { service } = dbWith([
+      row('100.00', 'income', 'paid', '2026-01-10'),
+      row('50.00', 'income', 'confirmed', '2026-01-11'),
+      row('40.00', 'expense', 'paid', '2026-01-12'),
+      row('999.00', 'income', 'pending', '2026-01-13'),
+      row('888.00', 'expense', 'pending', '2026-01-14'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.revenue.total).toBe(150);
+    expect(dre.expenses.total).toBe(40);
+    expect(dre.net_result).toBe(110);
+    expect(dre.revenue.categories).toEqual([{ category_name: 'Dízimos', total: 150, count: 2 }]);
+    expect(dre.expenses.categories).toEqual([{ category_name: 'Aluguel', total: 40, count: 1 }]);
+  });
+
+  it('pending não entra no período anterior', async () => {
+    const { service } = dbWith([
+      row('70.00', 'income', 'paid', '2025-12-10'),
+      row('20.00', 'expense', 'confirmed', '2025-12-11'),
+      row('500.00', 'income', 'pending', '2025-12-12'),
+      row('300.00', 'expense', 'pending', '2025-12-13'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.previous_period.revenue_total).toBe(70);
+    expect(dre.previous_period.expenses_total).toBe(20);
+    expect(dre.previous_period.net_result).toBe(50);
+  });
+
+  it('`pending` traz a soma dos pendentes do período, fora do net_result', async () => {
+    const { service } = dbWith([
+      row('100.00', 'income', 'paid', '2026-01-10'),
+      row('200.00', 'income', 'pending', '2026-01-13'),
+      row('30.50', 'income', 'pending', '2026-01-14'),
+      row('80.25', 'expense', 'pending', '2026-01-15'),
+      // pendente de outro período não conta
+      row('7000.00', 'income', 'pending', '2026-02-02'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.pending).toEqual({ revenue_total: 230.5, expenses_total: 80.25 });
+    expect(dre.net_result).toBe(100);
+  });
+
+  it('sem pendentes, `pending` vem zerado', async () => {
+    const { service } = dbWith([row('100.00', 'income', 'paid', '2026-01-10')]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.pending).toEqual({ revenue_total: 0, expenses_total: 0 });
+  });
+
+  it('período sem lançamentos: zeros e `pending` zerado', async () => {
+    const { service } = dbWith([]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.net_result).toBe(0);
+    expect(dre.pending).toEqual({ revenue_total: 0, expenses_total: 0 });
+  });
+
+  it('o recorte de congregação vale também para o "A realizar", não só para o realizado', async () => {
+    const { service, wheres } = dbWith([row('50.00', 'income', 'pending', '2026-01-05')]);
+
+    await service.buildDre('t1', 'c1', { ...janeiro, congregation_id: 'cong-9' }, false);
+
+    // atual, anterior e pendente: as TRÊS consultas levam a mesma congregação
+    expect(wheres).toHaveLength(3);
+    for (const w of wheres) expect(w).toMatchObject({ congregation_id: 'cong-9' });
+  });
+
+  it('0,10 + 0,20 − 0,30 → net_result 0, sem resíduo de ponto flutuante', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'paid', '2026-01-05', null, 'A'),
+      row('0.20', 'income', 'paid', '2026-01-06', null, 'B'),
+      row('0.30', 'expense', 'paid', '2026-01-07'),
+      row('0.10', 'income', 'paid', '2025-12-05', null, 'A'),
+      row('0.20', 'income', 'paid', '2025-12-06', null, 'B'),
+      row('0.30', 'expense', 'paid', '2025-12-07'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.net_result).toBe(0);
+    expect(dre.previous_period.net_result).toBe(0);
+  });
+
+  // 0,10 + 0,20 e 0,70 − 0,60 só dão 0,3 e 0,1 depois de arredondar: em ponto
+  // flutuante saem 0.30000000000000004 e 0.09999999999999998. O caso de cima
+  // (0,10 + 0,20 − 0,30) não separa: lá o resultado cai em zero de qualquer jeito.
+  it('receita e despesa totais fecham em centavos: duas categorias 0,10 + 0,20 → 0,3', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'paid', '2026-01-05', null, 'A'),
+      row('0.20', 'income', 'paid', '2026-01-06', null, 'B'),
+      row('0.10', 'expense', 'paid', '2026-01-07', null, 'C'),
+      row('0.20', 'expense', 'paid', '2026-01-08', null, 'D'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.revenue.total).toBe(0.3);
+    expect(dre.expenses.total).toBe(0.3);
+  });
+
+  it('net_result 0,70 − 0,60 → 0,1, no período atual e no anterior', async () => {
+    const { service } = dbWith([
+      row('0.70', 'income', 'paid', '2026-01-05'),
+      row('0.60', 'expense', 'paid', '2026-01-06'),
+      row('0.70', 'income', 'paid', '2025-12-05'),
+      row('0.60', 'expense', 'paid', '2025-12-06'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.net_result).toBe(0.1);
+    expect(dre.previous_period.net_result).toBe(0.1);
+  });
+
+  it('o período anterior também soma em centavos: 0,10 + 0,20 → 0,3 de receita e de despesa', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'paid', '2025-12-05'),
+      row('0.20', 'income', 'paid', '2025-12-06'),
+      row('0.10', 'expense', 'paid', '2025-12-07'),
+      row('0.20', 'expense', 'paid', '2025-12-08'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.previous_period.revenue_total).toBe(0.3);
+    expect(dre.previous_period.expenses_total).toBe(0.3);
+  });
+
+  it('o A realizar também soma em centavos: 0,10 + 0,20 → 0,3', async () => {
+    const { service } = dbWith([
+      row('0.10', 'income', 'pending', '2026-01-05'),
+      row('0.20', 'income', 'pending', '2026-01-06'),
+      row('0.10', 'expense', 'pending', '2026-01-07'),
+      row('0.20', 'expense', 'pending', '2026-01-08'),
+    ]);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.pending).toEqual({ revenue_total: 0.3, expenses_total: 0.3 });
+  });
+});
+
+describe('DreService.buildDre — filtro por centro de custo', () => {
+  const rows = [
+    row('100.00', 'income', 'paid', '2026-01-10', CC_A),
+    row('30.00', 'expense', 'paid', '2026-01-11', CC_A),
+    row('500.00', 'income', 'paid', '2026-01-12', CC_B),
+    row('60.00', 'income', 'confirmed', '2026-01-13', null),
+    row('90.00', 'income', 'paid', '2025-12-10', CC_A),
+    row('400.00', 'income', 'paid', '2025-12-11', CC_B),
+    row('25.00', 'income', 'pending', '2026-01-14', CC_A),
+  ];
+
+  it('cost_center_id=UUID recorta o período atual, o anterior e o A realizar', async () => {
+    const { service } = dbWith(rows);
+
+    const dre = await service.buildDre('t1', 'c1', { ...janeiro, cost_center_id: CC_A }, false);
+
+    expect(dre.revenue.total).toBe(100);
+    expect(dre.expenses.total).toBe(30);
+    expect(dre.net_result).toBe(70);
+    expect(dre.previous_period.revenue_total).toBe(90);
+    expect(dre.pending).toEqual({ revenue_total: 25, expenses_total: 0 });
+  });
+
+  it('cost_center_id=none traz só lançamentos sem centro, nos dois períodos', async () => {
+    const { service } = dbWith([...rows, row('15.00', 'income', 'paid', '2025-12-20', null)]);
+
+    const dre = await service.buildDre('t1', 'c1', { ...janeiro, cost_center_id: 'none' }, false);
+
+    expect(dre.revenue.total).toBe(60);
+    expect(dre.net_result).toBe(60);
+    expect(dre.previous_period.revenue_total).toBe(15);
+    expect(dre.pending).toEqual({ revenue_total: 0, expenses_total: 0 });
+  });
+
+  it('sem cost_center_id, nenhum filtro de centro é aplicado', async () => {
+    const { service, wheres } = dbWith(rows);
+
+    const dre = await service.buildDre('t1', 'c1', janeiro, false);
+
+    expect(dre.revenue.total).toBe(660);
+    for (const w of wheres) {
+      expect(w).not.toHaveProperty('cost_center_id');
+      expect(w).not.toHaveProperty('costCenter');
+    }
+  });
+
+  it('cost_center_id vence cost_center (nome)', async () => {
+    const { service, wheres } = dbWith(rows);
+
+    const dre = await service.buildDre(
+      't1',
+      'c1',
+      { ...janeiro, cost_center_id: CC_B, cost_center: 'Missões' },
+      false,
+    );
+
+    expect(dre.revenue.total).toBe(500);
+    for (const w of wheres) {
+      expect(w['cost_center_id']).toBe(CC_B);
+      expect(w).not.toHaveProperty('costCenter');
+    }
+  });
+
+  it('centro de outro tenant (sem lançamentos do tenant) devolve DRE zerado', async () => {
+    const { service, wheres } = dbWith([]);
+
+    const dre = await service.buildDre(
+      'tenant-a',
+      'c1',
+      { ...janeiro, cost_center_id: '11111111-2222-4333-8444-555555555555' },
+      false,
+    );
+
+    expect(dre.revenue.total).toBe(0);
+    expect(dre.expenses.total).toBe(0);
+    expect(dre.net_result).toBe(0);
+    expect(dre.previous_period.net_result).toBe(0);
+    expect(dre.pending).toEqual({ revenue_total: 0, expenses_total: 0 });
+    // o isolamento é por tenant_id em toda consulta (incluindo a de "A realizar")
+    expect(wheres).toHaveLength(3);
+    for (const w of wheres) expect(w['tenant_id']).toBe('tenant-a');
+  });
+
+  it('o cost_center por nome continua funcionando (compatibilidade)', async () => {
+    const { service, wheres } = dbWith([]);
+
+    await service.buildDre('t1', 'c1', { ...janeiro, cost_center: 'Missões' }, false);
+
+    for (const w of wheres) expect(w['costCenter']).toEqual({ name: 'Missões' });
   });
 });

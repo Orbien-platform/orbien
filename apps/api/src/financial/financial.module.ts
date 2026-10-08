@@ -9,6 +9,7 @@ import { CostCentersController } from './cost-centers.controller';
 import { CostCentersService } from './cost-centers.service';
 import { BalanceteController } from './balancete.controller';
 import { BalanceteService } from './balancete.service';
+import { BalanceteMonthlyService } from './balancete-monthly.service';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { PixModule } from './pix.module';
@@ -18,6 +19,7 @@ import { DashboardService } from './dashboard.service';
 import { DreController } from './dre.controller';
 import { DreService } from './dre.service';
 import { DrePdfService } from './dre-pdf.service';
+import { DreCostCenterService } from './dre-cost-center.service';
 import { ExportController } from './export/export.controller';
 import { ExportService } from './export/export.service';
 import { PdfExportService } from './export/pdf-export.service';
@@ -44,11 +46,13 @@ import { OfxImportService } from './import/ofx-import.service';
     CategoriesService,
     CostCentersService,
     BalanceteService,
+    BalanceteMonthlyService,
     TransactionsService,
     ForecastService,
     DashboardService,
     DreService,
     DrePdfService,
+    DreCostCenterService,
     ExportService,
     PdfExportService,
     ZipExportService,
