@@ -162,21 +162,16 @@ export const fontFamily = {
   semibold: "Geist_600SemiBold",
   mono: "GeistMono_400Regular",
   monoMedium: "GeistMono_500Medium",
-  /** Títulos. Instrument Serif só tem o peso 400 — não aplique
-   * `fontWeight` por cima, o RN sintetizaria um negrito falso. */
-  serif: "InstrumentSerif_400Regular",
-  /** Ênfase dentro de um título (itálico em teal). */
-  serifItalic: "InstrumentSerif_400Regular_Italic",
 } as const;
 
 /** Escala tipográfica da Órbita. Sem cor: quem aplica o papel semântico é a
  * tela, porque a cor depende do modo claro/escuro ativo. Mínimo absoluto de
  * 11px — não baixar nem em caption. */
 export const typography = {
-  // Títulos em Instrument Serif: a serifa é a voz da Órbita.
-  display: { fontFamily: fontFamily.serif, fontSize: 36, lineHeight: 40 },
-  h1: { fontFamily: fontFamily.serif, fontSize: 30, lineHeight: 34 },
-  h2: { fontFamily: fontFamily.serif, fontSize: 24, lineHeight: 28 },
+  // Títulos em Geist Medium, com tracking fechado (igual ao `page-title` do web).
+  display: { fontFamily: fontFamily.medium, fontSize: 36, lineHeight: 40, letterSpacing: -0.9 },
+  h1: { fontFamily: fontFamily.medium, fontSize: 30, lineHeight: 34, letterSpacing: -0.75 },
+  h2: { fontFamily: fontFamily.medium, fontSize: 24, lineHeight: 28, letterSpacing: -0.6 },
   // h3 é título de card/linha — fica em Geist, que lê melhor em 16px.
   h3: { fontFamily: fontFamily.medium, fontSize: 16, lineHeight: 22 },
   body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22 },

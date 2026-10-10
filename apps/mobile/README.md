@@ -16,7 +16,7 @@ regra ao arquivo que a implementa; o resumo operacional está em `AGENTS.md`.
 | Cadeia da paleta do tenant (plataforma → build → cache → runtime) | `src/lib/theme/brand-theme.ts` |
 | Contraste medido (texto sobre a marca, accent legível) | `src/lib/theme/color.ts` |
 | Papel semântico + tema do tenant + claro/escuro | `src/lib/theme/theme-provider.tsx` (`useTheme()`) |
-| Fontes da marca (Geist / Geist Mono / Instrument Serif) | `src/lib/theme/fonts.ts` |
+| Fontes da marca (Geist / Geist Mono) | `src/lib/theme/fonts.ts` |
 | Ícones (lista fechada, lucide) | `src/lib/theme/icons.ts` |
 | Componentes (botão, card, badge, input, estado vazio…) | `src/components/` |
 
@@ -28,7 +28,7 @@ Dois imports que parecem inofensivos e não são, os dois medidos no
   teste de tela passou de 1,7s para 69s.
 - `@expo-google-fonts/geist` (barril) faz `require` dos 18 pesos e
   itálicos — `src/lib/theme/fonts.ts` importa peso a peso e empacota só os 8
-  que a escala da Órbita usa (Geist, Geist Mono e Instrument Serif). Fonte
+  que a escala da Órbita usa (Geist e Geist Mono). Fonte
   nova exige build nativa: não sai por OTA.
 
 ### Versão genérica e versões personalizadas

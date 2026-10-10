@@ -1,6 +1,6 @@
 // Carregamento das fontes da Órbita (v2, docs/design/orbita-v2/README.md):
-// Geist na interface (300/400/500/600), Geist Mono em números e rótulos
-// (400/500) e Instrument Serif nos títulos (400, com o itálico de ênfase).
+// Geist na interface e nos títulos (300/400/500/600) e Geist Mono em números
+// e rótulos (400/500).
 //
 // As chaves passadas ao `useFonts` são os nomes que o `fontFamily` das
 // telas referencia (src/lib/theme/tokens.ts, `fontFamily`). Se um nome
@@ -17,8 +17,6 @@ import { Geist_500Medium } from "@expo-google-fonts/geist/500Medium";
 import { Geist_600SemiBold } from "@expo-google-fonts/geist/600SemiBold";
 import { GeistMono_400Regular } from "@expo-google-fonts/geist-mono/400Regular";
 import { GeistMono_500Medium } from "@expo-google-fonts/geist-mono/500Medium";
-import { InstrumentSerif_400Regular } from "@expo-google-fonts/instrument-serif/400Regular";
-import { InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif/400Regular_Italic";
 import { useFonts } from "expo-font";
 
 /**
@@ -38,8 +36,6 @@ export function useAppFonts(): boolean {
     Geist_600SemiBold,
     GeistMono_400Regular,
     GeistMono_500Medium,
-    InstrumentSerif_400Regular,
-    InstrumentSerif_400Regular_Italic,
   });
 
   return loaded || error !== null;
