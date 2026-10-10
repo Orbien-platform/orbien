@@ -207,6 +207,21 @@ recorrentes, `PROD-27`, e QR dinâmico do tesoureiro, Cenário 2), **Recibos**
 componente próprio. Detalhe e a decisão sobre a tela do doador em `PROD-27`
 (seção 6).
 
+Em **2026-10-07**, feature `financeiro-dre-resultado-centros-custo`
+(`.specs/features/financeiro-dre-resultado-centros-custo/`): o **DRE** passou a
+dizer **Lucro**, **Prejuízo** ou **Resultado zerado** do período e a contar só
+lançamentos realizados (`paid` + `confirmed`), com o pendente numa linha "A
+realizar" fora do resultado (`AD-011`). O botão **DRE (PDF)** entrou na aba DRE
+(a rota `POST /financial/dre/export/pdf` já existia sem tela) e o PDF deixou de
+marcar os lançamentos como `confirmed` — gerar relatório não escreve. Por
+centro de custo: filtro no DRE e no PDF (`cost_center_id`), **DRE comparativo**
+categorias × centros (`GET /financial/dre/by-cost-center`), gráficos no
+Balancete (receita × despesa e participação nas despesas) e **evolução mensal**
+do resultado por centro (`GET /financial/balancete/monthly`, até 36 meses).
+Sem tabela nova, sem migration, sem script de RLS. Ficou de fora, por decisão:
+ação explícita de "confirmar lançamentos do período", PDF do Balancete e rateio
+de despesa entre centros.
+
 Em **2026-09-28**, limpeza pré-go-live de tenants (nota completa em `DEC-06`,
 seção 9): `teste1-church` passou a nascer no plano Starter e `teste2-church`
 no Premium, os dois com dado em todos os módulos — servem agora também de
@@ -2408,7 +2423,20 @@ mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 - **Marca da igreja na página pública**: a página mostra o nome da igreja,
   mas não a cor nem o logo — não há rota pública de identidade por slug.
 
-### PEND-20 · 500 intermitente na montagem de dado do E2E de produção · aberto
+### PEND-20 · Avisar quem estava escalado quando o culto é cancelado ou removido · aberto
+
+Cancelar uma data, cancelar uma instância ou remover uma celebração
+(`celebration-instances.service.ts`, `celebrations.service.ts`) tira o culto da
+agenda e da lista "minhas escalas" dos voluntários, mas **não notifica
+ninguém**. Quem estava escalado só descobre abrindo o app — ou chegando à
+igreja. Falta: push (e o canal que `PROD-14` respeitar) para os
+`celebration_assignments` ativos da instância, nos três casos — cancelar,
+remover a celebração com instâncias futuras e, se fizer sentido, reabrir.
+Ponto de atenção: na remoção a escala é apagada junto com a instância, então os
+destinatários têm de ser lidos **antes** do `deleteMany`. Respeitar a
+preferência de notificação do usuário (`notification_preferences`).
+
+### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 
 No job "E2E (produção)" do run 37530228190 (PR #167, 2026-10-06, 21:09–21:38Z)
 duas chamadas de montagem devolveram `500 Internal server error`:
@@ -2430,7 +2458,9 @@ resta é infra: o `TenantContextInterceptor` abre `$transaction` com
 local com `maxWait` baixo). É hipótese compatível com o sintoma, não prova.
 
 **Rastro adicionado:** `api.call` do e2e (`apps/web/e2e/fixtures.ts`) retenta
-uma vez em 5xx e registra método, rota, status e corpo a cada falha.
+uma vez em 500 (não em 502/503/504, que podem vir depois do commit e duplicar
+o `POST`) e registra método, rota, status e corpo de cada 5xx, além de
+timeout/queda de conexão, que não são retentados.
 
 **Falta:** log da Render na janela 2026-10-06 21:09–21:38Z, filtrando
 `POST /api/celebrations/instances` e `/celebrations/setlists/songs` — o Nest

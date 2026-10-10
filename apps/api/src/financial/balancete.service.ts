@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { BalanceteQueryDto } from './dto/balancete-query.dto';
+import { REALIZED_STATUSES, buildScope, round2 } from './dre-scope';
 
 const SEM_CENTRO_CUSTO = 'Sem centro de custo';
 
@@ -32,11 +33,13 @@ export class BalanceteService {
     end.setUTCHours(23, 59, 59, 999);
 
     const transactions = await this.prisma.client.financialTransaction.findMany({
-      where: {
-        tenant_id: tenantId,
-        occurred_at: { gte: start, lte: end },
-        ...(query.congregation_id ? { congregation_id: query.congregation_id } : {}),
-      },
+      where: buildScope({
+        tenantId,
+        start,
+        end,
+        congregationId: query.congregation_id,
+        statuses: REALIZED_STATUSES,
+      }),
       include: {
         category: { select: { type: true } },
         costCenter: { select: { id: true, name: true } },
@@ -53,9 +56,9 @@ export class BalanceteService {
         end: end.toISOString().slice(0, 10),
       },
       lines,
-      revenue_total: Math.round(revenueTotal * 100) / 100,
-      expenses_total: Math.round(expensesTotal * 100) / 100,
-      net_result: Math.round((revenueTotal - expensesTotal) * 100) / 100,
+      revenue_total: round2(revenueTotal),
+      expenses_total: round2(expensesTotal),
+      net_result: round2(revenueTotal - expensesTotal),
     };
   }
 

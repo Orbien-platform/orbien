@@ -10,8 +10,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // (aconteceu no CI da main, no merge do #128). Subset latin do Google Fonts,
 // via @fontsource — licença em src/fonts/OFL-*.txt.
 //
-// Direção Órbita (docs/design/orbita-v2): Geist na interface, Geist Mono em
-// números e rótulos, Instrument Serif nos títulos de página.
+// Direção Órbita (docs/design/orbita-v2): Geist na interface e nos títulos de
+// página, Geist Mono em números e rótulos.
 const geist = localFont({
   variable: "--font-geist",
   src: [
@@ -30,14 +30,6 @@ const geistMono = localFont({
   ],
 });
 
-const instrumentSerif = localFont({
-  variable: "--font-instrument-serif",
-  src: [
-    { path: "../fonts/instrument-serif-400.woff2", weight: "400", style: "normal" },
-    { path: "../fonts/instrument-serif-400-italic.woff2", weight: "400", style: "italic" },
-  ],
-});
-
 export const metadata: Metadata = {
   title: "Orbien",
   description: "Plataforma de gestão para igrejas",
@@ -51,7 +43,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geist.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

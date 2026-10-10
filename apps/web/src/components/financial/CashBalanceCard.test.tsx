@@ -88,6 +88,34 @@ describe("CashBalanceCard", () => {
     expect(api.get).toHaveBeenCalledTimes(2);
   });
 
+  it("recarga da mesma data mantém o valor anterior esmaecido, sem skeleton", async () => {
+    let resolveNext: (v: unknown) => void = () => {};
+    vi.mocked(api.get)
+      .mockResolvedValueOnce(cash(100))
+      .mockReturnValueOnce(new Promise((r) => (resolveNext = r)));
+    const { rerender } = render(<CashBalanceCard asOf="2026-10-31" reloadKey={0} />);
+    await screen.findByText(/R\$\s?100,00/);
+
+    rerender(<CashBalanceCard asOf="2026-10-31" reloadKey={1} />);
+    const value = screen.getByText(/R\$\s?100,00/);
+    expect(value).toHaveClass("opacity-50");
+    expect(screen.getByRole("region", { name: "Caixa" })).toHaveAttribute("aria-busy", "true");
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+
+    resolveNext(cash(250));
+    expect(await screen.findByText(/R\$\s?250,00/)).not.toHaveClass("opacity-50");
+  });
+
+  it("trocar a data volta ao skeleton: o valor antigo não vale para a data nova", async () => {
+    vi.mocked(api.get).mockResolvedValueOnce(cash(100)).mockReturnValueOnce(new Promise(() => {}));
+    const { rerender } = render(<CashBalanceCard asOf="2026-10-31" />);
+    await screen.findByText(/R\$\s?100,00/);
+
+    rerender(<CashBalanceCard asOf="2026-11-30" />);
+    expect(screen.queryByText(/R\$\s?100,00/)).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+  });
+
   it("descarta a resposta atrasada de uma data que já foi trocada", async () => {
     let resolveOld: (v: unknown) => void = () => {};
     vi.mocked(api.get)

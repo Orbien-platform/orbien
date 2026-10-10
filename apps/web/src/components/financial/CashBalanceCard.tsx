@@ -34,6 +34,10 @@ function dmy(key: string): string {
  * recorte. Refaz a busca quando `asOf` ou `reloadKey` mudam (a tela avança a
  * chave ao criar, editar, pagar ou excluir um lançamento), e uma resposta
  * que chega depois de a data já ter mudado é descartada.
+ *
+ * Ao recarregar a mesma data, o valor anterior fica na tela, esmaecido, até o
+ * novo chegar — o skeleton é só da primeira carga ou de outra data. Trocar o
+ * número por um bloco cinza a cada baixa dava a impressão de tela travada.
  */
 export function CashBalanceCard({ asOf, reloadKey = 0 }: { asOf: string; reloadKey?: number }) {
   const [data, setData] = useState<CashBalance | null>(null);
@@ -52,6 +56,9 @@ export function CashBalanceCard({ asOf, reloadKey = 0 }: { asOf: string; reloadK
 
     const mine = ++seq.current;
     setLoading(true);
+    // Um "Tentar de novo" precisa responder na hora: sem isto o aviso de erro
+    // ficaria na tela até a resposta chegar, e o clique pareceria não ter feito nada.
+    setLoadError(false);
     api
       .get<CashBalance>(`/financial/dashboard/cash-balance?as_of=${asOf}`)
       .then((res) => {
@@ -95,20 +102,25 @@ export function CashBalanceCard({ asOf, reloadKey = 0 }: { asOf: string; reloadK
 
   const balance = data?.balance ?? 0;
   const pending = data?.pending;
+  // O valor em tela vale para a data pedida? Só então dá para mantê-lo durante a recarga.
+  const stale = !!data && data.as_of === asOf;
+  const refreshing = loading && stale;
   const hasPending = !!pending && (pending.income > 0 || pending.expense > 0);
 
   return (
     <section
       aria-label="Caixa"
+      aria-busy={loading}
       className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-card)] px-5 py-4"
     >
       <p className="text-sm font-medium text-stone">Caixa em {dmy(asOf)}</p>
-      {loading ? (
+      {loading && !stale ? (
         <Skeleton className="mt-2 h-9 w-44" />
       ) : (
         <p
           className={cn(
-            "mt-1 text-3xl font-medium tabular-nums",
+            "mt-1 text-3xl font-medium tabular-nums transition-opacity duration-150",
+            refreshing && "opacity-50",
             balance >= 0 ? "text-teal" : "text-crimson",
           )}
         >
@@ -118,7 +130,7 @@ export function CashBalanceCard({ asOf, reloadKey = 0 }: { asOf: string; reloadK
       <p className="mt-1 text-xs text-stone">
         Entradas menos saídas pagas, desde o primeiro lançamento. Não muda com os filtros.
       </p>
-      {!loading && hasPending && pending && (
+      {(!loading || refreshing) && hasPending && pending && (
         <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone tabular-nums">
           {pending.income > 0 && <span>A receber {fmt(pending.income)}</span>}
           {pending.expense > 0 && <span>A pagar {fmt(pending.expense)}</span>}

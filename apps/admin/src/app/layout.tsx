@@ -10,8 +10,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 // via @fontsource — licença em src/fonts/OFL-*.txt.
 //
 // Direção Órbita (docs/design/orbita-v2), a mesma do painel da igreja:
-// Geist na interface, Geist Mono em números e rótulos, Instrument Serif nos
-// títulos de página.
+// Geist na interface e nos títulos de página, Geist Mono em números e rótulos.
 const geist = localFont({
   variable: "--font-geist",
   src: [
@@ -30,14 +29,6 @@ const geistMono = localFont({
   ],
 });
 
-const instrumentSerif = localFont({
-  variable: "--font-instrument-serif",
-  src: [
-    { path: "../fonts/instrument-serif-400.woff2", weight: "400", style: "normal" },
-    { path: "../fonts/instrument-serif-400-italic.woff2", weight: "400", style: "italic" },
-  ],
-});
-
 export const metadata: Metadata = {
   title: "Orbien — Plataforma",
   description: "Console de administração da plataforma Orbien",
@@ -51,7 +42,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geist.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

@@ -289,3 +289,34 @@ suporte. Modelo: `DonorPixSubscriptionsService`.
 **Consequência prática**: ligar pagamentos em produção é mudar uma env — e
 isso só depois de `AD-008`/`AD-009` no código (`PROD-28`, "O que falta").
 
+
+### AD-011 — Resultado financeiro de relatório é o realizado: `paid` + `confirmed`; o pendente é informativo
+
+**Status**: active
+**Origem**: decisão do dono do produto, 2026-10-07 (feature `financeiro-dre-resultado-centros-custo`)
+
+Lucro ou prejuízo de um período é o que **já entrou e já saiu**. Regra para
+todo relatório financeiro que some lançamentos — o que existe hoje (DRE,
+Balancete, DRE por centro de custo, evolução mensal) e o que vier:
+
+1. O filtro de "o que conta" vive em **um** lugar:
+   `apps/api/src/financial/dre-scope.ts` (`REALIZED_STATUSES`, `buildScope`).
+   Relatório novo usa `buildScope`; não escreve `status` à mão. É isso que
+   mantém DRE = soma da matriz por centro = Balancete = soma da série mensal.
+2. Lançamento `pending` **não** entra em receitas, despesas nem resultado. Ele
+   aparece à parte, como "A realizar" (`pending` no `GET /financial/dre`), para
+   o tesoureiro enxergar o que falta sem que o resultado minta.
+3. O rótulo do resultado é "Lucro do período", "Prejuízo do período" ou
+   "Resultado zerado" (`resultLabel`), sempre em texto e cor — nunca só cor.
+   `net_result` passa por `round2` (0,10 + 0,20 − 0,30 é 0, não 5e-17).
+4. **Gerar relatório não escreve.** O PDF do DRE deixou de marcar os
+   lançamentos do período como `confirmed`; essa transição é do fluxo de
+   exportação contábil (SPED/OFX), não de um clique em "baixar PDF". O teste do
+   `DrePdfService` falha se alguma escrita em `financialTransaction` voltar.
+5. Filtro de centro de custo é por `cost_center_id` (UUID ou `none`), nunca
+   pelo nome: nome não é único. O parâmetro `cost_center` (nome) segue aceito só
+   por compatibilidade.
+
+**Consequência prática**: os números do DRE e do Balancete mudam em relação a
+antes — lançamento ainda não pago deixa de somar. Quem precisar do regime de
+competência pede relatório novo; não reabre esta regra.

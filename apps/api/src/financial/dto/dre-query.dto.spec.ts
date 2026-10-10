@@ -42,3 +42,50 @@ describe('DreQueryDto', () => {
     expect(errors.some((e) => e.property === 'cost_center')).toBe(true);
   });
 });
+
+describe('DreQueryDto — cost_center_id e período', () => {
+  const UUID = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+
+  it('aceita cost_center_id UUID', async () => {
+    expect(await errorsFor({ cost_center_id: UUID })).toHaveLength(0);
+  });
+
+  it('aceita cost_center_id "none"', async () => {
+    expect(await errorsFor({ cost_center_id: 'none' })).toHaveLength(0);
+  });
+
+  it('rejeita cost_center_id que não é UUID nem "none"', async () => {
+    const errors = await errorsFor({ cost_center_id: 'Missões' });
+    expect(errors.some((e) => e.property === 'cost_center_id')).toBe(true);
+  });
+
+  it.each([
+    ['prefixo em "none"', 'xnone'],
+    ['sufixo em "none"', 'noneX'],
+    ['prefixo no UUID', `x${UUID}`],
+    ['sufixo no UUID', `${UUID}x`],
+    ['espaço depois do UUID', `${UUID} `],
+    ['UUID e "none" colados', `${UUID}none`],
+  ])('rejeita cost_center_id com %s (o padrão é ancorado nas duas pontas)', async (_label, value) => {
+    const errors = await errorsFor({ cost_center_id: value });
+    expect(errors.some((e) => e.property === 'cost_center_id')).toBe(true);
+  });
+
+  it('rejeita cost_center_id vazio', async () => {
+    const errors = await errorsFor({ cost_center_id: '' });
+    expect(errors.some((e) => e.property === 'cost_center_id')).toBe(true);
+  });
+
+  it('o nome continua aceito junto com o id (compatibilidade)', async () => {
+    expect(await errorsFor({ cost_center: 'Missões', cost_center_id: UUID })).toHaveLength(0);
+  });
+
+  it('rejeita period_end anterior a period_start', async () => {
+    const errors = await errorsFor({ period_start: '2026-02-01', period_end: '2026-01-31' });
+    expect(errors.some((e) => e.property === 'period_end')).toBe(true);
+  });
+
+  it('aceita period_end igual a period_start', async () => {
+    expect(await errorsFor({ period_start: '2026-01-10', period_end: '2026-01-10' })).toHaveLength(0);
+  });
+});

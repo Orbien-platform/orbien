@@ -29,3 +29,10 @@ export class CreateUserDto {
   @IsIn(ASSIGNABLE_ROLES, { message: 'Papel inválido' })
   role_code!: (typeof ASSIGNABLE_ROLES)[number];
 }
+
+export class UpdateUserRoleDto {
+  @IsString()
+  @IsNotEmpty({ message: 'role_code é obrigatório' })
+  @IsIn(ASSIGNABLE_ROLES, { message: 'Papel inválido' })
+  role_code!: (typeof ASSIGNABLE_ROLES)[number];
+}

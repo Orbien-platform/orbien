@@ -6,7 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserRoleDto } from './dto/create-user.dto';
+import { maxRoleRank, ROLE_RANK } from './role-rank';
 import { frontendUrl } from '../common/urls/frontend-url';
 
 const INVITE_TOKEN_TTL_DAYS = 7;
@@ -26,14 +27,12 @@ export class UsersService {
   /**
    * Concede acesso ao sistema para uma pessoa já cadastrada. Só o dono do
    * tenant (`tenant_admin`) ou `pastor` chamam este método (ver
-   * `@Roles` no controller) — mas nenhum dos dois pode promover alguém a um
-   * papel que eles mesmos não têm: só `tenant_admin` distribui `tenant_admin`.
-   * Sem isso, `pastor` criaria pares no papel mais alto do tenant.
+   * `@Roles` no controller) — mas ninguém concede um papel acima do maior que
+   * ele mesmo tem (ordem em `role-rank.ts`). Sem isso, `pastor` criaria
+   * `admin_congregation` ou `tenant_admin`.
    */
   async create(dto: CreateUserDto, actor: JwtPayload): Promise<CreatedUserAccount> {
-    if (dto.role_code === 'tenant_admin' && !actor.roles.includes('tenant_admin')) {
-      throw new ForbiddenException('Apenas um admin do tenant pode conceder o papel de admin do tenant.');
-    }
+    this.assertCanGrant(dto.role_code, actor);
 
     // A leitura roda em `tx` (app_user, RLS): é ela quem decide se o pedido é
     // autorizado, confirmando que a pessoa está no tenant/congregação do
@@ -112,5 +111,75 @@ export class UsersService {
     await this.mail.sendInvite(user.email, inviteUrl, tenantMailBrand(tenant));
 
     return { id: user.id, email: user.email };
+  }
+
+  /**
+   * Troca o papel de quem já tem acesso. Mesmas travas do convite: só
+   * ninguém concede papel acima do seu nem mexe em quem está acima, e ninguém muda o
+   * próprio papel (evita deixar o tenant sem dono). A leitura roda em `tx`
+   * (RLS decide se a pessoa é do tenant/congregação do ator); a escrita vai
+   * por `system`, porque `role_assignments` só aceita escrita por ele
+   * (migration 017).
+   */
+  async updateRole(
+    personId: string,
+    dto: UpdateUserRoleDto,
+    actor: JwtPayload,
+  ): Promise<{ id: string; role_code: string }> {
+    this.assertCanGrant(dto.role_code, actor);
+
+    const account = await this.prisma.runInTx(async (tx) => {
+      const person = await tx.person.findUnique({
+        where: { id: personId },
+        select: {
+          userAccounts: {
+            where: { is_active: true },
+            select: {
+              id: true,
+              tenant_id: true,
+              congregation_id: true,
+              roleAssignments: { select: { role_code: true } },
+            },
+          },
+        },
+      });
+      if (!person) throw new NotFoundException('Pessoa não encontrada');
+      const found = person.userAccounts[0];
+      if (!found) throw new NotFoundException('Esta pessoa não tem acesso ao sistema.');
+      return found;
+    });
+
+    if (account.id === actor.sub) {
+      throw new ForbiddenException('Você não pode alterar o próprio papel.');
+    }
+    if (maxRoleRank(account.roleAssignments.map((r) => r.role_code)) > maxRoleRank(actor.roles)) {
+      throw new ForbiddenException('Você não pode alterar o papel de quem tem um nível acima do seu.');
+    }
+
+    await this.prisma.system.$transaction(async (sysTx) => {
+      await sysTx.roleAssignment.deleteMany({
+        where: {
+          user_account_id: account.id,
+          tenant_id: account.tenant_id,
+          role_code: { not: 'platform_support' },
+        },
+      });
+      await sysTx.roleAssignment.create({
+        data: {
+          tenant_id: account.tenant_id,
+          congregation_id: account.congregation_id,
+          user_account_id: account.id,
+          role_code: dto.role_code,
+        },
+      });
+    });
+
+    return { id: account.id, role_code: dto.role_code };
+  }
+
+  private assertCanGrant(roleCode: string, actor: JwtPayload): void {
+    if ((ROLE_RANK[roleCode] ?? Infinity) > maxRoleRank(actor.roles)) {
+      throw new ForbiddenException('Você não pode conceder um papel acima do seu nível.');
+    }
   }
 }

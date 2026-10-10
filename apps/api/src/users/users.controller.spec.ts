@@ -3,7 +3,7 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserRoleDto } from './dto/create-user.dto';
 
 const CREATE_ROLES = ['tenant_admin', 'pastor'];
 
@@ -36,6 +36,22 @@ describe('UsersController', () => {
     const reflector = new Reflector();
     expect(
       reflector.get<string[]>(ROLES_KEY, UsersController.prototype.create),
+    ).toEqual(CREATE_ROLES);
+  });
+
+  it('updateRole delega ao service com a pessoa, o dto e o usuário, e exige o mesmo papel do create', async () => {
+    const roleDto: UpdateUserRoleDto = { role_code: 'secretary' };
+    const usersService = {
+      updateRole: jest.fn().mockResolvedValue({ id: 'user-1', role_code: 'secretary' }),
+    } as unknown as jest.Mocked<UsersService>;
+    const controller = new UsersController(usersService);
+
+    const result = await controller.updateRole('person-1', roleDto, actor);
+
+    expect(usersService.updateRole).toHaveBeenCalledWith('person-1', roleDto, actor);
+    expect(result).toEqual({ id: 'user-1', role_code: 'secretary' });
+    expect(
+      new Reflector().get<string[]>(ROLES_KEY, UsersController.prototype.updateRole),
     ).toEqual(CREATE_ROLES);
   });
 });

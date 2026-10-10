@@ -14,6 +14,7 @@ import { CelebrationSchedulerService } from './celebration-scheduler.service';
 import { CreateCelebrationDto } from './dto/create-celebration.dto';
 import { UpdateCelebrationDto } from './dto/update-celebration.dto';
 import { ListCelebrationsQueryDto } from './dto/list-celebrations-query.dto';
+import { CancelInstanceDatesDto } from './dto/cancel-instance-dates.dto';
 import { MaterializeInstancesDto } from './dto/materialize-instances.dto';
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 
@@ -82,6 +83,18 @@ export class CelebrationsController {
   @Roles('admin_congregation', 'tenant_admin')
   remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.celebrationsService.remove(user.tenant_id, user.congregation_id, id);
+  }
+
+  // Cancela ocorrências pontuais (datas) de uma recorrente. Antes de `materialize`
+  // não importa a ordem — os paths são literais diferentes.
+  @Post(':id/instances/cancel')
+  @Roles(...MANAGE_ROLES)
+  cancelInstanceDates(
+    @Param('id') id: string,
+    @Body() dto: CancelInstanceDatesDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.instancesService.cancelDates(user.tenant_id, user.congregation_id, id, dto.dates);
   }
 
   @Post(':id/instances/materialize')
