@@ -142,17 +142,47 @@ async function login(): Promise<Tokens> {
 function makeApi(tokens: Tokens): Api {
   return {
     tokens,
+    /**
+     * Um 500 na montagem de dado é retentado uma vez (PEND-21: 500
+     * intermitentes em produção que o run seguinte não repetiu). A causa não
+     * é conhecida; retentar só é seguro porque o 500 desfaz a transação do
+     * request inteira (`TenantContextInterceptor`), então a 1ª tentativa não
+     * deixa linha. Só o 500: 502/503/504 podem vir de proxy ou gateway depois
+     * do commit, e repetir o POST duplicaria a linha. Cada falha registra
+     * método, rota, status e corpo — o rastro que o próximo 5xx precisa para
+     * ser diagnosticado. Os demais status não são retentados: 4xx é erro do
+     * teste, não da infra.
+     */
     async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-      const res = await fetch(`${API_URL}${path}`, {
-        method,
-        headers: authHeaders(tokens.access_token),
-        ...(body ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(90_000),
-      });
-      if (!res.ok) {
-        throw new Error(`${method} ${path} → HTTP ${res.status} ${await res.text()}`);
+      let last = "";
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        let res: Response;
+        try {
+          res = await fetch(`${API_URL}${path}`, {
+            method,
+            headers: authHeaders(tokens.access_token),
+            ...(body ? { body: JSON.stringify(body) } : {}),
+            signal: AbortSignal.timeout(90_000),
+          });
+        } catch (err) {
+          // Timeout ou queda de conexão: não se sabe se o servidor chegou a
+          // gravar, então não retenta — só deixa o rastro e falha.
+          console.warn(
+            `[e2e api.call] ${new Date().toISOString()} ${method} ${path} sem resposta: ${String(err)}`
+          );
+          throw err;
+        }
+        if (res.ok) return (res.status === 204 ? null : await res.json()) as T;
+
+        last = `${method} ${path} → HTTP ${res.status} ${await res.text()}`;
+        if (res.status >= 500) {
+          console.warn(
+            `[e2e api.call] ${new Date().toISOString()} tentativa ${attempt}/2: ${last}`
+          );
+        }
+        if (res.status !== 500) break;
       }
-      return (res.status === 204 ? null : await res.json()) as T;
+      throw new Error(last);
     },
     async tryCall(method: string, path: string): Promise<void> {
       try {
