@@ -2423,6 +2423,19 @@ mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 - **Marca da igreja na página pública**: a página mostra o nome da igreja,
   mas não a cor nem o logo — não há rota pública de identidade por slug.
 
+### PEND-20 · Avisar quem estava escalado quando o culto é cancelado ou removido · aberto
+
+Cancelar uma data, cancelar uma instância ou remover uma celebração
+(`celebration-instances.service.ts`, `celebrations.service.ts`) tira o culto da
+agenda e da lista "minhas escalas" dos voluntários, mas **não notifica
+ninguém**. Quem estava escalado só descobre abrindo o app — ou chegando à
+igreja. Falta: push (e o canal que `PROD-14` respeitar) para os
+`celebration_assignments` ativos da instância, nos três casos — cancelar,
+remover a celebração com instâncias futuras e, se fizer sentido, reabrir.
+Ponto de atenção: na remoção a escala é apagada junto com a instância, então os
+destinatários têm de ser lidos **antes** do `deleteMany`. Respeitar a
+preferência de notificação do usuário (`notification_preferences`).
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a

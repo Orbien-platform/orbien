@@ -773,7 +773,7 @@ describe('CelebrationAssignmentService', () => {
             celebrationMinistry: expect.objectContaining({
               schedule: expect.objectContaining({
                 status: 'published',
-                celebrationInstance: { scheduled_date: { gte: expect.any(Date) } },
+                celebrationInstance: { status: { not: 'cancelled' }, scheduled_date: { gte: expect.any(Date) } },
               }),
             }),
           }),
@@ -784,7 +784,7 @@ describe('CelebrationAssignmentService', () => {
       expect(result[1]!.celebration).toEqual({ id: 'c1', name: 'Culto Noite', start_time: '19:00' });
     });
 
-    it('não filtra por data quando includePast=true', async () => {
+    it('não filtra por data quando includePast=true (cancelados continuam de fora)', async () => {
       const client = clientWith();
       client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
       client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
@@ -797,7 +797,7 @@ describe('CelebrationAssignmentService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             celebrationMinistry: expect.objectContaining({
-              schedule: { status: 'published' },
+              schedule: { status: 'published', celebrationInstance: { status: { not: 'cancelled' } } },
             }),
           }),
         }),

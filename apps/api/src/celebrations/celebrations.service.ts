@@ -72,12 +72,35 @@ export class CelebrationsService {
     });
   }
 
-  async remove(tenantId: string, congregationId: string, id: string): Promise<Celebration> {
+  /**
+   * Remove a celebração, recorrente ou não. O cadastro vira inativo — o que
+   * interrompe o ciclo, já que o gerador só olha celebração ativa — e as
+   * instâncias que ainda não aconteceram (de hoje em diante) são apagadas,
+   * com OC e escala. O que já passou fica: é o histórico da igreja.
+   * Culto `finalized` também fica, mesmo com data futura: foi encerrado.
+   */
+  async remove(
+    tenantId: string,
+    congregationId: string,
+    id: string,
+  ): Promise<Celebration & { removed_instances: number }> {
     await this.findOne(tenantId, congregationId, id);
-    // Soft delete: mark inactive rather than hard delete to preserve instance history
-    return this.prisma.client.celebration.update({
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    // Mesma transação do request: se uma das duas falhar, nenhuma vale.
+    const { count } = await this.prisma.client.celebrationInstance.deleteMany({
+      where: {
+        celebration_id: id,
+        tenant_id: tenantId,
+        scheduled_date: { gte: today },
+        status: { not: 'finalized' },
+      },
+    });
+    const celebration = await this.prisma.client.celebration.update({
       where: { id },
       data: { is_active: false },
     });
+    return { ...celebration, removed_instances: count };
   }
 }

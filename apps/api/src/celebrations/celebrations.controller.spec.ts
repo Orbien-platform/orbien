@@ -43,6 +43,7 @@ describe('CelebrationsController', () => {
 
     instancesService = {
       materializeInstancesForPeriod: jest.fn(),
+      cancelDates: jest.fn(),
     } as unknown as jest.Mocked<CelebrationInstancesService>;
 
     scheduleService = {
@@ -113,6 +114,15 @@ describe('CelebrationsController', () => {
     expect(celebrationsService.remove).toHaveBeenCalledWith('tenant-1', 'cong-1', 'c1');
     expect(result).toEqual({ id: 'c1' });
     expect(rolesFor('remove')).toEqual(['admin_congregation', 'tenant_admin']);
+  });
+
+  it('cancelInstanceDates delega ao instancesService com as datas', async () => {
+    instancesService.cancelDates.mockResolvedValue([] as never);
+
+    await controller.cancelInstanceDates('c1', { dates: ['2026-09-13'] }, user);
+
+    expect(instancesService.cancelDates).toHaveBeenCalledWith('tenant-1', 'cong-1', 'c1', ['2026-09-13']);
+    expect(rolesFor('cancelInstanceDates')).toEqual(['admin_congregation', 'pastor', 'tenant_admin']);
   });
 
   it('materializeInstances converte from/to em Date e delega ao instancesService', async () => {

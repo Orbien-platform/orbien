@@ -257,4 +257,182 @@ describe("CelebrationDetailSheet", () => {
     expect(screen.getByText("custom_type")).toBeInTheDocument();
     expect(screen.getByText("custom_recurrence")).toBeInTheDocument();
   });
+
+  describe("cancelar e remover", () => {
+    function renderSheet(props: Partial<React.ComponentProps<typeof CelebrationDetailSheet>> = {}) {
+      return render(
+        <CelebrationDetailSheet
+          open={true}
+          onOpenChange={vi.fn()}
+          celebrationId="c1"
+          canEdit={true}
+          canRemove={true}
+          canAddSongs={true}
+          {...props}
+        />
+      );
+    }
+
+    it("cancela um culto depois de confirmar e recarrega a lista", async () => {
+      mockGet();
+      vi.mocked(api.patch).mockResolvedValue({ data: {} });
+      const user = userEvent.setup();
+      renderSheet();
+
+      await screen.findByText("Instâncias (2)");
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await user.click(await screen.findByRole("button", { name: "Cancelar culto" }));
+
+      await waitFor(() =>
+        expect(api.patch).toHaveBeenCalledWith("/celebrations/instances/i2", { status: "cancelled" })
+      );
+      await waitFor(() =>
+        expect(vi.mocked(api.get).mock.calls.filter(([u]) => u === "/celebrations/instances?celebration_id=c1")).toHaveLength(2)
+      );
+    });
+
+    it("reabre um culto cancelado sem pedir confirmação", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: celebration });
+        return Promise.resolve({ data: [{ id: "i1", scheduled_date: "2026-09-06T00:00:00.000Z", status: "cancelled" }] });
+      });
+      vi.mocked(api.patch).mockResolvedValue({ data: {} });
+      const user = userEvent.setup();
+      renderSheet();
+
+      await screen.findByText("Instâncias (1)");
+      expect(screen.getByText("Cancelado", { selector: "span.rounded-full" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /^Reabrir o culto de/ }));
+
+      await waitFor(() =>
+        expect(api.patch).toHaveBeenCalledWith("/celebrations/instances/i1", { status: "draft" })
+      );
+    });
+
+    it("cancela uma data pontual de uma recorrente e mostra o erro do servidor", async () => {
+      mockGet();
+      vi.mocked(api.post).mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { status: 400, data: { message: "2026-12-28 não cai no dia da semana desta celebração" } },
+      });
+      vi.mocked(api.post).mockResolvedValueOnce({ data: [] });
+      const user = userEvent.setup();
+      renderSheet();
+
+      await screen.findByText("Instâncias (2)");
+      await user.click(screen.getByRole("button", { name: /Cancelar uma data/ }));
+      const submit = await screen.findByRole("button", { name: "Cancelar data" });
+      expect(submit).toBeDisabled();
+      await user.type(screen.getByLabelText("Data"), "2026-12-28");
+      await user.click(submit);
+      expect(await screen.findByText(/não cai no dia da semana/)).toBeInTheDocument();
+
+      await user.clear(screen.getByLabelText("Data"));
+      await user.type(screen.getByLabelText("Data"), "2026-12-27");
+      await user.click(screen.getByRole("button", { name: "Cancelar data" }));
+      await waitFor(() =>
+        expect(api.post).toHaveBeenLastCalledWith("/celebrations/c1/instances/cancel", { dates: ["2026-12-27"] })
+      );
+    });
+
+    it("remove a celebração, fecha o detalhe e avisa a página", async () => {
+      mockGet();
+      vi.mocked(api.delete).mockResolvedValue({ data: {} });
+      const onRemoved = vi.fn();
+      const onOpenChange = vi.fn();
+      const user = userEvent.setup();
+      renderSheet({ onRemoved, onOpenChange });
+
+      await screen.findByText("Instâncias (2)");
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      expect(await screen.findByText(/deixa de se repetir/)).toBeInTheDocument();
+      await user.click(screen.getAllByRole("button", { name: "Remover celebração" }).at(-1)!);
+
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith("/celebrations/c1"));
+      await waitFor(() => expect(onRemoved).toHaveBeenCalled());
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("esconde as ações de quem não pode editar nem remover", async () => {
+      mockGet();
+      renderSheet({ canEdit: false, canRemove: false });
+
+      await screen.findByText("Instâncias (2)");
+      expect(screen.queryByRole("button", { name: /Remover celebração/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Cancelar uma data/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Cancelar o culto de/ })).not.toBeInTheDocument();
+    });
+
+    it("fecha cada confirmação sem chamar a API: Voltar, Manter e Esc", async () => {
+      mockGet();
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await waitFor(() => expect(screen.queryByText("Cancelar este culto?")).not.toBeInTheDocument());
+
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await screen.findByText("Cancelar este culto?");
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByText("Cancelar este culto?")).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /Cancelar uma data/ }));
+      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await waitFor(() => expect(screen.queryByText("Cancelar uma data", { selector: "h2,[role=dialog] *" })).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      await user.click(await screen.findByRole("button", { name: "Manter" }));
+      await waitFor(() => expect(screen.queryByText("Remover esta celebração?")).not.toBeInTheDocument());
+
+      expect(api.patch).not.toHaveBeenCalled();
+      expect(api.post).not.toHaveBeenCalled();
+      expect(api.delete).not.toHaveBeenCalled();
+    });
+
+    it("mostra o erro do servidor quando cancelar ou remover falha", async () => {
+      mockGet();
+      vi.mocked(api.patch).mockRejectedValue({ isAxiosError: true, response: { status: 400, data: { message: "O culto já foi finalizado" } } });
+      vi.mocked(api.delete).mockRejectedValue(new Error("boom"));
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await user.click(await screen.findByRole("button", { name: "Cancelar culto" }));
+      expect(await screen.findByText("O culto já foi finalizado")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Voltar" }));
+
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      await user.click(screen.getAllByRole("button", { name: "Remover celebração" }).at(-1)!);
+      expect(await screen.findByText("Não foi possível remover a celebração.")).toBeInTheDocument();
+    });
+
+    it("em celebração avulsa, não oferece cancelar data e explica a remoção do culto único", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: { ...celebration, recurrence: "none" } });
+        return Promise.resolve({ data: instances });
+      });
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+
+      expect(screen.queryByRole("button", { name: /Cancelar uma data/ })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      expect(await screen.findByText(/O culto que ainda não aconteceu é apagado/)).toBeInTheDocument();
+    });
+
+    it("não oferece cancelar culto já finalizado", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) =>
+        url === "/celebrations/c1"
+          ? Promise.resolve({ data: celebration })
+          : Promise.resolve({ data: [{ id: "i9", scheduled_date: "2026-09-06T00:00:00.000Z", status: "finalized" }] })
+      );
+      renderSheet();
+      await screen.findByText("Instâncias (1)");
+      expect(screen.getByText("Finalizado")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Cancelar o culto de/ })).not.toBeInTheDocument();
+    });
+  });
 });

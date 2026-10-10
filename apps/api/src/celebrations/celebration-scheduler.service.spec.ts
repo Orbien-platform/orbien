@@ -142,6 +142,32 @@ describe('CelebrationSchedulerService', () => {
       );
     });
 
+    it('com âncora biweekly no futuro (data cancelada adiantada), volta no ciclo e gera a janela', async () => {
+      const system = systemWith();
+      system.celebration.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          day_of_week: 0,
+          recurrence: 'biweekly',
+          created_at: new Date('2026-01-01'),
+          instances: [{ scheduled_date: new Date('2026-09-20T00:00:00Z') }],
+        },
+      ]);
+      system.celebrationInstance.findFirst.mockResolvedValue(null);
+      system.celebrationInstance.create.mockResolvedValue({ id: 'new1' });
+      const { service } = serviceWith(system);
+
+      await service.generateInstances();
+
+      expect(system.celebrationInstance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ scheduled_date: new Date('2026-09-06T00:00:00.000Z') }),
+        }),
+      );
+    });
+
     it('usa a primeira ocorrência a partir da criação como âncora biweekly quando não há instância', async () => {
       const system = systemWith();
       system.celebration.findMany.mockResolvedValue([
