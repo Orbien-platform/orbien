@@ -5,7 +5,7 @@
 // ainda nem existe no momento em que ele rodaria.
 //
 // Visual da v2 ("Órbita"): marca e nome no topo, à esquerda, e o título em
-// serifa dizendo o que fazer — entrar com o e-mail da igreja, sem escolher
+// Geist dizendo o que fazer — entrar com o e-mail da igreja, sem escolher
 // igreja (a conta já sabe qual é). Campos de 48px com ícone e label (§3,
 // §7), erro como alerta com ícone, botão primário em estado `loading`. Sem
 // biometria nesta versão. Depois do login, quem aplica a cor e o logo da

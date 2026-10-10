@@ -2,7 +2,7 @@
 
 *React Native + Expo · v0.2 · direção "Órbita" (v2) — `docs/design/orbita-v2/README.md`*
 
-> **v2.** Cor, tipografia e forma seguem a Órbita: tema escuro como padrão (fundo `#05070F`), Geist na interface, Geist Mono em rótulos e números, Instrument Serif nos títulos, botão em pill. Onde este guia e o `README.md` da v2 divergirem, vale o README. A seção 3 de `orbien-brand-guidelines.md` é da v1 e foi substituída.
+> **v2.** Cor, tipografia e forma seguem a Órbita: tema escuro como padrão (fundo `#05070F`), Geist na interface, Geist Mono em rótulos e números, Geist Medium nos títulos, botão em pill. Onde este guia e o `README.md` da v2 divergirem, vale o README. A seção 3 de `orbien-brand-guidelines.md` é da v1 e foi substituída.
 
 Este documento cobre o que o brand guideline web **não** cobre: como os mesmos tokens se comportam em mobile — touch, safe area, elevation, tema dinâmico por tenant em runtime.
 
@@ -35,7 +35,6 @@ fontFamily: {
   sans: ["Geist_400Regular"], "sans-light": ["Geist_300Light"],
   "sans-medium": ["Geist_500Medium"], "sans-semibold": ["Geist_600SemiBold"],
   mono: ["GeistMono_400Regular"], "mono-medium": ["GeistMono_500Medium"],
-  serif: ["InstrumentSerif_400Regular"], "serif-italic": ["InstrumentSerif_400Regular_Italic"],
 },
 borderRadius: { btn: 999, card: 18, modal: 20, pill: 999, input: 10, avatar: 10 },
 ```
@@ -45,22 +44,22 @@ borderRadius: { btn: 999, card: 18, modal: 20, pill: 999, input: 10, avatar: 10 
 ### Fontes (Expo)
 
 ```bash
-npm install @expo-google-fonts/geist @expo-google-fonts/geist-mono @expo-google-fonts/instrument-serif -w orbien-mobile
+npm install @expo-google-fonts/geist @expo-google-fonts/geist-mono -w orbien-mobile
 ```
 
-Pesos a carregar, cada um pelo subpath do peso (o barril do pacote empacota os 18 arquivos): `Geist_300Light`, `Geist_400Regular`, `Geist_500Medium`, `Geist_600SemiBold`, `GeistMono_400Regular`, `GeistMono_500Medium`, `InstrumentSerif_400Regular`, `InstrumentSerif_400Regular_Italic`. Bloquear render com `SplashScreen.preventAutoHideAsync()` até `useFonts()` resolver — nunca deixar o app piscar com a fonte do sistema. **Fonte nova exige build nativa**: não sai por OTA.
+Pesos a carregar, cada um pelo subpath do peso (o barril do pacote empacota os 18 arquivos): `Geist_300Light`, `Geist_400Regular`, `Geist_500Medium`, `Geist_600SemiBold`, `GeistMono_400Regular`, `GeistMono_500Medium`. Bloquear render com `SplashScreen.preventAutoHideAsync()` até `useFonts()` resolver — nunca deixar o app piscar com a fonte do sistema. **Fonte nova exige build nativa**: não sai por OTA.
 
 ---
 
 ## 2. Tipografia mobile
 
-Títulos em Instrument Serif (a voz da Órbita), interface em Geist, números e rótulos em Geist Mono. A serifa só tem o peso 400 — nunca aplicar `fontWeight` por cima, o RN sintetiza um negrito falso.
+Títulos em Geist Medium com tracking fechado, interface em Geist, números e rótulos em Geist Mono.
 
 | Token | Família | Tamanho | Line height | Uso |
 |---|---|---|---|---|
-| `display` | Instrument Serif | 36px | 40px | Tela cheia (splash, transição de entrada) |
-| `h1` | Instrument Serif | 30px | 34px | Título de aba e de tela grande, saudação da Home |
-| `h2` | Instrument Serif | 24px | 28px | Título de seção, título do destaque |
+| `display` | Geist Medium | 36px | 40px | Tela cheia (splash, transição de entrada) |
+| `h1` | Geist Medium | 30px | 34px | Título de aba e de tela grande, saudação da Home |
+| `h2` | Geist Medium | 24px | 28px | Título de seção, título do destaque |
 | `h3` | Geist 500 | 16px | 22px | Título de card, item de lista, header de pilha |
 | `body` | Geist 400 | 15px | 22px | Texto corrido |
 | `body-medium` | Geist 400 | 14px | 20px | Formulário, descrição |
@@ -181,7 +180,7 @@ Specs mínimas dos componentes que aparecem em quase toda tela — antes de dese
 - Estado disabled: fundo `subtle`, texto `muted`
 
 **Header de stack (só nas telas de detalhe)**
-- As abas rodam **sem** header, com o título da aba em `h1` serifado no topo do conteúdo: a tab bar já identifica a tela, e uma barra de 56px + safe area repetindo a marca em toda tela custa mais espaço útil do que entrega. A safe area superior das abas fica no `View` que envolve o navigator (`src/app/(tabs)/_layout.tsx`).
+- As abas rodam **sem** header, com o título da aba em `h1` no topo do conteúdo: a tab bar já identifica a tela, e uma barra de 56px + safe area repetindo a marca em toda tela custa mais espaço útil do que entrega. A safe area superior das abas fica no `View` que envolve o navigator (`src/app/(tabs)/_layout.tsx`).
 - Tela de detalhe (aberta a partir de uma aba) **tem** header: fundo `bgBase` (o mesmo da tela, como o `AppHeader` da v2), título `h3` centralizado em `textPrimary`, voltar em `brandInk`, sem filete, e o botão de voltar só com a seta (`headerBackButtonDisplayMode: "minimal"` — sem isso o iOS escreve o nome da rota anterior ao lado dela, que é o grupo de abas e aparece como "(tabs)").
 - Toda rota de detalhe declara `title` no `Stack.Screen`: é ele que nomeia a tela e o retorno.
 
