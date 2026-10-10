@@ -362,5 +362,77 @@ describe("CelebrationDetailSheet", () => {
       expect(screen.queryByRole("button", { name: /Cancelar uma data/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /^Cancelar o culto de/ })).not.toBeInTheDocument();
     });
+
+    it("fecha cada confirmação sem chamar a API: Voltar, Manter e Esc", async () => {
+      mockGet();
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await waitFor(() => expect(screen.queryByText("Cancelar este culto?")).not.toBeInTheDocument());
+
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await screen.findByText("Cancelar este culto?");
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByText("Cancelar este culto?")).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /Cancelar uma data/ }));
+      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await waitFor(() => expect(screen.queryByText("Cancelar uma data", { selector: "h2,[role=dialog] *" })).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      await user.click(await screen.findByRole("button", { name: "Manter" }));
+      await waitFor(() => expect(screen.queryByText("Remover esta celebração?")).not.toBeInTheDocument());
+
+      expect(api.patch).not.toHaveBeenCalled();
+      expect(api.post).not.toHaveBeenCalled();
+      expect(api.delete).not.toHaveBeenCalled();
+    });
+
+    it("mostra o erro do servidor quando cancelar ou remover falha", async () => {
+      mockGet();
+      vi.mocked(api.patch).mockRejectedValue({ isAxiosError: true, response: { status: 400, data: { message: "O culto já foi finalizado" } } });
+      vi.mocked(api.delete).mockRejectedValue(new Error("boom"));
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+
+      await user.click(screen.getAllByRole("button", { name: /^Cancelar o culto de/ })[0]);
+      await user.click(await screen.findByRole("button", { name: "Cancelar culto" }));
+      expect(await screen.findByText("O culto já foi finalizado")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Voltar" }));
+
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      await user.click(screen.getAllByRole("button", { name: "Remover celebração" }).at(-1)!);
+      expect(await screen.findByText("Não foi possível remover a celebração.")).toBeInTheDocument();
+    });
+
+    it("em celebração avulsa, não oferece cancelar data e explica a remoção do culto único", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: { ...celebration, recurrence: "none" } });
+        return Promise.resolve({ data: instances });
+      });
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+
+      expect(screen.queryByRole("button", { name: /Cancelar uma data/ })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /Remover celebração/ }));
+      expect(await screen.findByText(/O culto que ainda não aconteceu é apagado/)).toBeInTheDocument();
+    });
+
+    it("não oferece cancelar culto já finalizado", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) =>
+        url === "/celebrations/c1"
+          ? Promise.resolve({ data: celebration })
+          : Promise.resolve({ data: [{ id: "i9", scheduled_date: "2026-09-06T00:00:00.000Z", status: "finalized" }] })
+      );
+      renderSheet();
+      await screen.findByText("Instâncias (1)");
+      expect(screen.getByText("Finalizado")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Cancelar o culto de/ })).not.toBeInTheDocument();
+    });
   });
 });

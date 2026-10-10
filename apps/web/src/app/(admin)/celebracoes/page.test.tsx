@@ -25,8 +25,23 @@ vi.mock("@/components/celebrations/CreateCelebrationModal", () => ({
     ) : null,
 }));
 vi.mock("@/components/celebrations/CelebrationDetailSheet", () => ({
-  CelebrationDetailSheet: ({ open, celebrationId }: { open: boolean; celebrationId: string | null }) =>
-    open ? <div data-testid="celebration-detail-sheet">detail:{celebrationId}</div> : null,
+  CelebrationDetailSheet: ({
+    open,
+    celebrationId,
+    canRemove,
+    onRemoved,
+  }: {
+    open: boolean;
+    celebrationId: string | null;
+    canRemove?: boolean;
+    onRemoved?: () => void;
+  }) =>
+    open ? (
+      <div data-testid="celebration-detail-sheet">
+        detail:{celebrationId} remove:{String(canRemove)}
+        <button onClick={onRemoved}>simular remoção</button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/celebrations/ScheduleSheet", () => ({
   ScheduleSheet: ({
@@ -274,6 +289,46 @@ describe("CelebracoesPage", () => {
     await screen.findByText("Nenhuma celebração cadastrada.");
     await user.click(screen.getByRole("tab", { name: "Templates" }));
     expect(await screen.findByTestId("templates-panel")).toHaveTextContent("templates:false");
+  });
+
+  it("só admin_congregation e tenant_admin podem remover; ao remover, recarrega a lista", async () => {
+    setup(["pastor"]);
+    mockedApi.get.mockResolvedValue({
+      data: [{ id: "9", name: "Clique Aqui", day_of_week: 0, start_time: "10:00", recurrence: "weekly" }],
+    });
+    const user = userEvent.setup();
+    const { unmount } = render(<CelebracoesPage />);
+    await user.click(await screen.findByText("Clique Aqui"));
+    expect(await screen.findByTestId("celebration-detail-sheet")).toHaveTextContent("remove:false");
+    unmount();
+
+    setup(["admin_congregation"]);
+    render(<CelebracoesPage />);
+    await user.click(await screen.findByText("Clique Aqui"));
+    expect(await screen.findByTestId("celebration-detail-sheet")).toHaveTextContent("remove:true");
+    const before = mockedApi.get.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "simular remoção" }));
+    await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("marca como Cancelado, e risca o nome, o culto cancelado na aba Próximas", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/celebrations"
+        ? Promise.resolve({ data: [] })
+        : Promise.resolve({
+            data: [
+              { id: "i1", scheduled_date: "2026-02-01", status: "cancelled", celebration: { id: "c1", name: "Culto Cancelado" }, serviceOrder: null, schedule: null },
+            ],
+          })
+    );
+    const user = userEvent.setup();
+    render(<CelebracoesPage />);
+    await user.click(screen.getByRole("tab", { name: "Próximas" }));
+
+    expect(await screen.findByText("Cancelado")).toBeInTheDocument();
+    expect(screen.getByText("Culto Cancelado")).toHaveClass("line-through");
+    expect(screen.queryByText("Sem OC")).not.toBeInTheDocument();
   });
 
   it("carrega instâncias próximas ao entrar na aba, ordenadas por data e limitadas a 30", async () => {
