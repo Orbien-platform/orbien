@@ -379,6 +379,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: [e2e]
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Um por vez em todo o repositório, não um por PR (o `concurrency` do
+    # topo é por PR). Todas as runs escrevem no mesmo `teste2-church` e a
+    # spec de destaques mexe num singleton do tenant: `PUT
+    # /content/posts/highlights` zera o carrossel inteiro, então duas runs em
+    # paralelo apagam os posts uma da outra ("A não ficou antes de B").
+    # `cancel-in-progress: false` deixa a run em curso terminar; o GitHub
+    # guarda só um job pendente por grupo, e um mais novo substitui o pendente.
+    concurrency:
+      group: e2e-prod
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
