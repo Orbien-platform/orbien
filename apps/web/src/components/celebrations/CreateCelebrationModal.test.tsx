@@ -73,6 +73,38 @@ describe("CreateCelebrationModal", () => {
     vi.useRealTimers();
   });
 
+  it("pede a data, no lugar do dia da semana, quando a recorrência é não recorrente", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockReset().mockResolvedValue({ data: {} });
+
+    render(
+      <CreateCelebrationModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />
+    );
+
+    await user.type(screen.getByLabelText(/Nome/), "Vigília");
+    await user.type(screen.getByLabelText(/Horário/), "09:00");
+    await user.selectOptions(screen.getByLabelText(/Recorrência/), "none");
+
+    expect(screen.queryByLabelText(/Dia da semana/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Criar celebração" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Data é obrigatória.");
+    expect(api.post).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText(/Data/), "2026-10-11");
+    await user.click(screen.getByRole("button", { name: "Criar celebração" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/celebrations", {
+        name: "Vigília",
+        type: "sunday_service",
+        scheduled_date: "2026-10-11",
+        start_time: "09:00",
+        recurrence: "none",
+      })
+    );
+  });
+
   it("shows an error message when the API call fails", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockRejectedValue(new Error("fail"));
