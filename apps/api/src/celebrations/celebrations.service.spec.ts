@@ -10,6 +10,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    celebrationInstance: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     ...overrides,
   };
 }
@@ -161,10 +162,13 @@ describe('CelebrationsService', () => {
   });
 
   describe('remove', () => {
-    it('marca a celebração como inativa (soft delete)', async () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('marca a celebração como inativa (soft delete) e informa quantas instâncias removeu', async () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
       client.celebration.update.mockResolvedValue({ id: 'c1', is_active: false });
+      client.celebrationInstance.deleteMany.mockResolvedValue({ count: 3 });
       const service = new CelebrationsService({ client } as unknown as PrismaService);
 
       const result = await service.remove('t1', 'g1', 'c1');
@@ -173,15 +177,35 @@ describe('CelebrationsService', () => {
         where: { id: 'c1' },
         data: { is_active: false },
       });
-      expect(result).toEqual({ id: 'c1', is_active: false });
+      expect(result).toEqual({ id: 'c1', is_active: false, removed_instances: 3 });
     });
 
-    it('lança NotFoundException quando a celebração não existe', async () => {
+    it('apaga só as instâncias de hoje em diante que não foram finalizadas', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-10T15:30:00Z'));
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
+      client.celebration.update.mockResolvedValue({ id: 'c1' });
+      const service = new CelebrationsService({ client } as unknown as PrismaService);
+
+      await service.remove('t1', 'g1', 'c1');
+
+      expect(client.celebrationInstance.deleteMany).toHaveBeenCalledWith({
+        where: {
+          celebration_id: 'c1',
+          tenant_id: 't1',
+          scheduled_date: { gte: new Date('2026-09-10T00:00:00Z') },
+          status: { not: 'finalized' },
+        },
+      });
+    });
+
+    it('lança NotFoundException quando a celebração não existe, sem apagar nada', async () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue(null);
       const service = new CelebrationsService({ client } as unknown as PrismaService);
 
       await expect(service.remove('t1', 'g1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.celebrationInstance.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

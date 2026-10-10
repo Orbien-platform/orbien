@@ -594,4 +594,75 @@ describe('CelebrationInstancesService', () => {
       expect(runInTx).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('cancelDates', () => {
+    const weekly = { id: 'c1', congregation_id: 'g1', recurrence: 'weekly', day_of_week: 0 };
+
+    it('cancela a instância que já existe na data', async () => {
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue(weekly);
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'draft' });
+      client.celebrationInstance.update.mockResolvedValue({ id: 'i1', status: 'cancelled' });
+      const service = serviceWith(client);
+
+      const result = await service.cancelDates('t1', 'g1', 'c1', ['2026-09-13']);
+
+      expect(client.celebrationInstance.update).toHaveBeenCalledWith({
+        where: { id: 'i1' },
+        data: { status: 'cancelled' },
+      });
+      expect(client.celebrationInstance.create).not.toHaveBeenCalled();
+      expect(result).toEqual([{ id: 'i1', status: 'cancelled' }]);
+    });
+
+    it('cria a instância já cancelada quando a data ainda não tem uma', async () => {
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue(weekly);
+      client.celebrationInstance.findFirst.mockResolvedValue(null);
+      client.celebrationInstance.create.mockResolvedValue({ id: 'i2' });
+      const service = serviceWith(client);
+
+      await service.cancelDates('t1', 'g1', 'c1', ['2026-12-27']);
+
+      expect(client.celebrationInstance.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          celebration_id: 'c1',
+          scheduled_date: new Date('2026-12-27T00:00:00Z'),
+          status: 'cancelled',
+        },
+      });
+    });
+
+    it('recusa data fora do dia da semana, data inexistente e celebração avulsa', async () => {
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue(weekly);
+      const service = serviceWith(client);
+
+      await expect(service.cancelDates('t1', 'g1', 'c1', ['2026-09-14'])).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.cancelDates('t1', 'g1', 'c1', ['2026-02-30'])).rejects.toBeInstanceOf(BadRequestException);
+
+      client.celebration.findFirst.mockResolvedValue({ ...weekly, recurrence: 'none' });
+      await expect(service.cancelDates('t1', 'g1', 'c1', ['2026-09-13'])).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.celebrationInstance.create).not.toHaveBeenCalled();
+    });
+
+    it('recusa cancelar culto finalizado', async () => {
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue(weekly);
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'finalized' });
+      const service = serviceWith(client);
+
+      await expect(service.cancelDates('t1', 'g1', 'c1', ['2026-09-13'])).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('lança NotFoundException quando a celebração não existe', async () => {
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(service.cancelDates('t1', 'g1', 'x', ['2026-09-13'])).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 });

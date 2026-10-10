@@ -85,6 +85,8 @@ function CelebracoesContent() {
   const canEdit = roles.some((r) =>
     ["admin_congregation", "pastor", "tenant_admin"].includes(r)
   );
+  // Remover é mais restrito que editar: a API só deixa estes dois papéis.
+  const canRemove = roles.some((r) => ["admin_congregation", "tenant_admin"].includes(r));
   const canAddSongs = roles.some((r) =>
     ["admin_congregation", "pastor", "tenant_admin", "ministry_leader"].includes(r)
   );
@@ -323,6 +325,7 @@ function CelebracoesContent() {
             <div className="flex flex-col gap-3">
               {upcomingInstances.map((inst) => {
                 const hasOC = !!inst.serviceOrder;
+                const cancelled = inst.status === "cancelled";
                 const startTime = celebrations.find((c) => c.id === inst.celebration.id)?.start_time;
                 const sched = inst.schedule;
                 const schedLabel =
@@ -349,7 +352,12 @@ function CelebracoesContent() {
                         <FileText size={16} strokeWidth={1.5} />
                       </div>
                       <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="truncate text-sm font-medium text-ink dark:text-white">
+                        <span
+                          className={cn(
+                            "truncate text-sm font-medium text-ink dark:text-white",
+                            cancelled && "text-stone line-through dark:text-stone"
+                          )}
+                        >
                           {inst.celebration.name}
                         </span>
                         <span className="text-xs text-stone">
@@ -363,12 +371,14 @@ function CelebracoesContent() {
                       <span
                         className={cn(
                           "rounded-full px-2 py-0.5 text-xs font-medium",
-                          hasOC
-                            ? "bg-teal-dim text-teal"
-                            : "bg-[var(--surface-subtle)] text-stone"
+                          cancelled
+                            ? "bg-crimson-dim text-crimson"
+                            : hasOC
+                              ? "bg-teal-dim text-teal"
+                              : "bg-[var(--surface-subtle)] text-stone"
                         )}
                       >
-                        {hasOC ? "Com OC" : "Sem OC"}
+                        {cancelled ? "Cancelado" : hasOC ? "Com OC" : "Sem OC"}
                       </span>
                       <button
                         type="button"
@@ -414,6 +424,12 @@ function CelebracoesContent() {
         onOpenChange={setDetailOpen}
         celebrationId={selectedCelId}
         canEdit={canEdit}
+        canRemove={canRemove}
+        onRemoved={() => {
+          hasFetchedCel.current = false;
+          setCelebrationsLoading(true);
+          loadCelebrations();
+        }}
         canAddSongs={canAddSongs}
       />
 

@@ -140,6 +140,73 @@ export class CelebrationInstancesService {
     return this.prisma.client.celebrationInstance.delete({ where: { id } });
   }
 
+  /**
+   * Cancela ocorrências pontuais de uma celebração recorrente, por data.
+   *
+   * Instância que já existe vira `cancelled`. Data sem instância (além da
+   * janela do gerador) ganha uma já cancelada: o gerador pula a data quando
+   * acha qualquer instância no dia, então o culto não reaparece. Apagar a
+   * instância não serviria — o cron a recriaria.
+   * Cultos `finalized` não cancelam: já aconteceram.
+   */
+  async cancelDates(
+    tenantId: string,
+    congregationId: string,
+    celebrationId: string,
+    dates: string[],
+  ): Promise<CelebrationInstance[]> {
+    const celebration = await this.prisma.client.celebration.findFirst({
+      where: { id: celebrationId, tenant_id: tenantId, congregation_id: congregationId },
+    });
+    if (!celebration) throw new NotFoundException('Celebração não encontrada');
+    if (celebration.recurrence === 'none') {
+      throw new BadRequestException('Celebração avulsa não tem datas a cancelar; altere o status da instância');
+    }
+
+    const days = dates.map((d) => {
+      const day = new Date(`${d}T00:00:00.000Z`);
+      if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== d) {
+        throw new BadRequestException(`Data inválida: ${d}`);
+      }
+      if (celebration.day_of_week !== null && day.getUTCDay() !== celebration.day_of_week) {
+        throw new BadRequestException(`${d} não cai no dia da semana desta celebração`);
+      }
+      return day;
+    });
+
+    const results: CelebrationInstance[] = [];
+    for (const day of days) {
+      const dayEnd = new Date(day.getTime() + 86_400_000);
+      const existing = await this.prisma.client.celebrationInstance.findFirst({
+        where: {
+          tenant_id: tenantId,
+          celebration_id: celebrationId,
+          scheduled_date: { gte: day, lt: dayEnd },
+        },
+      });
+      if (existing?.status === 'finalized') {
+        throw new BadRequestException(`O culto de ${day.toISOString().slice(0, 10)} já foi finalizado`);
+      }
+      results.push(
+        existing
+          ? await this.prisma.client.celebrationInstance.update({
+              where: { id: existing.id },
+              data: { status: 'cancelled' },
+            })
+          : await this.prisma.client.celebrationInstance.create({
+              data: {
+                tenant_id: tenantId,
+                congregation_id: celebration.congregation_id,
+                celebration_id: celebrationId,
+                scheduled_date: day,
+                status: 'cancelled',
+              },
+            }),
+      );
+    }
+    return results;
+  }
+
   // Materializes CelebrationInstance rows for a Celebration over [from, to].
   // - recurrence "none" (avulsa/evento): guarantees exactly one instance ever exists.
   // - recurring (weekly/biweekly/monthly): get-or-create one instance per computed date,

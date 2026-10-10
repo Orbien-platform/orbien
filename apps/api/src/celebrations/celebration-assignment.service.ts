@@ -9,6 +9,7 @@ import {
 import {
   AssignmentStatus,
   CelebrationAssignment,
+  CelebrationInstanceStatus,
   CelebrationSchedule,
   ScheduleStatus,
   SwapRequestStatus,
@@ -384,7 +385,11 @@ export class CelebrationAssignmentService {
         celebrationMinistry: {
           schedule: {
             status: ScheduleStatus.published,
-            ...(includePast ? {} : { celebrationInstance: { scheduled_date: { gte: today } } }),
+            // Culto cancelado não é compromisso: some da lista, passado ou não.
+            celebrationInstance: {
+              status: { not: CelebrationInstanceStatus.cancelled },
+              ...(includePast ? {} : { scheduled_date: { gte: today } }),
+            },
           },
         },
       },

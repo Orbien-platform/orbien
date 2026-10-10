@@ -287,8 +287,11 @@ export class CelebrationSchedulerService implements OnApplicationBootstrap {
             ? this.startOfDayUtc(lastInstanceDate)
             : this.nextOrSameDayOfWeek(celebrationCreatedAt, dayOfWeek);
 
-        // Advance anchor in 14-day steps until we reach today or beyond
+        // Âncora no futuro (instância pontual, p. ex. um cancelamento adiantado)
+        // volta em passos de 14 dias; senão a janela de hoje ficaria sem datas.
         let d = new Date(anchor.getTime());
+        while (this.addDays(d, -14) >= today) d = this.addDays(d, -14);
+        // Advance anchor in 14-day steps until we reach today or beyond
         while (d < today) d = this.addDays(d, 14);
 
         while (d <= windowEnd) {

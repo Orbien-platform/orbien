@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { AssignmentStatus, Prisma, ScheduleStatus, SwapRequestStatus } from '@prisma/client';
+import { AssignmentStatus, CelebrationInstanceStatus, Prisma, ScheduleStatus, SwapRequestStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService, orGroup, type OneSignalFilter } from '../content/notifications.service';
 import { CreateSwapRequestDto } from './dto/create-swap-request.dto';
@@ -444,7 +444,10 @@ export class CelebrationSwapService {
             celebrationMinistry: {
               schedule: {
                 status: ScheduleStatus.published,
-                celebrationInstance: { scheduled_date: { gte: startOfTodayUtc() } },
+                celebrationInstance: {
+                  scheduled_date: { gte: startOfTodayUtc() },
+                  status: { not: CelebrationInstanceStatus.cancelled },
+                },
               },
             },
           },
