@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Celebration, CelebrationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCelebrationDto } from './dto/create-celebration.dto';
@@ -14,17 +14,45 @@ export class CelebrationsService {
     congregationId: string,
     dto: CreateCelebrationDto,
   ): Promise<Celebration> {
-    return this.prisma.client.celebration.create({
+    // Avulsa: o cron só gera instância de celebração recorrente, então a
+    // instância nasce aqui, na data informada. O dia da semana vem da data.
+    let scheduledDate: Date | null = null;
+    if (dto.recurrence === 'none') {
+      if (!dto.scheduled_date) {
+        throw new BadRequestException('Celebração não recorrente exige scheduled_date');
+      }
+      scheduledDate = new Date(`${dto.scheduled_date}T00:00:00.000Z`);
+      if (
+        Number.isNaN(scheduledDate.getTime()) ||
+        scheduledDate.toISOString().slice(0, 10) !== dto.scheduled_date
+      ) {
+        throw new BadRequestException(`Data inválida: ${dto.scheduled_date}`);
+      }
+    }
+
+    const celebration = await this.prisma.client.celebration.create({
       data: {
         tenant_id: tenantId,
         congregation_id: congregationId,
         name: dto.name,
         type: dto.type,
-        day_of_week: dto.day_of_week ?? null,
+        day_of_week: scheduledDate ? scheduledDate.getUTCDay() : (dto.day_of_week ?? null),
         start_time: dto.start_time,
         recurrence: dto.recurrence,
       },
     });
+
+    if (scheduledDate) {
+      await this.prisma.client.celebrationInstance.create({
+        data: {
+          tenant_id: tenantId,
+          congregation_id: congregationId,
+          celebration_id: celebration.id,
+          scheduled_date: scheduledDate,
+        },
+      });
+    }
+    return celebration;
   }
 
   async findAll(tenantId: string, query: ListCelebrationsQueryDto): Promise<Celebration[]> {
