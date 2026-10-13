@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CelebrationsService } from './celebrations.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -10,7 +10,10 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
-    celebrationInstance: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    celebrationInstance: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      create: jest.fn(),
+    },
     ...overrides,
   };
 }
@@ -59,6 +62,54 @@ describe('CelebrationsService', () => {
       expect(client.celebration.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ day_of_week: 0 }) }),
       );
+    });
+  });
+
+  describe('create (avulsa)', () => {
+    const base = { name: 'Vigília', type: 'sunday_service', start_time: '09:00', recurrence: 'none' };
+
+    it('cria a instância na data informada e deriva day_of_week dela', async () => {
+      const client = clientWith();
+      client.celebration.create.mockResolvedValue({ id: 'c1' });
+      const service = new CelebrationsService({ client } as unknown as PrismaService);
+
+      await service.create('t1', 'g1', { ...base, scheduled_date: '2026-10-11' } as never);
+
+      expect(client.celebration.create.mock.calls[0][0].data.day_of_week).toBe(0);
+      expect(client.celebrationInstance.create).toHaveBeenCalledWith({
+        data: {
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          celebration_id: 'c1',
+          scheduled_date: new Date('2026-10-11T00:00:00.000Z'),
+        },
+      });
+    });
+
+    it('exige scheduled_date e não grava nada sem ela', async () => {
+      const client = clientWith();
+      const service = new CelebrationsService({ client } as unknown as PrismaService);
+
+      await expect(service.create('t1', 'g1', base as never)).rejects.toThrow(BadRequestException);
+      expect(client.celebration.create).not.toHaveBeenCalled();
+    });
+
+    it('rejeita data inexistente', async () => {
+      const client = clientWith();
+      const service = new CelebrationsService({ client } as unknown as PrismaService);
+
+      await expect(
+        service.create('t1', 'g1', { ...base, scheduled_date: '2026-02-30' } as never),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('recorrente não cria instância', async () => {
+      const client = clientWith();
+      client.celebration.create.mockResolvedValue({ id: 'c1' });
+      const service = new CelebrationsService({ client } as unknown as PrismaService);
+
+      await service.create('t1', 'g1', { ...base, recurrence: 'weekly' } as never);
+      expect(client.celebrationInstance.create).not.toHaveBeenCalled();
     });
   });
 

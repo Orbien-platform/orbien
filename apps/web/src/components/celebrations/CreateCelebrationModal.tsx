@@ -57,6 +57,7 @@ export function CreateCelebrationModal({
   const [dayOfWeek, setDayOfWeek] = useState("");
   const [startTime, setStartTime] = useState("");
   const [recurrence, setRecurrence] = useState<Recurrence>("weekly");
+  const [scheduledDate, setScheduledDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -67,6 +68,7 @@ export function CreateCelebrationModal({
     setDayOfWeek("");
     setStartTime("");
     setRecurrence("weekly");
+    setScheduledDate("");
     setError("");
     setSuccess(false);
   }
@@ -75,13 +77,16 @@ export function CreateCelebrationModal({
     e.preventDefault();
     if (!name.trim()) { setError("Nome é obrigatório."); return; }
     if (!startTime) { setError("Horário é obrigatório."); return; }
+    if (recurrence === "none" && !scheduledDate) { setError("Data é obrigatória."); return; }
     setError("");
     setIsSubmitting(true);
     try {
       await api.post("/celebrations", {
         name: name.trim(),
         type,
-        day_of_week: dayOfWeek !== "" ? Number(dayOfWeek) : undefined,
+        ...(recurrence === "none"
+          ? { scheduled_date: scheduledDate }
+          : { day_of_week: dayOfWeek !== "" ? Number(dayOfWeek) : undefined }),
         start_time: startTime,
         recurrence,
       });
@@ -145,6 +150,21 @@ export function CreateCelebrationModal({
 
           {/* Dia e Horário */}
           <div className="grid grid-cols-2 gap-3">
+            {recurrence === "none" ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cc-date" className="text-sm font-medium text-ink dark:text-white">
+                Data <span className="text-crimson">*</span>
+              </Label>
+              <Input
+                id="cc-date"
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                disabled={isSubmitting}
+                className="rounded-[8px]"
+              />
+            </div>
+            ) : (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cc-day" className="text-sm font-medium text-ink dark:text-white">
                 Dia da semana
@@ -162,6 +182,7 @@ export function CreateCelebrationModal({
                 ))}
               </select>
             </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cc-time" className="text-sm font-medium text-ink dark:text-white">
                 Horário <span className="text-crimson">*</span>
