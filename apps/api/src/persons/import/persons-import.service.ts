@@ -118,8 +118,12 @@ export class PersonsImportService {
     const rows = this.parseBuffer(fileBuffer, ext);
     if (rows.length === 0) throw new BadRequestException('Arquivo sem dados');
 
+    const sendInvites = dto.send_invites !== false;
+
     if (rows.length <= SYNC_ROW_LIMIT) {
-      return this.processRows(rows, dto.mapping, user.tenant_id, user.congregation_id, user.sub, this.prisma.client);
+      return this.processRows(
+        rows, dto.mapping, user.tenant_id, user.congregation_id, user.sub, this.prisma.client, sendInvites,
+      );
     }
 
     // Async path
@@ -135,7 +139,7 @@ export class PersonsImportService {
     });
 
     setImmediate(() => {
-      this.runJobBackground(job.id, rows, dto.mapping, user.tenant_id, user.congregation_id, user.sub).catch(
+      this.runJobBackground(job.id, rows, dto.mapping, user.tenant_id, user.congregation_id, user.sub, sendInvites).catch(
         (err: unknown) =>
           this.logger.error(`Import job ${job.id} failed: ${err instanceof Error ? err.message : String(err)}`),
       );
@@ -163,13 +167,14 @@ export class PersonsImportService {
     tenantId: string,
     congregationId: string,
     userId: string,
+    sendInvites: boolean,
   ): Promise<void> {
     await this.prisma.system.importJob.update({
       where: { id: jobId },
       data: { status: JobStatus.processing },
     });
     try {
-      const result = await this.processRows(rows, mapping, tenantId, congregationId, userId, this.prisma.system);
+      const result = await this.processRows(rows, mapping, tenantId, congregationId, userId, this.prisma.system, sendInvites);
       await this.prisma.system.importJob.update({
         where: { id: jobId },
         data: {
@@ -199,6 +204,7 @@ export class PersonsImportService {
     congregationId: string,
     userId: string,
     db: typeof this.prisma.client,
+    sendInvites: boolean,
   ): Promise<ImportResult> {
     let imported = 0;
     let skipped = 0;
@@ -341,6 +347,13 @@ export class PersonsImportService {
           // promise entra em `pendingInvites` só para ganhar uma chance de
           // terminar antes da função retornar (ver o `Promise.allSettled`
           // depois do loop).
+          // `send_invites: false` (ex.: migração em que só a gestão acessa o
+          // app por enquanto): a conta e o token existem, mas ninguém é
+          // notificado.
+          if (!sendInvites) {
+            imported++;
+            continue;
+          }
           const inviteUrl = `${frontendUrl()}/redefinir-senha?token=${created.rawToken}`;
           // Falha ao ler a marca não derruba a linha — a conta já existe; o
           // convite sai com a marca padrão.

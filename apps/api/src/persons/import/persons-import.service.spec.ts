@@ -286,6 +286,21 @@ describe('PersonsImportService', () => {
       );
     });
 
+    it('send_invites=false cria a conta mas não envia e-mail de convite', async () => {
+      const { service, storage, mail, userAccountClient, passwordResetTokenClient } = serviceWith();
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(VALID_CSV, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: MAPPING, send_invites: false },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 1, skipped: 0, errors: [] });
+      expect(userAccountClient.create).toHaveBeenCalled();
+      expect(passwordResetTokenClient.create).toHaveBeenCalled();
+      expect(mail.sendInvite).not.toHaveBeenCalled();
+    });
+
     it('não serializa o loop atrás do envio do convite — a linha seguinte não espera o e-mail da anterior', async () => {
       const { service, storage, mail, userAccountClient } = serviceWith();
       let resolveFirstInvite: () => void = () => {};
