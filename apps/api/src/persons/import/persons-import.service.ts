@@ -340,13 +340,6 @@ export class PersonsImportService {
           accountsCreated++;
           emailsGrantedThisRun.add(email!.toLowerCase());
 
-          // Fora da transação, como em `UsersService.create`: envio de e-mail
-          // não deve segurar conexão de banco. Sem `await` aqui de propósito
-          // — a conta já foi criada com sucesso, então nem uma falha nem a
-          // latência do envio podem travar a linha seguinte do import; a
-          // promise entra em `pendingInvites` só para ganhar uma chance de
-          // terminar antes da função retornar (ver o `Promise.allSettled`
-          // depois do loop).
           // `send_invites: false` (ex.: migração em que só a gestão acessa o
           // app por enquanto): a conta e o token existem, mas ninguém é
           // notificado.
@@ -354,6 +347,14 @@ export class PersonsImportService {
             imported++;
             continue;
           }
+
+          // Fora da transação, como em `UsersService.create`: envio de e-mail
+          // não deve segurar conexão de banco. Sem `await` aqui de propósito
+          // — a conta já foi criada com sucesso, então nem uma falha nem a
+          // latência do envio podem travar a linha seguinte do import; a
+          // promise entra em `pendingInvites` só para ganhar uma chance de
+          // terminar antes da função retornar (ver o `Promise.allSettled`
+          // depois do loop).
           const inviteUrl = `${frontendUrl()}/redefinir-senha?token=${created.rawToken}`;
           // Falha ao ler a marca não derruba a linha — a conta já existe; o
           // convite sai com a marca padrão.
