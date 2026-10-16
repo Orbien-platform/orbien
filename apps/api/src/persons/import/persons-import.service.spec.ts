@@ -686,6 +686,36 @@ describe('PersonsImportService', () => {
       expect(call.data.birth_date!.getUTCFullYear()).toBe(1990);
     });
 
+    it('lê DD/MM/YYYY como dia/mês (07/05/1990 é 7 de maio, não 5 de julho)', async () => {
+      const { service, storage, client } = serviceWith();
+      const csv = ['nome,telefone,nascimento', 'Bia,11999998888,07/05/1990'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', birth_date: 'nascimento' } },
+        user,
+      );
+
+      const call = client.person.create.mock.calls[0][0] as { data: { birth_date?: Date } };
+      expect(call.data.birth_date!.getUTCMonth()).toBe(4); // maio, 0-indexado
+      expect(call.data.birth_date!.getUTCDate()).toBe(7);
+    });
+
+    it('data BR impossível (99/99/1990) fica sem data de nascimento, sem derrubar a linha', async () => {
+      const { service, storage, client } = serviceWith();
+      const csv = ['nome,telefone,nascimento', 'Bia,11999998888,99/99/1990'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', birth_date: 'nascimento' } },
+        user,
+      );
+
+      expect(result).toMatchObject({ imported: 1 });
+      const call = client.person.create.mock.calls[0][0] as { data: { birth_date?: Date } };
+      expect(call.data.birth_date).toBeUndefined();
+    });
+
     it('aceita data em formato ISO (parseável diretamente por `new Date`)', async () => {
       const { service, storage, client } = serviceWith();
       const csv = ['nome,telefone,nascimento', 'Bia,11999998888,1990-06-15'].join('\n');

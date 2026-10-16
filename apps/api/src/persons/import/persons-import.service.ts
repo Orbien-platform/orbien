@@ -457,7 +457,7 @@ export class PersonsImportService {
   // `csv-parse` assume `,` — o arquivo inteiro virava uma coluna só. O
   // cabeçalho decide: vale o separador que mais aparece fora de aspas.
   private detectDelimiter(buffer: Buffer): string {
-    const header = buffer.toString('utf8').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] ?? '';
+    const header = buffer.toString('utf8').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0]!;
     const unquoted = header.replace(/"[^"]*"/g, '');
     const count = (d: string) => unquoted.split(d).length - 1;
     return [';', '\t', ','].reduce((best, d) => (count(d) > count(best) ? d : best), ',');

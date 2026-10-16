@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import { ImportCsvModal } from "./ImportCsvModal";
 import api from "@/lib/api";
 
@@ -216,6 +216,47 @@ describe("ImportCsvModal", () => {
 
     expect(await screen.findByText("600", {}, { timeout: 5000 })).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith("/persons/import/jobs/job-1");
+  });
+
+  describe("background job", () => {
+    async function startJob(jobResponses: Array<{ status: string }>) {
+      const user = userEvent.setup();
+      vi.mocked(api.post).mockImplementation((url: string) => {
+        if (url === "/persons/import") return Promise.resolve({ data: preview });
+        if (url === "/persons/import/confirm")
+          return Promise.resolve({ data: { job_id: "job-1", status: "pending" } });
+        return Promise.reject(new Error(`unexpected POST ${url}`));
+      });
+      const get = vi.mocked(api.get);
+      for (const r of jobResponses) get.mockResolvedValueOnce({ data: r });
+      get.mockResolvedValue({ data: { status: "processing" } });
+
+      render(<ImportCsvModal open={true} onOpenChange={vi.fn()} onImported={vi.fn()} />);
+      const file = new File(["x"], "pessoas.csv", { type: "text/csv" });
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(fileInput, file);
+      await screen.findByText("pessoas.csv");
+
+      vi.useFakeTimers();
+      fireEvent.click(screen.getByRole("button", { name: "Importar" }));
+    }
+
+    afterEach(() => vi.useRealTimers());
+
+    it("shows the import error when the job fails", async () => {
+      await startJob([{ status: "processing" }, { status: "error" }]);
+      await act(() => vi.advanceTimersByTimeAsync(2000 * 2));
+      vi.useRealTimers();
+      expect(await screen.findByText("Erro ao importar. Tente novamente.")).toBeInTheDocument();
+    });
+
+    it("gives up when the job never finishes", async () => {
+      await startJob([]);
+      await act(() => vi.advanceTimersByTimeAsync(2000 * 151));
+      vi.useRealTimers();
+      expect(await screen.findByText("Erro ao importar. Tente novamente.")).toBeInTheDocument();
+      expect(api.get).toHaveBeenCalledTimes(150);
+    });
   });
 
   it("uploads a dropped .csv file", async () => {
