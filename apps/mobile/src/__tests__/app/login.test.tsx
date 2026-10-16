@@ -78,6 +78,16 @@ describe("LoginScreen", () => {
 
     expect(mockPush).toHaveBeenCalledWith("/esqueci-senha");
   });
+  it("CTA de primeiro acesso abre /esqueci-senha com o parâmetro primeiroAcesso", async () => {
+    await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId("first-access-button"));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/esqueci-senha",
+      params: { primeiroAcesso: "1" },
+    });
+  });
+
   it("o olho alterna entre mostrar e ocultar a senha", async () => {
     await render(<LoginScreen />);
     expect(screen.getByTestId("password-input").props.secureTextEntry).toBe(true);

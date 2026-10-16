@@ -54,4 +54,19 @@ describe('UsersController', () => {
       new Reflector().get<string[]>(ROLES_KEY, UsersController.prototype.updateRole),
     ).toEqual(CREATE_ROLES);
   });
+
+  it('resendInvite delega ao service com a pessoa e o usuário, e exige o mesmo papel do create', async () => {
+    const usersService = {
+      resendInvite: jest.fn().mockResolvedValue({ id: 'user-1', email: 'ana@igreja.test' }),
+    } as unknown as jest.Mocked<UsersService>;
+    const controller = new UsersController(usersService);
+
+    const result = await controller.resendInvite('person-1', actor);
+
+    expect(usersService.resendInvite).toHaveBeenCalledWith('person-1', actor);
+    expect(result).toEqual({ id: 'user-1', email: 'ana@igreja.test' });
+    expect(
+      new Reflector().get<string[]>(ROLES_KEY, UsersController.prototype.resendInvite),
+    ).toEqual(CREATE_ROLES);
+  });
 });

@@ -28,4 +28,11 @@ describe('ImportConfirmDto', () => {
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'mapping')).toBe(true);
   });
+
+  it('aceita send_invites booleano e rejeita outros tipos', async () => {
+    const ok = plainToInstance(ImportConfirmDto, { file_id: 'a.csv', mapping: {}, send_invites: false });
+    expect(await validate(ok)).toHaveLength(0);
+    const bad = plainToInstance(ImportConfirmDto, { file_id: 'a.csv', mapping: {}, send_invites: 'nao' });
+    expect((await validate(bad)).some((e) => e.property === 'send_invites')).toBe(true);
+  });
 });

@@ -1,4 +1,4 @@
-import { IsObject, IsString } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class ImportMappingDto {
   nome?: string;
@@ -15,4 +15,10 @@ export class ImportConfirmDto {
 
   @IsObject()
   mapping!: ImportMappingDto;
+
+  // Quando `false`, a importação não envia o e-mail de convite de primeiro
+  // acesso. Omitido = `true` (comportamento histórico).
+  @IsOptional()
+  @IsBoolean()
+  send_invites?: boolean;
 }

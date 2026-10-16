@@ -177,6 +177,54 @@ export class UsersService {
     return { id: account.id, role_code: dto.role_code };
   }
 
+  /**
+   * Reenvia o convite de primeiro acesso de quem já tem conta. Invalida os
+   * links ainda não usados e emite um novo (7 dias), então o e-mail antigo
+   * deixa de valer. Mesmas travas de `updateRole` quanto a nível: ninguém
+   * reenvia para quem está acima do seu papel. A leitura roda em `tx` (RLS
+   * decide se a pessoa é do tenant/congregação do ator); a escrita do token
+   * vai por `system`, porque `password_reset_tokens` não aceita `app_user`.
+   */
+  async resendInvite(personId: string, actor: JwtPayload): Promise<{ id: string; email: string }> {
+    const account = await this.prisma.runInTx(async (tx) => {
+      const person = await tx.person.findUnique({
+        where: { id: personId },
+        select: {
+          userAccounts: {
+            where: { is_active: true },
+            select: { id: true, email: true, roleAssignments: { select: { role_code: true } } },
+          },
+        },
+      });
+      if (!person) throw new NotFoundException('Pessoa não encontrada');
+      const found = person.userAccounts[0];
+      if (!found) throw new NotFoundException('Esta pessoa não tem acesso ao sistema.');
+      return found;
+    });
+
+    if (maxRoleRank(account.roleAssignments.map((r) => r.role_code)) > maxRoleRank(actor.roles)) {
+      throw new ForbiddenException('Você não pode reenviar o convite de quem tem um nível acima do seu.');
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + INVITE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+    await this.prisma.system.$transaction(async (sysTx) => {
+      await sysTx.passwordResetToken.deleteMany({ where: { user_id: account.id, used_at: null } });
+      await sysTx.passwordResetToken.create({
+        data: { user_id: account.id, token: rawToken, expires_at: expiresAt },
+      });
+    });
+
+    const inviteUrl = `${frontendUrl()}/redefinir-senha?token=${rawToken}`;
+    const tenant = await this.prisma.client.tenant.findUnique({
+      where: { id: actor.tenant_id },
+      select: TENANT_MAIL_BRAND_SELECT,
+    });
+    await this.mail.sendInvite(account.email, inviteUrl, tenantMailBrand(tenant));
+
+    return { id: account.id, email: account.email };
+  }
+
   private assertCanGrant(roleCode: string, actor: JwtPayload): void {
     if ((ROLE_RANK[roleCode] ?? Infinity) > maxRoleRank(actor.roles)) {
       throw new ForbiddenException('Você não pode conceder um papel acima do seu nível.');

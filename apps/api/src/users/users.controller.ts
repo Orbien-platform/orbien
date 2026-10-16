@@ -33,4 +33,10 @@ export class UsersController {
   ) {
     return this.usersService.updateRole(personId, dto, user);
   }
+
+  @Post('by-person/:personId/resend-invite')
+  @Roles(...CREATE_ROLES)
+  resendInvite(@Param('personId', ParseUUIDPipe) personId: string, @CurrentUser() user: JwtPayload) {
+    return this.usersService.resendInvite(personId, user);
+  }
 }

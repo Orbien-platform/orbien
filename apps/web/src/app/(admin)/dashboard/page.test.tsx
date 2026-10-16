@@ -244,6 +244,10 @@ describe("DashboardPage", () => {
   it("pede os lançamentos das 4 semanas do gráfico, não as 100 mais recentes", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-07T15:00:00.000Z")); // quarta-feira
+    // As chamadas dos testes anteriores (feitas com a data real) ficam no
+    // mock; sem zerar, o `find` abaixo pegava a delas e o teste só passava na
+    // semana em que a data real coincidia com a congelada.
+    mockedApi.get.mockClear();
     try {
       mockedApi.get.mockImplementation((url: string) => {
         if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [], total: 0 } });
