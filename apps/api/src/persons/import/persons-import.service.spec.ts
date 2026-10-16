@@ -207,6 +207,27 @@ describe('PersonsImportService', () => {
 
       expect(result.suggested_mapping.nome).toBe('nome');
     });
+
+    it('CSV com ponto e vírgula e BOM (export do Excel/Eklesia): separa as colunas e sugere celular e arrolamento', async () => {
+      const { service } = serviceWith();
+      const csv =
+        '\uFEFFCÓDIGO;NOME;NASCIMENTO;TELEFONE;CELULAR;EMAIL;ARROLAMENTO\n' +
+        '000104;ALAN VIANA;07/05/1990;;(55)99192-0815;alan@hotmail.com;MEMBRO\n';
+
+      const result = await service.preview(fileOf(csv), 'tenant-1');
+
+      expect(result.detected_columns).toEqual([
+        'CÓDIGO', 'NOME', 'NASCIMENTO', 'TELEFONE', 'CELULAR', 'EMAIL', 'ARROLAMENTO',
+      ]);
+      expect(result.suggested_mapping).toEqual({
+        nome: 'NOME',
+        birth_date: 'NASCIMENTO',
+        telefone: 'CELULAR',
+        email: 'EMAIL',
+        classificação: 'ARROLAMENTO',
+      });
+      expect(result.preview_rows[0].NOME).toBe('ALAN VIANA');
+    });
   });
 
   describe('confirm', () => {
@@ -663,6 +684,36 @@ describe('PersonsImportService', () => {
       const call = client.person.create.mock.calls[0][0] as { data: { birth_date?: Date } };
       expect(call.data.birth_date).toBeInstanceOf(Date);
       expect(call.data.birth_date!.getUTCFullYear()).toBe(1990);
+    });
+
+    it('lê DD/MM/YYYY como dia/mês (07/05/1990 é 7 de maio, não 5 de julho)', async () => {
+      const { service, storage, client } = serviceWith();
+      const csv = ['nome,telefone,nascimento', 'Bia,11999998888,07/05/1990'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', birth_date: 'nascimento' } },
+        user,
+      );
+
+      const call = client.person.create.mock.calls[0][0] as { data: { birth_date?: Date } };
+      expect(call.data.birth_date!.getUTCMonth()).toBe(4); // maio, 0-indexado
+      expect(call.data.birth_date!.getUTCDate()).toBe(7);
+    });
+
+    it('data BR impossível (99/99/1990) fica sem data de nascimento, sem derrubar a linha', async () => {
+      const { service, storage, client } = serviceWith();
+      const csv = ['nome,telefone,nascimento', 'Bia,11999998888,99/99/1990'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', birth_date: 'nascimento' } },
+        user,
+      );
+
+      expect(result).toMatchObject({ imported: 1 });
+      const call = client.person.create.mock.calls[0][0] as { data: { birth_date?: Date } };
+      expect(call.data.birth_date).toBeUndefined();
     });
 
     it('aceita data em formato ISO (parseável diretamente por `new Date`)', async () => {

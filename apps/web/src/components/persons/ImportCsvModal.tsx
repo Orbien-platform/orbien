@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ImportPreview {
+  file_id: string;
   // `detected_columns`, e não `columns`: é o nome que a API manda, declarado em
   // `apps/api/src/persons/dto/import-preview.dto.ts`. Enquanto este tipo dizia
   // `columns`, `data.columns` chegava `undefined`, o `for…of` logo abaixo
@@ -19,23 +20,49 @@ interface ImportPreview {
   // quem entrega o corpo é o axios, como `any` na fronteira.
   detected_columns: string[];
   preview_rows: Record<string, string>[];
+  // campo do Orbien → coluna do arquivo (o inverso do estado `mapping` abaixo)
   suggested_mapping?: Record<string, string>;
+}
+
+interface ImportError {
+  row: number;
+  reason: string;
 }
 
 interface ImportResult {
   imported: number;
   skipped: number;
-  errors: string[];
+  errors: ImportError[];
+}
+
+// Resposta do confirm: até 500 linhas volta o resultado; acima disso a API
+// cria um job e devolve só o id, a ser consultado em `/persons/import/jobs/:id`.
+type ConfirmResponse = ImportResult | { job_id: string; status: string };
+
+interface ImportJob extends ImportResult {
+  status: "pending" | "processing" | "done" | "error";
+}
+
+const JOB_POLL_MS = 2000;
+const JOB_POLL_MAX = 150;
+
+const ERROR_REASONS: Record<string, string> = {
+  missing_name: "sem nome",
+  missing_phone_and_email: "sem telefone nem e-mail",
+};
+
+function describeError(e: ImportError) {
+  return `Linha ${e.row}: ${ERROR_REASONS[e.reason] ?? e.reason}`;
 }
 
 const ORBIEN_FIELDS = [
   { value: "", label: "— Ignorar coluna —" },
-  { value: "full_name", label: "Nome completo *" },
-  { value: "phone", label: "Telefone" },
+  { value: "nome", label: "Nome completo *" },
+  { value: "telefone", label: "Telefone" },
   { value: "email", label: "E-mail" },
   { value: "birth_date", label: "Data de nascimento" },
-  { value: "gender", label: "Gênero" },
-  { value: "classification", label: "Classificação" },
+  { value: "sexo", label: "Gênero" },
+  { value: "classificação", label: "Classificação" },
 ];
 
 interface ImportCsvModalProps {
@@ -81,8 +108,9 @@ export function ImportCsvModal({
       });
       setPreview(data);
       const initial: Record<string, string> = {};
-      for (const col of data.detected_columns) {
-        initial[col] = data.suggested_mapping?.[col] ?? "";
+      for (const col of data.detected_columns) initial[col] = "";
+      for (const [field, col] of Object.entries(data.suggested_mapping ?? {})) {
+        if (col in initial) initial[col] = field;
       }
       setMapping(initial);
       setStep("mapping");
@@ -106,12 +134,34 @@ export function ImportCsvModal({
     else setError("Apenas arquivos .csv são aceitos.");
   }
 
+  async function waitForJob(jobId: string): Promise<ImportResult> {
+    for (let i = 0; i < JOB_POLL_MAX; i++) {
+      await new Promise((r) => setTimeout(r, JOB_POLL_MS));
+      const { data } = await api.get<ImportJob>(`/persons/import/jobs/${jobId}`);
+      if (data.status === "done") return data;
+      if (data.status === "error") throw new Error("job failed");
+    }
+    throw new Error("job timeout");
+  }
+
   async function handleConfirm() {
     setError("");
+    // A API espera campo → coluna; a tela guarda coluna → campo.
+    const apiMapping: Record<string, string> = {};
+    for (const [col, field] of Object.entries(mapping)) {
+      if (field && !apiMapping[field]) apiMapping[field] = col;
+    }
+    if (!apiMapping.nome) {
+      setError("Escolha qual coluna é o nome completo.");
+      return;
+    }
     setIsLoading(true);
     try {
-      const { data } = await api.post<ImportResult>("/persons/import/confirm", { mapping });
-      setResult(data);
+      const { data } = await api.post<ConfirmResponse>("/persons/import/confirm", {
+        file_id: preview?.file_id,
+        mapping: apiMapping,
+      });
+      setResult("job_id" in data ? await waitForJob(data.job_id) : data);
       setStep("result");
     } catch {
       setError("Erro ao importar. Tente novamente.");
@@ -260,7 +310,7 @@ export function ImportCsvModal({
               </p>
               <ul className="space-y-0.5">
                 {result.errors.slice(0, 5).map((e, i) => (
-                  <li key={i} className="text-xs text-crimson">{e}</li>
+                  <li key={i} className="text-xs text-crimson">{describeError(e)}</li>
                 ))}
                 {result.errors.length > 5 && (
                   <li className="text-xs text-stone">…e mais {result.errors.length - 5}</li>

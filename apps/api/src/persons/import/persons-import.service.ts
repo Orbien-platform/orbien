@@ -45,6 +45,7 @@ const COLUMN_ALIASES: Record<string, keyof SuggestedMapping> = {
   nascimento: 'birth_date', data_nascimento: 'birth_date',
   birth_date: 'birth_date', dt_nasc: 'birth_date', 'data nascimento': 'birth_date',
   classificação: 'classificação', classificacao: 'classificação',
+  arrolamento: 'classificação',
   status: 'classificação', tipo: 'classificação', classification: 'classificação',
 };
 
@@ -432,6 +433,10 @@ export class PersonsImportService {
   private parseBuffer(buffer: Buffer, ext: string): Record<string, string>[] {
     if (ext === '.csv') {
       return csvParse(buffer, {
+        delimiter: this.detectDelimiter(buffer),
+        // Excel e vários sistemas gravam o CSV com BOM; sem isto ele gruda no
+        // nome da primeira coluna.
+        bom: true,
         columns: true,
         skip_empty_lines: true,
         trim: true,
@@ -448,6 +453,16 @@ export class PersonsImportService {
     );
   }
 
+  // Excel em pt-BR exporta com `;` (a vírgula é o separador decimal), e
+  // `csv-parse` assume `,` — o arquivo inteiro virava uma coluna só. O
+  // cabeçalho decide: vale o separador que mais aparece fora de aspas.
+  private detectDelimiter(buffer: Buffer): string {
+    const header = buffer.toString('utf8').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0]!;
+    const unquoted = header.replace(/"[^"]*"/g, '');
+    const count = (d: string) => unquoted.split(d).length - 1;
+    return [';', '\t', ','].reduce((best, d) => (count(d) > count(best) ? d : best), ',');
+  }
+
   // ── Mapping helpers ───────────────────────────────────────────────────────
 
   private buildSuggestedMapping(columns: string[]): SuggestedMapping {
@@ -455,7 +470,10 @@ export class PersonsImportService {
     for (const col of columns) {
       const normalized = this.normalizeStr(col);
       const canonical = COLUMN_ALIASES[normalized];
-      if (canonical && !mapping[canonical]) {
+      // Exportações de sistemas de igreja trazem TELEFONE (fixo, quase sempre
+      // vazio) e CELULAR lado a lado; o cadastro guarda um número só, e o que
+      // atende no WhatsApp é o celular — ele vence a coluna que veio antes.
+      if (canonical && (!mapping[canonical] || normalized === 'celular')) {
         mapping[canonical] = col;
       }
     }
@@ -496,16 +514,17 @@ export class PersonsImportService {
   }
 
   private parseDate(raw: string): Date | undefined {
-    // Accept ISO (2026-01-15), BR (15/01/2026), or numeric Excel dates
+    // Accept BR (15/01/2026), ISO (2026-01-15), or numeric Excel dates
     if (!raw) return undefined;
-    const d = new Date(raw);
-    if (!isNaN(d.getTime())) return d;
-    // Try BR format DD/MM/YYYY
+    // BR primeiro: `new Date('07/05/1990')` lê como mês/dia (7 de maio vira
+    // 5 de julho), então o formato do arquivo não pode passar pelo parser nativo.
     const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (match) {
       const [, dd, mm, yyyy] = match;
-      return new Date(`${yyyy}-${mm!.padStart(2, '0')}-${dd!.padStart(2, '0')}`);
+      const d = new Date(`${yyyy}-${mm!.padStart(2, '0')}-${dd!.padStart(2, '0')}`);
+      return isNaN(d.getTime()) ? undefined : d;
     }
-    return undefined;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? undefined : d;
   }
 }
