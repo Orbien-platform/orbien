@@ -517,6 +517,39 @@ describe("PersonSheet", () => {
       expect(await screen.findByText("Secretário(a)")).toBeInTheDocument();
     });
 
+    it("resends the invite for a person who already has access", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.post).mockResolvedValue({ data: { id: "u1", email: "ana@igreja.org" } });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Reenviar convite/ }));
+
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith("/users/by-person/p1/resend-invite"));
+      expect(await screen.findByText("Convite reenviado para ana@igreja.org.")).toBeInTheDocument();
+    });
+
+    it("shows an error when resending the invite fails", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.post).mockRejectedValue(new Error("boom"));
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Reenviar convite/ }));
+
+      expect(await screen.findByText("Erro ao reenviar o convite. Tente novamente.")).toBeInTheDocument();
+    });
+
     it("shows the API message when the role change is forbidden", async () => {
       asTenantAdmin();
       vi.mocked(api.get).mockResolvedValue({
@@ -572,6 +605,7 @@ describe("PersonSheet", () => {
       await screen.findByText("Ana Souza");
 
       expect(screen.queryByRole("button", { name: /Alterar papel/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Reenviar convite/ })).not.toBeInTheDocument();
     });
     it("shows a generic message when the role change fails without a 403", async () => {
       asTenantAdmin();

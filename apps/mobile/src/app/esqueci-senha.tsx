@@ -14,7 +14,7 @@
 // resposta é sempre a mesma mensagem de sucesso, tenha o e-mail conta ou
 // não, e mesmo se a chamada falhar por erro de rede — mesmo padrão do
 // formulário web equivalente.
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -30,6 +30,10 @@ import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../lib
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  // `primeiroAcesso=1` vem do CTA do login: mesma chamada e mesmo e-mail, só
+  // o texto muda (quem nunca definiu senha não "esqueceu" nada).
+  const { primeiroAcesso } = useLocalSearchParams<{ primeiroAcesso?: string }>();
+  const firstAccess = primeiroAcesso === "1";
   const { colors, isDark, brandInk } = useTheme();
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +63,9 @@ export default function ForgotPasswordScreen() {
           { backgroundColor: colors.bgSurface, borderColor: colors.border },
         ]}
       >
-        <Text style={[typography.h1, { color: colors.textPrimary }]}>Recuperar senha</Text>
+        <Text style={[typography.h1, { color: colors.textPrimary }]}>
+          {firstAccess ? "Primeiro acesso" : "Recuperar senha"}
+        </Text>
 
         {sent ? (
           <View style={styles.success}>
@@ -78,8 +84,9 @@ export default function ForgotPasswordScreen() {
         ) : (
           <>
             <Text style={[typography.body, styles.subtitle, { color: colors.textSecondary }]}>
-              Informe o e-mail da sua conta. Vamos enviar um link para você criar uma senha
-              nova.
+              {firstAccess
+                ? "Informe o e-mail que a igreja cadastrou. Vamos enviar um link para você criar a sua senha."
+                : "Informe o e-mail da sua conta. Vamos enviar um link para você criar uma senha nova."}
             </Text>
             <Input
               testID="forgot-password-email-input"
@@ -97,7 +104,7 @@ export default function ForgotPasswordScreen() {
             />
             <AppButton
               testID="forgot-password-submit"
-              title="Enviar link de redefinição"
+              title={firstAccess ? "Enviar link de acesso" : "Enviar link de redefinição"}
               onPress={handleSubmit}
               loading={submitting}
               disabled={!email.trim()}

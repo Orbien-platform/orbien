@@ -291,3 +291,63 @@ describe('UsersService.updateRole', () => {
     );
   });
 });
+
+describe('UsersService.resendInvite', () => {
+  function resendWith(account: unknown) {
+    const deleteMany = jest.fn().mockResolvedValue({});
+    const create = jest.fn().mockResolvedValue({});
+    const tx = {
+      person: {
+        findUnique: () => Promise.resolve(account === null ? null : { userAccounts: account ? [account] : [] }),
+      },
+    };
+    const sysTx = { passwordResetToken: { deleteMany, create } };
+    const prisma = {
+      runInTx: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+      system: { $transaction: (fn: (t: typeof sysTx) => Promise<unknown>) => fn(sysTx) },
+      client: {
+        tenant: { findUnique: () => Promise.resolve({ name: 'Igreja Teste 1', brandingConfig: null }) },
+      },
+    } as unknown as PrismaService;
+    const mail = { sendInvite: jest.fn().mockResolvedValue(undefined) } as unknown as MailService;
+    return { service: new UsersService(prisma, mail), deleteMany, create, mail };
+  }
+
+  const target = {
+    id: 'user-alvo',
+    email: 'alvo@igreja.test',
+    roleAssignments: [{ role_code: 'member' }],
+  };
+
+  it('invalida os links não usados, emite um novo e envia o e-mail', async () => {
+    const { service, deleteMany, create, mail } = resendWith(target);
+    await expect(service.resendInvite('person-1', actor)).resolves.toEqual({
+      id: 'user-alvo',
+      email: 'alvo@igreja.test',
+    });
+    expect(deleteMany).toHaveBeenCalledWith({ where: { user_id: 'user-alvo', used_at: null } });
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'user-alvo' }) });
+    expect(mail.sendInvite).toHaveBeenCalledWith(
+      'alvo@igreja.test',
+      expect.stringContaining('/redefinir-senha?token='),
+      expect.anything(),
+    );
+  });
+
+  it('pastor não reenvia para quem tem nível acima', async () => {
+    const { service, create, mail } = resendWith({ ...target, roleAssignments: [{ role_code: 'tenant_admin' }] });
+    await expect(service.resendInvite('person-1', actor)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(create).not.toHaveBeenCalled();
+    expect(mail.sendInvite).not.toHaveBeenCalled();
+  });
+
+  it('404 quando a pessoa não existe', async () => {
+    const { service } = resendWith(null);
+    await expect(service.resendInvite('person-1', actor)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('404 quando a pessoa não tem acesso', async () => {
+    const { service } = resendWith(undefined);
+    await expect(service.resendInvite('person-1', actor)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

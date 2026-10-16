@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, Phone, Mail, Calendar, User, Edit2, Check, X, KeyRound } from "lucide-react";
+import { Loader2, Phone, Mail, Calendar, User, Edit2, Check, X, KeyRound, Send } from "lucide-react";
 import {
   DetailPage,
   DetailPageContent,
@@ -155,6 +155,9 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
   const [accessError, setAccessError] = useState("");
   const [accessSent, setAccessSent] = useState(false);
 
+  const [isResending, setIsResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
   const [editingRole, setEditingRole] = useState(false);
   const [newRole, setNewRole] = useState("member");
   const [isSavingRole, setIsSavingRole] = useState(false);
@@ -191,6 +194,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
       setAccessSent(false);
       setEditingRole(false);
       setRoleError("");
+      setResendStatus(null);
     }
     onOpenChange(next);
   }
@@ -224,6 +228,23 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
       }
     } finally {
       setIsInviting(false);
+    }
+  }
+
+  async function handleResendInvite(person: PersonDetail) {
+    setResendStatus(null);
+    setIsResending(true);
+    try {
+      await api.post(`/users/by-person/${person.id}/resend-invite`);
+      setResendStatus({ kind: "ok", text: `Convite reenviado para ${person.access?.email ?? "o e-mail da conta"}.` });
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        setResendStatus({ kind: "error", text: "Você não tem permissão para reenviar este convite." });
+      } else {
+        setResendStatus({ kind: "error", text: "Erro ao reenviar o convite. Tente novamente." });
+      }
+    } finally {
+      setIsResending(false);
     }
   }
 
@@ -609,6 +630,33 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
                                 </Button>
                               </div>
                             </form>
+                          )}
+
+                          {maxRank(person.access.role_codes) > actorRank || editingRole ? null : (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 gap-1.5 rounded-[8px]"
+                                onClick={() => handleResendInvite(person)}
+                                disabled={isResending}
+                              >
+                                {isResending ? (
+                                  <Loader2 size={13} className="animate-spin" />
+                                ) : (
+                                  <Send size={13} strokeWidth={1.5} />
+                                )}
+                                Reenviar convite
+                              </Button>
+                              {resendStatus && (
+                                <p
+                                  role={resendStatus.kind === "error" ? "alert" : "status"}
+                                  className={`mt-2 text-xs ${resendStatus.kind === "error" ? "text-crimson" : "text-teal"}`}
+                                >
+                                  {resendStatus.text}
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       ) : !showAccessForm ? (

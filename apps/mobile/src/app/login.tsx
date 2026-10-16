@@ -130,6 +130,23 @@ export default function LoginScreen() {
             Esqueci minha senha
           </AppLink>
         </View>
+
+        {/* Quem foi importado ou convidado tem conta, mas nunca definiu a
+            senha. O caminho é o mesmo da recuperação (link por e-mail); o
+            parâmetro só troca o texto da tela para ela não parecer "esqueci". */}
+        <View style={styles.firstAccess}>
+          <Text style={[typography.body, styles.firstAccessLead, { color: colors.textSecondary }]}>
+            Sua igreja já cadastrou você?
+          </Text>
+          <AppButton
+            testID="first-access-button"
+            title="Primeiro acesso"
+            variant="secondary"
+            onPress={() =>
+              router.push({ pathname: "/esqueci-senha", params: { primeiroAcesso: "1" } })
+            }
+          />
+        </View>
       </View>
     </Screen>
   );
@@ -151,4 +168,6 @@ const styles = StyleSheet.create({
   lead: { marginTop: spacing.sm, marginBottom: spacing.xxl, textAlign: "center" },
   submit: { marginTop: spacing.xs },
   forgotPassword: { alignItems: "center" },
+  firstAccess: { marginTop: spacing.xxl },
+  firstAccessLead: { textAlign: "center", marginBottom: spacing.sm },
 });

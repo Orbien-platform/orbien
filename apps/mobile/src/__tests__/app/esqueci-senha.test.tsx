@@ -22,8 +22,10 @@ jest.mock("../../lib/theme/theme-provider", () => {
 
 const mockBack = jest.fn();
 const mockPush = jest.fn();
+const mockParams: { current: Record<string, string> } = { current: {} };
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack, push: mockPush }),
+  useLocalSearchParams: () => mockParams.current,
 }));
 
 import ForgotPasswordScreen from "../../app/esqueci-senha";
@@ -35,6 +37,22 @@ describe("ForgotPasswordScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsDark.current = false;
+    mockParams.current = {};
+  });
+
+  it("vindo do CTA de primeiro acesso, troca o título e o texto, e chama a mesma recuperação", async () => {
+    mockParams.current = { primeiroAcesso: "1" };
+    mockForgotPassword.mockResolvedValue(undefined);
+    await render(<ForgotPasswordScreen />);
+
+    expect(screen.getByText("Primeiro acesso")).toBeTruthy();
+    expect(screen.queryByText("Recuperar senha")).toBeNull();
+
+    await fireEvent.changeText(screen.getByTestId("forgot-password-email-input"), "A@B.com");
+    await fireEvent.press(screen.getByTestId("forgot-password-submit"));
+
+    await waitFor(() => expect(mockForgotPassword).toHaveBeenCalledWith("a@b.com"));
+    expect(screen.getByTestId("forgot-password-success")).toBeTruthy();
   });
 
   it("submit com e-mail chama forgotPassword com o e-mail normalizado e mostra a mensagem de sucesso", async () => {
