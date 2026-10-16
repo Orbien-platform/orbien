@@ -207,6 +207,27 @@ describe('PersonsImportService', () => {
 
       expect(result.suggested_mapping.nome).toBe('nome');
     });
+
+    it('CSV com ponto e vírgula e BOM (export do Excel/Eklesia): separa as colunas e sugere celular e arrolamento', async () => {
+      const { service } = serviceWith();
+      const csv =
+        '\uFEFFCÓDIGO;NOME;NASCIMENTO;TELEFONE;CELULAR;EMAIL;ARROLAMENTO\n' +
+        '000104;ALAN VIANA;07/05/1990;;(55)99192-0815;alan@hotmail.com;MEMBRO\n';
+
+      const result = await service.preview(fileOf(csv), 'tenant-1');
+
+      expect(result.detected_columns).toEqual([
+        'CÓDIGO', 'NOME', 'NASCIMENTO', 'TELEFONE', 'CELULAR', 'EMAIL', 'ARROLAMENTO',
+      ]);
+      expect(result.suggested_mapping).toEqual({
+        nome: 'NOME',
+        birth_date: 'NASCIMENTO',
+        telefone: 'CELULAR',
+        email: 'EMAIL',
+        classificação: 'ARROLAMENTO',
+      });
+      expect(result.preview_rows[0].NOME).toBe('ALAN VIANA');
+    });
   });
 
   describe('confirm', () => {
