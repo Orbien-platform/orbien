@@ -534,6 +534,22 @@ describe("PersonSheet", () => {
       expect(await screen.findByText("Convite reenviado para ana@igreja.org.")).toBeInTheDocument();
     });
 
+    it("shows a permission message when resending the invite is forbidden", async () => {
+      asTenantAdmin();
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...person, access: { email: "ana@igreja.org", role_codes: ["member"] } },
+      });
+      vi.mocked(api.post).mockRejectedValue({ isAxiosError: true, response: { status: 403 } });
+      const user = userEvent.setup();
+
+      render(<PersonSheet personId="p1" open={true} onOpenChange={vi.fn()} onUpdated={vi.fn()} />);
+      await screen.findByText("Ana Souza");
+
+      await user.click(screen.getByRole("button", { name: /Reenviar convite/ }));
+
+      expect(await screen.findByText("Você não tem permissão para reenviar este convite.")).toBeInTheDocument();
+    });
+
     it("shows an error when resending the invite fails", async () => {
       asTenantAdmin();
       vi.mocked(api.get).mockResolvedValue({

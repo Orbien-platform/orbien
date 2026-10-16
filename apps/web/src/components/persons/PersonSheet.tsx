@@ -236,7 +236,7 @@ export function PersonSheet({ personId, open, onOpenChange, onUpdated }: PersonS
     setIsResending(true);
     try {
       await api.post(`/users/by-person/${person.id}/resend-invite`);
-      setResendStatus({ kind: "ok", text: `Convite reenviado para ${person.access?.email ?? "o e-mail da conta"}.` });
+      setResendStatus({ kind: "ok", text: `Convite reenviado para ${person.access!.email}.` });
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 403) {
         setResendStatus({ kind: "error", text: "Você não tem permissão para reenviar este convite." });
