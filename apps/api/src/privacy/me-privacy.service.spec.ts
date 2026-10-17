@@ -322,3 +322,37 @@ describe('pedido de exclusão', () => {
     await expect(service.cancelDeletion(user)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('profileGaps', () => {
+  const complete = { phone: '11988887777', birth_date: new Date('1990-05-01'), gender: 'female' };
+  const withPerson = (person: Record<string, unknown> | null) => {
+    const ctx = setup();
+    ctx.client.userAccount.findUnique.mockResolvedValueOnce({ person });
+    return ctx;
+  };
+
+  it('lista o que falta entre sexo, telefone e nascimento', async () => {
+    const { service } = withPerson({ ...complete, gender: null, phone: '  ', birth_date: null });
+    await expect(service.profileGaps(user)).resolves.toEqual({
+      missing: ['gender', 'phone', 'birth_date'],
+    });
+  });
+
+  it('cadastro completo: nada a pedir', async () => {
+    const { service } = withPerson(complete);
+    await expect(service.profileGaps(user)).resolves.toEqual({ missing: [] });
+  });
+
+  it('conta sem pessoa, pessoa removida e anonimizada: nada a pedir', async () => {
+    for (const person of [null, { ...complete, gender: null, deleted_at: new Date() }, { gender: null, anonymized_at: new Date() }]) {
+      const { service } = withPerson(person);
+      await expect(service.profileGaps(user)).resolves.toEqual({ missing: [] });
+    }
+  });
+
+  it('sessão de suporte não é o titular: nem consulta', async () => {
+    const { service, client } = setup();
+    await expect(service.profileGaps({ ...user, support_session: true })).resolves.toEqual({ missing: [] });
+    expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+  });
+});

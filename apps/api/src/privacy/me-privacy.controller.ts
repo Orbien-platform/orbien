@@ -33,6 +33,11 @@ import { RevokeConsentDto } from './dto/revoke-consent.dto';
 export class MePrivacyController {
   constructor(private readonly privacy: MePrivacyService) {}
 
+  @Get('profile-gaps')
+  profileGaps(@CurrentUser() user: JwtPayload) {
+    return this.privacy.profileGaps(user);
+  }
+
   @Get('personal-data')
   personalData(@CurrentUser() user: JwtPayload) {
     return this.privacy.personalData(user);

@@ -9,6 +9,7 @@ export interface MyPerson {
   phone: string | null;
   email: string | null;
   birth_date: string | null;
+  gender: "male" | "female" | "other" | "prefer_not_to_say" | null;
   address_street: string | null;
   address_number: string | null;
   address_complement: string | null;
@@ -49,6 +50,8 @@ export type MyDataPatch = Partial<
     MyPerson,
     | "full_name"
     | "phone"
+    | "birth_date"
+    | "gender"
     | "address_street"
     | "address_number"
     | "address_complement"
@@ -97,4 +100,20 @@ export function requestDeletion(): Promise<DeletionStatus> {
 
 export function cancelDeletion(): Promise<DeletionStatus> {
   return authenticatedRequest<DeletionStatus>("delete", "/me/deletion-request");
+}
+
+export type ProfileGap = "gender" | "phone" | "birth_date";
+
+/**
+ * O que falta no cadastro da pessoa da conta (`GET /me/profile-gaps`). Vazio
+ * também quando não deu para perguntar: não se bloqueia a sessão por um dado
+ * que não foi possível conferir. Nunca lança.
+ */
+export async function getProfileGaps(): Promise<ProfileGap[]> {
+  try {
+    const response = await authenticatedRequest<{ missing?: unknown }>("get", "/me/profile-gaps");
+    return Array.isArray(response?.missing) ? (response.missing as ProfileGap[]) : [];
+  } catch {
+    return [];
+  }
 }

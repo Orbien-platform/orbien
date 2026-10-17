@@ -63,6 +63,7 @@ const EDITABLE_FIELDS = [
   'full_name',
   'phone',
   'birth_date',
+  'gender',
   'address_street',
   'address_number',
   'address_complement',
@@ -221,6 +222,30 @@ export class MePrivacyService {
       this.logger,
     );
     return { format: 'orbien.personal-data.v1', exported_at: new Date(), ...data };
+  }
+
+  /**
+   * `GET /me/profile-gaps` — quais dos três dados de cadastro (sexo, telefone,
+   * data de nascimento) a pessoa da conta ainda não informou. Os fronts abrem
+   * o modal obrigatório de confirmação no login quando a lista não é vazia.
+   *
+   * Vazia, sem erro, quando não há o que pedir: conta sem pessoa vinculada,
+   * pessoa removida/anonimizada e sessão de suporte (quem opera ali é a
+   * equipe da plataforma, não o titular).
+   */
+  async profileGaps(user: JwtPayload): Promise<{ missing: Array<'gender' | 'phone' | 'birth_date'> }> {
+    if (user.support_session) return { missing: [] };
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: user.sub },
+      select: { person: { select: { phone: true, birth_date: true, gender: true, deleted_at: true, anonymized_at: true } } },
+    });
+    const person = account?.person;
+    if (!person || person.deleted_at || person.anonymized_at) return { missing: [] };
+    const missing: Array<'gender' | 'phone' | 'birth_date'> = [];
+    if (!person.gender) missing.push('gender');
+    if (!person.phone?.trim()) missing.push('phone');
+    if (!person.birth_date) missing.push('birth_date');
+    return { missing };
   }
 
   /** `PATCH /me` — correção (Art. 18, III), com antes/depois na auditoria. */

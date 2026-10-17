@@ -12,6 +12,8 @@ interface ModalProps {
   description?: string;
   children: React.ReactNode;
   className?: string;
+  /** `false` tira o X e ignora Esc/clique fora: o modal só fecha por dentro. */
+  dismissible?: boolean;
 }
 
 export function Modal({
@@ -21,9 +23,17 @@ export function Modal({
   description,
   children,
   className,
+  dismissible = true,
 }: ModalProps) {
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(next, details) => {
+        if (dismissible || next) {
+          (onOpenChange as (open: boolean, details?: unknown) => void)(next, details);
+        }
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <Dialog.Popup
@@ -43,12 +53,14 @@ export function Modal({
                 </Dialog.Description>
               )}
             </div>
+            {dismissible && (
             <Dialog.Close
               className="flex h-7 w-7 items-center justify-center rounded-[8px] text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink"
               aria-label="Fechar"
             >
               <X size={15} strokeWidth={1.5} />
             </Dialog.Close>
+            )}
           </div>
           {children}
         </Dialog.Popup>

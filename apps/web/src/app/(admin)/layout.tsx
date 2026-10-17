@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { SupportSessionBanner } from "@/components/layout/SupportSessionBanner";
+import { ProfileGapsGate } from "@/components/layout/ProfileGapsGate";
 import { ChurchIdentityProvider } from "@/contexts/ChurchIdentityContext";
 
 export default function AdminLayout({
@@ -19,6 +20,7 @@ export default function AdminLayout({
         {/* Main area */}
         <div className="flex flex-1 flex-col overflow-hidden">
           <SupportSessionBanner />
+          <ProfileGapsGate />
           <Header />
           <main className="relative flex-1 overflow-y-auto">
             {/* Anéis da Órbita, atrás do conteúdo */}
