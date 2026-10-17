@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/hooks/useAuth";
@@ -110,5 +110,57 @@ describe("ProfileGapsGate", () => {
     render(<ProfileGapsGate />);
     await userEvent.click(await screen.findByRole("button", { name: "Sair da conta" }));
     expect(logout).toHaveBeenCalled();
+  });
+
+  it("sem usuário na sessão, não consulta", () => {
+    setup(null);
+    render(<ProfileGapsGate />);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it("resposta sem lista não abre o modal", async () => {
+    setup();
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    render(<ProfileGapsGate />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    expect(screen.queryByText("Confirme seus dados")).not.toBeInTheDocument();
+  });
+
+  it("Esc não fecha o modal", async () => {
+    setup();
+    vi.mocked(api.get).mockResolvedValue({ data: { missing: ["gender"] } });
+    render(<ProfileGapsGate />);
+    await screen.findByText("Confirme seus dados");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByText("Confirme seus dados")).toBeInTheDocument();
+  });
+
+  it("só habilita o botão com telefone completo e nascimento válido", async () => {
+    setup();
+    vi.mocked(api.get).mockResolvedValue({ data: { missing: ["gender", "phone", "birth_date"] } });
+    render(<ProfileGapsGate />);
+    await screen.findByText("Confirme seus dados");
+    const submit = screen.getByRole("button", { name: "Confirmar dados" });
+
+    await userEvent.selectOptions(screen.getByLabelText("Sexo"), "other");
+    await userEvent.type(screen.getByLabelText("Telefone"), "1198");
+    await userEvent.type(screen.getByLabelText("Data de nascimento"), "1990-05-01");
+    expect(submit).toBeDisabled(); // telefone incompleto
+
+    await userEvent.type(screen.getByLabelText("Telefone"), "887777");
+    expect(submit).toBeEnabled();
+
+    await userEvent.clear(screen.getByLabelText("Data de nascimento"));
+    expect(submit).toBeDisabled(); // sem data
+  });
+
+  it("data futura não habilita o botão", async () => {
+    setup();
+    vi.mocked(api.get).mockResolvedValue({ data: { missing: ["birth_date"] } });
+    render(<ProfileGapsGate />);
+    await screen.findByText("Confirme seus dados");
+    const future = `${new Date().getFullYear() + 1}-01-01`;
+    fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: future } });
+    expect(screen.getByRole("button", { name: "Confirmar dados" })).toBeDisabled();
   });
 });

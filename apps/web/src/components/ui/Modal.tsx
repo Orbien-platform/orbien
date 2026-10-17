@@ -12,7 +12,8 @@ interface ModalProps {
   description?: string;
   children: React.ReactNode;
   className?: string;
-  /** `false` tira o X e ignora Esc/clique fora: o modal só fecha por dentro. */
+  /** `false` tira o X. Esc e clique fora continuam chamando `onOpenChange`; quem quer
+   * um modal sem saída o mantém aberto (`open` fixo) e ignora o pedido. */
   dismissible?: boolean;
 }
 
@@ -26,14 +27,7 @@ export function Modal({
   dismissible = true,
 }: ModalProps) {
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(next, details) => {
-        if (dismissible || next) {
-          (onOpenChange as (open: boolean, details?: unknown) => void)(next, details);
-        }
-      }}
-    >
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <Dialog.Popup

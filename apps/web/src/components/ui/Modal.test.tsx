@@ -34,4 +34,13 @@ describe("Modal", () => {
     await userEvent.click(screen.getByRole("button", { name: "Fechar" }));
     expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
   });
+
+  it("dismissible={false} tira o botão de fechar", () => {
+    render(
+      <Modal open onOpenChange={vi.fn()} title="Título" dismissible={false}>
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    expect(screen.queryByRole("button", { name: "Fechar" })).not.toBeInTheDocument();
+  });
 });

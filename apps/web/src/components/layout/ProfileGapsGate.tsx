@@ -50,16 +50,13 @@ export function ProfileGapsGate() {
 
   useEffect(() => {
     if (!userId || isSupport) return;
-    let ativo = true;
+    // Sem guard de desmontagem: setState depois de desmontar é no-op.
     api
       .get<{ missing: Gap[] }>("/me/profile-gaps")
       .then(({ data }) => {
-        if (ativo && Array.isArray(data.missing)) setMissing(data.missing);
+        if (Array.isArray(data.missing)) setMissing(data.missing);
       })
       .catch(() => {});
-    return () => {
-      ativo = false;
-    };
   }, [userId, isSupport]);
 
   if (missing.length === 0) return null;
@@ -73,7 +70,9 @@ export function ProfileGapsGate() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!valid || saving) return;
+    // Só dispara com o botão habilitado (tudo válido, e não gravando): o
+    // envio por Enter também é barrado pelo navegador enquanto ele está
+    // desabilitado.
     setSaving(true);
     setError(null);
     const body: Record<string, string> = {};

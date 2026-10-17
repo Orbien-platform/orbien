@@ -6,6 +6,7 @@ describe("maskPhone", () => {
     expect(maskPhone("1133334444")).toBe("(11) 33334-444");
     expect(maskPhone("(11) 9")).toBe("(11) 9");
     expect(maskPhone("")).toBe("");
+    expect(maskPhone("1")).toBe("(1");
     expect(maskPhone("119888877779999")).toBe("(11) 98888-7777");
   });
   it("valida 10 ou 11 dígitos", () => {

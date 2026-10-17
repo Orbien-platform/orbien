@@ -15,7 +15,7 @@ jest.mock("../../lib/privacidade/privacidade-client", () => ({
   updateMyData: (...args: unknown[]) => mockUpdate(...args),
 }));
 
-import { NetworkError } from "../../lib/api/errors";
+import { HttpError, NetworkError } from "../../lib/api/errors";
 import { ProfileGapsModal } from "../../components/ProfileGapsModal";
 
 async function open(gaps: string[]) {
@@ -81,6 +81,29 @@ describe("ProfileGapsModal", () => {
     await press("gaps-save");
     expect(screen.getByTestId("gaps-error")).toBeTruthy();
     expect(screen.getByText("Confirme seus dados")).toBeTruthy();
+  });
+
+  it("erro 400 da API mostra a mensagem dela; outro erro mostra o aviso genérico", async () => {
+    await open(["gender"]);
+    await press("gaps-gender-male");
+
+    mockUpdate.mockRejectedValueOnce(new HttpError(400, { message: "Sexo inválido" }));
+    await press("gaps-save");
+    expect(screen.getByTestId("gaps-error")).toHaveTextContent("Sexo inválido");
+
+    mockUpdate.mockRejectedValueOnce(new Error("boom"));
+    await press("gaps-save");
+    expect(screen.getByTestId("gaps-error")).toHaveTextContent(/^Não foi possível salvar\./);
+  });
+
+  it("telefone incompleto ou data impossível mantêm o botão sem efeito", async () => {
+    await open(["phone", "birth_date"]);
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("gaps-phone"), "1198");
+      fireEvent.changeText(screen.getByTestId("gaps-birth-date"), "01051990");
+    });
+    await press("gaps-save");
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it("permite sair da conta", async () => {

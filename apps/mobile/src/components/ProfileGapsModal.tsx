@@ -61,13 +61,9 @@ export function ProfileGapsModal() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    getProfileGaps().then((gaps) => {
-      if (!cancelled) setMissing(gaps);
-    });
-    return () => {
-      cancelled = true;
-    };
+    // `getProfileGaps` nunca lança; sem guard de desmontagem de propósito —
+    // setState depois de desmontar é no-op.
+    getProfileGaps().then(setMissing);
   }, []);
 
   if (missing.length === 0) return null;
@@ -80,13 +76,14 @@ export function ProfileGapsModal() {
     (!needs("birth_date") || isoBirth !== null);
 
   async function handleSave() {
-    if (!valid || saving) return;
+    // Só roda pelo botão, que fica desabilitado sem tudo válido (e em
+    // `loading` enquanto grava): sexo e data estão preenchidos aqui.
     setSaving(true);
     setError(null);
     const patch: MyDataPatch = {};
-    if (needs("gender") && gender) patch.gender = gender;
+    if (needs("gender")) patch.gender = gender as Gender;
     if (needs("phone")) patch.phone = phoneDigits(phone);
-    if (needs("birth_date") && isoBirth) patch.birth_date = isoBirth;
+    if (needs("birth_date")) patch.birth_date = isoBirth as string;
     try {
       await updateMyData(patch);
       setMissing([]);
@@ -116,7 +113,7 @@ export function ProfileGapsModal() {
     >
       <KeyboardAvoidingView
         style={[styles.container, { backgroundColor: colors.bgBase }]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.select({ ios: "padding" })}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={[typography.h2, { color: colors.textPrimary }]}>Confirme seus dados</Text>
