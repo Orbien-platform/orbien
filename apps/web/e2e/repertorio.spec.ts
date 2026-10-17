@@ -181,11 +181,17 @@ test.describe("repertório do time de louvor", () => {
         await page.goto("/voluntarios", { waitUntil: "domcontentloaded" });
         await selectTab(page, "Meus Turnos");
         await expect(cardHeading).toBeVisible();
-        await expect(page.getByText(songTitle, { exact: true })).toBeVisible();
-        await expect(page.getByText("D", { exact: true }).first()).toBeVisible();
-        await expect(page.getByText("96 BPM")).toBeVisible();
+        // As asserções são escopadas à linha da música deste teste (título único
+        // por execução): "96 BPM" e o tom "D" também aparecem em sobras de
+        // outras execuções no mesmo tenant, e o que se prova aqui é que ESTA
+        // música chegou à escala pessoal com tom, BPM e link.
+        const title = page.getByText(songTitle, { exact: true });
+        await expect(title).toBeVisible();
+        const row = title.locator("xpath=..");
+        await expect(row.getByText("D", { exact: true })).toBeVisible();
+        await expect(row.getByText("96 BPM")).toBeVisible();
         await expect(
-          page.getByRole("button", { name: `Abrir link de ${songTitle}` })
+          row.getByRole("button", { name: `Abrir link de ${songTitle}` })
         ).toBeVisible();
         await shot(page, "22-meus-turnos-com-repertorio");
       });
