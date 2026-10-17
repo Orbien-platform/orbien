@@ -220,6 +220,12 @@ describe('GET /me/profile-gaps', () => {
     expect((await api().get('/api/me/profile-gaps')).status).toBe(401);
   });
 
+  it('aguenta a consulta a cada carga de página: 30 seguidas, nenhuma 429', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 30; i++) statuses.push((await gaps(tokenSemPessoa)).status);
+    expect(statuses.filter((s) => s !== 200)).toEqual([]);
+  });
+
   it('PATCH /me aceita sexo e nascimento, rejeita sexo fora da lista, e esvazia as pendências', async () => {
     const bad = await api()
       .patch('/api/me')
