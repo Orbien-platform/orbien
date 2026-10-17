@@ -51,8 +51,11 @@ test.describe("repertório do time de louvor", () => {
           page.getByText(songTitle, { exact: true }),
           "música criada via API não apareceu no catálogo"
         ).toBeVisible();
-        await expect(page.getByText("Tom D", { exact: true })).toBeVisible();
-        await expect(page.getByText("96 BPM")).toBeVisible();
+        // Tom e BPM não são únicos: outras músicas do catálogo (inclusive sobras
+        // de e2e) repetem os mesmos valores, e o modo estrito do Playwright
+        // falha quando o texto casa com mais de um elemento.
+        await expect(page.getByText("Tom D", { exact: true }).first()).toBeVisible();
+        await expect(page.getByText("96 BPM").first()).toBeVisible();
         await shot(page, "20-repertorio-catalogo");
       });
 
@@ -74,7 +77,7 @@ test.describe("repertório do time de louvor", () => {
           page.getByText(uiSongTitle, { exact: true }),
           "música criada pelo modal não apareceu no catálogo"
         ).toBeVisible();
-        await expect(page.getByText("Tom A", { exact: true })).toBeVisible();
+        await expect(page.getByText("Tom A", { exact: true }).first()).toBeVisible();
         await shot(page, "20b-repertorio-catalogo-criado-via-ui");
       });
 
@@ -133,9 +136,9 @@ test.describe("repertório do time de louvor", () => {
       );
       await api.call("PATCH", `/celebrations/instances/${instanceId}/schedule/publish`);
 
-      // `.first()`: a data pode aparecer em mais de um ponto da tela (ou sobrar
-      // de uma execução anterior no mesmo tenant); o que o teste confere é que
-      // existe ao menos um card dela, não que seja o único.
+      // `.first()`: em produção outra escala pode cair na mesma data (sobra de
+      // uma run anterior ou outro teste), e o `getByText` em modo estrito falha
+      // quando acha mais de um elemento.
       const cardHeading = page
         .getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false })
         .first();
@@ -181,17 +184,11 @@ test.describe("repertório do time de louvor", () => {
         await page.goto("/voluntarios", { waitUntil: "domcontentloaded" });
         await selectTab(page, "Meus Turnos");
         await expect(cardHeading).toBeVisible();
-        // As asserções são escopadas à linha da música deste teste (título único
-        // por execução): "96 BPM" e o tom "D" também aparecem em sobras de
-        // outras execuções no mesmo tenant, e o que se prova aqui é que ESTA
-        // música chegou à escala pessoal com tom, BPM e link.
-        const title = page.getByText(songTitle, { exact: true });
-        await expect(title).toBeVisible();
-        const row = title.locator("xpath=..");
-        await expect(row.getByText("D", { exact: true })).toBeVisible();
-        await expect(row.getByText("96 BPM")).toBeVisible();
+        await expect(page.getByText(songTitle, { exact: true }).first()).toBeVisible();
+        await expect(page.getByText("D", { exact: true }).first()).toBeVisible();
+        await expect(page.getByText("96 BPM").first()).toBeVisible();
         await expect(
-          row.getByRole("button", { name: `Abrir link de ${songTitle}` })
+          page.getByRole("button", { name: `Abrir link de ${songTitle}` }).first()
         ).toBeVisible();
         await shot(page, "22-meus-turnos-com-repertorio");
       });

@@ -236,9 +236,11 @@ export class PersonsImportService {
       const rowNum = i + 2; // 1-indexed, header = row 1
       const row = rows[i];
 
-      const fullName = mapping.nome ? (row[mapping.nome] ?? '').trim() : '';
+      const fullName = this.normalizeFullName(mapping.nome ? (row[mapping.nome] ?? '') : '');
       const rawPhone = mapping.telefone ? (row[mapping.telefone] ?? '').trim() : '';
-      const email = mapping.email ? (row[mapping.email] ?? '').trim() || undefined : undefined;
+      const email = mapping.email
+        ? (row[mapping.email] ?? '').trim().toLowerCase() || undefined
+        : undefined;
       const rawSexo = mapping.sexo ? (row[mapping.sexo] ?? '').trim() : '';
       const rawBirth = mapping.birth_date ? (row[mapping.birth_date] ?? '').trim() : '';
       const rawClass = mapping.classificação ? (row[mapping.classificação] ?? '').trim() : '';
@@ -506,6 +508,16 @@ export class PersonsImportService {
     const digits = raw.replace(/\D/g, '');
     if (digits.length >= 12) return `+${digits}`;
     return `+55${digits}`;
+  }
+
+  // Primeira letra de cada nome em maiúscula e o resto em minúscula; hífen e
+  // apóstrofo também iniciam um nome ("Ana-Maria", "D'Ávila").
+  private normalizeFullName(raw: string): string {
+    return raw
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .replace(/(^|[\s\-'’])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
   }
 
   private mapGender(raw: string): Gender | undefined {
