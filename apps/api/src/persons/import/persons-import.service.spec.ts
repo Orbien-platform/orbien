@@ -862,6 +862,23 @@ describe('PersonsImportService', () => {
       expect(call.data.classification).toBe('attendee');
     });
 
+    it('grava e-mail em minúsculas e nome com a inicial de cada nome em maiúscula', async () => {
+      const { service, storage, client } = serviceWith();
+      const csv = ['nome,telefone,email', 'MARIA da SILVA  souza,11999998888,Maria.Silva@GMAIL.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', telefone: 'telefone', email: 'email' } },
+        user,
+      );
+
+      const call = client.person.create.mock.calls[0][0] as {
+        data: { full_name: string; email?: string };
+      };
+      expect(call.data.full_name).toBe('Maria Da Silva Souza');
+      expect(call.data.email).toBe('maria.silva@gmail.com');
+    });
+
     it('mapeia todas as variações reconhecidas de gênero e classificação', async () => {
       const { service, storage, client } = serviceWith();
       // Cada linha usa um telefone distinto para não colidir na deduplicação,

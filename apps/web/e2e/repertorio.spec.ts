@@ -51,8 +51,11 @@ test.describe("repertório do time de louvor", () => {
           page.getByText(songTitle, { exact: true }),
           "música criada via API não apareceu no catálogo"
         ).toBeVisible();
-        await expect(page.getByText("Tom D", { exact: true })).toBeVisible();
-        await expect(page.getByText("96 BPM")).toBeVisible();
+        // Tom e BPM não são únicos: outras músicas do catálogo (inclusive sobras
+        // de e2e) repetem os mesmos valores, e o modo estrito do Playwright
+        // falha quando o texto casa com mais de um elemento.
+        await expect(page.getByText("Tom D", { exact: true }).first()).toBeVisible();
+        await expect(page.getByText("96 BPM").first()).toBeVisible();
         await shot(page, "20-repertorio-catalogo");
       });
 
@@ -74,7 +77,7 @@ test.describe("repertório do time de louvor", () => {
           page.getByText(uiSongTitle, { exact: true }),
           "música criada pelo modal não apareceu no catálogo"
         ).toBeVisible();
-        await expect(page.getByText("Tom A", { exact: true })).toBeVisible();
+        await expect(page.getByText("Tom A", { exact: true }).first()).toBeVisible();
         await shot(page, "20b-repertorio-catalogo-criado-via-ui");
       });
 
@@ -133,7 +136,12 @@ test.describe("repertório do time de louvor", () => {
       );
       await api.call("PATCH", `/celebrations/instances/${instanceId}/schedule/publish`);
 
-      const cardHeading = page.getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false });
+      // `.first()`: em produção outra escala pode cair na mesma data (sobra de
+      // uma run anterior ou outro teste), e o `getByText` em modo estrito falha
+      // quando acha mais de um elemento.
+      const cardHeading = page
+        .getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false })
+        .first();
 
       // ── Antes da OC/setlist existir: "ainda não publicado" ──
       await test.step("escala sem setlist mostra 'repertório ainda não publicado'", async () => {
@@ -176,11 +184,11 @@ test.describe("repertório do time de louvor", () => {
         await page.goto("/voluntarios", { waitUntil: "domcontentloaded" });
         await selectTab(page, "Meus Turnos");
         await expect(cardHeading).toBeVisible();
-        await expect(page.getByText(songTitle, { exact: true })).toBeVisible();
+        await expect(page.getByText(songTitle, { exact: true }).first()).toBeVisible();
         await expect(page.getByText("D", { exact: true }).first()).toBeVisible();
-        await expect(page.getByText("96 BPM")).toBeVisible();
+        await expect(page.getByText("96 BPM").first()).toBeVisible();
         await expect(
-          page.getByRole("button", { name: `Abrir link de ${songTitle}` })
+          page.getByRole("button", { name: `Abrir link de ${songTitle}` }).first()
         ).toBeVisible();
         await shot(page, "22-meus-turnos-com-repertorio");
       });
