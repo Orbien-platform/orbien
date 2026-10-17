@@ -18,7 +18,13 @@ import { frontendUrl } from '../../common/urls/frontend-url';
 
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const SYNC_ROW_LIMIT = 500;
+// O caminho síncrono roda dentro da transação da requisição, que o
+// `TenantContextInterceptor` limita a 30 s. Cada linha com e-mail custa um
+// hash argon2 e vários round-trips ao banco (~0,6 s/linha no Render), então
+// 500 linhas estouravam o limite no meio ("Transaction already closed") e
+// a importação parava num pedaço. Acima disto o job roda em segundo plano,
+// fora dessa transação.
+const SYNC_ROW_LIMIT = 20;
 const MAX_IMPORT_ROWS = 5000;
 const PREVIEW_ROWS = 5;
 
@@ -218,7 +224,7 @@ export class PersonsImportService {
     // Convites disparados sem `await` por linha (ver abaixo) — coletados
     // aqui para dar a eles uma chance de terminar antes da função retornar,
     // sem serializar o loop atrás de cada envio. No caminho síncrono
-    // (≤500 linhas), isso é o que evita uma importação com muitos e-mails
+    // (≤ SYNC_ROW_LIMIT linhas), isso é o que evita uma importação com muitos e-mails
     // novos estourar o timeout da requisição HTTP esperando o Resend linha
     // a linha.
     const pendingInvites: Promise<unknown>[] = [];
@@ -249,16 +255,22 @@ export class PersonsImportService {
         continue;
       }
 
-      // Deduplication by phone
-      if (phone) {
-        const existing = await db.person.findFirst({
-          where: { tenant_id: tenantId, phone },
-          select: { id: true },
-        });
-        if (existing) {
-          skipped++;
-          continue;
-        }
+      // Deduplicação por telefone OU e-mail: reimportar o mesmo arquivo (ou um
+      // que sobreponha o cadastro) não duplica ninguém, e uma linha só com
+      // e-mail também é reconhecida. Quem já existe é pulado, não atualizado.
+      const existing = await db.person.findFirst({
+        where: {
+          tenant_id: tenantId,
+          OR: [
+            ...(phone ? [{ phone }] : []),
+            ...(email ? [{ email: { equals: email, mode: 'insensitive' as const } }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        skipped++;
+        continue;
       }
 
       const gender = this.mapGender(rawSexo);
