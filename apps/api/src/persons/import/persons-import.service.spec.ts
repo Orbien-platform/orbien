@@ -258,7 +258,7 @@ describe('PersonsImportService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('importa pessoa válida de forma síncrona (≤500 linhas) e grava consentimento', async () => {
+    it('importa pessoa válida de forma síncrona (≤20 linhas) e grava consentimento', async () => {
       const { service, storage, client } = serviceWith();
       storage.downloadBuffer.mockResolvedValue(Buffer.from(VALID_CSV, 'utf-8'));
 
@@ -638,6 +638,21 @@ describe('PersonsImportService', () => {
       expect(client.person.create).not.toHaveBeenCalled();
     });
 
+    it('pula linha só com e-mail quando o e-mail já está cadastrado (reimportação)', async () => {
+      const { service, storage, client } = serviceWith();
+      client.person.findFirst.mockResolvedValue({ id: 'existing' });
+      const csv = ['nome,email', 'Ana,ANA@test.com'].join('\n');
+      storage.downloadBuffer.mockResolvedValue(Buffer.from(csv, 'utf-8'));
+
+      const result = await service.confirm(
+        { file_id: 'arquivo.csv', mapping: { nome: 'nome', email: 'email' } },
+        user,
+      );
+
+      expect(result).toEqual({ imported: 0, skipped: 1, errors: [] });
+      expect(client.person.create).not.toHaveBeenCalled();
+    });
+
     it('registra erro da linha sem interromper as demais quando a criação falha', async () => {
       const { service, storage, client } = serviceWith();
       const csv = [
@@ -766,7 +781,13 @@ describe('PersonsImportService', () => {
       );
 
       expect((result as ImportResult).imported).toBe(1);
-      expect(client.person.findFirst).not.toHaveBeenCalled();
+      expect(client.person.findFirst).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 'tenant-1',
+          OR: [{ email: { equals: 'soemail@test.com', mode: 'insensitive' } }],
+        },
+        select: { id: true },
+      });
       const call = client.person.create.mock.calls[0][0] as { data: { phone?: string; email?: string } };
       expect(call.data.phone).toBeUndefined();
       expect(call.data.email).toBe('soemail@test.com');
@@ -977,7 +998,31 @@ describe('PersonsImportService', () => {
       expect((result as ImportResult).imported).toBe(1);
     });
 
-    it('processa arquivo grande (>500 linhas) de forma assíncrona, criando um job', async () => {
+    it('21 linhas já vão para o job em segundo plano; 20 ainda são síncronas', async () => {
+      const csvDe = (n: number) => {
+        const rows = ['nome,telefone'];
+        for (let i = 0; i < n; i++) rows.push(`Pessoa ${i},1199999${String(i).padStart(4, '0')}`);
+        return Buffer.from(rows.join('\n'), 'utf-8');
+      };
+      const mapping = { nome: 'nome', telefone: 'telefone' };
+
+      const a = serviceWith();
+      a.storage.downloadBuffer.mockResolvedValue(csvDe(21));
+      expect(await a.service.confirm({ file_id: 'arquivo.csv', mapping }, user)).toEqual({
+        job_id: 'job-1',
+        status: 'pending',
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const b = serviceWith();
+      b.storage.downloadBuffer.mockResolvedValue(csvDe(20));
+      expect(await b.service.confirm({ file_id: 'arquivo.csv', mapping }, user)).toMatchObject({
+        imported: 20,
+      });
+    });
+
+    it('processa arquivo acima do limite síncrono (>20 linhas) de forma assíncrona, criando um job', async () => {
       const { service, storage, client, system } = serviceWith();
       const rows = ['nome,telefone'];
       for (let i = 0; i < 501; i++) rows.push(`Pessoa ${i},1199999${String(i).padStart(4, '0')}`);
