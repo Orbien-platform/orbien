@@ -80,3 +80,19 @@ export function saoPauloCivilDay(at: string | Date): Date {
 export function civilDayKey(day: Date): string {
   return day.toISOString().slice(0, 10);
 }
+
+/**
+ * Soma minutos (positivos ou negativos) a um horário "HH:mm" e devolve "HH:mm",
+ * dando a volta na meia-noite nos dois sentidos. `null` se o horário não for
+ * "HH:mm". Serve às etapas da OC, cujo horário é guardado como minutos desde o
+ * início do culto — negativo é antes dele.
+ */
+export function addMinutesToClock(clock: string | undefined | null, minutes: number): string | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(clock ?? "");
+  if (!match) return null;
+  const total = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + minutes;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(wrapped / 60)).padStart(2, "0");
+  const mm = String(wrapped % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsDate, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Gender } from '@prisma/client';
 
 /**
  * Correção pelo próprio titular (LGPD, Art. 18, III — mapeamento §4.2).
@@ -28,6 +29,10 @@ export class UpdateMyDataDto {
   @Type(() => Date)
   @IsDate({ message: 'Data de nascimento inválida' })
   birth_date?: Date | null;
+
+  @IsOptional()
+  @IsEnum(Gender, { message: 'Sexo inválido' })
+  gender?: Gender | null;
 
   @IsOptional() @IsString() @MaxLength(200) address_street?: string | null;
   @IsOptional() @IsString() @MaxLength(20) address_number?: string | null;

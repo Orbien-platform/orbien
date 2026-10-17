@@ -1,9 +1,37 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ResponsibleType, ServiceOrderItem } from '@prisma/client';
+import {
+  ResponsibleType,
+  ServiceOrderEntryKind,
+  ServiceOrderItem,
+  ServiceOrderPhase,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServiceOrderItemDto } from './dto/create-service-order-item.dto';
 import { UpdateServiceOrderItemDto } from './dto/update-service-order-item.dto';
 import { ReorderItemsDto } from './dto/reorder-items.dto';
+
+/**
+ * Horário e duração têm de combinar com o momento e o tipo da etapa.
+ * `start_offset_minutes` é medido do início do culto: antes dele é negativo;
+ * durante e depois, zero ou mais. Só a etapa de equipe (`logistics`) pode ter
+ * duração zero — é um aviso pontual ("luz desligada às 10h05"), não programa.
+ */
+export function assertTiming(t: {
+  phase: ServiceOrderPhase;
+  entry_kind: ServiceOrderEntryKind;
+  start_offset_minutes: number;
+  duration_minutes: number;
+}): void {
+  if (t.phase === ServiceOrderPhase.before && t.start_offset_minutes >= 0) {
+    throw new BadRequestException('Etapa antes do culto precisa de horário anterior ao início');
+  }
+  if (t.phase !== ServiceOrderPhase.before && t.start_offset_minutes < 0) {
+    throw new BadRequestException('Só etapa antes do culto pode ter horário anterior ao início');
+  }
+  if (t.entry_kind === ServiceOrderEntryKind.program && t.duration_minutes < 1) {
+    throw new BadRequestException('Etapa do programa precisa de duração de ao menos 1 minuto');
+  }
+}
 
 @Injectable()
 export class ServiceOrderItemsService {
@@ -26,6 +54,15 @@ export class ServiceOrderItemsService {
     dto: CreateServiceOrderItemDto,
   ): Promise<ServiceOrderItem> {
     await this.resolveOrder(tenantId, congregationId, dto.service_order_id);
+
+    const phase = dto.phase ?? ServiceOrderPhase.during;
+    const entryKind = dto.entry_kind ?? ServiceOrderEntryKind.program;
+    assertTiming({
+      phase,
+      entry_kind: entryKind,
+      start_offset_minutes: dto.start_offset_minutes,
+      duration_minutes: dto.duration_minutes,
+    });
 
     if (dto.responsible_type === ResponsibleType.person && !dto.person_id) {
       throw new BadRequestException('person_id é obrigatório quando responsible_type = person');
@@ -61,6 +98,8 @@ export class ServiceOrderItemsService {
         type: dto.type,
         start_offset_minutes: dto.start_offset_minutes,
         duration_minutes: dto.duration_minutes,
+        phase,
+        entry_kind: entryKind,
         responsible_type: dto.responsible_type,
         person_id: dto.person_id ?? null,
         ministry_id: dto.ministry_id ?? null,
@@ -76,7 +115,7 @@ export class ServiceOrderItemsService {
 
     const items = await this.prisma.client.serviceOrderItem.findMany({
       where: { service_order_id: serviceOrderId, tenant_id: tenantId },
-      orderBy: { sequence: 'asc' },
+      orderBy: [{ phase: 'asc' }, { sequence: 'asc' }],
       include: {
         person: { select: { id: true, full_name: true } },
         ministry: { select: { id: true, name: true } },
@@ -151,6 +190,13 @@ export class ServiceOrderItemsService {
   ): Promise<ServiceOrderItem> {
     const item = await this.findOne(tenantId, congregationId, id);
 
+    assertTiming({
+      phase: dto.phase ?? item.phase,
+      entry_kind: dto.entry_kind ?? item.entry_kind,
+      start_offset_minutes: dto.start_offset_minutes ?? item.start_offset_minutes,
+      duration_minutes: dto.duration_minutes ?? item.duration_minutes,
+    });
+
     if (dto.person_id && dto.person_id !== item.person_id) {
       const person = await this.prisma.client.person.findFirst({
         where: { id: dto.person_id, tenant_id: tenantId },
@@ -173,6 +219,8 @@ export class ServiceOrderItemsService {
         ...(dto.type !== undefined && { type: dto.type }),
         ...(dto.start_offset_minutes !== undefined && { start_offset_minutes: dto.start_offset_minutes }),
         ...(dto.duration_minutes !== undefined && { duration_minutes: dto.duration_minutes }),
+        ...(dto.phase !== undefined && { phase: dto.phase }),
+        ...(dto.entry_kind !== undefined && { entry_kind: dto.entry_kind }),
         ...(dto.responsible_type !== undefined && { responsible_type: dto.responsible_type }),
         ...(dto.person_id !== undefined && { person_id: dto.person_id }),
         ...(dto.ministry_id !== undefined && { ministry_id: dto.ministry_id }),

@@ -44,7 +44,7 @@ export class ServiceOrdersService {
     });
   }
 
-  async findOne(tenantId: string, congregationId: string, id: string): Promise<ServiceOrder> {
+  async findOne(tenantId: string, congregationId: string, id: string) {
     const order = await this.prisma.client.serviceOrder.findFirst({
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
       include: {
@@ -53,11 +53,11 @@ export class ServiceOrdersService {
             id: true,
             scheduled_date: true,
             status: true,
-            celebration: { select: { id: true, name: true, type: true } },
+            celebration: { select: { id: true, name: true, type: true, start_time: true } },
           },
         },
         items: {
-          orderBy: { sequence: 'asc' },
+          orderBy: [{ phase: 'asc' }, { sequence: 'asc' }],
           include: {
             person: { select: { id: true, full_name: true } },
             ministry: { select: { id: true, name: true } },
@@ -74,7 +74,48 @@ export class ServiceOrdersService {
       },
     });
     if (!order) throw new NotFoundException('Ordem de culto não encontrada');
-    return order;
+
+    // Liga a OC à escala: em cada etapa de ministério, quem está escalado
+    // naquele ministério para ESTA celebração (a escala é 1:1 com a instância).
+    // Recusados e trocados ficam de fora; pendentes entram, com o status, para
+    // a tela distinguir quem ainda não confirmou.
+    const ministryIds = [
+      ...new Set(order.items.filter((i) => i.ministry_id).map((i) => i.ministry_id as string)),
+    ];
+    const assignments =
+      ministryIds.length === 0
+        ? []
+        : await this.prisma.client.celebrationAssignment.findMany({
+            where: {
+              tenant_id: tenantId,
+              status: { in: ['pending', 'confirmed'] },
+              celebrationMinistry: {
+                ministry_id: { in: ministryIds },
+                schedule: { celebration_instance_id: order.celebration_instance_id },
+              },
+            },
+            include: {
+              volunteerProfile: { include: { person: { select: { id: true, full_name: true } } } },
+              celebrationMinistry: { select: { ministry_id: true } },
+            },
+          });
+
+    const byMinistry = new Map<string, { id: string; full_name: string; status: string }[]>();
+    for (const a of assignments) {
+      const key = a.celebrationMinistry.ministry_id;
+      byMinistry.set(key, [
+        ...(byMinistry.get(key) ?? []),
+        { ...a.volunteerProfile.person, status: a.status },
+      ]);
+    }
+
+    return {
+      ...order,
+      items: order.items.map((item) => ({
+        ...item,
+        scheduled_volunteers: item.ministry_id ? (byMinistry.get(item.ministry_id) ?? []) : [],
+      })),
+    };
   }
 
   async update(

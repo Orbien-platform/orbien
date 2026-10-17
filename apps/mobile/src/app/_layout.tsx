@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { ChurchWelcome } from "../components/ChurchWelcome";
+import { ProfileGapsModal } from "../components/ProfileGapsModal";
 import { AuthProvider, useAuth } from "../lib/auth/auth-provider";
 import { NotificationsProvider } from "../lib/notifications/notifications-provider";
 import { AnimatedSplash } from "../lib/splash/animated-splash";
@@ -169,6 +170,7 @@ function ThemedShell() {
           <Stack.Screen name="esqueci-senha" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>
+      {isAuthenticated ? <ProfileGapsModal /> : null}
       {welcoming ? <ChurchWelcome onFinish={finishWelcome} /> : null}
       {splashFinished ? null : (
         <AnimatedSplash onReady={hideNativeSplash} done={!isBooting} onFinish={finishSplash} />

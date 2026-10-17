@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AddItemModal, computeStartOffsetMinutes, timeToMinutes } from "./AddItemModal";
+import { AddItemModal, computeStartOffsetMinutes, phaseTimeError, timeToMinutes } from "./AddItemModal";
 import api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -36,8 +36,22 @@ describe("timeToMinutes / computeStartOffsetMinutes", () => {
     expect(computeStartOffsetMinutes("10:30", "inválido")).toBe(0);
   });
 
-  it("nunca devolve um valor negativo quando a etapa é 'antes' do início", () => {
-    expect(computeStartOffsetMinutes("09:00", "10:00")).toBe(0);
+  it("devolve negativo quando a etapa é antes do início", () => {
+    expect(computeStartOffsetMinutes("09:00", "10:00")).toBe(-60);
+  });
+});
+
+describe("phaseTimeError", () => {
+  it("antes do culto exige horário anterior ao início", () => {
+    expect(phaseTimeError("before", -30)).toBeNull();
+    expect(phaseTimeError("before", 0)).toMatch(/anterior ao início/);
+  });
+
+  it("durante e depois não aceitam horário anterior ao início", () => {
+    expect(phaseTimeError("during", 10)).toBeNull();
+    expect(phaseTimeError("after", 90)).toBeNull();
+    expect(phaseTimeError("during", -5)).toMatch(/Antes do culto/);
+    expect(phaseTimeError("after", -5)).toMatch(/Antes do culto/);
   });
 });
 
@@ -115,7 +129,7 @@ describe("AddItemModal", () => {
     await user.selectOptions(screen.getByLabelText("Tipo"), "sermon");
     await user.type(screen.getByLabelText(/Duração/), "20");
     await user.type(screen.getByLabelText(/Horário/), "10:00");
-    await user.selectOptions(screen.getByLabelText(/Responsável/), "p1");
+    await user.selectOptions(screen.getByLabelText(/Responsável/), "person:p1");
     await user.type(screen.getByLabelText(/Notas/), "Observação");
 
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
@@ -128,6 +142,8 @@ describe("AddItemModal", () => {
           sequence: 2,
           name: "Louvor de abertura",
           type: "sermon",
+          phase: "during",
+          entry_kind: "program",
           duration_minutes: 20,
           start_offset_minutes: 30,
           responsible_type: "person",
@@ -202,6 +218,76 @@ describe("AddItemModal", () => {
         expect.objectContaining({ start_offset_minutes: 0 })
       )
     );
+  });
+
+  it("etapa de equipe antes do culto: horário negativo, sem duração e com ministério da escala", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/persons")) return Promise.resolve({ data: { data: persons } });
+      if (url === "/volunteers/ministries") {
+        return Promise.resolve({
+          data: [{ id: "m1", name: "Recepção", children: [{ id: "m2", name: "Estacionamento" }] }],
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+
+    render(
+      <AddItemModal
+        open
+        onOpenChange={vi.fn()}
+        serviceOrderId="so1"
+        nextSequence={1}
+        celebrationStartTime="10:00"
+        onAdded={vi.fn()}
+      />
+    );
+    expect(await screen.findByRole("option", { name: "Estacionamento" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/Nome da etapa/), "Recepção pronta");
+    await user.selectOptions(screen.getByLabelText("Momento"), "before");
+    await user.click(screen.getByLabelText(/Etapa de equipe/));
+    await user.type(screen.getByLabelText(/Horário/), "09:30");
+    await user.selectOptions(screen.getByLabelText(/Responsável/), "ministry:m1");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/celebrations/items",
+        expect.objectContaining({
+          phase: "before",
+          entry_kind: "logistics",
+          duration_minutes: 0,
+          start_offset_minutes: -30,
+          responsible_type: "ministry",
+          ministry_id: "m1",
+          person_id: undefined,
+        })
+      )
+    );
+  });
+
+  it("recusa horário que não combina com o momento escolhido", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockClear();
+    render(
+      <AddItemModal
+        open
+        onOpenChange={vi.fn()}
+        serviceOrderId="so1"
+        nextSequence={1}
+        celebrationStartTime="10:00"
+        onAdded={vi.fn()}
+      />
+    );
+    await user.type(screen.getByLabelText(/Nome da etapa/), "Abertura");
+    await user.type(screen.getByLabelText(/Duração/), "5");
+    await user.type(screen.getByLabelText(/Horário/), "09:30");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escolha \"Antes do culto\"");
+    expect(api.post).not.toHaveBeenCalled();
   });
 
   it("shows an error message when the API call fails", async () => {

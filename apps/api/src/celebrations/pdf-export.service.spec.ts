@@ -361,6 +361,113 @@ describe('PdfExportService', () => {
     }, 20000);
   });
 
+  describe('tabela da OC', () => {
+    // Espia o documento entregue ao pdfmake para conferir a tabela.
+    async function tableRows(items: object[]): Promise<{ text?: string }[][]> {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const lib = require('pdfmake') as { createPdf: (def: object, o: object) => unknown };
+      const spy = jest.spyOn(lib, 'createPdf');
+      const client = clientWith();
+      client.serviceOrder.findFirst.mockResolvedValue(baseOrder(items));
+      client.tenant.findUnique.mockResolvedValue(null);
+      client.celebrationAssignment.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+      await service.generateServiceOrderPdf('t1', 'g1', 'so1');
+      const def = spy.mock.calls[0][0] as {
+        content: { table?: { body: { text?: string }[][]; widths: unknown[] } }[];
+      };
+      const table = def.content.find((c) => c.table)!.table!;
+      expect(table.widths).toHaveLength(table.body[0].length);
+      return table.body;
+    }
+
+    const item = (extra: Record<string, unknown>) => ({
+      sequence: 1,
+      name: 'Etapa',
+      phase: 'during',
+      entry_kind: 'program',
+      start_offset_minutes: 0,
+      duration_minutes: 10,
+      responsible_type: 'free_text',
+      person: null,
+      ministry: null,
+      responsible_label: 'Fulano',
+      ministry_id: null,
+      setlist: null,
+      ...extra,
+    });
+
+    it('põe o horário na primeira coluna, à esquerda, antes do resto', async () => {
+      const rows = await tableRows([item({ start_offset_minutes: 15 })]);
+      expect(rows[0].map((c) => c.text)).toEqual(['Horário', '#', 'Etapa', 'Duração', 'Responsável']);
+      const data = rows[2]; // rows[1] é a faixa "Culto"
+      expect(data.map((c) => c.text)).toEqual(['09:15', '1', 'Etapa', '10 min', 'Fulano']);
+    });
+
+    it('põe logo e nome da igreja no cabeçalho, à esquerda, em toda página', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const lib = require('pdfmake') as { createPdf: (def: object, o: object) => unknown };
+      const spy = jest.spyOn(lib, 'createPdf');
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer,
+      }) as unknown as typeof fetch;
+      const client = clientWith();
+      client.serviceOrder.findFirst.mockResolvedValue(baseOrder());
+      client.tenant.findUnique.mockResolvedValue({
+        name: 'Igreja Central',
+        brandingConfig: { primary_color: '#123456', logo_url: 'https://cdn/logo.png', app_name: null },
+      });
+      client.celebrationAssignment.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+
+      await service.generateServiceOrderPdf('t1', 'g1', 'so1').catch(() => undefined);
+
+      const def = spy.mock.calls[0][0] as {
+        header: () => { stack: { columns?: { image?: string; text?: string }[] }[] };
+        content: { stack?: { text: string }[] }[];
+      };
+      const [logo, name] = def.header().stack[0].columns!;
+      expect(logo.image).toMatch(/^data:image\/png;base64,/);
+      expect(name.text).toBe('Igreja Central');
+      // O corpo não repete a igreja: começa pela celebração.
+      expect(def.content[0].stack![0].text).toBe('Culto de Celebração');
+    });
+
+    it('sem logo, só o nome da igreja no cabeçalho', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const lib = require('pdfmake') as { createPdf: (def: object, o: object) => unknown };
+      const spy = jest.spyOn(lib, 'createPdf');
+      const client = clientWith();
+      client.serviceOrder.findFirst.mockResolvedValue(baseOrder());
+      client.tenant.findUnique.mockResolvedValue({ name: 'Igreja Central', brandingConfig: null });
+      client.celebrationAssignment.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+
+      await service.generateServiceOrderPdf('t1', 'g1', 'so1');
+
+      const def = spy.mock.calls[0][0] as {
+        header: () => { stack: { columns?: { text?: string }[] }[] };
+      };
+      expect(def.header().stack[0].columns!.map((c) => c.text)).toEqual(['Igreja Central']);
+    });
+
+    it('separa antes, durante e depois do culto, com etapa de equipe sem duração', async () => {
+      const rows = await tableRows([
+        item({ sequence: 1, name: 'Recepção pronta', phase: 'before', entry_kind: 'logistics', start_offset_minutes: -30, duration_minutes: 0 }),
+        item({ sequence: 2, name: 'Abertura' }),
+        item({ sequence: 3, name: 'Luz desligada', entry_kind: 'logistics', start_offset_minutes: 65, duration_minutes: 0 }),
+        item({ sequence: 4, name: 'Desmontagem', phase: 'after', start_offset_minutes: 120 }),
+      ]);
+      const col = (i: number) => rows.slice(1).map((r) => r[i].text);
+      expect(col(0)).toEqual(['Antes do culto', '08:30', 'Culto', '09:00', '10:05', 'Depois do culto', '11:00']);
+      expect(col(2).filter(Boolean)).toEqual(['Recepção pronta (equipe)', 'Abertura', 'Luz desligada (equipe)', 'Desmontagem']);
+      expect(rows[1][0]).toMatchObject({ colSpan: 5 });
+      expect(col(3).filter(Boolean)).toEqual(['—', '10 min', '—', '10 min']);
+    });
+  });
+
   describe('políticas de acesso do pdfmake (module init, whitebox)', () => {
     // pdf-export.service.ts configura setLocalAccessPolicy(() => false) e
     // setUrlAccessPolicy(() => false) na importação do módulo — bloqueio
@@ -435,6 +542,16 @@ describe('PdfExportService', () => {
       ).addMinutes.bind(service);
 
       expect(addMinutes('09:00', 25)).toBe('09:25');
+    });
+
+    it('aceita minutos negativos (etapa antes do culto), inclusive cruzando a meia-noite', () => {
+      const { service } = serviceWith(clientWith());
+      const addMinutes = (
+        service as unknown as { addMinutes: (t: string, m: number) => string }
+      ).addMinutes.bind(service);
+
+      expect(addMinutes('09:00', -30)).toBe('08:30');
+      expect(addMinutes('00:10', -20)).toBe('23:50');
     });
 
     it('vira o dia (mod 24) quando ultrapassa a meia-noite', () => {

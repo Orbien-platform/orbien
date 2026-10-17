@@ -8,6 +8,7 @@ import {
   consentLabel,
   exportPersonalData,
   getPersonalData,
+  getProfileGaps,
   requestDeletion,
   revokeConsent,
   updateMyData,
@@ -38,5 +39,22 @@ describe("privacidade-client", () => {
   it("dá nome legível ao termo e mostra o código quando não conhece", () => {
     expect(consentLabel("visitor_consent_v1")).toBe("Cadastro e contato pela igreja");
     expect(consentLabel("termo_novo_v9")).toBe("termo_novo_v9");
+  });
+
+  describe("getProfileGaps", () => {
+    it("devolve o que falta no cadastro", async () => {
+      mockRequest.mockResolvedValue({ missing: ["gender", "phone"] });
+      await expect(getProfileGaps()).resolves.toEqual(["gender", "phone"]);
+      expect(mockRequest).toHaveBeenLastCalledWith("get", "/me/profile-gaps");
+    });
+
+    it("resposta malformada ou falha de rede: nada a pedir, sem lançar", async () => {
+      mockRequest.mockResolvedValue({});
+      await expect(getProfileGaps()).resolves.toEqual([]);
+      mockRequest.mockResolvedValue(null);
+      await expect(getProfileGaps()).resolves.toEqual([]);
+      mockRequest.mockRejectedValue(new Error("offline"));
+      await expect(getProfileGaps()).resolves.toEqual([]);
+    });
   });
 });

@@ -186,10 +186,23 @@ async function seedGroupTypes(tenantId: string, congregationId: string): Promise
 }
 
 /**
+ * Cadastro completo (sexo, telefone, nascimento) das contas dos tenants de
+ * teste. Sem ele, o modal obrigatório de confirmação de cadastro abre no login
+ * e cobre a tela do e2e. Só vale para `teste1-church` e `teste2-church`: na
+ * `doca-church` a pessoa é real e não ganha dado inventado.
+ */
+const TEST_ACCOUNT_PROFILE = {
+  gender: Gender.prefer_not_to_say,
+  phone: '11999990000',
+  birth_date: new Date('1990-01-01T00:00:00.000Z'),
+} as const;
+
+/**
  * Garante a `Person` de uma conta e liga as duas.
  *
  * Idempotente por dois caminhos: a conta já apontar para uma pessoa que
- * existe, ou já haver pessoa com aquele e-mail no tenant.
+ * existe, ou já haver pessoa com aquele e-mail no tenant. Com
+ * `completeProfile`, preenche só o que estiver vazio (nunca sobrescreve).
  */
 async function ensurePersonForAccount(
   account: { id: string; person_id: string | null },
@@ -197,13 +210,36 @@ async function ensurePersonForAccount(
   congregationId: string,
   email: string,
   fullName: string,
+  completeProfile = false,
 ): Promise<string> {
+  const profile = completeProfile ? TEST_ACCOUNT_PROFILE : {};
+
+  /** Preenche gênero/telefone/nascimento que faltam, sem tocar no resto. */
+  const fillProfile = async (personId: string): Promise<void> => {
+    if (!completeProfile) return;
+    await prisma.person.updateMany({
+      where: { id: personId, gender: null },
+      data: { gender: TEST_ACCOUNT_PROFILE.gender },
+    });
+    await prisma.person.updateMany({
+      where: { id: personId, phone: null },
+      data: { phone: TEST_ACCOUNT_PROFILE.phone },
+    });
+    await prisma.person.updateMany({
+      where: { id: personId, birth_date: null },
+      data: { birth_date: TEST_ACCOUNT_PROFILE.birth_date },
+    });
+  };
+
   if (account.person_id) {
     const existing = await prisma.person.findUnique({
       where: { id: account.person_id },
       select: { id: true },
     });
-    if (existing) return existing.id;
+    if (existing) {
+      await fillProfile(existing.id);
+      return existing.id;
+    }
   }
 
   let person = await prisma.person.findFirst({
@@ -219,9 +255,12 @@ async function ensurePersonForAccount(
         full_name: fullName,
         email,
         classification: PersonClassification.member,
+        ...profile,
       },
       select: { id: true },
     });
+  } else {
+    await fillProfile(person.id);
   }
 
   await prisma.userAccount.update({
@@ -337,6 +376,8 @@ async function seedTenant(spec: TenantSpec): Promise<SeededTenant> {
     congregation.id,
     spec.admin.email,
     spec.admin.fullName,
+    // Só os tenants de teste: a pessoa da `doca-church` é real.
+    spec.demoData === true,
   );
   console.log(`  person admin:     ${adminPersonId}`);
 

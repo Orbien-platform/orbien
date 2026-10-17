@@ -12,6 +12,9 @@ interface ModalProps {
   description?: string;
   children: React.ReactNode;
   className?: string;
+  /** `false` tira o X. Esc e clique fora continuam chamando `onOpenChange`; quem quer
+   * um modal sem saída o mantém aberto (`open` fixo) e ignora o pedido. */
+  dismissible?: boolean;
 }
 
 export function Modal({
@@ -21,6 +24,7 @@ export function Modal({
   description,
   children,
   className,
+  dismissible = true,
 }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -43,12 +47,14 @@ export function Modal({
                 </Dialog.Description>
               )}
             </div>
+            {dismissible && (
             <Dialog.Close
               className="flex h-7 w-7 items-center justify-center rounded-[8px] text-stone transition-colors hover:bg-[var(--surface-subtle)] hover:text-ink"
               aria-label="Fechar"
             >
               <X size={15} strokeWidth={1.5} />
             </Dialog.Close>
+            )}
           </div>
           {children}
         </Dialog.Popup>

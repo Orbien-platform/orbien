@@ -139,6 +139,39 @@ async function login(): Promise<Tokens> {
   throw new Error(`Login falhou: ${last}`);
 }
 
+/**
+ * Completa o cadastro da conta de e2e se faltar sexo, telefone ou nascimento.
+ *
+ * Com dado faltando, o app abre o modal obrigatório de confirmação de cadastro
+ * depois do login, e o backdrop dele intercepta todo clique da suíte. A conta
+ * de e2e é de um tenant de teste (`teste1-church`/`teste2-church`), então
+ * escrever no cadastro dela é permitido — e é isso que cobre o
+ * `teste2-church` de produção, que o seed não reexecuta. Best-effort: API sem
+ * a rota (`404`) ou falha de rede não derrubam o login.
+ */
+async function ensureProfileComplete(tokens: Tokens): Promise<void> {
+  try {
+    const headers = authHeaders(tokens.access_token);
+    const res = await fetch(`${API_URL}/me/profile-gaps`, { headers, signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) return;
+    const { missing } = (await res.json()) as { missing?: string[] };
+    if (!Array.isArray(missing) || missing.length === 0) return;
+
+    const patch: Record<string, string> = {};
+    if (missing.includes("gender")) patch.gender = "prefer_not_to_say";
+    if (missing.includes("phone")) patch.phone = "11999990000";
+    if (missing.includes("birth_date")) patch.birth_date = "1990-01-01";
+    await fetch(`${API_URL}/me`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(patch),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    // Sem isso o modal pode aparecer, e o teste que ele atrapalhar vai dizer.
+  }
+}
+
 function makeApi(tokens: Tokens): Api {
   return {
     tokens,
@@ -249,7 +282,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   // Uma sessão por worker: o login custa um cold start inteiro contra o Render.
   api: [
     async ({}, provide) => {
-      await provide(makeApi(await login()));
+      const tokens = await login();
+      await ensureProfileComplete(tokens);
+      await provide(makeApi(tokens));
     },
     { scope: "worker" },
   ],

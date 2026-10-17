@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
   Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown, Link2, Unlink,
@@ -9,12 +9,18 @@ import {
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AddItemModal, ITEM_TYPE_LABELS, type ItemType } from "@/components/celebrations/AddItemModal";
+import {
+  AddItemModal,
+  ITEM_TYPE_LABELS,
+  PHASE_LABELS,
+  type ItemPhase,
+  type ItemType,
+} from "@/components/celebrations/AddItemModal";
 import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
 import { songKey, type CatalogSong } from "@/lib/repertorio";
 import api from "@/lib/api";
-import { formatCivilDate } from "@/lib/datetime";
+import { addMinutesToClock, formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +60,12 @@ interface ServiceOrderItem {
   sequence: number;
   duration_minutes: number;
   start_offset_minutes: number;
+  /** Ausente em OC antiga: vale `during`. */
+  phase?: ItemPhase;
+  /** `logistics` é tarefa de equipe ligada à escala, fora do tempo do programa. */
+  entry_kind?: "program" | "logistics";
+  /** Quem está na escala do ministério responsável, para esta celebração. */
+  scheduled_volunteers?: { id: string; full_name: string; status: string }[];
   responsible_type: "person" | "ministry" | "free_text";
   person?: { id: string; full_name: string } | null;
   ministry?: { id: string; name: string } | null;
@@ -95,13 +107,16 @@ function fmtDate(iso: string): string {
 // `start_offset_minutes` é minutos desde o início da celebração — converte de
 // volta para "HH:mm" para exibição, quando o horário de início é conhecido.
 function fmtItemTime(startOffsetMinutes: number, celebrationStartTime?: string): string | null {
-  if (!celebrationStartTime) return null;
-  const match = /^(\d{1,2}):(\d{2})$/.exec(celebrationStartTime);
-  if (!match) return null;
-  const totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + startOffsetMinutes;
-  const hh = String(Math.floor(totalMinutes / 60) % 24).padStart(2, "0");
-  const mm = String(totalMinutes % 60).padStart(2, "0");
-  return `${hh}:${mm}`;
+  return addMinutesToClock(celebrationStartTime, startOffsetMinutes);
+}
+
+const PHASE_ORDER: Record<ItemPhase, number> = { before: 0, during: 1, after: 2 };
+
+// Antes, durante e depois do culto; dentro de cada momento, a sequência.
+function compareItems(a: ServiceOrderItem, b: ServiceOrderItem): number {
+  return (
+    PHASE_ORDER[a.phase ?? "during"] - PHASE_ORDER[b.phase ?? "during"] || a.sequence - b.sequence
+  );
 }
 
 function responsibleLabel(item: {
@@ -321,7 +336,7 @@ export function ServiceOrderView({
           .then((soRes) => {
             if (signal.cancelled) return;
             setServiceOrder(soRes.data);
-            setItems([...(soRes.data.items ?? [])].sort((a, b) => a.sequence - b.sequence));
+            setItems([...(soRes.data.items ?? [])].sort(compareItems));
             setNoOC(false);
           });
       })
@@ -394,13 +409,15 @@ export function ServiceOrderView({
     const newItems = [...items];
     const targetIndex = direction === "up" ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= newItems.length) return;
+    // A ordem vale dentro do momento: não troca etapa de antes com a do culto.
+    if ((newItems[index].phase ?? "during") !== (newItems[targetIndex].phase ?? "during")) return;
 
     // Swap sequences in local state
     const seqA = newItems[index].sequence;
     const seqB = newItems[targetIndex].sequence;
     newItems[index] = { ...newItems[index], sequence: seqB };
     newItems[targetIndex] = { ...newItems[targetIndex], sequence: seqA };
-    newItems.sort((a, b) => a.sequence - b.sequence);
+    newItems.sort(compareItems);
     setItems(newItems);
 
     // Persist both
@@ -609,9 +626,23 @@ export function ServiceOrderView({
                       addSongForItemId === item.id;
                     const setlist = item.setlist;
 
+                    const phase = item.phase ?? "during";
+                    const prev = items[idx - 1];
+                    const startsPhase = idx === 0 || (prev.phase ?? "during") !== phase;
+                    const nextItem = items[idx + 1];
+                    const isTeamTask = item.entry_kind === "logistics";
+
                     return (
+                      <Fragment key={item.id}>
+                        {startsPhase && (
+                          <h3
+                            className="mt-2 text-xs font-medium text-stone first:mt-0"
+                            data-testid={`phase-${phase}`}
+                          >
+                            {PHASE_LABELS[phase]}
+                          </h3>
+                        )}
                       <div
-                        key={item.id}
                         className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] overflow-hidden"
                       >
                         {/* Item header */}
@@ -622,7 +653,7 @@ export function ServiceOrderView({
                               <button
                                 type="button"
                                 onClick={() => handleMoveItem(idx, "up")}
-                                disabled={idx === 0 || reordering}
+                                disabled={idx === 0 || (prev.phase ?? "during") !== phase || reordering}
                                 className="flex h-5 w-5 items-center justify-center rounded text-stone hover:text-ink disabled:opacity-30 transition-colors"
                                 aria-label="Mover para cima"
                               >
@@ -631,7 +662,11 @@ export function ServiceOrderView({
                               <button
                                 type="button"
                                 onClick={() => handleMoveItem(idx, "down")}
-                                disabled={idx === items.length - 1 || reordering}
+                                disabled={
+                                  idx === items.length - 1 ||
+                                  (nextItem.phase ?? "during") !== phase ||
+                                  reordering
+                                }
                                 className="flex h-5 w-5 items-center justify-center rounded text-stone hover:text-ink disabled:opacity-30 transition-colors"
                                 aria-label="Mover para baixo"
                               >
@@ -655,21 +690,37 @@ export function ServiceOrderView({
                               <span className="text-sm font-medium text-ink dark:text-white truncate">
                                 {item.name}
                               </span>
-                              <span className="ml-auto flex-shrink-0 text-xs text-stone">
+                              <span className="ml-auto flex flex-shrink-0 items-center gap-1.5 text-xs text-stone">
+                                {isTeamTask && (
+                                  <span className="rounded px-1 py-0.5 text-[10px] bg-navy/10 text-navy dark:text-white">
+                                    Equipe
+                                  </span>
+                                )}
                                 {ITEM_TYPE_LABELS[item.type]}
                               </span>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                              <span className="text-xs text-stone">
-                                {item.duration_minutes} min
-                              </span>
+                              {item.duration_minutes > 0 && (
+                                <span className="text-xs text-stone">
+                                  {item.duration_minutes} min
+                                </span>
+                              )}
                               {responsibleLabel(item) && (
                                 <span className="text-xs text-stone">
                                   {responsibleLabel(item)}
                                 </span>
                               )}
                             </div>
+
+                            {item.scheduled_volunteers && item.scheduled_volunteers.length > 0 && (
+                              <p className="text-xs text-stone" data-testid="item-scheduled">
+                                Na escala:{" "}
+                                {item.scheduled_volunteers
+                                  .map((v) => (v.status === "pending" ? `${v.full_name} (a confirmar)` : v.full_name))
+                                  .join(", ")}
+                              </p>
+                            )}
 
                             {item.notes && (
                               <p className="mt-1 text-xs text-stone italic">{item.notes}</p>
@@ -843,6 +894,7 @@ export function ServiceOrderView({
                           </div>
                         )}
                       </div>
+                      </Fragment>
                     );
                   })}
                 </div>

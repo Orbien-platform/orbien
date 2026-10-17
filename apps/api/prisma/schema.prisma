@@ -1595,22 +1595,31 @@ model ServiceOrder {
 }
 
 model ServiceOrderItem {
-  id                   String               @id @default(uuid())
+  id                   String                @id @default(uuid())
   tenant_id            String
   congregation_id      String
   service_order_id     String
   sequence             Int
   name                 String
-  type                 ServiceOrderItemType @default(other)
+  type                 ServiceOrderItemType  @default(other)
+  /// Minutos desde o início do culto; negativo é antes dele. Em `after`, é
+  /// medido do início (a tela converte "X min depois do fim").
   start_offset_minutes Int
+  /// 0 só vale para `logistics` (aviso pontual, sem duração).
   duration_minutes     Int
+  /// Quando a etapa acontece em relação ao culto: antes, durante ou depois.
+  phase                ServiceOrderPhase     @default(during)
+  /// `program` é o programa do culto; `logistics` é tarefa de equipe ligada à
+  /// escala (recepção pronta, estacionamento, luz) — tem horário e
+  /// responsável, mas não ocupa tempo do culto.
+  entry_kind           ServiceOrderEntryKind @default(program)
   responsible_type     ResponsibleType
   person_id            String?
   ministry_id          String?
   responsible_label    String?
   notes                String?
-  created_at           DateTime             @default(now())
-  updated_at           DateTime             @updatedAt
+  created_at           DateTime              @default(now())
+  updated_at           DateTime              @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -2132,6 +2141,17 @@ enum ResponsibleType {
   person
   ministry
   free_text
+}
+
+enum ServiceOrderPhase {
+  before
+  during
+  after
+}
+
+enum ServiceOrderEntryKind {
+  program
+  logistics
 }
 
 enum ServiceOrderItemType {

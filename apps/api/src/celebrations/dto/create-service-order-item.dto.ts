@@ -1,5 +1,10 @@
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Min, ValidateIf } from 'class-validator';
-import { ResponsibleType, ServiceOrderItemType } from '@prisma/client';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min, ValidateIf } from 'class-validator';
+import {
+  ResponsibleType,
+  ServiceOrderEntryKind,
+  ServiceOrderItemType,
+  ServiceOrderPhase,
+} from '@prisma/client';
 
 export class CreateServiceOrderItemDto {
   @IsUUID()
@@ -15,13 +20,24 @@ export class CreateServiceOrderItemDto {
   @IsEnum(ServiceOrderItemType)
   type!: ServiceOrderItemType;
 
+  /** Negativo é antes do início do culto. A coerência com `phase` e a duração
+   * mínima de cada tipo de etapa são checadas no serviço. */
   @IsInt()
-  @Min(0)
+  @Min(-1440)
+  @Max(1440)
   start_offset_minutes!: number;
 
   @IsInt()
-  @Min(1)
+  @Min(0)
   duration_minutes!: number;
+
+  @IsOptional()
+  @IsEnum(ServiceOrderPhase)
+  phase?: ServiceOrderPhase;
+
+  @IsOptional()
+  @IsEnum(ServiceOrderEntryKind)
+  entry_kind?: ServiceOrderEntryKind;
 
   @IsEnum(ResponsibleType)
   responsible_type!: ResponsibleType;

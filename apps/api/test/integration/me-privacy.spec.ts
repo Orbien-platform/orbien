@@ -199,6 +199,53 @@ describe('PATCH /me', () => {
   });
 });
 
+describe('GET /me/profile-gaps', () => {
+  const gaps = (token: string) =>
+    api().get('/api/me/profile-gaps').set('Authorization', `Bearer ${token}`);
+
+  it('lista o que falta no cadastro da pessoa da conta, e só da dela', async () => {
+    // Ana e Bea nascem com telefone e sem sexo nem nascimento.
+    const ana = await gaps(tokenAna);
+    expect(ana.status).toBe(200);
+    expect(ana.body).toEqual({ missing: ['gender', 'birth_date'] });
+  });
+
+  it('conta sem pessoa vinculada não tem o que pedir', async () => {
+    const res = await gaps(tokenSemPessoa);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ missing: [] });
+  });
+
+  it('sem token, 401', async () => {
+    expect((await api().get('/api/me/profile-gaps')).status).toBe(401);
+  });
+
+  it('aguenta a consulta a cada carga de página: 30 seguidas, nenhuma 429', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 30; i++) statuses.push((await gaps(tokenSemPessoa)).status);
+    expect(statuses.filter((s) => s !== 200)).toEqual([]);
+  });
+
+  it('PATCH /me aceita sexo e nascimento, rejeita sexo fora da lista, e esvazia as pendências', async () => {
+    const bad = await api()
+      .patch('/api/me')
+      .set('Authorization', `Bearer ${tokenAna}`)
+      .send({ gender: 'x' });
+    expect(bad.status).toBe(400);
+
+    const ok = await api()
+      .patch('/api/me')
+      .set('Authorization', `Bearer ${tokenAna}`)
+      .send({ gender: 'female', birth_date: '1990-05-01' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.gender).toBe('female');
+
+    expect((await gaps(tokenAna)).body).toEqual({ missing: [] });
+    // Bea segue com as pendências dela: o que Ana gravou não vaza.
+    expect((await gaps(tokenBea)).body).toEqual({ missing: ['gender', 'birth_date'] });
+  });
+});
+
 describe('POST /me/revoke-consent', () => {
   it('revoga o aceite ativo da versão — e só o do titular', async () => {
     const res = await api()

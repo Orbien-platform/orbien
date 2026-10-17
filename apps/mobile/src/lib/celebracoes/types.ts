@@ -17,6 +17,8 @@ export interface SetlistSongRef {
   cifra_club_link: string | null;
 }
 
+export type ItemPhase = "before" | "during" | "after";
+
 export interface ServiceOrderItem {
   id: string;
   sequence: number;
@@ -24,6 +26,12 @@ export interface ServiceOrderItem {
   type: string;
   start_offset_minutes: number;
   duration_minutes: number;
+  /** Ausente em OC antiga: vale `during`. */
+  phase?: ItemPhase;
+  /** `logistics` é tarefa de equipe ligada à escala, fora do tempo do programa. */
+  entry_kind?: "program" | "logistics";
+  /** Quem está na escala do ministério responsável, para esta celebração. */
+  scheduled_volunteers?: { id: string; full_name: string; status: string }[];
   responsible_type: "person" | "ministry" | "free_text";
   person: { id: string; full_name: string } | null;
   ministry: { id: string; name: string } | null;
@@ -39,7 +47,7 @@ export interface ServiceOrder {
   celebrationInstance: {
     id: string;
     scheduled_date: string;
-    celebration: { id: string; name: string; type: string };
+    celebration: { id: string; name: string; type: string; start_time?: string };
   };
   items: ServiceOrderItem[];
 }

@@ -36,6 +36,12 @@ export interface PdfResult {
   expires_at: string;
 }
 
+const PHASE_LABELS: Record<string, string> = {
+  before: 'Antes do culto',
+  during: 'Culto',
+  after: 'Depois do culto',
+};
+
 @Injectable()
 export class PdfExportService {
   private readonly logger = new Logger(PdfExportService.name);
@@ -60,7 +66,7 @@ export class PdfExportService {
           },
         },
         items: {
-          orderBy: { sequence: 'asc' },
+          orderBy: [{ phase: 'asc' }, { sequence: 'asc' }],
           include: {
             person: { select: { full_name: true } },
             ministry: { select: { id: true, name: true } },
@@ -129,9 +135,9 @@ export class PdfExportService {
     // ── 3. Build PDF document definition ────────────────────────────────────
     const tableBody: object[][] = [
       [
+        { text: 'Horário', style: 'th', alignment: 'center' },
         { text: '#', style: 'th', alignment: 'center' },
         { text: 'Etapa', style: 'th' },
-        { text: 'Horário', style: 'th', alignment: 'center' },
         { text: 'Duração', style: 'th', alignment: 'center' },
         { text: 'Responsável', style: 'th' },
       ],
@@ -139,15 +145,28 @@ export class PdfExportService {
 
     const setlistBlocks: object[] = [];
 
+    let currentPhase: string | null = null;
     for (const item of order.items) {
+      // Faixa de título quando muda o momento: antes, durante, depois do culto.
+      if (item.phase !== currentPhase) {
+        currentPhase = item.phase;
+        tableBody.push([
+          { text: PHASE_LABELS[item.phase], style: 'th', colSpan: 5, alignment: 'left' },
+          {},
+          {},
+          {},
+          {},
+        ]);
+      }
       const clockTime = this.addMinutes(celebration.start_time, item.start_offset_minutes);
-      const duration = `${item.duration_minutes} min`;
+      const duration = item.duration_minutes > 0 ? `${item.duration_minutes} min` : '—';
       const responsible = this.formatResponsible(item, volunteersByMinistry);
+      const label = item.entry_kind === 'logistics' ? `${item.name} (equipe)` : item.name;
 
       tableBody.push([
-        { text: String(item.sequence), alignment: 'center' },
-        { text: item.name },
         { text: clockTime, alignment: 'center' },
+        { text: String(item.sequence), alignment: 'center' },
+        { text: label },
         { text: duration, alignment: 'center' },
         { text: responsible },
       ]);
@@ -170,23 +189,33 @@ export class PdfExportService {
       }
     }
 
-    const headerStack: object[] = [];
-    if (logoBase64) {
-      headerStack.push({ image: logoBase64, width: 60, margin: [0, 0, 0, 4] });
-    }
-    headerStack.push(
-      { text: churchName, style: 'churchName' },
+    // Logo e nome da igreja ficam no cabeçalho da página (canto superior
+    // esquerdo, em todas as páginas); o corpo começa pela celebração.
+    const headerStack: object[] = [
       { text: celebration.name, style: 'celebrationName' },
       { text: `${dateLabel} · ${celebration.start_time}`, style: 'dateLabel' },
       { text: order.title, style: 'orderTitle' },
-    );
+    ];
 
     const docDefinition = {
       pageSize: 'A4',
-      pageMargins: [40, 80, 40, 60] as [number, number, number, number],
+      pageMargins: [40, 90, 40, 60] as [number, number, number, number],
       header: () => ({
-        margin: [40, 20, 40, 0],
-        canvas: [{ type: 'rect', x: 0, y: 0, w: 515, h: 6, color: primaryColor }],
+        margin: [40, 14, 40, 0],
+        stack: [
+          {
+            columns: [
+              ...(logoBase64
+                ? [{ image: logoBase64, fit: [44, 30], width: 'auto', margin: [0, 0, 8, 0] }]
+                : []),
+              { text: churchName, style: 'churchName', width: '*', margin: [0, logoBase64 ? 7 : 0, 0, 0] },
+            ],
+          },
+          {
+            canvas: [{ type: 'rect', x: 0, y: 0, w: 515, h: 6, color: primaryColor }],
+            margin: [0, 6, 0, 0],
+          },
+        ],
       }),
       footer: (currentPage: number, pageCount: number) => ({
         margin: [40, 0, 40, 20],
@@ -200,7 +229,7 @@ export class PdfExportService {
         {
           table: {
             headerRows: 1,
-            widths: [20, '*', 50, 50, '*'],
+            widths: [50, 20, '*', 50, '*'],
             body: tableBody,
           },
           layout: 'lightHorizontalLines',
@@ -208,7 +237,7 @@ export class PdfExportService {
         ...setlistBlocks,
       ],
       styles: {
-        churchName: { fontSize: 10, color: '#666666' },
+        churchName: { fontSize: 13, bold: true, color: '#222222' },
         celebrationName: { fontSize: 20, bold: true, color: primaryColor },
         dateLabel: { fontSize: 11, color: '#444444', margin: [0, 2, 0, 0] },
         orderTitle: { fontSize: 13, italics: true, color: '#333333', margin: [0, 4, 0, 0] },
@@ -264,8 +293,11 @@ export class PdfExportService {
   private addMinutes(timeStr: string, minutes: number): string {
     const [h, m] = timeStr.split(':').map(Number);
     const total = (h ?? 0) * 60 + (m ?? 0) + minutes;
-    const nh = Math.floor(total / 60) % 24;
-    const nm = total % 60;
+    // Módulo positivo: etapa antes do culto tem offset negativo, e o culto
+    // pode começar logo depois da meia-noite.
+    const wrapped = ((total % 1440) + 1440) % 1440;
+    const nh = Math.floor(wrapped / 60);
+    const nm = wrapped % 60;
     return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
   }
 

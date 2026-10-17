@@ -33,6 +33,15 @@ import { RevokeConsentDto } from './dto/revoke-consent.dto';
 export class MePrivacyController {
   constructor(private readonly privacy: MePrivacyService) {}
 
+  // O front consulta a cada carga de página (modal de confirmação de cadastro),
+  // e é uma leitura de uma linha: o teto de 20/min das demais rotas daqui
+  // faria quem recarrega a tela, ou a suíte de e2e, tomar 429.
+  @Get('profile-gaps')
+  @Throttle({ default: { limit: 120, ttl: 60000 } })
+  profileGaps(@CurrentUser() user: JwtPayload) {
+    return this.privacy.profileGaps(user);
+  }
+
   @Get('personal-data')
   personalData(@CurrentUser() user: JwtPayload) {
     return this.privacy.personalData(user);

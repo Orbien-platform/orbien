@@ -13,6 +13,7 @@ const user: JwtPayload = {
 describe('MePrivacyController', () => {
   const privacy = {
     personalData: jest.fn().mockResolvedValue('personal'),
+    profileGaps: jest.fn().mockResolvedValue({ missing: ['phone'] }),
     exportData: jest.fn().mockResolvedValue('export'),
     updateMyData: jest.fn().mockResolvedValue('updated'),
     revokeConsent: jest.fn().mockResolvedValue({ revoked: 1 }),
@@ -23,6 +24,7 @@ describe('MePrivacyController', () => {
 
   it('repassa cada rota ao serviço com o usuário do token', async () => {
     await expect(controller.personalData(user)).resolves.toBe('personal');
+    await expect(controller.profileGaps(user)).resolves.toEqual({ missing: ['phone'] });
     await expect(controller.exportData(user)).resolves.toBe('export');
     await expect(controller.update({ phone: '1' }, user)).resolves.toBe('updated');
     await expect(controller.revokeConsent({ version: 'v1' }, user)).resolves.toEqual({ revoked: 1 });
@@ -30,6 +32,7 @@ describe('MePrivacyController', () => {
     await expect(controller.cancelDeletion(user)).resolves.toBe('cancelled');
 
     expect(privacy.personalData).toHaveBeenCalledWith(user);
+    expect(privacy.profileGaps).toHaveBeenCalledWith(user);
     expect(privacy.updateMyData).toHaveBeenCalledWith({ phone: '1' }, user);
     expect(privacy.revokeConsent).toHaveBeenCalledWith('v1', user);
   });

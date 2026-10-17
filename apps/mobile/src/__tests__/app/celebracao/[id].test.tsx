@@ -128,6 +128,80 @@ describe("CelebracaoScreen", () => {
     );
   });
 
+  it("agrupa por antes/durante/depois, mostra o horário do relógio e a escala do ministério", async () => {
+    const base = {
+      type: "other",
+      person: null,
+      responsible_label: null,
+      notes: null,
+      setlist: null,
+    };
+    mockGetServiceOrder.mockResolvedValue({
+      ...BASE_ORDER,
+      celebrationInstance: {
+        ...BASE_ORDER.celebrationInstance,
+        celebration: { id: "c1", name: "Culto de Domingo", type: "weekly", start_time: "10:00" },
+      },
+      items: [
+        { ...base, id: "pos", sequence: 1, name: "Desmontagem", phase: "after", entry_kind: "program", start_offset_minutes: 90, duration_minutes: 15, responsible_type: "free_text", ministry: null },
+        { ...base, id: "dur", sequence: 1, name: "Abertura", phase: "during", entry_kind: "program", start_offset_minutes: 0, duration_minutes: 20, responsible_type: "free_text", ministry: null },
+        {
+          ...base, id: "pre", sequence: 1, name: "Recepção pronta", phase: "before", entry_kind: "logistics",
+          start_offset_minutes: -30, duration_minutes: 0, responsible_type: "ministry",
+          ministry: { id: "min1", name: "Recepção" },
+          scheduled_volunteers: [
+            { id: "v1", full_name: "Carla", status: "confirmed" },
+            { id: "v2", full_name: "Davi", status: "pending" },
+          ],
+        },
+      ],
+    });
+
+    await act(async () => {
+      render(<CelebracaoScreen />);
+    });
+
+    expect(screen.getByText("Antes do culto")).toBeTruthy();
+    expect(screen.getByText("Durante o culto")).toBeTruthy();
+    expect(screen.getByText("Depois do culto")).toBeTruthy();
+    // Ordem na tela: antes, durante, depois.
+    const ids = screen.getAllByTestId(/^celebracao-item-(pre|dur|pos)-horario$/).map((n) => n.props.testID);
+    expect(ids).toEqual([
+      "celebracao-item-pre-horario",
+      "celebracao-item-dur-horario",
+      "celebracao-item-pos-horario",
+    ]);
+    // Etapa de equipe sem duração: só o horário. As do programa: horário · duração.
+    expect(screen.getByTestId("celebracao-item-pre-horario")).toHaveTextContent(/^09:30$/);
+    expect(screen.getByTestId("celebracao-item-dur-horario")).toHaveTextContent("10:00 · 20min");
+    expect(screen.getByTestId("celebracao-item-pos-horario")).toHaveTextContent("11:30 · 15min");
+    expect(screen.getByText("Equipe")).toBeTruthy();
+    expect(screen.getByTestId("celebracao-item-pre-escala")).toHaveTextContent(
+      "Na escala: Carla, Davi (a confirmar)",
+    );
+    // Etapa de equipe não cobra repertório.
+    expect(screen.getAllByText("Repertório ainda não publicado")).toHaveLength(2);
+  });
+
+  it("sem horário de início da celebração, mostra o deslocamento (antes do início, com 'antes')", async () => {
+    mockGetServiceOrder.mockResolvedValue({
+      ...BASE_ORDER,
+      items: [
+        {
+          id: "pre", sequence: 1, name: "Chegada", type: "other", phase: "before", entry_kind: "logistics",
+          start_offset_minutes: -45, duration_minutes: 0, responsible_type: "free_text", person: null,
+          ministry: null, responsible_label: "Todos", notes: null, setlist: null,
+        },
+      ],
+    });
+
+    await act(async () => {
+      render(<CelebracaoScreen />);
+    });
+
+    expect(screen.getByTestId("celebracao-item-pre-horario")).toHaveTextContent("45min antes");
+  });
+
   it("etapa sem setlist mostra 'Repertório ainda não publicado' (AC4)", async () => {
     mockGetServiceOrder.mockResolvedValue({
       ...BASE_ORDER,

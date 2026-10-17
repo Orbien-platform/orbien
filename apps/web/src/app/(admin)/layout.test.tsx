@@ -14,6 +14,9 @@ vi.mock("@/components/layout/header", () => ({
 vi.mock("@/contexts/ChurchIdentityContext", () => ({
   ChurchIdentityProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
+vi.mock("@/components/layout/ProfileGapsGate", () => ({
+  ProfileGapsGate: () => <div data-testid="profile-gate" />,
+}));
 vi.mock("@/components/layout/SupportSessionBanner", () => ({
   SupportSessionBanner: () => <div data-testid="support-banner" />,
 }));

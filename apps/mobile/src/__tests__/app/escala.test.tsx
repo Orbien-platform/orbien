@@ -95,6 +95,37 @@ describe("EscalaScreen", () => {
     expect(mockGetMyAssignments).toHaveBeenCalledTimes(1);
   });
 
+  it("mostra as tarefas da OC desta escala com o horário do relógio, ou o deslocamento sem ele", async () => {
+    mockGetMyAssignments.mockResolvedValue([
+      {
+        ...PENDING_ASSIGNMENT,
+        celebration: { id: "c1", name: "Culto de domingo", start_time: "10:00" },
+        cues: [
+          { id: "q1", name: "Recepção pronta", phase: "before", start_offset_minutes: -30, duration_minutes: 0, notes: null },
+          { id: "q2", name: "Luz desligada", phase: "during", start_offset_minutes: 65, duration_minutes: 0, notes: null },
+        ],
+      },
+      {
+        ...CONFIRMED_ASSIGNMENT,
+        cues: [{ id: "q3", name: "Abrir o salão", phase: "before", start_offset_minutes: -15, duration_minutes: 0, notes: null }],
+      },
+      { ...CONFIRMED_ASSIGNMENT, id: "a3", cues: [] },
+    ]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+
+    await waitFor(() => screen.getByTestId("assignment-a1-cues"));
+    expect(screen.getAllByText("Suas tarefas neste culto")).toHaveLength(2);
+    expect(screen.getByText("09:30")).toBeTruthy();
+    expect(screen.getByText("Recepção pronta")).toBeTruthy();
+    expect(screen.getByText("11:05")).toBeTruthy();
+    // Sem start_time conhecido, o deslocamento — nunca um horário inventado.
+    expect(screen.getByText("15min antes")).toBeTruthy();
+    expect(screen.queryByTestId("assignment-a3-cues")).toBeNull();
+  });
+
   it("mostra o dia do culto com o horário da celebração, não a véspera em UTC-3 (PEND-12)", async () => {
     mockGetMyAssignments.mockResolvedValue([
       {

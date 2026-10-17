@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { flattenMinistryTree, type MinistryTreeNode } from "@/lib/ministryTree";
 import { cn } from "@/lib/utils";
 import api, { isForbidden } from "@/lib/api";
-import { formatCivilDate } from "@/lib/datetime";
+import { addMinutesToClock, formatCivilDate } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,15 +34,27 @@ interface RepertoireSong {
   link: string | null;
 }
 
+/** Etapa de equipe da OC que cabe ao voluntário (escala + OC). */
+interface MyCue {
+  id: string;
+  name: string;
+  phase: "before" | "during" | "after";
+  /** Minutos desde o início do culto; negativo é antes. */
+  start_offset_minutes: number;
+  duration_minutes: number;
+  notes: string | null;
+}
+
 interface MyAssignment {
   id: string;
   status: AssignmentStatus;
   notified_at: string | null;
   responded_at: string | null;
-  celebration: { id: string; name: string };
+  celebration: { id: string; name: string; start_time?: string };
   ministry: { id: string; name: string };
   scheduled_date: string;
   setlist: { songs: RepertoireSong[] } | null;
+  cues?: MyCue[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -380,6 +392,25 @@ export default function VoluntariosPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Tarefas da OC para quem está na escala */}
+                    {a.cues && a.cues.length > 0 && (
+                      <div className="mb-3 border-t border-[var(--border-default)] pt-3" data-testid="my-cues">
+                        <p className="mb-1.5 text-xs font-medium text-stone">Suas tarefas neste culto</p>
+                        <ul className="flex flex-col gap-1">
+                          {a.cues.map((cue) => (
+                            <li key={cue.id} className="flex items-baseline gap-2 text-xs">
+                              <span className="flex-shrink-0 font-mono text-ink dark:text-white">
+                                {addMinutesToClock(a.celebration.start_time, cue.start_offset_minutes) ??
+                                  "—"}
+                              </span>
+                              <span className="text-ink dark:text-white">{cue.name}</span>
+                              {cue.notes && <span className="text-stone italic">{cue.notes}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {/* Repertório (REPERT-03) */}
                     <div className="border-t border-[var(--border-default)] pt-3">

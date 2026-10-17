@@ -323,6 +323,59 @@ describe("VoluntariosPage", () => {
     expect(openSpy).toHaveBeenCalledWith("http://x.test", "_blank", "noopener,noreferrer");
   });
 
+  it("mostra as tarefas da OC do voluntário com o horário do relógio (escala + OC)", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1",
+              status: "confirmed",
+              notified_at: null,
+              responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo", start_time: "10:00" },
+              ministry: { id: "m1", name: "Recepção" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+              setlist: null,
+              cues: [
+                { id: "q1", name: "Recepção pronta", phase: "before", start_offset_minutes: -30, duration_minutes: 0, notes: "Portão principal" },
+                { id: "q2", name: "Luz desligada", phase: "during", start_offset_minutes: 65, duration_minutes: 0, notes: null },
+              ],
+            },
+            {
+              id: "a2",
+              status: "confirmed",
+              notified_at: null,
+              responded_at: null,
+              // Sem start_time conhecido o horário não é inventado.
+              celebration: { id: "c2", name: "Culto Quarta" },
+              ministry: { id: "m1", name: "Recepção" },
+              scheduled_date: "2026-02-04T00:00:00Z",
+              setlist: null,
+              cues: [{ id: "q3", name: "Abrir o salão", phase: "before", start_offset_minutes: -15, duration_minutes: 0, notes: null }],
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+
+    expect(await screen.findByText("Recepção pronta")).toBeInTheDocument();
+    expect(screen.getByText("09:30")).toBeInTheDocument();
+    expect(screen.getByText("Portão principal")).toBeInTheDocument();
+    expect(screen.getByText("11:05")).toBeInTheDocument();
+    expect(screen.getByText("Abrir o salão")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getAllByText("Suas tarefas neste culto")).toHaveLength(2);
+  });
+
   it("mostra 'repertório ainda não publicado' quando a escala não tem setlist", async () => {
     setup(["volunteer"]);
     mockedApi.get.mockImplementation((url: string) => {
