@@ -133,7 +133,12 @@ test.describe("repertório do time de louvor", () => {
       );
       await api.call("PATCH", `/celebrations/instances/${instanceId}/schedule/publish`);
 
-      const cardHeading = page.getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false });
+      // `.first()`: em produção outra escala pode cair na mesma data (sobra de
+      // uma run anterior ou outro teste), e o `getByText` em modo estrito falha
+      // quando acha mais de um elemento.
+      const cardHeading = page
+        .getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false })
+        .first();
 
       // ── Antes da OC/setlist existir: "ainda não publicado" ──
       await test.step("escala sem setlist mostra 'repertório ainda não publicado'", async () => {
