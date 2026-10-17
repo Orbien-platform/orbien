@@ -133,7 +133,12 @@ test.describe("repertório do time de louvor", () => {
       );
       await api.call("PATCH", `/celebrations/instances/${instanceId}/schedule/publish`);
 
-      const cardHeading = page.getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false });
+      // `.first()`: a data pode aparecer em mais de um ponto da tela (ou sobrar
+      // de uma execução anterior no mesmo tenant); o que o teste confere é que
+      // existe ao menos um card dela, não que seja o único.
+      const cardHeading = page
+        .getByText(scheduledDate.toLocaleDateString("pt-BR"), { exact: false })
+        .first();
 
       // ── Antes da OC/setlist existir: "ainda não publicado" ──
       await test.step("escala sem setlist mostra 'repertório ainda não publicado'", async () => {
