@@ -322,6 +322,107 @@ describe("ServiceOrderView", () => {
     expect(text.indexOf("Pregação")).toBeLessThan(text.indexOf("Louvor de abertura"));
   });
 
+  describe("antes, durante e depois do culto", () => {
+    function mockPhases(startTime = "10:00") {
+      const order = {
+        id: "so1",
+        title: "OC Domingo",
+        items: [
+          // Fora de ordem de propósito: a tela agrupa por momento.
+          { id: "d1", name: "Desmontagem", type: "other", sequence: 1, phase: "after", entry_kind: "program", duration_minutes: 15, start_offset_minutes: 90, responsible_type: "free_text", responsible_label: "Zé" },
+          { id: "p1", name: "Abertura", type: "worship", sequence: 1, phase: "during", entry_kind: "program", duration_minutes: 20, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "Ana", setlist: null },
+          {
+            id: "r1", name: "Recepção pronta", type: "other", sequence: 1, phase: "before", entry_kind: "logistics",
+            duration_minutes: 0, start_offset_minutes: -30, responsible_type: "ministry",
+            ministry: { id: "m1", name: "Recepção" },
+            scheduled_volunteers: [
+              { id: "v1", full_name: "Carla", status: "confirmed" },
+              { id: "v2", full_name: "Davi", status: "pending" },
+            ],
+          },
+        ],
+      };
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/instances/i1") {
+          return Promise.resolve({
+            data: { ...instanceWithOC, celebration: { ...instanceWithOC.celebration, start_time: startTime } },
+          });
+        }
+        if (url === "/celebrations/orders/so1") return Promise.resolve({ data: order });
+        return Promise.reject(new Error(`unexpected GET ${url}`));
+      });
+    }
+
+    function renderView() {
+      render(
+        <ServiceOrderView open onOpenChange={vi.fn()} instanceId="i1" canEdit canAddSongs />
+      );
+    }
+
+    it("agrupa por momento, marca a etapa de equipe e mostra quem está na escala", async () => {
+      mockPhases();
+      renderView();
+
+      await screen.findByText("Recepção pronta");
+      const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+      expect(headings).toEqual(["Antes do culto", "Durante o culto", "Depois do culto"]);
+
+      const text = document.body.textContent ?? "";
+      expect(text.indexOf("Recepção pronta")).toBeLessThan(text.indexOf("Abertura"));
+      expect(text.indexOf("Abertura")).toBeLessThan(text.indexOf("Desmontagem"));
+
+      expect(screen.getByText("09:30")).toBeInTheDocument();
+      expect(screen.getByText("Equipe")).toBeInTheDocument();
+      expect(screen.getByTestId("item-scheduled")).toHaveTextContent("Na escala: Carla, Davi (a confirmar)");
+      // Etapa de equipe sem duração não mostra "0 min".
+      expect(screen.queryByText("0 min")).not.toBeInTheDocument();
+    });
+
+    it("não deixa mover uma etapa para fora do seu momento", async () => {
+      mockPhases();
+      renderView();
+      await screen.findByText("Recepção pronta");
+
+      // Cada momento tem uma etapa só: nenhuma seta pode estar habilitada.
+      for (const b of screen.getAllByRole("button", { name: /Mover para (cima|baixo)/ })) {
+        expect(b).toBeDisabled();
+      }
+    });
+
+    it("troca de lugar só etapas do mesmo momento", async () => {
+      vi.mocked(api.patch).mockResolvedValue({ data: {} });
+      const order = {
+        id: "so1", title: "OC", items: [
+          { id: "a", name: "Chegada", type: "other", sequence: 1, phase: "before", entry_kind: "logistics", duration_minutes: 0, start_offset_minutes: -40, responsible_type: "free_text", responsible_label: "x" },
+          { id: "b", name: "Som ligado", type: "other", sequence: 2, phase: "before", entry_kind: "logistics", duration_minutes: 0, start_offset_minutes: -20, responsible_type: "free_text", responsible_label: "x" },
+          { id: "c", name: "Abertura", type: "other", sequence: 1, phase: "during", entry_kind: "program", duration_minutes: 5, start_offset_minutes: 0, responsible_type: "free_text", responsible_label: "x" },
+        ],
+      };
+      vi.mocked(api.get).mockImplementation((url: string) =>
+        url === "/celebrations/instances/i1"
+          ? Promise.resolve({ data: instanceWithOC })
+          : Promise.resolve({ data: order })
+      );
+      const user = userEvent.setup();
+      renderView();
+      await screen.findByText("Chegada");
+
+      const down = screen.getAllByRole("button", { name: "Mover para baixo" });
+      expect(down[0]).toBeEnabled(); // Chegada → desce dentro de "antes"
+      expect(down[1]).toBeDisabled(); // Som ligado é a última de "antes"
+      await user.click(down[0]);
+      await waitFor(() => expect(api.patch).toHaveBeenCalledWith("/celebrations/items/a", { sequence: 2 }));
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/items/b", { sequence: 1 });
+    });
+
+    it("mostra o horário certo antes da meia-noite quando o culto começa logo depois dela", async () => {
+      mockPhases("00:10");
+      renderView();
+      await screen.findByText("Recepção pronta");
+      expect(screen.getByText("23:40")).toBeInTheDocument();
+    });
+  });
+
   it("deletes an item", async () => {
     mockGet(true);
     vi.mocked(api.delete).mockResolvedValue({ data: {} });

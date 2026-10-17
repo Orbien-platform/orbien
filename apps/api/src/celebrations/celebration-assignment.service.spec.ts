@@ -976,12 +976,53 @@ describe('CelebrationAssignmentService', () => {
 
       await service.getMyAssignments('u1', 't1', 'g1', false);
 
-      expect(client.serviceOrder.findMany).toHaveBeenCalledTimes(1);
-      expect(client.serviceOrder.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { celebration_instance_id: { in: ['inst1', 'inst2'] } },
-        }),
-      );
+      // Uma query para o repertório e outra para as etapas de equipe — nunca
+      // uma por escala.
+      expect(client.serviceOrder.findMany).toHaveBeenCalledTimes(2);
+      for (const call of client.serviceOrder.findMany.mock.calls) {
+        expect(call[0]).toEqual(
+          expect.objectContaining({
+            where: { celebration_instance_id: { in: ['inst1', 'inst2'] } },
+          }),
+        );
+      }
+    });
+
+    it('traz as etapas de equipe do ministério e as da própria pessoa (escala + OC)', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1', person_id: 'p1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([assignmentFixture({ id: 'a1' })]);
+      const item = (id: string, extra: Record<string, unknown>) => ({
+        id,
+        name: id,
+        phase: 'before',
+        start_offset_minutes: -30,
+        duration_minutes: 0,
+        notes: null,
+        ministry_id: null,
+        person_id: null,
+        ...extra,
+      });
+      client.serviceOrder.findMany.mockResolvedValue([
+        // OC de outra celebração: nada dela vale para esta escala.
+        { celebration_instance_id: 'outra', items: [item('de-outro-culto', { ministry_id: 'min1' })] },
+        {
+          celebration_instance_id: 'inst1',
+          items: [
+            item('recepcao-pronta', { ministry_id: 'min1' }),
+            item('luz-desligada', { person_id: 'p1', phase: 'during', start_offset_minutes: 65 }),
+            item('de-outro-ministerio', { ministry_id: 'outro' }),
+            item('de-outra-pessoa', { person_id: 'p2' }),
+          ],
+        },
+      ]);
+      const { service } = serviceWith(client);
+
+      const [result] = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result.cues.map((c) => c.id)).toEqual(['recepcao-pronta', 'luz-desligada']);
+      expect(result.cues[0]).toMatchObject({ phase: 'before', start_offset_minutes: -30 });
     });
 
     it('traz service_order_id quando a instância já tem Ordem de Culto (MOB-08-07)', async () => {

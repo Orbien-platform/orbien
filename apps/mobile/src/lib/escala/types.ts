@@ -16,6 +16,17 @@ export interface SetlistSong {
   link: string | null;
 }
 
+/** Etapa de equipe da OC que cabe a quem está nesta escala (escala + OC). */
+export interface AssignmentCue {
+  id: string;
+  name: string;
+  phase: "before" | "during" | "after";
+  /** Minutos desde o início do culto; negativo é antes. */
+  start_offset_minutes: number;
+  duration_minutes: number;
+  notes: string | null;
+}
+
 export interface Assignment {
   id: string;
   status: AssignmentStatus;
@@ -29,6 +40,8 @@ export interface Assignment {
   /** id da Ordem de Culto da celebração, ou `null` se ainda não existir (MOB-08-07). */
   service_order_id: string | null;
   setlist: { songs: SetlistSong[] } | null;
+  /** Ausente em resposta antiga da API. */
+  cues?: AssignmentCue[];
 }
 
 export interface Unavailability {

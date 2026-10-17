@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { ServiceOrderItemsService } from './service-order-items.service';
+import { assertTiming, ServiceOrderItemsService } from './service-order-items.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 function clientWith(overrides: Record<string, unknown> = {}) {
@@ -126,6 +126,8 @@ describe('ServiceOrderItemsService', () => {
           type: 'prayer',
           start_offset_minutes: 0,
           duration_minutes: 5,
+          phase: 'during',
+          entry_kind: 'program',
           responsible_type: 'free_text',
           person_id: null,
           ministry_id: null,
@@ -277,6 +279,8 @@ describe('ServiceOrderItemsService', () => {
         type: 'sermon',
         start_offset_minutes: 5,
         duration_minutes: 10,
+        phase: 'after',
+        entry_kind: 'logistics',
         responsible_type: 'person',
         person_id: 'p2',
         ministry_id: 'm2',
@@ -292,6 +296,8 @@ describe('ServiceOrderItemsService', () => {
           type: 'sermon',
           start_offset_minutes: 5,
           duration_minutes: 10,
+          phase: 'after',
+          entry_kind: 'logistics',
           responsible_type: 'person',
           person_id: 'p2',
           ministry_id: 'm2',
@@ -299,6 +305,23 @@ describe('ServiceOrderItemsService', () => {
           notes: 'obs',
         },
       });
+    });
+
+    it('valida o horário contra o momento já gravado quando só um deles muda', async () => {
+      const client = clientWith();
+      client.serviceOrderItem.findFirst.mockResolvedValue({
+        id: 'item1',
+        phase: 'before',
+        entry_kind: 'program',
+        start_offset_minutes: -30,
+        duration_minutes: 5,
+      });
+      const service = serviceWith(client);
+
+      await expect(
+        service.update('t1', 'g1', 'item1', { start_offset_minutes: 10 } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.serviceOrderItem.update).not.toHaveBeenCalled();
     });
 
     it('não valida person_id quando é o mesmo já atribuído', async () => {
@@ -405,5 +428,27 @@ describe('ServiceOrderItemsService', () => {
         service.reorder('t1', 'g1', { items: [{ id: 'nope', sequence: 1 }] } as never),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+  });
+});
+
+describe('assertTiming', () => {
+  const base = { phase: 'during', entry_kind: 'program', start_offset_minutes: 10, duration_minutes: 5 } as const;
+
+  it('aceita etapa antes do culto com horário negativo', () => {
+    expect(() => assertTiming({ ...base, phase: 'before', start_offset_minutes: -30 })).not.toThrow();
+  });
+
+  it('antes do culto exige horário anterior ao início', () => {
+    expect(() => assertTiming({ ...base, phase: 'before', start_offset_minutes: 0 })).toThrow(BadRequestException);
+  });
+
+  it('durante e depois não aceitam horário anterior ao início', () => {
+    expect(() => assertTiming({ ...base, start_offset_minutes: -5 })).toThrow(BadRequestException);
+    expect(() => assertTiming({ ...base, phase: 'after', start_offset_minutes: -5 })).toThrow(BadRequestException);
+  });
+
+  it('só a etapa de equipe pode ter duração zero', () => {
+    expect(() => assertTiming({ ...base, duration_minutes: 0 })).toThrow(BadRequestException);
+    expect(() => assertTiming({ ...base, entry_kind: 'logistics', duration_minutes: 0 })).not.toThrow();
   });
 });

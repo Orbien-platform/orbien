@@ -21,10 +21,12 @@ import { AppButton } from "../../components/AppButton";
 import { Badge } from "../../components/Badge";
 import { Card } from "../../components/Card";
 import { Screen } from "../../components/Screen";
+import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { getServiceOrder } from "../../lib/celebracoes/celebracoes-client";
-import type { ServiceOrder } from "../../lib/celebracoes/types";
+import type { ItemPhase, ServiceOrder } from "../../lib/celebracoes/types";
+import { addMinutesToClock, formatOffsetFromStart } from "../../lib/format/clock";
 import {
   CircleAlert,
   Clock,
@@ -41,16 +43,12 @@ const NOT_FOUND_MESSAGE = "Ordem de culto não encontrada.";
 const UNPUBLISHED_WARNING = "Ordem de culto ainda não publicada — pode mudar.";
 const NO_SETLIST_MESSAGE = "Repertório ainda não publicado";
 
-// Sem o horário de início da celebração no shape de ServiceOrder (design.md
-// não o inclui), o horário de cada etapa é exibido como deslocamento a
-// partir do início — mesma unidade que a API já guarda (AddItemModal.tsx
-// converte na direção oposta, de "HH:mm" pra este mesmo campo).
-function formatOffset(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0) return m > 0 ? `${h}h${m}min` : `${h}h`;
-  return `${m}min`;
-}
+const PHASE_LABELS: Record<ItemPhase, string> = {
+  before: "Antes do culto",
+  during: "Durante o culto",
+  after: "Depois do culto",
+};
+const PHASE_ORDER: Record<ItemPhase, number> = { before: 0, during: 1, after: 2 };
 
 export default function CelebracaoScreen() {
   const { brandInk, colors } = useTheme();
@@ -116,7 +114,12 @@ export default function CelebracaoScreen() {
     return <StatusMessage testID="celebracao-loading" icon={ListMusic} message="Carregando…" />;
   }
 
-  const items = [...order.items].sort((a, b) => a.sequence - b.sequence);
+  // Antes, durante e depois do culto; dentro de cada momento, a sequência.
+  const items = [...order.items].sort(
+    (a, b) =>
+      PHASE_ORDER[a.phase ?? "during"] - PHASE_ORDER[b.phase ?? "during"] || a.sequence - b.sequence,
+  );
+  const startTime = order.celebrationInstance.celebration.start_time;
 
   return (
     <Screen scroll testID="celebracao-detail">
@@ -130,7 +133,15 @@ export default function CelebracaoScreen() {
         <Alert messageTestID="celebracao-unpublished-warning" message={UNPUBLISHED_WARNING} />
       ) : null}
 
-      {items.map((item) => {
+      {items.map((item, index) => {
+        const phase = item.phase ?? "during";
+        const startsPhase = index === 0 || (items[index - 1].phase ?? "during") !== phase;
+        const isTeamTask = item.entry_kind === "logistics";
+        const clock = addMinutesToClock(startTime, item.start_offset_minutes);
+        const when = clock ?? formatOffsetFromStart(item.start_offset_minutes);
+        const scheduled = (item.scheduled_volunteers ?? [])
+          .map((v) => (v.status === "pending" ? `${v.full_name} (a confirmar)` : v.full_name))
+          .join(", ");
         const isMine = ministryId !== undefined && item.ministry?.id === ministryId;
         const responsible =
           item.responsible_type === "person" && item.person
@@ -140,8 +151,13 @@ export default function CelebracaoScreen() {
               : item.responsible_label;
 
         return (
+          <View key={item.id}>
+            {startsPhase ? (
+              <View testID={`celebracao-phase-${phase}`}>
+                <SectionLabel>{PHASE_LABELS[phase]}</SectionLabel>
+              </View>
+            ) : null}
           <Card
-            key={item.id}
             testID={isMine ? `celebracao-item-${item.id}-mine` : `celebracao-item-${item.id}`}
             highlightColor={isMine ? brandInk : undefined}
           >
@@ -149,6 +165,7 @@ export default function CelebracaoScreen() {
               <Text style={[typography.h3, styles.itemName, { color: colors.textPrimary }]}>
                 {item.name}
               </Text>
+              {isTeamTask ? <Badge label="Equipe" /> : null}
               {isMine ? <Badge label="Minha função" tone="info" /> : null}
             </View>
 
@@ -163,13 +180,22 @@ export default function CelebracaoScreen() {
                 testID={`celebracao-item-${item.id}-horario`}
                 style={[typography.mono, { color: colors.textSecondary }]}
               >
-                {`${formatOffset(item.start_offset_minutes)} · ${item.duration_minutes}min`}
+                {item.duration_minutes > 0 ? `${when} · ${item.duration_minutes}min` : when}
               </Text>
             </View>
 
             {responsible ? (
               <Text style={[typography.bodyMedium, styles.responsible, { color: colors.textPrimary }]}>
                 {responsible}
+              </Text>
+            ) : null}
+
+            {scheduled ? (
+              <Text
+                testID={`celebracao-item-${item.id}-escala`}
+                style={[typography.caption, styles.responsible, { color: colors.textSecondary }]}
+              >
+                {`Na escala: ${scheduled}`}
               </Text>
             ) : null}
 
@@ -193,12 +219,13 @@ export default function CelebracaoScreen() {
                   </View>
                 ))}
               </View>
-            ) : (
+            ) : isTeamTask ? null : (
               <Text style={[typography.caption, styles.noSetlist, { color: colors.textTertiary }]}>
                 {NO_SETLIST_MESSAGE}
               </Text>
             )}
           </Card>
+          </View>
         );
       })}
     </Screen>

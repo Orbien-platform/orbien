@@ -38,6 +38,7 @@ import {
   respondToAssignment,
 } from "../lib/escala/escala-client";
 import type { Assignment, AssignmentStatus, MySwapRequests, SwapRequest } from "../lib/escala/types";
+import { addMinutesToClock, formatOffsetFromStart } from "../lib/format/clock";
 import { formatDateTime, localWhen } from "../lib/format/date";
 import {
   ArrowLeftRight,
@@ -323,6 +324,25 @@ export default function EscalaScreen() {
                     )}
                   </View>
 
+                  {item.cues && item.cues.length > 0 ? (
+                    <View testID={`assignment-${item.id}-cues`} style={styles.cues}>
+                      <Text style={[typography.label, { color: colors.textTertiary }]}>
+                        Suas tarefas neste culto
+                      </Text>
+                      {item.cues.map((cue) => (
+                        <View key={cue.id} style={styles.cueRow}>
+                          <Text style={[typography.mono, { color: colors.textPrimary }]}>
+                            {addMinutesToClock(item.celebration.start_time, cue.start_offset_minutes) ??
+                              formatOffsetFromStart(cue.start_offset_minutes)}
+                          </Text>
+                          <Text style={[typography.body, styles.cueName, { color: colors.textPrimary }]}>
+                            {cue.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
                   {item.status === "pending" ? (
                     <View style={styles.actionsRow}>
                       <AppButton
@@ -390,6 +410,9 @@ export default function EscalaScreen() {
 }
 
 const styles = StyleSheet.create({
+  cues: { marginTop: spacing.md, gap: spacing.xs },
+  cueRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.sm },
+  cueName: { flex: 1 },
   tabs: { marginBottom: spacing.lg },
   card: { marginBottom: spacing.sm },
   cardRow: {

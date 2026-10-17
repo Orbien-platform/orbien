@@ -41,13 +41,45 @@ describe('CreateServiceOrderItemDto', () => {
     expect(errors.some((e) => e.property === 'sequence')).toBe(true);
   });
 
-  it('rejeita start_offset_minutes negativo', async () => {
+  it('aceita start_offset_minutes negativo (etapa antes do culto)', async () => {
+    expect(
+      await errorsFor({
+        start_offset_minutes: -30,
+        phase: 'before',
+        responsible_type: 'free_text',
+        responsible_label: 'x',
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('rejeita start_offset_minutes além de um dia', async () => {
     const errors = await errorsFor({
-      start_offset_minutes: -1,
+      start_offset_minutes: -1441,
       responsible_type: 'free_text',
       responsible_label: 'x',
     });
     expect(errors.some((e) => e.property === 'start_offset_minutes')).toBe(true);
+  });
+
+  it('rejeita phase e entry_kind fora do enum', async () => {
+    const errors = await errorsFor({
+      phase: 'meio',
+      entry_kind: 'outro',
+      responsible_type: 'free_text',
+      responsible_label: 'x',
+    });
+    expect(errors.map((e) => e.property).sort()).toEqual(['entry_kind', 'phase']);
+  });
+
+  it('aceita etapa de equipe sem duração', async () => {
+    expect(
+      await errorsFor({
+        entry_kind: 'logistics',
+        duration_minutes: 0,
+        responsible_type: 'free_text',
+        responsible_label: 'x',
+      }),
+    ).toHaveLength(0);
   });
 
   it('rejeita type fora do enum', async () => {
@@ -70,9 +102,9 @@ describe('CreateServiceOrderItemDto', () => {
     expect(errors.some((e) => e.property === 'type')).toBe(true);
   });
 
-  it('rejeita duration_minutes menor que 1', async () => {
+  it('rejeita duration_minutes negativo', async () => {
     const errors = await errorsFor({
-      duration_minutes: 0,
+      duration_minutes: -1,
       responsible_type: 'free_text',
       responsible_label: 'x',
     });

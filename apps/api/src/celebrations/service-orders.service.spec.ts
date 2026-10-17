@@ -65,15 +65,68 @@ describe('ServiceOrdersService', () => {
   describe('findOne', () => {
     it('retorna a OC com includes quando encontrada', async () => {
       const client = clientWith();
-      client.serviceOrder.findFirst.mockResolvedValue({ id: 'so1' });
+      client.serviceOrder.findFirst.mockResolvedValue({ id: 'so1', items: [] });
       const { service } = serviceWith(client);
 
-      await expect(service.findOne('t1', 'g1', 'so1')).resolves.toEqual({ id: 'so1' });
+      await expect(service.findOne('t1', 'g1', 'so1')).resolves.toEqual({ id: 'so1', items: [] });
+      // Sem etapa de ministério, não há o que buscar na escala.
+      expect(client.celebrationAssignment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('liga a OC à escala: cada etapa de ministério traz quem está escalado', async () => {
+      const client = clientWith();
+      client.serviceOrder.findFirst.mockResolvedValue({
+        id: 'so1',
+        celebration_instance_id: 'inst1',
+        items: [
+          { id: 'i1', ministry_id: 'm1' },
+          { id: 'i2', ministry_id: 'm1' },
+          { id: 'i3', ministry_id: 'm2' },
+          { id: 'i4', ministry_id: null },
+        ],
+      });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        {
+          status: 'confirmed',
+          volunteerProfile: { person: { id: 'p1', full_name: 'Ana' } },
+          celebrationMinistry: { ministry_id: 'm1' },
+        },
+        {
+          status: 'pending',
+          volunteerProfile: { person: { id: 'p2', full_name: 'Bia' } },
+          celebrationMinistry: { ministry_id: 'm1' },
+        },
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.findOne('t1', 'g1', 'so1');
+
+      expect(client.celebrationAssignment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: { in: ['pending', 'confirmed'] },
+            celebrationMinistry: {
+              ministry_id: { in: ['m1', 'm2'] },
+              schedule: { celebration_instance_id: 'inst1' },
+            },
+          }),
+        }),
+      );
+      const crew = [
+        { id: 'p1', full_name: 'Ana', status: 'confirmed' },
+        { id: 'p2', full_name: 'Bia', status: 'pending' },
+      ];
+      expect(result.items.map((i) => (i as { scheduled_volunteers: unknown }).scheduled_volunteers)).toEqual([
+        crew,
+        crew,
+        [],
+        [],
+      ]);
     });
 
     it('inclui a referência do catálogo dentro de setlist.songs (SETREP-04 AC1)', async () => {
       const client = clientWith();
-      client.serviceOrder.findFirst.mockResolvedValue({ id: 'so1' });
+      client.serviceOrder.findFirst.mockResolvedValue({ id: 'so1', items: [] });
       const { service } = serviceWith(client);
 
       await service.findOne('t1', 'g1', 'so1');
@@ -86,11 +139,11 @@ describe('ServiceOrdersService', () => {
               id: true,
               scheduled_date: true,
               status: true,
-              celebration: { select: { id: true, name: true, type: true } },
+              celebration: { select: { id: true, name: true, type: true, start_time: true } },
             },
           },
           items: {
-            orderBy: { sequence: 'asc' },
+            orderBy: [{ phase: 'asc' }, { sequence: 'asc' }],
             include: {
               person: { select: { id: true, full_name: true } },
               ministry: { select: { id: true, name: true } },

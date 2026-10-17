@@ -44,7 +44,7 @@ export class CelebrationAssignmentService {
     const personId = await this.resolvePersonId(userId);
     const profile = await this.prisma.client.volunteerProfile.findFirst({
       where: { person_id: personId, tenant_id: tenantId, congregation_id: congregationId },
-      select: { id: true },
+      select: { id: true, person_id: true },
     });
     if (!profile) throw new NotFoundException('Perfil de voluntário não encontrado');
     return profile;
@@ -410,6 +410,7 @@ export class CelebrationAssignmentService {
     });
 
     const setlistByKey = await this.attachSetlists(assignments);
+    const cuesByKey = await this.attachCues(assignments, profile.person_id);
 
     const result = assignments.map((a) => ({
       id: a.id,
@@ -432,11 +433,72 @@ export class CelebrationAssignmentService {
       setlist: setlistByKey.get(
         `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,
       ) ?? null,
+      cues:
+        cuesByKey.get(
+          `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,
+        ) ?? [],
     }));
 
     result.sort((a, b) => a.scheduled_date.getTime() - b.scheduled_date.getTime());
 
     return result;
+  }
+
+  /**
+   * Liga a escala à OC: para cada escala devolvida, as etapas de equipe
+   * (`entry_kind = logistics`) da mesma celebração que são do ministério em que
+   * a pessoa está escalada ou dela mesma (`responsible_type = person`). Numa
+   * query só, casada em memória por `(celebration_instance_id, ministry_id)`;
+   * a etapa pessoal vale para todas as escalas da pessoa naquela celebração.
+   */
+  private async attachCues(
+    assignments: Array<{
+      celebrationMinistry: { ministry_id: string; schedule: { celebrationInstance: { id: string } } };
+    }>,
+    personId: string,
+  ): Promise<Map<string, MyAssignmentCue[]>> {
+    const instanceIds = [
+      ...new Set(assignments.map((a) => a.celebrationMinistry.schedule.celebrationInstance.id)),
+    ];
+    const cuesByKey = new Map<string, MyAssignmentCue[]>();
+
+    const orders = await this.prisma.client.serviceOrder.findMany({
+      where: { celebration_instance_id: { in: instanceIds } },
+      include: {
+        items: {
+          where: { entry_kind: 'logistics' },
+          orderBy: [{ phase: 'asc' }, { start_offset_minutes: 'asc' }, { sequence: 'asc' }],
+        },
+      },
+    });
+
+    const push = (key: string, cue: MyAssignmentCue) => {
+      // Uma pessoa não repete ministério na mesma escala, então a chave
+      // `(instância, ministério)` nunca recebe a mesma etapa duas vezes.
+      cuesByKey.set(key, [...(cuesByKey.get(key) ?? []), cue]);
+    };
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        const cue: MyAssignmentCue = {
+          id: item.id,
+          name: item.name,
+          phase: item.phase,
+          start_offset_minutes: item.start_offset_minutes,
+          duration_minutes: item.duration_minutes,
+          notes: item.notes,
+        };
+        for (const a of assignments) {
+          const { id: instanceId } = a.celebrationMinistry.schedule.celebrationInstance;
+          if (instanceId !== order.celebration_instance_id) continue;
+          // `null` nunca é igual a um id: etapa sem ministério/pessoa não casa.
+          const mine =
+            item.ministry_id === a.celebrationMinistry.ministry_id || item.person_id === personId;
+          if (mine) push(`${instanceId}:${a.celebrationMinistry.ministry_id}`, cue);
+        }
+      }
+    }
+    return cuesByKey;
   }
 
   /**
@@ -485,6 +547,20 @@ export class CelebrationAssignmentService {
     }
     return setlistByKey;
   }
+}
+
+/**
+ * Etapa de equipe da OC que cabe a quem está escalado: "recepção pronta",
+ * "estacionamento", "luz desligada". O horário vem como minutos desde o início
+ * do culto (negativo é antes) — quem exibe soma ao `start_time` da celebração.
+ */
+export interface MyAssignmentCue {
+  id: string;
+  name: string;
+  phase: 'before' | 'during' | 'after';
+  start_offset_minutes: number;
+  duration_minutes: number;
+  notes: string | null;
 }
 
 export interface MyAssignmentSetlistSong {

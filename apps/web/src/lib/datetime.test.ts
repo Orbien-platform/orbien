@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DISPLAY_TIME_ZONE,
+  addMinutesToClock,
   civilDayKey,
   formatCivilDate,
   formatInstant,
@@ -81,5 +82,24 @@ describe("saoPauloCivilDay", () => {
 describe("civilDayKey", () => {
   it("devolve a chave do dia civil", () => {
     expect(civilDayKey(new Date("2026-02-03T00:00:00Z"))).toBe("2026-02-03");
+  });
+});
+
+describe("addMinutesToClock", () => {
+  it("soma e subtrai minutos", () => {
+    expect(addMinutesToClock("10:00", 25)).toBe("10:25");
+    expect(addMinutesToClock("10:00", -30)).toBe("09:30");
+  });
+
+  it("dá a volta na meia-noite nos dois sentidos", () => {
+    expect(addMinutesToClock("23:50", 20)).toBe("00:10");
+    expect(addMinutesToClock("00:10", -20)).toBe("23:50");
+  });
+
+  it("aceita hora de um dígito e devolve null para horário inválido ou ausente", () => {
+    expect(addMinutesToClock("9:05", 0)).toBe("09:05");
+    expect(addMinutesToClock("meio-dia", 5)).toBeNull();
+    expect(addMinutesToClock(undefined, 5)).toBeNull();
+    expect(addMinutesToClock(null, 5)).toBeNull();
   });
 });
