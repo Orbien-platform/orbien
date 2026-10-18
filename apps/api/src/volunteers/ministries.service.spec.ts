@@ -39,6 +39,7 @@ describe('MinistriesService', () => {
           name: 'Geral',
           description: null,
           color: null,
+          counts_attendance: false,
           parent_ministry_id: null,
         },
       });
@@ -187,6 +188,20 @@ describe('MinistriesService', () => {
       expect(client.ministry.update).toHaveBeenCalledWith({
         where: { id: 'm1' },
         data: { description: 'Nova descrição', color: '#000000' },
+      });
+    });
+
+    it('atualiza counts_attendance quando informado', async () => {
+      const client = clientWith();
+      client.ministry.findFirst.mockResolvedValueOnce({ id: 'm1' }); // findOne
+      client.ministry.update.mockResolvedValue({ id: 'm1' });
+      const service = serviceWith(client);
+
+      await service.update('t1', 'g1', 'm1', { counts_attendance: true } as never);
+
+      expect(client.ministry.update).toHaveBeenCalledWith({
+        where: { id: 'm1' },
+        data: { counts_attendance: true },
       });
     });
 

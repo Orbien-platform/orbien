@@ -96,7 +96,7 @@ membros, frequentadores e visitantes vieram ao culto, no celular ou no web.
 | PRES-04 | `attendance`/`can_count_attendance` em my-assignments (AC7) | Pending |
 | PRES-05 | Mobile: formulário (AC8) | Pending |
 | PRES-06 | Web: formulário no detalhe da celebração (AC9) | Pending |
-| PRES-07 | `GET /celebrations/attendance/summary` + tela de média (P1 média) | Pending |
+| PRES-07 | `GET /celebrations/attendance/summary` + tela `/pessoas/indicadores` (P1 média) | Pending |
 | PRES-08 | Lista por culto + correção (P2) | Pending |
 
 ## Success Criteria

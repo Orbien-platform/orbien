@@ -23,7 +23,7 @@
 ## Web (`apps/web`)
 - Detalhe da celebração (`CelebrationDetailSheet`): bloco "Presença" com 4 campos + total.
 - Ministérios: checkbox "Responsável pela contagem de presença".
-- Nova tela `/celebracoes/presenca` (aba/atalho na página de celebrações; sem novo item de menu): filtros período + celebração, KPIs de média, lista por culto (P2). Padrão `useEffect` + axios. Passa por `frontend-design`.
+- Nova tela `/pessoas/indicadores` (slot "Pessoas → Indicadores" já previsto em `docs/design/orbita-v2/README.md`; entra como item de menu em Pessoas): filtros período + celebração, KPIs de média, lista por culto (P2). Padrão `useEffect` + axios. Passa por `frontend-design`.
 
 ## Mobile (`apps/mobile`)
 - `escala-client.ts`: `saveAttendance(instanceId, counts)`; tipos em `types.ts`.

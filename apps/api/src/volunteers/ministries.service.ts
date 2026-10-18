@@ -79,6 +79,7 @@ export class MinistriesService {
         name: dto.name,
         description: dto.description ?? null,
         color: dto.color ?? null,
+        counts_attendance: dto.counts_attendance ?? false,
         parent_ministry_id: dto.parent_ministry_id ?? null,
       },
     });
@@ -158,6 +159,7 @@ export class MinistriesService {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.color !== undefined && { color: dto.color }),
+        ...(dto.counts_attendance !== undefined && { counts_attendance: dto.counts_attendance }),
         ...(dto.parent_ministry_id !== undefined && { parent_ministry_id: dto.parent_ministry_id }),
       },
     });
