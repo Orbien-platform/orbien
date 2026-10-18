@@ -27,6 +27,15 @@ export interface AssignmentCue {
   notes: string | null;
 }
 
+/** Contagem de público de um culto; as quatro categorias não se sobrepõem. */
+export interface AttendanceCounts {
+  children: number;
+  members: number;
+  attendees: number;
+  visitors: number;
+  total: number;
+}
+
 export interface Assignment {
   id: string;
   status: AssignmentStatus;
@@ -42,6 +51,11 @@ export interface Assignment {
   setlist: { songs: SetlistSong[] } | null;
   /** Ausente em resposta antiga da API. */
   cues?: AssignmentCue[];
+  /** Ausentes em resposta antiga da API: sem eles, o app não oferece a contagem. */
+  celebration_instance_id?: string;
+  /** Escalado num ministério responsável pela contagem de público. */
+  can_count_attendance?: boolean;
+  attendance?: AttendanceCounts | null;
 }
 
 export interface Unavailability {

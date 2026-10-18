@@ -599,6 +599,32 @@ Próximas, Trocas e Meu perfil.
 - O que ficou de fora virou `PROD-36`. Check-in por QR ou localização é
   `promessa` no protótipo e não entrou.
 
+### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
+
+Quem está escalado num ministério marcado como **responsável pela contagem**
+(`Ministry.counts_attendance`, edição em Ministérios no web) lança quantas
+crianças, membros, frequentadores e visitantes vieram ao culto — no web
+(Minhas escalas, aba "Meus Turnos", e o detalhe da celebração para a liderança)
+e no app (Minhas escalas). As quatro categorias não se sobrepõem; o total é a
+soma. Uma contagem por culto (`celebration_attendance`, `celebration_instance_id`
+único): quem salva por último vale, e a linha guarda `updated_by`.
+
+- `PUT /celebrations/instances/:id/attendance` — escalado elegível (a pessoa vem
+  de `user_accounts.person_id`, nunca da claim; atribuição `pending`/`confirmed`)
+  ou `tenant_admin`/`admin_congregation`/`pastor`/`secretary`. Só a partir do
+  dia do culto (fuso da congregação); culto cancelado não aceita.
+- `GET /celebrations/attendance/summary` e `GET /celebrations/attendance` —
+  média por categoria e lista por culto, para a liderança. A média usa só os
+  cultos **com contagem lançada**; culto sem lançamento não entra como zero.
+- Onde se vê: `/pessoas/indicadores` no web, o "Pessoas → Indicadores" que o
+  design Órbita já previa. Premium como o resto de Celebrações.
+- RLS: `026_rls_celebration_attendance.sql`, escopo de congregação, no
+  `bootstrap-db.sh` e no passo 7; teste em `test/rls/celebration-attendance.spec.ts`.
+
+Falta: conferir o formulário no aparelho (teclado numérico, rolagem com os
+quatro campos abertos dentro do card). Spec em
+`.specs/features/contagem-presenca-culto/`.
+
 ### PROD-36 · Voluntário edita o próprio perfil e aceita o termo de voluntariado · aberto
 
 "Meu perfil" (`PROD-35`) só lê. O protótipo deixa a disponibilidade semanal

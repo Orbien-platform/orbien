@@ -183,7 +183,7 @@ async function refreshNow(): Promise<string> {
   return performRefresh(session);
 }
 
-type AuthenticatedMethod = "get" | "post" | "patch" | "delete";
+type AuthenticatedMethod = "get" | "post" | "put" | "patch" | "delete";
 
 /**
  * Chamada autenticada de fato usada pelo app (ex.: `ThemeProvider`): obtém

@@ -2,6 +2,7 @@ import {
   Building2,
   CalendarDays,
   ChartLine,
+  ChartNoAxesColumn,
   Eye,
   GitBranch,
   HeartHandshake,
@@ -48,7 +49,12 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Pessoas",
-    items: [{ href: "/pessoas", label: "Pessoas", icon: Users }],
+    items: [
+      { href: "/pessoas", label: "Pessoas", icon: Users },
+      // Presença nos cultos: média por categoria, a partir da contagem lançada
+      // por quem está na escala. É o "Indicadores" que o design Órbita já previa.
+      { href: "/pessoas/indicadores", label: "Indicadores", icon: ChartNoAxesColumn },
+    ],
   },
   {
     title: "Comunidade",
@@ -99,12 +105,23 @@ export function isActiveRoute(pathname: string, href: string): boolean {
 export function findNavEntry(
   pathname: string
 ): { section: string | null; item: NavItem } | null {
+  let best: { section: string | null; item: NavItem } | null = null;
   for (const section of NAV_SECTIONS) {
     for (const item of section.items) {
-      if (isActiveRoute(pathname, item.href)) {
-        return { section: section.title, item };
+      // O mais específico vence: "/pessoas/indicadores" é do item Indicadores,
+      // não de Pessoas, que também casa por prefixo.
+      if (
+        isActiveRoute(pathname, item.href) &&
+        (!best || item.href.length > best.item.href.length)
+      ) {
+        best = { section: section.title, item };
       }
     }
   }
-  return null;
+  return best;
+}
+
+/** O `href` do item de menu que representa o pathname — um só, o mais específico. */
+export function activeNavHref(pathname: string): string | null {
+  return findNavEntry(pathname)?.item.href ?? null;
 }

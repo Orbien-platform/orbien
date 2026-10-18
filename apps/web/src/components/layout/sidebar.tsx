@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Crown } from "lucide-react";
 import { canAccessRoute, isUpgradeRoute } from "@/lib/permissions";
-import { NAV_SECTIONS, isActiveRoute, navLabel } from "@/lib/navigation";
+import { NAV_SECTIONS, activeNavHref, navLabel } from "@/lib/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useChurchIdentity } from "@/contexts/ChurchIdentityContext";
 
@@ -20,6 +20,7 @@ function initials(name: string): string {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const activeHref = activeNavHref(pathname);
   const { user } = useAuth();
   const { churchName, congregationName, groupTerm } = useChurchIdentity();
 
@@ -66,7 +67,7 @@ export function Sidebar() {
               {section.items.map((item) => {
                 const { href, icon: Icon } = item;
                 const label = navLabel(item, groupTerm.plural);
-                const active = isActiveRoute(pathname, href);
+                const active = href === activeHref;
                 const upgrade = isUpgradeRoute(user, href);
                 return (
                   <li key={href}>

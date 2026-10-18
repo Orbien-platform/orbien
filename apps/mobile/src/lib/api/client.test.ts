@@ -152,4 +152,19 @@ describe("ApiClient — apiUrl ausente na config", () => {
     expect(error).not.toBeInstanceOf(NetworkErrorReloaded);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it("put: envia PUT com o corpo em JSON", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true }),
+    }) as unknown as typeof fetch;
+
+    await apiClient.put("/celebrations/instances/i1/attendance", { body: { members: 3 } });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.exemplo.test/celebrations/instances/i1/attendance",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ members: 3 }) }),
+    );
+  });
 });

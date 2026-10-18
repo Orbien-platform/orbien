@@ -5,7 +5,7 @@ import { CelebrationDetailSheet } from "./CelebrationDetailSheet";
 import api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
-  default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
 const celebration = {
@@ -256,6 +256,79 @@ describe("CelebrationDetailSheet", () => {
     expect(await screen.findByText("Reunião Especial")).toBeInTheDocument();
     expect(screen.getByText("custom_type")).toBeInTheDocument();
     expect(screen.getByText("custom_recurrence")).toBeInTheDocument();
+  });
+
+  describe("contagem de público", () => {
+    function renderSheet(canEdit = true) {
+      return render(
+        <CelebrationDetailSheet
+          open={true}
+          onOpenChange={vi.fn()}
+          celebrationId="c1"
+          canEdit={canEdit}
+          canAddSongs={true}
+        />
+      );
+    }
+
+    it("mostra o total lançado, 'Contar' no culto sem contagem, e salva pelo formulário", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: celebration });
+        return Promise.resolve({
+          data: [
+            { id: "i1", scheduled_date: "2026-09-06T00:00:00.000Z", status: "scheduled", attendance: { children: 1, members: 2, attendees: 3, visitors: 4 } },
+            { id: "i2", scheduled_date: "2026-09-13T00:00:00.000Z", status: "scheduled", attendance: null },
+            { id: "i3", scheduled_date: "2026-09-20T00:00:00.000Z", status: "cancelled" },
+          ],
+        });
+      });
+      vi.mocked(api.put).mockResolvedValue({ data: { children: 0, members: 5, attendees: 0, visitors: 0, total: 5 } });
+      const user = userEvent.setup();
+      renderSheet();
+
+      await screen.findByText("Instâncias (3)");
+      const buttons = screen.getAllByRole("button", { name: /^Contagem de público do culto de/ });
+      // O culto cancelado não tem contagem.
+      expect(buttons).toHaveLength(2);
+      // Do mais novo para o mais antigo: i2 ainda sem contagem, i1 com 10.
+      expect(buttons[0]).toHaveTextContent("Contar");
+      expect(buttons[1]).toHaveTextContent("10");
+
+      await user.click(buttons[0]);
+      await user.type(await screen.findByLabelText("Crianças"), "0");
+      await user.type(screen.getByLabelText("Membros"), "5");
+      await user.type(screen.getByLabelText("Frequentadores"), "0");
+      await user.type(screen.getByLabelText("Visitantes"), "0");
+      await user.click(screen.getByRole("button", { name: "Salvar contagem" }));
+
+      await waitFor(() =>
+        expect(api.put).toHaveBeenCalledWith("/celebrations/instances/i2/attendance", {
+          children: 0, members: 5, attendees: 0, visitors: 0,
+        })
+      );
+      // Recarrega as instâncias para mostrar o total novo.
+      await waitFor(() =>
+        expect(vi.mocked(api.get).mock.calls.filter(([u]) => u === "/celebrations/instances?celebration_id=c1")).toHaveLength(2)
+      );
+    });
+
+    it("fecha o formulário sem salvar", async () => {
+      mockGet();
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (2)");
+      await user.click(screen.getAllByRole("button", { name: /^Contagem de público do culto de/ })[0]);
+      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+      await waitFor(() => expect(screen.queryByLabelText("Crianças")).not.toBeInTheDocument());
+      expect(api.put).not.toHaveBeenCalled();
+    });
+
+    it("não oferece a contagem a quem não edita", async () => {
+      mockGet();
+      renderSheet(false);
+      await screen.findByText("Instâncias (2)");
+      expect(screen.queryByRole("button", { name: /^Contagem de público/ })).not.toBeInTheDocument();
+    });
   });
 
   describe("cancelar e remover", () => {

@@ -16,12 +16,25 @@ import {
   requestSwap,
   respondToAssignment,
   respondToSwap,
+  saveAttendance,
   saveUnavailability,
 } from "./escala-client";
 
 describe("EscalaClient", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe("contagem de público", () => {
+    it("lança a contagem com PUT na instância do culto", async () => {
+      const counts = { children: 1, members: 2, attendees: 3, visitors: 4 };
+      await saveAttendance("i1", counts);
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
+        "put",
+        "/celebrations/instances/i1/attendance",
+        { body: counts },
+      );
+    });
   });
 
   describe("troca de escala e perfil", () => {

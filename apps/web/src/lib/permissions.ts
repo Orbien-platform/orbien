@@ -35,6 +35,9 @@ export const ROUTE_AREAS: Record<string, string> = {
   "/conteudo": "content",
   "/voluntarios": "volunteers",
   "/celebracoes": "celebrations",
+  // Indicadores de presença nos cultos: mesma área e mesmos papéis de leitura
+  // que a API dá a `GET /celebrations/attendance/summary`.
+  "/pessoas/indicadores": "celebrations",
   // `PROD-21`. Área Premium e só de `tenant_admin`, os dois recortes vindo da
   // API (`readableAreas`) — aqui só mora o de→para de URL.
   "/auditoria": "audit",
