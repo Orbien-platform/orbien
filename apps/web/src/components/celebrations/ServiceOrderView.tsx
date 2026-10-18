@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
   Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown, Link2, Unlink,
-  SquarePlay, Disc3, FileMusic,
+  SquarePlay, Disc3, FileMusic, Pencil,
 } from "lucide-react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
@@ -290,6 +290,7 @@ export function ServiceOrderView({
   const [noOC, setNoOC] = useState(false);
   const [isCreatingOC, setIsCreatingOC] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ServiceOrderItem | null>(null);
   const [addSongForItemId, setAddSongForItemId] = useState<string | null>(null);
   const [linkSongId, setLinkSongId] = useState<string | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
@@ -360,6 +361,7 @@ export function ServiceOrderView({
       setItems([]);
       setNoOC(false);
       setAddItemOpen(false);
+      setEditingItem(null);
       setAddSongForItemId(null);
       setLinkSongId(null);
       setLoadedKey(null);
@@ -727,6 +729,18 @@ export function ServiceOrderView({
                             )}
                           </div>
 
+                          {/* Edit */}
+                          {canEdit && !isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingItem(item)}
+                              className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded text-stone hover:text-navy transition-colors"
+                              aria-label="Editar etapa"
+                            >
+                              <Pencil size={12} strokeWidth={1.5} />
+                            </button>
+                          )}
+
                           {/* Delete */}
                           {canEdit && !isReadOnly && (
                             <button
@@ -913,8 +927,14 @@ export function ServiceOrderView({
 
       {serviceOrder && (
         <AddItemModal
-          open={addItemOpen}
-          onOpenChange={setAddItemOpen}
+          key={editingItem?.id ?? "new"}
+          item={editingItem}
+          open={addItemOpen || editingItem !== null}
+          onOpenChange={(next) => {
+            if (next) return setAddItemOpen(true);
+            setAddItemOpen(false);
+            setEditingItem(null);
+          }}
           serviceOrderId={serviceOrder.id}
           nextSequence={items.length + 1}
           celebrationStartTime={instance?.celebration.start_time}

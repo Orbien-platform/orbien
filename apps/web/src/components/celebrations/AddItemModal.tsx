@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import { addMinutesToClock } from "@/lib/datetime";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,28 @@ function flattenMinistries(nodes: MinistryNode[]): { id: string; name: string }[
   return nodes.flatMap((n) => [{ id: n.id, name: n.name }, ...flattenMinistries(n.children ?? [])]);
 }
 
+/** Etapa já salva, aberta para edição. */
+export interface EditableItem {
+  id: string;
+  name: string;
+  type: ItemType;
+  phase?: ItemPhase;
+  entry_kind?: "program" | "logistics";
+  duration_minutes: number;
+  start_offset_minutes: number;
+  responsible_type: "person" | "ministry" | "free_text";
+  person?: { id: string; full_name: string } | null;
+  ministry?: { id: string; name: string } | null;
+  responsible_label?: string | null;
+  notes?: string | null;
+}
+
+function initialResponsible(item?: EditableItem | null): string {
+  if (item?.responsible_type === "person" && item.person) return `person:${item.person.id}`;
+  if (item?.responsible_type === "ministry" && item.ministry) return `ministry:${item.ministry.id}`;
+  return "";
+}
+
 interface AddItemModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +81,8 @@ interface AddItemModalProps {
   /** "HH:mm" de início da celebração — usado para converter o horário digitado em `start_offset_minutes`. */
   celebrationStartTime?: string;
   onAdded: () => void;
+  /** Quando presente, o modal edita esta etapa em vez de criar uma nova. */
+  item?: EditableItem | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,16 +124,24 @@ export function AddItemModal({
   nextSequence,
   celebrationStartTime,
   onAdded,
+  item,
 }: AddItemModalProps) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState<ItemType>("worship");
-  const [phase, setPhase] = useState<ItemPhase>("during");
-  const [isTeamTask, setIsTeamTask] = useState(false);
-  const [duration, setDuration] = useState("");
-  const [startTime, setStartTime] = useState("");
+  const isEditing = !!item;
+  // O estado inicial vem da etapa; quem edita monta o modal com `key` própria
+  // por etapa, então não há efeito para ressincronizar.
+  const [name, setName] = useState(item?.name ?? "");
+  const [type, setType] = useState<ItemType>(item?.type ?? "worship");
+  const [phase, setPhase] = useState<ItemPhase>(item?.phase ?? "during");
+  const [isTeamTask, setIsTeamTask] = useState(item?.entry_kind === "logistics");
+  const [duration, setDuration] = useState(
+    item && item.duration_minutes > 0 ? String(item.duration_minutes) : "",
+  );
+  const [startTime, setStartTime] = useState(
+    item ? (addMinutesToClock(celebrationStartTime, item.start_offset_minutes) ?? "") : "",
+  );
   // "" | "person:<id>" | "ministry:<id>"
-  const [responsible, setResponsible] = useState("");
-  const [notes, setNotes] = useState("");
+  const [responsible, setResponsible] = useState(initialResponsible(item));
+  const [notes, setNotes] = useState(item?.notes ?? "");
   const [persons, setPersons] = useState<Person[]>([]);
   const [ministries, setMinistries] = useState<{ id: string; name: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -161,9 +194,7 @@ export function AddItemModal({
     setIsSubmitting(true);
     try {
       const [kind, id] = responsible.split(":");
-      await api.post(`/celebrations/items`, {
-        service_order_id: serviceOrderId,
-        sequence: nextSequence,
+      const body = {
         name: name.trim(),
         type,
         phase,
@@ -175,12 +206,33 @@ export function AddItemModal({
         ministry_id: kind === "ministry" ? id : undefined,
         responsible_label: responsible ? undefined : "A definir",
         notes: notes.trim() || undefined,
-      });
+      };
+      if (item) {
+        // PATCH só altera o que vem definido: ao trocar de responsável, o
+        // vínculo antigo e as notas apagadas precisam seguir como `null`.
+        await api.patch(`/celebrations/items/${item.id}`, {
+          ...body,
+          person_id: body.person_id ?? null,
+          ministry_id: body.ministry_id ?? null,
+          responsible_label: responsible
+            ? null
+            : item.responsible_type === "free_text" && item.responsible_label
+              ? item.responsible_label
+              : "A definir",
+          notes: body.notes ?? null,
+        });
+      } else {
+        await api.post(`/celebrations/items`, {
+          service_order_id: serviceOrderId,
+          sequence: nextSequence,
+          ...body,
+        });
+      }
       onAdded();
       onOpenChange(false);
       reset();
     } catch {
-      setError("Erro ao adicionar etapa.");
+      setError(isEditing ? "Erro ao salvar etapa." : "Erro ao adicionar etapa.");
     } finally {
       setIsSubmitting(false);
     }
@@ -190,7 +242,7 @@ export function AddItemModal({
     <Modal
       open={open}
       onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
-      title="Nova etapa"
+      title={isEditing ? "Editar etapa" : "Nova etapa"}
       className="max-w-md"
     >
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
@@ -316,6 +368,10 @@ export function AddItemModal({
               </optgroup>
             )}
             <optgroup label="Pessoas">
+              {/* A lista carrega só as primeiras 100 pessoas: garante que o responsável atual apareça. */}
+              {item?.person && !persons.some((p) => p.id === item.person!.id) && (
+                <option value={`person:${item.person.id}`}>{item.person.full_name}</option>
+              )}
               {persons.map((p) => (
                 <option key={p.id} value={`person:${p.id}`}>{p.full_name}</option>
               ))}
@@ -360,7 +416,7 @@ export function AddItemModal({
             disabled={isSubmitting}
             className="flex-1 rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]"
           >
-            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : "Adicionar"}
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : isEditing ? "Salvar" : "Adicionar"}
           </Button>
         </div>
       </form>
