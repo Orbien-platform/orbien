@@ -4,7 +4,12 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { AssignmentStatus, CelebrationAttendance, CelebrationInstanceStatus } from '@prisma/client';
+import {
+  AssignmentStatus,
+  CelebrationAttendance,
+  CelebrationInstanceStatus,
+  ScheduleStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { SaveAttendanceDto } from './dto/save-attendance.dto';
@@ -34,6 +39,8 @@ export function toCounts(a: Pick<CelebrationAttendance, 'children' | 'members' |
     total: a.children + a.members + a.attendees + a.visitors,
   };
 }
+
+const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -105,7 +112,8 @@ export class CelebrationAttendanceService {
             volunteerProfile: { person_id: account.person_id },
             celebrationMinistry: {
               ministry: { counts_attendance: true },
-              schedule: { celebration_instance_id: instanceId },
+              // Escala em rascunho não é escala: quem só está nela não foi nem avisado.
+              schedule: { celebration_instance_id: instanceId, status: ScheduleStatus.published },
             },
           },
           select: { id: true },
@@ -163,7 +171,13 @@ export class CelebrationAttendanceService {
 
   /** Cultos do período (até hoje) com a contagem de cada um; `null` = sem lançamento. */
   async list(user: JwtPayload, query: AttendanceQueryDto, now = new Date()) {
-    const upTo = new Date(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    // "Até hoje" no fuso da congregação — o mesmo critério de `save`, para um
+    // culto nunca aparecer como "falta lançar" quando o lançamento ainda é recusado.
+    const congregation = await this.prisma.client.congregation.findFirst({
+      where: { id: user.congregation_id, tenant_id: user.tenant_id },
+      select: { timezone: true },
+    });
+    const upTo = new Date(`${todayKey(congregation?.timezone ?? DEFAULT_TIMEZONE, now)}T00:00:00.000Z`);
     const instances = await this.prisma.client.celebrationInstance.findMany({
       where: this.scope(user, query),
       orderBy: { scheduled_date: 'desc' },

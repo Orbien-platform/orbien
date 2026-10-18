@@ -8,6 +8,7 @@ function clientWith() {
     celebrationInstance: { findFirst: jest.fn(), findMany: jest.fn() },
     celebrationAttendance: { upsert: jest.fn(), findMany: jest.fn() },
     celebrationAssignment: { findFirst: jest.fn() },
+    congregation: { findFirst: jest.fn() },
     userAccount: { findUnique: jest.fn() },
   };
 }
@@ -74,7 +75,7 @@ describe('CelebrationAttendanceService', () => {
           volunteerProfile: { person_id: 'p1' },
           celebrationMinistry: {
             ministry: { counts_attendance: true },
-            schedule: { celebration_instance_id: 'i1' },
+            schedule: { celebration_instance_id: 'i1', status: 'published' },
           },
         },
         select: { id: true },
@@ -206,6 +207,7 @@ describe('CelebrationAttendanceService', () => {
     it('marca como sem contagem o culto que já passou e esconde o futuro sem contagem', async () => {
       const client = clientWith();
       const celebration = { id: 'c1', name: 'Culto', start_time: '19:00' };
+      client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
       client.celebrationInstance.findMany.mockResolvedValue([
         { id: 'i4', scheduled_date: new Date('2026-10-25'), celebration, attendance: null },
         { id: 'i3', scheduled_date: new Date('2026-10-18'), celebration, attendance: { children: 1, members: 2, attendees: 3, visitors: 4 } },
@@ -222,8 +224,31 @@ describe('CelebrationAttendanceService', () => {
 
     it('usa a data atual quando `now` não é informado', async () => {
       const client = clientWith();
+      client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
       client.celebrationInstance.findMany.mockResolvedValue([]);
       await expect(serviceWith(client).list(user(['pastor']), {})).resolves.toEqual([]);
+    });
+
+    it('"até hoje" segue o fuso da congregação, como o lançamento: 21h de sábado em Brasília ainda não é domingo', async () => {
+      const client = clientWith();
+      client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
+      const celebration = { id: 'c1', name: 'Culto', start_time: '09:00' };
+      client.celebrationInstance.findMany.mockResolvedValue([
+        { id: 'sun', scheduled_date: new Date('2026-10-18T00:00:00.000Z'), celebration, attendance: null },
+      ]);
+      // 19/10 00:30 UTC = 18/10 21:30 em Brasília; o culto de 18/10 já é de hoje.
+      const same = await serviceWith(client).list(user(['pastor']), {}, new Date('2026-10-19T00:30:00.000Z'));
+      expect(same).toHaveLength(1);
+      // 18/10 01:00 UTC = 17/10 22:00 em Brasília; o culto de 18/10 ainda é amanhã.
+      const before = await serviceWith(client).list(user(['pastor']), {}, new Date('2026-10-18T01:00:00.000Z'));
+      expect(before).toHaveLength(0);
+    });
+
+    it('sem a congregação na base cai no fuso de Brasília', async () => {
+      const client = clientWith();
+      client.congregation.findFirst.mockResolvedValue(null);
+      client.celebrationInstance.findMany.mockResolvedValue([]);
+      await expect(serviceWith(client).list(user(['pastor']), {}, NOW)).resolves.toEqual([]);
     });
   });
 
