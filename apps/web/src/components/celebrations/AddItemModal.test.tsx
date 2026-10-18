@@ -514,4 +514,117 @@ describe("AddItemModal — edição", () => {
       ),
     );
   });
+
+  it("mostra o erro quando o PATCH falha e mantém o modal aberto", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.patch).mockRejectedValue(new Error("falhou"));
+    const onOpenChange = vi.fn();
+
+    render(
+      <AddItemModal
+        open
+        onOpenChange={onOpenChange}
+        serviceOrderId="so1"
+        nextSequence={5}
+        celebrationStartTime="09:30"
+        item={item}
+        onAdded={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Erro ao salvar etapa.");
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("mantém o texto livre do responsável e aceita etapa de equipe sem duração", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+
+    render(
+      <AddItemModal
+        open
+        onOpenChange={vi.fn()}
+        serviceOrderId="so1"
+        nextSequence={5}
+        celebrationStartTime="09:30"
+        item={{
+          ...item,
+          entry_kind: "logistics",
+          duration_minutes: 0,
+          responsible_type: "free_text",
+          person: null,
+          responsible_label: "Equipe da recepção",
+          notes: null,
+        }}
+        onAdded={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/Responsável/)).toHaveValue("");
+    expect(screen.getByLabelText(/Duração/)).toHaveValue(null);
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith(
+        "/celebrations/items/i1",
+        expect.objectContaining({
+          entry_kind: "logistics",
+          duration_minutes: 0,
+          responsible_type: "free_text",
+          responsible_label: "Equipe da recepção",
+          person_id: null,
+          notes: null,
+        }),
+      ),
+    );
+  });
+
+  it("mantém selecionado o responsável que não veio nas 100 primeiras pessoas e o ministério atual", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+
+    const { unmount } = render(
+      <AddItemModal
+        open
+        onOpenChange={vi.fn()}
+        serviceOrderId="so1"
+        nextSequence={5}
+        celebrationStartTime="09:30"
+        item={{ ...item, person: { id: "p99", full_name: "Bia Fora da Lista" } }}
+        onAdded={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/persons?limit=100"));
+    expect(screen.getByLabelText(/Responsável/)).toHaveValue("person:p99");
+    expect(screen.getByRole("option", { name: "Bia Fora da Lista" })).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(api.get).mockImplementation((url: string) =>
+      url.startsWith("/persons")
+        ? Promise.resolve({ data: { data: persons } })
+        : Promise.resolve({ data: [{ id: "m1", name: "Louvor" }] }),
+    );
+    render(
+      <AddItemModal
+        open
+        onOpenChange={vi.fn()}
+        serviceOrderId="so1"
+        nextSequence={5}
+        celebrationStartTime="09:30"
+        item={{ ...item, responsible_type: "ministry", person: null, ministry: { id: "m1", name: "Louvor" } }}
+        onAdded={vi.fn()}
+      />,
+    );
+    await screen.findByRole("option", { name: "Louvor" });
+    expect(screen.getByLabelText(/Responsável/)).toHaveValue("ministry:m1");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith(
+        "/celebrations/items/i1",
+        expect.objectContaining({ responsible_type: "ministry", ministry_id: "m1", person_id: null }),
+      ),
+    );
+  });
 });

@@ -606,6 +606,67 @@ describe("ServiceOrderView", () => {
     expect(await screen.findByText("Erro ao criar Ordem de Celebração.")).toBeInTheDocument();
   });
 
+  it("edita uma etapa pelo lápis: abre preenchido, salva e recarrega a OC", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [] } });
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findAllByText("Pregação");
+    await user.click(screen.getAllByRole("button", { name: "Editar etapa" })[1]);
+
+    expect(await screen.findByText("Editar etapa", { selector: "h2, h1, h3, [role=heading]" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nome da etapa/)).toHaveValue("Pregação");
+    expect(screen.getByLabelText(/Horário/)).toHaveValue("10:30");
+
+    const callsBefore = vi.mocked(api.get).mock.calls.filter(([u]) => u === "/celebrations/orders/so1").length;
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith(
+        "/celebrations/items/it2",
+        expect.objectContaining({ name: "Pregação", start_offset_minutes: 30 }),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        vi.mocked(api.get).mock.calls.filter(([u]) => u === "/celebrations/orders/so1").length,
+      ).toBeGreaterThan(callsBefore),
+    );
+    await waitFor(() => expect(screen.queryByLabelText(/Nome da etapa/)).not.toBeInTheDocument());
+  });
+
+  it("cancelar a edição fecha o modal sem salvar", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: serviceOrder });
+      if (url.startsWith("/persons")) return Promise.resolve({ data: { data: [] } });
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    vi.mocked(api.patch).mockClear();
+    const user = userEvent.setup();
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findAllByText("Pregação");
+    await user.click(screen.getAllByRole("button", { name: "Editar etapa" })[0]);
+    await screen.findByLabelText(/Nome da etapa/);
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(screen.queryByLabelText(/Nome da etapa/)).not.toBeInTheDocument());
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
   it("opens the add-item modal from the empty-items state", async () => {
     const emptyOrder = { id: "so1", title: "OC", items: [] };
     vi.mocked(api.get).mockImplementation((url: string) => {
