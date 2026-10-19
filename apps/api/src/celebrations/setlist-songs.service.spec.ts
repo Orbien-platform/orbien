@@ -383,6 +383,48 @@ describe('SetlistSongsService', () => {
       });
     });
 
+    it('song_id com song_version_id grava a música e a versão escolhida', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog' });
+      client.songVersion.findFirst.mockResolvedValue({ id: 'ver2', label: 'Acústica' });
+      client.setlistSong.update.mockResolvedValue({ id: 'song1' });
+      const service = serviceWith(client);
+
+      await service.update('t1', 'g1', 'song1', {
+        song_id: 'song-catalog',
+        song_version_id: 'ver2',
+      } as never);
+
+      expect(client.songVersion.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'ver2',
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          song_id: 'song-catalog',
+        },
+      });
+      expect(client.setlistSong.update).toHaveBeenCalledWith({
+        where: { id: 'song1' },
+        data: { song_id: 'song-catalog', song_version_id: 'ver2', version_label: 'Acústica' },
+      });
+    });
+
+    it('só song_version_id troca a versão sem mexer na música', async () => {
+      const client = clientWith();
+      client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', song_id: 'song-catalog' });
+      client.songVersion.findFirst.mockResolvedValue({ id: 'ver2', label: 'Ao vivo' });
+      client.setlistSong.update.mockResolvedValue({ id: 'song1' });
+      const service = serviceWith(client);
+
+      await service.update('t1', 'g1', 'song1', { song_version_id: 'ver2' } as never);
+
+      expect(client.setlistSong.update).toHaveBeenCalledWith({
+        where: { id: 'song1' },
+        data: { song_version_id: 'ver2', version_label: 'Ao vivo' },
+      });
+    });
+
     it('song_id null desvincula preservando os demais campos (SETREP-01 AC3)', async () => {
       const client = clientWith();
       client.setlistSong.findFirst.mockResolvedValue({ id: 'song1', song_id: 'song-catalog', key: 'G' });

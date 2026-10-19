@@ -49,6 +49,14 @@ describe('CreateSongDto', () => {
     expect(props).toEqual(['bpm', 'label', 'youtube_link']);
   });
 
+  it('apara o nome da versão e rejeita nome que não é texto', async () => {
+    const dto = plainToInstance(CreateSongDto, { title: 'x', version: { label: '  Acústica  ' } });
+    expect(dto.version?.label).toBe('Acústica');
+
+    const [error] = await errorsFor({ version: { label: 123 } });
+    expect(error.children?.some((c) => c.property === 'label')).toBe(true);
+  });
+
   it('não tem mais tom alternativo: key_alt solto no corpo não é campo do DTO', () => {
     const dto = plainToInstance(CreateSongDto, { title: 'x', key_alt: 'A' });
     expect('version' in dto).toBe(false);

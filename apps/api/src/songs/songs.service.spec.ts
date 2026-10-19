@@ -277,6 +277,27 @@ describe('SongsService', () => {
       });
     });
 
+    it('updateVersion grava todos os campos informados', async () => {
+      const client = clientWith();
+      client.songVersion.findFirst.mockResolvedValue({ id: 'v1' });
+      client.songVersion.update.mockResolvedValue({ id: 'v1' });
+      const service = serviceWith(client);
+
+      const all = {
+        label: 'Ao vivo',
+        key: 'B',
+        bpm: 72,
+        link: 'https://cifraclub.com/y',
+        youtube_link: 'https://youtube.com/watch?v=y',
+        spotify_link: 'https://open.spotify.com/track/y',
+        cifra_club_link: 'https://cifraclub.com.br/y',
+        notes: 'transpor',
+      };
+      await service.updateVersion('t1', 'g1', 's1', 'v1', all as never);
+
+      expect(client.songVersion.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: all });
+    });
+
     it('updateVersion lança NotFoundException quando a versão não é da música', async () => {
       const client = clientWith();
       client.songVersion.findFirst.mockResolvedValue(null);

@@ -136,7 +136,7 @@ describe('PdfExportService', () => {
             ministry_id: 'm1',
             setlist: {
               songs: [
-                { title: 'Grande é o Senhor', key: 'G', bpm: 90 },
+                { title: 'Grande é o Senhor', version_label: 'Acústica', key: 'G', bpm: 90 },
                 { title: 'Sem metadados', key: null, bpm: null },
               ],
             },
