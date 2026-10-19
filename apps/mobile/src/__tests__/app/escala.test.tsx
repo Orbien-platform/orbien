@@ -29,6 +29,7 @@ const mockCheckIn = jest.fn();
 const mockGetMySwapRequests = jest.fn();
 const mockRespondToSwap = jest.fn();
 const mockGetMyVolunteerProfile = jest.fn();
+const mockSaveAttendance = jest.fn();
 jest.mock("../../lib/escala/escala-client", () => ({
   getMyAssignments: (...args: unknown[]) => mockGetMyAssignments(...args),
   respondToAssignment: (...args: unknown[]) => mockRespondToAssignment(...args),
@@ -36,6 +37,7 @@ jest.mock("../../lib/escala/escala-client", () => ({
   getMySwapRequests: (...args: unknown[]) => mockGetMySwapRequests(...args),
   respondToSwap: (...args: unknown[]) => mockRespondToSwap(...args),
   getMyVolunteerProfile: (...args: unknown[]) => mockGetMyVolunteerProfile(...args),
+  saveAttendance: (...args: unknown[]) => mockSaveAttendance(...args),
 }));
 
 import { HttpError, NetworkError } from "../../lib/api/errors";
@@ -562,5 +564,41 @@ describe("EscalaScreen — troca e perfil (v2)", () => {
     });
 
     expect(screen.queryByTestId("escala-abas")).toBeNull();
+  });
+
+  it("só oferece a contagem de público a quem está no ministério responsável e atualiza o total", async () => {
+    mockSaveAttendance.mockResolvedValue({ children: 1, members: 2, attendees: 3, visitors: 4, total: 10 });
+    mockGetMyAssignments.mockResolvedValue([
+      { ...CONFIRMED_ASSIGNMENT, id: "a5", celebration_instance_id: "i5", can_count_attendance: true, attendance: null },
+      { ...CONFIRMED_ASSIGNMENT, id: "a6", celebration_instance_id: "i6", can_count_attendance: false, attendance: null },
+      // Resposta antiga da API: sem os campos novos, sem contagem.
+      { ...CONFIRMED_ASSIGNMENT, id: "a7" },
+    ]);
+
+    await act(async () => {
+      render(<EscalaScreen />);
+    });
+    await waitFor(() => screen.getByTestId("assignment-a5"));
+
+    expect(screen.getByTestId("assignment-a5-attendance-open")).toBeTruthy();
+    expect(screen.queryByTestId("assignment-a6-attendance-open")).toBeNull();
+    expect(screen.queryByTestId("assignment-a7-attendance-open")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("assignment-a5-attendance-open"));
+    await fireEvent.changeText(screen.getByTestId("assignment-a5-attendance-children"), "1");
+    await fireEvent.changeText(screen.getByTestId("assignment-a5-attendance-members"), "2");
+    await fireEvent.changeText(screen.getByTestId("assignment-a5-attendance-attendees"), "3");
+    await fireEvent.changeText(screen.getByTestId("assignment-a5-attendance-visitors"), "4");
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("assignment-a5-attendance-save"));
+    });
+
+    expect(mockSaveAttendance).toHaveBeenCalledWith("i5", {
+      children: 1,
+      members: 2,
+      attendees: 3,
+      visitors: 4,
+    });
+    expect(screen.getByText("Contagem lançada: 10")).toBeTruthy();
   });
 });

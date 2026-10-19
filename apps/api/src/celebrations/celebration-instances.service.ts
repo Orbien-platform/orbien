@@ -60,6 +60,8 @@ export class CelebrationInstancesService {
         // Permite saber se a instância já tem escala e em que estado,
         // sem uma chamada por instância.
         schedule: { select: { id: true, status: true } },
+        // A contagem de público do culto (PRES), para a lista mostrar "lançada" ou "falta lançar".
+        attendance: { select: { children: true, members: true, attendees: true, visitors: true } },
       },
     });
   }

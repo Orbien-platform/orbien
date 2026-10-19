@@ -6,6 +6,7 @@ import { authenticatedRequest } from "../auth/auth-client";
 import type {
   Assignment,
   AssignmentStatus,
+  AttendanceCounts,
   MySwapRequests,
   MyVolunteerProfile,
   SwapCandidate,
@@ -113,4 +114,19 @@ export async function respondToSwap(
 /** `GET /volunteers/me/profile` — leitura só; quem edita é a secretaria. */
 export async function getMyVolunteerProfile(): Promise<MyVolunteerProfile> {
   return authenticatedRequest<MyVolunteerProfile>("get", "/volunteers/me/profile");
+}
+
+/**
+ * `PUT /celebrations/instances/:id/attendance` — lança (ou corrige) a contagem
+ * de público do culto. Uma contagem por culto: quem salva por último vale.
+ */
+export async function saveAttendance(
+  instanceId: string,
+  counts: Omit<AttendanceCounts, "total">,
+): Promise<AttendanceCounts> {
+  return authenticatedRequest<AttendanceCounts>(
+    "put",
+    `/celebrations/instances/${instanceId}/attendance`,
+    { body: counts },
+  );
 }

@@ -128,6 +128,28 @@ describe("MinistryDetailSheet", () => {
     expect(onUpdated).toHaveBeenCalled();
   });
 
+  it("marca o ministério como responsável pela contagem de público", async () => {
+    mockGet();
+    vi.mocked(api.patch).mockResolvedValue({ data: { counts_attendance: true } });
+    const user = userEvent.setup();
+
+    render(<MinistryDetailSheet open={true} {...baseProps} />);
+    await screen.findByText("Louvor");
+
+    await user.click(screen.getByRole("button", { name: /Editar/ }));
+    const check = screen.getByRole("checkbox", { name: /Responsável pela contagem de público/ });
+    expect(check).not.toBeChecked();
+    await user.click(check);
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith(
+        "/volunteers/ministries/mn1",
+        expect.objectContaining({ counts_attendance: true })
+      )
+    );
+  });
+
   it("shows an error message when saving the edit fails", async () => {
     mockGet();
     vi.mocked(api.patch).mockRejectedValue(new Error("fail"));

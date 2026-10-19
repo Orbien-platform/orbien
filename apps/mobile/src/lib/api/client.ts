@@ -29,7 +29,7 @@ function getBaseUrl(): string {
 }
 
 async function request<T>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
@@ -82,6 +82,7 @@ async function request<T>(
 export const apiClient = {
   get: <T>(path: string, options?: RequestOptions) => request<T>("GET", path, options),
   post: <T>(path: string, options?: RequestOptions) => request<T>("POST", path, options),
+  put: <T>(path: string, options?: RequestOptions) => request<T>("PUT", path, options),
   patch: <T>(path: string, options?: RequestOptions) => request<T>("PATCH", path, options),
   delete: <T>(path: string, options?: RequestOptions) => request<T>("DELETE", path, options),
 };

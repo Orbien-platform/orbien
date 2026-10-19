@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, CheckCircle2, XCircle, Loader2, Music, ExternalLink } from "lucide-react";
+import { Plus, CheckCircle2, XCircle, Loader2, Music, ExternalLink, Users } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoAccessState } from "@/components/ui/NoAccessState";
+import { AttendanceFormModal, type AttendanceCounts } from "@/components/celebrations/AttendanceFormModal";
 import { CreateMinistryModal } from "@/components/volunteers/CreateMinistryModal";
 import { MinistryDetailSheet } from "@/components/volunteers/MinistryDetailSheet";
 import { MinistryTree } from "@/components/volunteers/MinistryTree";
@@ -53,6 +54,10 @@ interface MyAssignment {
   celebration: { id: string; name: string; start_time?: string };
   ministry: { id: string; name: string };
   scheduled_date: string;
+  /** Ausentes em resposta antiga da API. */
+  celebration_instance_id?: string;
+  can_count_attendance?: boolean;
+  attendance?: AttendanceCounts | null;
   setlist: { songs: RepertoireSong[] } | null;
   cues?: MyCue[];
 }
@@ -114,6 +119,8 @@ export default function VoluntariosPage() {
   const [myLoading, setMyLoading] = useState(false);
   const [myError, setMyError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Turno cuja contagem de público está aberta no formulário.
+  const [attendanceFor, setAttendanceFor] = useState<MyAssignment | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const hasFetchedMy = useRef(false);
 
@@ -360,6 +367,16 @@ export default function VoluntariosPage() {
                       {/* Status + actions */}
                       <div className="flex items-center gap-2">
                         <AssignmentStatusBadge status={a.status} />
+                        {a.can_count_attendance && a.celebration_instance_id && (
+                          <button
+                            type="button"
+                            onClick={() => setAttendanceFor(a)}
+                            className="flex items-center gap-1.5 rounded-full border border-[var(--border-strong)] px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-teal hover:text-teal dark:text-white"
+                          >
+                            <Users size={12} strokeWidth={1.5} />
+                            {a.attendance ? `Contagem: ${a.attendance.total}` : "Contar público"}
+                          </button>
+                        )}
                         {isPending && (
                           <div className="flex items-center gap-1">
                             <Button
@@ -467,6 +484,25 @@ export default function VoluntariosPage() {
       </div>
 
       {/* ── Sheets / Modals ── */}
+      {attendanceFor?.celebration_instance_id ? (
+        <AttendanceFormModal
+          key={attendanceFor.id}
+          open
+          onOpenChange={(next) => !next && setAttendanceFor(null)}
+          instanceId={attendanceFor.celebration_instance_id}
+          subtitle={`${attendanceFor.celebration.name} · ${fmtDate(attendanceFor.scheduled_date)}`}
+          initial={attendanceFor.attendance ?? null}
+          onSaved={(counts) =>
+            setMyAssignments((list) =>
+              list.map((x) =>
+                x.celebration_instance_id === attendanceFor.celebration_instance_id
+                  ? { ...x, attendance: counts }
+                  : x,
+              ),
+            )
+          }
+        />
+      ) : null}
       <CreateMinistryModal
         open={createMinOpen}
         onOpenChange={setCreateMinOpen}

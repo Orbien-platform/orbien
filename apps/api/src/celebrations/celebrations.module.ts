@@ -30,6 +30,8 @@ import {
 } from './celebration-volunteer.controller';
 import { CelebrationSwapController } from './celebration-swap.controller';
 import { CelebrationSwapService } from './celebration-swap.service';
+import { CelebrationAttendanceController } from './celebration-attendance.controller';
+import { CelebrationAttendanceService } from './celebration-attendance.service';
 
 @Module({
   imports: [PrismaModule, ContentModule, StorageModule],
@@ -37,6 +39,7 @@ import { CelebrationSwapService } from './celebration-swap.service';
   // doesn't let CelebrationsController's GET /:id swallow child routes.
   // Ordering: /setlists/songs before /setlists before /celebrations
   controllers: [
+    CelebrationAttendanceController,
     CelebrationInstancesController,
     ServiceOrderItemsController,
     ServiceOrdersController,
@@ -64,6 +67,7 @@ import { CelebrationSwapService } from './celebration-swap.service';
     CelebrationScheduleSuggestionService,
     CelebrationAssignmentService,
     CelebrationSwapService,
+    CelebrationAttendanceService,
     PdfExportService,
   ],
   exports: [

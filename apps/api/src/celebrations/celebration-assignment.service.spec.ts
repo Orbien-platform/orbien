@@ -784,6 +784,42 @@ describe('CelebrationAssignmentService', () => {
       expect(result[1]!.celebration).toEqual({ id: 'c1', name: 'Culto Noite', start_time: '19:00' });
     });
 
+    it('expõe a contagem de presença e se o voluntário pode lançá-la', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      const row = (id: string, status: string, counts: boolean, attendance: unknown, day: string) => ({
+        id,
+        status,
+        celebrationMinistry: {
+          ministry_id: 'm1',
+          ministry: { id: 'm1', name: 'Recepção', counts_attendance: counts },
+          schedule: {
+            celebrationInstance: {
+              id: `i-${id}`,
+              scheduled_date: new Date(day),
+              celebration: { id: 'c1', name: 'Culto' },
+              attendance,
+            },
+          },
+        },
+      });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        row('a1', 'confirmed', true, { children: 1, members: 2, attendees: 3, visitors: 4 }, '2026-09-06'),
+        row('a2', 'pending', true, null, '2026-09-07'),
+        row('a3', 'declined', true, null, '2026-09-08'),
+        row('a4', 'confirmed', false, null, '2026-09-09'),
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result.map((r) => r.can_count_attendance)).toEqual([true, true, false, false]);
+      expect(result[0]!.celebration_instance_id).toBe('i-a1');
+      expect(result[0]!.attendance).toEqual({ children: 1, members: 2, attendees: 3, visitors: 4, total: 10 });
+      expect(result[1]!.attendance).toBeNull();
+    });
+
     it('não filtra por data quando includePast=true (cancelados continuam de fora)', async () => {
       const client = clientWith();
       client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });

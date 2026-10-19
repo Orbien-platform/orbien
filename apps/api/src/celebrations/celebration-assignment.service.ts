@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../content/notifications.service';
 import { AddCelebrationAssignmentDto } from './dto/add-celebration-assignment.dto';
 import { RespondCelebrationAssignmentDto } from './dto/respond-celebration-assignment.dto';
+import { toCounts } from './celebration-attendance.service';
 
 @Injectable()
 export class CelebrationAssignmentService {
@@ -400,7 +401,11 @@ export class CelebrationAssignmentService {
             schedule: {
               include: {
                 celebrationInstance: {
-                  include: { celebration: true, serviceOrder: { select: { id: true } } },
+                  include: {
+                    celebration: true,
+                    serviceOrder: { select: { id: true } },
+                    attendance: true,
+                  },
                 },
               },
             },
@@ -429,6 +434,14 @@ export class CelebrationAssignmentService {
         name: a.celebrationMinistry.ministry.name,
       },
       scheduled_date: a.celebrationMinistry.schedule.celebrationInstance.scheduled_date,
+      celebration_instance_id: a.celebrationMinistry.schedule.celebrationInstance.id,
+      // Quem está neste ministério (e ainda não recusou nem trocou) lança a contagem.
+      can_count_attendance:
+        a.celebrationMinistry.ministry.counts_attendance &&
+        (a.status === AssignmentStatus.pending || a.status === AssignmentStatus.confirmed),
+      attendance: a.celebrationMinistry.schedule.celebrationInstance.attendance
+        ? toCounts(a.celebrationMinistry.schedule.celebrationInstance.attendance)
+        : null,
       service_order_id: a.celebrationMinistry.schedule.celebrationInstance.serviceOrder?.id ?? null,
       setlist: setlistByKey.get(
         `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,

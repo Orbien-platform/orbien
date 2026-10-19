@@ -27,6 +27,7 @@ import { Screen } from "../components/Screen";
 import { SectionLabel } from "../components/SectionLabel";
 import { Segmented } from "../components/Segmented";
 import { StatusMessage } from "../components/StatusMessage";
+import { AttendanceCountPanel } from "../components/escala/AttendanceCountPanel";
 import { SwapRequestsPanel } from "../components/escala/SwapRequestsPanel";
 import { VolunteerProfilePanel } from "../components/escala/VolunteerProfilePanel";
 import { HttpError } from "../lib/api/errors";
@@ -341,6 +342,15 @@ export default function EscalaScreen() {
                         </View>
                       ))}
                     </View>
+                  ) : null}
+
+                  {item.can_count_attendance && item.celebration_instance_id ? (
+                    <AttendanceCountPanel
+                      instanceId={item.celebration_instance_id}
+                      idPrefix={`assignment-${item.id}`}
+                      attendance={item.attendance}
+                      onSaved={(counts) => updateAssignment(item.id, { attendance: counts })}
+                    />
                   ) : null}
 
                   {item.status === "pending" ? (

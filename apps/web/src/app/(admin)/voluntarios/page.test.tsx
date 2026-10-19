@@ -10,7 +10,7 @@ vi.mock("@/lib/api", () => ({
   // Espelha o `isForbidden` real: 403 e só 403.
   isForbidden: (error: unknown) =>
     (error as { response?: { status?: number } })?.response?.status === 403,
-  default: { get: vi.fn(), patch: vi.fn() },
+  default: { get: vi.fn(), patch: vi.fn(), put: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 
@@ -692,5 +692,58 @@ describe("VoluntariosPage", () => {
     await screen.findByText(/Nenhum ministério cadastrado\./);
     await user.click(screen.getByRole("tab", { name: "Indisponibilidade" }));
     expect(await screen.findByTestId("unavailability-panel")).toBeInTheDocument();
+  });
+
+  it("Meus Turnos: quem pode contar o público lança a contagem e vê o total", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1", status: "confirmed", notified_at: null, responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo" },
+              ministry: { id: "m1", name: "Recepção" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+              celebration_instance_id: "i1", can_count_attendance: true, attendance: null,
+            },
+            {
+              id: "a2", status: "confirmed", notified_at: null, responded_at: null,
+              celebration: { id: "c2", name: "Culto Noite" },
+              ministry: { id: "m2", name: "Louvor" },
+              scheduled_date: "2026-02-02T00:00:00Z",
+              celebration_instance_id: "i2", can_count_attendance: false, attendance: null,
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    mockedApi.put.mockResolvedValue({
+      data: { children: 1, members: 2, attendees: 3, visitors: 4, total: 10 },
+    });
+
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Culto Domingo");
+
+    // Só o turno do ministério responsável tem o botão.
+    expect(screen.getAllByRole("button", { name: "Contar público" })).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Contar público" }));
+    await user.type(await screen.findByLabelText("Crianças"), "1");
+    await user.type(screen.getByLabelText("Membros"), "2");
+    await user.type(screen.getByLabelText("Frequentadores"), "3");
+    await user.type(screen.getByLabelText("Visitantes"), "4");
+    await user.click(screen.getByRole("button", { name: "Salvar contagem" }));
+
+    expect(await screen.findByRole("button", { name: "Contagem: 10" })).toBeInTheDocument();
+    expect(mockedApi.put).toHaveBeenCalledWith(
+      "/celebrations/instances/i1/attendance",
+      { children: 1, members: 2, attendees: 3, visitors: 4 },
+    );
   });
 });

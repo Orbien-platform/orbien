@@ -57,6 +57,7 @@ interface MinistryDetail {
   name: string;
   description?: string | null;
   color?: string | null;
+  counts_attendance?: boolean;
   parent_ministry_id?: string | null;
   leaders: MinistryAssignment[];
   volunteers: MinistryAssignment[];
@@ -399,6 +400,7 @@ export function MinistryDetailSheet({
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [editCounts, setEditCounts] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -435,6 +437,7 @@ export function MinistryDetailSheet({
         setEditName(data.name);
         setEditDesc(data.description ?? "");
         setEditColor(data.color ?? MINISTRY_COLORS[0].value);
+        setEditCounts(data.counts_attendance ?? false);
       })
       .catch(() => {
         if (!signal.cancelled) setMinistry(null);
@@ -471,6 +474,7 @@ export function MinistryDetailSheet({
         name: editName.trim(),
         description: editDesc.trim() || undefined,
         color: editColor,
+        counts_attendance: editCounts,
       });
       setMinistry((prev) => (prev ? { ...prev, ...data } : prev));
       setEditing(false);
@@ -597,6 +601,21 @@ export function MinistryDetailSheet({
                         ))}
                       </div>
                     </div>
+                    <label className="flex items-start gap-2 text-sm text-ink dark:text-white">
+                      <input
+                        type="checkbox"
+                        checked={editCounts}
+                        onChange={(e) => setEditCounts(e.target.checked)}
+                        disabled={isSaving}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Responsável pela contagem de público
+                        <span className="block text-xs text-stone">
+                          Quem está escalado neste ministério informa quantas pessoas vieram ao culto.
+                        </span>
+                      </span>
+                    </label>
                     {saveError && <p className="text-sm text-crimson">{saveError}</p>}
                     <div className="flex gap-2">
                       <Button variant="outline" className="flex-1 rounded-[8px]" onClick={() => setEditing(false)} disabled={isSaving}>Cancelar</Button>

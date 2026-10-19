@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, FileText, Calendar, Trash2, Ban, RotateCcw } from "lucide-react";
+import { Loader2, FileText, Calendar, Trash2, Ban, RotateCcw, Users } from "lucide-react";
 import {
   DetailPage,
   DetailPageContent,
@@ -10,6 +10,7 @@ import {
   DetailPageDescription,
 } from "@/components/ui/detail-page";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
+import { AttendanceFormModal } from "@/components/celebrations/AttendanceFormModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +42,7 @@ interface CelebrationInstance {
   scheduled_date: string;
   status?: string;
   serviceOrder?: { id: string } | null;
+  attendance?: { children: number; members: number; attendees: number; visitors: number } | null;
 }
 
 interface CelebrationDetailSheetProps {
@@ -70,6 +72,10 @@ function fmtDate(iso: string): string {
   });
 }
 
+function attendanceTotal(a: { children: number; members: number; attendees: number; visitors: number }): number {
+  return a.children + a.members + a.attendees + a.visitors;
+}
+
 function instanceStatusCls(hasOC: boolean): string {
   return hasOC
     ? "bg-teal-dim text-teal"
@@ -93,6 +99,8 @@ export function CelebrationDetailSheet({
   // setState síncrono dentro do effect, que dispara renders em cascata.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  // Culto cuja contagem de público está aberta no formulário.
+  const [attendanceTarget, setAttendanceTarget] = useState<CelebrationInstance | null>(null);
   const [soViewOpen, setSoViewOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -321,6 +329,20 @@ export function CelebrationDetailSheet({
                             {cancelled ? "Cancelado" : hasOC ? "Com OC" : "Sem OC"}
                           </span>
                         </button>
+                        {canEdit && !cancelled && (
+                          <button
+                            type="button"
+                            onClick={() => setAttendanceTarget(inst)}
+                            aria-label={`Contagem de público do culto de ${fmtDate(inst.scheduled_date)}`}
+                            title="Contagem de público"
+                            className="mr-1 flex flex-shrink-0 items-center gap-1 rounded-[6px] px-2 py-1.5 text-xs text-stone hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white"
+                          >
+                            <Users size={14} strokeWidth={1.5} />
+                            {inst.attendance
+                              ? attendanceTotal(inst.attendance)
+                              : "Contar"}
+                          </button>
+                        )}
                         {canEdit && inst.status !== "finalized" && (
                           <button
                             type="button"
@@ -350,6 +372,18 @@ export function CelebrationDetailSheet({
           )}
         </DetailPageContent>
       </DetailPage>
+
+      {attendanceTarget ? (
+        <AttendanceFormModal
+          key={attendanceTarget.id}
+          open
+          onOpenChange={(next) => !next && setAttendanceTarget(null)}
+          instanceId={attendanceTarget.id}
+          subtitle={fmtDate(attendanceTarget.scheduled_date)}
+          initial={attendanceTarget.attendance ?? null}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      ) : null}
 
       <Modal
         open={cancelTarget !== null}
