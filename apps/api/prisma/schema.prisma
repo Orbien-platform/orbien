@@ -1028,6 +1028,11 @@ model GroupMeetingMaterial {
   meeting_id      String
   material_id     String
   visibility      MaterialVisibility @default(all)
+  /// Quando o material passa a valer para o público da visibilidade. Nulo =
+  /// liberado na hora do vínculo. Líder vê antes; participante só depois.
+  release_at      DateTime?
+  /// Marca o aviso por push já enviado (cron de liberação e vínculo imediato).
+  notified_at     DateTime?
   created_at      DateTime           @default(now())
 
   tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
@@ -1038,6 +1043,7 @@ model GroupMeetingMaterial {
   @@unique([meeting_id, material_id])
   @@index([tenant_id, congregation_id])
   @@index([material_id])
+  @@index([notified_at, release_at])
   @@map("group_meeting_materials")
 }
 

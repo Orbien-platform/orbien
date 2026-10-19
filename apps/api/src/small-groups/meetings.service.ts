@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -57,7 +58,10 @@ const MEETING_PRIVILEGED_ROLES = [
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: MeetingMaterialNotifier,
+  ) {}
 
   async create(
     dto: CreateMeetingDto,
@@ -263,15 +267,23 @@ export class MeetingsService {
     });
     if (existing) throw new ConflictException('Este material já está vinculado a esta reunião');
 
-    return this.prisma.client.groupMeetingMaterial.create({
+    const releaseAt = dto.release_at ? new Date(dto.release_at) : null;
+    const releasedNow = !releaseAt || releaseAt.getTime() <= Date.now();
+
+    const link = await this.prisma.client.groupMeetingMaterial.create({
       data: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
         meeting_id: meetingId,
         material_id: dto.material_id,
         visibility: dto.visibility ?? MaterialVisibility.all,
+        release_at: releaseAt,
       },
     });
+
+    // Liberado agora: avisa já. Agendado: o cron do notifier avisa na data.
+    if (releasedNow) await this.notifier.notifyLink(link.id);
+    return link;
   }
 
   async listMaterials(meetingId: string, user: JwtPayload) {
@@ -289,7 +301,12 @@ export class MeetingsService {
     return this.prisma.client.groupMeetingMaterial.findMany({
       where: {
         meeting_id: meetingId,
-        ...(isLeader ? {} : { visibility: MaterialVisibility.all }),
+        ...(isLeader
+          ? {}
+          : {
+              visibility: MaterialVisibility.all,
+              OR: [{ release_at: null }, { release_at: { lte: new Date() } }],
+            }),
       },
       include: { material: true },
       orderBy: { created_at: 'asc' },

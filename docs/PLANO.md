@@ -599,6 +599,28 @@ Próximas, Trocas e Meu perfil.
 - O que ficou de fora virou `PROD-36`. Check-in por QR ou localização é
   `promessa` no protótipo e não entrou.
 
+### PROD-38 · Material do PG por encontro: liberação por data, aviso aos inscritos, arquivo e rede · parcial
+
+O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
+`all`/`leaders_only`. Entregue em 2026-10-19:
+
+- `release_at` e `notified_at` no vínculo (migration
+  `20261019120000_add_meeting_material_release`). Participante só lê depois de
+  `release_at`; líder vê antes.
+- `MeetingMaterialNotifier`: push só para os membros do PG do encontro (só
+  `leader`/`trainee` quando `leaders_only`), na hora do vínculo ou, se agendado,
+  pelo cron de 10 em 10 minutos. Substitui, para o material de encontro, o aviso
+  por congregação inteira do `StudyMaterialsService.publishPending`.
+- Campo "Liberar em" no `RegisterMeetingModal` (web).
+
+Falta:
+- Upload de arquivo (PDF) e `rich_content` no web — hoje o modal só cria
+  material por link. Precisa decidir o storage.
+- Alvo por rede ou lote de PGs (`MaterialTarget` é só PG).
+- O push do `publishPending` ainda avisa a congregação toda pelo material
+  avulso; revisar junto com o item acima.
+- `addMaterial` não confere se o material tem o PG do encontro como alvo.
+
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
 
 Quem está escalado num ministério marcado como **responsável pela contagem**

@@ -13,6 +13,7 @@ import { MeetingsService } from './meetings.service';
 import { PrayerRequestsService } from './prayer-requests.service';
 import { GroupMessagesService } from './group-messages.service';
 import { SmallGroupsAbsenceNotifier } from './small-groups-absence.notifier';
+import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 
 // Network vive dentro deste módulo, não num NetworksModule próprio — é
@@ -39,6 +40,7 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
     PrayerRequestsService,
     GroupMessagesService,
     SmallGroupsAbsenceNotifier,
+    MeetingMaterialNotifier,
     TenantContextInterceptor,
   ],
   exports: [

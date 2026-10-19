@@ -29,6 +29,7 @@ interface MeetingMaterial {
   id: string;
   material_id: string;
   visibility: MaterialVisibility;
+  release_at?: string | null;
   material: { id: string; title: string; author?: string; source_type?: string; rich_content?: string };
 }
 
@@ -76,6 +77,8 @@ export function RegisterMeetingModal({
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
   const [materialVisibility, setMaterialVisibility] = useState<MaterialVisibility>("all");
+  // datetime-local, vazio = liberado na hora.
+  const [materialReleaseAt, setMaterialReleaseAt] = useState("");
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
   const [materialError, setMaterialError] = useState("");
   const [meetingMaterials, setMeetingMaterials] = useState<MeetingMaterial[]>([]);
@@ -97,6 +100,7 @@ export function RegisterMeetingModal({
     setLinkUrl("");
     setLinkTitle("");
     setMaterialVisibility("all");
+    setMaterialReleaseAt("");
     setMaterialError("");
     setMeetingMaterials([]);
     setRemovingMaterialId(null);
@@ -209,7 +213,11 @@ export function RegisterMeetingModal({
 
       const { data: linked } = await api.post<{ id: string }>(
         `/small-groups/meetings/${meetingId}/materials`,
-        { material_id: materialId, visibility: materialVisibility }
+        {
+          material_id: materialId,
+          visibility: materialVisibility,
+          ...(materialReleaseAt ? { release_at: new Date(materialReleaseAt).toISOString() } : {}),
+        }
       );
 
       setMeetingMaterials((prev) => [
@@ -218,6 +226,7 @@ export function RegisterMeetingModal({
           id: linked.id,
           material_id: materialId!,
           visibility: materialVisibility,
+          release_at: materialReleaseAt ? new Date(materialReleaseAt).toISOString() : null,
           material: materialInfo,
         },
       ]);
@@ -226,6 +235,7 @@ export function RegisterMeetingModal({
       setLinkUrl("");
       setLinkTitle("");
       setMaterialVisibility("all");
+      setMaterialReleaseAt("");
     } catch (err: unknown) {
       const status = (err as { response?: { status: number } })?.response?.status;
       setMaterialError(
@@ -541,6 +551,20 @@ export function RegisterMeetingModal({
               </label>
             </div>
 
+            <label className="flex flex-col gap-1 text-sm text-ink dark:text-white">
+              Liberar em
+              <Input
+                type="datetime-local"
+                value={materialReleaseAt}
+                onChange={(e) => setMaterialReleaseAt(e.target.value)}
+                disabled={isAddingMaterial}
+                className="rounded-[8px]"
+              />
+              <span className="text-xs text-stone">
+                Deixe em branco para liberar agora. Líderes veem o material antes; os membros são avisados na data.
+              </span>
+            </label>
+
             {materialError && (
               <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson" role="alert">
                 {materialError}
@@ -569,6 +593,11 @@ export function RegisterMeetingModal({
                       <span className="truncate text-sm text-ink dark:text-white">{mm.material.title}</span>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
+                      {mm.release_at && new Date(mm.release_at) > new Date() && (
+                        <span className="text-xs text-stone">
+                          Libera em {new Date(mm.release_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                        </span>
+                      )}
                       <span
                         className={cn(
                           "rounded-[100px] px-2 py-0.5 text-xs font-medium",

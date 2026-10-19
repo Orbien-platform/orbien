@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
+import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -35,12 +36,16 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const notifier = { notifyLink: jest.fn() };
+
+beforeEach(() => notifier.notifyLink.mockReset());
+
 function serviceWith(client: ReturnType<typeof clientWith>, runInTx?: jest.Mock) {
   const prisma = {
     client,
     runInTx: runInTx ?? jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
   } as unknown as PrismaService;
-  return new MeetingsService(prisma);
+  return new MeetingsService(prisma, notifier as unknown as MeetingMaterialNotifier);
 }
 
 describe('MeetingsService', () => {
@@ -323,8 +328,29 @@ describe('MeetingsService', () => {
           meeting_id: 'meet1',
           material_id: 'mat1',
           visibility: 'all',
+          release_at: null,
         },
       });
+      expect(notifier.notifyLink).toHaveBeenCalledWith('link1');
+    });
+
+    it('com release_at futuro grava a data e não avisa agora (o cron avisa na data)', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
+      client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
+      client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
+      const service = serviceWith(client);
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+
+      await service.addMaterial('meet1', { material_id: 'mat1', release_at: future } as never, USER);
+
+      expect(client.groupMeetingMaterial.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ release_at: new Date(future) }),
+        }),
+      );
+      expect(notifier.notifyLink).not.toHaveBeenCalled();
     });
 
     it('vincula o material com visibility informada', async () => {
@@ -386,7 +412,13 @@ describe('MeetingsService', () => {
         }),
       );
       expect(client.groupMeetingMaterial.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { meeting_id: 'meet1', visibility: 'all' } }),
+        expect.objectContaining({
+          where: {
+            meeting_id: 'meet1',
+            visibility: 'all',
+            OR: [{ release_at: null }, { release_at: { lte: expect.any(Date) } }],
+          },
+        }),
       );
     });
 
