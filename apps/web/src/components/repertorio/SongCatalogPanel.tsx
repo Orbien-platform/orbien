@@ -124,8 +124,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
   const showsTitle = mode?.kind === "new-song" || mode?.kind === "rename";
   const showsVersion = mode !== null && mode.kind !== "rename";
 
-  async function submit() {
-    if (!mode) return;
+  async function submit(current: FormMode) {
     if (showsTitle && !title.trim()) {
       setFormError("Dê um título à música.");
       return;
@@ -139,14 +138,14 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
     setFormError(null);
     try {
       const version = versionFormToBody(versionForm);
-      if (mode.kind === "new-song") {
+      if (current.kind === "new-song") {
         await api.post("/songs", { title: title.trim(), version });
-      } else if (mode.kind === "rename") {
-        await api.patch(`/songs/${mode.song.id}`, { title: title.trim() });
-      } else if (mode.kind === "new-version") {
-        await api.post(`/songs/${mode.song.id}/versions`, version);
+      } else if (current.kind === "rename") {
+        await api.patch(`/songs/${current.song.id}`, { title: title.trim() });
+      } else if (current.kind === "new-version") {
+        await api.post(`/songs/${current.song.id}/versions`, version);
       } else {
-        await api.patch(`/songs/${mode.song.id}/versions/${mode.version.id}`, version);
+        await api.patch(`/songs/${current.song.id}/versions/${current.version.id}`, version);
       }
       setMode(null);
       setReloadKey((k) => k + 1);
@@ -340,9 +339,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
       {/* ── Formulário ── */}
       <Modal
         open={mode !== null}
-        onOpenChange={(open) => {
-          if (!open) setMode(null);
-        }}
+        onOpenChange={() => setMode(null)}
         title={mode ? FORM_COPY[mode.kind].title : ""}
         description={mode ? FORM_COPY[mode.kind].description : ""}
         className="max-w-lg"
@@ -394,7 +391,7 @@ export function SongCatalogPanel({ canEdit }: { canEdit: boolean }) {
             </button>
             <Button
               type="button"
-              onClick={submit}
+              onClick={() => mode && submit(mode)}
               disabled={saving}
               className="flex items-center gap-1.5 rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
             >

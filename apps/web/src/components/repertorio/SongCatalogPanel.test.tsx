@@ -308,6 +308,35 @@ describe("SongCatalogPanel", () => {
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith("/songs/s1"));
   });
 
+  it("shows an error message when deleting a version fails", async () => {
+    mockGet();
+    vi.mocked(api.delete).mockRejectedValue({ isAxiosError: false });
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Grande é o Senhor");
+
+    await user.click(
+      screen.getByRole("button", { name: "Excluir versão Acústica de Grande é o Senhor" })
+    );
+
+    expect(await screen.findByText("Não foi possível excluir a versão.")).toBeInTheDocument();
+  });
+
+  it("closes the form with Escape", async () => {
+    mockGet();
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Grande é o Senhor");
+
+    await user.click(screen.getByRole("button", { name: "Nova música" }));
+    expect(await screen.findByRole("heading", { name: "Nova música" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Nova música" })).not.toBeInTheDocument()
+    );
+  });
+
   it("shows an error message when deleting a song fails", async () => {
     mockGet();
     vi.mocked(api.delete).mockRejectedValue({ isAxiosError: false });
