@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { fmtLastPlayed, matchesSong, normalizeForSearch, songKey, type CatalogSong } from "./repertorio";
+import {
+  fmtLastPlayed,
+  matchesSong,
+  normalizeForSearch,
+  versionSummary,
+  type CatalogSong,
+  type SongVersion,
+} from "./repertorio";
 
-function song(overrides: Partial<CatalogSong> = {}): CatalogSong {
+function version(overrides: Partial<SongVersion> = {}): SongVersion {
   return {
-    id: "s1",
-    title: "Grande é o Senhor",
+    id: "v1",
+    label: "Original",
     key: "D",
-    key_alt: null,
     bpm: 80,
     link: null,
     youtube_link: null,
@@ -14,6 +20,16 @@ function song(overrides: Partial<CatalogSong> = {}): CatalogSong {
     cifra_club_link: null,
     notes: null,
     last_played_at: null,
+    ...overrides,
+  };
+}
+
+function song(overrides: Partial<CatalogSong> = {}): CatalogSong {
+  return {
+    id: "s1",
+    title: "Grande é o Senhor",
+    last_played_at: null,
+    versions: [version()],
     ...overrides,
   };
 }
@@ -61,16 +77,14 @@ describe("matchesSong", () => {
   });
 });
 
-describe("songKey", () => {
-  it("devolve o tom principal quando existe", () => {
-    expect(songKey(song({ key: "D", key_alt: "E" }))).toBe("D");
+describe("versionSummary", () => {
+  it("junta nome, tom e bpm da versão", () => {
+    expect(versionSummary(version({ label: "Acústica", key: "G", bpm: 76 }))).toBe(
+      "Acústica · Tom G · 76 BPM",
+    );
   });
 
-  it("cai no tom alternativo quando o principal é nulo", () => {
-    expect(songKey(song({ key: null, key_alt: "E" }))).toBe("E");
-  });
-
-  it("devolve null quando nenhum dos dois existe", () => {
-    expect(songKey(song({ key: null, key_alt: null }))).toBeNull();
+  it("omite o que a versão não tem", () => {
+    expect(versionSummary(version({ label: "Ao vivo", key: null, bpm: null }))).toBe("Ao vivo");
   });
 });

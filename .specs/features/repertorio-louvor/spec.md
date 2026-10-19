@@ -1,5 +1,9 @@
 # Repertório do Time de Louvor — Specification
 
+> **Revisão 2026-10-19 (AD-012):** a música passou a ter N versões; tom, bpm e
+> links são por versão e o tom alternativo foi removido. Onde o texto abaixo
+> fala em tom/bpm/links "da música", leia "da versão".
+
 ## Problem Statement
 
 O módulo de Celebrações já monta a ordem de culto e a escala de voluntários,

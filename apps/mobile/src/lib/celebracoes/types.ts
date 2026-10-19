@@ -8,13 +8,20 @@ export interface SetlistSongRef {
   id: string;
   sequence: number;
   title: string;
+  /** Versão escolhida para este culto; null em música avulsa ou setlist antiga. */
+  version_label: string | null;
   key: string | null;
-  key_alt: string | null;
   bpm: number | null;
   link: string | null;
-  youtube_link: string | null;
-  spotify_link: string | null;
-  cifra_club_link: string | null;
+  songVersion: {
+    id: string;
+    label: string;
+    key: string | null;
+    bpm: number | null;
+    youtube_link: string | null;
+    spotify_link: string | null;
+    cifra_club_link: string | null;
+  } | null;
 }
 
 export type ItemPhase = "before" | "during" | "after";

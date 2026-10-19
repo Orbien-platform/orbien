@@ -181,7 +181,8 @@ export class PdfExportService {
               if (s.key) meta.push(`Tom: ${s.key}`);
               if (s.bpm) meta.push(`BPM: ${s.bpm}`);
               const suffix = meta.length ? ` (${meta.join(' · ')})` : '';
-              return { text: `${s.title}${suffix}` };
+              const version = s.version_label ? ` — ${s.version_label}` : '';
+              return { text: `${s.title}${version}${suffix}` };
             }),
             margin: [20, 0, 0, 0] as [number, number, number, number],
           },

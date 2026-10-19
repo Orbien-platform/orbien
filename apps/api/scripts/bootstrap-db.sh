@@ -202,6 +202,12 @@ fi
 if [ -f prisma/migrations/026_rls_celebration_attendance.sql ]; then
   run_sql_file prisma/migrations/026_rls_celebration_attendance.sql
 fi
+# `song_versions` (versões de uma música do repertório): tabela nova, mesmo caso
+# de 007/026 — nasce com a policy de congregação. Depende de
+# app_congregation_allowed() (003).
+if [ -f prisma/migrations/027_rls_song_versions.sql ]; then
+  run_sql_file prisma/migrations/027_rls_song_versions.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -635,6 +641,18 @@ BEGIN
   RAISE NOTICE 'celebration_attendance com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em celebration_attendance, encontrei % — 026_rls_celebration_attendance.sql rodou?', n;
+  END IF;
+
+  -- 027: song_versions (versões de uma música), mesmo caso de 026.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  = 'song_versions'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'song_versions com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em song_versions, encontrei % — 027_rls_song_versions.sql rodou?', n;
   END IF;
 
   -- 024: pix_webhook_scope() — o webhook da Asaas não tem contexto de tenant e

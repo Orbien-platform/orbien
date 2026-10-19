@@ -6,11 +6,11 @@
 
 import { formatInstant } from "@/lib/datetime";
 
-export interface CatalogSong {
+/** Uma versão da música: tudo que, na música, não é o título. */
+export interface SongVersion {
   id: string;
-  title: string;
+  label: string;
   key: string | null;
-  key_alt: string | null;
   bpm: number | null;
   link: string | null;
   youtube_link: string | null;
@@ -18,6 +18,13 @@ export interface CatalogSong {
   cifra_club_link: string | null;
   notes: string | null;
   last_played_at: string | null;
+}
+
+export interface CatalogSong {
+  id: string;
+  title: string;
+  last_played_at: string | null;
+  versions: SongVersion[];
 }
 
 export function fmtLastPlayed(iso: string | null): string {
@@ -39,7 +46,13 @@ export function matchesSong(song: CatalogSong, term: string): boolean {
   return normalizeForSearch(song.title).includes(needle);
 }
 
-/** Tom a exibir: o tom da música, ou o alternativo quando o principal é nulo. */
-export function songKey(song: CatalogSong): string | null {
-  return song.key ?? song.key_alt ?? null;
+/** "Acústica · Tom G · 76 BPM" — o que identifica a versão numa lista. */
+export function versionSummary(version: SongVersion): string {
+  return [
+    version.label,
+    version.key ? `Tom ${version.key}` : null,
+    version.bpm != null ? `${version.bpm} BPM` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

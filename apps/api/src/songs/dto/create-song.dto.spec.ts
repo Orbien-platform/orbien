@@ -2,114 +2,63 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateSongDto } from './create-song.dto';
 
-const BASE = {
-  title: 'Grande é o Senhor',
-};
-
 async function errorsFor(payload: Record<string, unknown>) {
-  const dto = plainToInstance(CreateSongDto, { ...BASE, ...payload });
+  const dto = plainToInstance(CreateSongDto, { title: 'Grande é o Senhor', ...payload });
   return validate(dto);
 }
 
 describe('CreateSongDto', () => {
-  it('aceita apenas o campo obrigatório (title)', async () => {
+  it('aceita apenas o título', async () => {
     expect(await errorsFor({})).toHaveLength(0);
   });
 
-  it('rejeita title ausente', async () => {
-    const dto = plainToInstance(CreateSongDto, {});
-    const errors = await validate(dto);
+  it.each([
+    ['ausente', undefined],
+    ['vazio', ''],
+    ['só com espaço', '   '],
+    ['que não é string', 123],
+  ])('rejeita title %s', async (_label, title) => {
+    const errors = await validate(plainToInstance(CreateSongDto, { title }));
     expect(errors.some((e) => e.property === 'title')).toBe(true);
   });
 
-  it('rejeita title que não é string', async () => {
-    const errors = await errorsFor({ title: 123 });
-    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  it('apara espaços do título', () => {
+    expect(plainToInstance(CreateSongDto, { title: '  Ousado Amor  ' }).title).toBe('Ousado Amor');
   });
 
-  it('rejeita title vazio', async () => {
-    const errors = await errorsFor({ title: '' });
-    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  it('aceita a versão inicial com todos os campos', async () => {
+    const errors = await errorsFor({
+      version: {
+        label: 'Original',
+        key: 'G',
+        bpm: 76,
+        link: 'https://example.com',
+        youtube_link: 'https://youtube.com/watch?v=x',
+        spotify_link: 'https://open.spotify.com/track/x',
+        cifra_club_link: 'https://cifraclub.com.br/x',
+        notes: 'intro longa',
+      },
+    });
+    expect(errors).toHaveLength(0);
   });
 
-  it('rejeita title só com espaço', async () => {
-    const errors = await errorsFor({ title: '   ' });
-    expect(errors.some((e) => e.property === 'title')).toBe(true);
+  it('valida a versão aninhada (rótulo vazio, bpm 0, link inválido)', async () => {
+    const [error] = await errorsFor({ version: { label: '', bpm: 0, youtube_link: 'x' } });
+    expect(error.property).toBe('version');
+    const props = (error.children ?? []).map((c) => c.property).sort();
+    expect(props).toEqual(['bpm', 'label', 'youtube_link']);
   });
 
-  it('aceita title válido', async () => {
-    expect(await errorsFor({ title: 'Grande é o Senhor' })).toHaveLength(0);
+  it('apara o nome da versão e rejeita nome que não é texto', async () => {
+    const dto = plainToInstance(CreateSongDto, { title: 'x', version: { label: '  Acústica  ' } });
+    expect(dto.version?.label).toBe('Acústica');
+
+    const [error] = await errorsFor({ version: { label: 123 } });
+    expect(error.children?.some((c) => c.property === 'label')).toBe(true);
   });
 
-  it('aceita key como string', async () => {
-    expect(await errorsFor({ key: 'G' })).toHaveLength(0);
-  });
-
-  it('rejeita key que não é string', async () => {
-    const errors = await errorsFor({ key: 123 });
-    expect(errors.some((e) => e.property === 'key')).toBe(true);
-  });
-
-  it('aceita bpm inteiro >= 1', async () => {
-    expect(await errorsFor({ bpm: 120 })).toHaveLength(0);
-  });
-
-  it('rejeita bpm menor que 1', async () => {
-    const errors = await errorsFor({ bpm: 0 });
-    expect(errors.some((e) => e.property === 'bpm')).toBe(true);
-  });
-
-  it('aceita link como URL válida', async () => {
-    expect(await errorsFor({ link: 'https://youtube.com/watch?v=abc' })).toHaveLength(0);
-  });
-
-  it('rejeita link que não é URL', async () => {
-    const errors = await errorsFor({ link: 'não é url' });
-    expect(errors.some((e) => e.property === 'link')).toBe(true);
-  });
-
-  it('aceita notes como string', async () => {
-    expect(await errorsFor({ notes: 'tocar mais lento' })).toHaveLength(0);
-  });
-
-  it('rejeita notes que não é string', async () => {
-    const errors = await errorsFor({ notes: 123 });
-    expect(errors.some((e) => e.property === 'notes')).toBe(true);
-  });
-
-  it('aceita key_alt como string', async () => {
-    expect(await errorsFor({ key_alt: 'E' })).toHaveLength(0);
-  });
-
-  it('rejeita key_alt que não é string', async () => {
-    const errors = await errorsFor({ key_alt: 123 });
-    expect(errors.some((e) => e.property === 'key_alt')).toBe(true);
-  });
-
-  it('aceita youtube_link como URL válida', async () => {
-    expect(await errorsFor({ youtube_link: 'https://youtube.com/watch?v=abc' })).toHaveLength(0);
-  });
-
-  it('rejeita youtube_link que não é URL', async () => {
-    const errors = await errorsFor({ youtube_link: 'não é url' });
-    expect(errors.some((e) => e.property === 'youtube_link')).toBe(true);
-  });
-
-  it('aceita spotify_link como URL válida', async () => {
-    expect(await errorsFor({ spotify_link: 'https://open.spotify.com/track/abc' })).toHaveLength(0);
-  });
-
-  it('rejeita spotify_link que não é URL', async () => {
-    const errors = await errorsFor({ spotify_link: 'não é url' });
-    expect(errors.some((e) => e.property === 'spotify_link')).toBe(true);
-  });
-
-  it('aceita cifra_club_link como URL válida', async () => {
-    expect(await errorsFor({ cifra_club_link: 'https://cifraclub.com.br/abc' })).toHaveLength(0);
-  });
-
-  it('rejeita cifra_club_link que não é URL', async () => {
-    const errors = await errorsFor({ cifra_club_link: 'não é url' });
-    expect(errors.some((e) => e.property === 'cifra_club_link')).toBe(true);
+  it('não tem mais tom alternativo: key_alt solto no corpo não é campo do DTO', () => {
+    const dto = plainToInstance(CreateSongDto, { title: 'x', key_alt: 'A' });
+    expect('version' in dto).toBe(false);
   });
 });

@@ -142,7 +142,14 @@ beforeAll(async () => {
       tenant_id: tenantAId,
       congregation_id: congregationA2Id,
       title: 'Música RLS Test — A-Second',
-      key: 'D',
+      versions: {
+        create: {
+          tenant_id: tenantAId,
+          congregation_id: congregationA2Id,
+          label: 'Original',
+          key: 'D',
+        },
+      },
     },
   });
   songA2Id = songA2.id;
@@ -1499,6 +1506,37 @@ describe('23. Songs — isolamento por congregação (AD-001)', () => {
     const after = await prismaAdmin.song.findUniqueOrThrow({ where: { id: songA2Id } });
     expect(after.title).toBe('Música RLS Test — A-Second (editada pelo tenant_admin)');
     expect(after.congregation_id).toBe(congregationA2Id);
+  });
+
+  // `027_rls_song_versions.sql`: as versões seguem a mesma regra da música.
+  it('versões: Tenant B não vê; admin_congregation da A-Main não lê a da A-Second; tenant_admin lê e grava', async () => {
+    const fromB = await runAsTenant(tenantBId, congregationBId, (tx) =>
+      tx.songVersion.findMany({ where: { tenant_id: tenantAId } }),
+    );
+    expect(fromB).toHaveLength(0);
+
+    const asCongAdmin = await runAsUser(tenantAId, congregationAId, congAdminUserId, (tx) =>
+      tx.songVersion.findMany({ where: { song_id: songA2Id } }),
+    );
+    expect(asCongAdmin).toHaveLength(0);
+
+    const asTenantAdmin = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.songVersion.findMany({ where: { song_id: songA2Id } }),
+    );
+    expect(asTenantAdmin.length).toBeGreaterThan(0);
+
+    const created = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+      tx.songVersion.create({
+        data: {
+          tenant_id: tenantAId,
+          congregation_id: congregationA2Id,
+          song_id: songA2Id,
+          label: 'Acústica (RLS)',
+          key: 'E',
+        },
+      }),
+    );
+    expect(created.congregation_id).toBe(congregationA2Id);
   });
 });
 

@@ -320,3 +320,31 @@ Balancete, DRE por centro de custo, evolução mensal) e o que vier:
 **Consequência prática**: os números do DRE e do Balancete mudam em relação a
 antes — lançamento ainda não pago deixa de somar. Quem precisar do regime de
 competência pede relatório novo; não reabre esta regra.
+
+
+### AD-012 — Música do repertório é só título; tom, bpm e links vivem na versão
+
+**Status**: active
+**Origem**: pedido do dono do produto, 2026-10-19 (feature `repertorio-louvor`, revisão)
+
+Uma música do repertório tem **N versões** (`Song` → `SongVersion`). Só o
+título é da música; `label`, `key`, `bpm`, links e notas são **por versão**.
+O "tom alternativo" (`key_alt`) deixou de existir: cada versão tem o seu tom.
+
+1. `POST /songs` recebe `{ title, version? }` e cria a música com uma versão
+   (padrão "Original"). Versões extras: `POST /songs/:id/versions`. Não se apaga
+   a última versão que sobra — apaga-se a música.
+2. A setlist escolhe **música + versão**: `SetlistSong.song_version_id` (FK,
+   `SetNull`) e `version_label`, cópia congelada do nome, como já são `title`,
+   `key`, `bpm` e `link`. A versão aparece na ordem de culto, na escala do
+   voluntário (web e mobile) e no PDF — a versão apagada do catálogo continua
+   legível pelo `version_label`.
+3. `song_version_id` acompanha `song_id` no `PATCH`: desvincular a música
+   desvincula a versão; trocar de música sem dizer a versão a limpa.
+4. `song_versions` tem RLS própria (`027_rls_song_versions.sql`), com
+   `app_congregation_allowed()` nos dois lados, e verificação no passo 7 do
+   bootstrap.
+
+**Migração**: cada música existente virou uma versão "Original"; quem tinha
+`key_alt` ganhou uma segunda versão "Tom X". As setlists já montadas foram
+ligadas à versão cujo tom bate com o gravado (senão, à "Original").

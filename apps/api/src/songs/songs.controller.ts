@@ -8,6 +8,8 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { SongsService } from './songs.service';
 import { CreateSongDto } from './dto/create-song.dto';
 import { UpdateSongDto } from './dto/update-song.dto';
+import { CreateSongVersionDto } from './dto/create-song-version.dto';
+import { UpdateSongVersionDto } from './dto/update-song-version.dto';
 
 const EDIT_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'ministry_leader'] as const;
 
@@ -38,5 +40,36 @@ export class SongsController {
   @Roles(...EDIT_ROLES)
   remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.songsService.remove(user.tenant_id, user.congregation_id, id);
+  }
+
+  @Post(':id/versions')
+  @Roles(...EDIT_ROLES)
+  createVersion(
+    @Param('id') id: string,
+    @Body() dto: CreateSongVersionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.songsService.createVersion(user.tenant_id, user.congregation_id, id, dto);
+  }
+
+  @Patch(':id/versions/:versionId')
+  @Roles(...EDIT_ROLES)
+  updateVersion(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+    @Body() dto: UpdateSongVersionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.songsService.updateVersion(user.tenant_id, user.congregation_id, id, versionId, dto);
+  }
+
+  @Delete(':id/versions/:versionId')
+  @Roles(...EDIT_ROLES)
+  removeVersion(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.songsService.removeVersion(user.tenant_id, user.congregation_id, id, versionId);
   }
 }

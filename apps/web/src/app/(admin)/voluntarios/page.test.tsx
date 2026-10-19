@@ -294,7 +294,7 @@ describe("VoluntariosPage", () => {
               setlist: {
                 songs: [
                   { id: "s2", sequence: 2, title: "Segunda", key: null, bpm: null, link: null },
-                  { id: "s1", sequence: 1, title: "Grande é o Senhor", key: "G", bpm: 80, link: "http://x.test" },
+                  { id: "s1", sequence: 1, title: "Grande é o Senhor", version_label: "Acústica", key: "G", bpm: 80, link: "http://x.test" },
                 ],
               },
             },
@@ -312,6 +312,9 @@ describe("VoluntariosPage", () => {
     expect(await screen.findByText("Grande é o Senhor")).toBeInTheDocument();
     expect(screen.getByText("G")).toBeInTheDocument();
     expect(screen.getByText("80 BPM")).toBeInTheDocument();
+    // A versão escolhida para o culto aparece; música sem versão não mostra selo.
+    expect(screen.getByText("Versão Acústica")).toBeInTheDocument();
+    expect(screen.getAllByText(/^Versão /)).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Abrir link de Grande é o Senhor" })).toBeInTheDocument();
 
     // Ordenado por sequence: "Grande é o Senhor" (1) aparece antes de "Segunda" (2).

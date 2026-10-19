@@ -12,15 +12,33 @@ const songs: CatalogSong[] = [
   {
     id: "s1",
     title: "Grande é o Senhor",
-    key: "D",
-    key_alt: null,
-    bpm: 80,
-    link: null,
-    youtube_link: null,
-    spotify_link: null,
-    cifra_club_link: null,
-    notes: null,
     last_played_at: "2026-08-01T00:00:00.000Z",
+    versions: [
+      {
+        id: "v1",
+        label: "Original",
+        key: "D",
+        bpm: 80,
+        link: null,
+        youtube_link: null,
+        spotify_link: null,
+        cifra_club_link: null,
+        notes: null,
+        last_played_at: "2026-08-01T00:00:00.000Z",
+      },
+      {
+        id: "v2",
+        label: "Acústica",
+        key: "A",
+        bpm: 66,
+        link: null,
+        youtube_link: "https://youtube.com/watch?v=ac",
+        spotify_link: null,
+        cifra_club_link: null,
+        notes: null,
+        last_played_at: null,
+      },
+    ],
   },
 ];
 
@@ -36,16 +54,26 @@ describe("SongCatalogPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("loads and lists songs with key, bpm and last played date", async () => {
+  it("lists each song with its versions, each with its own key and bpm", async () => {
     mockGet();
     render(<SongCatalogPanel canEdit={true} />);
 
     expect(await screen.findByText("Grande é o Senhor")).toBeInTheDocument();
+    expect(screen.getByText("Original")).toBeInTheDocument();
+    expect(screen.getByText("Acústica")).toBeInTheDocument();
     expect(screen.getByText("Tom D")).toBeInTheDocument();
+    expect(screen.getByText("Tom A")).toBeInTheDocument();
     expect(screen.getByText("80 BPM")).toBeInTheDocument();
+    expect(screen.getByText("66 BPM")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "YouTube" })).toHaveAttribute(
+      "href",
+      "https://youtube.com/watch?v=ac",
+    );
     // 2026-08-01T00:00:00Z é 31/07 às 21h em Brasília — e 01/08 em Tóquio,
     // onde este teste roda. O valor exibido é o de Brasília, sempre.
     expect(screen.getByText(/Última vez tocada: 31\/07\/2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Tocada em: 31\/07\/2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Tocada em: nunca tocada/)).toBeInTheDocument();
     expect(screen.getByText("1 música no repertório")).toBeInTheDocument();
   });
 
@@ -105,7 +133,7 @@ describe("SongCatalogPanel", () => {
     render(<SongCatalogPanel canEdit={false} />);
     await screen.findByText("Grande é o Senhor");
     expect(screen.queryByRole("button", { name: "Nova música" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Editar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Editar|Renomear|Nova versão/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Excluir/ })).not.toBeInTheDocument();
   });
 
@@ -121,9 +149,9 @@ describe("SongCatalogPanel", () => {
     expect(await screen.findByText("Dê um título à música.")).toBeInTheDocument();
   });
 
-  it("creates a song with all fields", async () => {
-    // Timeout maior que o default (5s): nove campos digitados via user.type
-    // levam mais que isso na máquina mais lenta do CI (mesmo padrão usado em
+  it("creates a song with its first version", async () => {
+    // Timeout maior que o default (5s): campos digitados via user.type levam
+    // mais que isso na máquina mais lenta do CI (mesmo padrão usado em
     // ServiceOrderView.test.tsx para o formulário de Adicionar Item).
     mockGet();
     vi.mocked(api.post).mockResolvedValue({ data: {} });
@@ -132,9 +160,11 @@ describe("SongCatalogPanel", () => {
     await screen.findByText("Grande é o Senhor");
 
     await user.click(screen.getByRole("button", { name: "Nova música" }));
+    // Não existe mais "Tom alternativo": cada versão tem o seu tom.
+    expect(screen.queryByLabelText("Tom alternativo")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Título"), "Digno é o Senhor");
+    expect(screen.getByLabelText("Nome da versão")).toHaveValue("Original");
     await user.type(screen.getByLabelText("Tom"), "E");
-    await user.type(screen.getByLabelText("Tom alternativo"), "F#");
     await user.type(screen.getByLabelText("BPM"), "90");
     await user.type(screen.getByLabelText("Link do YouTube"), "https://youtube.com/watch?v=x");
     await user.type(screen.getByLabelText("Link do Spotify"), "https://open.spotify.com/track/x");
@@ -146,39 +176,107 @@ describe("SongCatalogPanel", () => {
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith("/songs", {
         title: "Digno é o Senhor",
-        key: "E",
-        key_alt: "F#",
-        bpm: 90,
-        link: "https://cifra.example/x",
-        youtube_link: "https://youtube.com/watch?v=x",
-        spotify_link: "https://open.spotify.com/track/x",
-        cifra_club_link: "https://cifraclub.com.br/x",
-        notes: "tocar mais lento",
+        version: {
+          label: "Original",
+          key: "E",
+          bpm: 90,
+          link: "https://cifra.example/x",
+          youtube_link: "https://youtube.com/watch?v=x",
+          spotify_link: "https://open.spotify.com/track/x",
+          cifra_club_link: "https://cifraclub.com.br/x",
+          notes: "tocar mais lento",
+        },
       })
     );
   }, 10000);
 
-  it("opens the edit form pre-filled and updates the song", async () => {
+  it("renames a song without touching its versions", async () => {
     mockGet();
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
     render(<SongCatalogPanel canEdit={true} />);
     await screen.findByText("Grande é o Senhor");
 
-    await user.click(screen.getByRole("button", { name: "Editar Grande é o Senhor" }));
+    await user.click(screen.getByRole("button", { name: "Renomear Grande é o Senhor" }));
+    const title = await screen.findByLabelText("Título");
+    expect(title).toHaveValue("Grande é o Senhor");
+    expect(screen.queryByLabelText("Tom")).not.toBeInTheDocument();
 
-    expect(await screen.findByDisplayValue("Grande é o Senhor")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("D")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("80")).toBeInTheDocument();
+    await user.clear(title);
+    await user.type(title, "Grande é Deus");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/songs/s1", { title: "Grande é Deus" })
+    );
+  });
+
+  it("adds a new version with its own key to an existing song", async () => {
+    mockGet();
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Grande é o Senhor");
+
+    await user.click(screen.getByRole("button", { name: "Nova versão de Grande é o Senhor" }));
+    await user.click(screen.getByRole("button", { name: "Criar versão" }));
+    expect(await screen.findByText("Dê um nome à versão.")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Nome da versão"), "Ao vivo");
+    await user.type(screen.getByLabelText("Tom"), "B");
+    await user.click(screen.getByRole("button", { name: "Criar versão" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/songs/s1/versions", {
+        label: "Ao vivo",
+        key: "B",
+      })
+    );
+  });
+
+  it("opens a version pre-filled and updates only that version", async () => {
+    mockGet();
+    vi.mocked(api.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Grande é o Senhor");
+
+    await user.click(
+      screen.getByRole("button", { name: "Editar versão Acústica de Grande é o Senhor" })
+    );
+
+    expect(await screen.findByDisplayValue("Acústica")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("A")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("66")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith(
-        "/songs/s1",
-        expect.objectContaining({ title: "Grande é o Senhor" })
+        "/songs/s1/versions/v2",
+        expect.objectContaining({ label: "Acústica", key: "A", bpm: 66 })
       )
     );
+  });
+
+  it("deletes a version, and hides delete when the song has only one", async () => {
+    mockGet([
+      songs[0],
+      { ...songs[0], id: "s2", title: "Aleluia", versions: [songs[0].versions[0]] },
+    ]);
+    vi.mocked(api.delete).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Aleluia");
+
+    expect(
+      screen.queryByRole("button", { name: "Excluir versão Original de Aleluia" })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Excluir versão Acústica de Grande é o Senhor" })
+    );
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith("/songs/s1/versions/v2"));
   });
 
   it("shows an error from the API when saving fails", async () => {
@@ -208,6 +306,35 @@ describe("SongCatalogPanel", () => {
     await user.click(screen.getByRole("button", { name: "Excluir Grande é o Senhor" }));
 
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith("/songs/s1"));
+  });
+
+  it("shows an error message when deleting a version fails", async () => {
+    mockGet();
+    vi.mocked(api.delete).mockRejectedValue({ isAxiosError: false });
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Grande é o Senhor");
+
+    await user.click(
+      screen.getByRole("button", { name: "Excluir versão Acústica de Grande é o Senhor" })
+    );
+
+    expect(await screen.findByText("Não foi possível excluir a versão.")).toBeInTheDocument();
+  });
+
+  it("closes the form with Escape", async () => {
+    mockGet();
+    const user = userEvent.setup();
+    render(<SongCatalogPanel canEdit={true} />);
+    await screen.findByText("Grande é o Senhor");
+
+    await user.click(screen.getByRole("button", { name: "Nova música" }));
+    expect(await screen.findByRole("heading", { name: "Nova música" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Nova música" })).not.toBeInTheDocument()
+    );
   });
 
   it("shows an error message when deleting a song fails", async () => {
@@ -259,19 +386,25 @@ describe("SongCatalogPanel", () => {
     await Promise.resolve();
   });
 
-  it("lists a song without key or bpm, and edits it without pre-filling those fields", async () => {
+  it("lists a version without key or bpm, and edits it without pre-filling those fields", async () => {
     const bare: CatalogSong = {
       id: "s2",
       title: "Aleluia",
-      key: null,
-      key_alt: null,
-      bpm: null,
-      link: null,
-      youtube_link: null,
-      spotify_link: null,
-      cifra_club_link: null,
-      notes: null,
       last_played_at: null,
+      versions: [
+        {
+          id: "v9",
+          label: "Original",
+          key: null,
+          bpm: null,
+          link: null,
+          youtube_link: null,
+          spotify_link: null,
+          cifra_club_link: null,
+          notes: null,
+          last_played_at: null,
+        },
+      ],
     };
     mockGet([bare]);
     const user = userEvent.setup();
@@ -281,8 +414,8 @@ describe("SongCatalogPanel", () => {
     expect(screen.queryByText(/^Tom /)).not.toBeInTheDocument();
     expect(screen.queryByText(/ BPM$/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Editar Aleluia" }));
-    expect(await screen.findByDisplayValue("Aleluia")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Editar versão Original de Aleluia" }));
+    expect(await screen.findByDisplayValue("Original")).toBeInTheDocument();
     expect(screen.getByLabelText("Tom")).toHaveValue("");
     expect(screen.getByLabelText("BPM")).toHaveValue(null);
   });

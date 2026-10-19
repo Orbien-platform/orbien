@@ -9,12 +9,25 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
-import { fmtLastPlayed, matchesSong, songKey, type CatalogSong } from "@/lib/repertorio";
+import {
+  fmtLastPlayed,
+  matchesSong,
+  versionSummary,
+  type CatalogSong,
+  type SongVersion,
+} from "@/lib/repertorio";
+import {
+  SongVersionFields,
+  emptyVersionForm,
+  versionFormToBody,
+  type VersionForm,
+} from "./SongVersionFields";
 
 interface SongPickerProps {
   /** Papel autorizado a escrever no catálogo — esconde o atalho de cadastro quando falso. */
   canCreate: boolean;
-  onSelect: (song: CatalogSong) => void;
+  /** Escolher é escolher uma versão: a setlist grava qual delas vai tocar. */
+  onSelect: (song: CatalogSong, version: SongVersion) => void;
   onCancel?: () => void;
   /** Repassado ao SearchInput; os testes usam 0 para não depender do timer real. */
   debounce?: number;
@@ -86,25 +99,26 @@ export function SongPicker({ canCreate, onSelect, onCancel, debounce }: SongPick
 
       {visible.length > 0 ? (
         <ul className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-          {visible.map((s) => {
-            const tom = songKey(s);
-            return (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(s)}
-                  className="flex w-full flex-col items-start gap-0.5 rounded-[8px] px-2 py-1.5 text-left hover:bg-[var(--surface-muted)]"
-                >
-                  <span className="w-full truncate text-sm text-ink dark:text-white">{s.title}</span>
-                  <span className="flex flex-wrap items-center gap-x-2 text-xs text-stone">
-                    {tom ? <span>Tom {tom}</span> : null}
-                    {s.bpm != null ? <span>{s.bpm} BPM</span> : null}
-                    <span>Última vez tocada: {fmtLastPlayed(s.last_played_at)}</span>
+          {visible.map((s) => (
+            <li key={s.id}>
+              {s.versions.length === 1 ? (
+                <VersionButton song={s} version={s.versions[0]} onSelect={onSelect} showTitle />
+              ) : (
+                <div className="flex flex-col">
+                  <span className="truncate px-2 pt-1.5 text-sm text-ink dark:text-white">
+                    {s.title}
                   </span>
-                </button>
-              </li>
-            );
-          })}
+                  <ul className="flex flex-col gap-0.5 pl-3">
+                    {s.versions.map((v) => (
+                      <li key={v.id}>
+                        <VersionButton song={s} version={v} onSelect={onSelect} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </li>
+          ))}
         </ul>
       ) : null}
 
@@ -133,6 +147,39 @@ export function SongPicker({ canCreate, onSelect, onCancel, debounce }: SongPick
   );
 }
 
+function VersionButton({
+  song,
+  version,
+  onSelect,
+  showTitle = false,
+}: {
+  song: CatalogSong;
+  version: SongVersion;
+  onSelect: (song: CatalogSong, version: SongVersion) => void;
+  showTitle?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(song, version)}
+      aria-label={`${song.title} — ${version.label}`}
+      className="flex w-full flex-col items-start gap-0.5 rounded-[8px] px-2 py-1.5 text-left hover:bg-[var(--surface-muted)]"
+    >
+      {showTitle ? (
+        <span className="w-full truncate text-sm text-ink dark:text-white">{song.title}</span>
+      ) : null}
+      <span className="flex flex-wrap items-center gap-x-2 text-xs text-stone">
+        <span className={showTitle ? undefined : "text-sm text-ink dark:text-white"}>
+          {showTitle ? versionSummary(version) : version.label}
+        </span>
+        {!showTitle && version.key ? <span>Tom {version.key}</span> : null}
+        {!showTitle && version.bpm != null ? <span>{version.bpm} BPM</span> : null}
+        <span>Tocada em: {fmtLastPlayed(version.last_played_at)}</span>
+      </span>
+    </button>
+  );
+}
+
 /**
  * Cadastro de música do repertório sem sair da tela. Interno ao seletor: o
  * CRUD do catálogo (editar, remover) continua só em `/repertorio`.
@@ -141,17 +188,11 @@ function SongQuickCreate({
   onCreated,
   onCancel,
 }: {
-  onCreated: (song: CatalogSong) => void;
+  onCreated: (song: CatalogSong, version: SongVersion) => void;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState("");
-  const [key, setKey] = useState("");
-  const [keyAlt, setKeyAlt] = useState("");
-  const [bpm, setBpm] = useState("");
-  const [link, setLink] = useState("");
-  const [youtubeLink, setYoutubeLink] = useState("");
-  const [spotifyLink, setSpotifyLink] = useState("");
-  const [cifraClubLink, setCifraClubLink] = useState("");
+  const [versionForm, setVersionForm] = useState<VersionForm>(emptyVersionForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -160,23 +201,22 @@ function SongQuickCreate({
       setError("Dê um título à música.");
       return;
     }
+    if (!versionForm.label.trim()) {
+      setError("Dê um nome à versão.");
+      return;
+    }
 
     setSaving(true);
     setError(null);
     try {
-      const { data } = await api.post<CatalogSong>("/songs", {
+      const { data } = await api.post<Omit<CatalogSong, "last_played_at">>("/songs", {
         title: title.trim(),
-        key: key.trim() || undefined,
-        key_alt: keyAlt.trim() || undefined,
-        bpm: bpm ? Number(bpm) : undefined,
-        link: link.trim() || undefined,
-        youtube_link: youtubeLink.trim() || undefined,
-        spotify_link: spotifyLink.trim() || undefined,
-        cifra_club_link: cifraClubLink.trim() || undefined,
+        version: versionFormToBody(versionForm),
       });
       // `POST /songs` não devolve `last_played_at` — música recém-criada nunca
       // foi tocada, então o valor correto é null, não `undefined` vazando.
-      onCreated({ ...data, last_played_at: null });
+      const versions = data.versions.map((v) => ({ ...v, last_played_at: null }));
+      onCreated({ ...data, last_played_at: null, versions }, versions[0]);
     } catch (err) {
       setError(apiErrorMessage(err, "Não foi possível salvar a música."));
     } finally {
@@ -199,61 +239,12 @@ function SongQuickCreate({
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-key" className="text-xs">Tom</Label>
-          <Input id="picker-song-key" value={key} onChange={(e) => setKey(e.target.value)} disabled={saving} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-key-alt" className="text-xs">Tom alternativo</Label>
-          <Input id="picker-song-key-alt" value={keyAlt} onChange={(e) => setKeyAlt(e.target.value)} disabled={saving} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-bpm" className="text-xs">BPM</Label>
-          <Input
-            id="picker-song-bpm"
-            type="number"
-            min={1}
-            value={bpm}
-            onChange={(e) => setBpm(e.target.value)}
-            disabled={saving}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-link" className="text-xs">Link</Label>
-          <Input id="picker-song-link" value={link} onChange={(e) => setLink(e.target.value)} disabled={saving} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-youtube" className="text-xs">YouTube</Label>
-          <Input
-            id="picker-song-youtube"
-            value={youtubeLink}
-            onChange={(e) => setYoutubeLink(e.target.value)}
-            disabled={saving}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-spotify" className="text-xs">Spotify</Label>
-          <Input
-            id="picker-song-spotify"
-            value={spotifyLink}
-            onChange={(e) => setSpotifyLink(e.target.value)}
-            disabled={saving}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="picker-song-cifra" className="text-xs">Cifra Club</Label>
-          <Input
-            id="picker-song-cifra"
-            value={cifraClubLink}
-            onChange={(e) => setCifraClubLink(e.target.value)}
-            disabled={saving}
-          />
-        </div>
-      </div>
+      <SongVersionFields
+        idPrefix="picker-song"
+        value={versionForm}
+        onChange={setVersionForm}
+        disabled={saving}
+      />
 
       {error ? <p className="text-xs text-crimson">{error}</p> : null}
 

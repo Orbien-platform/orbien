@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ServiceOrderView } from "./ServiceOrderView";
 import api from "@/lib/api";
-import type { CatalogSong } from "@/lib/repertorio";
+import type { CatalogSong, SongVersion } from "@/lib/repertorio";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -58,13 +58,12 @@ const serviceOrder = {
   ],
 };
 
-/** Música do catálogo no formato que `GET /songs` devolve ao seletor. */
-function catalogSong(overrides: Partial<CatalogSong> = {}): CatalogSong {
+/** Versão do catálogo no formato que `GET /songs` devolve ao seletor. */
+function catalogVersion(overrides: Partial<SongVersion> = {}): SongVersion {
   return {
-    id: "cs1",
-    title: "Digno é o Senhor",
+    id: "v-cs1",
+    label: "Original",
     key: "E",
-    key_alt: null,
     bpm: 90,
     link: null,
     youtube_link: null,
@@ -73,6 +72,30 @@ function catalogSong(overrides: Partial<CatalogSong> = {}): CatalogSong {
     notes: null,
     last_played_at: null,
     ...overrides,
+  };
+}
+
+/**
+ * Música do catálogo. `key`/`bpm`/`link` são atalho para a versão única
+ * ("Original"); para várias versões, passe `versions`.
+ */
+function catalogSong(
+  overrides: Partial<Pick<CatalogSong, "id" | "title" | "versions">> &
+    Partial<Pick<SongVersion, "key" | "bpm" | "link">> = {},
+): CatalogSong {
+  const { id = "cs1", title = "Digno é o Senhor", versions, key, bpm, link } = overrides;
+  return {
+    id,
+    title,
+    last_played_at: null,
+    versions: versions ?? [
+      catalogVersion({
+        id: `v-${id}`,
+        ...(key !== undefined && { key }),
+        ...(bpm !== undefined && { bpm }),
+        ...(link !== undefined && { link }),
+      }),
+    ],
   };
 }
 
@@ -1164,9 +1187,16 @@ describe("ServiceOrderView", () => {
     );
   });
 
-  it("lets the confirmed tom be chosen between the catalog's two versions", async () => {
+  it("confirms which version goes on the setlist when the song has several", async () => {
     mockGet(true, [
-      catalogSong({ id: "cs3", title: "Digno é o Senhor", key: "E", key_alt: "F#", bpm: 90, link: null }),
+      catalogSong({
+        id: "cs3",
+        title: "Digno é o Senhor",
+        versions: [
+          catalogVersion({ id: "v-orig", label: "Original", key: "E", bpm: 90 }),
+          catalogVersion({ id: "v-ac", label: "Acústica", key: "F#", bpm: 70 }),
+        ],
+      }),
     ]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -1176,26 +1206,30 @@ describe("ServiceOrderView", () => {
 
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
-    await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
+    await user.click(await screen.findByRole("button", { name: "Digno é o Senhor — Acústica" }));
 
-    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("E");
-    await user.selectOptions(screen.getByLabelText("Tom confirmado para a escala"), "F#");
+    // Cada versão tem o seu tom e o seu bpm: a escolhida preenche os campos.
     expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("F#");
+    expect(screen.getByPlaceholderText("BPM")).toHaveValue(70);
+    expect(screen.getByText(/versão/)).toHaveTextContent("Do repertório: Digno é o Senhor — versão Acústica");
 
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
         "/celebrations/setlists/songs",
-        expect.objectContaining({ setlist_id: "sl1", song_id: "cs3", key: "F#" })
+        expect.objectContaining({
+          setlist_id: "sl1",
+          song_id: "cs3",
+          song_version_id: "v-ac",
+          key: "F#",
+        })
       )
     );
   });
 
-  it("defaults to the alternate tom when it's the catalog song's only one set", async () => {
-    mockGet(true, [
-      catalogSong({ id: "cs4", title: "Aleluia", key: null, key_alt: "C", bpm: null, link: null }),
-    ]);
+  it("sends the version of a single-version song picked from the catalog", async () => {
+    mockGet(true, [catalogSong({ id: "cs4", title: "Aleluia", key: "C", bpm: null, link: null })]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
     render(
@@ -1205,19 +1239,12 @@ describe("ServiceOrderView", () => {
     await screen.findByText("Grande é o Senhor");
     await user.click(screen.getByRole("button", { name: "Adicionar música" }));
     await user.click(await screen.findByRole("button", { name: /Aleluia/ }));
-
-    // Sem tom principal, o seletor só tem a opção do tom alternativo — o
-    // estado precisa nascer nela, e não vazio, para bater com o que a tela
-    // mostra como selecionado sem exigir um clique extra do usuário.
-    expect(screen.getByLabelText("Tom confirmado para a escala")).toHaveValue("C");
-    expect(screen.getByPlaceholderText("Tom (ex: G)")).toHaveValue("C");
-
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
         "/celebrations/setlists/songs",
-        expect.objectContaining({ setlist_id: "sl1", song_id: "cs4", key: "C" })
+        expect.objectContaining({ song_id: "cs4", song_version_id: "v-cs4", key: "C" })
       )
     );
   });
@@ -1279,7 +1306,13 @@ describe("ServiceOrderView", () => {
     mockGet(true, []);
     vi.mocked(api.post).mockImplementation((url: string) => {
       if (url === "/songs") {
-        return Promise.resolve({ data: { id: "novo", title: "Grande é o Nosso Deus", key: "A", bpm: 72, link: null } });
+        return Promise.resolve({
+          data: {
+            id: "novo",
+            title: "Grande é o Nosso Deus",
+            versions: [catalogVersion({ id: "v-novo", key: "A", bpm: 72 })],
+          },
+        });
       }
       if (url === "/celebrations/setlists/songs") return Promise.resolve({ data: {} });
       return Promise.reject(new Error(`unexpected POST ${url}`));
@@ -1309,7 +1342,12 @@ describe("ServiceOrderView", () => {
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
         "/celebrations/setlists/songs",
-        expect.objectContaining({ setlist_id: "sl1", song_id: "novo", title: "Grande é o Nosso Deus" })
+        expect.objectContaining({
+          setlist_id: "sl1",
+          song_id: "novo",
+          song_version_id: "v-novo",
+          title: "Grande é o Nosso Deus",
+        })
       )
     );
   });
@@ -1435,7 +1473,10 @@ describe("ServiceOrderView", () => {
     await user.click(await screen.findByRole("button", { name: /Digno é o Senhor/ }));
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", { song_id: "cs1" })
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", {
+        song_id: "cs1",
+        song_version_id: "v-cs1",
+      })
     );
     // A lista reflete o vínculo pela recarga da própria ordem, sem reload de
     // página: a linha passa a oferecer desvincular (SETREP-01 AC5).
@@ -1480,7 +1521,10 @@ describe("ServiceOrderView", () => {
     );
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", { song_id: null })
+      expect(api.patch).toHaveBeenCalledWith("/celebrations/setlists/songs/s1", {
+        song_id: null,
+        song_version_id: null,
+      })
     );
     // Nada mais é enviado: tom, BPM e link digitados ficam como estavam.
     expect(screen.getByText("G")).toBeInTheDocument();
@@ -1557,11 +1601,12 @@ describe("ServiceOrderView", () => {
       if (url === "/celebrations/orders/so1") {
         return Promise.resolve({ data: orderWithSetlistSong({
           song_id: "cs1",
-          song: {
-            id: "cs1",
-            title: "Grande é o Senhor",
+          song: { id: "cs1", title: "Grande é o Senhor" },
+          songVersion: {
+            id: "v-cs1",
+            label: "Original",
             key: "G",
-            key_alt: null,
+            bpm: null,
             youtube_link: "http://yt.test/a",
             spotify_link: "http://spotify.test/a",
             cifra_club_link: "http://cifraclub.test/a",
@@ -1601,13 +1646,65 @@ describe("ServiceOrderView", () => {
     ).toBeInTheDocument();
   });
 
+  it("sinaliza na setlist qual versão da música vai tocar", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          version_label: "Acústica",
+          song: { id: "cs1", title: "Grande é o Senhor" },
+          songVersion: {
+            id: "v-ac",
+            label: "Acústica",
+            key: "G",
+            bpm: null,
+            youtube_link: null,
+            spotify_link: null,
+            cifra_club_link: null,
+          },
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.getByText("Versão Acústica")).toBeInTheDocument();
+  });
+
+  it("mantém o nome da versão na setlist mesmo depois de a versão sair do catálogo", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") {
+        return Promise.resolve({ data: orderWithSetlistSong({
+          song_id: "cs1",
+          version_label: "Ao vivo",
+          song: { id: "cs1", title: "Grande é o Senhor" },
+          songVersion: null,
+        }) });
+      }
+      if (url === "/songs") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    render(
+      <ServiceOrderView open={true} onOpenChange={vi.fn()} instanceId="i1" canEdit={true} canAddSongs={true} />
+    );
+
+    await screen.findByText("Grande é o Senhor");
+    expect(screen.getByText("Versão Ao vivo")).toBeInTheDocument();
+  });
+
   it("referência nula renderiza os campos históricos da setlist sem erro (SETREP-04 AC2)", async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
       if (url === "/celebrations/orders/so1") {
         // `Song` removido do catálogo: `song_id` virou NULL por SetNull e a
         // referência vem nula, mas a cópia congelada continua na setlist.
-        return Promise.resolve({ data: orderWithSetlistSong({ song_id: null, song: null }) });
+        return Promise.resolve({ data: orderWithSetlistSong({ song_id: null, song: null, songVersion: null }) });
       }
       if (url === "/songs") return Promise.resolve({ data: [] });
       return Promise.reject(new Error(`unexpected GET ${url}`));
@@ -1629,11 +1726,12 @@ describe("ServiceOrderView", () => {
       if (url === "/celebrations/orders/so1") {
         return Promise.resolve({ data: orderWithSetlistSong({
           song_id: "cs1",
-          song: {
-            id: "cs1",
-            title: "Grande é o Senhor",
+          song: { id: "cs1", title: "Grande é o Senhor" },
+          songVersion: {
+            id: "v-cs1",
+            label: "Original",
             key: "G",
-            key_alt: null,
+            bpm: null,
             youtube_link: "http://yt.test/a",
             spotify_link: null,
             cifra_club_link: null,
@@ -1665,11 +1763,12 @@ describe("ServiceOrderView", () => {
       if (url === "/celebrations/orders/so1") {
         return Promise.resolve({ data: orderWithSetlistSong({
           song_id: "cs1",
-          song: {
-            id: "cs1",
-            title: "Grande é o Senhor",
+          song: { id: "cs1", title: "Grande é o Senhor" },
+          songVersion: {
+            id: "v-cs1",
+            label: "Original",
             key: "D",
-            key_alt: null,
+            bpm: null,
             youtube_link: "http://yt.test/a",
             spotify_link: null,
             cifra_club_link: "http://cifraclub.test/a",
