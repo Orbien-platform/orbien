@@ -80,6 +80,7 @@ model Tenant {
   setlists                  Setlist[]
   setlistSongs              SetlistSong[]
   songs                     Song[]
+  songVersions              SongVersion[]
   auditLogs                 AuditLog[]
   qrTokens                  QrToken[]
   exportJobs                ExportJob[]
@@ -158,6 +159,7 @@ model Congregation {
   setlists                  Setlist[]
   setlistSongs              SetlistSong[]
   songs                     Song[]
+  songVersions              SongVersion[]
   materialOpenRecords       MaterialOpenRecord[]
   groupMeetingMaterials     GroupMeetingMaterial[]
   studyMaterialVersions     StudyMaterialVersion[]
@@ -1687,6 +1689,8 @@ model SetlistSong {
   congregation_id String
   setlist_id      String
   song_id         String?
+  song_version_id String?
+  version_label   String?
   sequence        Int
   title           String
   key             String?
@@ -1700,6 +1704,7 @@ model SetlistSong {
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   setlist      Setlist      @relation(fields: [setlist_id], references: [id], onDelete: Cascade)
   song         Song?        @relation(fields: [song_id], references: [id], onDelete: SetNull)
+  songVersion  SongVersion? @relation(fields: [song_version_id], references: [id], onDelete: SetNull)
 
   @@index([setlist_id])
   @@index([tenant_id, setlist_id])
@@ -1711,8 +1716,27 @@ model Song {
   tenant_id       String
   congregation_id String
   title           String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  versions     SongVersion[]
+  setlistSongs SetlistSong[]
+
+  @@index([tenant_id, congregation_id])
+  @@index([tenant_id, id])
+  @@map("songs")
+}
+
+// Uma música (título) tem N versões; tudo que não é título mora na versão.
+model SongVersion {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  song_id         String
+  label           String
   key             String?
-  key_alt         String?
   bpm             Int?
   link            String?
   youtube_link    String?
@@ -1724,11 +1748,12 @@ model Song {
 
   tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  song         Song          @relation(fields: [song_id], references: [id], onDelete: Cascade)
   setlistSongs SetlistSong[]
 
   @@index([tenant_id, congregation_id])
-  @@index([tenant_id, id])
-  @@map("songs")
+  @@index([song_id])
+  @@map("song_versions")
 }
 
 model NotificationPreference {

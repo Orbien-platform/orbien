@@ -29,6 +29,9 @@ describe('SongsController', () => {
       findAll: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      createVersion: jest.fn(),
+      updateVersion: jest.fn(),
+      removeVersion: jest.fn(),
     } as unknown as jest.Mocked<SongsService>;
 
     controller = new SongsController(songsService);
@@ -76,5 +79,26 @@ describe('SongsController', () => {
     expect(songsService.remove).toHaveBeenCalledWith('tenant-1', 'cong-1', 's1');
     expect(result).toEqual({ id: 's1' });
     expect(rolesFor('remove')).toEqual(EDIT_ROLES);
+  });
+
+  it('createVersion, updateVersion e removeVersion delegam ao service e exigem papel de edição', async () => {
+    songsService.createVersion.mockResolvedValue({ id: 'v1' } as never);
+    songsService.updateVersion.mockResolvedValue({ id: 'v1' } as never);
+    songsService.removeVersion.mockResolvedValue({ id: 'v1' } as never);
+
+    await controller.createVersion('s1', { label: 'Acústica' } as never, user);
+    await controller.updateVersion('s1', 'v1', { key: 'A' } as never, user);
+    await controller.removeVersion('s1', 'v1', user);
+
+    expect(songsService.createVersion).toHaveBeenCalledWith('tenant-1', 'cong-1', 's1', {
+      label: 'Acústica',
+    });
+    expect(songsService.updateVersion).toHaveBeenCalledWith('tenant-1', 'cong-1', 's1', 'v1', {
+      key: 'A',
+    });
+    expect(songsService.removeVersion).toHaveBeenCalledWith('tenant-1', 'cong-1', 's1', 'v1');
+    expect(rolesFor('createVersion')).toEqual(EDIT_ROLES);
+    expect(rolesFor('updateVersion')).toEqual(EDIT_ROLES);
+    expect(rolesFor('removeVersion')).toEqual(EDIT_ROLES);
   });
 });

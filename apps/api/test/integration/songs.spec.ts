@@ -65,11 +65,22 @@ beforeAll(async () => {
   });
 
   // catálogo: uma música nunca tocada e uma usada numa setlist
+  const scope = { tenant_id: tenantId, congregation_id: congregationId };
   const nunca = await admin.song.create({
-    data: { tenant_id: tenantId, congregation_id: congregationId, title: 'Nunca Tocada' },
+    data: { ...scope, title: 'Nunca Tocada', versions: { create: { ...scope, label: 'Original' } } },
   });
   const tocada = await admin.song.create({
-    data: { tenant_id: tenantId, congregation_id: congregationId, title: 'Já Tocada', key: 'G' },
+    data: {
+      ...scope,
+      title: 'Já Tocada',
+      versions: {
+        create: [
+          { ...scope, label: 'Original', key: 'G' },
+          { ...scope, label: 'Acústica', key: 'A' },
+        ],
+      },
+    },
+    include: { versions: { orderBy: { created_at: 'asc' } } },
   });
   void nunca;
 
@@ -126,6 +137,8 @@ beforeAll(async () => {
       congregation_id: congregationId,
       setlist_id: setlist.id,
       song_id: tocada.id,
+      song_version_id: tocada.versions[0].id,
+      version_label: 'Original',
       sequence: 1,
       title: 'Já Tocada',
     },
@@ -171,6 +184,37 @@ it('devolve o catálogo com last_played_at resolvido pela setlist', async () => 
 
   expect(tocada?.['last_played_at']).toBe('2026-09-01T19:00:00.000Z');
   expect(nunca?.['last_played_at']).toBeNull();
+
+  // A última vez tocada também vem por versão: só a "Original" entrou na setlist.
+  const versions = tocada?.['versions'] as Array<Record<string, unknown>>;
+  expect(versions.map((v) => v['label'])).toEqual(['Original', 'Acústica']);
+  expect(versions.map((v) => v['last_played_at'])).toEqual(['2026-09-01T19:00:00.000Z', null]);
+});
+
+it('cria música com versões e confirma a versão na setlist', async () => {
+  const created = await request(app.getHttpServer())
+    .post('/api/songs')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ title: 'Com Versões', version: { label: 'Original', key: 'C', bpm: 70 } });
+  expect(created.status).toBe(201);
+  expect(created.body.versions).toHaveLength(1);
+
+  const extra = await request(app.getHttpServer())
+    .post(`/api/songs/${created.body.id}/versions`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ label: 'Ao vivo', key: 'E', bpm: 82 });
+  expect(extra.status).toBe(201);
+  expect(extra.body.key).toBe('E');
+
+  // Não dá para apagar a última versão que sobra.
+  const only = await request(app.getHttpServer())
+    .delete(`/api/songs/${created.body.id}/versions/${created.body.versions[0].id}`)
+    .set('Authorization', `Bearer ${token}`);
+  expect(only.status).toBe(200);
+  const last = await request(app.getHttpServer())
+    .delete(`/api/songs/${created.body.id}/versions/${extra.body.id}`)
+    .set('Authorization', `Bearer ${token}`);
+  expect(last.status).toBe(400);
 });
 
 it('responde 503 — e não 500 "Internal server error" — sem a tabela songs', async () => {
@@ -188,8 +232,8 @@ it('responde 503 — e não 500 "Internal server error" — sem a tabela songs',
   }
 });
 
-it('responde 503 sem a coluna key_alt (migration aplicada pela metade)', async () => {
-  await admin.$executeRawUnsafe('ALTER TABLE songs RENAME COLUMN key_alt TO key_alt_bak');
+it('responde 503 sem a coluna song_versions.label (migration aplicada pela metade)', async () => {
+  await admin.$executeRawUnsafe('ALTER TABLE song_versions RENAME COLUMN label TO label_bak');
   try {
     const res = await request(app.getHttpServer())
       .get('/api/songs')
@@ -198,6 +242,6 @@ it('responde 503 sem a coluna key_alt (migration aplicada pela metade)', async (
     expect(res.status).toBe(503);
     expect(res.body.message).toContain('migration pendente');
   } finally {
-    await admin.$executeRawUnsafe('ALTER TABLE songs RENAME COLUMN key_alt_bak TO key_alt');
+    await admin.$executeRawUnsafe('ALTER TABLE song_versions RENAME COLUMN label_bak TO label');
   }
 });

@@ -1,5 +1,9 @@
 # Conexão Setlist ↔ Repertório — Specification
 
+> **Revisão 2026-10-19 (AD-012):** `key_alt` não existe mais — a música tem N
+> versões e a setlist escolhe a versão (`song_version_id`, `version_label`).
+> As referências (YouTube/Spotify/Cifra Club) e o tom vêm da versão.
+
 ## Problem Statement
 
 A ligação entre a setlist de uma etapa de louvor da ordem de culto e o

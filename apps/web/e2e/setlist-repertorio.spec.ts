@@ -131,7 +131,10 @@ async function deleteSongByTitle(api: Api, title: string): Promise<void> {
 test.describe("setlist × repertório", () => {
   test("busca no catálogo e escolhe a música para a setlist", async ({ page, api }) => {
     const songTitle = `E2E busca ${Date.now()}`;
-    const song = await api.call<Song>("POST", "/songs", { title: songTitle, key: "D", bpm: 96 });
+    const song = await api.call<Song>("POST", "/songs", {
+      title: songTitle,
+      version: { label: "Original", key: "D", bpm: 96 },
+    });
     let instanceId: string | null = null;
 
     try {
@@ -201,7 +204,10 @@ test.describe("setlist × repertório", () => {
   test("vincula ao catálogo uma música digitada avulsa", async ({ page, api }) => {
     const songTitle = `E2E vínculo ${Date.now()}`;
     const avulsaTitle = `E2E avulsa ${Date.now()}`;
-    const song = await api.call<Song>("POST", "/songs", { title: songTitle, key: "E" });
+    const song = await api.call<Song>("POST", "/songs", {
+      title: songTitle,
+      version: { label: "Original", key: "E" },
+    });
     let instanceId: string | null = null;
 
     try {

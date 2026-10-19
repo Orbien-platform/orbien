@@ -18,7 +18,7 @@ import {
 } from "@/components/celebrations/AddItemModal";
 import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
-import { songKey, type CatalogSong } from "@/lib/repertorio";
+import { type CatalogSong, type SongVersion } from "@/lib/repertorio";
 import api from "@/lib/api";
 import { addMinutesToClock, formatCivilDate } from "@/lib/datetime";
 
@@ -32,16 +32,20 @@ interface SetlistSong {
   link?: string;
   sequence: number;
   song_id?: string | null;
+  /** Nome da versão escolhida, copiado na hora da escolha (sobrevive à versão apagada). */
+  version_label?: string | null;
   /**
    * Referência do catálogo, lida pela relação e não copiada: `null` quando a
    * música é avulsa ou quando o `Song` foi removido do catálogo (SetNull).
    * Título, tom, BPM e link da setlist continuam sendo cópia congelada.
    */
-  song?: {
+  song?: { id: string; title: string } | null;
+  /** Versão do catálogo escolhida; `null` se avulsa ou se a versão foi removida. */
+  songVersion?: {
     id: string;
-    title: string;
+    label: string;
     key: string | null;
-    key_alt: string | null;
+    bpm: number | null;
     youtube_link: string | null;
     spotify_link: string | null;
     cifra_club_link: string | null;
@@ -154,6 +158,7 @@ interface AddSongFormProps {
 
 function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: AddSongFormProps) {
   const [selectedSong, setSelectedSong] = useState<CatalogSong | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<SongVersion | null>(null);
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
@@ -163,15 +168,13 @@ function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: 
 
   // Escolher uma música do catálogo preenche os campos como valores default,
   // ainda editáveis por baixo — sem travar entrada avulsa (REPERT-02).
-  function handleSelectSong(song: CatalogSong) {
+  function handleSelectSong(song: CatalogSong, version: SongVersion) {
     setSelectedSong(song);
+    setSelectedVersion(version);
     setTitle(song.title);
-    // Quando só o tom alternativo está cadastrado, ele é a única opção do
-    // seletor abaixo — o estado precisa começar nele para não divergir do
-    // que a tela mostra como selecionado.
-    setKey(songKey(song) ?? "");
-    setBpm(song.bpm != null ? String(song.bpm) : "");
-    setLink(song.link ?? "");
+    setKey(version.key ?? "");
+    setBpm(version.bpm != null ? String(version.bpm) : "");
+    setLink(version.link ?? "");
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -189,6 +192,7 @@ function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: 
       await api.post(`/celebrations/setlists/songs`, {
         setlist_id: setlistId,
         song_id: selectedSong?.id ?? undefined,
+        song_version_id: selectedVersion?.id ?? undefined,
         sequence: nextPosition,
         title: title.trim(),
         key: key.trim() || undefined,
@@ -216,17 +220,12 @@ function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: 
     <div className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-3 mt-2">
       <SongPicker canCreate={canCreate} onSelect={handleSelectSong} />
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2">
-        {selectedSong?.key_alt && (
-          <select
-            aria-label="Tom confirmado para a escala"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            disabled={isSubmitting}
-            className="h-8 rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-base)] px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-navy/20 dark:text-white"
-          >
-            {selectedSong.key && <option value={selectedSong.key}>Tom {selectedSong.key}</option>}
-            <option value={selectedSong.key_alt}>Tom alt. {selectedSong.key_alt}</option>
-          </select>
+        {selectedSong && selectedVersion && (
+          <p className="text-xs text-stone">
+            Do repertório:{" "}
+            <span className="text-ink dark:text-white">{selectedSong.title}</span> — versão{" "}
+            <span className="text-ink dark:text-white">{selectedVersion.label}</span>
+          </p>
         )}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="col-span-2 sm:col-span-2">
@@ -463,10 +462,14 @@ export function ServiceOrderView({
    * não reimporta tom/BPM/link — o que a escala confirmou fica como está
    * (SETREP-01 AC2/AC3).
    */
-  async function handleLinkSong(setlistSongId: string, song: CatalogSong | null) {
+  async function handleLinkSong(
+    setlistSongId: string,
+    choice: { song: CatalogSong; version: SongVersion } | null,
+  ) {
     try {
       await api.patch(`/celebrations/setlists/songs/${setlistSongId}`, {
-        song_id: song ? song.id : null,
+        song_id: choice ? choice.song.id : null,
+        song_version_id: choice ? choice.version.id : null,
       });
       setLinkSongId(null);
       afterAddSong();
@@ -781,6 +784,11 @@ export function ServiceOrderView({
                                           Repertório
                                         </span>
                                       )}
+                                      {(song.songVersion?.label ?? song.version_label) && (
+                                        <span className="flex-shrink-0 rounded px-1 py-0.5 text-[10px] bg-navy/10 text-navy dark:text-white">
+                                          Versão {song.songVersion?.label ?? song.version_label}
+                                        </span>
+                                      )}
                                       {song.key && (
                                         <span className="flex-shrink-0 rounded px-1 py-0.5 font-mono text-[10px] bg-[var(--surface-base)] text-stone border border-[var(--border-default)]">
                                           {song.key}
@@ -807,9 +815,9 @@ export function ServiceOrderView({
                                         O link congelado da setlist, acima, é
                                         outro campo — não há duplicata.
                                       */}
-                                      {song.song?.youtube_link && (
+                                      {song.songVersion?.youtube_link && (
                                         <a
-                                          href={song.song.youtube_link}
+                                          href={song.songVersion.youtube_link}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="flex-shrink-0 text-stone hover:text-navy transition-colors"
@@ -818,9 +826,9 @@ export function ServiceOrderView({
                                           <SquarePlay size={11} strokeWidth={1.5} />
                                         </a>
                                       )}
-                                      {song.song?.spotify_link && (
+                                      {song.songVersion?.spotify_link && (
                                         <a
-                                          href={song.song.spotify_link}
+                                          href={song.songVersion.spotify_link}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="flex-shrink-0 text-stone hover:text-navy transition-colors"
@@ -829,9 +837,9 @@ export function ServiceOrderView({
                                           <Disc3 size={11} strokeWidth={1.5} />
                                         </a>
                                       )}
-                                      {song.song?.cifra_club_link && (
+                                      {song.songVersion?.cifra_club_link && (
                                         <a
-                                          href={song.song.cifra_club_link}
+                                          href={song.songVersion.cifra_club_link}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="flex-shrink-0 text-stone hover:text-navy transition-colors"
@@ -875,7 +883,7 @@ export function ServiceOrderView({
                                     {linkSongId === song.id && (
                                       <SongPicker
                                         canCreate={canAddSongs}
-                                        onSelect={(chosen) => handleLinkSong(song.id, chosen)}
+                                        onSelect={(chosen, version) => handleLinkSong(song.id, { song: chosen, version })}
                                         onCancel={() => setLinkSongId(null)}
                                       />
                                     )}

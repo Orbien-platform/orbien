@@ -8,6 +8,11 @@ export class CreateSetlistSongDto {
   @IsUUID()
   song_id?: string;
 
+  /** Versão escolhida da música. Sem `song_id`, a música é deduzida da versão. */
+  @IsOptional()
+  @IsUUID()
+  song_version_id?: string;
+
   @IsInt()
   @Min(1)
   sequence!: number;

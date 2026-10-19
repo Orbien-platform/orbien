@@ -209,7 +209,7 @@ export default function CelebracaoScreen() {
                       strokeWidth={ICON_STROKE_WIDTH}
                     />
                     <Text style={[typography.body, styles.songTitle, { color: colors.textPrimary }]}>
-                      {song.title}
+                      {song.version_label ? `${song.title} — ${song.version_label}` : song.title}
                     </Text>
                     {song.key ? (
                       <Text style={[typography.mono, { color: colors.textTertiary }]}>

@@ -1,5 +1,6 @@
-import { Transform } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CreateSongVersionDto } from './create-song-version.dto';
 
 export class CreateSongDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -7,36 +8,9 @@ export class CreateSongDto {
   @IsNotEmpty()
   title!: string;
 
+  /** Versão inicial. Sem ela, a música nasce com uma versão "Original" vazia. */
   @IsOptional()
-  @IsString()
-  key?: string;
-
-  @IsOptional()
-  @IsString()
-  key_alt?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  bpm?: number;
-
-  @IsOptional()
-  @IsUrl()
-  link?: string;
-
-  @IsOptional()
-  @IsUrl()
-  youtube_link?: string;
-
-  @IsOptional()
-  @IsUrl()
-  spotify_link?: string;
-
-  @IsOptional()
-  @IsUrl()
-  cifra_club_link?: string;
-
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  @ValidateNested()
+  @Type(() => CreateSongVersionDto)
+  version?: CreateSongVersionDto;
 }

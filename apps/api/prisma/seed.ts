@@ -1365,20 +1365,36 @@ async function seedDemoData(seeded: SeededTenant): Promise<void> {
     for (const [i, s] of songSpecs.entries()) {
       let song = await prisma.song.findFirst({
         where: { tenant_id: tenantId, congregation_id: congregationId, title: s.title },
-        select: { id: true },
+        select: { id: true, versions: { select: { id: true, label: true }, take: 1 } },
       });
       if (!song) {
         song = await prisma.song.create({
-          data: { tenant_id: tenantId, congregation_id: congregationId, title: s.title, key: s.key, bpm: s.bpm },
-          select: { id: true },
+          data: {
+            tenant_id: tenantId,
+            congregation_id: congregationId,
+            title: s.title,
+            versions: {
+              create: {
+                tenant_id: tenantId,
+                congregation_id: congregationId,
+                label: 'Original',
+                key: s.key,
+                bpm: s.bpm,
+              },
+            },
+          },
+          select: { id: true, versions: { select: { id: true, label: true }, take: 1 } },
         });
       }
+      const version = song.versions[0];
       await prisma.setlistSong.create({
         data: {
           tenant_id: tenantId,
           congregation_id: congregationId,
           setlist_id: setlist.id,
           song_id: song.id,
+          song_version_id: version?.id ?? null,
+          version_label: version?.label ?? null,
           sequence: i + 1,
           title: s.title,
           key: s.key,

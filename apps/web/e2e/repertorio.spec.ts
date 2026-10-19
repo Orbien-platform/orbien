@@ -34,9 +34,12 @@ test.describe("repertório do time de louvor", () => {
     const songTitle = `E2E música ${Date.now()}`;
     const song = await api.call<{ id: string; title: string }>("POST", "/songs", {
       title: songTitle,
-      key: "D",
-      bpm: 96,
-      link: "https://cifraclub.com.br/e2e-repertorio",
+      version: {
+        label: "Original",
+        key: "D",
+        bpm: 96,
+        link: "https://cifraclub.com.br/e2e-repertorio",
+      },
     });
 
     let instanceId: string | null = null;

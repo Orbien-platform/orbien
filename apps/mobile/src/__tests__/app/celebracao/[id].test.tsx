@@ -252,13 +252,11 @@ describe("CelebracaoScreen", () => {
                 id: "sg1",
                 sequence: 1,
                 title: "Grande é o Senhor",
+                version_label: "Acústica",
                 key: "G",
-                key_alt: null,
                 bpm: 80,
                 link: null,
-                youtube_link: null,
-                spotify_link: null,
-                cifra_club_link: null,
+                songVersion: null,
               },
             ],
           },
@@ -270,7 +268,8 @@ describe("CelebracaoScreen", () => {
       render(<CelebracaoScreen />);
     });
 
-    expect(screen.getByText("Grande é o Senhor")).toBeTruthy();
+    // A versão escolhida aparece junto do título.
+    expect(screen.getByText("Grande é o Senhor — Acústica")).toBeTruthy();
   });
 
   it("OC com published_at nulo mostra o aviso de rascunho, sem esconder os itens (AC não publicada)", async () => {
@@ -447,13 +446,11 @@ describe("CelebracaoScreen", () => {
                 id: "sg1",
                 sequence: 1,
                 title: "Sem tom definido",
+                version_label: null,
                 key: null,
-                key_alt: null,
                 bpm: null,
                 link: null,
-                youtube_link: null,
-                spotify_link: null,
-                cifra_club_link: null,
+                songVersion: null,
               },
             ],
           },

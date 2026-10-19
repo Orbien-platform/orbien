@@ -30,6 +30,8 @@ interface RepertoireSong {
   id: string;
   sequence: number;
   title: string;
+  /** Versão escolhida para este culto; ausente em setlist antiga. */
+  version_label?: string | null;
   key: string | null;
   bpm: number | null;
   link: string | null;
@@ -441,6 +443,11 @@ export default function VoluntariosPage() {
                                 <span className="flex-1 truncate text-ink dark:text-white">
                                   {song.title}
                                 </span>
+                                {song.version_label && (
+                                  <span className="flex-shrink-0 rounded px-1 py-0.5 text-[10px] bg-navy/10 text-navy dark:text-white">
+                                    Versão {song.version_label}
+                                  </span>
+                                )}
                                 {song.key && (
                                   <span className="flex-shrink-0 rounded px-1 py-0.5 font-mono text-[10px] bg-[var(--surface-subtle)] text-stone border border-[var(--border-default)]">
                                     {song.key}

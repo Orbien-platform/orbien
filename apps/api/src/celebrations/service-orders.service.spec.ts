@@ -152,12 +152,13 @@ describe('ServiceOrdersService', () => {
                   songs: {
                     orderBy: { sequence: 'asc' },
                     include: {
-                      song: {
+                      song: { select: { id: true, title: true } },
+                      songVersion: {
                         select: {
                           id: true,
-                          title: true,
+                          label: true,
                           key: true,
-                          key_alt: true,
+                          bpm: true,
                           youtube_link: true,
                           spotify_link: true,
                           cifra_club_link: true,

@@ -3,18 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SongPicker } from "./SongPicker";
 import api from "@/lib/api";
-import type { CatalogSong } from "@/lib/repertorio";
+import type { CatalogSong, SongVersion } from "@/lib/repertorio";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn() },
 }));
 
-function song(overrides: Partial<CatalogSong> = {}): CatalogSong {
+function version(overrides: Partial<SongVersion> = {}): SongVersion {
   return {
-    id: "s1",
-    title: "Grande é o Senhor",
+    id: "v1",
+    label: "Original",
     key: "D",
-    key_alt: null,
     bpm: 80,
     link: null,
     youtube_link: null,
@@ -23,6 +22,20 @@ function song(overrides: Partial<CatalogSong> = {}): CatalogSong {
     notes: null,
     last_played_at: "2026-08-01T12:00:00.000Z",
     ...overrides,
+  };
+}
+
+/** `key`/`bpm`/`last_played_at` configuram a versão única; `versions` sobrescreve. */
+function song(
+  overrides: Partial<Pick<CatalogSong, "id" | "title" | "versions">> &
+    Partial<Pick<SongVersion, "key" | "bpm" | "last_played_at" | "link" | "youtube_link">> = {},
+): CatalogSong {
+  const { id = "s1", title = "Grande é o Senhor", versions, ...fields } = overrides;
+  return {
+    id,
+    title,
+    last_played_at: fields.last_played_at ?? "2026-08-01T12:00:00.000Z",
+    versions: versions ?? [version({ id: `v-${id}`, ...fields })],
   };
 }
 
@@ -35,24 +48,45 @@ describe("SongPicker", () => {
     vi.clearAllMocks();
   });
 
-  it("lista título, tom, BPM e última vez tocada (SETREP-02 AC1)", async () => {
+  it("música de uma versão: título, versão com tom e BPM e última vez tocada", async () => {
     mockGet();
     render(<SongPicker canCreate onSelect={vi.fn()} debounce={0} />);
 
     expect(await screen.findByText("Grande é o Senhor")).toBeInTheDocument();
-    expect(screen.getByText("Tom D")).toBeInTheDocument();
-    expect(screen.getByText("80 BPM")).toBeInTheDocument();
-    expect(screen.getByText("Última vez tocada: 01/08/2026")).toBeInTheDocument();
+    expect(screen.getByText("Original · Tom D · 80 BPM")).toBeInTheDocument();
+    expect(screen.getByText("Tocada em: 01/08/2026")).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith("/songs");
   });
 
-  it("usa key_alt quando key é nulo e mostra 'nunca tocada' (SETREP-02 AC1)", async () => {
-    mockGet([song({ key: null, key_alt: "E", bpm: null, last_played_at: null })]);
+  it("versão sem tom nem BPM mostra só o nome e 'nunca tocada'", async () => {
+    mockGet([song({ key: null, bpm: null, last_played_at: null })]);
     render(<SongPicker canCreate onSelect={vi.fn()} debounce={0} />);
 
-    expect(await screen.findByText("Tom E")).toBeInTheDocument();
-    expect(screen.getByText("Última vez tocada: nunca tocada")).toBeInTheDocument();
+    expect(await screen.findByText("Original")).toBeInTheDocument();
+    expect(screen.getByText("Tocada em: nunca tocada")).toBeInTheDocument();
     expect(screen.queryByText(/BPM/)).not.toBeInTheDocument();
+  });
+
+  it("música com várias versões lista cada uma, com o seu tom e BPM", async () => {
+    mockGet([
+      song({
+        title: "Digno é o Senhor",
+        versions: [
+          version({ id: "v1", label: "Original", key: "E", bpm: 90 }),
+          version({ id: "v2", label: "Acústica", key: "G", bpm: 66, last_played_at: null }),
+        ],
+      }),
+    ]);
+    render(<SongPicker canCreate onSelect={vi.fn()} debounce={0} />);
+
+    expect(await screen.findByText("Digno é o Senhor")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Digno é o Senhor — Original" })).toHaveTextContent(
+      "Tom E",
+    );
+    expect(screen.getByRole("button", { name: "Digno é o Senhor — Acústica" })).toHaveTextContent(
+      "Tom G",
+    );
+    expect(screen.getByText("66 BPM")).toBeInTheDocument();
   });
 
   it("mostra o esqueleto de carga antes da resposta", async () => {
@@ -130,7 +164,7 @@ describe("SongPicker", () => {
     expect(screen.getByPlaceholderText("Buscar no repertório…")).toBeInTheDocument();
   });
 
-  it("escolher uma música chama onSelect com o CatalogSong inteiro (SETREP-02 AC4)", async () => {
+  it("escolher chama onSelect com a música inteira e a versão escolhida", async () => {
     const chosen = song({ youtube_link: "https://yt/x", link: "https://cifra/x" });
     mockGet([chosen]);
     const onSelect = vi.fn();
@@ -138,7 +172,24 @@ describe("SongPicker", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /Grande é o Senhor/ }));
 
-    expect(onSelect).toHaveBeenCalledWith(chosen);
+    expect(onSelect).toHaveBeenCalledWith(chosen, chosen.versions[0]);
+  });
+
+  it("escolher uma das versões entrega aquela versão, não a primeira", async () => {
+    const multi = song({
+      title: "Digno é o Senhor",
+      versions: [
+        version({ id: "v1", label: "Original" }),
+        version({ id: "v2", label: "Acústica", key: "G" }),
+      ],
+    });
+    mockGet([multi]);
+    const onSelect = vi.fn();
+    render(<SongPicker canCreate onSelect={onSelect} debounce={0} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Digno é o Senhor — Acústica" }));
+
+    expect(onSelect).toHaveBeenCalledWith(multi, multi.versions[1]);
   });
 
   it("duas músicas de mesmo título ficam distinguíveis por tom, BPM e última vez (Edge Case)", async () => {
@@ -149,12 +200,10 @@ describe("SongPicker", () => {
     render(<SongPicker canCreate onSelect={vi.fn()} debounce={0} />);
 
     expect(await screen.findAllByText("Aleluia")).toHaveLength(2);
-    expect(screen.getByText("Tom D")).toBeInTheDocument();
-    expect(screen.getByText("Tom G")).toBeInTheDocument();
-    expect(screen.getByText("80 BPM")).toBeInTheDocument();
-    expect(screen.getByText("120 BPM")).toBeInTheDocument();
-    expect(screen.getByText("Última vez tocada: nunca tocada")).toBeInTheDocument();
-    expect(screen.getByText("Última vez tocada: 01/08/2026")).toBeInTheDocument();
+    expect(screen.getByText("Original · Tom D · 80 BPM")).toBeInTheDocument();
+    expect(screen.getByText("Original · Tom G · 120 BPM")).toBeInTheDocument();
+    expect(screen.getByText("Tocada em: nunca tocada")).toBeInTheDocument();
+    expect(screen.getByText("Tocada em: 01/08/2026")).toBeInTheDocument();
   });
 
   it("título longo é truncado em vez de quebrar o layout (Edge Case)", async () => {
@@ -199,68 +248,85 @@ describe("SongPicker", () => {
       return onSelect;
     }
 
-    it("oferece título, tons, BPM e os quatro links (SETREP-03 AC1)", async () => {
+    it("oferece título e os campos da primeira versão — sem tom alternativo", async () => {
       await openCreate();
 
       expect(screen.getByLabelText("Título")).toBeInTheDocument();
+      expect(screen.getByLabelText("Nome da versão")).toHaveValue("Original");
       expect(screen.getByLabelText("Tom")).toBeInTheDocument();
-      expect(screen.getByLabelText("Tom alternativo")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Tom alternativo")).not.toBeInTheDocument();
       expect(screen.getByLabelText("BPM")).toBeInTheDocument();
-      expect(screen.getByLabelText("Link")).toBeInTheDocument();
-      expect(screen.getByLabelText("YouTube")).toBeInTheDocument();
-      expect(screen.getByLabelText("Spotify")).toBeInTheDocument();
-      expect(screen.getByLabelText("Cifra Club")).toBeInTheDocument();
+      expect(screen.getByLabelText("Outro link (opcional)")).toBeInTheDocument();
+      expect(screen.getByLabelText("Link do YouTube")).toBeInTheDocument();
+      expect(screen.getByLabelText("Link do Spotify")).toBeInTheDocument();
+      expect(screen.getByLabelText("Link do Cifra Club")).toBeInTheDocument();
     });
 
-    it("cria a música via POST /songs com os campos informados (SETREP-03 AC1)", async () => {
+    it("cria a música via POST /songs com a versão inicial", async () => {
       const onSelect = await openCreate();
       vi.mocked(api.post).mockResolvedValue({
-        data: { id: "novo", title: "Grande é o Senhor", key: "D" },
+        data: { id: "novo", title: "Grande é o Senhor", versions: [version({ id: "vn" })] },
       } as never);
 
       await userEvent.type(screen.getByLabelText("Título"), "  Grande é o Senhor  ");
       await userEvent.type(screen.getByLabelText("Tom"), "D");
-      await userEvent.type(screen.getByLabelText("Tom alternativo"), "E");
       await userEvent.type(screen.getByLabelText("BPM"), "80");
-      await userEvent.type(screen.getByLabelText("Link"), "https://cifra/x");
-      await userEvent.type(screen.getByLabelText("YouTube"), "https://yt/x");
-      await userEvent.type(screen.getByLabelText("Spotify"), "https://spotify/x");
-      await userEvent.type(screen.getByLabelText("Cifra Club"), "https://cifraclub/x");
+      await userEvent.type(screen.getByLabelText("Outro link (opcional)"), "https://cifra/x");
+      await userEvent.type(screen.getByLabelText("Link do YouTube"), "https://yt/x");
+      await userEvent.type(screen.getByLabelText("Link do Spotify"), "https://spotify/x");
+      await userEvent.type(screen.getByLabelText("Link do Cifra Club"), "https://cifraclub/x");
       await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
 
       await waitFor(() =>
         expect(api.post).toHaveBeenCalledWith("/songs", {
           title: "Grande é o Senhor",
-          key: "D",
-          key_alt: "E",
-          bpm: 80,
-          link: "https://cifra/x",
-          youtube_link: "https://yt/x",
-          spotify_link: "https://spotify/x",
-          cifra_club_link: "https://cifraclub/x",
+          version: {
+            label: "Original",
+            key: "D",
+            bpm: 80,
+            link: "https://cifra/x",
+            youtube_link: "https://yt/x",
+            spotify_link: "https://spotify/x",
+            cifra_club_link: "https://cifraclub/x",
+          },
         }),
       );
       expect(onSelect).toHaveBeenCalledTimes(1);
     });
 
-    it("seleciona a música criada com last_played_at nulo (SETREP-03 AC2)", async () => {
+    it("seleciona a música criada, com a versão criada e last_played_at nulo", async () => {
       const onSelect = await openCreate();
+      const created = version({ id: "vn", key: "D", bpm: null });
       vi.mocked(api.post).mockResolvedValue({
-        data: { id: "novo", title: "Grande é o Senhor", key: "D", bpm: null },
+        data: { id: "novo", title: "Grande é o Senhor", versions: [created] },
       } as never);
 
       await userEvent.type(screen.getByLabelText("Título"), "Grande é o Senhor");
       await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
 
+      const expectedVersion = { ...created, last_played_at: null };
       await waitFor(() =>
-        expect(onSelect).toHaveBeenCalledWith({
-          id: "novo",
-          title: "Grande é o Senhor",
-          key: "D",
-          bpm: null,
-          last_played_at: null,
-        }),
+        expect(onSelect).toHaveBeenCalledWith(
+          {
+            id: "novo",
+            title: "Grande é o Senhor",
+            last_played_at: null,
+            versions: [expectedVersion],
+          },
+          expectedVersion,
+        ),
       );
+    });
+
+    it("versão sem nome bloqueia o envio sem chamar a API", async () => {
+      await openCreate();
+
+      await userEvent.type(screen.getByLabelText("Título"), "Digno é o Senhor");
+      await userEvent.clear(screen.getByLabelText("Nome da versão"));
+      await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
+
+      expect(await screen.findByText("Dê um nome à versão.")).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
     });
 
     it("título só com espaço bloqueia o envio sem chamar a API (SETREP-03 AC3)", async () => {
@@ -310,7 +376,7 @@ describe("SongPicker", () => {
       await userEvent.click(screen.getByRole("button", { name: "Criar e usar" }));
 
       expect(await screen.findByRole("button", { name: "Salvando…" })).toBeInTheDocument();
-      resolve({ data: { id: "novo", title: "Digno é o Senhor" } });
+      resolve({ data: { id: "novo", title: "Digno é o Senhor", versions: [version()] } });
     });
 
     it("volta para a busca sem criar nada", async () => {

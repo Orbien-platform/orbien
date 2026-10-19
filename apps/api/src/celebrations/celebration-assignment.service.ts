@@ -551,6 +551,7 @@ export class CelebrationAssignmentService {
             id: s.id,
             sequence: s.sequence,
             title: s.title,
+            version_label: s.version_label,
             key: s.key,
             bpm: s.bpm,
             link: s.link,
@@ -580,6 +581,7 @@ export interface MyAssignmentSetlistSong {
   id: string;
   sequence: number;
   title: string;
+  version_label: string | null;
   key: string | null;
   bpm: number | null;
   link: string | null;

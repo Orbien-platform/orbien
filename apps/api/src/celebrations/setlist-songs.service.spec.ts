@@ -6,6 +6,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     setlist: { findFirst: jest.fn() },
     song: { findFirst: jest.fn() },
+    songVersion: { findFirst: jest.fn() },
     setlistSong: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -51,6 +52,8 @@ describe('SetlistSongsService', () => {
           congregation_id: 'g1',
           setlist_id: 'sl1',
           song_id: null,
+          song_version_id: null,
+          version_label: null,
           sequence: 1,
           title: 'Música',
           key: null,
@@ -84,22 +87,36 @@ describe('SetlistSongsService', () => {
       );
     });
 
-    it('song_id sem overrides copia key/bpm/link do catálogo (REPERT-02 AC1)', async () => {
+    it('song_version_id sem overrides copia tom/bpm/link da versão e grava o rótulo', async () => {
       const client = clientWith();
       client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
-      client.song.findFirst.mockResolvedValue({ id: 'song-catalog', key: 'D', bpm: 80, link: 'https://cifra/x' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog' });
+      client.songVersion.findFirst.mockResolvedValue({
+        id: 'ver1',
+        song_id: 'song-catalog',
+        label: 'Acústica',
+        key: 'D',
+        bpm: 80,
+        link: 'https://cifra/x',
+      });
       client.setlistSong.create.mockResolvedValue({ id: 'song1' });
       const service = serviceWith(client);
 
       await service.create('t1', 'g1', {
         setlist_id: 'sl1',
         song_id: 'song-catalog',
+        song_version_id: 'ver1',
         sequence: 1,
         title: 'Música do catálogo',
       } as never);
 
-      expect(client.song.findFirst).toHaveBeenCalledWith({
-        where: { id: 'song-catalog', tenant_id: 't1', congregation_id: 'g1' },
+      expect(client.songVersion.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'ver1',
+          tenant_id: 't1',
+          congregation_id: 'g1',
+          song_id: 'song-catalog',
+        },
       });
       expect(client.setlistSong.create).toHaveBeenCalledWith({
         data: {
@@ -107,6 +124,8 @@ describe('SetlistSongsService', () => {
           congregation_id: 'g1',
           setlist_id: 'sl1',
           song_id: 'song-catalog',
+          song_version_id: 'ver1',
+          version_label: 'Acústica',
           sequence: 1,
           title: 'Música do catálogo',
           key: 'D',
@@ -117,16 +136,25 @@ describe('SetlistSongsService', () => {
       });
     });
 
-    it('song_id com override em key mantém o valor do body, com song_id ainda setado (REPERT-02 AC2)', async () => {
+    it('override em key mantém o valor do body, com a versão ainda gravada', async () => {
       const client = clientWith();
       client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
-      client.song.findFirst.mockResolvedValue({ id: 'song-catalog', key: 'D', bpm: 80, link: 'https://cifra/x' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog' });
+      client.songVersion.findFirst.mockResolvedValue({
+        id: 'ver1',
+        song_id: 'song-catalog',
+        label: 'Original',
+        key: 'D',
+        bpm: 80,
+        link: 'https://cifra/x',
+      });
       client.setlistSong.create.mockResolvedValue({ id: 'song1' });
       const service = serviceWith(client);
 
       await service.create('t1', 'g1', {
         setlist_id: 'sl1',
         song_id: 'song-catalog',
+        song_version_id: 'ver1',
         sequence: 1,
         title: 'Música do catálogo',
         key: 'E',
@@ -134,23 +162,58 @@ describe('SetlistSongsService', () => {
 
       expect(client.setlistSong.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ song_id: 'song-catalog', key: 'E', bpm: 80, link: 'https://cifra/x' }),
+          data: expect.objectContaining({
+            song_version_id: 'ver1',
+            version_label: 'Original',
+            key: 'E',
+            bpm: 80,
+          }),
         }),
       );
     });
 
-    it('song_id de outro tenant/congregação lança NotFoundException (REPERT-02 AC4)', async () => {
+    it('deduz a música da versão quando song_id não vem', async () => {
       const client = clientWith();
       client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
-      client.song.findFirst.mockResolvedValue(null);
+      client.songVersion.findFirst.mockResolvedValue({
+        id: 'ver1',
+        song_id: 'song-catalog',
+        label: 'Original',
+        key: null,
+        bpm: null,
+        link: null,
+      });
+      client.setlistSong.create.mockResolvedValue({ id: 'song1' });
+      const service = serviceWith(client);
+
+      await service.create('t1', 'g1', {
+        setlist_id: 'sl1',
+        song_version_id: 'ver1',
+        sequence: 1,
+        title: 'X',
+      } as never);
+
+      expect(client.setlistSong.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ song_id: 'song-catalog', song_version_id: 'ver1' }),
+        }),
+      );
+    });
+
+    it('lança NotFoundException quando a versão não é da música (ou de outra congregação)', async () => {
+      const client = clientWith();
+      client.setlist.findFirst.mockResolvedValue({ id: 'sl1' });
+      client.song.findFirst.mockResolvedValue({ id: 'song-catalog' });
+      client.songVersion.findFirst.mockResolvedValue(null);
       const service = serviceWith(client);
 
       await expect(
         service.create('t1', 'g1', {
           setlist_id: 'sl1',
-          song_id: 'song-de-outro-tenant',
+          song_id: 'song-catalog',
+          song_version_id: 'outra',
           sequence: 1,
-          title: 'x',
+          title: 'X',
         } as never),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(client.setlistSong.create).not.toHaveBeenCalled();
@@ -178,12 +241,13 @@ describe('SetlistSongsService', () => {
         where: { setlist_id: 'sl1', tenant_id: 't1' },
         orderBy: { sequence: 'asc' },
         include: {
-          song: {
+          song: { select: { id: true, title: true } },
+          songVersion: {
             select: {
               id: true,
-              title: true,
+              label: true,
               key: true,
-              key_alt: true,
+              bpm: true,
               youtube_link: true,
               spotify_link: true,
               cifra_club_link: true,
@@ -218,12 +282,13 @@ describe('SetlistSongsService', () => {
       expect(client.setlistSong.findFirst).toHaveBeenCalledWith({
         where: { id: 'song1', tenant_id: 't1', congregation_id: 'g1' },
         include: {
-          song: {
+          song: { select: { id: true, title: true } },
+          songVersion: {
             select: {
               id: true,
-              title: true,
+              label: true,
               key: true,
-              key_alt: true,
+              bpm: true,
               youtube_link: true,
               spotify_link: true,
               cifra_club_link: true,
@@ -265,6 +330,8 @@ describe('SetlistSongsService', () => {
         where: { id: 'song1' },
         data: {
           song_id: 'song-catalog',
+          song_version_id: null,
+          version_label: null,
           sequence: 2,
           title: 'Novo título',
           key: 'D',
@@ -312,7 +379,7 @@ describe('SetlistSongsService', () => {
 
       expect(client.setlistSong.update).toHaveBeenCalledWith({
         where: { id: 'song1' },
-        data: { song_id: 'song-catalog' },
+        data: { song_id: 'song-catalog', song_version_id: null, version_label: null },
       });
     });
 
@@ -326,7 +393,7 @@ describe('SetlistSongsService', () => {
 
       expect(client.setlistSong.update).toHaveBeenCalledWith({
         where: { id: 'song1' },
-        data: { song_id: null },
+        data: { song_id: null, song_version_id: null, version_label: null },
       });
       expect(client.song.findFirst).not.toHaveBeenCalled();
       expect(result).toEqual({ id: 'song1', song_id: null, key: 'G' });
