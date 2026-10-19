@@ -7,9 +7,15 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtService } from '@nestjs/jwt';
+import { memoryStorage } from 'multer';
+import { UploadTicketRoute } from '../auth/decorators/upload-ticket.decorator';
+import { UploadMeetingMaterialDto } from './dto/upload-meeting-material.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -41,13 +47,19 @@ const MEETING_READ_ROLES = [...MEETING_WRITE_ROLES, 'treasurer'];
 const MEETING_LIST_READ_ROLES = [...MEETING_READ_ROLES, 'member'];
 const MEETING_ADMIN_ROLES = ['tenant_admin', 'admin_congregation', 'pastor'];
 const MATERIAL_WRITE_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
+/** Segundos. Tempo de pegar o ticket e começar a subir, não de subir. */
+const UPLOAD_TICKET_TTL = 300;
+const MATERIAL_FILE_MAX_BYTES = 50 * 1024 * 1024;
 const MATERIAL_READ_ROLES = ['member', ...MATERIAL_WRITE_ROLES];
 
 @Controller('small-groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @UseInterceptors(TenantContextInterceptor)
 export class MeetingsController {
-  constructor(private readonly meetingsService: MeetingsService) {}
+  constructor(
+    private readonly meetingsService: MeetingsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Post('meetings')
   @Roles(...MEETING_WRITE_ROLES)
@@ -127,6 +139,55 @@ export class MeetingsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.meetingsService.addMaterial(meetingId, dto, user);
+  }
+
+  /**
+   * Ticket para subir o arquivo direto na API, fora do `/api-proxy` (teto de
+   * 4,5 MB na Vercel) — mesmo desenho de `POST /content/posts/:id/upload-ticket`
+   * (ver DEPLOY.md). Preso a esta reunião: recusado em qualquer outra rota. O
+   * `:id` tem esse nome porque o `RolesGuard` compara `upload_target` com
+   * `params.id`.
+   */
+  @Post('meetings/:id/materials/upload-ticket')
+  @Roles(...MATERIAL_WRITE_ROLES)
+  async materialUploadTicket(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ upload_token: string; expires_in: number }> {
+    // Reunião inexistente (ou de outra congregação, pelo RLS) falha aqui, não
+    // depois de 50 MB pela rede.
+    await this.meetingsService.assertMeetingExists(id);
+
+    const payload: JwtPayload = {
+      sub: user.sub,
+      tenant_id: user.tenant_id,
+      congregation_id: user.congregation_id,
+      roles: [],
+      plan: user.plan,
+      scope: 'upload',
+      upload_target: id,
+      ...(user.impersonated_by ? { impersonated_by: user.impersonated_by } : {}),
+      ...(user.support_session ? { support_session: true } : {}),
+    };
+    return {
+      upload_token: this.jwtService.sign(payload, { expiresIn: UPLOAD_TICKET_TTL }),
+      expires_in: UPLOAD_TICKET_TTL,
+    };
+  }
+
+  @Post('meetings/:id/materials/upload')
+  @Roles(...MATERIAL_WRITE_ROLES)
+  @UploadTicketRoute()
+  @UseInterceptors(
+    FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MATERIAL_FILE_MAX_BYTES } }),
+  )
+  uploadMaterial(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UploadMeetingMaterialDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.uploadMaterial(id, dto, file, user);
   }
 
   @Get('meetings/:meetingId/materials')

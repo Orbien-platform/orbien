@@ -1,6 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { MeetingMaterialNotifier } from './meeting-material.notifier';
+import { StorageService } from '../storage/storage.service';
+import { UploadMeetingMaterialDto } from './dto/upload-meeting-material.dto';
+import * as path from 'node:path';
 import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -40,6 +49,17 @@ const CHECKIN_MAX_MEETING_AGE_HOURS = 24;
 
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
 
+// PDF e Word. O mimetype vem do cliente, então a extensão confere junto: um
+// executável renomeado para .pdf não passa pelos dois.
+const MATERIAL_FILE_TYPES: Record<string, { ext: string[]; source: 'pdf' | 'doc' }> = {
+  'application/pdf': { ext: ['.pdf'], source: 'pdf' },
+  'application/msword': { ext: ['.doc'], source: 'doc' },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+    ext: ['.docx'],
+    source: 'doc',
+  },
+};
+
 // Espelha `MEETING_READ_ROLES` do controller — papéis de liderança que já
 // enxergam grupos que não lideram (ex.: `pastor`/`secretary` cobrindo a rede
 // toda) e por isso não passam pela checagem de participação de
@@ -61,6 +81,7 @@ export class MeetingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifier: MeetingMaterialNotifier,
+    private readonly storage: StorageService,
   ) {}
 
   async create(
@@ -240,6 +261,14 @@ export class MeetingsService {
     return this.prisma.client.attendanceRecord.delete({ where: { id: record.id } });
   }
 
+  async assertMeetingExists(meetingId: string): Promise<void> {
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+  }
+
   async addMaterial(
     meetingId: string,
     dto: CreateMeetingMaterialDto,
@@ -283,6 +312,78 @@ export class MeetingsService {
 
     // Liberado agora: avisa já. Agendado: o cron do notifier avisa na data.
     if (releasedNow) await this.notifier.notifyLink(link.id);
+    return link;
+  }
+
+  /**
+   * Cria o material a partir do arquivo enviado e já o vincula ao encontro,
+   * num passo só — o líder de PG não tem `POST /study-materials` (é do
+   * administrativo), e o alvo aqui é sempre o PG do encontro.
+   */
+  async uploadMaterial(
+    meetingId: string,
+    dto: UploadMeetingMaterialDto,
+    file: Express.Multer.File | undefined,
+    user: JwtPayload,
+  ): Promise<GroupMeetingMaterial> {
+    if (!file) throw new BadRequestException('Arquivo obrigatório.');
+    const ext = path.extname(file.originalname).toLowerCase();
+    const type = MATERIAL_FILE_TYPES[file.mimetype];
+    if (!type || !type.ext.includes(ext)) {
+      throw new BadRequestException('Envie um arquivo PDF ou Word (.doc, .docx).');
+    }
+
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, small_group_id: true },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
+    const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
+    const file_url = await this.storage.upload(file.buffer, key, file.mimetype);
+
+    const releaseAt = dto.release_at ? new Date(dto.release_at) : null;
+    let link: GroupMeetingMaterial;
+    try {
+      link = await this.prisma.runInTx(
+        async (tx) => {
+          const material = await tx.studyMaterial.create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              title: dto.title.trim(),
+              source_type: type.source,
+              file_url,
+              publish_at: new Date(),
+              tags: [],
+            },
+          });
+          await tx.materialTarget.create({
+            data: { study_material_id: material.id, small_group_id: meeting.small_group_id },
+          });
+          return tx.groupMeetingMaterial.create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              meeting_id: meetingId,
+              material_id: material.id,
+              visibility: dto.visibility ?? MaterialVisibility.all,
+              release_at: releaseAt,
+            },
+            include: { material: true },
+          });
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      );
+    } catch (err) {
+      // Sem linha no banco o arquivo ficaria órfão no bucket.
+      await this.storage.deleteByUrl(file_url);
+      throw err;
+    }
+
+    if (!releaseAt || releaseAt.getTime() <= Date.now()) {
+      await this.notifier.notifyLink(link.id);
+    }
     return link;
   }
 

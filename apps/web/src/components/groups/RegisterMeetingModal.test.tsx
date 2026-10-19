@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RegisterMeetingModal } from "./RegisterMeetingModal";
 import api from "@/lib/api";
+import { uploadMeetingMaterial } from "@/lib/upload-meeting-material";
 
 vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
@@ -12,6 +13,11 @@ const members = [
   { id: "m1", role: "leader", person: { id: "p1", full_name: "Ana Souza" } },
   { id: "m2", role: "member", person: { id: "p2", full_name: "Bruno Lima" } },
 ];
+
+vi.mock("@/lib/upload-meeting-material", async (orig) => ({
+  ...(await orig<typeof import("@/lib/upload-meeting-material")>()),
+  uploadMeetingMaterial: vi.fn(),
+}));
 
 describe("RegisterMeetingModal", () => {
   beforeEach(() => {
@@ -784,5 +790,83 @@ describe("RegisterMeetingModal", () => {
     expect(
       await screen.findByText("Nenhum membro cadastrado neste grupo.")
     ).toBeInTheDocument();
+  });
+
+  describe("material por arquivo", () => {
+    async function openFileMode() {
+      const user = userEvent.setup({ applyAccept: false });
+      vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+      render(
+        <RegisterMeetingModal
+          open={true}
+          onOpenChange={vi.fn()}
+          groupId="g1"
+          groupName="Célula Alfa"
+          members={members}
+          onRegistered={vi.fn()}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: "Registrar e marcar presença" }));
+      await screen.findByText("Ana Souza");
+      await user.click(screen.getByRole("button", { name: "Enviar PDF ou Word" }));
+      return user;
+    }
+
+    it("exige título e arquivo antes de enviar", async () => {
+      const user = await openFileMode();
+      await user.click(screen.getByRole("button", { name: "Adicionar material" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Informe o título e escolha o arquivo.");
+      expect(uploadMeetingMaterial).not.toHaveBeenCalled();
+    });
+
+    it("recusa arquivo que não é PDF nem Word", async () => {
+      const user = await openFileMode();
+      await user.upload(
+        screen.getByLabelText("Arquivo do material"),
+        new File(["x"], "foto.png", { type: "image/png" })
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent("Envie um arquivo PDF ou Word");
+    });
+
+    it("envia o PDF com visibilidade e data de liberação e lista o material", async () => {
+      const user = await openFileMode();
+      vi.mocked(uploadMeetingMaterial).mockResolvedValue({
+        id: "link-9",
+        material_id: "sm-9",
+        visibility: "leaders_only",
+        release_at: null,
+        material: { id: "sm-9", title: "Roteiro do líder", source_type: "pdf" },
+      });
+
+      await user.type(screen.getByPlaceholderText("Título do material"), "Roteiro do líder");
+      const file = new File(["%PDF"], "roteiro.pdf", { type: "application/pdf" });
+      await user.upload(screen.getByLabelText("Arquivo do material"), file);
+      await user.click(screen.getByLabelText("Somente para líderes"));
+      await user.click(screen.getByRole("button", { name: "Adicionar material" }));
+
+      await waitFor(() =>
+        expect(uploadMeetingMaterial).toHaveBeenCalledWith(
+          "meet-1",
+          { file, title: "Roteiro do líder", visibility: "leaders_only", releaseAt: undefined },
+          expect.any(Function)
+        )
+      );
+      expect(await screen.findByText("Roteiro do líder")).toBeInTheDocument();
+      expect(screen.getByText("Somente líderes")).toBeInTheDocument();
+    });
+
+    it("mostra mensagem específica quando a API recusa o tamanho", async () => {
+      const user = await openFileMode();
+      vi.mocked(uploadMeetingMaterial).mockRejectedValue(new Error("upload_failed_413"));
+
+      await user.type(screen.getByPlaceholderText("Título do material"), "Grande");
+      await user.upload(
+        screen.getByLabelText("Arquivo do material"),
+        new File(["x"], "g.pdf", { type: "application/pdf" })
+      );
+      await user.click(screen.getByRole("button", { name: "Adicionar material" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Arquivo muito grande");
+    });
   });
 });

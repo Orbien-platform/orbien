@@ -612,10 +612,22 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
   pelo cron de 10 em 10 minutos. Substitui, para o material de encontro, o aviso
   por congregação inteira do `StudyMaterialsService.publishPending`.
 - Campo "Liberar em" no `RegisterMeetingModal` (web).
+- Upload de PDF/Word (2026-10-19): `POST /small-groups/meetings/:id/materials/upload`
+  cria o `StudyMaterial` (alvo: o PG do encontro, arquivo no R2) e já o vincula,
+  para os papéis de `MATERIAL_WRITE_ROLES` — inclusive `cell_leader`, que não
+  tem `POST /study-materials`. Valida mimetype **e** extensão (pdf, doc, docx),
+  máx. 50 MB, e apaga o objeto do R2 se a gravação falhar. Sobe direto na API
+  com ticket de 5 min preso à reunião
+  (`POST .../materials/upload-ticket`), pelo mesmo motivo do upload de posts:
+  teto de 4,5 MB do proxy da Vercel. Modo "Enviar PDF ou Word" no modal.
 
 Falta:
-- Upload de arquivo (PDF) e `rich_content` no web — hoje o modal só cria
-  material por link. Precisa decidir o storage.
+- `rich_content` (texto formatado) no web — o modal cria material por link ou
+  arquivo.
+- Arquivo de material "só líderes" tem URL pública do R2 (chave com UUID, só
+  aparece na listagem autorizada). URL assinada de curta duração exigiria o
+  participante pedir o link à API e mudar o app mobile, que abre `file_url`
+  direto (`getPresignedGetUrl` já existe no `StorageService`).
 - Alvo por rede ou lote de PGs (`MaterialTarget` é só PG).
 - O push do `publishPending` ainda avisa a congregação toda pelo material
   avulso; revisar junto com o item acima.

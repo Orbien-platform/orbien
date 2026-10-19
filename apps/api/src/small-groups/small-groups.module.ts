@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ContentModule } from '../content/content.module';
+import { StorageModule } from '../storage/storage.module';
 import { MeetingsController } from './meetings.controller';
 import { GroupMessagesController } from './group-messages.controller';
 import { PrayerRequestsController } from './prayer-requests.controller';
@@ -23,7 +24,7 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
   // ContentModule pelo `NotificationsService` do alerta de ausência
   // (PROD-11) — mesmo caminho de `CelebrationsModule`. Sentido único:
   // `ContentModule` não importa `SmallGroupsModule` de volta.
-  imports: [ContentModule],
+  imports: [ContentModule, StorageModule],
   controllers: [
     MeetingsController,
     GroupMessagesController,

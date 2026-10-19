@@ -1,6 +1,7 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { MeetingMaterialNotifier } from './meeting-material.notifier';
+import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -22,7 +23,8 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       delete: jest.fn(),
       create: jest.fn(),
     },
-    studyMaterial: { findUnique: jest.fn() },
+    studyMaterial: { findUnique: jest.fn(), create: jest.fn() },
+    materialTarget: { create: jest.fn() },
     groupMeetingMaterial: {
       findUnique: jest.fn(),
       create: jest.fn(),
@@ -37,15 +39,24 @@ function clientWith(overrides: Record<string, unknown> = {}) {
 }
 
 const notifier = { notifyLink: jest.fn() };
+const storage = { upload: jest.fn(), deleteByUrl: jest.fn() };
 
-beforeEach(() => notifier.notifyLink.mockReset());
+beforeEach(() => {
+  notifier.notifyLink.mockReset();
+  storage.upload.mockReset();
+  storage.deleteByUrl.mockReset();
+});
 
 function serviceWith(client: ReturnType<typeof clientWith>, runInTx?: jest.Mock) {
   const prisma = {
     client,
     runInTx: runInTx ?? jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
   } as unknown as PrismaService;
-  return new MeetingsService(prisma, notifier as unknown as MeetingMaterialNotifier);
+  return new MeetingsService(
+    prisma,
+    notifier as unknown as MeetingMaterialNotifier,
+    storage as unknown as StorageService,
+  );
 }
 
 describe('MeetingsService', () => {
@@ -370,6 +381,118 @@ describe('MeetingsService', () => {
       expect(client.groupMeetingMaterial.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ visibility: 'leaders_only' }) }),
       );
+    });
+  });
+
+  describe('uploadMaterial', () => {
+    const pdf = (over: Record<string, unknown> = {}) =>
+      ({
+        originalname: 'estudo.pdf',
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('x'),
+        ...over,
+      }) as unknown as Express.Multer.File;
+
+    function ready() {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1', small_group_id: 'sg1' });
+      client.studyMaterial.create.mockResolvedValue({ id: 'mat1' });
+      client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
+      storage.upload.mockResolvedValue('https://cdn/t1/materials/a.pdf');
+      return client;
+    }
+
+    it('exige o arquivo', async () => {
+      const service = serviceWith(ready());
+      await expect(service.uploadMaterial('meet1', { title: 'T' } as never, undefined, USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it.each([
+      ['executável renomeado para pdf', { originalname: 'x.pdf', mimetype: 'application/x-msdownload' }],
+      ['extensão que não bate com o tipo', { originalname: 'x.exe', mimetype: 'application/pdf' }],
+      ['imagem', { originalname: 'x.png', mimetype: 'image/png' }],
+    ])('recusa %s sem tocar no storage', async (_n, over) => {
+      const service = serviceWith(ready());
+      await expect(
+        service.uploadMaterial('meet1', { title: 'T' } as never, pdf(over), USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('recusa reunião inexistente antes de subir o arquivo', async () => {
+      const client = ready();
+      client.groupMeeting.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+      await expect(
+        service.uploadMaterial('meet1', { title: 'T' } as never, pdf(), USER),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('sobe o PDF, cria material com alvo no PG do encontro, vincula e avisa', async () => {
+      const client = ready();
+      const service = serviceWith(client);
+
+      await service.uploadMaterial('meet1', { title: ' Estudo ', visibility: 'leaders_only' } as never, pdf(), USER);
+
+      expect(storage.upload).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.stringMatching(/^t1\/materials\/[0-9a-f-]+\.pdf$/),
+        'application/pdf',
+      );
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          title: 'Estudo',
+          source_type: 'pdf',
+          file_url: 'https://cdn/t1/materials/a.pdf',
+        }),
+      });
+      expect(client.materialTarget.create).toHaveBeenCalledWith({
+        data: { study_material_id: 'mat1', small_group_id: 'sg1' },
+      });
+      expect(client.groupMeetingMaterial.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ meeting_id: 'meet1', material_id: 'mat1', visibility: 'leaders_only' }),
+        }),
+      );
+      expect(notifier.notifyLink).toHaveBeenCalledWith('link1');
+    });
+
+    it('docx vira source_type doc', async () => {
+      const client = ready();
+      const service = serviceWith(client);
+
+      await service.uploadMaterial(
+        'meet1',
+        { title: 'T' } as never,
+        pdf({
+          originalname: 'Roteiro.DOCX',
+          mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+        USER,
+      );
+
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ source_type: 'doc' }),
+      });
+    });
+
+    it('agendado: não avisa agora', async () => {
+      const service = serviceWith(ready());
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+      await service.uploadMaterial('meet1', { title: 'T', release_at: future } as never, pdf(), USER);
+      expect(notifier.notifyLink).not.toHaveBeenCalled();
+    });
+
+    it('falha ao gravar remove o arquivo do bucket', async () => {
+      const client = ready();
+      client.groupMeetingMaterial.create.mockRejectedValue(new Error('db'));
+      const service = serviceWith(client);
+
+      await expect(service.uploadMaterial('meet1', { title: 'T' } as never, pdf(), USER)).rejects.toThrow('db');
+      expect(storage.deleteByUrl).toHaveBeenCalledWith('https://cdn/t1/materials/a.pdf');
     });
   });
 
