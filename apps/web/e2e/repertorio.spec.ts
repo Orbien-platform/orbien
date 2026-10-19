@@ -32,7 +32,7 @@ interface MinistryMember {
 test.describe("repertório do time de louvor", () => {
   test("catálogo de músicas e repertório na escala pessoal", async ({ page, api, errorLog }) => {
     const songTitle = `E2E música ${Date.now()}`;
-    const song = await api.call<{ id: string; title: string }>("POST", "/songs", {
+    const song = await api.call<{ id: string; title: string; versions: { id: string }[] }>("POST", "/songs", {
       title: songTitle,
       version: {
         label: "Original",
@@ -178,6 +178,7 @@ test.describe("repertório do time de louvor", () => {
       await api.call("POST", "/celebrations/setlists/songs", {
         setlist_id: setlist.id,
         song_id: song.id,
+        song_version_id: song.versions[0].id,
         sequence: 1,
         title: song.title,
       });

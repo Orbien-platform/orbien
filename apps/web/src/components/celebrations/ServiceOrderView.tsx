@@ -222,9 +222,7 @@ function AddSongForm({ setlistId, nextPosition, canCreate, onAdded, onCancel }: 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2">
         {selectedSong && selectedVersion && (
           <p className="text-xs text-stone">
-            Do repertório:{" "}
-            <span className="text-ink dark:text-white">{selectedSong.title}</span> — versão{" "}
-            <span className="text-ink dark:text-white">{selectedVersion.label}</span>
+            {`Do repertório: ${selectedSong.title} — versão ${selectedVersion.label}`}
           </p>
         )}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
