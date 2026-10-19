@@ -46,6 +46,7 @@ describe('MeetingsController', () => {
       createCheckinToken: jest.fn(),
       checkin: jest.fn(),
       assertMeetingExists: jest.fn(),
+      listGroupMaterials: jest.fn(),
       uploadMaterial: jest.fn(),
     } as unknown as jest.Mocked<MeetingsService>;
     jwt = { sign: jest.fn().mockReturnValue('ticket') };
@@ -109,6 +110,13 @@ describe('MeetingsController', () => {
     await controller.uploadMaterial('meet1', { title: 'T' } as never, file, USER);
 
     expect(service.uploadMaterial).toHaveBeenCalledWith('meet1', { title: 'T' }, file, USER);
+  });
+
+  it('listGroupMaterials aceita member e delega ao service', async () => {
+    expect(rolesFor('listGroupMaterials')).toEqual(MATERIAL_READ_ROLES);
+    service.listGroupMaterials.mockResolvedValue([]);
+    await controller.listGroupMaterials('sg1', USER);
+    expect(service.listGroupMaterials).toHaveBeenCalledWith('sg1', USER);
   });
 
   it('listMaterials aceita member além dos papéis de escrita de material', () => {

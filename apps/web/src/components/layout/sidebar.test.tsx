@@ -68,6 +68,7 @@ describe("Sidebar", () => {
       "Início",
       "Grupos",
       "Redes",
+      "Materiais",
       "Celebrações",
       "Ministérios",
       "Repertório",
@@ -151,6 +152,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Ministérios" })).toHaveAttribute("href", "/voluntarios");
     expect(screen.getByRole("link", { name: "Publicações" })).toHaveAttribute("href", "/conteudo");
     expect(screen.getByRole("link", { name: "Redes" })).toHaveAttribute("href", "/redes");
+    expect(screen.getByRole("link", { name: "Materiais" })).toHaveAttribute("href", "/materiais");
   });
 
   it("usa o termo da igreja para pequeno grupo no item de grupos", () => {

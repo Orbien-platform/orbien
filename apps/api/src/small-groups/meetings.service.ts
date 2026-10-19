@@ -9,7 +9,7 @@ import {
 import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { StorageService } from '../storage/storage.service';
 import { UploadMeetingMaterialDto } from './dto/upload-meeting-material.dto';
-import * as path from 'node:path';
+import { assertMaterialFile } from '../study-materials/material-file';
 import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -48,17 +48,6 @@ const CHECKIN_TOKEN_TTL_MINUTES = 240;
 const CHECKIN_MAX_MEETING_AGE_HOURS = 24;
 
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
-
-// PDF e Word. O mimetype vem do cliente, então a extensão confere junto: um
-// executável renomeado para .pdf não passa pelos dois.
-const MATERIAL_FILE_TYPES: Record<string, { ext: string[]; source: 'pdf' | 'doc' }> = {
-  'application/pdf': { ext: ['.pdf'], source: 'pdf' },
-  'application/msword': { ext: ['.doc'], source: 'doc' },
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
-    ext: ['.docx'],
-    source: 'doc',
-  },
-};
 
 // Espelha `MEETING_READ_ROLES` do controller — papéis de liderança que já
 // enxergam grupos que não lideram (ex.: `pastor`/`secretary` cobrindo a rede
@@ -327,11 +316,7 @@ export class MeetingsService {
     user: JwtPayload,
   ): Promise<GroupMeetingMaterial> {
     if (!file) throw new BadRequestException('Arquivo obrigatório.');
-    const ext = path.extname(file.originalname).toLowerCase();
-    const type = MATERIAL_FILE_TYPES[file.mimetype];
-    if (!type || !type.ext.includes(ext)) {
-      throw new BadRequestException('Envie um arquivo PDF ou Word (.doc, .docx).');
-    }
+    const { ext, source } = assertMaterialFile(file);
 
     const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
@@ -352,7 +337,7 @@ export class MeetingsService {
               tenant_id: user.tenant_id,
               congregation_id: user.congregation_id,
               title: dto.title.trim(),
-              source_type: type.source,
+              source_type: source,
               file_url,
               publish_at: new Date(),
               tags: [],
@@ -385,6 +370,35 @@ export class MeetingsService {
       await this.notifier.notifyLink(link.id);
     }
     return link;
+  }
+
+  /**
+   * Materiais que alcançam o PG (`material_targets`), independentes de
+   * encontro — é por aqui que o material de uma rede ou de todas as redes
+   * chega ao PG. Mesma regra de `listMaterials`: líder vê tudo, inclusive o
+   * agendado e o "só líderes"; membro precisa participar do PG e só enxerga o
+   * publicado, não expirado e de visibilidade `all`.
+   */
+  async listGroupMaterials(groupId: string, user: JwtPayload) {
+    const isLeader = user.roles.some((role) => MATERIAL_LEADER_ROLES.includes(role));
+    if (!isLeader) {
+      await this.assertParticipant(groupId, user.sub);
+    }
+
+    const now = new Date();
+    return this.prisma.client.studyMaterial.findMany({
+      where: {
+        materialTargets: { some: { small_group_id: groupId } },
+        ...(isLeader
+          ? {}
+          : {
+              visibility: MaterialVisibility.all,
+              publish_at: { lte: now },
+              OR: [{ expires_at: null }, { expires_at: { gt: now } }],
+            }),
+      },
+      orderBy: { publish_at: 'desc' },
+    });
   }
 
   async listMaterials(meetingId: string, user: JwtPayload) {

@@ -82,6 +82,15 @@ export class MeetingsController {
     return this.meetingsService.update(meetingId, dto);
   }
 
+  @Get(':groupId/materials')
+  @Roles(...MATERIAL_READ_ROLES)
+  listGroupMaterials(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.listGroupMaterials(groupId, user);
+  }
+
   @Get(':groupId/meetings')
   @Roles(...MEETING_LIST_READ_ROLES)
   findByGroup(

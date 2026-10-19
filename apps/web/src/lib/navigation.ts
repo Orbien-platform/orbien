@@ -4,6 +4,7 @@ import {
   ChartLine,
   ChartNoAxesColumn,
   Eye,
+  FileText,
   GitBranch,
   HeartHandshake,
   House,
@@ -20,7 +21,7 @@ import {
  * não por tabela.
  *
  * Só entra aqui rota que existe. As áreas que o README prevê e que ainda não
- * têm tela (Visitantes, Famílias, Materiais, Escalas, Eventos, as sub-áreas do
+ * têm tela (Visitantes, Famílias, Escalas, Eventos, as sub-áreas do
  * Financeiro e da Administração…) entram quando a tela entrar — link para 404
  * não é menu. Quem decide se o item aparece para a sessão é
  * `canAccessRoute`, em `permissions.ts`.
@@ -61,6 +62,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/grupos", label: "Grupos", icon: HeartHandshake, usesGroupTerm: true },
       { href: "/redes", label: "Redes", icon: GitBranch },
+      { href: "/materiais", label: "Materiais", icon: FileText },
     ],
   },
   {

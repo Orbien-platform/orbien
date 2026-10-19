@@ -620,17 +620,32 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
   com ticket de 5 min preso à reunião
   (`POST .../materials/upload-ticket`), pelo mesmo motivo do upload de posts:
   teto de 4,5 MB do proxy da Vercel. Modo "Enviar PDF ou Word" no modal.
+- Alcance do material (2026-10-19): ao criar, escolhe-se **todas as redes**,
+  **uma rede** ou **um PG**, e quem vê (**todos** ou **só líderes**) — colunas
+  `audience`, `network_id` e `visibility` em `study_materials` (migration
+  `20261019130000_add_material_audience`). Os PGs alcançados são gravados em
+  `material_targets` na criação (foto: PG criado ou movido de rede depois não
+  recebe material antigo). `GET /small-groups/:groupId/materials` lista o que
+  alcança o PG, com a mesma regra de visibilidade/liberação. `publishPending`
+  agora avisa só os membros dos PGs-alvo (e só líderes quando `leaders_only`),
+  em vez da congregação inteira. Tela nova `/materiais` (menu Comunidade) com
+  a lista e o formulário; arquivo sobe por ticket
+  (`POST /study-materials/upload-ticket` + `POST /study-materials/upload/:id`).
+  Arquivos de material só aceitam PDF/Word, também em `POST/PATCH
+  /study-materials`.
 
 Falta:
+- Exibir os materiais do PG (`GET /small-groups/:groupId/materials`) na tela do
+  PG no web e no app mobile; hoje só a lista por encontro aparece lá.
+- Edição de audiência/visibilidade de material já criado (o `PATCH` não troca).
+- Foto vs. consulta viva: se o produto quiser que PG novo numa rede receba o
+  material da rede, `material_targets` precisa ser resolvido na leitura.
 - `rich_content` (texto formatado) no web — o modal cria material por link ou
   arquivo.
 - Arquivo de material "só líderes" tem URL pública do R2 (chave com UUID, só
   aparece na listagem autorizada). URL assinada de curta duração exigiria o
   participante pedir o link à API e mudar o app mobile, que abre `file_url`
   direto (`getPresignedGetUrl` já existe no `StorageService`).
-- Alvo por rede ou lote de PGs (`MaterialTarget` é só PG).
-- O push do `publishPending` ainda avisa a congregação toda pelo material
-  avulso; revisar junto com o item acima.
 - `addMaterial` não confere se o material tem o PG do encontro como alvo.
 
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho

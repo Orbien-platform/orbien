@@ -1,4 +1,6 @@
 import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
+import { UPLOAD_TICKET_KEY } from '../auth/decorators/upload-ticket.decorator';
 import { StudyMaterialsController } from './study-materials.controller';
 import { StudyMaterialsService } from './study-materials.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
@@ -25,6 +27,7 @@ function rolesFor(methodName: keyof StudyMaterialsController): string[] | undefi
 describe('StudyMaterialsController', () => {
   let service: jest.Mocked<StudyMaterialsService>;
   let controller: StudyMaterialsController;
+  let jwt: { sign: jest.Mock };
 
   beforeEach(() => {
     service = {
@@ -38,7 +41,8 @@ describe('StudyMaterialsController', () => {
       recordOpen: jest.fn(),
     } as unknown as jest.Mocked<StudyMaterialsService>;
 
-    controller = new StudyMaterialsController(service);
+    jwt = { sign: jest.fn().mockReturnValue('ticket') };
+    controller = new StudyMaterialsController(service, jwt as unknown as JwtService);
   });
 
   it('create e update exigem papel de escrita', () => {
@@ -139,5 +143,32 @@ describe('StudyMaterialsController', () => {
 
     expect(service.recordOpen).toHaveBeenCalledWith('m1', USER);
     expect(result).toEqual({ recorded: false, already_opened: true });
+  });
+
+  it('upload-ticket e upload/:id exigem papel de escrita; só o upload aceita ticket', () => {
+    expect(rolesFor('uploadTicket')).toEqual(WRITE_ROLES);
+    expect(rolesFor('createWithTicket')).toEqual(WRITE_ROLES);
+    expect(Reflect.getMetadata(UPLOAD_TICKET_KEY, StudyMaterialsController.prototype.createWithTicket)).toBe(true);
+    expect(Reflect.getMetadata(UPLOAD_TICKET_KEY, StudyMaterialsController.prototype.uploadTicket)).toBeUndefined();
+  });
+
+  it('uploadTicket assina ticket sem papel, preso a um upload_id sorteado', () => {
+    const result = controller.uploadTicket(USER);
+
+    expect(result.upload_token).toBe('ticket');
+    expect(result.upload_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ roles: [], scope: 'upload', upload_target: result.upload_id }),
+      { expiresIn: 300 },
+    );
+  });
+
+  it('createWithTicket delega ao create do service', async () => {
+    service.create.mockResolvedValue({ id: 'm1' } as never);
+    const file = { mimetype: 'application/pdf' } as Express.Multer.File;
+
+    await controller.createWithTicket({ title: 'T' } as never, file, USER);
+
+    expect(service.create).toHaveBeenCalledWith({ title: 'T' }, file, USER);
   });
 });

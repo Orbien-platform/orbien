@@ -2,11 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService, OneSignalFilter, orGroup } from '../content/notifications.service';
-
-// Limite de filtros por chamada do OneSignal é 200 (cada pessoa = 1 filtro +
-// 1 operador OR); em lotes de 90 sobra folga.
-const BATCH_SIZE = 90;
+import { NotificationsService, personFilterBatches } from '../content/notifications.service';
 
 /**
  * Avisa por push os inscritos no PG quando um material de encontro é liberado.
@@ -66,15 +62,7 @@ export class MeetingMaterialNotifier {
         select: { person_id: true },
       });
 
-      for (let i = 0; i < members.length; i += BATCH_SIZE) {
-        const filters: OneSignalFilter[] = orGroup(
-          members.slice(i, i + BATCH_SIZE).map((m) => ({
-            field: 'tag' as const,
-            key: 'person_id',
-            relation: '=' as const,
-            value: m.person_id,
-          })),
-        );
+      for (const filters of personFilterBatches(members.map((m) => m.person_id))) {
         await this.notifications.sendPush({
           tenantId: group.tenant_id,
           congregationId: group.congregation_id,

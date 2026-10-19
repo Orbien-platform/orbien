@@ -44,6 +44,28 @@ export function orGroup(filters: OneSignalFilter[]): OneSignalFilter[] {
   }, [] as OneSignalFilter[]);
 }
 
+/**
+ * Um grupo de filtros `person_id = X OR person_id = Y …` por lote. O OneSignal
+ * limita os filtros por chamada (200, contando os operadores); em lotes de 90
+ * pessoas sobra folga.
+ */
+export function personFilterBatches(personIds: string[], size = 90): OneSignalFilter[][] {
+  const batches: OneSignalFilter[][] = [];
+  for (let i = 0; i < personIds.length; i += size) {
+    batches.push(
+      orGroup(
+        personIds.slice(i, i + size).map((value) => ({
+          field: 'tag' as const,
+          key: 'person_id',
+          relation: '=' as const,
+          value,
+        })),
+      ),
+    );
+  }
+  return batches;
+}
+
 export interface SendPushOpts {
   tenantId: string;
   congregationId: string;

@@ -23,7 +23,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       delete: jest.fn(),
       create: jest.fn(),
     },
-    studyMaterial: { findUnique: jest.fn(), create: jest.fn() },
+    studyMaterial: { findUnique: jest.fn(), create: jest.fn(), findMany: jest.fn() },
     materialTarget: { create: jest.fn() },
     groupMeetingMaterial: {
       findUnique: jest.fn(),
@@ -493,6 +493,54 @@ describe('MeetingsService', () => {
 
       await expect(service.uploadMaterial('meet1', { title: 'T' } as never, pdf(), USER)).rejects.toThrow('db');
       expect(storage.deleteByUrl).toHaveBeenCalledWith('https://cdn/t1/materials/a.pdf');
+    });
+  });
+
+  describe('listGroupMaterials', () => {
+    it('líder vê tudo que alcança o PG, inclusive agendado e só-líderes', async () => {
+      const client = clientWith();
+      client.studyMaterial.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      await service.listGroupMaterials('sg1', { ...USER, roles: ['cell_leader'] });
+
+      expect(client.studyMaterial.findMany).toHaveBeenCalledWith({
+        where: { materialTargets: { some: { small_group_id: 'sg1' } } },
+        orderBy: { publish_at: 'desc' },
+      });
+      expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('membro participante vê só publicado, não expirado e de visibilidade all', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue({ id: 'mem1' });
+      client.studyMaterial.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      await service.listGroupMaterials('sg1', { ...USER, roles: ['member'] });
+
+      expect(client.studyMaterial.findMany).toHaveBeenCalledWith({
+        where: {
+          materialTargets: { some: { small_group_id: 'sg1' } },
+          visibility: 'all',
+          publish_at: { lte: expect.any(Date) },
+          OR: [{ expires_at: null }, { expires_at: { gt: expect.any(Date) } }],
+        },
+        orderBy: { publish_at: 'desc' },
+      });
+    });
+
+    it('membro de outro PG leva ForbiddenException', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.listGroupMaterials('sg1', { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.studyMaterial.findMany).not.toHaveBeenCalled();
     });
   });
 
