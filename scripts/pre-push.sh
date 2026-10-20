@@ -333,7 +333,7 @@ if ! $RAPIDO && quer e2e; then
           E2E_BASE_URL=http://localhost:3001 E2E_API_URL=http://localhost:3000/api \
           E2E_EMAIL=fvargaspf+teste2@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste2-church \
           E2E_SUPPORT_EMAIL=fernando.vargas@fill.tech E2E_SUPPORT_PASSWORD=A3dodfemf \
-            npm run e2e -w orbien-web -- "${SPEC_ARGS[@]}" >/tmp/prepush-e2e.log 2>&1 \
+            npm run e2e -w orbien-web -- ${SPEC_ARGS[@]+"${SPEC_ARGS[@]}"} >/tmp/prepush-e2e.log 2>&1 \
             && passa "e2e — $QUAIS" \
             || {
               bloqueia "e2e falhou — veja /tmp/prepush-e2e.log (traces em apps/web/test-results, relatório em apps/web/playwright-report)"
