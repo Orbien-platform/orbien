@@ -47,6 +47,9 @@ const CHECKIN_TOKEN_TTL_MINUTES = 240;
 // deixado um token antigo ainda válido por acaso.
 const CHECKIN_MAX_MEETING_AGE_HOURS = 24;
 
+/** Segundos. Dá tempo de abrir o arquivo; link copiado e guardado expira. */
+const LEADERS_FILE_URL_TTL = 15 * 60;
+
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
 // Os dois papéis que mexem em material de qualquer PG da congregação. Os demais
 // (`cell_leader`) só mexem no do PG que lideram — o RLS filtra por congregação,
@@ -424,7 +427,7 @@ export class MeetingsService {
     }
 
     const now = new Date();
-    return this.prisma.client.studyMaterial.findMany({
+    const materials = await this.prisma.client.studyMaterial.findMany({
       where: {
         materialTargets: { some: { small_group_id: groupId } },
         ...(isLeader
@@ -437,6 +440,24 @@ export class MeetingsService {
       },
       orderBy: { publish_at: 'desc' },
     });
+    return Promise.all(materials.map((m) => this.withSignedFile(m)));
+  }
+
+  /**
+   * Material "só líderes" com arquivo sai da listagem com URL assinada de
+   * curta duração, em vez da URL pública do R2. A URL pública continua válida
+   * enquanto o bucket for público: o ganho completo vem de tornar o bucket
+   * privado, e essa troca não exige mudar o código nem o app.
+   */
+  private async withSignedFile<T extends { visibility: MaterialVisibility; file_url: string | null }>(
+    material: T,
+    visibility: MaterialVisibility = material.visibility,
+  ): Promise<T> {
+    if (visibility !== MaterialVisibility.leaders_only || !material.file_url) return material;
+    const key = this.storage.keyFromUrl(material.file_url);
+    if (!key) return material;
+    const file_url = await this.storage.getPresignedGetUrl(key, LEADERS_FILE_URL_TTL);
+    return { ...material, file_url };
   }
 
   async listMaterials(meetingId: string, user: JwtPayload) {
@@ -451,7 +472,7 @@ export class MeetingsService {
       await this.assertParticipant(meeting.small_group_id, user.sub);
     }
 
-    return this.prisma.client.groupMeetingMaterial.findMany({
+    const links = await this.prisma.client.groupMeetingMaterial.findMany({
       where: {
         meeting_id: meetingId,
         ...(isLeader
@@ -464,6 +485,13 @@ export class MeetingsService {
       include: { material: true },
       orderBy: { created_at: 'asc' },
     });
+    // A visibilidade que vale é a do vínculo (a do material é a do cadastro).
+    return Promise.all(
+      links.map(async (link) => ({
+        ...link,
+        material: await this.withSignedFile(link.material, link.visibility),
+      })),
+    );
   }
 
   async removeMaterial(

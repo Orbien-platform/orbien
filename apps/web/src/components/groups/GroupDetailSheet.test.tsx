@@ -1299,6 +1299,47 @@ describe("GroupDetailSheet", () => {
     ).toHaveLength(1);
   });
 
+  it("abre os materiais do PG só quando a aba Materiais é aberta", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/small-groups/g1") return Promise.resolve({ data: group });
+      if (url.startsWith("/small-groups/g1/meetings"))
+        return Promise.resolve({ data: { data: meetings } });
+      if (url === "/small-groups/g1/materials")
+        return Promise.resolve({
+          data: [
+            {
+              id: "m1",
+              title: "Roteiro da rede",
+              source_type: "pdf",
+              file_url: "https://cdn/r.pdf",
+              rich_content: null,
+              visibility: "all",
+              publish_at: "2026-01-10T12:00:00.000Z",
+            },
+          ],
+        });
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    const user = userEvent.setup();
+
+    render(
+      <GroupDetailSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        groupId="g1"
+        onUpdated={vi.fn()}
+        canEdit={true}
+      />
+    );
+
+    expect(await screen.findByText("Célula Alfa")).toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalledWith("/small-groups/g1/materials");
+
+    await user.click(screen.getByRole("tab", { name: "Materiais" }));
+
+    expect(await screen.findByText("Roteiro da rede")).toBeInTheDocument();
+  });
+
   // PROD-11 — a aba espelha o ALERT_ROLES da rota: gestão (canEdit) +
   // cell_leader. Quem não tem nenhum dos dois não vê a aba.
   it("mostra a aba Ausências para quem pode editar e carrega o painel ao abrir", async () => {

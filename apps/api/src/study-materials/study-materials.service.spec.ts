@@ -26,6 +26,8 @@ const EXISTING_MATERIAL = {
   publish_at: new Date('2026-09-01T00:00:00.000Z'),
   expires_at: null,
   tags: ['fé'],
+  audience: 'all_networks',
+  network_id: null,
   version: 1,
 };
 
@@ -43,7 +45,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       updateMany: jest.fn(),
       delete: jest.fn(),
     },
-    materialTarget: { findMany: jest.fn(), createMany: jest.fn() },
+    materialTarget: { findMany: jest.fn(), createMany: jest.fn(), deleteMany: jest.fn() },
     groupMembership: { findMany: jest.fn() },
     userAccount: { findUnique: jest.fn() },
     materialOpenRecord: { findFirst: jest.fn(), create: jest.fn(), count: jest.fn() },
@@ -313,6 +315,23 @@ describe('StudyMaterialsService', () => {
   });
 
   describe('findAll', () => {
+    it('traz o primeiro PG alvo de cada material, para o rótulo da lista', async () => {
+      const client = clientWith();
+      client.studyMaterial.findMany.mockResolvedValue([]);
+      client.studyMaterial.count.mockResolvedValue(0);
+      const { service } = serviceWith(client);
+
+      await service.findAll({ page: 1, limit: 20 } as never);
+
+      expect(client.studyMaterial.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            materialTargets: { take: 1, include: { smallGroup: { select: { id: true, name: true } } } },
+          }),
+        }),
+      );
+    });
+
     it('filtra por status scheduled', async () => {
       const client = clientWith();
       client.studyMaterial.findMany.mockResolvedValue([]);
@@ -425,7 +444,128 @@ describe('StudyMaterialsService', () => {
         where: { id: 'm1', version: 1 },
         data: { title: 'Novo', version: { increment: 1 } },
       });
-      expect(client.studyMaterial.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'm1' } });
+      expect(client.studyMaterial.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { id: 'm1' },
+        include: { materialTargets: { include: { smallGroup: true } } },
+      });
+      expect(client.materialTarget.deleteMany).not.toHaveBeenCalled();
+    });
+
+    describe('alcance', () => {
+      function setup() {
+        const client = clientWith();
+        client.studyMaterial.findUnique.mockResolvedValue(EXISTING_MATERIAL);
+        client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+        client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
+        return { client, ...serviceWith(client) };
+      }
+
+      it('troca para uma rede: regrava os PGs dela e a coluna network_id', async () => {
+        const { client, service } = setup();
+        client.network.findFirst.mockResolvedValue({ id: 'n1' });
+        client.smallGroup.findMany.mockResolvedValue([{ id: 'sg1' }, { id: 'sg2' }]);
+
+        await service.update('m1', { audience: 'network', network_id: 'n1' } as never, undefined, USER);
+
+        expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
+          where: { id: 'm1', version: 1 },
+          data: {
+            audience: 'network',
+            network_id: 'n1',
+            version: { increment: 1 },
+          },
+        });
+        expect(client.materialTarget.deleteMany).toHaveBeenCalledWith({
+          where: { study_material_id: 'm1' },
+        });
+        expect(client.materialTarget.createMany).toHaveBeenCalledWith({
+          data: [
+            { study_material_id: 'm1', small_group_id: 'sg1' },
+            { study_material_id: 'm1', small_group_id: 'sg2' },
+          ],
+          skipDuplicates: true,
+        });
+      });
+
+      it('só target_group_ids vira audience group e não vaza o campo para o Prisma', async () => {
+        const { client, service } = setup();
+        client.smallGroup.findMany.mockResolvedValue([{ id: 'sg1' }]);
+
+        await service.update('m1', { target_group_ids: ['sg1'] } as never, undefined, USER);
+
+        const { data } = client.studyMaterial.updateMany.mock.calls[0][0];
+        expect(data).toEqual({ audience: 'group', network_id: null, version: { increment: 1 } });
+        expect(client.materialTarget.createMany).toHaveBeenCalledWith({
+          data: [{ study_material_id: 'm1', small_group_id: 'sg1' }],
+          skipDuplicates: true,
+        });
+      });
+
+      it('troca só a visibilidade sem mexer nos PGs alcançados', async () => {
+        const { client, service } = setup();
+
+        await service.update('m1', { visibility: 'leaders_only' } as never, undefined, USER);
+
+        expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
+          where: { id: 'm1', version: 1 },
+          data: { visibility: 'leaders_only', version: { increment: 1 } },
+        });
+        expect(client.materialTarget.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('recusa PG de outra congregação antes de gravar qualquer coisa', async () => {
+        const { client, service } = setup();
+        client.smallGroup.findMany.mockResolvedValue([]);
+
+        await expect(
+          service.update('m1', { audience: 'group', target_group_ids: ['sg9'] } as never, undefined, USER),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(client.studyMaterial.updateMany).not.toHaveBeenCalled();
+        expect(client.materialTarget.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('só network_id num material de rede mantém a audience e troca a rede', async () => {
+        const { client, service } = setup();
+        client.studyMaterial.findUnique.mockResolvedValue({
+          ...EXISTING_MATERIAL,
+          audience: 'network',
+          network_id: 'n1',
+        });
+        client.network.findFirst.mockResolvedValue({ id: 'n2' });
+        client.smallGroup.findMany.mockResolvedValue([{ id: 'sg3' }]);
+
+        await service.update('m1', { network_id: 'n2' } as never, undefined, USER);
+
+        const { data } = client.studyMaterial.updateMany.mock.calls[0][0];
+        expect(data).toMatchObject({ audience: 'network', network_id: 'n2' });
+      });
+
+      it('rede sem PGs apaga os alvos e não grava nenhum', async () => {
+        const { client, service } = setup();
+        client.network.findFirst.mockResolvedValue({ id: 'n1' });
+        client.smallGroup.findMany.mockResolvedValue([]);
+
+        await service.update('m1', { audience: 'network', network_id: 'n1' } as never, undefined, USER);
+
+        expect(client.materialTarget.deleteMany).toHaveBeenCalled();
+        expect(client.materialTarget.createMany).not.toHaveBeenCalled();
+      });
+
+      it('alcance para todas as redes zera o network_id que existia', async () => {
+        const { client, service } = setup();
+        client.studyMaterial.findUnique.mockResolvedValue({
+          ...EXISTING_MATERIAL,
+          audience: 'network',
+          network_id: 'n1',
+        });
+        client.smallGroup.findMany.mockResolvedValue([{ id: 'sg1' }]);
+
+        await service.update('m1', { audience: 'all_networks' } as never, undefined, USER);
+
+        const { data } = client.studyMaterial.updateMany.mock.calls[0][0];
+        expect(data.audience).toBe('all_networks');
+        expect(data.network_id).toBeNull();
+      });
     });
 
     it('lança ConflictException quando o material foi alterado por outra pessoa nesse meio tempo', async () => {

@@ -41,12 +41,19 @@ function clientWith(overrides: Record<string, unknown> = {}) {
 }
 
 const notifier = { notifyLink: jest.fn() };
-const storage = { upload: jest.fn(), deleteByUrl: jest.fn() };
+const storage = {
+  upload: jest.fn(),
+  deleteByUrl: jest.fn(),
+  keyFromUrl: jest.fn(),
+  getPresignedGetUrl: jest.fn(),
+};
 
 beforeEach(() => {
   notifier.notifyLink.mockReset();
   storage.upload.mockReset();
   storage.deleteByUrl.mockReset();
+  storage.keyFromUrl.mockReset();
+  storage.getPresignedGetUrl.mockReset();
 });
 
 function serviceWith(client: ReturnType<typeof clientWith>, runInTx?: jest.Mock) {
@@ -639,6 +646,42 @@ describe('MeetingsService', () => {
       });
     });
 
+    it('arquivo só-líderes sai com URL assinada; o de todos segue com a URL pública', async () => {
+      const client = clientWith();
+      client.studyMaterial.findMany.mockResolvedValue([
+        { id: 'm1', visibility: 'leaders_only', file_url: 'https://cdn/t/materials/a.pdf' },
+        { id: 'm2', visibility: 'all', file_url: 'https://cdn/t/materials/b.pdf' },
+        { id: 'm3', visibility: 'leaders_only', file_url: null },
+      ]);
+      storage.keyFromUrl.mockReturnValue('t/materials/a.pdf');
+      storage.getPresignedGetUrl.mockResolvedValue('https://signed/a.pdf');
+      const service = serviceWith(client);
+
+      const result = await service.listGroupMaterials('sg1', { ...USER, roles: ['cell_leader'] });
+
+      expect(storage.getPresignedGetUrl).toHaveBeenCalledTimes(1);
+      expect(storage.getPresignedGetUrl).toHaveBeenCalledWith('t/materials/a.pdf', 900);
+      expect(result.map((m) => m.file_url)).toEqual([
+        'https://signed/a.pdf',
+        'https://cdn/t/materials/b.pdf',
+        null,
+      ]);
+    });
+
+    it('URL que não é do bucket (link externo) fica como está', async () => {
+      const client = clientWith();
+      client.studyMaterial.findMany.mockResolvedValue([
+        { id: 'm1', visibility: 'leaders_only', file_url: 'https://outro.site/a.pdf' },
+      ]);
+      storage.keyFromUrl.mockReturnValue(null);
+      const service = serviceWith(client);
+
+      const result = await service.listGroupMaterials('sg1', { ...USER, roles: ['cell_leader'] });
+
+      expect(storage.getPresignedGetUrl).not.toHaveBeenCalled();
+      expect(result[0].file_url).toBe('https://outro.site/a.pdf');
+    });
+
     it('membro de outro PG leva ForbiddenException', async () => {
       const client = clientWith();
       client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
@@ -664,7 +707,9 @@ describe('MeetingsService', () => {
     it('líder vê todos os materiais, sem filtro de visibilidade nem checagem de participação', async () => {
       const client = clientWith();
       client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1', small_group_id: 'sg1' });
-      client.groupMeetingMaterial.findMany.mockResolvedValue([{ id: 'link1' }]);
+      client.groupMeetingMaterial.findMany.mockResolvedValue([
+        { id: 'link1', visibility: 'all', material: { id: 'm1', file_url: null } },
+      ]);
       const service = serviceWith(client);
 
       await service.listMaterials('meet1', { ...USER, roles: ['cell_leader'] });
@@ -673,6 +718,25 @@ describe('MeetingsService', () => {
         expect.objectContaining({ where: { meeting_id: 'meet1' } }),
       );
       expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('vínculo só-líderes entrega o arquivo com URL assinada, pela visibilidade do vínculo', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1', small_group_id: 'sg1' });
+      client.groupMeetingMaterial.findMany.mockResolvedValue([
+        {
+          id: 'link1',
+          visibility: 'leaders_only',
+          material: { id: 'm1', visibility: 'all', file_url: 'https://cdn/t/materials/a.pdf' },
+        },
+      ]);
+      storage.keyFromUrl.mockReturnValue('t/materials/a.pdf');
+      storage.getPresignedGetUrl.mockResolvedValue('https://signed/a.pdf');
+      const service = serviceWith(client);
+
+      const result = await service.listMaterials('meet1', { ...USER, roles: ['cell_leader'] });
+
+      expect(result[0].material.file_url).toBe('https://signed/a.pdf');
     });
 
     it('member participante do grupo vê apenas materiais com visibility "all"', async () => {

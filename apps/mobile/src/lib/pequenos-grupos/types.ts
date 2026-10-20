@@ -37,6 +37,18 @@ export interface MeetingMaterial {
   };
 }
 
+/** `GET /small-groups/:groupId/materials` — material que alcança o PG, sem passar por encontro. */
+export interface GroupMaterial {
+  id: string;
+  title: string;
+  source_type: "pdf" | "doc" | "rich_text";
+  /** Para "só líderes" a API devolve URL assinada de curta duração. */
+  file_url: string | null;
+  rich_content: string | null;
+  visibility: "all" | "leaders_only";
+  publish_at: string;
+}
+
 export interface GroupRosterMember {
   person_id: string;
   full_name: string;

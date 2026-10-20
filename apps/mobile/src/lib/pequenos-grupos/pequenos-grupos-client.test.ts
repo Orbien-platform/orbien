@@ -11,6 +11,7 @@ import {
   getGroupRoster,
   getHealthSummary,
   getMeeting,
+  listGroupMaterials,
   listMaterials,
   listMeetings,
   listMyGroups,
@@ -67,6 +68,18 @@ describe("PequenosGruposClient", () => {
 
       expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/small-groups/meetings/m1");
       expect(result).toEqual(meeting);
+    });
+  });
+
+  describe("listGroupMaterials", () => {
+    it("chama GET /small-groups/:groupId/materials", async () => {
+      const materials = [{ id: "mat1" }];
+      mockAuthenticatedRequest.mockResolvedValue(materials);
+
+      const result = await listGroupMaterials("sg1");
+
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/small-groups/sg1/materials");
+      expect(result).toEqual(materials);
     });
   });
 

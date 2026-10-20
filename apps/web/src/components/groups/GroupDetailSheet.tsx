@@ -21,6 +21,7 @@ import { GroupGenealogyTree } from "@/components/groups/GroupGenealogyTree";
 import { PrayerRequestsPanel } from "@/components/groups/PrayerRequestsPanel";
 import { GroupChatPanel } from "@/components/groups/GroupChatPanel";
 import { VisitRequestsPanel } from "@/components/groups/VisitRequestsPanel";
+import { GroupMaterialsPanel } from "@/components/groups/GroupMaterialsPanel";
 import { AbsenceAlertsPanel } from "@/components/groups/AbsenceAlertsPanel";
 import { DEFAULT_GROUP_TYPE_COLOR } from "@/lib/groupTypes";
 import { cn } from "@/lib/utils";
@@ -545,6 +546,9 @@ export function GroupDetailSheet({
                           Ausências
                         </Tabs.Tab>
                       )}
+                      <Tabs.Tab value="materials" className={tabBtn(activeTab === "materials")}>
+                        Materiais
+                      </Tabs.Tab>
                       <Tabs.Tab value="prayer" className={tabBtn(activeTab === "prayer")}>
                         Oração
                       </Tabs.Tab>
@@ -696,6 +700,10 @@ export function GroupDetailSheet({
                     sem papel de liderança, que é justamente quem não deve
                     pagar por ela em toda abertura. */}
                 {activeTab === "visits" && <VisitRequestsPanel groupId={group.id} />}
+
+                {/* ── Materiais tab (PROD-38) ── */}
+                {/* Montada só quando a aba abre, mesmo motivo das abas acima. */}
+                {activeTab === "materials" && <GroupMaterialsPanel groupId={group.id} />}
 
                 {/* ── Genealogia tab (PROD-20, CEL20-06) ── */}
                 {/* Montada só quando a aba abre, mesmo motivo das abas acima. */}

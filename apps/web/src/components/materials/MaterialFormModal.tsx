@@ -23,25 +23,48 @@ interface GroupOption {
   name: string;
 }
 
+/** Material já criado, como `GET /study-materials/:id` o devolve. */
+export interface EditableMaterial {
+  id: string;
+  title: string;
+  audience: Audience;
+  network_id?: string | null;
+  visibility: Visibility;
+  publish_at: string;
+  materialTargets: { small_group_id: string }[];
+}
+
 interface MaterialFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  /** Presente = edita o alcance e a liberação; o conteúdo não muda por aqui. */
+  material?: EditableMaterial | null;
+}
+
+/** ISO → valor de `datetime-local` no fuso do navegador. */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // Criação de material com alcance: todas as redes, uma rede ou um PG. O pai
 // (`MateriaisPage`) troca a `key` a cada abertura, remontando o formulário com
-// estado limpo — mesmo padrão de `NetworkFormModal`.
-export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormModalProps) {
-  const [title, setTitle] = useState("");
+// estado limpo — mesmo padrão de `NetworkFormModal`. Com `material`, o mesmo
+// formulário edita título, alcance, visibilidade e liberação (o arquivo ou o
+// texto ficam como estão).
+export function MaterialFormModal({ open, onOpenChange, onSaved, material }: MaterialFormModalProps) {
+  const editing = !!material;
+  const [title, setTitle] = useState(material?.title ?? "");
   const [kind, setKind] = useState<Kind>("file");
   const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState("");
-  const [audience, setAudience] = useState<Audience>("all_networks");
-  const [networkId, setNetworkId] = useState("");
-  const [groupId, setGroupId] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("all");
-  const [releaseAt, setReleaseAt] = useState("");
+  const [audience, setAudience] = useState<Audience>(material?.audience ?? "all_networks");
+  const [networkId, setNetworkId] = useState(material?.network_id ?? "");
+  const [groupId, setGroupId] = useState(material?.materialTargets[0]?.small_group_id ?? "");
+  const [visibility, setVisibility] = useState<Visibility>(material?.visibility ?? "all");
+  const [releaseAt, setReleaseAt] = useState(material ? toLocalInput(material.publish_at) : "");
   const [networks, setNetworks] = useState<NetworkOption[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
   // Cada lista falha sozinha: /networks é Premium e responde 403 em outros
@@ -75,8 +98,8 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
     setError("");
 
     if (!title.trim()) return setError("Informe o título do material.");
-    if (kind === "file" && !file) return setError("Escolha o arquivo PDF ou Word.");
-    if (kind === "text" && !content.trim()) return setError("Escreva o texto ou cole o link.");
+    if (!editing && kind === "file" && !file) return setError("Escolha o arquivo PDF ou Word.");
+    if (!editing && kind === "text" && !content.trim()) return setError("Escreva o texto ou cole o link.");
     if (audience === "network" && !networkId) return setError("Escolha a rede.");
     if (audience === "group" && !groupId) return setError("Escolha o PG.");
 
@@ -86,13 +109,17 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
       ...(audience === "network" ? { network_id: networkId } : {}),
       ...(audience === "group" ? { target_group_ids: [groupId] } : {}),
       visibility,
-      publish_at: releaseAt ? new Date(releaseAt).toISOString() : new Date().toISOString(),
+      publish_at: releaseAt
+        ? new Date(releaseAt).toISOString()
+        : (material?.publish_at ?? new Date().toISOString()),
     };
 
     setIsSubmitting(true);
     setProgress(0);
     try {
-      if (kind === "file") {
+      if (material) {
+        await api.patch(`/study-materials/${material.id}`, fields);
+      } else if (kind === "file") {
         await uploadStudyMaterial(file!, fields, setProgress);
       } else {
         await api.post("/study-materials", {
@@ -121,8 +148,12 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Novo material"
-      description="Escolha o conteúdo e quem vai recebê-lo."
+      title={editing ? "Editar material" : "Novo material"}
+      description={
+        editing
+          ? "Mude quem recebe o material, quem pode vê-lo e quando é liberado."
+          : "Escolha o conteúdo e quem vai recebê-lo."
+      }
       className="max-w-lg"
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -137,6 +168,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
           />
         </div>
 
+        {!editing && (
         <fieldset className="flex flex-col gap-1.5" disabled={isSubmitting}>
           <legend className="mb-1 text-sm font-medium text-ink dark:text-white">Conteúdo</legend>
           <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
@@ -148,8 +180,9 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
             Texto ou link
           </label>
         </fieldset>
+        )}
 
-        {kind === "file" ? (
+        {!editing && (kind === "file" ? (
           <input
             type="file"
             accept={MATERIAL_FILE_ACCEPT}
@@ -173,7 +206,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
             rows={5}
             className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink dark:text-white"
           />
-        )}
+        ))}
 
         <fieldset className="flex flex-col gap-1.5" disabled={isSubmitting}>
           <legend className="mb-1 text-sm font-medium text-ink dark:text-white">Para quem</legend>
@@ -245,7 +278,9 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
             className="rounded-[8px]"
           />
           <span className="text-xs text-stone">
-            Deixe em branco para liberar agora. Os participantes são avisados na data.
+            {editing
+              ? "Quem já foi avisado não recebe um novo aviso ao mudar o alcance."
+              : "Deixe em branco para liberar agora. Os participantes são avisados na data."}
           </span>
         </label>
 
@@ -272,7 +307,13 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
           disabled={isSubmitting}
           className="rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]"
         >
-          {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : "Publicar material"}
+          {isSubmitting ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : editing ? (
+            "Salvar alterações"
+          ) : (
+            "Publicar material"
+          )}
         </Button>
       </form>
     </Modal>

@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
 import { uploadStudyMaterial } from "@/lib/upload-study-material";
-import { MaterialFormModal } from "./MaterialFormModal";
+import { MaterialFormModal, type EditableMaterial } from "./MaterialFormModal";
 
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
+vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
 vi.mock("@/lib/upload-study-material", () => ({ uploadStudyMaterial: vi.fn() }));
 
 const mockedApi = vi.mocked(api, true);
@@ -281,5 +281,97 @@ describe("MaterialFormModal", () => {
     await user.type(screen.getByLabelText("Título"), "Sem arquivo");
     await user.click(screen.getByRole("button", { name: "Publicar material" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Escolha o arquivo PDF ou Word.");
+  });
+
+  describe("edição", () => {
+    const material: EditableMaterial = {
+      id: "m1",
+      title: "Roteiro",
+      audience: "group",
+      network_id: null,
+      visibility: "all",
+      publish_at: "2026-01-10T12:30:00.000Z",
+      materialTargets: [{ small_group_id: "g1" }],
+    };
+
+    async function setupEdit(over: Partial<EditableMaterial> = {}) {
+      mockedApi.get.mockImplementation((url: string) =>
+        url === "/networks"
+          ? Promise.resolve({ data: [{ id: "n1", name: "Norte" }] })
+          : Promise.resolve({ data: { data: [{ id: "g1", name: "Centro" }] } })
+      );
+      const onSaved = vi.fn();
+      const onOpenChange = vi.fn();
+      const user = userEvent.setup({ applyAccept: false });
+      render(
+        <MaterialFormModal
+          open
+          onOpenChange={onOpenChange}
+          onSaved={onSaved}
+          material={{ ...material, ...over }}
+        />
+      );
+      await screen.findByRole("heading", { name: "Editar material" });
+      return { user, onSaved, onOpenChange };
+    }
+
+    it("abre com os valores do material e sem os campos de conteúdo", async () => {
+      await setupEdit();
+
+      expect(screen.getByLabelText("Título")).toHaveValue("Roteiro");
+      expect(screen.getByLabelText("Um PG")).toBeChecked();
+      expect(await screen.findByLabelText("PG")).toHaveValue("g1");
+      expect(screen.getByLabelText("Todos os participantes")).toBeChecked();
+      expect(screen.queryByLabelText("Arquivo do material")).not.toBeInTheDocument();
+      expect(screen.queryByText("Conteúdo")).not.toBeInTheDocument();
+    });
+
+    it("troca para uma rede e só líderes com um PATCH, sem subir arquivo", async () => {
+      mockedApi.patch.mockResolvedValue({ data: {} });
+      const { user, onSaved, onOpenChange } = await setupEdit();
+
+      await user.click(screen.getByLabelText("Uma rede"));
+      await user.selectOptions(await screen.findByLabelText("Rede"), "n1");
+      await user.click(screen.getByLabelText("Somente líderes"));
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      await waitFor(() =>
+        expect(mockedApi.patch).toHaveBeenCalledWith("/study-materials/m1", {
+          title: "Roteiro",
+          audience: "network",
+          network_id: "n1",
+          visibility: "leaders_only",
+          publish_at: expect.any(String),
+        })
+      );
+      expect(uploadStudyMaterial).not.toHaveBeenCalled();
+      expect(onSaved).toHaveBeenCalled();
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("limpar a data de liberação mantém a que o material já tinha", async () => {
+      mockedApi.patch.mockResolvedValue({ data: {} });
+      const { user } = await setupEdit();
+
+      fireEvent.change(screen.getByLabelText(/Liberar em/), { target: { value: "" } });
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      await waitFor(() =>
+        expect(mockedApi.patch).toHaveBeenCalledWith(
+          "/study-materials/m1",
+          expect.objectContaining({ publish_at: "2026-01-10T12:30:00.000Z" })
+        )
+      );
+    });
+
+    it("mostra o erro quando o PATCH falha", async () => {
+      mockedApi.patch.mockRejectedValue(new Error("boom"));
+      const { user, onSaved } = await setupEdit({ audience: "all_networks", materialTargets: [] });
+
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Erro ao salvar o material.");
+      expect(onSaved).not.toHaveBeenCalled();
+    });
   });
 });
