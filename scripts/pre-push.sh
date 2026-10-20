@@ -7,24 +7,41 @@
 # específicas do Orbien que dão para verificar por script, e falha antes de o
 # commit sair da máquina.
 #
-#   bash scripts/pre-push.sh              # portão determinístico
-#   bash scripts/pre-push.sh --e2e        # inclui a suíte de tela (mais lento)
-#   bash scripts/pre-push.sh --review     # inclui revisão por IA, com veredito
+#   bash scripts/pre-push.sh              # portão completo (o que vale para subir)
+#   bash scripts/pre-push.sh --review     # + revisão por IA, com veredito
+#   bash scripts/pre-push.sh --rapido     # só build, tipos, lint e regras — NÃO libera PR
+#   bash scripts/pre-push.sh --so=ETAPA   # só uma etapa, para iterar — NÃO libera PR
+#                                         #   ETAPA: cobertura | rls | e2e | site
+#
+# O completo roda o que o CI roda, na mesma ordem de importância:
+#   build, tipos, lint · testes e cobertura dos 5 apps (sempre) · RLS (se o
+#   diff toca a API) · e2e do web só nos specs que o diff afeta · smoke do site
+#   (se o diff toca o site).
+# Banco, API e web sobem sozinhos, num Postgres local — nunca o do Supabase.
+#
+# Falhou? Corrija a causa e rode de novo até liberar; `--so=` encurta o ciclo,
+# mas a liberação só vale com o completo verde. Ver "Antes de subir" no
+# CLAUDE.md.
 #
 # Racional e alternativas: docs/CI.md
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-WITH_E2E=false
 WITH_REVIEW=false
+RAPIDO=false
+SO=""
 for arg in "$@"; do
   case "$arg" in
-    --e2e) WITH_E2E=true ;;
+    --e2e) echo "(--e2e não é mais preciso: o e2e do escopo afetado roda sempre)" ;;
     --review) WITH_REVIEW=true ;;
+    --rapido) RAPIDO=true ;;
+    --so=cobertura|--so=rls|--so=e2e|--so=site) SO="${arg#--so=}" ;;
     *) echo "argumento desconhecido: $arg"; exit 2 ;;
   esac
 done
+# `quer ETAPA`: a etapa roda? Sempre, a menos que --so tenha escolhido outra.
+quer() { [ -z "$SO" ] || [ "$SO" = "$1" ]; }
 
 BLOCKS=()
 WARNS=()
@@ -44,6 +61,8 @@ fi
 
 echo "Arquivos alterados: $(echo "$CHANGED" | wc -l | tr -d ' ')"
 toca() { echo "$CHANGED" | grep -qE "$1"; }
+
+if [ -z "$SO" ]; then
 
 # ── Checagens do Orbien que dão para verificar por script ─────────────────
 echo
@@ -142,44 +161,208 @@ npx turbo run lint >/tmp/prepush-lint.log 2>&1 && passa "lint" \
 node scripts/check-skills.mjs >/dev/null 2>&1 && passa "skills consistentes" \
   || bloqueia "skills inconsistentes — rode 'node scripts/check-skills.mjs'"
 
-if toca "^apps/api/(src|prisma)/"; then
-  echo
-  echo "▶ Isolamento multi-tenant (o diff toca a API)"
-  echo "  … a suíte leva ~2,5 min contra o Supabase"
-  npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && {
-    # AJU-07: contagem lida da própria saída do Jest, não mais literal — o
-    # literal desatualizou três vezes (39→118→125) a cada suíte nova de RLS.
-    RLS_SUMMARY=$(grep -E "^Tests:" /tmp/prepush-rls.log | sed -E 's/^Tests:\s*//')
-    passa "${RLS_SUMMARY:-testes de RLS} (veja /tmp/prepush-rls.log)"
-  } || {
-    # Distinguir banco inacessível de teste vermelho: bloquear por
-    # infraestrutura ensina a ignorar o portão.
-    if grep -qE "Exceeded timeout|Can't reach database|P1001|ECONNREFUSED" /tmp/prepush-rls.log; then
-      alerta "testes de RLS não rodaram: o banco não respondeu a tempo (veja /tmp/prepush-rls.log)"
-    else
-      bloqueia "testes de RLS falharam — veja /tmp/prepush-rls.log"
-      grep -E "✕|SECURITY GAP|Tests:" /tmp/prepush-rls.log | tail -6 | sed 's/^/      /'
+fi # -z "$SO"
+
+# ── Banco local, testes, cobertura, RLS, e2e e smoke ─────────────────────
+#
+# Tudo abaixo roda num Postgres LOCAL. A DATABASE_URL do ambiente de dev e a
+# da sessão remota podem apontar para o Supabase de produção; seed e testes
+# que escrevem não podem ir parar lá. Se as variáveis não forem locais, este
+# script usa localhost:5432 com as credenciais do CI (as mesmas do ci.yml) em
+# vez de confiar nelas. Os tenants que os testes usam são só `teste1-church`
+# e `teste2-church` (docs/AMBIENTES.md) — vêm do seed.
+
+PIDS=()
+encerra() {
+  for pid in "${PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    pkill -P "$pid" 2>/dev/null
+    kill "$pid" 2>/dev/null
+  done
+}
+trap encerra EXIT
+
+url_local() { [[ "${1:-}" =~ @(localhost|127\.0\.0\.1)[:/] ]]; }
+porta_aberta() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+espera_url() { # URL, tentativas de 2s
+  for _ in $(seq 1 "$2"); do curl -sf "$1" >/dev/null 2>&1 && return 0; sleep 2; done
+  return 1
+}
+
+# Build para o e2e/smoke. O crash do Next 16.x ao prerenderizar (AJU-04,
+# vercel/next.js#95741) é uma corrida: tenta até 3 vezes. Se persistir E for
+# exatamente esse padrão, não é culpa do diff — vira alerta (a etapa não
+# rodou, e o dev decide); qualquer outra falha de build bloqueia.
+# Retorno: 0 = buildou, 1 = bloqueou, 2 = alerta (crash conhecido, etapa pulada).
+build_com_retry() { # LOG, args do turbo...
+  local log="$1"; shift
+  for tentativa in 1 2 3; do
+    npx turbo run build "$@" >"$log" 2>&1 && return 0
+    grep -q "Cannot read properties of null (reading 'useContext')" "$log" || break
+    echo "  … crash conhecido do Next no build (tentativa $tentativa/3)"
+  done
+  if grep -q "Cannot read properties of null (reading 'useContext')" "$log" && grep -q "prerender" "$log"; then
+    return 2
+  fi
+  return 1
+}
+
+BANCO_PRONTO=false
+prepara_banco() {
+  $BANCO_PRONTO && return 0
+  local reprovisiona=false
+  if url_local "${DATABASE_URL:-}" && url_local "${DIRECT_URL:-}"; then
+    echo "  banco: o Postgres local do ambiente"
+  else
+    if ! porta_aberta 5432; then
+      bloqueia "sem Postgres local em localhost:5432 — suba um (docs/TESTES.md, Fase 0) ou rode com --rapido e declare que testes e e2e ficam para o CI"
+      return 1
     fi
-  }
+    export DIRECT_URL="postgresql://postgres:ci@localhost:5432/orbien"
+    export DATABASE_URL="postgresql://orbien_app:ci_app@localhost:5432/orbien"
+    export ORBIEN_APP_PASSWORD="ci_app"
+    reprovisiona=true
+    echo "  banco: DATABASE_URL do ambiente não é local — usando localhost:5432 com as credenciais do CI"
+  fi
+  export JWT_SECRET="${JWT_SECRET:-ci-jwt-secret}"
+  export JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-ci-jwt-refresh-secret}"
+
+  # Migration ou script de RLS novo na branch: o banco local precisa recebê-los
+  # antes de qualquer teste, senão o teste mede o schema antigo.
+  if $reprovisiona || toca "^apps/api/prisma/"; then
+    echo "  … provisionando schema e RLS (bootstrap-db.sh)"
+    (cd apps/api && bash scripts/bootstrap-db.sh) >/tmp/prepush-bootstrap.log 2>&1 \
+      || { bloqueia "bootstrap-db.sh falhou — veja /tmp/prepush-bootstrap.log"; tail -8 /tmp/prepush-bootstrap.log | sed 's/^/      /'; return 1; }
+  fi
+  echo "  … semeando os tenants de teste"
+  (cd apps/api && DATABASE_URL="$DIRECT_URL" npx ts-node prisma/seed.ts) >/tmp/prepush-seed.log 2>&1 \
+    || { bloqueia "seed falhou — veja /tmp/prepush-seed.log"; tail -8 /tmp/prepush-seed.log | sed 's/^/      /'; return 1; }
+  BANCO_PRONTO=true
+}
+
+# Linhas que dizem o que quebrou, sem despejar o log inteiro.
+resumo_falha() { grep -E "✕|✘|×|FAIL |threshold|●.*›|Error:|passed|failed|Tests:" "$1" | head -"${2:-12}" | sed 's/^/      /'; }
+
+if ! $RAPIDO && quer cobertura; then
+  echo
+  echo "▶ Testes e cobertura (os 5 apps, sempre — é o que o CI cobra)"
+  if prepara_banco; then
+    for pkg in orbien-backend orbien-web orbien-site orbien-admin orbien-mobile; do
+      log="/tmp/prepush-cov-$pkg.log"
+      if npm run test:cov -w "$pkg" >"$log" 2>&1; then
+        passa "$pkg — testes e piso de cobertura"
+      else
+        bloqueia "$pkg — testes ou cobertura abaixo do piso (veja $log)"
+        resumo_falha "$log"
+      fi
+    done
+  fi
 fi
 
-if [ "$WITH_E2E" = true ] && toca "^apps/web/src/"; then
+if ! $RAPIDO && quer rls && toca "^apps/api/(src|prisma)/"; then
   echo
-  echo "▶ E2E (--e2e, e o diff toca tela)"
-  E2E_URL="${E2E_BASE_URL:-http://localhost:3001}"
-
-  # Sem estas checagens o e2e falha por falta de setup e o portão bloqueia o
-  # push por motivo errado — que é pior do que não rodar.
-  if [ -z "${E2E_EMAIL:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${E2E_TENANT:-}" ]; then
-    alerta "e2e pulado: defina E2E_EMAIL, E2E_PASSWORD e E2E_TENANT (credenciais estão no seed)"
-  elif ! curl -sf --max-time 10 "$E2E_URL/login" >/dev/null 2>&1; then
-    alerta "e2e pulado: nada respondendo em $E2E_URL — suba o web ou aponte E2E_BASE_URL"
-  else
-    npm run e2e -w orbien-web >/tmp/prepush-e2e.log 2>&1 && passa "suíte de tela" \
-      || { bloqueia "e2e falhou — veja /tmp/prepush-e2e.log"; grep -E "✘|passed|failed" /tmp/prepush-e2e.log | tail -6 | sed 's/^/      /'; }
+  echo "▶ Isolamento multi-tenant (o diff toca a API)"
+  if prepara_banco; then
+    npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && {
+      # AJU-07: contagem lida da própria saída do Jest, não mais literal — o
+      # literal desatualizou três vezes (39→118→125) a cada suíte nova de RLS.
+      RLS_SUMMARY=$(grep -E "^Tests:" /tmp/prepush-rls.log | sed -E 's/^Tests:\s*//')
+      passa "${RLS_SUMMARY:-testes de RLS} (veja /tmp/prepush-rls.log)"
+    } || {
+      # Distinguir banco inacessível de teste vermelho: bloquear por
+      # infraestrutura ensina a ignorar o portão.
+      if grep -qE "Exceeded timeout|Can't reach database|P1001|ECONNREFUSED" /tmp/prepush-rls.log; then
+        alerta "testes de RLS não rodaram: o banco não respondeu a tempo (veja /tmp/prepush-rls.log)"
+      else
+        bloqueia "testes de RLS falharam — veja /tmp/prepush-rls.log"
+        grep -E "✕|SECURITY GAP|Tests:" /tmp/prepush-rls.log | tail -6 | sed 's/^/      /'
+      fi
+    }
   fi
-elif toca "^apps/web/src/"; then
-  alerta "o diff toca tela e o e2e não rodou — use --e2e"
+fi
+
+# Escopo do e2e: só os specs que o diff pode afetar (scripts/e2e-escopo.mjs).
+ESCOPO=$(echo "$CHANGED" | node scripts/e2e-escopo.mjs 2>/tmp/prepush-escopo.log)
+WEB_SPECS=$(echo "$ESCOPO" | sed -n 's/^web://p')
+SITE_NO_ESCOPO=$(echo "$ESCOPO" | grep -c '^site:1' || true)
+
+if ! $RAPIDO && quer e2e; then
+  echo
+  echo "▶ E2E do web — só o escopo afetado"
+  if [ -z "$WEB_SPECS" ]; then
+    passa "nenhum spec do e2e é afetado por este diff"
+    [ -s /tmp/prepush-escopo.log ] && sed 's/^/  /' /tmp/prepush-escopo.log
+  else
+    if [ "$WEB_SPECS" = "*" ]; then SPEC_ARGS=(); QUAIS="suíte inteira"; else
+      SPEC_ARGS=(); for sp in $WEB_SPECS; do SPEC_ARGS+=("e2e/$sp"); done
+      QUAIS="$(echo "$WEB_SPECS" | wc -w | tr -d ' ') spec(s): $(echo $WEB_SPECS | sed 's/\.spec\.ts//g')"
+    fi
+    echo "  escopo: $QUAIS"
+    sed 's/^/  /' /tmp/prepush-escopo.log
+
+    if porta_aberta 3000 || porta_aberta 3001; then
+      bloqueia "porta 3000 ou 3001 ocupada — o e2e sobe a API e o web nelas; encerre o que estiver rodando"
+    elif prepara_banco; then
+      # Estes dois precisam existir no build E no start (ver o job `e2e` do ci.yml).
+      export API_BACKEND_URL="http://localhost:3000/api" NEXT_PUBLIC_API_URL="/api-proxy"
+      echo "  … build da API e do web"
+      build_com_retry /tmp/prepush-e2e-build.log --filter=orbien-backend --filter=orbien-web; RC=$?
+      if [ $RC -eq 2 ]; then
+        alerta "e2e NÃO rodou: build do web caiu no crash conhecido do Next 16.x mesmo após 3 tentativas (AJU-04, vercel/next.js#95741) — rode em outra máquina ou confirme no CI"
+      elif [ $RC -ne 0 ]; then
+        bloqueia "build para o e2e falhou — veja /tmp/prepush-e2e-build.log"
+      else
+        PORT=3000 ALLOWED_ORIGINS=http://localhost:3001 FRONTEND_URL=http://localhost:3001 \
+          node apps/api/dist/src/main.js >/tmp/prepush-e2e-api.log 2>&1 &
+        PIDS+=("$!")
+        (cd apps/web && exec node ../../node_modules/next/dist/bin/next start --port 3001) >/tmp/prepush-e2e-web.log 2>&1 &
+        PIDS+=("$!")
+        if ! espera_url http://localhost:3000/api/health 60; then
+          bloqueia "a API não respondeu em 120s — veja /tmp/prepush-e2e-api.log"; tail -6 /tmp/prepush-e2e-api.log | sed 's/^/      /'
+        elif ! espera_url http://localhost:3001/login 60; then
+          bloqueia "o web não respondeu em 120s — veja /tmp/prepush-e2e-web.log"; tail -6 /tmp/prepush-e2e-web.log | sed 's/^/      /'
+        else
+          # Credenciais do seed, não segredo; as mesmas do job `e2e` do ci.yml.
+          # teste2-church (Premium), nunca doca-church.
+          E2E_BASE_URL=http://localhost:3001 E2E_API_URL=http://localhost:3000/api \
+          E2E_EMAIL=fvargaspf+teste2@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste2-church \
+          E2E_SUPPORT_EMAIL=fernando.vargas@fill.tech E2E_SUPPORT_PASSWORD=A3dodfemf \
+            npm run e2e -w orbien-web -- "${SPEC_ARGS[@]}" >/tmp/prepush-e2e.log 2>&1 \
+            && passa "e2e — $QUAIS" \
+            || {
+              bloqueia "e2e falhou — veja /tmp/prepush-e2e.log (traces em apps/web/test-results, relatório em apps/web/playwright-report)"
+              grep -E "✘|^\s+[0-9]+\) |passed|failed|Executable doesn't exist" /tmp/prepush-e2e.log | tail -12 | sed 's/^/      /'
+            }
+        fi
+      fi
+      encerra; PIDS=()
+    fi
+  fi
+fi
+
+if ! $RAPIDO && quer site; then
+  if [ "$SITE_NO_ESCOPO" != "0" ] || [ "$SO" = "site" ]; then
+    echo
+    echo "▶ Smoke do site (o diff toca o site)"
+    if porta_aberta 3002; then
+      bloqueia "porta 3002 ocupada — o smoke sobe o site nela; encerre o que estiver rodando"
+    elif build_com_retry /tmp/prepush-site-build.log --filter=orbien-site; RC=$?; [ $RC -eq 2 ]; then
+      alerta "smoke do site NÃO rodou: build caiu no crash conhecido do Next 16.x mesmo após 3 tentativas (AJU-04, vercel/next.js#95741) — confirme no CI"
+    elif [ $RC -ne 0 ]; then
+      bloqueia "build do site falhou — veja /tmp/prepush-site-build.log"
+    else
+      (cd apps/site && exec node ../../node_modules/next/dist/bin/next start --port 3002) >/tmp/prepush-site.log 2>&1 &
+      PIDS+=("$!")
+      if ! espera_url http://localhost:3002/ 60; then
+        bloqueia "o site não respondeu em 120s — veja /tmp/prepush-site.log"
+      else
+        E2E_BASE_URL=http://localhost:3002 npm run e2e -w orbien-site >/tmp/prepush-site-smoke.log 2>&1 \
+          && passa "smoke do site" \
+          || { bloqueia "smoke do site falhou — veja /tmp/prepush-site-smoke.log"; grep -E "✘|^\s+[0-9]+\) |passed|failed|Executable doesn't exist" /tmp/prepush-site-smoke.log | tail -8 | sed 's/^/      /'; }
+      fi
+      encerra; PIDS=()
+    fi
+  fi
 fi
 
 # ── Revisão por IA, opcional ──────────────────────────────────────────────
@@ -220,7 +403,15 @@ fi
 if [ ${#BLOCKS[@]} -gt 0 ]; then
   echo "BLOQUEADO — ${#BLOCKS[@]} problema(s):"
   for b in "${BLOCKS[@]}"; do echo "  ✗ $b"; done
+  echo
+  echo "Corrija a causa (não o teste, o piso ou o escopo) e rode de novo até liberar."
   exit 1
+fi
+
+if $RAPIDO || [ -n "$SO" ]; then
+  PARCIAL=$($RAPIDO && echo "--rapido" || echo "--so=$SO")
+  echo "PARCIAL — $PARCIAL não libera PR. Rode 'bash scripts/pre-push.sh' inteiro antes de subir."
+  exit 0
 fi
 
 echo "Liberado para push."

@@ -74,6 +74,13 @@ Verifique no diff e mencione em **Riscos e pendências** quando aparecer:
 | `apps/web/e2e/` | como rodar a suíte |
 | Rota de API removida ou renomeada | quem consome no front precisa mudar junto |
 
+## Antes de abrir: portão verde
+
+Antes da revisão, `bash scripts/pre-push.sh` completo tem que liberar (testes e
+cobertura dos 5 apps, e2e do escopo afetado, smoke do site se tocou o site).
+Falhou: corrija a causa e rode de novo — ver "Antes de subir" no `CLAUDE.md`.
+Em **Como validar**, cite o resultado dele; `--rapido` e `--so=` não valem.
+
 ## Antes de abrir: revisar
 
 O padrão deste repositório é **revisar localmente antes de abrir o PR**, em vez
