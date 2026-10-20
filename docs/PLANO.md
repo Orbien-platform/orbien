@@ -634,7 +634,27 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
   Arquivos de material só aceitam PDF/Word, também em `POST/PATCH
   /study-materials`.
 
+- Revisão local antes do PR (2026-10-20), ajustada: o ticket de upload agora
+  carrega `upload_kind` (`post_media`, `meeting_material`, `study_material`) e a
+  rota confere — antes, o ticket de reunião valia em `POST /study-materials/upload/:id`,
+  rota só da administração; o push de material endereça `UserAccount` por
+  `include_external_user_ids` (o app registra `external_id` = conta e só as tags
+  `tenant_id`/`congregation_id`/`role`, sem `person_id`) via
+  `NotificationsService.sendPushToPersons`; `sendPush`/`dispatch` devolvem se o
+  OneSignal aceitou e o `notified_at` só é gravado nesse caso, com retentativa
+  limitada a 24h; `uploadMaterial` grava `visibility` e `publish_at` no material
+  (antes o `publishPending` e `GET /small-groups/:id/materials` o tratavam como
+  público e liberado); `cell_leader` só envia/vincula/remove material de PG que
+  lidera (`assertCanManageMaterials`); o arquivo só sobe ao R2 depois de validado
+  o alcance.
+
 Falta:
+- Teste e2e (`apps/web/e2e`) de `/materiais` e do modo arquivo do encontro, só
+  em `teste1-church`/`teste2-church`.
+- A validação de arquivo confere mimetype e extensão, não o conteúdo (magic
+  bytes).
+- Rede apagada deixa `audience = 'network'` com `network_id` nulo (`SET NULL`);
+  é cosmético, a lista de PGs já foi gravada.
 - Exibir os materiais do PG (`GET /small-groups/:groupId/materials`) na tela do
   PG no web e no app mobile; hoje só a lista por encontro aparece lá.
 - Edição de audiência/visibilidade de material já criado (o `PATCH` não troca).

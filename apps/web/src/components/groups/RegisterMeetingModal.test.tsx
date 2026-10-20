@@ -853,6 +853,8 @@ describe("RegisterMeetingModal", () => {
       );
       expect(await screen.findByText("Roteiro do líder")).toBeInTheDocument();
       expect(screen.getByText("Somente líderes")).toBeInTheDocument();
+      // O seletor de arquivo é esvaziado junto com o estado.
+      expect((screen.getByLabelText("Arquivo do material") as HTMLInputElement).files).toHaveLength(0);
     });
 
     it("mostra mensagem específica quando a API recusa o tamanho", async () => {

@@ -163,9 +163,9 @@ export class MeetingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<{ upload_token: string; expires_in: number }> {
-    // Reunião inexistente (ou de outra congregação, pelo RLS) falha aqui, não
-    // depois de 50 MB pela rede.
-    await this.meetingsService.assertMeetingExists(id);
+    // Reunião inexistente (ou de outra congregação, pelo RLS) e líder de outro
+    // PG falham aqui, não depois de 50 MB pela rede.
+    await this.meetingsService.assertCanManageMaterials(id, user);
 
     const payload: JwtPayload = {
       sub: user.sub,
@@ -174,6 +174,7 @@ export class MeetingsController {
       roles: [],
       plan: user.plan,
       scope: 'upload',
+      upload_kind: 'meeting_material',
       upload_target: id,
       ...(user.impersonated_by ? { impersonated_by: user.impersonated_by } : {}),
       ...(user.support_session ? { support_session: true } : {}),
@@ -186,7 +187,7 @@ export class MeetingsController {
 
   @Post('meetings/:id/materials/upload')
   @Roles(...MATERIAL_WRITE_ROLES)
-  @UploadTicketRoute()
+  @UploadTicketRoute('meeting_material')
   @UseInterceptors(
     FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MATERIAL_FILE_MAX_BYTES } }),
   )
@@ -213,7 +214,8 @@ export class MeetingsController {
   removeMaterial(
     @Param('meetingId', ParseUUIDPipe) meetingId: string,
     @Param('materialId', ParseUUIDPipe) materialId: string,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.meetingsService.removeMaterial(meetingId, materialId);
+    return this.meetingsService.removeMaterial(meetingId, materialId, user);
   }
 }

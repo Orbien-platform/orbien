@@ -16,7 +16,7 @@ import { assertMaterialFile } from './material-file';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { NotificationsService, personFilterBatches } from '../content/notifications.service';
+import { NotificationsService } from '../content/notifications.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateStudyMaterialDto } from './dto/create-study-material.dto';
 import { UpdateStudyMaterialDto } from './dto/update-study-material.dto';
@@ -59,9 +59,13 @@ export class StudyMaterialsService {
       );
     }
 
+    // Tudo que pode recusar a requisição vem antes do upload: um 400 depois
+    // dele deixaria o arquivo órfão no bucket.
+    const ext = file ? assertMaterialFile(file).ext : undefined;
+    const { audience, network_id, groupIds } = await this.resolveAudience(dto, user);
+
     let file_url: string | undefined;
     if (file) {
-      const { ext } = assertMaterialFile(file);
       const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
       file_url = await this.storageService.upload(
         file.buffer,
@@ -70,48 +74,52 @@ export class StudyMaterialsService {
       );
     }
 
-    const { audience, network_id, groupIds } = await this.resolveAudience(dto, user);
-
-    return this.prisma.runInTx(
-      async (tx) => {
-        const material = await tx.studyMaterial.create({
-          data: {
-            tenant_id: user.tenant_id,
-            congregation_id: user.congregation_id,
-            title: dto.title,
-            description: dto.description,
-            author: dto.author,
-            source_type: dto.source_type,
-            rich_content: dto.rich_content,
-            file_url,
-            publish_at: new Date(dto.publish_at),
-            expires_at: dto.expires_at ? new Date(dto.expires_at) : undefined,
-            audience,
-            network_id,
-            visibility: dto.visibility ?? MaterialVisibility.all,
-            tags: dto.tags ?? [],
-          },
-        });
-
-        if (groupIds.length > 0) {
-          await tx.materialTarget.createMany({
-            data: groupIds.map((small_group_id) => ({
-              study_material_id: material.id,
-              small_group_id,
-            })),
-            skipDuplicates: true,
+    try {
+      return await this.prisma.runInTx(
+        async (tx) => {
+          const material = await tx.studyMaterial.create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              title: dto.title,
+              description: dto.description,
+              author: dto.author,
+              source_type: dto.source_type,
+              rich_content: dto.rich_content,
+              file_url,
+              publish_at: new Date(dto.publish_at),
+              expires_at: dto.expires_at ? new Date(dto.expires_at) : undefined,
+              audience,
+              network_id,
+              visibility: dto.visibility ?? MaterialVisibility.all,
+              tags: dto.tags ?? [],
+            },
           });
-        }
 
-        return tx.studyMaterial.findUnique({
-          where: { id: material.id },
-          include: {
-            materialTargets: { include: { smallGroup: true } },
-          },
-        });
-      },
-      { timeout: 30_000, maxWait: 10_000 },
-    );
+          if (groupIds.length > 0) {
+            await tx.materialTarget.createMany({
+              data: groupIds.map((small_group_id) => ({
+                study_material_id: material.id,
+                small_group_id,
+              })),
+              skipDuplicates: true,
+            });
+          }
+
+          return tx.studyMaterial.findUnique({
+            where: { id: material.id },
+            include: {
+              materialTargets: { include: { smallGroup: true } },
+            },
+          });
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      );
+    } catch (err) {
+      // Sem a linha no banco o arquivo ficaria órfão no bucket.
+      await this.storageService.deleteByUrl(file_url);
+      throw err;
+    }
   }
 
   /**
@@ -379,8 +387,14 @@ export class StudyMaterialsService {
     }
 
     const now = new Date();
+    // Janela de 24h: um envio que não passa não é retentado para sempre, e
+    // material publicado há mais que isso sem aviso (o job parado, o
+    // OneSignal fora) não vira push surpresa quando o job voltar.
     const pending = await this.prisma.system.studyMaterial.findMany({
-      where: { publish_at: { lte: now }, notified_at: null },
+      where: {
+        publish_at: { lte: now, gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        notified_at: null,
+      },
       select: {
         id: true,
         title: true,
@@ -412,16 +426,22 @@ export class StudyMaterialsService {
                 distinct: ['person_id'],
               });
 
-        for (const filters of personFilterBatches(members.map((m) => m.person_id))) {
-          await this.notifications.sendPush({
-            tenantId: material.tenant_id,
-            congregationId: material.congregation_id,
-            contentPostId: null,
-            title: 'Novo material disponível',
-            body: `${material.title} foi publicado no seu grupo.`,
-            filters,
-            data: { type: 'study_material', material_id: material.id },
-          });
+        const delivered =
+          members.length === 0 ||
+          (await this.notifications.sendPushToPersons(
+            {
+              tenantId: material.tenant_id,
+              congregationId: material.congregation_id,
+              contentPostId: null,
+              title: 'Novo material disponível',
+              body: `${material.title} foi publicado no seu grupo.`,
+              data: { type: 'study_material', material_id: material.id },
+            },
+            members.map((m) => m.person_id),
+          ));
+        if (!delivered) {
+          this.logger.warn(`OneSignal não aceitou o aviso do material ${material.id}`);
+          continue;
         }
 
         await this.prisma.system.studyMaterial.update({

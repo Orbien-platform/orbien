@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService, personFilterBatches } from '../content/notifications.service';
+import { NotificationsService } from '../content/notifications.service';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Avisa por push os inscritos no PG quando um material de encontro é liberado.
@@ -24,10 +26,21 @@ export class MeetingMaterialNotifier {
     private readonly notifications: NotificationsService,
   ) {}
 
+  // Só vínculos agendados cuja hora chegou nas últimas 24h: é o que o cron
+  // cobre. Vínculo imediato avisa no próprio request e, se o envio falhar, não
+  // é retentado aqui (`release_at` nulo); e aviso atrasado por mais de um dia
+  // já não é novidade — a janela impede a retentativa eterna de um envio que
+  // não passa.
   @Cron('*/10 * * * *')
   async cronNotifyReleased(): Promise<void> {
+    if (!process.env['ONESIGNAL_APP_ID']) return;
+
+    const now = Date.now();
     const pending = await this.prisma.system.groupMeetingMaterial.findMany({
-      where: { notified_at: null, release_at: { lte: new Date() } },
+      where: {
+        notified_at: null,
+        release_at: { lte: new Date(now), gte: new Date(now - DAY_MS) },
+      },
       select: { id: true },
       take: 200,
     });
@@ -62,21 +75,25 @@ export class MeetingMaterialNotifier {
         select: { person_id: true },
       });
 
-      for (const filters of personFilterBatches(members.map((m) => m.person_id))) {
-        await this.notifications.sendPush({
+      const delivered = await this.notifications.sendPushToPersons(
+        {
           tenantId: group.tenant_id,
           congregationId: group.congregation_id,
           contentPostId: null,
           title: `Material do encontro — ${group.name}`,
           body: `${link.material.title} já está disponível.`,
-          filters,
           data: {
             type: 'meeting_material',
             small_group_id: link.meeting.small_group_id,
             meeting_id: link.meeting_id,
             material_id: link.material_id,
           },
-        });
+        },
+        members.map((m) => m.person_id),
+      );
+      if (!delivered) {
+        this.logger.warn(`OneSignal não aceitou o aviso do vínculo ${linkId}`);
+        return;
       }
 
       await this.prisma.system.groupMeetingMaterial.update({
@@ -84,8 +101,9 @@ export class MeetingMaterialNotifier {
         data: { notified_at: new Date() },
       });
     } catch (err) {
-      // Aviso é best-effort: falhar não pode desfazer o vínculo. O cron tenta
-      // de novo no próximo ciclo enquanto `notified_at` seguir nulo.
+      // Aviso é best-effort: falhar não pode desfazer o vínculo. `notified_at`
+      // fica nulo, e o cron tenta de novo se o vínculo for agendado e ainda
+      // estiver na janela de 24h.
       this.logger.error(`Falha ao avisar o material do vínculo ${linkId}: ${String(err)}`);
     }
   }

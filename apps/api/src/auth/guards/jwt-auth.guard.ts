@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import { UPLOAD_TICKET_KEY } from '../decorators/upload-ticket.decorator';
+import { UPLOAD_TICKET_KEY, type UploadTicketKind } from '../decorators/upload-ticket.decorator';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 /**
@@ -29,12 +29,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>();
     if (user?.scope !== 'upload') return true;
 
-    const rotaDeUpload = this.reflector.getAllAndOverride<boolean | undefined>(
+    const tipoDaRota = this.reflector.getAllAndOverride<UploadTicketKind | undefined>(
       UPLOAD_TICKET_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    if (!rotaDeUpload) {
+    if (!tipoDaRota || (user.upload_kind ?? 'post_media') !== tipoDaRota) {
       throw new UnauthorizedException('Ticket de upload não vale nesta rota.');
     }
 

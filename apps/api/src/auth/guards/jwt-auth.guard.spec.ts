@@ -45,7 +45,7 @@ describe('JwtAuthGuard', () => {
     pai.canActivate = original;
   });
 
-  function guard(rotaDeUpload: boolean | undefined): JwtAuthGuard {
+  function guard(rotaDeUpload: string | undefined): JwtAuthGuard {
     const reflector = {
       getAllAndOverride: jest.fn().mockReturnValue(rotaDeUpload),
     } as unknown as Reflector;
@@ -65,11 +65,33 @@ describe('JwtAuthGuard', () => {
 
   it('deixa o ticket passar na rota marcada com @UploadTicketRoute', async () => {
     const ticket: JwtPayload = { ...base, roles: [], scope: 'upload', upload_target: 'p-1' };
-    await expect(guard(true).canActivate(contexto(ticket))).resolves.toBe(true);
+    await expect(guard('post_media').canActivate(contexto(ticket))).resolves.toBe(true);
+  });
+
+  it('ticket sem upload_kind vale como post_media (emitido antes do campo existir)', async () => {
+    const ticket: JwtPayload = { ...base, roles: [], scope: 'upload', upload_target: 'p-1' };
+    await expect(guard('post_media').canActivate(contexto(ticket))).resolves.toBe(true);
+    await expect(guard('study_material').canActivate(contexto(ticket))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('recusa ticket de um tipo em rota de upload de outro tipo', async () => {
+    const ticket: JwtPayload = {
+      ...base,
+      roles: [],
+      scope: 'upload',
+      upload_target: 'x-1',
+      upload_kind: 'meeting_material',
+    };
+    await expect(guard('study_material').canActivate(contexto(ticket))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    await expect(guard('meeting_material').canActivate(contexto(ticket))).resolves.toBe(true);
   });
 
   it('não deixa passar quando o passport já recusou', async () => {
     pai.canActivate = jest.fn().mockResolvedValue(false);
-    await expect(guard(true).canActivate(contexto(base))).resolves.toBe(false);
+    await expect(guard('post_media').canActivate(contexto(base))).resolves.toBe(false);
   });
 });

@@ -45,7 +45,7 @@ describe('MeetingsController', () => {
       removeMaterial: jest.fn(),
       createCheckinToken: jest.fn(),
       checkin: jest.fn(),
-      assertMeetingExists: jest.fn(),
+      assertCanManageMaterials: jest.fn(),
       listGroupMaterials: jest.fn(),
       uploadMaterial: jest.fn(),
     } as unknown as jest.Mocked<MeetingsService>;
@@ -86,7 +86,7 @@ describe('MeetingsController', () => {
         UPLOAD_TICKET_KEY,
         MeetingsController.prototype.uploadMaterial,
       ),
-    ).toBe(true);
+    ).toBe('meeting_material');
     expect(
       Reflect.getMetadata(UPLOAD_TICKET_KEY, MeetingsController.prototype.materialUploadTicket),
     ).toBeUndefined();
@@ -95,9 +95,14 @@ describe('MeetingsController', () => {
   it('materialUploadTicket confere a reunião e assina ticket sem papel, preso a ela', async () => {
     const result = await controller.materialUploadTicket('meet1', USER);
 
-    expect(service.assertMeetingExists).toHaveBeenCalledWith('meet1');
+    expect(service.assertCanManageMaterials).toHaveBeenCalledWith('meet1', USER);
     expect(jwt.sign).toHaveBeenCalledWith(
-      expect.objectContaining({ roles: [], scope: 'upload', upload_target: 'meet1' }),
+      expect.objectContaining({
+        roles: [],
+        scope: 'upload',
+        upload_kind: 'meeting_material',
+        upload_target: 'meet1',
+      }),
       { expiresIn: 300 },
     );
     expect(result).toEqual({ upload_token: 'ticket', expires_in: 300 });
@@ -198,9 +203,9 @@ describe('MeetingsController', () => {
   it('removeMaterial delega ao service', async () => {
     service.removeMaterial.mockResolvedValue({ id: 'link1' } as never);
 
-    const result = await controller.removeMaterial('meet1', 'mat1');
+    const result = await controller.removeMaterial('meet1', 'mat1', USER);
 
-    expect(service.removeMaterial).toHaveBeenCalledWith('meet1', 'mat1');
+    expect(service.removeMaterial).toHaveBeenCalledWith('meet1', 'mat1', USER);
     expect(result).toEqual({ id: 'link1' });
   });
 

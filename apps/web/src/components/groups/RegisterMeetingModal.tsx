@@ -82,6 +82,8 @@ export function RegisterMeetingModal({
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
+  // O <input type="file"> não é controlado: trocar a key é o que o esvazia.
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [fileTitle, setFileTitle] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [materialVisibility, setMaterialVisibility] = useState<MaterialVisibility>("all");
@@ -211,6 +213,7 @@ export function RegisterMeetingModal({
         );
         setMeetingMaterials((prev) => [...prev, created]);
         setMaterialFile(null);
+        setFileInputKey((k) => k + 1);
         setFileTitle("");
         setMaterialVisibility("all");
         setMaterialReleaseAt("");
@@ -579,6 +582,7 @@ export function RegisterMeetingModal({
                   className="rounded-[8px]"
                 />
                 <input
+                  key={fileInputKey}
                   type="file"
                   accept={MATERIAL_FILE_ACCEPT}
                   aria-label="Arquivo do material"

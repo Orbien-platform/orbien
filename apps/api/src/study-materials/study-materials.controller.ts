@@ -61,7 +61,7 @@ export class StudyMaterialsController {
    * Ticket para subir o arquivo direto na API, fora do `/api-proxy` (teto de
    * 4,5 MB na Vercel) — mesmo desenho do upload de posts (ver DEPLOY.md). Não
    * há recurso a que prender o ticket (o material ainda não existe), então ele
-   * é preso a um `upload_id` sorteado aqui e usado uma vez na rota de upload.
+   * é preso a um `upload_id` sorteado aqui, e o tipo `study_material` o impede de valer em outras rotas de upload.
    * O `:id` da rota tem esse nome porque o `RolesGuard` compara
    * `upload_target` com `params.id`.
    */
@@ -80,6 +80,7 @@ export class StudyMaterialsController {
       roles: [],
       plan: user.plan,
       scope: 'upload',
+      upload_kind: 'study_material',
       upload_target: upload_id,
       ...(user.impersonated_by ? { impersonated_by: user.impersonated_by } : {}),
       ...(user.support_session ? { support_session: true } : {}),
@@ -93,7 +94,7 @@ export class StudyMaterialsController {
 
   @Post('upload/:id')
   @Roles(...WRITE_ROLES)
-  @UploadTicketRoute()
+  @UploadTicketRoute('study_material')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: FILE_MAX_BYTES } }))
   createWithTicket(
     @Body() dto: CreateStudyMaterialDto,

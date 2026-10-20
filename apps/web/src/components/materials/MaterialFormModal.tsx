@@ -44,7 +44,10 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
   const [releaseAt, setReleaseAt] = useState("");
   const [networks, setNetworks] = useState<NetworkOption[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
-  const [optionsError, setOptionsError] = useState(false);
+  // Cada lista falha sozinha: /networks é Premium e responde 403 em outros
+  // planos, e isso não pode apagar o seletor de PG (nem o inverso).
+  const [networksError, setNetworksError] = useState(false);
+  const [groupsError, setGroupsError] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -52,18 +55,16 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
   useEffect(() => {
     if (!open) return;
     const signal = { cancelled: false };
-    Promise.all([
+    Promise.allSettled([
       api.get<NetworkOption[]>("/networks"),
       api.get<{ data: GroupOption[] }>("/small-groups?limit=100"),
-    ])
-      .then(([n, g]) => {
-        if (signal.cancelled) return;
-        setNetworks(n.data);
-        setGroups(g.data.data ?? []);
-      })
-      .catch(() => {
-        if (!signal.cancelled) setOptionsError(true);
-      });
+    ]).then(([n, g]) => {
+      if (signal.cancelled) return;
+      if (n.status === "fulfilled") setNetworks(n.value.data);
+      else setNetworksError(true);
+      if (g.status === "fulfilled") setGroups(g.value.data.data ?? []);
+      else setGroupsError(true);
+    });
     return () => {
       signal.cancelled = true;
     };
@@ -181,7 +182,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
             Todas as redes
           </label>
           <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
-            <input type="radio" name="material-audience" checked={audience === "network"} onChange={() => setAudience("network")} />
+            <input type="radio" name="material-audience" checked={audience === "network"} disabled={networksError} onChange={() => setAudience("network")} />
             Uma rede
           </label>
           {audience === "network" && (
@@ -198,7 +199,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
             </select>
           )}
           <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
-            <input type="radio" name="material-audience" checked={audience === "group"} onChange={() => setAudience("group")} />
+            <input type="radio" name="material-audience" checked={audience === "group"} disabled={groupsError} onChange={() => setAudience("group")} />
             Um PG
           </label>
           {audience === "group" && (
@@ -214,8 +215,11 @@ export function MaterialFormModal({ open, onOpenChange, onSaved }: MaterialFormM
               ))}
             </select>
           )}
-          {optionsError && (
-            <p className="text-xs text-crimson">Não foi possível carregar as redes e os PGs.</p>
+          {networksError && (
+            <p className="text-xs text-crimson">Não foi possível carregar as redes.</p>
+          )}
+          {groupsError && (
+            <p className="text-xs text-crimson">Não foi possível carregar os PGs.</p>
           )}
         </fieldset>
 

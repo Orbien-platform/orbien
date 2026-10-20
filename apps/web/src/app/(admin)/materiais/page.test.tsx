@@ -94,4 +94,24 @@ describe("MateriaisPage", () => {
     expect(await screen.findByText("Você não tem acesso a Materiais.")).toBeInTheDocument();
     expect(screen.queryByText("Estudo de Rute")).not.toBeInTheDocument();
   });
+
+  it("falha que não é 403 mostra erro com nova tentativa, não 'nenhum material'", async () => {
+    setup(["admin_congregation"]);
+    mockedApi.get.mockRejectedValueOnce({ response: { status: 500 } });
+    const user = userEvent.setup();
+    render(<MateriaisPage />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar os materiais.");
+    expect(screen.queryByText(/Nenhum material ainda/)).not.toBeInTheDocument();
+
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.resolve({ data: [] })
+        : Promise.resolve({
+            data: { data: [{ id: "m1", title: "Voltou", audience: "all_networks", visibility: "all", publish_at: "2026-01-10T12:00:00.000Z", materialTargets: [] }] },
+          })
+    );
+    await user.click(screen.getByRole("button", { name: /Tentar de novo/ }));
+    expect(await screen.findByText("Voltou")).toBeInTheDocument();
+  });
 });

@@ -52,6 +52,7 @@ export default function MateriaisPage() {
   const [rows, setRows] = useState<(MaterialRow & { network_id?: string | null })[]>([]);
   const [networks, setNetworks] = useState<Record<string, string>>({});
   const [accessDenied, setAccessDenied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const requestKey = `${reloadTick}`;
@@ -73,11 +74,16 @@ export default function MateriaisPage() {
         setRows(materials.data.data ?? []);
         setNetworks(Object.fromEntries(nets.data.map((n) => [n.id, n.name])));
         setAccessDenied(false);
+        setLoadError(false);
       })
       .catch((error) => {
         if (signal.cancelled) return;
         setRows([]);
-        setAccessDenied(isForbidden(error));
+        const denied = isForbidden(error);
+        setAccessDenied(denied);
+        // Falha que não é falta de acesso não pode virar "nenhum material": quem
+        // lê a lista vazia como fato cria material em duplicidade.
+        setLoadError(!denied);
       })
       .finally(() => {
         if (!signal.cancelled) setLoadedKey(requestKey);
@@ -148,6 +154,8 @@ export default function MateriaisPage() {
         rows={rows}
         getRowKey={(row) => row.id}
         isLoading={isLoading}
+        error={loadError ? "Não foi possível carregar os materiais." : undefined}
+        onRetry={loadError ? reload : undefined}
         emptyState={
           accessDenied ? (
             <NoAccessState resource="Materiais" />

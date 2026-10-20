@@ -148,7 +148,7 @@ describe('StudyMaterialsController', () => {
   it('upload-ticket e upload/:id exigem papel de escrita; só o upload aceita ticket', () => {
     expect(rolesFor('uploadTicket')).toEqual(WRITE_ROLES);
     expect(rolesFor('createWithTicket')).toEqual(WRITE_ROLES);
-    expect(Reflect.getMetadata(UPLOAD_TICKET_KEY, StudyMaterialsController.prototype.createWithTicket)).toBe(true);
+    expect(Reflect.getMetadata(UPLOAD_TICKET_KEY, StudyMaterialsController.prototype.createWithTicket)).toBe('study_material');
     expect(Reflect.getMetadata(UPLOAD_TICKET_KEY, StudyMaterialsController.prototype.uploadTicket)).toBeUndefined();
   });
 
@@ -158,7 +158,12 @@ describe('StudyMaterialsController', () => {
     expect(result.upload_token).toBe('ticket');
     expect(result.upload_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(jwt.sign).toHaveBeenCalledWith(
-      expect.objectContaining({ roles: [], scope: 'upload', upload_target: result.upload_id }),
+      expect.objectContaining({
+        roles: [],
+        scope: 'upload',
+        upload_kind: 'study_material',
+        upload_target: result.upload_id,
+      }),
       { expiresIn: 300 },
     );
   });

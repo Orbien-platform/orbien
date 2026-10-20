@@ -11,4 +11,12 @@ export const UPLOAD_TICKET_KEY = 'upload_ticket_route';
  * fica legível, precisa não servir para mais nada: sem esta marca, o
  * `JwtAuthGuard` recusa qualquer token com `scope: 'upload'`.
  */
-export const UploadTicketRoute = () => SetMetadata(UPLOAD_TICKET_KEY, true);
+/**
+ * Cada rota de upload declara o tipo de ticket que aceita. O `upload_target`
+ * sozinho não basta: ele é só um UUID, e um ticket emitido para um recurso (a
+ * reunião) valeria em outra rota de upload cujo `:id` fosse o mesmo UUID.
+ */
+export type UploadTicketKind = 'post_media' | 'meeting_material' | 'study_material';
+
+export const UploadTicketRoute = (kind: UploadTicketKind = 'post_media') =>
+  SetMetadata(UPLOAD_TICKET_KEY, kind);

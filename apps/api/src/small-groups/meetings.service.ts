@@ -48,6 +48,10 @@ const CHECKIN_TOKEN_TTL_MINUTES = 240;
 const CHECKIN_MAX_MEETING_AGE_HOURS = 24;
 
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
+// Os dois papéis que mexem em material de qualquer PG da congregação. Os demais
+// (`cell_leader`) só mexem no do PG que lideram — o RLS filtra por congregação,
+// não por papel.
+const MATERIAL_ADMIN_ROLES = ['tenant_admin', 'admin_congregation'];
 
 // Espelha `MEETING_READ_ROLES` do controller — papéis de liderança que já
 // enxergam grupos que não lideram (ex.: `pastor`/`secretary` cobrindo a rede
@@ -250,12 +254,48 @@ export class MeetingsService {
     return this.prisma.client.attendanceRecord.delete({ where: { id: record.id } });
   }
 
-  async assertMeetingExists(meetingId: string): Promise<void> {
+  /**
+   * Confere que o encontro existe e que quem escreve pode mexer no material
+   * dele: administração de qualquer PG da congregação; `cell_leader` só do PG
+   * que lidera (líder titular do PG, ou `leader`/`trainee` na membership).
+   * Devolve o PG do encontro.
+   */
+  async assertCanManageMaterials(meetingId: string, user: JwtPayload): Promise<string> {
     const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
-      select: { id: true },
+      select: {
+        id: true,
+        small_group_id: true,
+        smallGroup: { select: { leader_person_id: true } },
+      },
     });
     if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
+    if (user.roles.some((role) => MATERIAL_ADMIN_ROLES.includes(role))) {
+      return meeting.small_group_id;
+    }
+
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: user.sub },
+      select: { person_id: true },
+    });
+    const personId = account?.person_id;
+    if (personId && personId === meeting.smallGroup.leader_person_id) {
+      return meeting.small_group_id;
+    }
+
+    const membership = personId
+      ? await this.prisma.client.groupMembership.findUnique({
+          where: {
+            small_group_id_person_id: { small_group_id: meeting.small_group_id, person_id: personId },
+          },
+          select: { role: true },
+        })
+      : null;
+    if (!membership || !['leader', 'trainee'].includes(membership.role)) {
+      throw new ForbiddenException('Só quem lidera este grupo pode enviar material para ele');
+    }
+    return meeting.small_group_id;
   }
 
   async addMaterial(
@@ -263,11 +303,7 @@ export class MeetingsService {
     dto: CreateMeetingMaterialDto,
     user: JwtPayload,
   ): Promise<GroupMeetingMaterial> {
-    const meeting = await this.prisma.client.groupMeeting.findUnique({
-      where: { id: meetingId },
-      select: { id: true },
-    });
-    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+    await this.assertCanManageMaterials(meetingId, user);
 
     const material = await this.prisma.client.studyMaterial.findUnique({
       where: { id: dto.material_id },
@@ -318,11 +354,7 @@ export class MeetingsService {
     if (!file) throw new BadRequestException('Arquivo obrigatório.');
     const { ext, source } = assertMaterialFile(file);
 
-    const meeting = await this.prisma.client.groupMeeting.findUnique({
-      where: { id: meetingId },
-      select: { id: true, small_group_id: true },
-    });
-    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+    const smallGroupId = await this.assertCanManageMaterials(meetingId, user);
 
     const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
     const file_url = await this.storage.upload(file.buffer, key, file.mimetype);
@@ -339,12 +371,18 @@ export class MeetingsService {
               title: dto.title.trim(),
               source_type: source,
               file_url,
-              publish_at: new Date(),
+              // O material espelha o vínculo: sem isso o `publishPending` e a
+              // listagem do PG (`listGroupMaterials`) tratariam um material
+              // "só líderes" ou agendado como público e já liberado.
+              visibility: dto.visibility ?? MaterialVisibility.all,
+              publish_at: releaseAt ?? new Date(),
+              // O aviso é do `MeetingMaterialNotifier`, por vínculo.
+              notified_at: new Date(),
               tags: [],
             },
           });
           await tx.materialTarget.create({
-            data: { study_material_id: material.id, small_group_id: meeting.small_group_id },
+            data: { study_material_id: material.id, small_group_id: smallGroupId },
           });
           return tx.groupMeetingMaterial.create({
             data: {
@@ -431,18 +469,15 @@ export class MeetingsService {
   async removeMaterial(
     meetingId: string,
     materialId: string,
+    user: JwtPayload,
   ): Promise<GroupMeetingMaterial> {
     // A reunião vem primeiro de propósito. `group_meetings` tem a policy
     // `tenant_congregation_isolation`; `group_meeting_materials` tem só a de
     // tenant. Sem esta leitura, o DELETE encontrava o vínculo pela chave
     // (meeting_id, material_id) e apagava material de reunião de outra
-    // congregação do mesmo tenant. `addMaterial` e `listMaterials` já validavam
-    // a reunião assim — só a remoção escapava.
-    const meeting = await this.prisma.client.groupMeeting.findUnique({
-      where: { id: meetingId },
-      select: { id: true },
-    });
-    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+    // congregação do mesmo tenant. `assertCanManageMaterials` faz essa leitura
+    // e ainda confere que quem remove lidera o PG (ou administra).
+    await this.assertCanManageMaterials(meetingId, user);
 
     const link = await this.prisma.client.groupMeetingMaterial.findUnique({
       where: {

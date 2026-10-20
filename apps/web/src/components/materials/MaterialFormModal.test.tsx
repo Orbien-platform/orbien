@@ -126,4 +126,36 @@ describe("MaterialFormModal", () => {
     await user.click(screen.getByRole("button", { name: "Publicar material" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Arquivo muito grande");
   });
+
+  it("falha em /networks (plano sem redes) não apaga o seletor de PG", async () => {
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.reject({ response: { status: 403 } })
+        : Promise.resolve({ data: { data: [{ id: "g1", name: "Centro" }] } })
+    );
+    const user = userEvent.setup({ applyAccept: false });
+    render(<MaterialFormModal open onOpenChange={vi.fn()} onSaved={vi.fn()} />);
+
+    expect(await screen.findByText("Não foi possível carregar as redes.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Uma rede")).toBeDisabled();
+
+    await user.click(screen.getByLabelText("Um PG"));
+    expect(await screen.findByRole("option", { name: "Centro" })).toBeInTheDocument();
+  });
+
+  it("falha em /small-groups não apaga o seletor de rede", async () => {
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.resolve({ data: [{ id: "n1", name: "Norte" }] })
+        : Promise.reject(new Error("boom"))
+    );
+    const user = userEvent.setup({ applyAccept: false });
+    render(<MaterialFormModal open onOpenChange={vi.fn()} onSaved={vi.fn()} />);
+
+    expect(await screen.findByText("Não foi possível carregar os PGs.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Um PG")).toBeDisabled();
+
+    await user.click(screen.getByLabelText("Uma rede"));
+    expect(await screen.findByRole("option", { name: "Norte" })).toBeInTheDocument();
+  });
 });

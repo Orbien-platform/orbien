@@ -22,7 +22,7 @@ function build(visibility: 'all' | 'leaders_only', notifiedAt: Date | null = nul
     },
     groupMembership: { findMany: jest.fn().mockResolvedValue([{ person_id: 'p1' }, { person_id: 'p2' }]) },
   };
-  const notifications = { sendPush: jest.fn() };
+  const notifications = { sendPushToPersons: jest.fn().mockResolvedValue(true) };
   const notifier = new MeetingMaterialNotifier(
     { system } as unknown as PrismaService,
     notifications as unknown as NotificationsService,
@@ -31,7 +31,15 @@ function build(visibility: 'all' | 'leaders_only', notifiedAt: Date | null = nul
 }
 
 describe('MeetingMaterialNotifier', () => {
-  it('visibility all: avisa todos os membros do PG e marca notified_at', async () => {
+  const ORIGINAL_ENV = process.env;
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV, ONESIGNAL_APP_ID: 'app1' };
+  });
+  afterEach(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it('visibility all: avisa as pessoas do PG e marca notified_at', async () => {
     const { system, notifications, notifier } = build('all');
 
     await notifier.notifyLink('link1');
@@ -40,13 +48,15 @@ describe('MeetingMaterialNotifier', () => {
       where: { small_group_id: 'sg1' },
       select: { person_id: true },
     });
-    expect(notifications.sendPush).toHaveBeenCalledTimes(1);
-    const arg = notifications.sendPush.mock.calls[0][0];
-    expect(arg.filters).toEqual([
-      { field: 'tag', key: 'person_id', relation: '=', value: 'p1' },
-      { operator: 'OR' },
-      { field: 'tag', key: 'person_id', relation: '=', value: 'p2' },
-    ]);
+    expect(notifications.sendPushToPersons).toHaveBeenCalledTimes(1);
+    const [opts, personIds] = notifications.sendPushToPersons.mock.calls[0];
+    expect(opts).toMatchObject({
+      tenantId: 't1',
+      congregationId: 'c1',
+      title: 'Material do encontro — PG Centro',
+      body: 'Estudo de Rute já está disponível.',
+    });
+    expect(personIds).toEqual(['p1', 'p2']);
     expect(system.groupMeetingMaterial.update).toHaveBeenCalledWith({
       where: { id: 'link1' },
       data: { notified_at: expect.any(Date) },
@@ -69,25 +79,50 @@ describe('MeetingMaterialNotifier', () => {
 
     await notifier.notifyLink('link1');
 
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
-  it('falha no push não derruba o chamador e deixa notified_at nulo para o cron tentar de novo', async () => {
+  it('OneSignal recusando o envio deixa notified_at nulo', async () => {
     const { system, notifications, notifier } = build('all');
-    notifications.sendPush.mockRejectedValue(new Error('onesignal fora'));
+    notifications.sendPushToPersons.mockResolvedValue(false);
+
+    await notifier.notifyLink('link1');
+
+    expect(system.groupMeetingMaterial.update).not.toHaveBeenCalled();
+  });
+
+  it('exceção no push não derruba o chamador nem marca notified_at', async () => {
+    const { system, notifications, notifier } = build('all');
+    notifications.sendPushToPersons.mockRejectedValue(new Error('rede fora'));
 
     await expect(notifier.notifyLink('link1')).resolves.toBeUndefined();
     expect(system.groupMeetingMaterial.update).not.toHaveBeenCalled();
   });
 
-  it('cron avisa os vínculos liberados e ainda não avisados', async () => {
+  it('cron avisa só vínculos agendados cuja hora chegou nas últimas 24h', async () => {
     const { system, notifications, notifier } = build('all');
 
     await notifier.cronNotifyReleased();
 
     expect(system.groupMeetingMaterial.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { notified_at: null, release_at: { lte: expect.any(Date) } } }),
+      expect.objectContaining({
+        where: {
+          notified_at: null,
+          release_at: { lte: expect.any(Date), gte: expect.any(Date) },
+        },
+      }),
     );
-    expect(notifications.sendPush).toHaveBeenCalledTimes(1);
+    const { gte, lte } = system.groupMeetingMaterial.findMany.mock.calls[0][0].where.release_at;
+    expect(lte.getTime() - gte.getTime()).toBe(24 * 60 * 60 * 1000);
+    expect(notifications.sendPushToPersons).toHaveBeenCalledTimes(1);
+  });
+
+  it('cron não faz nada sem ONESIGNAL_APP_ID', async () => {
+    delete process.env['ONESIGNAL_APP_ID'];
+    const { system, notifier } = build('all');
+
+    await notifier.cronNotifyReleased();
+
+    expect(system.groupMeetingMaterial.findMany).not.toHaveBeenCalled();
   });
 });
