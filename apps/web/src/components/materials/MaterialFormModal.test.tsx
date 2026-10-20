@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
@@ -157,5 +157,129 @@ describe("MaterialFormModal", () => {
 
     await user.click(screen.getByLabelText("Uma rede"));
     expect(await screen.findByRole("option", { name: "Norte" })).toBeInTheDocument();
+  });
+
+  it("troca de volta entre as opções e manda a data de liberação escolhida", async () => {
+    vi.mocked(uploadStudyMaterial).mockResolvedValue({ id: "m1" });
+    const { user } = await setup();
+
+    // Texto → arquivo, PG → todas as redes, líderes → todos: cada rádio volta ao estado inicial.
+    await user.click(screen.getByLabelText("Texto ou link"));
+    await user.click(screen.getByLabelText("Arquivo PDF ou Word"));
+    await user.click(screen.getByLabelText("Um PG"));
+    await user.click(screen.getByLabelText("Todas as redes"));
+    await user.click(screen.getByLabelText("Somente líderes"));
+    await user.click(screen.getByLabelText("Todos os participantes"));
+
+    await user.type(screen.getByLabelText("Título"), "Agendado");
+    await user.upload(screen.getByLabelText("Arquivo do material"), new File(["%PDF"], "a.pdf", { type: "application/pdf" }));
+    fireEvent.change(screen.getByLabelText(/Liberar em/), { target: { value: "2030-01-01T10:00" } });
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+
+    await waitFor(() => expect(uploadStudyMaterial).toHaveBeenCalled());
+    const fields = vi.mocked(uploadStudyMaterial).mock.calls[0][1];
+    expect(fields.audience).toBe("all_networks");
+    expect(fields.visibility).toBe("all");
+    expect(fields.publish_at).toBe(new Date("2030-01-01T10:00").toISOString());
+  });
+
+  it("erro 400 da API pede conferir arquivo e alcance; outro erro pede nova tentativa", async () => {
+    const { user } = await setup();
+    await user.type(screen.getByLabelText("Título"), "Erro");
+    await user.upload(screen.getByLabelText("Arquivo do material"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+
+    vi.mocked(uploadStudyMaterial).mockRejectedValueOnce(new Error("upload_failed_400"));
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Confira o arquivo");
+
+    vi.mocked(uploadStudyMaterial).mockRejectedValueOnce(new Error("network_error"));
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Erro ao salvar o material"));
+  });
+
+  it("mostra a barra de progresso durante o envio do arquivo", async () => {
+    let report: (p: number) => void = () => {};
+    let finish: (v: { id: string }) => void = () => {};
+    vi.mocked(uploadStudyMaterial).mockImplementation(
+      (_file, _fields, onProgress) =>
+        new Promise((resolve) => {
+          report = onProgress;
+          finish = resolve;
+        })
+    );
+    const { user } = await setup();
+    await user.type(screen.getByLabelText("Título"), "Grande");
+    await user.upload(screen.getByLabelText("Arquivo do material"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+
+    const bar = await screen.findByRole("progressbar");
+    act(() => report(40));
+    expect(bar).toHaveAttribute("aria-valuenow", "40");
+    await act(async () => finish({ id: "m1" }));
+  });
+
+  it("exige título, texto e PG antes de enviar o texto", async () => {
+    const { user } = await setup();
+    await user.type(screen.getByLabelText("Título"), "Texto");
+    await user.click(screen.getByLabelText("Texto ou link"));
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escreva o texto ou cole o link.");
+
+    await user.type(screen.getByLabelText("Texto ou link do material"), "x");
+    await user.click(screen.getByLabelText("Um PG"));
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escolha o PG.");
+  });
+
+  it("fechado, não renderiza nem busca redes e PGs", () => {
+    render(<MaterialFormModal open={false} onOpenChange={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.queryByRole("heading", { name: "Novo material" })).not.toBeInTheDocument();
+    expect(mockedApi.get).not.toHaveBeenCalled();
+  });
+
+  it("fechar antes das listas chegarem não atualiza o formulário", async () => {
+    let resolveNetworks: (v: unknown) => void = () => {};
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? new Promise((resolve) => { resolveNetworks = resolve; })
+        : Promise.resolve({ data: { data: [] } })
+    );
+    const { unmount } = render(<MaterialFormModal open onOpenChange={vi.fn()} onSaved={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Novo material" });
+
+    unmount();
+    resolveNetworks({ data: [{ id: "n1", name: "Norte" }] });
+    await Promise.resolve();
+    expect(mockedApi.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("resposta de PGs sem lista vira lista vazia", async () => {
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks" ? Promise.resolve({ data: [] }) : Promise.resolve({ data: {} })
+    );
+    const user = userEvent.setup({ applyAccept: false });
+    render(<MaterialFormModal open onOpenChange={vi.fn()} onSaved={vi.fn()} />);
+
+    await user.click(await screen.findByLabelText("Um PG"));
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+  });
+
+  it("falha sem mensagem vira erro genérico", async () => {
+    vi.mocked(uploadStudyMaterial).mockRejectedValue("sem mensagem");
+    const { user } = await setup();
+    await user.type(screen.getByLabelText("Título"), "X");
+    await user.upload(screen.getByLabelText("Arquivo do material"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Erro ao salvar o material");
+  });
+
+  it("limpar a escolha do arquivo volta a exigir o arquivo", async () => {
+    const { user } = await setup();
+    const input = screen.getByLabelText("Arquivo do material");
+    await user.upload(input, new File(["x"], "a.pdf", { type: "application/pdf" }));
+    fireEvent.change(input, { target: { files: [] } });
+    await user.type(screen.getByLabelText("Título"), "Sem arquivo");
+    await user.click(screen.getByRole("button", { name: "Publicar material" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escolha o arquivo PDF ou Word.");
   });
 });

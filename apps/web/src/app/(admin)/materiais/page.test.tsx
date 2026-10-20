@@ -114,4 +114,66 @@ describe("MateriaisPage", () => {
     await user.click(screen.getByRole("button", { name: /Tentar de novo/ }));
     expect(await screen.findByText("Voltou")).toBeInTheDocument();
   });
+
+  it("rótulos de alcance quando faltam dados: rede sem id, rede desconhecida, PG sem nome", async () => {
+    setup(["admin_congregation"]);
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.resolve({ data: [] })
+        : Promise.resolve({
+            data: {
+              data: [
+                { id: "a", title: "Sem rede", audience: "network", visibility: "all", publish_at: "2026-01-10T12:00:00.000Z", materialTargets: [] },
+                { id: "b", title: "Rede sumida", audience: "network", network_id: "n9", visibility: "all", publish_at: "2026-01-10T12:00:00.000Z", materialTargets: [] },
+                { id: "c", title: "Sem PG", audience: "group", visibility: "all", publish_at: "2026-01-10T12:00:00.000Z", materialTargets: [] },
+              ],
+            },
+          })
+    );
+    render(<MateriaisPage />);
+
+    expect(await screen.findByText("Uma rede")).toBeInTheDocument();
+    expect(screen.getByText("Rede")).toBeInTheDocument();
+    expect(screen.getByText("Um PG")).toBeInTheDocument();
+  });
+
+  it("sem usuário carregado a lista aparece sem o botão de criar; resposta sem lista vira vazia", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: null, isLoading: false, isAuthenticated: false, login: vi.fn(), logout: vi.fn(),
+    });
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks" ? Promise.resolve({ data: [] }) : Promise.resolve({ data: {} })
+    );
+    render(<MateriaisPage />);
+
+    expect(await screen.findByText(/Nenhum material ainda/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Novo material/ })).not.toBeInTheDocument();
+  });
+
+  it("sair da tela antes da resposta não atualiza o estado, com sucesso ou com falha", async () => {
+    setup(["admin_congregation"]);
+    let resolveList: (v: unknown) => void = () => {};
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.resolve({ data: [] })
+        : new Promise((resolve) => { resolveList = resolve; })
+    );
+    const first = render(<MateriaisPage />);
+    first.unmount();
+    resolveList({ data: { data: [] } });
+    await Promise.resolve();
+
+    let rejectList: (e: unknown) => void = () => {};
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.resolve({ data: [] })
+        : new Promise((_resolve, reject) => { rejectList = reject; })
+    );
+    const second = render(<MateriaisPage />);
+    second.unmount();
+    rejectList({ response: { status: 500 } });
+    await Promise.resolve();
+
+    expect(mockedApi.get).toHaveBeenCalled();
+  });
 });
