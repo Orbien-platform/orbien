@@ -12,9 +12,17 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
 vi.mock("@/components/materials/MaterialFormModal", () => ({
-  MaterialFormModal: ({ open, onSaved }: { open: boolean; onSaved: () => void }) =>
+  MaterialFormModal: ({
+    open,
+    onSaved,
+    material,
+  }: {
+    open: boolean;
+    onSaved: () => void;
+    material?: { title: string } | null;
+  }) =>
     open ? (
-      <div data-testid="material-form">
+      <div data-testid="material-form" data-editing={material?.title ?? ""}>
         <button onClick={onSaved}>simular salvar</button>
       </div>
     ) : null,
@@ -137,6 +145,25 @@ describe("MateriaisPage", () => {
     expect(screen.getByText("Um PG")).toBeInTheDocument();
   });
 
+  it("material de PG sem a lista de alvos na resposta não derruba a tela", async () => {
+    setup(["admin_congregation"]);
+    mockedApi.get.mockImplementation((url: string) =>
+      url === "/networks"
+        ? Promise.resolve({ data: [] })
+        : Promise.resolve({
+            data: {
+              data: [
+                { id: "d", title: "Sem alvos", audience: "group", visibility: "all", publish_at: "2026-01-10T12:00:00.000Z" },
+              ],
+            },
+          })
+    );
+    render(<MateriaisPage />);
+
+    expect(await screen.findByText("Sem alvos")).toBeInTheDocument();
+    expect(screen.getByText("Um PG")).toBeInTheDocument();
+  });
+
   it("sem usuário carregado a lista aparece sem o botão de criar; resposta sem lista vira vazia", async () => {
     vi.mocked(useAuth).mockReturnValue({
       user: null, isLoading: false, isAuthenticated: false, login: vi.fn(), logout: vi.fn(),
@@ -175,5 +202,82 @@ describe("MateriaisPage", () => {
     await Promise.resolve();
 
     expect(mockedApi.get).toHaveBeenCalled();
+  });
+
+  it("editar busca o material completo e abre o formulário já preenchido", async () => {
+    setup(["admin_congregation"]);
+    const user = userEvent.setup();
+    const detail = { id: "m3", title: "Dinâmica", materialTargets: [{ small_group_id: "g1" }] };
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/study-materials/m3") return Promise.resolve({ data: detail });
+      if (url === "/networks") return Promise.resolve({ data: [] });
+      return Promise.resolve({
+        data: {
+          data: [
+            { id: "m3", title: "Dinâmica", audience: "group", visibility: "all", publish_at: past, materialTargets: [] },
+          ],
+        },
+      });
+    });
+    render(<MateriaisPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Editar material" }));
+
+    expect(await screen.findByTestId("material-form")).toHaveAttribute("data-editing", "Dinâmica");
+    expect(mockedApi.get).toHaveBeenCalledWith("/study-materials/m3");
+  });
+
+  it("falha ao abrir o material para edição avisa e não abre o formulário", async () => {
+    setup(["admin_congregation"]);
+    const user = userEvent.setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/study-materials/m3") return Promise.reject(new Error("boom"));
+      if (url === "/networks") return Promise.resolve({ data: [] });
+      return Promise.resolve({
+        data: {
+          data: [
+            { id: "m3", title: "Dinâmica", audience: "group", visibility: "all", publish_at: past, materialTargets: [] },
+          ],
+        },
+      });
+    });
+    render(<MateriaisPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Editar material" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível abrir o material");
+    expect(screen.queryByTestId("material-form")).not.toBeInTheDocument();
+  });
+
+  it("novo material depois de editar abre o formulário vazio", async () => {
+    setup(["admin_congregation"]);
+    const user = userEvent.setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/study-materials/m1")
+        return Promise.resolve({ data: { id: "m1", title: "Estudo de Rute", materialTargets: [] } });
+      if (url === "/networks") return Promise.resolve({ data: [] });
+      return Promise.resolve({
+        data: {
+          data: [
+            { id: "m1", title: "Estudo de Rute", audience: "all_networks", visibility: "all", publish_at: past, materialTargets: [] },
+          ],
+        },
+      });
+    });
+    render(<MateriaisPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Editar material" }));
+    expect(await screen.findByTestId("material-form")).toHaveAttribute("data-editing", "Estudo de Rute");
+    await user.click(screen.getByRole("button", { name: "Novo material" }));
+
+    expect(screen.getByTestId("material-form")).toHaveAttribute("data-editing", "");
+  });
+
+  it("quem não pode criar não vê o botão de editar", async () => {
+    setup(["cell_leader"]);
+    render(<MateriaisPage />);
+
+    await screen.findByText("Estudo de Rute");
+    expect(screen.queryByRole("button", { name: "Editar material" })).not.toBeInTheDocument();
   });
 });

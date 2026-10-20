@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
-import { MaterialFormModal } from "@/components/materials/MaterialFormModal";
+import { MaterialFormModal, type EditableMaterial } from "@/components/materials/MaterialFormModal";
 import { useAuth } from "@/hooks/useAuth";
 import api, { isForbidden } from "@/lib/api";
 
@@ -30,7 +30,7 @@ interface Network {
 function audienceLabel(row: MaterialRow, networks: Record<string, string>, networkOf: string | null): string {
   if (row.audience === "all_networks") return "Todas as redes";
   if (row.audience === "network") return networkOf ? `Rede ${networks[networkOf] ?? ""}`.trim() : "Uma rede";
-  const first = row.materialTargets[0]?.smallGroup?.name;
+  const first = row.materialTargets?.[0]?.smallGroup?.name;
   return first ? `PG ${first}` : "Um PG";
 }
 
@@ -60,6 +60,8 @@ export default function MateriaisPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [formSeq, setFormSeq] = useState(0);
+  const [editing, setEditing] = useState<EditableMaterial | null>(null);
+  const [editError, setEditError] = useState(false);
 
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
@@ -94,8 +96,23 @@ export default function MateriaisPage() {
   }, [requestKey]);
 
   function openCreate() {
+    setEditing(null);
     setFormSeq((s) => s + 1);
     setFormOpen(true);
+  }
+
+  // A listagem não traz os PGs do material; o detalhe traz. O formulário só
+  // abre com o material completo, para não editar o PG às cegas.
+  async function openEdit(row: MaterialRow) {
+    setEditError(false);
+    try {
+      const { data } = await api.get<EditableMaterial>(`/study-materials/${row.id}`);
+      setEditing(data);
+      setFormSeq((s) => s + 1);
+      setFormOpen(true);
+    } catch {
+      setEditError(true);
+    }
   }
 
   const columns: Column<MaterialRow & { network_id?: string | null }>[] = [
@@ -125,6 +142,29 @@ export default function MateriaisPage() {
       header: "Liberação",
       render: (row) => <span className="text-stone">{releaseLabel(row.publish_at)}</span>,
     },
+    ...(canCreate
+      ? [
+          {
+            key: "actions",
+            header: "",
+            width: "60px",
+            render: (row: MaterialRow) => (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="rounded-[8px]"
+                  aria-label="Editar material"
+                  title="Editar material"
+                  onClick={() => openEdit(row)}
+                >
+                  <Pencil size={14} strokeWidth={1.5} />
+                </Button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -149,6 +189,12 @@ export default function MateriaisPage() {
         )}
       </div>
 
+      {editError && (
+        <p role="alert" className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson">
+          Não foi possível abrir o material para edição. Tente de novo.
+        </p>
+      )}
+
       <DataTable
         columns={columns}
         rows={rows}
@@ -167,7 +213,13 @@ export default function MateriaisPage() {
         }
       />
 
-      <MaterialFormModal key={formSeq} open={formOpen} onOpenChange={setFormOpen} onSaved={reload} />
+      <MaterialFormModal
+        key={formSeq}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSaved={reload}
+        material={editing}
+      />
     </div>
   );
 }

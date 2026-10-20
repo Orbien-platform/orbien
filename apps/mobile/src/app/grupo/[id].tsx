@@ -9,33 +9,91 @@
 // (src/lib/format/date.ts) como bloco à esquerda do card (§7), e o tópico
 // fica no título, com um rótulo neutro quando não há.
 //
+// PROD-38: acima dos encontros, os materiais que chegam ao grupo por rede ou
+// por alcance direto (`GET /small-groups/:id/materials`). Falhar aqui não derruba
+// a tela: os encontros carregam por conta própria e a falha vira um aviso.
+//
 // PROD-12: acima da lista, "Fazer check-in" abre o leitor do QR do líder.
 // Não aparece para quem lidera o grupo (`role` vem da aba, de
 // `GET /small-groups/mine`) — o líder mostra o QR a partir do encontro.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Linking, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../../components/AppButton";
+import { AppLink } from "../../components/AppLink";
 import { Card } from "../../components/Card";
 import { DateBlock } from "../../components/DateBlock";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
-import { listMeetings } from "../../lib/pequenos-grupos/pequenos-grupos-client";
-import type { GroupMeetingSummary } from "../../lib/pequenos-grupos/types";
+import { listGroupMaterials, listMeetings } from "../../lib/pequenos-grupos/pequenos-grupos-client";
+import type { GroupMaterial, GroupMeetingSummary } from "../../lib/pequenos-grupos/types";
 import { formatDateTime } from "../../lib/format/date";
 import {
+  BookOpen,
   CalendarDays,
   ChevronRight,
   CircleAlert,
+  ExternalLink,
+  FileText,
+  Lock,
   RefreshCw,
   ScanLine,
   WifiOff,
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
+
+function MaterialCard({ material, now }: { material: GroupMaterial; now: number }) {
+  const { colors } = useTheme();
+  const isRichText = material.source_type === "rich_text";
+  const Icon = isRichText ? BookOpen : FileText;
+  const releasesAt = new Date(material.publish_at).getTime() > now;
+  const when = formatDateTime(material.publish_at);
+
+  return (
+    <Card testID={`grupo-material-${material.id}`}>
+      <View style={styles.cardRow}>
+        <Icon size={iconSize.action} color={colors.textSecondary} strokeWidth={ICON_STROKE_WIDTH} />
+        <View style={styles.cardBody}>
+          <Text style={[typography.h3, { color: colors.textPrimary }]}>{material.title}</Text>
+          {releasesAt && when ? (
+            <Text style={[typography.caption, styles.when, { color: colors.textTertiary }]}>
+              Libera em {when}
+            </Text>
+          ) : null}
+          {material.visibility === "leaders_only" ? (
+            <View style={styles.leadersOnly}>
+              <Lock size={iconSize.inline} color={colors.textTertiary} strokeWidth={ICON_STROKE_WIDTH} />
+              <Text style={[typography.caption, { color: colors.textTertiary }]}>Somente líderes</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+      {isRichText ? (
+        <Text
+          testID={`grupo-material-${material.id}-rich-content`}
+          style={[typography.body, styles.richContent, { color: colors.textSecondary }]}
+        >
+          {material.rich_content}
+        </Text>
+      ) : (
+        <AppLink
+          testID={`grupo-material-${material.id}-abrir`}
+          icon={ExternalLink}
+          disabled={!material.file_url}
+          onPress={
+            material.file_url ? () => Linking.openURL(material.file_url as string) : undefined
+          }
+        >
+          Abrir
+        </AppLink>
+      )}
+    </Card>
+  );
+}
 
 const EMPTY_MESSAGE = "Nenhum encontro registrado.";
 
@@ -44,6 +102,10 @@ export default function GrupoScreen() {
   const router = useRouter();
   const { colors, brandInk } = useTheme();
   const [meetings, setMeetings] = useState<GroupMeetingSummary[] | null>(null);
+  // Instante em que a tela abriu: decide "libera em" x já liberado.
+  const [now] = useState(() => Date.now());
+  const [materials, setMaterials] = useState<GroupMaterial[]>([]);
+  const [materialsFailed, setMaterialsFailed] = useState(false);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -61,6 +123,18 @@ export default function GrupoScreen() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setError(describeLoadError(err, "os encontros"));
+      });
+
+    listGroupMaterials(id)
+      .then((result) => {
+        if (cancelled) return;
+        setMaterials(result);
+        setMaterialsFailed(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMaterials([]);
+        setMaterialsFailed(true);
       });
 
     return () => {
@@ -91,7 +165,7 @@ export default function GrupoScreen() {
     );
   }
 
-  if (meetings && meetings.length === 0) {
+  if (meetings && meetings.length === 0 && materials.length === 0) {
     return (
       <StatusMessage
         testID="grupo-empty"
@@ -110,9 +184,9 @@ export default function GrupoScreen() {
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          meetings && meetings.length > 0 ? (
+          meetings ? (
             <>
-              {role !== "leader" ? (
+              {meetings.length > 0 && role !== "leader" ? (
                 <Card
                   testID="grupo-fazer-checkin"
                   onPress={() => router.push("/checkin")}
@@ -143,7 +217,25 @@ export default function GrupoScreen() {
                   </View>
                 </Card>
               ) : null}
-              <SectionLabel trailing={String(meetings.length)}>Encontros</SectionLabel>
+              {materials.length > 0 ? (
+                <View testID="grupo-materials" style={styles.materials}>
+                  <SectionLabel trailing={String(materials.length)}>Materiais</SectionLabel>
+                  {materials.map((m) => (
+                    <MaterialCard key={m.id} material={m} now={now} />
+                  ))}
+                </View>
+              ) : null}
+              {materialsFailed ? (
+                <Text
+                  testID="grupo-materials-error"
+                  style={[typography.caption, styles.materialsError, { color: colors.danger }]}
+                >
+                  Não foi possível carregar os materiais do grupo.
+                </Text>
+              ) : null}
+              {meetings.length > 0 ? (
+                <SectionLabel trailing={String(meetings.length)}>Encontros</SectionLabel>
+              ) : null}
             </>
           ) : null
         }
@@ -190,4 +282,8 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1 },
   when: { marginTop: spacing.xs },
   checkin: { marginBottom: spacing.lg },
+  materials: { marginBottom: spacing.lg },
+  materialsError: { marginBottom: spacing.lg },
+  leadersOnly: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
+  richContent: { marginTop: spacing.md },
 });

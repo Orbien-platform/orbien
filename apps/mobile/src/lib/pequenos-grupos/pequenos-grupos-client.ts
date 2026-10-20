@@ -5,6 +5,7 @@ import { authenticatedRequest } from "../auth/auth-client";
 import type {
   CheckinResult,
   CheckinToken,
+  GroupMaterial,
   GroupMeetingDetail,
   GroupMeetingSummary,
   GroupRosterMember,
@@ -31,6 +32,11 @@ export async function listMeetings(groupId: string): Promise<GroupMeetingSummary
 /** `GET /small-groups/meetings/:meetingId` (MOB-09-06). */
 export async function getMeeting(meetingId: string): Promise<GroupMeetingDetail> {
   return authenticatedRequest<GroupMeetingDetail>("get", `/small-groups/meetings/${meetingId}`);
+}
+
+/** `GET /small-groups/:groupId/materials` (PROD-38) — o que a rede, todas as redes ou o PG enviaram. */
+export async function listGroupMaterials(groupId: string): Promise<GroupMaterial[]> {
+  return authenticatedRequest<GroupMaterial[]>("get", `/small-groups/${groupId}/materials`);
 }
 
 /** `GET /small-groups/meetings/:meetingId/materials` (MOB-09-04). */

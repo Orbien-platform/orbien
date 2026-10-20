@@ -129,7 +129,7 @@ export class StudyMaterialsService {
    * congregação do tenant é recusado, não ignorado.
    */
   private async resolveAudience(
-    dto: CreateStudyMaterialDto,
+    dto: Pick<CreateStudyMaterialDto, 'audience' | 'network_id' | 'target_group_ids'>,
     user: JwtPayload,
   ): Promise<{ audience: MaterialAudience; network_id: string | null; groupIds: string[] }> {
     const hasTargets = !!dto.target_group_ids && dto.target_group_ids.length > 0;
@@ -197,6 +197,12 @@ export class StudyMaterialsService {
         orderBy: { publish_at: 'desc' },
         include: {
           _count: { select: { openRecords: true } },
+          // Só o rótulo "PG X" da lista precisa disto; um alvo basta (material
+          // de PG tem um, os de rede ou de todas as redes têm dezenas).
+          materialTargets: {
+            take: 1,
+            include: { smallGroup: { select: { id: true, name: true } } },
+          },
         },
       }),
       this.prisma.client.studyMaterial.count({ where }),
@@ -229,6 +235,26 @@ export class StudyMaterialsService {
     });
     if (!existing) throw new NotFoundException('Material não encontrado');
 
+    // Alcance novo: troca a foto de `material_targets`. Quem já recebeu o
+    // aviso não recebe outro — `notified_at` fica como está.
+    const touchesAudience =
+      dto.audience !== undefined ||
+      dto.network_id !== undefined ||
+      dto.target_group_ids !== undefined;
+    const audienceChange = touchesAudience
+      ? await this.resolveAudience(
+          {
+            audience:
+              dto.audience ??
+              (dto.target_group_ids ? MaterialAudience.group : existing.audience),
+            network_id: dto.network_id ?? existing.network_id ?? undefined,
+            target_group_ids: dto.target_group_ids,
+          },
+          user,
+        )
+      : null;
+    const { target_group_ids: _targets, ...fields } = dto;
+
     let file_url: string | undefined;
     if (file) {
       await this.storageService.deleteByUrl(existing.file_url);
@@ -248,10 +274,14 @@ export class StudyMaterialsService {
       const { count } = await tx.studyMaterial.updateMany({
         where: { id, version: existing.version },
         data: {
-          ...dto,
+          ...fields,
           ...(dto.publish_at && { publish_at: new Date(dto.publish_at) }),
           ...(dto.expires_at && { expires_at: new Date(dto.expires_at) }),
           ...(file_url && { file_url }),
+          ...(audienceChange && {
+            audience: audienceChange.audience,
+            network_id: audienceChange.network_id,
+          }),
           version: { increment: 1 },
         },
       });
@@ -259,6 +289,19 @@ export class StudyMaterialsService {
         throw new ConflictException(
           'Material foi alterado por outra pessoa nesse meio tempo — recarregue e tente de novo',
         );
+      }
+
+      if (audienceChange) {
+        await tx.materialTarget.deleteMany({ where: { study_material_id: id } });
+        if (audienceChange.groupIds.length > 0) {
+          await tx.materialTarget.createMany({
+            data: audienceChange.groupIds.map((small_group_id) => ({
+              study_material_id: id,
+              small_group_id,
+            })),
+            skipDuplicates: true,
+          });
+        }
       }
 
       // Snapshot da versão que acabou de ser substituída (PROD-10)
@@ -281,7 +324,10 @@ export class StudyMaterialsService {
         },
       });
 
-      return tx.studyMaterial.findUniqueOrThrow({ where: { id } });
+      return tx.studyMaterial.findUniqueOrThrow({
+        where: { id },
+        include: { materialTargets: { include: { smallGroup: true } } },
+      });
     });
   }
 

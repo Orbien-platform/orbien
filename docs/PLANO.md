@@ -648,24 +648,50 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
   lidera (`assertCanManageMaterials`); o arquivo só sobe ao R2 depois de validado
   o alcance.
 
+- Fechamento do que sobrava (2026-10-20):
+  - **Materiais na tela do PG.** Aba "Materiais" na gaveta do PG no web
+    (`GroupMaterialsPanel`, `GET /small-groups/:id/materials`) e seção
+    "Materiais" no topo de `/grupo/[id]` no app (`listGroupMaterials`). A
+    leitura é a mesma regra da API: líder vê o agendado e o "só líderes",
+    participante só o liberado. No app, falha nos materiais vira aviso e não
+    derruba a lista de encontros; grupo sem encontro mas com material mostra o
+    material.
+  - **Editar o alcance.** `PATCH /study-materials/:id` agora aceita `audience`,
+    `network_id`, `target_group_ids` e `visibility`: revalida o alcance na
+    congregação, troca `material_targets` na mesma transação e zera
+    `network_id` quando deixa de ser "uma rede". Quem já foi avisado não recebe
+    novo aviso (`notified_at` fica). No web, o botão "Editar material" em
+    `/materiais` abre o mesmo formulário preenchido (título, alcance,
+    visibilidade, liberação; conteúdo não muda por ali).
+  - **URL assinada para "só líderes".** `GET /small-groups/:id/materials` e
+    `GET /small-groups/meetings/:id/materials` devolvem `file_url` assinada
+    (15 min) para arquivo "só líderes" do bucket; a do vínculo vale sobre a do
+    material. O app abre `file_url` como sempre, então não mudou.
+    **Limite:** a URL pública continua válida enquanto o bucket for público —
+    o ganho completo só vem de tornar o bucket (ou o prefixo) privado em
+    Cloudflare; o código já está pronto para isso.
+  - **e2e de `/materiais`** (`apps/web/e2e/materiais.spec.ts`): cria para todas
+    as redes, edita para um PG só de líderes, confere pela API e pela aba do
+    PG. Rodou local em `teste2-church` e achou um bug: a listagem não trazia
+    `materialTargets` e a tela quebrava em material de PG — a API agora traz o
+    primeiro alvo. O modo arquivo ficou só em teste de componente: o upload
+    depende de `NEXT_PUBLIC_API_UPLOAD_URL` e não muda o que o spec verifica.
+
 Falta:
-- Teste e2e (`apps/web/e2e`) de `/materiais` e do modo arquivo do encontro, só
-  em `teste1-church`/`teste2-church`.
+- E2E do modo arquivo (encontro e `/materiais`), com upload real.
+- Tornar o bucket (ou um prefixo) privado, para a URL assinada de "só líderes"
+  proteger de fato; hoje a URL pública do R2 ainda abre o arquivo.
 - A validação de arquivo confere mimetype e extensão, não o conteúdo (magic
   bytes).
 - Rede apagada deixa `audience = 'network'` com `network_id` nulo (`SET NULL`);
   é cosmético, a lista de PGs já foi gravada.
-- Exibir os materiais do PG (`GET /small-groups/:groupId/materials`) na tela do
-  PG no web e no app mobile; hoje só a lista por encontro aparece lá.
-- Edição de audiência/visibilidade de material já criado (o `PATCH` não troca).
 - Foto vs. consulta viva: se o produto quiser que PG novo numa rede receba o
-  material da rede, `material_targets` precisa ser resolvido na leitura.
+  material da rede, `material_targets` precisa ser resolvido na leitura. Vale
+  também para a edição de alcance, que regrava a foto no momento do `PATCH`.
 - `rich_content` (texto formatado) no web — o modal cria material por link ou
   arquivo.
-- Arquivo de material "só líderes" tem URL pública do R2 (chave com UUID, só
-  aparece na listagem autorizada). URL assinada de curta duração exigiria o
-  participante pedir o link à API e mudar o app mobile, que abre `file_url`
-  direto (`getPresignedGetUrl` já existe no `StorageService`).
+- Troca de arquivo ou de conteúdo de material já criado pela tela `/materiais`
+  (a API aceita; a tela edita só alcance e liberação).
 - `addMaterial` não confere se o material tem o PG do encontro como alvo.
 
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
