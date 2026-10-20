@@ -185,4 +185,29 @@ describe('StudyMaterialsController', () => {
 
     expect(service.create).toHaveBeenCalledWith({ title: 'T' }, file, USER);
   });
+
+  it('replaceTicket confere o material e assina o ticket preso ao id dele', async () => {
+    service.findOne.mockResolvedValue({ id: 'm1' } as never);
+
+    const result = await controller.replaceTicket('m1', USER);
+
+    expect(service.findOne).toHaveBeenCalledWith('m1');
+    expect(result.upload_id).toBe('m1');
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: 'upload', upload_kind: 'study_material', upload_target: 'm1' }),
+      { expiresIn: 300 },
+    );
+  });
+
+  it('updateWithTicket exige papel de escrita, aceita só ticket study_material e delega ao update', async () => {
+    expect(rolesFor('updateWithTicket')).toEqual(WRITE_ROLES);
+    expect(rolesFor('replaceTicket')).toEqual(WRITE_ROLES);
+    expect(Reflect.getMetadata(UPLOAD_TICKET_KEY, StudyMaterialsController.prototype.updateWithTicket)).toBe('study_material');
+    service.update.mockResolvedValue({ id: 'm1' } as never);
+    const file = { mimetype: 'application/pdf' } as Express.Multer.File;
+
+    await controller.updateWithTicket('m1', { title: 'T' } as never, file, USER);
+
+    expect(service.update).toHaveBeenCalledWith('m1', { title: 'T' }, file, USER);
+  });
 });

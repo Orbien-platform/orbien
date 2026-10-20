@@ -2,11 +2,14 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
-import { uploadStudyMaterial } from "@/lib/upload-study-material";
+import { replaceStudyMaterialFile, uploadStudyMaterial } from "@/lib/upload-study-material";
 import { MaterialFormModal, type EditableMaterial } from "./MaterialFormModal";
 
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
-vi.mock("@/lib/upload-study-material", () => ({ uploadStudyMaterial: vi.fn() }));
+vi.mock("@/lib/upload-study-material", () => ({
+  uploadStudyMaterial: vi.fn(),
+  replaceStudyMaterialFile: vi.fn(),
+}));
 
 const mockedApi = vi.mocked(api, true);
 
@@ -315,15 +318,56 @@ describe("MaterialFormModal", () => {
       return { user, onSaved, onOpenChange };
     }
 
-    it("abre com os valores do material e sem os campos de conteúdo", async () => {
+    it("abre com os valores do material e o arquivo opcional para substituir", async () => {
       await setupEdit();
 
       expect(screen.getByLabelText("Título")).toHaveValue("Roteiro");
       expect(screen.getByLabelText("Um PG")).toBeChecked();
       expect(await screen.findByLabelText("PG")).toHaveValue("g1");
       expect(screen.getByLabelText("Todos os participantes")).toBeChecked();
-      expect(screen.queryByLabelText("Arquivo do material")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Arquivo do material")).toBeInTheDocument();
       expect(screen.queryByText("Conteúdo")).not.toBeInTheDocument();
+    });
+
+    it("substitui o arquivo enviando o novo pelo upload direto", async () => {
+      vi.mocked(replaceStudyMaterialFile).mockResolvedValue({ id: "m1" });
+      const { user, onSaved } = await setupEdit();
+
+      await user.upload(
+        screen.getByLabelText("Arquivo do material"),
+        new File(["%PDF"], "novo.pdf", { type: "application/pdf" })
+      );
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      await waitFor(() =>
+        expect(replaceStudyMaterialFile).toHaveBeenCalledWith(
+          "m1",
+          expect.objectContaining({ name: "novo.pdf" }),
+          expect.objectContaining({ title: "Roteiro" }),
+          expect.any(Function)
+        )
+      );
+      expect(mockedApi.patch).not.toHaveBeenCalled();
+      expect(onSaved).toHaveBeenCalled();
+    });
+
+    it("material de texto: reescreve o texto no PATCH e não pede arquivo", async () => {
+      mockedApi.patch.mockResolvedValue({ data: {} });
+      const { user } = await setupEdit({ source_type: "rich_text", rich_content: "https://velho.com" });
+
+      expect(screen.queryByLabelText("Arquivo do material")).not.toBeInTheDocument();
+      const box = screen.getByLabelText("Texto ou link do material");
+      expect(box).toHaveValue("https://velho.com");
+      await user.clear(box);
+      await user.type(box, "https://novo.com");
+      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+      await waitFor(() =>
+        expect(mockedApi.patch).toHaveBeenCalledWith(
+          "/study-materials/m1",
+          expect.objectContaining({ rich_content: "https://novo.com" })
+        )
+      );
     });
 
     it("troca para uma rede e só líderes com um PATCH, sem subir arquivo", async () => {
