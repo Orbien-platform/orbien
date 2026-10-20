@@ -75,4 +75,59 @@ describe('CreateStudyMaterialDto', () => {
     const errors = await errorsFor({ target_group_ids: ['não-uuid'] });
     expect(errors.some((e) => e.property === 'target_group_ids')).toBe(true);
   });
+
+  describe('multipart (campo repetido uma vez chega como string)', () => {
+    const GROUP = '11111111-1111-4111-8111-111111111111';
+
+    it('target_group_ids e tags de um item só viram array', async () => {
+      const dto = plainToInstance(CreateStudyMaterialDto, {
+        ...BASE,
+        target_group_ids: GROUP,
+        tags: 'fé',
+      });
+
+      expect(dto.target_group_ids).toEqual([GROUP]);
+      expect(dto.tags).toEqual(['fé']);
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('array de JSON continua array', () => {
+      const dto = plainToInstance(CreateStudyMaterialDto, {
+        ...BASE,
+        target_group_ids: [GROUP],
+        tags: ['a', 'b'],
+      });
+
+      expect(dto.target_group_ids).toEqual([GROUP]);
+      expect(dto.tags).toEqual(['a', 'b']);
+    });
+  });
+
+  describe('alcance', () => {
+    it('aceita audience, visibility e network_id válidos', async () => {
+      expect(
+        await errorsFor({
+          audience: 'network',
+          network_id: '11111111-1111-4111-8111-111111111111',
+          visibility: 'leaders_only',
+        }),
+      ).toHaveLength(0);
+    });
+
+    it('exige network_id quando audience é network', async () => {
+      const errors = await errorsFor({ audience: 'network' });
+      expect(errors.some((e) => e.property === 'network_id')).toBe(true);
+    });
+
+    it('não exige network_id nas outras audiences', async () => {
+      expect(await errorsFor({ audience: 'all_networks' })).toHaveLength(0);
+      expect(await errorsFor({ audience: 'group' })).toHaveLength(0);
+    });
+
+    it('rejeita audience e visibility fora do enum', async () => {
+      const errors = await errorsFor({ audience: 'todos', visibility: 'secreto' });
+      expect(errors.some((e) => e.property === 'audience')).toBe(true);
+      expect(errors.some((e) => e.property === 'visibility')).toBe(true);
+    });
+  });
 });

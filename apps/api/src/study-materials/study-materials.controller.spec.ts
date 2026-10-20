@@ -168,6 +168,15 @@ describe('StudyMaterialsController', () => {
     );
   });
 
+  it('uploadTicket propaga impersonated_by e support_session pro ticket, quando presentes', () => {
+    controller.uploadTicket({ ...USER, impersonated_by: 'support1', support_session: true });
+
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ impersonated_by: 'support1', support_session: true }),
+      { expiresIn: 300 },
+    );
+  });
+
   it('createWithTicket delega ao create do service', async () => {
     service.create.mockResolvedValue({ id: 'm1' } as never);
     const file = { mimetype: 'application/pdf' } as Express.Multer.File;

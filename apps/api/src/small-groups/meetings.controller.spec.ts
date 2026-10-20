@@ -108,6 +108,19 @@ describe('MeetingsController', () => {
     expect(result).toEqual({ upload_token: 'ticket', expires_in: 300 });
   });
 
+  it('materialUploadTicket propaga impersonated_by e support_session pro ticket, quando presentes', async () => {
+    await controller.materialUploadTicket('meet1', {
+      ...USER,
+      impersonated_by: 'support1',
+      support_session: true,
+    });
+
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ impersonated_by: 'support1', support_session: true }),
+      { expiresIn: 300 },
+    );
+  });
+
   it('uploadMaterial delega ao service', async () => {
     service.uploadMaterial.mockResolvedValue({ id: 'link1' } as never);
     const file = { originalname: 'a.pdf' } as Express.Multer.File;

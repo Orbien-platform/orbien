@@ -576,6 +576,15 @@ describe('MeetingsService', () => {
       expect(client.groupMembership.findUnique).not.toHaveBeenCalled();
     });
 
+    it('conta sem pessoa vinculada é recusada, sem consultar a membership', async () => {
+      const client = withMeeting();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+      const service = serviceWith(client);
+
+      await expect(service.assertCanManageMaterials('meet1', USER)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.groupMembership.findUnique).not.toHaveBeenCalled();
+    });
+
     it('leader e trainee na membership passam', async () => {
       for (const role of ['leader', 'trainee']) {
         const client = withMeeting();
