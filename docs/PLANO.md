@@ -2694,6 +2694,18 @@ só as contagens de `docs/PLANO.md` e `docs/TESTES.md` precisaram de mão.
 > continua `bloqueia`. O bug do Next em si segue aberto e sem fix — o que
 > fechou foi só o portão bloquear o push por ele.
 
+> **`AJU-04`, causa raiz achada em 2026-10-20 — não era bug do Next.** O
+> ambiente de dev/sessão remota exporta `NODE_ENV=development`, e o `next
+> build` já avisava ("non-standard NODE_ENV"). Controle no `orbien-site`:
+> `NODE_ENV=development` reproduz o `useContext` null; `NODE_ENV=production`
+> builda em 19s. `orbien-web` e `orbien-admin` também buildam com
+> `production`. Vercel e GitHub Actions não exportam `NODE_ENV`, por isso lá
+> nunca quebrou. Isso explica o "específico deste sandbox" e invalida a
+> hipótese de corrida do Turbopack registrada acima (a issue
+> vercel/next.js#95741 pode ter a mesma origem, mas isso não foi verificado).
+> `scripts/pre-push.sh` agora builda com `NODE_ENV=production` e não tolera
+> mais o padrão como alerta: build vermelho bloqueia.
+
 O buraco do portão que a mesma rodada apontou — `scripts/pre-push.sh` sem
 `mobile` na alternação da regra de fronteira — **fechou** em `08e0640`, junto
 das três contradições de `docs/TESTES.md`.

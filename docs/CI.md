@@ -456,14 +456,77 @@ de incêndio, não porta trancada.
 **Consequência prática: o portão passa a ser local**, e está implementado:
 
 ```bash
-bash scripts/pre-push.sh              # determinístico
-bash scripts/pre-push.sh --e2e        # inclui a suíte de tela
-bash scripts/pre-push.sh --review     # inclui revisão por IA, com veredito
+bash scripts/pre-push.sh              # completo — o único que libera subir
+bash scripts/pre-push.sh --review     # + revisão por IA, com veredito
+bash scripts/pre-push.sh --rapido     # só build, tipos, lint e regras (parcial)
+bash scripts/pre-push.sh --so=e2e     # uma etapa, para iterar: cobertura | rls | e2e | site
 ```
 
-Ele roda o que o CI rodaria — build dos 5 apps, tipos da API incluindo `test/`,
-lint, sanidade das skills — e dispara os testes de RLS sozinho quando o diff
-toca `apps/api`. Sai com código 1 quando bloqueia, então serve de hook.
+O completo roda o que o CI roda:
+
+| Etapa | Quando | Espelha no CI |
+|---|---|---|
+| Build dos 5 apps, `tsc` da API (com `test/`), lint, skills | sempre | `build` |
+| `test:cov` dos 5 apps — testes **e** piso de cobertura | sempre | `unit` |
+| `test:rls` | diff toca `apps/api/{src,prisma}` | `rls` |
+| E2E do web, **só os specs afetados** | diff mapeia para algum spec | `e2e` |
+| Smoke do site | diff toca `apps/site` ou o lockfile/`package.json` da raiz | `smoke-site` |
+
+Antes dos cinco passos de teste, o script prepara o banco. **Sempre local**: se
+`DATABASE_URL`/`DIRECT_URL` do ambiente não apontam para `localhost` (o caso
+típico é o Supabase de produção), ele ignora as duas e usa
+`localhost:5432` com as credenciais do CI — e bloqueia, pedindo um Postgres
+local, se não houver um. Roda o `bootstrap-db.sh` quando o diff mexe em
+`apps/api/prisma/` e semeia `teste1-church`/`teste2-church` (o seed é
+idempotente). O e2e e o smoke sobem API e web nas portas 3000/3001/3002 e
+derrubam no fim; porta ocupada bloqueia, em vez de testar contra o servidor
+errado.
+
+### Escopo do e2e
+
+`scripts/e2e-escopo.mjs` recebe os arquivos alterados e devolve os specs
+afetados. Não há tabela de rotas para manter: cada spec declara a área pelo
+nome, pelas telas que visita (`goto("/financeiro")`) e pelas rotas de API que
+chama (`/financial/...`); um arquivo alterado afeta o spec se algum segmento do
+caminho dele é da mesma área (`financeiro` ≡ `financial`; o dicionário de
+sinônimos pt/en está no próprio script). Spec novo entra no mapa sozinho.
+
+- Spec alterado → ele mesmo.
+- Código compartilhado (`lib/`, `contexts/`, `hooks/`, `components/{ui,providers,layout}`,
+  proxy, fixtures, e na API `common/`, `auth/`, `prisma/`, schema, migrations,
+  seed) → **suíte inteira**. É o lado em que o erro é barato.
+- Arquivo de área sem spec (ex.: `apps/api/src/bible`) → nenhum spec; o motivo
+  sai listado, para o caso de uma área nova ter nome diferente nos dois lados e
+  precisar entrar no dicionário.
+- Teste de unidade, doc, mobile e admin não disparam e2e.
+
+### Falhou? Corrige e roda de novo
+
+O portão só relata. Quem corrige é quem está desenvolvendo (ou o agente, por
+regra do `CLAUDE.md`): achar a causa, corrigir **no código ou no teste que está
+errado**, e rodar de novo até o completo liberar. `--so=` serve para o ciclo
+curto (reproduzir só o spec que caiu, só a cobertura do app), mas imprime
+`PARCIAL` e não libera. Não vale baixar piso de cobertura, `skip`, restringir o
+escopo ou `--no-verify` para passar — o que o CI vai cobrar é o mesmo.
+
+**`NODE_ENV` e o build do Next (AJU-04).** Com `NODE_ENV=development` no
+ambiente — o caso das sessões remotas e de muito shell de dev — o prerender do
+Next 16 cai em `Cannot read properties of null (reading 'useContext')`. Vercel
+e CI não exportam nada, por isso lá nunca quebrou. O portão força
+`NODE_ENV=production` só nos builds e no `next start` do web e do site (a API
+sobe sem `NODE_ENV`, como no `ci.yml`); exportar para o script todo
+contaminaria o Jest. Build que falha agora bloqueia, sem tolerância a "crash
+conhecido".
+
+**Chromium.** Em sessão remota o Chromium pré-instalado é de outra versão que
+a do Playwright do repositório e `playwright install` não é permitido. O
+portão aponta `E2E_CHROMIUM_PATH` para ele quando existe em
+`$PLAYWRIGHT_BROWSERS_PATH/chromium`, e os dois `playwright.config.ts` leem a
+variável. No CI e na máquina de dev ela fica vazia e nada muda.
+
+Registro de uma divergência que continua aberta: o CI roda `turbo run test`
+**e** `test:cov`; o portão roda só `test:cov`, que contém os mesmos testes (e
+na API soma `integration`). Se um dia os dois divergirem, o do CI manda.
 
 Antes dos portões genéricos ele checa o que é **específico do Orbien e dá para
 verificar por script**, em vez de depender de juízo:
