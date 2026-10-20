@@ -49,6 +49,19 @@ bloqueia() { BLOCKS+=("$1"); echo "  ✗ $1"; }
 alerta()   { WARNS+=("$1");  echo "  ! $1"; }
 passa()    { echo "  ✓ $1"; }
 
+# Tempo por etapa, impresso no fim: o portão completo é lento (builds, cobertura
+# dos 5 apps, e2e) e quem espera precisa ver onde o tempo vai antes de decidir
+# o que encurtar.
+TEMPOS=()
+ETAPA_ATUAL=""
+ETAPA_T0=$SECONDS
+fecha_etapa() {
+  [ -n "$ETAPA_ATUAL" ] && TEMPOS+=("$(( SECONDS - ETAPA_T0 ))|$ETAPA_ATUAL")
+  ETAPA_ATUAL=""
+}
+etapa() { fecha_etapa; ETAPA_ATUAL="$1"; ETAPA_T0=$SECONDS; echo "▶ $1"; }
+mmss() { printf '%dm%02ds' $(( $1 / 60 )) $(( $1 % 60 )); }
+
 # Base de comparação: o que ainda não está no remoto.
 BASE=$(git rev-parse --verify --quiet origin/main || echo "")
 if [ -z "$BASE" ]; then
@@ -66,7 +79,7 @@ if [ -z "$SO" ]; then
 
 # ── Checagens do Orbien que dão para verificar por script ─────────────────
 echo
-echo "▶ Regras do monorepo"
+etapa "Regras do monorepo"
 
 # Import cruzando app quebra a independência dos deploys — inequívoco.
 if grep -rnE "from ['\"].*apps/(api|web|site|admin|mobile)/" apps/*/src 2>/dev/null | grep -v "^apps/\([a-z]*\)/src.*apps/\1/" | head -3 | grep -q .; then
@@ -84,7 +97,7 @@ else
 fi
 
 echo
-echo "▶ Banco e isolamento"
+etapa "Banco e isolamento"
 
 MIGS=$(echo "$CHANGED" | grep -E "^apps/api/prisma/migrations/.*\.sql$" || true)
 SCHEMA_CHANGED=$(echo "$CHANGED" | grep -cE "^apps/api/prisma/schema\.prisma$" || true)
@@ -139,7 +152,11 @@ fi
 
 # ── Portões determinísticos ───────────────────────────────────────────────
 echo
-echo "▶ Build, tipos e lint"
+etapa "Build, tipos e lint"
+# Estas duas entram no hash do build do web (turbo.json). Exportadas já aqui,
+# o build do e2e reaproveita este em vez de refazer o web inteiro; precisam
+# estar definidas no build E no start (ver o job `e2e` do ci.yml).
+export API_BACKEND_URL="http://localhost:3000/api" NEXT_PUBLIC_API_URL="/api-proxy"
 npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 5 apps" || {
   # AJU-04: bug conhecido do Next 16.2.x/16.3.x (vercel/next.js#95741) — race
   # condition do Turbopack ao prerenderizar /_global-error ou /_not-found.
@@ -245,7 +262,7 @@ resumo_falha() { grep -E "✕|✘|×|FAIL |threshold|●.*›|Error:|passed|fail
 
 if ! $RAPIDO && quer cobertura; then
   echo
-  echo "▶ Testes e cobertura (os 5 apps, sempre — é o que o CI cobra)"
+  etapa "Testes e cobertura (os 5 apps, sempre — é o que o CI cobra)"
   if prepara_banco; then
     for pkg in orbien-backend orbien-web orbien-site orbien-admin orbien-mobile; do
       log="/tmp/prepush-cov-$pkg.log"
@@ -261,7 +278,7 @@ fi
 
 if ! $RAPIDO && quer rls && toca "^apps/api/(src|prisma)/"; then
   echo
-  echo "▶ Isolamento multi-tenant (o diff toca a API)"
+  etapa "Isolamento multi-tenant (o diff toca a API)"
   if prepara_banco; then
     npm run test:rls -w orbien-backend >/tmp/prepush-rls.log 2>&1 && {
       # AJU-07: contagem lida da própria saída do Jest, não mais literal — o
@@ -288,7 +305,7 @@ SITE_NO_ESCOPO=$(echo "$ESCOPO" | grep -c '^site:1' || true)
 
 if ! $RAPIDO && quer e2e; then
   echo
-  echo "▶ E2E do web — só o escopo afetado"
+  etapa "E2E do web — só o escopo afetado"
   if [ -z "$WEB_SPECS" ]; then
     passa "nenhum spec do e2e é afetado por este diff"
     [ -s /tmp/prepush-escopo.log ] && sed 's/^/  /' /tmp/prepush-escopo.log
@@ -303,8 +320,7 @@ if ! $RAPIDO && quer e2e; then
     if porta_aberta 3000 || porta_aberta 3001; then
       bloqueia "porta 3000 ou 3001 ocupada — o e2e sobe a API e o web nelas; encerre o que estiver rodando"
     elif prepara_banco; then
-      # Estes dois precisam existir no build E no start (ver o job `e2e` do ci.yml).
-      export API_BACKEND_URL="http://localhost:3000/api" NEXT_PUBLIC_API_URL="/api-proxy"
+      # API_BACKEND_URL / NEXT_PUBLIC_API_URL já exportados antes do build geral.
       echo "  … build da API e do web"
       build_com_retry /tmp/prepush-e2e-build.log --filter=orbien-backend --filter=orbien-web; RC=$?
       if [ $RC -eq 2 ]; then
@@ -343,7 +359,7 @@ fi
 if ! $RAPIDO && quer site; then
   if [ "$SITE_NO_ESCOPO" != "0" ] || [ "$SO" = "site" ]; then
     echo
-    echo "▶ Smoke do site (o diff toca o site)"
+    etapa "Smoke do site (o diff toca o site)"
     if porta_aberta 3002; then
       bloqueia "porta 3002 ocupada — o smoke sobe o site nela; encerre o que estiver rodando"
     elif build_com_retry /tmp/prepush-site-build.log --filter=orbien-site; RC=$?; [ $RC -eq 2 ]; then
@@ -368,7 +384,7 @@ fi
 # ── Revisão por IA, opcional ──────────────────────────────────────────────
 if [ "$WITH_REVIEW" = true ]; then
   echo
-  echo "▶ Revisão por IA (--review)"
+  etapa "Revisão por IA (--review)"
   if ! command -v claude >/dev/null; then
     alerta "claude CLI não encontrado — revisão pulada"
   else
@@ -393,6 +409,12 @@ VEREDITO: BLOQUEADO  (se houver achado crítico que deva impedir o push)" 2>/tmp
 fi
 
 # ── Resultado ─────────────────────────────────────────────────────────────
+fecha_etapa
+if [ ${#TEMPOS[@]} -gt 0 ]; then
+  echo
+  echo "Tempo por etapa (total $(mmss $SECONDS)):"
+  for t in "${TEMPOS[@]}"; do printf '  %7s  %s\n' "$(mmss "${t%%|*}")" "${t#*|}"; done
+fi
 echo
 if [ ${#WARNS[@]} -gt 0 ]; then
   echo "${#WARNS[@]} alerta(s) — não bloqueiam. Decida: seguir assim, ou ajustar antes?"
