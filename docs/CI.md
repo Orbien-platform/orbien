@@ -509,13 +509,20 @@ curto (reproduzir só o spec que caiu, só a cobertura do app), mas imprime
 `PARCIAL` e não libera. Não vale baixar piso de cobertura, `skip`, restringir o
 escopo ou `--no-verify` para passar — o que o CI vai cobrar é o mesmo.
 
-Em máquina onde o build do Next cai no crash conhecido (AJU-04, bug aberto
-upstream — acontece em sandbox de sessão remota), o e2e e o smoke tentam o
-build 3 vezes e, persistindo **exatamente** esse padrão, viram `alerta` "NÃO
-rodou" em vez de bloqueio. Alerta não é verde: vira pergunta ao dev (seguir e
-confiar no CI, ou rodar em outra máquina). Qualquer outra falha de build
-bloqueia. A subida de API/web e o Playwright desses dois passos foram
-escritos espelhando o `ci.yml`, mas só foram exercitados até esse ponto.
+**`NODE_ENV` e o build do Next (AJU-04).** Com `NODE_ENV=development` no
+ambiente — o caso das sessões remotas e de muito shell de dev — o prerender do
+Next 16 cai em `Cannot read properties of null (reading 'useContext')`. Vercel
+e CI não exportam nada, por isso lá nunca quebrou. O portão força
+`NODE_ENV=production` só nos builds e no `next start` do web e do site (a API
+sobe sem `NODE_ENV`, como no `ci.yml`); exportar para o script todo
+contaminaria o Jest. Build que falha agora bloqueia, sem tolerância a "crash
+conhecido".
+
+**Chromium.** Em sessão remota o Chromium pré-instalado é de outra versão que
+a do Playwright do repositório e `playwright install` não é permitido. O
+portão aponta `E2E_CHROMIUM_PATH` para ele quando existe em
+`$PLAYWRIGHT_BROWSERS_PATH/chromium`, e os dois `playwright.config.ts` leem a
+variável. No CI e na máquina de dev ela fica vazia e nada muda.
 
 Registro de uma divergência que continua aberta: o CI roda `turbo run test`
 **e** `test:cov`; o portão roda só `test:cov`, que contém os mesmos testes (e

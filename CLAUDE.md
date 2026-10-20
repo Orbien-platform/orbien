@@ -36,6 +36,9 @@ leia o do app antes de mexer nele.
   baixar piso de cobertura, pular/`skip` teste, estreitar o escopo ou usar
   `--rapido`/`--no-verify` para passar. Se a causa for decisão sua (produto,
   contrato, teste que pode estar certo), pare e pergunte com a evidência.
+  `next build` com `NODE_ENV=development` (padrão em sessão remota) quebra
+  com `useContext` null; o portão já força `production` nos builds — faça o
+  mesmo se buildar na mão (`NODE_ENV=production npm run build:web`).
   Alerta que sobrar vira pergunta, como na regra abaixo. Não diga que o CI
   vai passar sem ter visto o portão completo liberar.
 - **Teste só em `teste1-church` e `teste2-church`.** São os dois tenants que

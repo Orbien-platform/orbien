@@ -29,6 +29,10 @@ export default defineConfig({
     navigationTimeout: 120_000,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    // Máquina cujo Chromium pré-instalado não é o que este Playwright espera
+    // (sessão remota): scripts/pre-push.sh aponta para ele. Vazio no CI e na
+    // máquina de dev, onde `playwright install` resolve.
+    launchOptions: { executablePath: process.env.E2E_CHROMIUM_PATH || undefined },
   },
 
   projects: [

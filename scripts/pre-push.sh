@@ -49,6 +49,16 @@ bloqueia() { BLOCKS+=("$1"); echo "  ✗ $1"; }
 alerta()   { WARNS+=("$1");  echo "  ! $1"; }
 passa()    { echo "  ✓ $1"; }
 
+# NODE_ENV=production SÓ no build: com `development` o prerender do Next 16
+# cai em "Cannot read properties of null (reading 'useContext')" (AJU-04) —
+# e sessão remota e muitos shells de dev exportam `development`. Vercel e CI
+# não exportam nada, por isso lá nunca quebrou. Não vale exportar para o
+# script todo: o Jest só põe `test` se NODE_ENV estiver vazio.
+constroi() { # LOG, args do turbo...
+  local log="$1"; shift
+  NODE_ENV=production npx turbo run build "$@" >"$log" 2>&1
+}
+
 # Tempo por etapa, impresso no fim: o portão completo é lento (builds, cobertura
 # dos 5 apps, e2e) e quem espera precisa ver onde o tempo vai antes de decidir
 # o que encurtar.
@@ -157,19 +167,9 @@ etapa "Build, tipos e lint"
 # o build do e2e reaproveita este em vez de refazer o web inteiro; precisam
 # estar definidas no build E no start (ver o job `e2e` do ci.yml).
 export API_BACKEND_URL="http://localhost:3000/api" NEXT_PUBLIC_API_URL="/api-proxy"
-npx turbo run build >/tmp/prepush-build.log 2>&1 && passa "build dos 5 apps" || {
-  # AJU-04: bug conhecido do Next 16.2.x/16.3.x (vercel/next.js#95741) — race
-  # condition do Turbopack ao prerenderizar /_global-error ou /_not-found.
-  # Reproduz só neste tipo de sandbox de dev/CI; o build real da Vercel passa
-  # (confirmado no PR #84). Alerta em vez de bloquear só para esse padrão
-  # exato — qualquer outra falha de build continua bloqueando o push.
-  if grep -qE "Cannot read properties of null \(reading 'useContext'\)" /tmp/prepush-build.log \
-      && grep -qE "/_global-error|/_not-found" /tmp/prepush-build.log; then
-    alerta "build falhou só no crash conhecido do Next 16.x ao prerenderizar /_global-error|/_not-found (vercel/next.js#95741) — o build real da Vercel passa, veja AJU-04 em docs/PLANO.md"
-  else
-    bloqueia "build falhou — veja /tmp/prepush-build.log"
-    tail -15 /tmp/prepush-build.log | sed 's/^/      /'
-  fi
+constroi /tmp/prepush-build.log && passa "build dos 5 apps" || {
+  bloqueia "build falhou — veja /tmp/prepush-build.log"
+  tail -15 /tmp/prepush-build.log | sed 's/^/      /'
 }
 npx tsc --noEmit -p apps/api/tsconfig.json >/tmp/prepush-tsc.log 2>&1 && passa "tipos da API, incluindo test/" \
   || { bloqueia "tsc falhou — veja /tmp/prepush-tsc.log"; head -10 /tmp/prepush-tsc.log | sed 's/^/      /'; }
@@ -206,23 +206,13 @@ espera_url() { # URL, tentativas de 2s
   return 1
 }
 
-# Build para o e2e/smoke. O crash do Next 16.x ao prerenderizar (AJU-04,
-# vercel/next.js#95741) é uma corrida: tenta até 3 vezes. Se persistir E for
-# exatamente esse padrão, não é culpa do diff — vira alerta (a etapa não
-# rodou, e o dev decide); qualquer outra falha de build bloqueia.
-# Retorno: 0 = buildou, 1 = bloqueou, 2 = alerta (crash conhecido, etapa pulada).
-build_com_retry() { # LOG, args do turbo...
-  local log="$1"; shift
-  for tentativa in 1 2 3; do
-    npx turbo run build "$@" >"$log" 2>&1 && return 0
-    grep -q "Cannot read properties of null (reading 'useContext')" "$log" || break
-    echo "  … crash conhecido do Next no build (tentativa $tentativa/3)"
-  done
-  if grep -q "Cannot read properties of null (reading 'useContext')" "$log" && grep -q "prerender" "$log"; then
-    return 2
-  fi
-  return 1
-}
+# Sessão remota traz um Chromium em $PLAYWRIGHT_BROWSERS_PATH/chromium de outra
+# versão que a do Playwright do repositório (`playwright install` não é
+# permitido lá). Apontar para ele evita "Executable doesn't exist". Na máquina
+# de dev e no CI o caminho não existe e nada muda.
+if [ -z "${E2E_CHROMIUM_PATH:-}" ] && [ -x "${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}/chromium" ]; then
+  export E2E_CHROMIUM_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}/chromium"
+fi
 
 BANCO_PRONTO=false
 prepara_banco() {
@@ -322,16 +312,16 @@ if ! $RAPIDO && quer e2e; then
     elif prepara_banco; then
       # API_BACKEND_URL / NEXT_PUBLIC_API_URL já exportados antes do build geral.
       echo "  … build da API e do web"
-      build_com_retry /tmp/prepush-e2e-build.log --filter=orbien-backend --filter=orbien-web; RC=$?
-      if [ $RC -eq 2 ]; then
-        alerta "e2e NÃO rodou: build do web caiu no crash conhecido do Next 16.x mesmo após 3 tentativas (AJU-04, vercel/next.js#95741) — rode em outra máquina ou confirme no CI"
-      elif [ $RC -ne 0 ]; then
+      if ! constroi /tmp/prepush-e2e-build.log --filter=orbien-backend --filter=orbien-web; then
         bloqueia "build para o e2e falhou — veja /tmp/prepush-e2e-build.log"
+        tail -10 /tmp/prepush-e2e-build.log | sed 's/^/      /'
       else
+        # Sem NODE_ENV, como no job `e2e` do ci.yml: a API muda de comportamento
+        # com ele (cookies, CORS), e o ambiente de dev traz `development`.
         PORT=3000 ALLOWED_ORIGINS=http://localhost:3001 FRONTEND_URL=http://localhost:3001 \
-          node apps/api/dist/src/main.js >/tmp/prepush-e2e-api.log 2>&1 &
+          env -u NODE_ENV node apps/api/dist/src/main.js >/tmp/prepush-e2e-api.log 2>&1 &
         PIDS+=("$!")
-        (cd apps/web && exec node ../../node_modules/next/dist/bin/next start --port 3001) >/tmp/prepush-e2e-web.log 2>&1 &
+        (cd apps/web && NODE_ENV=production exec node ../../node_modules/next/dist/bin/next start --port 3001) >/tmp/prepush-e2e-web.log 2>&1 &
         PIDS+=("$!")
         if ! espera_url http://localhost:3000/api/health 60; then
           bloqueia "a API não respondeu em 120s — veja /tmp/prepush-e2e-api.log"; tail -6 /tmp/prepush-e2e-api.log | sed 's/^/      /'
@@ -362,12 +352,10 @@ if ! $RAPIDO && quer site; then
     etapa "Smoke do site (o diff toca o site)"
     if porta_aberta 3002; then
       bloqueia "porta 3002 ocupada — o smoke sobe o site nela; encerre o que estiver rodando"
-    elif build_com_retry /tmp/prepush-site-build.log --filter=orbien-site; RC=$?; [ $RC -eq 2 ]; then
-      alerta "smoke do site NÃO rodou: build caiu no crash conhecido do Next 16.x mesmo após 3 tentativas (AJU-04, vercel/next.js#95741) — confirme no CI"
-    elif [ $RC -ne 0 ]; then
+    elif ! constroi /tmp/prepush-site-build.log --filter=orbien-site; then
       bloqueia "build do site falhou — veja /tmp/prepush-site-build.log"
     else
-      (cd apps/site && exec node ../../node_modules/next/dist/bin/next start --port 3002) >/tmp/prepush-site.log 2>&1 &
+      (cd apps/site && NODE_ENV=production exec node ../../node_modules/next/dist/bin/next start --port 3002) >/tmp/prepush-site.log 2>&1 &
       PIDS+=("$!")
       if ! espera_url http://localhost:3002/ 60; then
         bloqueia "o site não respondeu em 120s — veja /tmp/prepush-site.log"
