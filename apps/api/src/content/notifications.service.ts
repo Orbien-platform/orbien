@@ -166,8 +166,39 @@ export class NotificationsService {
 
   // ── Direct push (used by cross-module callers like CelebrationAssignmentService) ─────
 
-  async sendPush(opts: SendPushOpts): Promise<void> {
-    await this.dispatch(opts);
+  /** `true` quando o OneSignal aceitou o envio (ou não havia ninguém a avisar). */
+  async sendPush(opts: SendPushOpts): Promise<boolean> {
+    return this.dispatch(opts);
+  }
+
+  /**
+   * Push endereçado a pessoas, não a tag. O app registra o aparelho com
+   * `external_id` = id da conta (`OneSignal.login(sub)`) e só as tags
+   * `tenant_id`, `congregation_id` e `role` — não há tag de pessoa. Por isso o
+   * destino é o `UserAccount` ativo de cada `person_id`, como o segmento
+   * avançado já faz. Pessoa sem conta (nunca entrou no app) fica de fora.
+   * Devolve `false` se qualquer lote falhou, para o chamador não dar o aviso
+   * por feito.
+   */
+  async sendPushToPersons(
+    opts: Omit<SendPushOpts, 'filters'>,
+    personIds: string[],
+  ): Promise<boolean> {
+    const accounts = personIds.length
+      ? await this.prisma.system.userAccount.findMany({
+          where: { tenant_id: opts.tenantId, person_id: { in: personIds }, is_active: true },
+          select: { id: true },
+        })
+      : [];
+    const ids = accounts.map((a) => a.id);
+
+    // OneSignal aceita até 2000 external ids por chamada; 1000 deixa folga.
+    let allDelivered = true;
+    for (let i = 0; i < ids.length; i += 1000) {
+      const ok = await this.dispatch({ ...opts, externalUserIds: ids.slice(i, i + 1000) });
+      allDelivered = allDelivered && ok;
+    }
+    return allDelivered;
   }
 
   // ── Metrics ───────────────────────────────────────────────────────────────
@@ -498,14 +529,14 @@ export class NotificationsService {
     filters?: OneSignalFilter[];
     externalUserIds?: string[];
     data: Record<string, string>;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const appId = process.env['ONESIGNAL_APP_ID'];
     const apiKey = process.env['ONESIGNAL_API_KEY'];
 
     if (!appId) {
       this.logger.warn('ONESIGNAL_APP_ID não configurado — criando dispatch sem envio');
       await this.createDispatch(opts.tenantId, opts.congregationId, opts.contentPostId, null, NotificationStatus.failed);
-      return;
+      return false;
     }
 
     // Segmento avançado sem nenhum destinatário elegível — nada a enviar, e
@@ -514,7 +545,7 @@ export class NotificationsService {
     if (opts.externalUserIds && opts.externalUserIds.length === 0) {
       this.logger.warn('Segmentação avançada sem destinatários elegíveis — dispatch sem envio');
       await this.createDispatch(opts.tenantId, opts.congregationId, opts.contentPostId, null, NotificationStatus.sent);
-      return;
+      return true;
     }
 
     let onesignalId: string | null = null;
@@ -570,6 +601,7 @@ export class NotificationsService {
     }
 
     await this.createDispatch(opts.tenantId, opts.congregationId, opts.contentPostId, onesignalId, status);
+    return status !== NotificationStatus.failed;
   }
 
   private async createDispatch(

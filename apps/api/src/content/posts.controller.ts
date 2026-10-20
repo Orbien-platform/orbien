@@ -133,6 +133,7 @@ export class PostsController {
       roles: [],
       plan: user.plan,
       scope: 'upload',
+      upload_kind: 'post_media',
       upload_target: id,
       // Copiados para o ticket porque o `AuditInterceptor` lê os dois: sem
       // eles, um upload feito em sessão de suporte não deixaria a linha

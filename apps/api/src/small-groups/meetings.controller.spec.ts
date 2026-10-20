@@ -1,4 +1,6 @@
 import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
+import { UPLOAD_TICKET_KEY } from '../auth/decorators/upload-ticket.decorator';
 import { MeetingsController } from './meetings.controller';
 import { MeetingsService } from './meetings.service';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
@@ -28,6 +30,8 @@ describe('MeetingsController', () => {
   let service: jest.Mocked<MeetingsService>;
   let controller: MeetingsController;
 
+  let jwt: { sign: jest.Mock };
+
   beforeEach(() => {
     service = {
       create: jest.fn(),
@@ -41,9 +45,13 @@ describe('MeetingsController', () => {
       removeMaterial: jest.fn(),
       createCheckinToken: jest.fn(),
       checkin: jest.fn(),
+      assertCanManageMaterials: jest.fn(),
+      listGroupMaterials: jest.fn(),
+      uploadMaterial: jest.fn(),
     } as unknown as jest.Mocked<MeetingsService>;
+    jwt = { sign: jest.fn().mockReturnValue('ticket') };
 
-    controller = new MeetingsController(service);
+    controller = new MeetingsController(service, jwt as unknown as JwtService);
   });
 
   it('create, update, findByGroup e recordAttendance exigem papel de escrita de reunião', () => {
@@ -68,6 +76,65 @@ describe('MeetingsController', () => {
   it('addMaterial e removeMaterial exigem papel de escrita de material', () => {
     expect(rolesFor('addMaterial')).toEqual(MATERIAL_WRITE_ROLES);
     expect(rolesFor('removeMaterial')).toEqual(MATERIAL_WRITE_ROLES);
+  });
+
+  it('ticket e upload de material exigem papel de escrita de material; o upload aceita o ticket', () => {
+    expect(rolesFor('materialUploadTicket')).toEqual(MATERIAL_WRITE_ROLES);
+    expect(rolesFor('uploadMaterial')).toEqual(MATERIAL_WRITE_ROLES);
+    expect(
+      Reflect.getMetadata(
+        UPLOAD_TICKET_KEY,
+        MeetingsController.prototype.uploadMaterial,
+      ),
+    ).toBe('meeting_material');
+    expect(
+      Reflect.getMetadata(UPLOAD_TICKET_KEY, MeetingsController.prototype.materialUploadTicket),
+    ).toBeUndefined();
+  });
+
+  it('materialUploadTicket confere a reunião e assina ticket sem papel, preso a ela', async () => {
+    const result = await controller.materialUploadTicket('meet1', USER);
+
+    expect(service.assertCanManageMaterials).toHaveBeenCalledWith('meet1', USER);
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roles: [],
+        scope: 'upload',
+        upload_kind: 'meeting_material',
+        upload_target: 'meet1',
+      }),
+      { expiresIn: 300 },
+    );
+    expect(result).toEqual({ upload_token: 'ticket', expires_in: 300 });
+  });
+
+  it('materialUploadTicket propaga impersonated_by e support_session pro ticket, quando presentes', async () => {
+    await controller.materialUploadTicket('meet1', {
+      ...USER,
+      impersonated_by: 'support1',
+      support_session: true,
+    });
+
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ impersonated_by: 'support1', support_session: true }),
+      { expiresIn: 300 },
+    );
+  });
+
+  it('uploadMaterial delega ao service', async () => {
+    service.uploadMaterial.mockResolvedValue({ id: 'link1' } as never);
+    const file = { originalname: 'a.pdf' } as Express.Multer.File;
+
+    await controller.uploadMaterial('meet1', { title: 'T' } as never, file, USER);
+
+    expect(service.uploadMaterial).toHaveBeenCalledWith('meet1', { title: 'T' }, file, USER);
+  });
+
+  it('listGroupMaterials aceita member e delega ao service', async () => {
+    expect(rolesFor('listGroupMaterials')).toEqual(MATERIAL_READ_ROLES);
+    service.listGroupMaterials.mockResolvedValue([]);
+    await controller.listGroupMaterials('sg1', USER);
+    expect(service.listGroupMaterials).toHaveBeenCalledWith('sg1', USER);
   });
 
   it('listMaterials aceita member além dos papéis de escrita de material', () => {
@@ -149,9 +216,9 @@ describe('MeetingsController', () => {
   it('removeMaterial delega ao service', async () => {
     service.removeMaterial.mockResolvedValue({ id: 'link1' } as never);
 
-    const result = await controller.removeMaterial('meet1', 'mat1');
+    const result = await controller.removeMaterial('meet1', 'mat1', USER);
 
-    expect(service.removeMaterial).toHaveBeenCalledWith('meet1', 'mat1');
+    expect(service.removeMaterial).toHaveBeenCalledWith('meet1', 'mat1', USER);
     expect(result).toEqual({ id: 'link1' });
   });
 

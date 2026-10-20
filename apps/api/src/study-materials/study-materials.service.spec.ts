@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { StudyMaterialsService } from './study-materials.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../content/notifications.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 const USER: JwtPayload = {
@@ -31,6 +32,7 @@ const EXISTING_MATERIAL = {
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     smallGroup: { findMany: jest.fn() },
+    network: { findFirst: jest.fn() },
     studyMaterial: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -53,6 +55,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
 function systemWith(overrides: Record<string, unknown> = {}) {
   return {
     studyMaterial: { findMany: jest.fn(), update: jest.fn() },
+    groupMembership: { findMany: jest.fn().mockResolvedValue([]) },
     ...overrides,
   };
 }
@@ -72,7 +75,17 @@ function serviceWith(
     upload: jest.fn().mockResolvedValue('https://cdn/materiais/a.pdf'),
     ...opts.storage,
   } as unknown as StorageService;
-  return { service: new StudyMaterialsService(prisma, storageService), storageService, system };
+  const notifications = { sendPushToPersons: jest.fn().mockResolvedValue(true) };
+  return {
+    service: new StudyMaterialsService(
+      prisma,
+      storageService,
+      notifications as unknown as NotificationsService,
+    ),
+    storageService,
+    system,
+    notifications,
+  };
 }
 
 describe('StudyMaterialsService', () => {
@@ -114,7 +127,7 @@ describe('StudyMaterialsService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('cria o material com upload de arquivo, usando ".bin" quando o arquivo não tem extensão', async () => {
+    it('recusa arquivo sem extensão de PDF/Word, sem tocar no storage', async () => {
       const client = clientWith();
       client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }, { id: 'g2' }]);
       client.studyMaterial.create.mockResolvedValue({ id: 'm1' });
@@ -122,9 +135,11 @@ describe('StudyMaterialsService', () => {
       const { service, storageService } = serviceWith(client);
       const file = { originalname: 'semext', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
 
-      await service.create({ source_type: 'pdf', publish_at: '2026-09-10' } as never, file, USER);
+      await expect(
+        service.create({ source_type: 'pdf', publish_at: '2026-09-10' } as never, file, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(storageService.upload).toHaveBeenCalledWith(file.buffer, expect.stringContaining('.bin'), 'application/pdf');
+      expect(storageService.upload).not.toHaveBeenCalled();
     });
 
     it('cria o material com todos os grupos da congregação quando target_group_ids não é informado', async () => {
@@ -191,6 +206,109 @@ describe('StudyMaterialsService', () => {
       );
 
       expect(client.materialTarget.createMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('create — alcance', () => {
+    function ready() {
+      const client = clientWith();
+      client.studyMaterial.create.mockResolvedValue({ id: 'm1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'm1' });
+      return client;
+    }
+    const base = { title: 'T', source_type: 'rich_text', rich_content: 'x', publish_at: '2026-09-10' };
+
+    it('rede: alcança os PGs da rede, grava audience/network_id e visibility', async () => {
+      const client = ready();
+      client.network.findFirst.mockResolvedValue({ id: 'n1' });
+      client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }, { id: 'g2' }]);
+      const { service } = serviceWith(client);
+
+      await service.create(
+        { ...base, audience: 'network', network_id: 'n1', visibility: 'leaders_only' } as never,
+        undefined,
+        USER,
+      );
+
+      expect(client.network.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'n1', congregation_id: 'g1' } }),
+      );
+      expect(client.smallGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { network_id: 'n1', congregation_id: 'g1' } }),
+      );
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ audience: 'network', network_id: 'n1', visibility: 'leaders_only' }),
+      });
+      expect(client.materialTarget.createMany).toHaveBeenCalledWith({
+        data: [
+          { study_material_id: 'm1', small_group_id: 'g1' },
+          { study_material_id: 'm1', small_group_id: 'g2' },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('rede de outra congregação é recusada', async () => {
+      const client = ready();
+      client.network.findFirst.mockResolvedValue(null);
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.create({ ...base, audience: 'network', network_id: 'n9' } as never, undefined, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(client.studyMaterial.create).not.toHaveBeenCalled();
+    });
+
+    it('todas as redes: alcança todos os PGs da congregação', async () => {
+      const client = ready();
+      client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }, { id: 'g2' }, { id: 'g3' }]);
+      const { service } = serviceWith(client);
+
+      await service.create({ ...base, audience: 'all_networks' } as never, undefined, USER);
+
+      expect(client.smallGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { congregation_id: 'g1' } }),
+      );
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ audience: 'all_networks', network_id: null, visibility: 'all' }),
+      });
+      expect(client.materialTarget.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ small_group_id: 'g3' })]) }),
+      );
+    });
+
+    it('alcance inválido é recusado antes de subir o arquivo ao storage', async () => {
+      const client = ready();
+      client.network.findFirst.mockResolvedValue(null);
+      const { service, storageService } = serviceWith(client);
+      const file = { originalname: 'a.pdf', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
+
+      await expect(
+        service.create({ title: 'T', source_type: 'pdf', publish_at: '2026-09-10', audience: 'network', network_id: 'n9' } as never, file, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(storageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('falha ao gravar remove o arquivo do bucket', async () => {
+      const client = ready();
+      client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }]);
+      client.studyMaterial.create.mockRejectedValue(new Error('db'));
+      const { service, storageService } = serviceWith(client);
+      const file = { originalname: 'a.pdf', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
+
+      await expect(
+        service.create({ title: 'T', source_type: 'pdf', publish_at: '2026-09-10' } as never, file, USER),
+      ).rejects.toThrow('db');
+      expect(storageService.deleteByUrl).toHaveBeenCalledWith('https://cdn/materiais/a.pdf');
+    });
+
+    it('PG específico sem nenhum PG informado é recusado', async () => {
+      const client = ready();
+      const { service } = serviceWith(client);
+
+      await expect(
+        service.create({ ...base, audience: 'group' } as never, undefined, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
@@ -369,7 +487,7 @@ describe('StudyMaterialsService', () => {
       });
     });
 
-    it('usa ".bin" como extensão quando o novo arquivo não tem uma', async () => {
+    it('recusa o novo arquivo sem extensão de PDF/Word, sem tocar no storage', async () => {
       const client = clientWith();
       client.studyMaterial.findUnique.mockResolvedValue({ ...EXISTING_MATERIAL, file_url: null });
       client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
@@ -377,9 +495,11 @@ describe('StudyMaterialsService', () => {
       const { service, storageService } = serviceWith(client);
       const file = { originalname: 'semext', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
 
-      await service.update('m1', {} as never, file, USER);
+      await expect(service.update('m1', {} as never, file, USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
 
-      expect(storageService.upload).toHaveBeenCalledWith(file.buffer, expect.stringContaining('.bin'), 'application/pdf');
+      expect(storageService.upload).not.toHaveBeenCalled();
     });
 
     it('converte publish_at e expires_at quando informados', async () => {
@@ -572,46 +692,101 @@ describe('StudyMaterialsService', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('notifica e marca notified_at quando o OneSignal responde ok', async () => {
+    const pendingMaterial = (over: Record<string, unknown> = {}) => ({
+      id: 'm1',
+      title: 'Estudo',
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      visibility: 'all',
+      materialTargets: [{ small_group_id: 'sg1' }, { small_group_id: 'sg2' }],
+      ...over,
+    });
+
+    it('avisa só as pessoas dos PGs-alvo e marca notified_at', async () => {
       process.env['ONESIGNAL_APP_ID'] = 'app1';
-      process.env['ONESIGNAL_REST_API_KEY'] = 'key1';
-      const client = clientWith();
       const system = systemWith();
-      system.studyMaterial.findMany.mockResolvedValue([{ id: 'm1', title: 'Estudo', congregation_id: 'g1' }]);
-      fetchMock.mockResolvedValue({ ok: true, json: async () => ({}) });
-      const { service } = serviceWith(client, { system });
+      system.studyMaterial.findMany.mockResolvedValue([pendingMaterial()]);
+      system.groupMembership.findMany.mockResolvedValue([{ person_id: 'p1' }, { person_id: 'p2' }]);
+      const { service, notifications } = serviceWith(clientWith(), { system });
 
       await service.publishPending();
 
+      expect(system.groupMembership.findMany).toHaveBeenCalledWith({
+        where: { small_group_id: { in: ['sg1', 'sg2'] } },
+        select: { person_id: true },
+        distinct: ['person_id'],
+      });
+      expect(notifications.sendPushToPersons).toHaveBeenCalledTimes(1);
+      const [opts, personIds] = notifications.sendPushToPersons.mock.calls[0];
+      expect(opts).toMatchObject({ tenantId: 't1', congregationId: 'g1', title: 'Novo material disponível' });
+      expect(personIds).toEqual(['p1', 'p2']);
       expect(system.studyMaterial.update).toHaveBeenCalledWith({
         where: { id: 'm1' },
         data: { notified_at: expect.any(Date) },
       });
     });
 
-    it('loga aviso mas ainda marca notified_at quando o OneSignal responde com erro', async () => {
+    it('só pega material publicado nas últimas 24h e ainda não avisado', async () => {
       process.env['ONESIGNAL_APP_ID'] = 'app1';
-      const client = clientWith();
       const system = systemWith();
-      system.studyMaterial.findMany.mockResolvedValue([{ id: 'm1', title: 'Estudo', congregation_id: 'g1' }]);
-      fetchMock.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
-      const { service } = serviceWith(client, { system });
+      system.studyMaterial.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(clientWith(), { system });
 
       await service.publishPending();
 
-      expect(system.studyMaterial.update).toHaveBeenCalledWith({
-        where: { id: 'm1' },
-        data: { notified_at: expect.any(Date) },
-      });
+      const where = system.studyMaterial.findMany.mock.calls[0][0].where;
+      expect(where.notified_at).toBeNull();
+      expect(where.publish_at.lte.getTime() - where.publish_at.gte.getTime()).toBe(24 * 60 * 60 * 1000);
     });
 
-    it('captura exceção de rede e não marca notified_at para aquele material', async () => {
+    it('leaders_only: restringe o público a leader e trainee', async () => {
       process.env['ONESIGNAL_APP_ID'] = 'app1';
-      const client = clientWith();
       const system = systemWith();
-      system.studyMaterial.findMany.mockResolvedValue([{ id: 'm1', title: 'Estudo', congregation_id: 'g1' }]);
-      fetchMock.mockRejectedValue(new Error('rede fora'));
-      const { service } = serviceWith(client, { system });
+      system.studyMaterial.findMany.mockResolvedValue([pendingMaterial({ visibility: 'leaders_only' })]);
+      const { service } = serviceWith(clientWith(), { system });
+
+      await service.publishPending();
+
+      expect(system.groupMembership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { small_group_id: { in: ['sg1', 'sg2'] }, role: { in: ['leader', 'trainee'] } },
+        }),
+      );
+    });
+
+    it('material sem PG alvo não dispara push e fica marcado como avisado', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const system = systemWith();
+      system.studyMaterial.findMany.mockResolvedValue([pendingMaterial({ materialTargets: [] })]);
+      const { service, notifications } = serviceWith(clientWith(), { system });
+
+      await service.publishPending();
+
+      expect(system.groupMembership.findMany).not.toHaveBeenCalled();
+      expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
+      expect(system.studyMaterial.update).toHaveBeenCalled();
+    });
+
+    it('OneSignal recusando o envio não marca notified_at (o job tenta de novo na janela)', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const system = systemWith();
+      system.studyMaterial.findMany.mockResolvedValue([pendingMaterial()]);
+      system.groupMembership.findMany.mockResolvedValue([{ person_id: 'p1' }]);
+      const { service, notifications } = serviceWith(clientWith(), { system });
+      notifications.sendPushToPersons.mockResolvedValue(false);
+
+      await service.publishPending();
+
+      expect(system.studyMaterial.update).not.toHaveBeenCalled();
+    });
+
+    it('exceção no push não derruba o job nem marca notified_at', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const system = systemWith();
+      system.studyMaterial.findMany.mockResolvedValue([pendingMaterial()]);
+      system.groupMembership.findMany.mockResolvedValue([{ person_id: 'p1' }]);
+      const { service, notifications } = serviceWith(clientWith(), { system });
+      notifications.sendPushToPersons.mockRejectedValue(new Error('rede fora'));
 
       await expect(service.publishPending()).resolves.toBeUndefined();
       expect(system.studyMaterial.update).not.toHaveBeenCalled();

@@ -623,10 +623,11 @@ model Network {
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
-  leader       Person?      @relation("NetworkLeader", fields: [leader_person_id], references: [id], onDelete: SetNull)
-  smallGroups  SmallGroup[]
+  tenant         Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation   Congregation    @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  leader         Person?         @relation("NetworkLeader", fields: [leader_person_id], references: [id], onDelete: SetNull)
+  smallGroups    SmallGroup[]
+  studyMaterials StudyMaterial[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -938,6 +939,13 @@ model StudyMaterial {
   publish_at      DateTime
   expires_at      DateTime?
   notified_at     DateTime?
+  /// Alcance escolhido na criação. Os PGs alcançados são gravados em
+  /// `material_targets` naquele momento (foto, não consulta viva): PG criado
+  /// ou movido de rede depois não recebe material antigo.
+  audience        MaterialAudience    @default(group)
+  network_id      String?
+  /// Quem enxerga: todos os alcançados ou só quem lidera o PG.
+  visibility      MaterialVisibility  @default(all)
   version         Int                 @default(1)
   tags            String[]
   created_at      DateTime            @default(now())
@@ -945,6 +953,7 @@ model StudyMaterial {
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  network      Network?     @relation(fields: [network_id], references: [id], onDelete: SetNull)
 
   materialTargets  MaterialTarget[]
   openRecords      MaterialOpenRecord[]
@@ -954,6 +963,7 @@ model StudyMaterial {
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([publish_at])
+  @@index([network_id])
   @@map("study_materials")
 }
 
@@ -1030,6 +1040,11 @@ model GroupMeetingMaterial {
   meeting_id      String
   material_id     String
   visibility      MaterialVisibility @default(all)
+  /// Quando o material passa a valer para o público da visibilidade. Nulo =
+  /// liberado na hora do vínculo. Líder vê antes; participante só depois.
+  release_at      DateTime?
+  /// Marca o aviso por push já enviado (cron de liberação e vínculo imediato).
+  notified_at     DateTime?
   created_at      DateTime           @default(now())
 
   tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
@@ -1040,6 +1055,7 @@ model GroupMeetingMaterial {
   @@unique([meeting_id, material_id])
   @@index([tenant_id, congregation_id])
   @@index([material_id])
+  @@index([notified_at, release_at])
   @@map("group_meeting_materials")
 }
 
@@ -2030,6 +2046,12 @@ enum StudyMaterialSource {
   pdf
   doc
   rich_text
+}
+
+enum MaterialAudience {
+  all_networks
+  network
+  group
 }
 
 enum MaterialVisibility {

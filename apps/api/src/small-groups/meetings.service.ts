@@ -1,5 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { MeetingMaterialNotifier } from './meeting-material.notifier';
+import { StorageService } from '../storage/storage.service';
+import { UploadMeetingMaterialDto } from './dto/upload-meeting-material.dto';
+import { assertMaterialFile } from '../study-materials/material-file';
 import { AttendanceRecord, GroupMeeting, GroupMeetingMaterial, MaterialVisibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -38,6 +48,10 @@ const CHECKIN_TOKEN_TTL_MINUTES = 240;
 const CHECKIN_MAX_MEETING_AGE_HOURS = 24;
 
 const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admin'];
+// Os dois papéis que mexem em material de qualquer PG da congregação. Os demais
+// (`cell_leader`) só mexem no do PG que lideram — o RLS filtra por congregação,
+// não por papel.
+const MATERIAL_ADMIN_ROLES = ['tenant_admin', 'admin_congregation'];
 
 // Espelha `MEETING_READ_ROLES` do controller — papéis de liderança que já
 // enxergam grupos que não lideram (ex.: `pastor`/`secretary` cobrindo a rede
@@ -57,7 +71,11 @@ const MEETING_PRIVILEGED_ROLES = [
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: MeetingMaterialNotifier,
+    private readonly storage: StorageService,
+  ) {}
 
   async create(
     dto: CreateMeetingDto,
@@ -236,16 +254,56 @@ export class MeetingsService {
     return this.prisma.client.attendanceRecord.delete({ where: { id: record.id } });
   }
 
+  /**
+   * Confere que o encontro existe e que quem escreve pode mexer no material
+   * dele: administração de qualquer PG da congregação; `cell_leader` só do PG
+   * que lidera (líder titular do PG, ou `leader`/`trainee` na membership).
+   * Devolve o PG do encontro.
+   */
+  async assertCanManageMaterials(meetingId: string, user: JwtPayload): Promise<string> {
+    const meeting = await this.prisma.client.groupMeeting.findUnique({
+      where: { id: meetingId },
+      select: {
+        id: true,
+        small_group_id: true,
+        smallGroup: { select: { leader_person_id: true } },
+      },
+    });
+    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+
+    if (user.roles.some((role) => MATERIAL_ADMIN_ROLES.includes(role))) {
+      return meeting.small_group_id;
+    }
+
+    const account = await this.prisma.client.userAccount.findUnique({
+      where: { id: user.sub },
+      select: { person_id: true },
+    });
+    const personId = account?.person_id;
+    if (personId && personId === meeting.smallGroup.leader_person_id) {
+      return meeting.small_group_id;
+    }
+
+    const membership = personId
+      ? await this.prisma.client.groupMembership.findUnique({
+          where: {
+            small_group_id_person_id: { small_group_id: meeting.small_group_id, person_id: personId },
+          },
+          select: { role: true },
+        })
+      : null;
+    if (!membership || !['leader', 'trainee'].includes(membership.role)) {
+      throw new ForbiddenException('Só quem lidera este grupo pode enviar material para ele');
+    }
+    return meeting.small_group_id;
+  }
+
   async addMaterial(
     meetingId: string,
     dto: CreateMeetingMaterialDto,
     user: JwtPayload,
   ): Promise<GroupMeetingMaterial> {
-    const meeting = await this.prisma.client.groupMeeting.findUnique({
-      where: { id: meetingId },
-      select: { id: true },
-    });
-    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+    await this.assertCanManageMaterials(meetingId, user);
 
     const material = await this.prisma.client.studyMaterial.findUnique({
       where: { id: dto.material_id },
@@ -263,14 +321,121 @@ export class MeetingsService {
     });
     if (existing) throw new ConflictException('Este material já está vinculado a esta reunião');
 
-    return this.prisma.client.groupMeetingMaterial.create({
+    const releaseAt = dto.release_at ? new Date(dto.release_at) : null;
+    const releasedNow = !releaseAt || releaseAt.getTime() <= Date.now();
+
+    const link = await this.prisma.client.groupMeetingMaterial.create({
       data: {
         tenant_id: user.tenant_id,
         congregation_id: user.congregation_id,
         meeting_id: meetingId,
         material_id: dto.material_id,
         visibility: dto.visibility ?? MaterialVisibility.all,
+        release_at: releaseAt,
       },
+    });
+
+    // Liberado agora: avisa já. Agendado: o cron do notifier avisa na data.
+    if (releasedNow) await this.notifier.notifyLink(link.id);
+    return link;
+  }
+
+  /**
+   * Cria o material a partir do arquivo enviado e já o vincula ao encontro,
+   * num passo só — o líder de PG não tem `POST /study-materials` (é do
+   * administrativo), e o alvo aqui é sempre o PG do encontro.
+   */
+  async uploadMaterial(
+    meetingId: string,
+    dto: UploadMeetingMaterialDto,
+    file: Express.Multer.File | undefined,
+    user: JwtPayload,
+  ): Promise<GroupMeetingMaterial> {
+    if (!file) throw new BadRequestException('Arquivo obrigatório.');
+    const { ext, source } = assertMaterialFile(file);
+
+    const smallGroupId = await this.assertCanManageMaterials(meetingId, user);
+
+    const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
+    const file_url = await this.storage.upload(file.buffer, key, file.mimetype);
+
+    const releaseAt = dto.release_at ? new Date(dto.release_at) : null;
+    let link: GroupMeetingMaterial;
+    try {
+      link = await this.prisma.runInTx(
+        async (tx) => {
+          const material = await tx.studyMaterial.create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              title: dto.title.trim(),
+              source_type: source,
+              file_url,
+              // O material espelha o vínculo: sem isso o `publishPending` e a
+              // listagem do PG (`listGroupMaterials`) tratariam um material
+              // "só líderes" ou agendado como público e já liberado.
+              visibility: dto.visibility ?? MaterialVisibility.all,
+              publish_at: releaseAt ?? new Date(),
+              // O aviso é do `MeetingMaterialNotifier`, por vínculo.
+              notified_at: new Date(),
+              tags: [],
+            },
+          });
+          await tx.materialTarget.create({
+            data: { study_material_id: material.id, small_group_id: smallGroupId },
+          });
+          return tx.groupMeetingMaterial.create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              meeting_id: meetingId,
+              material_id: material.id,
+              visibility: dto.visibility ?? MaterialVisibility.all,
+              release_at: releaseAt,
+            },
+            include: { material: true },
+          });
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      );
+    } catch (err) {
+      // Sem linha no banco o arquivo ficaria órfão no bucket.
+      await this.storage.deleteByUrl(file_url);
+      throw err;
+    }
+
+    if (!releaseAt || releaseAt.getTime() <= Date.now()) {
+      await this.notifier.notifyLink(link.id);
+    }
+    return link;
+  }
+
+  /**
+   * Materiais que alcançam o PG (`material_targets`), independentes de
+   * encontro — é por aqui que o material de uma rede ou de todas as redes
+   * chega ao PG. Mesma regra de `listMaterials`: líder vê tudo, inclusive o
+   * agendado e o "só líderes"; membro precisa participar do PG e só enxerga o
+   * publicado, não expirado e de visibilidade `all`.
+   */
+  async listGroupMaterials(groupId: string, user: JwtPayload) {
+    const isLeader = user.roles.some((role) => MATERIAL_LEADER_ROLES.includes(role));
+    if (!isLeader) {
+      await this.assertParticipant(groupId, user.sub);
+    }
+
+    const now = new Date();
+    return this.prisma.client.studyMaterial.findMany({
+      where: {
+        materialTargets: { some: { small_group_id: groupId } },
+        ...(isLeader
+          ? {}
+          : {
+              visibility: MaterialVisibility.all,
+              publish_at: { lte: now },
+              OR: [{ expires_at: null }, { expires_at: { gt: now } }],
+            }),
+      },
+      orderBy: { publish_at: 'desc' },
     });
   }
 
@@ -289,7 +454,12 @@ export class MeetingsService {
     return this.prisma.client.groupMeetingMaterial.findMany({
       where: {
         meeting_id: meetingId,
-        ...(isLeader ? {} : { visibility: MaterialVisibility.all }),
+        ...(isLeader
+          ? {}
+          : {
+              visibility: MaterialVisibility.all,
+              OR: [{ release_at: null }, { release_at: { lte: new Date() } }],
+            }),
       },
       include: { material: true },
       orderBy: { created_at: 'asc' },
@@ -299,18 +469,15 @@ export class MeetingsService {
   async removeMaterial(
     meetingId: string,
     materialId: string,
+    user: JwtPayload,
   ): Promise<GroupMeetingMaterial> {
     // A reunião vem primeiro de propósito. `group_meetings` tem a policy
     // `tenant_congregation_isolation`; `group_meeting_materials` tem só a de
     // tenant. Sem esta leitura, o DELETE encontrava o vínculo pela chave
     // (meeting_id, material_id) e apagava material de reunião de outra
-    // congregação do mesmo tenant. `addMaterial` e `listMaterials` já validavam
-    // a reunião assim — só a remoção escapava.
-    const meeting = await this.prisma.client.groupMeeting.findUnique({
-      where: { id: meetingId },
-      select: { id: true },
-    });
-    if (!meeting) throw new NotFoundException('Reunião não encontrada');
+    // congregação do mesmo tenant. `assertCanManageMaterials` faz essa leitura
+    // e ainda confere que quem remove lidera o PG (ou administra).
+    await this.assertCanManageMaterials(meetingId, user);
 
     const link = await this.prisma.client.groupMeetingMaterial.findUnique({
       where: {

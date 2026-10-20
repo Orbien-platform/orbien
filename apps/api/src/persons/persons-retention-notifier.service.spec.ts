@@ -45,7 +45,7 @@ describe('PersonsRetentionNotifier', () => {
       { tenant_id: 't1', congregation_id: 'c1', upcoming: 1n },
       { tenant_id: 't2', congregation_id: 'c2', upcoming: 2n },
     ]);
-    notifications.sendPush.mockRejectedValueOnce(new Error('OneSignal fora do ar')).mockResolvedValueOnce(undefined);
+    notifications.sendPush.mockRejectedValueOnce(new Error('OneSignal fora do ar')).mockResolvedValueOnce(true);
 
     await notifier.cronNotifyUpcomingRetentions();
 

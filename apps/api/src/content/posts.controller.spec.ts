@@ -173,6 +173,7 @@ describe('PostsController', () => {
         roles: [],
         plan: 'premium',
         scope: 'upload',
+        upload_kind: 'post_media',
         upload_target: 'p1',
       },
       { expiresIn: 300 }

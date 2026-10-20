@@ -13,4 +13,10 @@ export interface JwtPayload {
    */
   scope?: 'upload';
   upload_target?: string;
+  /**
+   * Tipo do ticket, conferido contra o que a rota declara em
+   * `@UploadTicketRoute(kind)`. Ausente = `post_media` (tickets emitidos antes
+   * deste campo existir, ainda dentro dos 5 minutos de vida).
+   */
+  upload_kind?: 'post_media' | 'meeting_material' | 'study_material';
 }

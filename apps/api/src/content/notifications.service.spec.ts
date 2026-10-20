@@ -201,6 +201,79 @@ describe('NotificationsService', () => {
 
       expect(system.notificationDispatch.create).toHaveBeenCalled();
     });
+
+    it('devolve true quando o OneSignal aceita e false quando recusa', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma } = prismaWith();
+      const service = new NotificationsService(prisma);
+      const opts = { tenantId: 't1', congregationId: 'g1', contentPostId: null, title: 'T', body: 'B', filters: [], data: {} };
+
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'osig1' }) });
+      await expect(service.sendPush(opts)).resolves.toBe(true);
+
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+      await expect(service.sendPush(opts)).resolves.toBe(false);
+    });
+  });
+
+  describe('sendPushToPersons', () => {
+    const base = { tenantId: 't1', congregationId: 'g1', contentPostId: null, title: 'T', body: 'B', data: {} };
+
+    it('endereça às contas ativas das pessoas, por external id, e não por tag', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.userAccount.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      const delivered = await service.sendPushToPersons(base, ['p1', 'p2', 'p3']);
+
+      expect(delivered).toBe(true);
+      expect(system.userAccount.findMany).toHaveBeenCalledWith({
+        where: { tenant_id: 't1', person_id: { in: ['p1', 'p2', 'p3'] }, is_active: true },
+        select: { id: true },
+      });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.include_external_user_ids).toEqual(['u1', 'u2']);
+      expect(body.filters).toBeUndefined();
+    });
+
+    it('sem nenhuma conta não chama o OneSignal e conta como entregue', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.userAccount.findMany.mockResolvedValue([]);
+      const service = new NotificationsService(prisma);
+
+      await expect(service.sendPushToPersons(base, ['p1'])).resolves.toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('sem pessoas nem consulta as contas', async () => {
+      const { prisma, system } = prismaWith();
+      const service = new NotificationsService(prisma);
+
+      await expect(service.sendPushToPersons(base, [])).resolves.toBe(true);
+      expect(system.userAccount.findMany).not.toHaveBeenCalled();
+    });
+
+    it('divide em lotes de 1000 e devolve false se algum lote falhar', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.userAccount.findMany.mockResolvedValue(
+        Array.from({ length: 1500 }, (_, i) => ({ id: `u${i}` })),
+      );
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'a' }) })
+        .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+      const service = new NotificationsService(prisma);
+
+      const delivered = await service.sendPushToPersons(base, ['p1']);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).include_external_user_ids).toHaveLength(1000);
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body).include_external_user_ids).toHaveLength(500);
+      expect(delivered).toBe(false);
+    });
   });
 
   describe('syncNotificationMetrics (cron)', () => {

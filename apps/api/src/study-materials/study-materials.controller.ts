@@ -13,7 +13,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'node:crypto';
 import { memoryStorage } from 'multer';
+import { UploadTicketRoute } from '../auth/decorators/upload-ticket.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -30,16 +33,70 @@ const READ_ROLES = [...WRITE_ROLES, 'cell_leader'];
 const STATS_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'cell_leader'];
 const ALL_ROLES = [...READ_ROLES, 'member', 'treasurer'];
 
+/** Segundos. Tempo de pegar o ticket e começar a subir, não de subir. */
+const UPLOAD_TICKET_TTL = 300;
+const FILE_MAX_BYTES = 50 * 1024 * 1024;
+
 @Controller('study-materials')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @UseInterceptors(TenantContextInterceptor)
 export class StudyMaterialsController {
-  constructor(private readonly studyMaterialsService: StudyMaterialsService) {}
+  constructor(
+    private readonly studyMaterialsService: StudyMaterialsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Post()
   @Roles(...WRITE_ROLES)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   create(
+    @Body() dto: CreateStudyMaterialDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.studyMaterialsService.create(dto, file, user);
+  }
+
+  /**
+   * Ticket para subir o arquivo direto na API, fora do `/api-proxy` (teto de
+   * 4,5 MB na Vercel) — mesmo desenho do upload de posts (ver DEPLOY.md). Não
+   * há recurso a que prender o ticket (o material ainda não existe), então ele
+   * é preso a um `upload_id` sorteado aqui, e o tipo `study_material` o impede de valer em outras rotas de upload.
+   * O `:id` da rota tem esse nome porque o `RolesGuard` compara
+   * `upload_target` com `params.id`.
+   */
+  @Post('upload-ticket')
+  @Roles(...WRITE_ROLES)
+  uploadTicket(@CurrentUser() user: JwtPayload): {
+    upload_token: string;
+    upload_id: string;
+    expires_in: number;
+  } {
+    const upload_id = randomUUID();
+    const payload: JwtPayload = {
+      sub: user.sub,
+      tenant_id: user.tenant_id,
+      congregation_id: user.congregation_id,
+      roles: [],
+      plan: user.plan,
+      scope: 'upload',
+      upload_kind: 'study_material',
+      upload_target: upload_id,
+      ...(user.impersonated_by ? { impersonated_by: user.impersonated_by } : {}),
+      ...(user.support_session ? { support_session: true } : {}),
+    };
+    return {
+      upload_token: this.jwtService.sign(payload, { expiresIn: UPLOAD_TICKET_TTL }),
+      upload_id,
+      expires_in: UPLOAD_TICKET_TTL,
+    };
+  }
+
+  @Post('upload/:id')
+  @Roles(...WRITE_ROLES)
+  @UploadTicketRoute('study_material')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: FILE_MAX_BYTES } }))
+  createWithTicket(
     @Body() dto: CreateStudyMaterialDto,
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: JwtPayload,

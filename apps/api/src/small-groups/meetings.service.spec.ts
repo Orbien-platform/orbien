@@ -1,5 +1,7 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
+import { MeetingMaterialNotifier } from './meeting-material.notifier';
+import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -21,26 +23,42 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       delete: jest.fn(),
       create: jest.fn(),
     },
-    studyMaterial: { findUnique: jest.fn() },
+    studyMaterial: { findUnique: jest.fn(), create: jest.fn(), findMany: jest.fn() },
+    materialTarget: { create: jest.fn() },
     groupMeetingMaterial: {
       findUnique: jest.fn(),
       create: jest.fn(),
       findMany: jest.fn(),
       delete: jest.fn(),
     },
-    userAccount: { findUnique: jest.fn() },
-    groupMembership: { findUnique: jest.fn() },
+    // Padrão: quem escreve é líder do PG do encontro. Os testes de acesso negado
+    // sobrescrevem estes dois.
+    userAccount: { findUnique: jest.fn().mockResolvedValue({ person_id: 'p-lead' }) },
+    groupMembership: { findUnique: jest.fn().mockResolvedValue({ role: 'leader' }) },
     meetingCheckinToken: { upsert: jest.fn(), findUnique: jest.fn() },
     ...overrides,
   };
 }
+
+const notifier = { notifyLink: jest.fn() };
+const storage = { upload: jest.fn(), deleteByUrl: jest.fn() };
+
+beforeEach(() => {
+  notifier.notifyLink.mockReset();
+  storage.upload.mockReset();
+  storage.deleteByUrl.mockReset();
+});
 
 function serviceWith(client: ReturnType<typeof clientWith>, runInTx?: jest.Mock) {
   const prisma = {
     client,
     runInTx: runInTx ?? jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
   } as unknown as PrismaService;
-  return new MeetingsService(prisma);
+  return new MeetingsService(
+    prisma,
+    notifier as unknown as MeetingMaterialNotifier,
+    storage as unknown as StorageService,
+  );
 }
 
 describe('MeetingsService', () => {
@@ -285,7 +303,11 @@ describe('MeetingsService', () => {
 
     it('lança NotFoundException quando o material não existe', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
       client.studyMaterial.findUnique.mockResolvedValue(null);
       const service = serviceWith(client);
 
@@ -296,7 +318,11 @@ describe('MeetingsService', () => {
 
     it('rejeita vínculo duplicado', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
       client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
       client.groupMeetingMaterial.findUnique.mockResolvedValue({ id: 'link1' });
       const service = serviceWith(client);
@@ -308,7 +334,11 @@ describe('MeetingsService', () => {
 
     it('vincula o material com visibility default (all)', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
       client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
       client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
       client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
@@ -323,13 +353,42 @@ describe('MeetingsService', () => {
           meeting_id: 'meet1',
           material_id: 'mat1',
           visibility: 'all',
+          release_at: null,
         },
       });
+      expect(notifier.notifyLink).toHaveBeenCalledWith('link1');
+    });
+
+    it('com release_at futuro grava a data e não avisa agora (o cron avisa na data)', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
+      client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
+      client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
+      const service = serviceWith(client);
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+
+      await service.addMaterial('meet1', { material_id: 'mat1', release_at: future } as never, USER);
+
+      expect(client.groupMeetingMaterial.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ release_at: new Date(future) }),
+        }),
+      );
+      expect(notifier.notifyLink).not.toHaveBeenCalled();
     });
 
     it('vincula o material com visibility informada', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
       client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
       client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
       client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
@@ -344,6 +403,252 @@ describe('MeetingsService', () => {
       expect(client.groupMeetingMaterial.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ visibility: 'leaders_only' }) }),
       );
+    });
+  });
+
+  describe('uploadMaterial', () => {
+    const pdf = (over: Record<string, unknown> = {}) =>
+      ({
+        originalname: 'estudo.pdf',
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('x'),
+        ...over,
+      }) as unknown as Express.Multer.File;
+
+    function ready() {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
+      client.studyMaterial.create.mockResolvedValue({ id: 'mat1' });
+      client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
+      storage.upload.mockResolvedValue('https://cdn/t1/materials/a.pdf');
+      return client;
+    }
+
+    it('exige o arquivo', async () => {
+      const service = serviceWith(ready());
+      await expect(service.uploadMaterial('meet1', { title: 'T' } as never, undefined, USER)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it.each([
+      ['executável renomeado para pdf', { originalname: 'x.pdf', mimetype: 'application/x-msdownload' }],
+      ['extensão que não bate com o tipo', { originalname: 'x.exe', mimetype: 'application/pdf' }],
+      ['imagem', { originalname: 'x.png', mimetype: 'image/png' }],
+    ])('recusa %s sem tocar no storage', async (_n, over) => {
+      const service = serviceWith(ready());
+      await expect(
+        service.uploadMaterial('meet1', { title: 'T' } as never, pdf(over), USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('recusa reunião inexistente antes de subir o arquivo', async () => {
+      const client = ready();
+      client.groupMeeting.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+      await expect(
+        service.uploadMaterial('meet1', { title: 'T' } as never, pdf(), USER),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('sobe o PDF, cria material com alvo no PG do encontro, vincula e avisa', async () => {
+      const client = ready();
+      const service = serviceWith(client);
+
+      await service.uploadMaterial('meet1', { title: ' Estudo ', visibility: 'leaders_only' } as never, pdf(), USER);
+
+      expect(storage.upload).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.stringMatching(/^t1\/materials\/[0-9a-f-]+\.pdf$/),
+        'application/pdf',
+      );
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          title: 'Estudo',
+          source_type: 'pdf',
+          file_url: 'https://cdn/t1/materials/a.pdf',
+          visibility: 'leaders_only',
+          notified_at: expect.any(Date),
+        }),
+      });
+      expect(client.materialTarget.create).toHaveBeenCalledWith({
+        data: { study_material_id: 'mat1', small_group_id: 'sg1' },
+      });
+      expect(client.groupMeetingMaterial.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ meeting_id: 'meet1', material_id: 'mat1', visibility: 'leaders_only' }),
+        }),
+      );
+      expect(notifier.notifyLink).toHaveBeenCalledWith('link1');
+    });
+
+    it('docx vira source_type doc', async () => {
+      const client = ready();
+      const service = serviceWith(client);
+
+      await service.uploadMaterial(
+        'meet1',
+        { title: 'T' } as never,
+        pdf({
+          originalname: 'Roteiro.DOCX',
+          mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+        USER,
+      );
+
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ source_type: 'doc' }),
+      });
+    });
+
+    it('agendado: não avisa agora e o material nasce com a data de liberação', async () => {
+      const client = ready();
+      const service = serviceWith(client);
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+      await service.uploadMaterial('meet1', { title: 'T', release_at: future } as never, pdf(), USER);
+      expect(notifier.notifyLink).not.toHaveBeenCalled();
+      expect(client.studyMaterial.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ publish_at: new Date(future) }),
+      });
+    });
+
+    it('falha ao gravar remove o arquivo do bucket', async () => {
+      const client = ready();
+      client.groupMeetingMaterial.create.mockRejectedValue(new Error('db'));
+      const service = serviceWith(client);
+
+      await expect(service.uploadMaterial('meet1', { title: 'T' } as never, pdf(), USER)).rejects.toThrow('db');
+      expect(storage.deleteByUrl).toHaveBeenCalledWith('https://cdn/t1/materials/a.pdf');
+    });
+  });
+
+  describe('autorização de quem escreve material', () => {
+    const pdfFile = {
+      originalname: 'a.pdf',
+      mimetype: 'application/pdf',
+      buffer: Buffer.from('x'),
+    } as unknown as Express.Multer.File;
+
+    function withMeeting(leaderPersonId = 'p-other') {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: leaderPersonId },
+      });
+      return client;
+    }
+
+    it('cell_leader de outro PG não envia nem vincula nem remove material, e o storage não é tocado', async () => {
+      const client = withMeeting();
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.uploadMaterial('meet1', { title: 'T' } as never, pdfFile, USER),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.addMaterial('meet1', { material_id: 'mat1' } as never, USER),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.removeMaterial('meet1', 'mat1', USER)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('membro comum do PG (role member) também é recusado', async () => {
+      const client = withMeeting();
+      client.groupMembership.findUnique.mockResolvedValue({ role: 'member' });
+      const service = serviceWith(client);
+
+      await expect(service.assertCanManageMaterials('meet1', USER)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('líder titular do PG passa sem consultar a membership', async () => {
+      const client = withMeeting('p-lead');
+      const service = serviceWith(client);
+
+      await expect(service.assertCanManageMaterials('meet1', USER)).resolves.toBe('sg1');
+      expect(client.groupMembership.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('conta sem pessoa vinculada é recusada, sem consultar a membership', async () => {
+      const client = withMeeting();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: null });
+      const service = serviceWith(client);
+
+      await expect(service.assertCanManageMaterials('meet1', USER)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.groupMembership.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('leader e trainee na membership passam', async () => {
+      for (const role of ['leader', 'trainee']) {
+        const client = withMeeting();
+        client.groupMembership.findUnique.mockResolvedValue({ role });
+        await expect(serviceWith(client).assertCanManageMaterials('meet1', USER)).resolves.toBe('sg1');
+      }
+    });
+
+    it('administração passa em qualquer PG, sem consultar conta nem membership', async () => {
+      for (const role of ['tenant_admin', 'admin_congregation']) {
+        const client = withMeeting();
+        await expect(
+          serviceWith(client).assertCanManageMaterials('meet1', { ...USER, roles: [role] }),
+        ).resolves.toBe('sg1');
+        expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('listGroupMaterials', () => {
+    it('líder vê tudo que alcança o PG, inclusive agendado e só-líderes', async () => {
+      const client = clientWith();
+      client.studyMaterial.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      await service.listGroupMaterials('sg1', { ...USER, roles: ['cell_leader'] });
+
+      expect(client.studyMaterial.findMany).toHaveBeenCalledWith({
+        where: { materialTargets: { some: { small_group_id: 'sg1' } } },
+        orderBy: { publish_at: 'desc' },
+      });
+      expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('membro participante vê só publicado, não expirado e de visibilidade all', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue({ id: 'mem1' });
+      client.studyMaterial.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      await service.listGroupMaterials('sg1', { ...USER, roles: ['member'] });
+
+      expect(client.studyMaterial.findMany).toHaveBeenCalledWith({
+        where: {
+          materialTargets: { some: { small_group_id: 'sg1' } },
+          visibility: 'all',
+          publish_at: { lte: expect.any(Date) },
+          OR: [{ expires_at: null }, { expires_at: { gt: expect.any(Date) } }],
+        },
+        orderBy: { publish_at: 'desc' },
+      });
+    });
+
+    it('membro de outro PG leva ForbiddenException', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+      const service = serviceWith(client);
+
+      await expect(
+        service.listGroupMaterials('sg1', { ...USER, roles: ['member'] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.studyMaterial.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -386,7 +691,13 @@ describe('MeetingsService', () => {
         }),
       );
       expect(client.groupMeetingMaterial.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { meeting_id: 'meet1', visibility: 'all' } }),
+        expect.objectContaining({
+          where: {
+            meeting_id: 'meet1',
+            visibility: 'all',
+            OR: [{ release_at: null }, { release_at: { lte: expect.any(Date) } }],
+          },
+        }),
       );
     });
 
@@ -410,26 +721,34 @@ describe('MeetingsService', () => {
       client.groupMeeting.findUnique.mockResolvedValue(null);
       const service = serviceWith(client);
 
-      await expect(service.removeMaterial('meet1', 'mat1')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.removeMaterial('meet1', 'mat1', USER)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('lança NotFoundException quando o vínculo não existe', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
       client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
       const service = serviceWith(client);
 
-      await expect(service.removeMaterial('meet1', 'mat1')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.removeMaterial('meet1', 'mat1', USER)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('remove o vínculo quando encontrado', async () => {
       const client = clientWith();
-      client.groupMeeting.findUnique.mockResolvedValue({ id: 'meet1' });
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
       client.groupMeetingMaterial.findUnique.mockResolvedValue({ id: 'link1' });
       client.groupMeetingMaterial.delete.mockResolvedValue({ id: 'link1' });
       const service = serviceWith(client);
 
-      expect(await service.removeMaterial('meet1', 'mat1')).toEqual({ id: 'link1' });
+      expect(await service.removeMaterial('meet1', 'mat1', USER)).toEqual({ id: 'link1' });
     });
   });
 

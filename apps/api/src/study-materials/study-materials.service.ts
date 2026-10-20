@@ -5,11 +5,18 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, StudyMaterial, StudyMaterialSource } from '@prisma/client';
-import * as path from 'path';
+import {
+  MaterialAudience,
+  MaterialVisibility,
+  Prisma,
+  StudyMaterial,
+  StudyMaterialSource,
+} from '@prisma/client';
+import { assertMaterialFile } from './material-file';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../content/notifications.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateStudyMaterialDto } from './dto/create-study-material.dto';
 import { UpdateStudyMaterialDto } from './dto/update-study-material.dto';
@@ -29,6 +36,7 @@ export class StudyMaterialsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(
@@ -51,9 +59,13 @@ export class StudyMaterialsService {
       );
     }
 
+    // Tudo que pode recusar a requisição vem antes do upload: um 400 depois
+    // dele deixaria o arquivo órfão no bucket.
+    const ext = file ? assertMaterialFile(file).ext : undefined;
+    const { audience, network_id, groupIds } = await this.resolveAudience(dto, user);
+
     let file_url: string | undefined;
     if (file) {
-      const ext = path.extname(file.originalname).toLowerCase() || '.bin';
       const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
       file_url = await this.storageService.upload(
         file.buffer,
@@ -62,65 +74,100 @@ export class StudyMaterialsService {
       );
     }
 
-    // Resolve target groups
-    let groupIds: string[];
-    if (dto.target_group_ids && dto.target_group_ids.length > 0) {
-      const found = await this.prisma.client.smallGroup.findMany({
-        where: {
-          id: { in: dto.target_group_ids },
-          congregation_id: user.congregation_id,
+    try {
+      return await this.prisma.runInTx(
+        async (tx) => {
+          const material = await tx.studyMaterial.create({
+            data: {
+              tenant_id: user.tenant_id,
+              congregation_id: user.congregation_id,
+              title: dto.title,
+              description: dto.description,
+              author: dto.author,
+              source_type: dto.source_type,
+              rich_content: dto.rich_content,
+              file_url,
+              publish_at: new Date(dto.publish_at),
+              expires_at: dto.expires_at ? new Date(dto.expires_at) : undefined,
+              audience,
+              network_id,
+              visibility: dto.visibility ?? MaterialVisibility.all,
+              tags: dto.tags ?? [],
+            },
+          });
+
+          if (groupIds.length > 0) {
+            await tx.materialTarget.createMany({
+              data: groupIds.map((small_group_id) => ({
+                study_material_id: material.id,
+                small_group_id,
+              })),
+              skipDuplicates: true,
+            });
+          }
+
+          return tx.studyMaterial.findUnique({
+            where: { id: material.id },
+            include: {
+              materialTargets: { include: { smallGroup: true } },
+            },
+          });
         },
+        { timeout: 30_000, maxWait: 10_000 },
+      );
+    } catch (err) {
+      // Sem a linha no banco o arquivo ficaria órfão no bucket.
+      await this.storageService.deleteByUrl(file_url);
+      throw err;
+    }
+  }
+
+  /**
+   * Transforma o alcance pedido na lista de PGs que vai para `material_targets`.
+   * A lista é uma foto do momento da criação (ver `StudyMaterial.audience`).
+   * Tudo é filtrado pela congregação do usuário: rede ou PG de outra
+   * congregação do tenant é recusado, não ignorado.
+   */
+  private async resolveAudience(
+    dto: CreateStudyMaterialDto,
+    user: JwtPayload,
+  ): Promise<{ audience: MaterialAudience; network_id: string | null; groupIds: string[] }> {
+    const hasTargets = !!dto.target_group_ids && dto.target_group_ids.length > 0;
+    const audience =
+      dto.audience ?? (hasTargets ? MaterialAudience.group : MaterialAudience.all_networks);
+
+    if (audience === MaterialAudience.group) {
+      if (!hasTargets) {
+        throw new BadRequestException('Escolha pelo menos um PG para receber o material');
+      }
+      const found = await this.prisma.client.smallGroup.findMany({
+        where: { id: { in: dto.target_group_ids }, congregation_id: user.congregation_id },
         select: { id: true },
       });
-      if (found.length !== dto.target_group_ids.length) {
+      if (found.length !== dto.target_group_ids!.length) {
         throw new BadRequestException('Um ou mais grupos não foram encontrados nesta congregação');
       }
-      groupIds = dto.target_group_ids;
-    } else {
-      const allGroups = await this.prisma.client.smallGroup.findMany({
-        where: { congregation_id: user.congregation_id },
-        select: { id: true },
-      });
-      groupIds = allGroups.map((g) => g.id);
+      return { audience, network_id: null, groupIds: dto.target_group_ids! };
     }
 
-    return this.prisma.runInTx(
-      async (tx) => {
-        const material = await tx.studyMaterial.create({
-          data: {
-            tenant_id: user.tenant_id,
-            congregation_id: user.congregation_id,
-            title: dto.title,
-            description: dto.description,
-            author: dto.author,
-            source_type: dto.source_type,
-            rich_content: dto.rich_content,
-            file_url,
-            publish_at: new Date(dto.publish_at),
-            expires_at: dto.expires_at ? new Date(dto.expires_at) : undefined,
-            tags: dto.tags ?? [],
-          },
-        });
+    if (audience === MaterialAudience.network) {
+      const network = await this.prisma.client.network.findFirst({
+        where: { id: dto.network_id, congregation_id: user.congregation_id },
+        select: { id: true },
+      });
+      if (!network) throw new BadRequestException('Rede não encontrada nesta congregação');
+      const groups = await this.prisma.client.smallGroup.findMany({
+        where: { network_id: network.id, congregation_id: user.congregation_id },
+        select: { id: true },
+      });
+      return { audience, network_id: network.id, groupIds: groups.map((g) => g.id) };
+    }
 
-        if (groupIds.length > 0) {
-          await tx.materialTarget.createMany({
-            data: groupIds.map((small_group_id) => ({
-              study_material_id: material.id,
-              small_group_id,
-            })),
-            skipDuplicates: true,
-          });
-        }
-
-        return tx.studyMaterial.findUnique({
-          where: { id: material.id },
-          include: {
-            materialTargets: { include: { smallGroup: true } },
-          },
-        });
-      },
-      { timeout: 30_000, maxWait: 10_000 },
-    );
+    const all = await this.prisma.client.smallGroup.findMany({
+      where: { congregation_id: user.congregation_id },
+      select: { id: true },
+    });
+    return { audience, network_id: null, groupIds: all.map((g) => g.id) };
   }
 
   async findAll(query: ListStudyMaterialsQueryDto) {
@@ -185,7 +232,7 @@ export class StudyMaterialsService {
     let file_url: string | undefined;
     if (file) {
       await this.storageService.deleteByUrl(existing.file_url);
-      const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+      const { ext } = assertMaterialFile(file);
       const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
       file_url = await this.storageService.upload(
         file.buffer,
@@ -327,6 +374,12 @@ export class StudyMaterialsService {
     return { total_targets, opened, percentage };
   }
 
+  /**
+   * Avisa por push quem foi alcançado pelo material, não a congregação toda:
+   * os membros dos PGs de `material_targets` — só `leader`/`trainee` quando a
+   * visibilidade é `leaders_only`. Material sem PG alvo não tem a quem avisar
+   * e fica marcado como avisado.
+   */
   async publishPending(): Promise<void> {
     if (!process.env['ONESIGNAL_APP_ID']) {
       this.logger.warn('ONESIGNAL_APP_ID não configurado — notificações desabilitadas');
@@ -334,9 +387,22 @@ export class StudyMaterialsService {
     }
 
     const now = new Date();
+    // Janela de 24h: um envio que não passa não é retentado para sempre, e
+    // material publicado há mais que isso sem aviso (o job parado, o
+    // OneSignal fora) não vira push surpresa quando o job voltar.
     const pending = await this.prisma.system.studyMaterial.findMany({
-      where: { publish_at: { lte: now }, notified_at: null },
-      select: { id: true, title: true, congregation_id: true },
+      where: {
+        publish_at: { lte: now, gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        notified_at: null,
+      },
+      select: {
+        id: true,
+        title: true,
+        tenant_id: true,
+        congregation_id: true,
+        visibility: true,
+        materialTargets: { select: { small_group_id: true } },
+      },
     });
 
     if (pending.length === 0) return;
@@ -345,30 +411,37 @@ export class StudyMaterialsService {
 
     for (const material of pending) {
       try {
-        const res = await fetch('https://onesignal.com/api/v1/notifications', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Basic ${process.env['ONESIGNAL_REST_API_KEY']}`,
-          },
-          body: JSON.stringify({
-            app_id: process.env['ONESIGNAL_APP_ID'],
-            filters: [
-              {
-                field: 'tag',
-                key: 'congregation_id',
-                relation: '=',
-                value: material.congregation_id,
-              },
-            ],
-            headings: { pt: 'Novo material disponível' },
-            contents: { pt: `${material.title} foi publicado no seu grupo.` },
-            data: { type: 'study_material', material_id: material.id },
-          }),
-        });
+        const groupIds = material.materialTargets.map((t) => t.small_group_id);
+        const members =
+          groupIds.length === 0
+            ? []
+            : await this.prisma.system.groupMembership.findMany({
+                where: {
+                  small_group_id: { in: groupIds },
+                  ...(material.visibility === MaterialVisibility.leaders_only
+                    ? { role: { in: ['leader', 'trainee'] } }
+                    : {}),
+                },
+                select: { person_id: true },
+                distinct: ['person_id'],
+              });
 
-        if (!res.ok) {
-          this.logger.warn(`OneSignal retornou ${res.status} para material ${material.id}`);
+        const delivered =
+          members.length === 0 ||
+          (await this.notifications.sendPushToPersons(
+            {
+              tenantId: material.tenant_id,
+              congregationId: material.congregation_id,
+              contentPostId: null,
+              title: 'Novo material disponível',
+              body: `${material.title} foi publicado no seu grupo.`,
+              data: { type: 'study_material', material_id: material.id },
+            },
+            members.map((m) => m.person_id),
+          ));
+        if (!delivered) {
+          this.logger.warn(`OneSignal não aceitou o aviso do material ${material.id}`);
+          continue;
         }
 
         await this.prisma.system.studyMaterial.update({

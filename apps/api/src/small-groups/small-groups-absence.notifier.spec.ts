@@ -70,7 +70,7 @@ describe('SmallGroupsAbsenceNotifier', () => {
     ]);
     notifications.sendPush
       .mockRejectedValueOnce(new Error('OneSignal fora do ar'))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(true);
 
     await notifier.cronNotifyAbsenceAlerts();
 

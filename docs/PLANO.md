@@ -599,6 +599,75 @@ Próximas, Trocas e Meu perfil.
 - O que ficou de fora virou `PROD-36`. Check-in por QR ou localização é
   `promessa` no protótipo e não entrou.
 
+### PROD-38 · Material do PG por encontro: liberação por data, aviso aos inscritos, arquivo e rede · parcial
+
+O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
+`all`/`leaders_only`. Entregue em 2026-10-19:
+
+- `release_at` e `notified_at` no vínculo (migration
+  `20261019120000_add_meeting_material_release`). Participante só lê depois de
+  `release_at`; líder vê antes.
+- `MeetingMaterialNotifier`: push só para os membros do PG do encontro (só
+  `leader`/`trainee` quando `leaders_only`), na hora do vínculo ou, se agendado,
+  pelo cron de 10 em 10 minutos. Substitui, para o material de encontro, o aviso
+  por congregação inteira do `StudyMaterialsService.publishPending`.
+- Campo "Liberar em" no `RegisterMeetingModal` (web).
+- Upload de PDF/Word (2026-10-19): `POST /small-groups/meetings/:id/materials/upload`
+  cria o `StudyMaterial` (alvo: o PG do encontro, arquivo no R2) e já o vincula,
+  para os papéis de `MATERIAL_WRITE_ROLES` — inclusive `cell_leader`, que não
+  tem `POST /study-materials`. Valida mimetype **e** extensão (pdf, doc, docx),
+  máx. 50 MB, e apaga o objeto do R2 se a gravação falhar. Sobe direto na API
+  com ticket de 5 min preso à reunião
+  (`POST .../materials/upload-ticket`), pelo mesmo motivo do upload de posts:
+  teto de 4,5 MB do proxy da Vercel. Modo "Enviar PDF ou Word" no modal.
+- Alcance do material (2026-10-19): ao criar, escolhe-se **todas as redes**,
+  **uma rede** ou **um PG**, e quem vê (**todos** ou **só líderes**) — colunas
+  `audience`, `network_id` e `visibility` em `study_materials` (migration
+  `20261019130000_add_material_audience`). Os PGs alcançados são gravados em
+  `material_targets` na criação (foto: PG criado ou movido de rede depois não
+  recebe material antigo). `GET /small-groups/:groupId/materials` lista o que
+  alcança o PG, com a mesma regra de visibilidade/liberação. `publishPending`
+  agora avisa só os membros dos PGs-alvo (e só líderes quando `leaders_only`),
+  em vez da congregação inteira. Tela nova `/materiais` (menu Comunidade) com
+  a lista e o formulário; arquivo sobe por ticket
+  (`POST /study-materials/upload-ticket` + `POST /study-materials/upload/:id`).
+  Arquivos de material só aceitam PDF/Word, também em `POST/PATCH
+  /study-materials`.
+
+- Revisão local antes do PR (2026-10-20), ajustada: o ticket de upload agora
+  carrega `upload_kind` (`post_media`, `meeting_material`, `study_material`) e a
+  rota confere — antes, o ticket de reunião valia em `POST /study-materials/upload/:id`,
+  rota só da administração; o push de material endereça `UserAccount` por
+  `include_external_user_ids` (o app registra `external_id` = conta e só as tags
+  `tenant_id`/`congregation_id`/`role`, sem `person_id`) via
+  `NotificationsService.sendPushToPersons`; `sendPush`/`dispatch` devolvem se o
+  OneSignal aceitou e o `notified_at` só é gravado nesse caso, com retentativa
+  limitada a 24h; `uploadMaterial` grava `visibility` e `publish_at` no material
+  (antes o `publishPending` e `GET /small-groups/:id/materials` o tratavam como
+  público e liberado); `cell_leader` só envia/vincula/remove material de PG que
+  lidera (`assertCanManageMaterials`); o arquivo só sobe ao R2 depois de validado
+  o alcance.
+
+Falta:
+- Teste e2e (`apps/web/e2e`) de `/materiais` e do modo arquivo do encontro, só
+  em `teste1-church`/`teste2-church`.
+- A validação de arquivo confere mimetype e extensão, não o conteúdo (magic
+  bytes).
+- Rede apagada deixa `audience = 'network'` com `network_id` nulo (`SET NULL`);
+  é cosmético, a lista de PGs já foi gravada.
+- Exibir os materiais do PG (`GET /small-groups/:groupId/materials`) na tela do
+  PG no web e no app mobile; hoje só a lista por encontro aparece lá.
+- Edição de audiência/visibilidade de material já criado (o `PATCH` não troca).
+- Foto vs. consulta viva: se o produto quiser que PG novo numa rede receba o
+  material da rede, `material_targets` precisa ser resolvido na leitura.
+- `rich_content` (texto formatado) no web — o modal cria material por link ou
+  arquivo.
+- Arquivo de material "só líderes" tem URL pública do R2 (chave com UUID, só
+  aparece na listagem autorizada). URL assinada de curta duração exigiria o
+  participante pedir o link à API e mudar o app mobile, que abre `file_url`
+  direto (`getPresignedGetUrl` já existe no `StorageService`).
+- `addMaterial` não confere se o material tem o PG do encontro como alvo.
+
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
 
 Quem está escalado num ministério marcado como **responsável pela contagem**

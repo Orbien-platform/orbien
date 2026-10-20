@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ContentModule } from '../content/content.module';
+import { StorageModule } from '../storage/storage.module';
 import { MeetingsController } from './meetings.controller';
 import { GroupMessagesController } from './group-messages.controller';
 import { PrayerRequestsController } from './prayer-requests.controller';
@@ -13,6 +14,7 @@ import { MeetingsService } from './meetings.service';
 import { PrayerRequestsService } from './prayer-requests.service';
 import { GroupMessagesService } from './group-messages.service';
 import { SmallGroupsAbsenceNotifier } from './small-groups-absence.notifier';
+import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { TenantContextInterceptor } from '../common/interceptors/tenant-context.interceptor';
 
 // Network vive dentro deste módulo, não num NetworksModule próprio — é
@@ -22,7 +24,7 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
   // ContentModule pelo `NotificationsService` do alerta de ausência
   // (PROD-11) — mesmo caminho de `CelebrationsModule`. Sentido único:
   // `ContentModule` não importa `SmallGroupsModule` de volta.
-  imports: [ContentModule],
+  imports: [ContentModule, StorageModule],
   controllers: [
     MeetingsController,
     GroupMessagesController,
@@ -39,6 +41,7 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
     PrayerRequestsService,
     GroupMessagesService,
     SmallGroupsAbsenceNotifier,
+    MeetingMaterialNotifier,
     TenantContextInterceptor,
   ],
   exports: [

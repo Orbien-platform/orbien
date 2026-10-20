@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import {
+  MATERIAL_FILE_ACCEPT,
+  uploadMeetingMaterial,
+  validateMaterialFile,
+} from "@/lib/upload-meeting-material";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +34,7 @@ interface MeetingMaterial {
   id: string;
   material_id: string;
   visibility: MaterialVisibility;
+  release_at?: string | null;
   material: { id: string; title: string; author?: string; source_type?: string; rich_content?: string };
 }
 
@@ -68,14 +74,21 @@ export function RegisterMeetingModal({
   const [savingAttendance, setSavingAttendance] = useState<Record<string, boolean>>({});
 
   // Materials
-  const [materialMode, setMaterialMode] = useState<"existing" | "link">("existing");
+  const [materialMode, setMaterialMode] = useState<"existing" | "link" | "file">("existing");
   const [materialSearch, setMaterialSearch] = useState("");
   const [materialResults, setMaterialResults] = useState<StudyMaterialOption[]>([]);
   const [searchingMaterials, setSearchingMaterials] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterialOption | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  // O <input type="file"> não é controlado: trocar a key é o que o esvazia.
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [fileTitle, setFileTitle] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [materialVisibility, setMaterialVisibility] = useState<MaterialVisibility>("all");
+  // datetime-local, vazio = liberado na hora.
+  const [materialReleaseAt, setMaterialReleaseAt] = useState("");
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
   const [materialError, setMaterialError] = useState("");
   const [meetingMaterials, setMeetingMaterials] = useState<MeetingMaterial[]>([]);
@@ -97,6 +110,10 @@ export function RegisterMeetingModal({
     setLinkUrl("");
     setLinkTitle("");
     setMaterialVisibility("all");
+    setMaterialReleaseAt("");
+    setMaterialFile(null);
+    setFileTitle("");
+    setUploadProgress(0);
     setMaterialError("");
     setMeetingMaterials([]);
     setRemovingMaterialId(null);
@@ -176,6 +193,45 @@ export function RegisterMeetingModal({
     if (!meetingId) return;
     setMaterialError("");
 
+    if (materialMode === "file") {
+      if (!materialFile || !fileTitle.trim()) {
+        setMaterialError("Informe o título e escolha o arquivo.");
+        return;
+      }
+      setIsAddingMaterial(true);
+      setUploadProgress(0);
+      try {
+        const created = await uploadMeetingMaterial(
+          meetingId,
+          {
+            file: materialFile,
+            title: fileTitle.trim(),
+            visibility: materialVisibility,
+            releaseAt: materialReleaseAt ? new Date(materialReleaseAt).toISOString() : undefined,
+          },
+          setUploadProgress
+        );
+        setMeetingMaterials((prev) => [...prev, created]);
+        setMaterialFile(null);
+        setFileInputKey((k) => k + 1);
+        setFileTitle("");
+        setMaterialVisibility("all");
+        setMaterialReleaseAt("");
+      } catch (err: unknown) {
+        const message = (err as Error)?.message ?? "";
+        setMaterialError(
+          message.endsWith("_413")
+            ? "Arquivo muito grande. Máximo: 50MB"
+            : message.endsWith("_400")
+              ? "Envie um arquivo PDF ou Word (.doc, .docx)."
+              : "Erro ao enviar o arquivo. Tente de novo."
+        );
+      } finally {
+        setIsAddingMaterial(false);
+      }
+      return;
+    }
+
     if (materialMode === "link") {
       if (!linkTitle.trim() || !linkUrl.trim()) {
         setMaterialError("Informe título e link do material.");
@@ -209,7 +265,11 @@ export function RegisterMeetingModal({
 
       const { data: linked } = await api.post<{ id: string }>(
         `/small-groups/meetings/${meetingId}/materials`,
-        { material_id: materialId, visibility: materialVisibility }
+        {
+          material_id: materialId,
+          visibility: materialVisibility,
+          ...(materialReleaseAt ? { release_at: new Date(materialReleaseAt).toISOString() } : {}),
+        }
       );
 
       setMeetingMaterials((prev) => [
@@ -218,6 +278,7 @@ export function RegisterMeetingModal({
           id: linked.id,
           material_id: materialId!,
           visibility: materialVisibility,
+          release_at: materialReleaseAt ? new Date(materialReleaseAt).toISOString() : null,
           material: materialInfo,
         },
       ]);
@@ -226,6 +287,7 @@ export function RegisterMeetingModal({
       setLinkUrl("");
       setLinkTitle("");
       setMaterialVisibility("all");
+      setMaterialReleaseAt("");
     } catch (err: unknown) {
       const status = (err as { response?: { status: number } })?.response?.status;
       setMaterialError(
@@ -449,6 +511,18 @@ export function RegisterMeetingModal({
               >
                 Informar link externo
               </button>
+              <button
+                type="button"
+                onClick={() => setMaterialMode("file")}
+                className={cn(
+                  "flex-1 rounded-[6px] px-2 py-1.5 text-xs font-medium transition-colors",
+                  materialMode === "file"
+                    ? "bg-[var(--surface-base)] text-ink shadow-sm dark:text-white"
+                    : "text-stone hover:text-ink dark:hover:text-white"
+                )}
+              >
+                Enviar PDF ou Word
+              </button>
             </div>
 
             {materialMode === "existing" ? (
@@ -498,6 +572,42 @@ export function RegisterMeetingModal({
                   </div>
                 )}
               </div>
+            ) : materialMode === "file" ? (
+              <div className="flex flex-col gap-2">
+                <Input
+                  placeholder="Título do material"
+                  value={fileTitle}
+                  onChange={(e) => setFileTitle(e.target.value)}
+                  disabled={isAddingMaterial}
+                  className="rounded-[8px]"
+                />
+                <input
+                  key={fileInputKey}
+                  type="file"
+                  accept={MATERIAL_FILE_ACCEPT}
+                  aria-label="Arquivo do material"
+                  disabled={isAddingMaterial}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    const invalid = file ? validateMaterialFile(file) : null;
+                    setMaterialError(invalid ?? "");
+                    setMaterialFile(invalid ? null : file);
+                    if (invalid) e.target.value = "";
+                  }}
+                  className="text-sm text-stone file:mr-3 file:rounded-[8px] file:border file:border-[var(--border-default)] file:bg-[var(--surface-subtle)] file:px-3 file:py-1.5 file:text-sm file:text-ink"
+                />
+                {isAddingMaterial && (
+                  <div
+                    role="progressbar"
+                    aria-valuenow={uploadProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]"
+                  >
+                    <div className="h-full bg-teal transition-[width]" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <Input
@@ -541,6 +651,20 @@ export function RegisterMeetingModal({
               </label>
             </div>
 
+            <label className="flex flex-col gap-1 text-sm text-ink dark:text-white">
+              Liberar em
+              <Input
+                type="datetime-local"
+                value={materialReleaseAt}
+                onChange={(e) => setMaterialReleaseAt(e.target.value)}
+                disabled={isAddingMaterial}
+                className="rounded-[8px]"
+              />
+              <span className="text-xs text-stone">
+                Deixe em branco para liberar agora. Líderes veem o material antes; os membros são avisados na data.
+              </span>
+            </label>
+
             {materialError && (
               <p className="rounded-[8px] bg-crimson-dim px-3 py-2 text-sm text-crimson" role="alert">
                 {materialError}
@@ -569,6 +693,11 @@ export function RegisterMeetingModal({
                       <span className="truncate text-sm text-ink dark:text-white">{mm.material.title}</span>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
+                      {mm.release_at && new Date(mm.release_at) > new Date() && (
+                        <span className="text-xs text-stone">
+                          Libera em {new Date(mm.release_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                        </span>
+                      )}
                       <span
                         className={cn(
                           "rounded-[100px] px-2 py-0.5 text-xs font-medium",
