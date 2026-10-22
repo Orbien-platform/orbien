@@ -255,10 +255,14 @@ export class StudyMaterialsService {
       : null;
     const { target_group_ids: _targets, ...fields } = dto;
 
+    // Validar antes de tocar no bucket: arquivo recusado não pode custar o
+    // arquivo que o material já tem. O antigo fica no bucket porque o snapshot
+    // de versão abaixo ainda aponta para ele.
     let file_url: string | undefined;
+    let file_source: 'pdf' | 'doc' | undefined;
     if (file) {
-      await this.storageService.deleteByUrl(existing.file_url);
-      const { ext } = assertMaterialFile(file);
+      const { ext, source } = assertMaterialFile(file);
+      file_source = source;
       const key = `${user.tenant_id}/materials/${randomUUID()}${ext}`;
       file_url = await this.storageService.upload(
         file.buffer,
@@ -277,7 +281,7 @@ export class StudyMaterialsService {
           ...fields,
           ...(dto.publish_at && { publish_at: new Date(dto.publish_at) }),
           ...(dto.expires_at && { expires_at: new Date(dto.expires_at) }),
-          ...(file_url && { file_url }),
+          ...(file_url && { file_url, source_type: file_source }),
           ...(audienceChange && {
             audience: audienceChange.audience,
             network_id: audienceChange.network_id,

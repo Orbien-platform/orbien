@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import api from "@/lib/api";
-import { uploadStudyMaterial } from "./upload-study-material";
+import { replaceStudyMaterialFile, uploadStudyMaterial } from "./upload-study-material";
 
 vi.mock("@/lib/api", () => ({ default: { post: vi.fn() } }));
 
@@ -15,7 +15,9 @@ class FakeXHR {
   openedUrl = "";
   sent: FormData | null = null;
 
-  open(_method: string, url: string) {
+  method = "";
+  open(method: string, url: string) {
+    this.method = method;
     this.openedUrl = url;
   }
   setRequestHeader(key: string, value: string) {
@@ -121,5 +123,38 @@ describe("uploadStudyMaterial", () => {
     vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "");
     await expect(uploadStudyMaterial(pdf, base, vi.fn())).rejects.toThrow("NEXT_PUBLIC_API_UPLOAD_URL");
     expect(FakeXHR.instances).toHaveLength(0);
+  });
+});
+
+describe("replaceStudyMaterialFile", () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal("XMLHttpRequest", FakeXHR);
+    vi.stubEnv("NEXT_PUBLIC_API_UPLOAD_URL", "http://upload.test");
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.post).mockResolvedValue({ data: { upload_token: "ticket-abc", upload_id: "m1" } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("pede o ticket do material e manda o arquivo novo por PATCH, sem source_type", async () => {
+    const promise = replaceStudyMaterialFile("m1", docx, base, vi.fn());
+
+    await vi.waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    expect(api.post).toHaveBeenCalledWith("/study-materials/m1/upload-ticket");
+    const xhr = FakeXHR.instances[0];
+    expect(xhr.method).toBe("PATCH");
+    expect(xhr.openedUrl).toBe("http://upload.test/study-materials/upload/m1");
+    expect(xhr.headers.Authorization).toBe("Bearer ticket-abc");
+    expect(xhr.sent!.get("title")).toBe("Estudo");
+    expect(xhr.sent!.has("source_type")).toBe(false);
+    expect((xhr.sent!.get("file") as File).name).toBe("roteiro.docx");
+
+    xhr.status = 200;
+    xhr.responseText = JSON.stringify({ id: "m1" });
+    xhr.onload?.();
+    await expect(promise).resolves.toEqual({ id: "m1" });
   });
 });
