@@ -348,3 +348,19 @@ O "tom alternativo" (`key_alt`) deixou de existir: cada versão tem o seu tom.
 **Migração**: cada música existente virou uma versão "Original"; quem tinha
 `key_alt` ganhou uma segunda versão "Tom X". As setlists já montadas foram
 ligadas à versão cujo tom bate com o gravado (senão, à "Original").
+
+
+### AD-013 — Criança é `Person` com `is_child=true`, sem conta; fora de listas por padrão; retirada só por código
+
+**Status**: active
+**Origem**: feature `modulo-kids`, 2026-10-22
+
+1. A criança é `Person` com `is_child = true`, `Household` do responsável e
+   `HouseholdMember(role=child)`. Nunca tem `UserAccount`.
+2. Toda listagem, exportação e indicador de pessoas exclui `is_child` por
+   padrão; só rota de kids a inclui, explicitamente.
+3. A retirada fecha só com `code`/QR de responsável com `can_pickup`, ou por
+   exceção de líder kids com motivo gravado. Nunca por nome.
+4. Dado de saúde (alergia, observação) tem leitura auditada: o log guarda quem
+   leu e quando, nunca o conteúdo.
+5. Tabelas de kids nascem com `app_congregation_allowed()` (AD-001).
