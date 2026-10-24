@@ -1891,6 +1891,53 @@ script novo — só leitura de tabelas que já existiam sob RLS
 `celebration_assignments`), mesmas policies que `celebration-assignment.service.ts`
 já usa.
 
+### ~~PROD-39 · Escala mais à mão, aviso de remoção e molde de OC~~ · fechado
+
+Entregue em 2026-10-22, a partir de uma dúvida de uso: onde se escala o culto, o
+que acontece com quem é tirado de uma escala publicada e por que a OC não tem
+molde como a escala tem. Três mudanças, uma só branch:
+
+- **Escala à mão, no `apps/web`.** O painel de escala já existia
+  (`ScheduleSheet`), mas só se chegava a ele por um selo pequeno na aba
+  "Próximas". Agora o selo é um botão com ícone (`Users`), e a escala também
+  abre pela barra do topo da Ordem de Culto ("Escala"). A OC fecha antes de a
+  escala abrir — os dois painéis ocupam a tela inteira. "Sem escala" virou
+  "Montar escala".
+- **Aviso a quem sai da escala (API).** `CelebrationRemovalNotifier` avisa por
+  push ("Você saiu da escala") quem foi tirado de uma escala **já publicada**:
+  remover uma pessoa (`removeAssignment`), um ministério (`removeMinistry`) ou a
+  escala inteira (`remove`). Só recebe quem tinha sido avisado
+  (`notified_at` preenchido) e ainda contava com a vaga (`pending` ou
+  `confirmed`); rascunho, recusado e trocado não geram aviso. É fire-and-forget
+  como o aviso de publicação — falha de push não desfaz a remoção. Usa
+  `sendPushToPersons` (destino por conta ativa), não a tag `person_id` que o
+  aviso de publicação usa. Sem tabela nova.
+- **Molde de OC.** Tabelas `service_order_templates` e
+  `service_order_template_items` (migration `add_service_order_templates`, RLS
+  em `028_rls_service_order_templates.sql`, já no `bootstrap-db.sh` e no passo
+  7). O molde **nasce de uma OC montada** (`POST /celebrations/order-templates`
+  com `service_order_id`) e copia etapas, horários, momento, tipo e responsável;
+  **não copia** setlist (as músicas mudam a cada culto) nem escala. Aplicar
+  (`POST .../order-templates/:id/apply`) acrescenta depois das etapas atuais ou,
+  com `replace`, apaga as atuais — e as setlists delas — antes. Pessoa ou
+  ministério que sumiu do cadastro depois de o molde ser salvo (`SetNull`) vira
+  texto livre com o nome guardado, em vez de etapa sem responsável. Mesmos papéis
+  e plano da OC (`admin_congregation`, `pastor`, `tenant_admin`, Premium). No
+  web: "Aplicar molde" e "Salvar como molde" na barra da OC, "Começar de um
+  molde" na OC vazia e, em Celebrações → Templates, uma chave "Escala / Ordem de
+  culto" com a lista, renomear e excluir (`OrderTemplatesPanel`). Editar as
+  etapas de dentro do molde ficou de fora: edita-se na OC e salva-se de novo.
+
+- **Correção do aviso de publicação.** "Você está na escala!" filtrava por tag
+  `person_id`, e o app só registra `external_id`, `tenant_id`,
+  `congregation_id` e `role` no OneSignal (`onesignal-client.ts`) — o filtro não
+  alcançava ninguém. Passou a `sendPushToPersons`, o mesmo caminho do aviso de
+  remoção. Os outros usos da tag `person_id` estão no `PEND-22`.
+
+Não muda: a escala publicada continua editável (não há trava pós-publicação), e
+quem entra depois só é avisado ao publicar de novo. `PEND-20` (cancelar ou
+remover o culto) segue aberto — este item cobre só a remoção dentro da escala.
+
 ### ~~PROD-12 · Check-in de membros por QR no encontro~~ · fechado
 
 Entregue em 2026-09-20. `QrToken` (schema) continua exclusivo do cadastro de
@@ -2554,8 +2601,25 @@ igreja. Falta: push (e o canal que `PROD-14` respeitar) para os
 `celebration_assignments` ativos da instância, nos três casos — cancelar,
 remover a celebração com instâncias futuras e, se fizer sentido, reabrir.
 Ponto de atenção: na remoção a escala é apagada junto com a instância, então os
-destinatários têm de ser lidos **antes** do `deleteMany`. Respeitar a
+destinatários têm de ser lidos **antes** do `deleteMany`.
+`CelebrationRemovalNotifier` (`PROD-39`) já avisa quem sai de uma escala publicada e
+pode ser reaproveitado aqui — hoje cobre só a remoção dentro da escala, não o
+cancelamento nem a remoção do culto. Respeitar a
 preferência de notificação do usuário (`notification_preferences`).
+
+### PEND-22 · Push endereçado por tag `person_id`, que o app não registra · aberto
+
+O app mobile registra no OneSignal só `external_id` (id da conta), `tenant_id`,
+`congregation_id`, `role` e as `pref_*`. Não existe tag `person_id`, então todo
+envio que filtra por ela não chega a ninguém. O aviso de publicação da escala
+foi corrigido no `PROD-39`; seguem com o mesmo filtro, ainda sem correção:
+`service-orders.service.ts` (OC publicada), `celebration-swap.service.ts`
+(pedido de troca), `small-groups-absence.notifier.ts` (alerta de ausência ao
+líder) e `bible-mark-interactions.service.ts` (curtida e resposta em marca).
+A correção é a do `PROD-39`: `NotificationsService.sendPushToPersons`, que
+resolve a conta ativa de cada `person_id`. Confirmar antes, num aparelho real
+ou no painel do OneSignal, que nenhum desses chega hoje — a leitura do código
+diz que não, mas ninguém viu o push falhar.
 
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 

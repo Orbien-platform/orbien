@@ -65,9 +65,37 @@ vi.mock("@/components/celebrations/TemplatesPanel", () => ({
     <div data-testid="templates-panel">templates:{String(canEdit)}</div>
   ),
 }));
+vi.mock("@/components/celebrations/OrderTemplatesPanel", () => ({
+  OrderTemplatesPanel: ({ canEdit }: { canEdit: boolean }) => (
+    <div data-testid="order-templates-panel">order-templates:{String(canEdit)}</div>
+  ),
+}));
 vi.mock("@/components/celebrations/ServiceOrderView", () => ({
-  ServiceOrderView: ({ open, instanceId }: { open: boolean; instanceId: string | null }) =>
-    open ? <div data-testid="service-order-view">so:{instanceId}</div> : null,
+  ServiceOrderView: ({
+    open,
+    instanceId,
+    onOpenSchedule,
+  }: {
+    open: boolean;
+    instanceId: string | null;
+    onOpenSchedule?: (inst: { id: string; scheduled_date: string; celebration: { id: string; name: string } }) => void;
+  }) =>
+    open ? (
+      <div data-testid="service-order-view">
+        so:{instanceId}
+        <button
+          onClick={() =>
+            onOpenSchedule?.({
+              id: instanceId ?? "",
+              scheduled_date: "2026-02-01",
+              celebration: { id: "c1", name: "Culto" },
+            })
+          }
+        >
+          escala pela OC
+        </button>
+      </div>
+    ) : null,
 }));
 
 const mockedApi = vi.mocked(api, true);
@@ -383,7 +411,7 @@ describe("CelebracoesPage", () => {
     await user.click(screen.getByRole("tab", { name: "Próximas" }));
 
     expect(await screen.findByText("Escala")).toBeInTheDocument();
-    expect(screen.getByText("Sem escala")).toBeInTheDocument();
+    expect(screen.getByText("Montar escala")).toBeInTheDocument();
     expect(screen.getByText("Escala rascunho")).toBeInTheDocument();
     expect(screen.getByText("Escala arquivada")).toBeInTheDocument();
   });
@@ -438,11 +466,56 @@ describe("CelebracoesPage", () => {
     await user.click(await screen.findByText("Culto"));
     expect(await screen.findByTestId("service-order-view")).toHaveTextContent("so:i1");
 
-    await user.click(screen.getByText("Sem escala"));
+    await user.click(screen.getByText("Montar escala"));
     expect(await screen.findByTestId("schedule-sheet")).toHaveTextContent("schedule:i1");
 
     const callsBefore = mockedApi.get.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "simular mudança" }));
     await waitFor(() => expect(mockedApi.get.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+  it("na aba Templates alterna entre os moldes de escala e os de ordem de culto", async () => {
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/celebrations") return Promise.resolve({ data: [] });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<CelebracoesPage />);
+    await screen.findByText("Nenhuma celebração cadastrada.");
+
+    await user.click(screen.getByRole("tab", { name: "Templates" }));
+    expect(await screen.findByTestId("templates-panel")).toHaveTextContent("templates:true");
+    expect(screen.queryByTestId("order-templates-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Escala" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Ordem de culto" }));
+    expect(screen.getByTestId("order-templates-panel")).toHaveTextContent("order-templates:true");
+    expect(screen.queryByTestId("templates-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ordem de culto" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Escala" }));
+    expect(screen.getByTestId("templates-panel")).toBeInTheDocument();
+  });
+
+  it("abre a escala a partir da Ordem de Culto, fechando a OC", async () => {
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/celebrations") return Promise.resolve({ data: [] });
+      if (url.startsWith("/celebrations/instances")) {
+        return Promise.resolve({
+          data: [{ id: "i1", scheduled_date: "2026-02-01", celebration: { id: "c1", name: "Culto" }, schedule: null }],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<CelebracoesPage />);
+    await screen.findByText("Nenhuma celebração cadastrada.");
+    await user.click(screen.getByRole("tab", { name: "Próximas" }));
+    await user.click(await screen.findByText("Culto"));
+    await screen.findByTestId("service-order-view");
+
+    await user.click(screen.getByRole("button", { name: "escala pela OC" }));
+
+    expect(await screen.findByTestId("schedule-sheet")).toHaveTextContent("schedule:i1");
+    expect(screen.queryByTestId("service-order-view")).not.toBeInTheDocument();
   });
 });

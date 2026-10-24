@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -1808,5 +1809,168 @@ describe("ServiceOrderView", () => {
     rejectGet(new Error("too late"));
     await Promise.resolve();
     await Promise.resolve();
+  });
+});
+
+describe("ServiceOrderView — escala e moldes", () => {
+  const emptyOrder = { id: "so1", title: "OC Domingo", items: [] };
+
+  function mockLoad(order: unknown = serviceOrder) {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === "/celebrations/instances/i1") return Promise.resolve({ data: instanceWithOC });
+      if (url === "/celebrations/orders/so1") return Promise.resolve({ data: order });
+      if (url === "/celebrations/order-templates") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "t1",
+              name: "Domingo",
+              description: null,
+              items: [
+                { id: "x1", name: "Abertura", sequence: 1, duration_minutes: 10, entry_kind: "program" },
+                { id: "x2", name: "Palavra", sequence: 2, duration_minutes: 30, entry_kind: "program" },
+              ],
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+  }
+
+  function renderView(props: Partial<React.ComponentProps<typeof ServiceOrderView>> = {}) {
+    return render(
+      <ServiceOrderView
+        open
+        onOpenChange={vi.fn()}
+        instanceId="i1"
+        canEdit
+        canAddSongs
+        {...props}
+      />
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("abre a escala do culto pelo botão da barra do topo", async () => {
+    mockLoad();
+    const onOpenSchedule = vi.fn();
+    const user = userEvent.setup();
+    renderView({ onOpenSchedule });
+
+    await user.click(await screen.findByRole("button", { name: "Escala deste culto" }));
+
+    expect(onOpenSchedule).toHaveBeenCalledWith(expect.objectContaining({ id: "i1" }));
+  });
+
+  it("não mostra o botão de escala quando a tela não sabe abri-la", async () => {
+    mockLoad();
+    renderView();
+
+    await screen.findByText("Louvor de abertura");
+    expect(screen.queryByRole("button", { name: "Escala deste culto" })).not.toBeInTheDocument();
+  });
+
+  it("mostra Aplicar molde e Salvar como molde a quem edita, quando há etapas", async () => {
+    mockLoad();
+    renderView();
+
+    await screen.findByText("Louvor de abertura");
+    expect(screen.getByRole("button", { name: "Aplicar molde" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar como molde" })).toBeInTheDocument();
+  });
+
+  it("esconde as ações de molde de quem só lê", async () => {
+    mockLoad();
+    renderView({ canEdit: false });
+
+    await screen.findByText("Louvor de abertura");
+    expect(screen.queryByRole("button", { name: "Aplicar molde" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar como molde" })).not.toBeInTheDocument();
+  });
+
+  it("não oferece salvar como molde numa OC sem etapas, mas oferece começar de um molde", async () => {
+    mockLoad(emptyOrder);
+    renderView();
+
+    await screen.findByText("Nenhuma etapa adicionada.");
+    expect(screen.queryByRole("button", { name: "Salvar como molde" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Começar de um molde" })).toBeInTheDocument();
+  });
+
+  it("aplica um molde, avisa quantas etapas entraram e recarrega a OC", async () => {
+    mockLoad(emptyOrder);
+    vi.mocked(api.post).mockResolvedValue({ data: { created: 2, replaced: 0 } });
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(await screen.findByRole("button", { name: "Começar de um molde" }));
+    await user.click(await screen.findByRole("radio", { name: /Domingo/ }));
+    const loadsBefore = vi.mocked(api.get).mock.calls.filter(([u]) => u === "/celebrations/orders/so1").length;
+    await user.click(screen.getByRole("button", { name: "Aplicar molde" }));
+
+    expect(await screen.findByText("Molde aplicado: 2 etapas.")).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledWith("/celebrations/order-templates/t1/apply", {
+      service_order_id: "so1",
+      replace: false,
+    });
+    await waitFor(() =>
+      expect(
+        vi.mocked(api.get).mock.calls.filter(([u]) => u === "/celebrations/orders/so1").length,
+      ).toBeGreaterThan(loadsBefore),
+    );
+  });
+
+  it("usa o singular quando o molde traz uma etapa só", async () => {
+    mockLoad(emptyOrder);
+    vi.mocked(api.post).mockResolvedValue({ data: { created: 1, replaced: 0 } });
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(await screen.findByRole("button", { name: "Começar de um molde" }));
+    await user.click(await screen.findByRole("radio", { name: /Domingo/ }));
+    await user.click(screen.getByRole("button", { name: "Aplicar molde" }));
+
+    expect(await screen.findByText("Molde aplicado: 1 etapa.")).toBeInTheDocument();
+  });
+
+  it("salva a OC como molde e confirma", async () => {
+    mockLoad();
+    vi.mocked(api.post).mockResolvedValue({ data: { id: "t9" } });
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(await screen.findByRole("button", { name: "Salvar como molde" }));
+    expect(await screen.findByLabelText("Nome")).toHaveValue("Culto Domingo");
+    await user.click(screen.getByRole("button", { name: "Salvar molde" }));
+
+    expect(await screen.findByText("Molde salvo.")).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledWith("/celebrations/order-templates", {
+      name: "Culto Domingo",
+      description: undefined,
+      service_order_id: "so1",
+    });
+  });
+
+  it("fecha os modais de molde junto com a OC", async () => {
+    mockLoad();
+    function Host() {
+      const [open, setOpen] = useState(true);
+      return (
+        <ServiceOrderView open={open} onOpenChange={setOpen} instanceId="i1" canEdit canAddSongs />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Host />);
+
+    await user.click(await screen.findByRole("button", { name: "Salvar como molde" }));
+    await screen.findByLabelText("Nome");
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByText("Culto Domingo")).not.toBeInTheDocument());
   });
 });

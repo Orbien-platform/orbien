@@ -77,6 +77,8 @@ model Tenant {
   celebrationAttendance     CelebrationAttendance[]
   serviceOrders             ServiceOrder[]
   serviceOrderItems         ServiceOrderItem[]
+  serviceOrderTemplates     ServiceOrderTemplate[]
+  serviceOrderTemplateItems ServiceOrderTemplateItem[]
   setlists                  Setlist[]
   setlistSongs              SetlistSong[]
   songs                     Song[]
@@ -156,6 +158,8 @@ model Congregation {
   celebrationAttendance     CelebrationAttendance[]
   serviceOrders             ServiceOrder[]
   serviceOrderItems         ServiceOrderItem[]
+  serviceOrderTemplates     ServiceOrderTemplate[]
+  serviceOrderTemplateItems ServiceOrderTemplateItem[]
   setlists                  Setlist[]
   setlistSongs              SetlistSong[]
   songs                     Song[]
@@ -406,29 +410,30 @@ model Person {
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
   household    Household?   @relation(fields: [household_id], references: [id], onDelete: SetNull)
 
-  userAccounts            UserAccount[]
-  householdMemberships    HouseholdMember[]
-  classificationHistories ClassificationHistory[]
-  visitRecords            VisitRecord[]
-  consentRecords          ConsentRecord[]
-  personTags              PersonTag[]
-  groupMemberships        GroupMembership[]
-  attendanceRecords       AttendanceRecord[]
-  prayerRequests          PrayerRequest[]
-  groupMessages           GroupMessage[]
-  bibleVerseMarks         BibleVerseMark[]
-  bibleVerseMarkLikes     BibleVerseMarkLike[]
-  bibleVerseMarkReplies   BibleVerseMarkReply[]
-  materialOpenRecords     MaterialOpenRecord[]
-  ledSmallGroups          SmallGroup[]            @relation("GroupLeader")
-  ledNetworks             Network[]               @relation("NetworkLeader")
-  donorTransactions       FinancialTransaction[]  @relation("TransactionDonor")
-  donationReceipts        DonationReceipt[]
-  pixDonations            PixPayment[]            @relation("PixDonor")
-  pixSubscriptions        PixSubscription[]       @relation("PixSubscriptionDonor")
-  volunteerProfile        VolunteerProfile?
-  serviceOrderItems       ServiceOrderItem[]
-  eventRegistrations      EventRegistration[]
+  userAccounts              UserAccount[]
+  householdMemberships      HouseholdMember[]
+  classificationHistories   ClassificationHistory[]
+  visitRecords              VisitRecord[]
+  consentRecords            ConsentRecord[]
+  personTags                PersonTag[]
+  groupMemberships          GroupMembership[]
+  attendanceRecords         AttendanceRecord[]
+  prayerRequests            PrayerRequest[]
+  groupMessages             GroupMessage[]
+  bibleVerseMarks           BibleVerseMark[]
+  bibleVerseMarkLikes       BibleVerseMarkLike[]
+  bibleVerseMarkReplies     BibleVerseMarkReply[]
+  materialOpenRecords       MaterialOpenRecord[]
+  ledSmallGroups            SmallGroup[]               @relation("GroupLeader")
+  ledNetworks               Network[]                  @relation("NetworkLeader")
+  donorTransactions         FinancialTransaction[]     @relation("TransactionDonor")
+  donationReceipts          DonationReceipt[]
+  pixDonations              PixPayment[]               @relation("PixDonor")
+  pixSubscriptions          PixSubscription[]          @relation("PixSubscriptionDonor")
+  volunteerProfile          VolunteerProfile?
+  serviceOrderItems         ServiceOrderItem[]
+  serviceOrderTemplateItems ServiceOrderTemplateItem[]
+  eventRegistrations        EventRegistration[]
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1491,6 +1496,7 @@ model Ministry {
   children     Ministry[]   @relation("MinistryHierarchy")
 
   serviceOrderItems          ServiceOrderItem[]
+  serviceOrderTemplateItems  ServiceOrderTemplateItem[]
   volunteerMinistries        VolunteerMinistry[]
   celebrationMinistries      CelebrationMinistry[]
   scheduleTemplateMinistries ScheduleTemplateMinistry[]
@@ -1679,6 +1685,59 @@ model ServiceOrderItem {
   @@index([service_order_id])
   @@index([tenant_id, service_order_id])
   @@map("service_order_items")
+}
+
+/// Molde de OC: o roteiro de etapas de um culto, salvo para reaproveitar em
+/// outros. Não guarda setlist (as músicas mudam a cada culto) nem escala.
+model ServiceOrderTemplate {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  name            String
+  description     String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+
+  items ServiceOrderTemplateItem[]
+
+  @@index([tenant_id, congregation_id])
+  @@map("service_order_templates")
+}
+
+model ServiceOrderTemplateItem {
+  id                   String                @id @default(uuid())
+  tenant_id            String
+  congregation_id      String
+  template_id          String
+  sequence             Int
+  name                 String
+  type                 ServiceOrderItemType  @default(other)
+  start_offset_minutes Int
+  duration_minutes     Int
+  phase                ServiceOrderPhase     @default(during)
+  entry_kind           ServiceOrderEntryKind @default(program)
+  responsible_type     ResponsibleType
+  person_id            String?
+  ministry_id          String?
+  /// Texto livre, ou o nome da pessoa/ministério no momento em que o molde foi
+  /// salvo: se a pessoa ou o ministério sumir (`SetNull`), a etapa aplicada
+  /// vira texto livre com este nome em vez de ficar sem responsável.
+  responsible_label    String?
+  notes                String?
+  created_at           DateTime              @default(now())
+
+  tenant       Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation         @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  template     ServiceOrderTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  person       Person?              @relation(fields: [person_id], references: [id], onDelete: SetNull)
+  ministry     Ministry?            @relation(fields: [ministry_id], references: [id], onDelete: SetNull)
+
+  @@index([template_id])
+  @@index([tenant_id, congregation_id])
+  @@map("service_order_template_items")
 }
 
 model Setlist {

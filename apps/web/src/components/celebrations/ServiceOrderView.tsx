@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState, type FormEvent } from "react";
 import {
   Loader2, X, Plus, ArrowUp, ArrowDown, Trash2, ExternalLink,
   Music, BookOpen, Heart, Megaphone, Wallet, Clock, FileDown, Link2, Unlink,
-  SquarePlay, Disc3, FileMusic, Pencil,
+  SquarePlay, Disc3, FileMusic, Pencil, Users, LayoutTemplate, BookmarkPlus,
 } from "lucide-react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,10 @@ import {
   type ItemPhase,
   type ItemType,
 } from "@/components/celebrations/AddItemModal";
+import {
+  ApplyOrderTemplateModal,
+  SaveOrderTemplateModal,
+} from "@/components/celebrations/OrderTemplateModals";
 import { SongPicker } from "@/components/repertorio/SongPicker";
 import { cn } from "@/lib/utils";
 import { type CatalogSong, type SongVersion } from "@/lib/repertorio";
@@ -98,6 +102,11 @@ interface ServiceOrderViewProps {
   instanceId: string | null;
   canEdit: boolean;
   canAddSongs: boolean;
+  /**
+   * Abre o painel de escala deste culto. Quem chama fecha a OC antes: os dois
+   * painéis ocupam a tela inteira. Sem a prop, o botão de escala não aparece.
+   */
+  onOpenSchedule?: (instance: CelebrationInstance) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -280,6 +289,7 @@ export function ServiceOrderView({
   instanceId,
   canEdit,
   canAddSongs,
+  onOpenSchedule,
 }: ServiceOrderViewProps) {
   const [instance, setInstance] = useState<CelebrationInstance | null>(null);
   const [serviceOrder, setServiceOrder] = useState<ServiceOrder | null>(null);
@@ -293,6 +303,8 @@ export function ServiceOrderView({
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [applyTemplateOpen, setApplyTemplateOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
 
   // Carregamento é derivado: qual requisição já terminou. `reloadTick` sobe a
@@ -361,6 +373,8 @@ export function ServiceOrderView({
       setEditingItem(null);
       setAddSongForItemId(null);
       setLinkSongId(null);
+      setApplyTemplateOpen(false);
+      setSaveTemplateOpen(false);
       setLoadedKey(null);
     }
     onOpenChange(next);
@@ -553,6 +567,42 @@ export function ServiceOrderView({
               </div>
 
               <div className="ml-auto flex items-center gap-2">
+                {onOpenSchedule && instance && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenSchedule(instance)}
+                    aria-label="Escala deste culto"
+                    className="flex items-center gap-1.5 rounded-[8px] text-sm"
+                  >
+                    <Users size={14} strokeWidth={1.5} />
+                    <span className="hidden sm:inline">Escala</span>
+                  </Button>
+                )}
+                {canEdit && serviceOrder && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setApplyTemplateOpen(true)}
+                    aria-label="Aplicar molde"
+                    className="flex items-center gap-1.5 rounded-[8px] text-sm"
+                  >
+                    <LayoutTemplate size={14} strokeWidth={1.5} />
+                    <span className="hidden sm:inline">Aplicar molde</span>
+                  </Button>
+                )}
+                {canEdit && serviceOrder && items.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSaveTemplateOpen(true)}
+                    aria-label="Salvar como molde"
+                    className="flex items-center gap-1.5 rounded-[8px] text-sm"
+                  >
+                    <BookmarkPlus size={14} strokeWidth={1.5} />
+                    <span className="hidden sm:inline">Salvar como molde</span>
+                  </Button>
+                )}
                 {canEdit && serviceOrder && (
                   <Button
                     type="button"
@@ -611,14 +661,24 @@ export function ServiceOrderView({
                 <div className="flex flex-col items-center gap-4 px-4 py-16 text-center">
                   <p className="text-sm text-stone">Nenhuma etapa adicionada.</p>
                   {canEdit && (
-                    <Button
-                      type="button"
-                      onClick={() => setAddItemOpen(true)}
-                      className="rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]"
-                    >
-                      <Plus size={14} strokeWidth={1.5} className="mr-1.5" />
-                      Adicionar primeira etapa
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => setAddItemOpen(true)}
+                        className="rounded-[8px] bg-navy text-white hover:bg-[var(--color-navy-dark)]"
+                      >
+                        <Plus size={14} strokeWidth={1.5} className="mr-1.5" />
+                        Adicionar primeira etapa
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setApplyTemplateOpen(true)}
+                        className="flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-sm text-navy hover:bg-[var(--surface-subtle)]"
+                      >
+                        <LayoutTemplate size={14} strokeWidth={1.5} />
+                        Começar de um molde
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -946,6 +1006,29 @@ export function ServiceOrderView({
           celebrationStartTime={instance?.celebration.start_time}
           onAdded={afterAddItem}
         />
+      )}
+
+      {serviceOrder && (
+        <>
+          <ApplyOrderTemplateModal
+            open={applyTemplateOpen}
+            onOpenChange={setApplyTemplateOpen}
+            serviceOrderId={serviceOrder.id}
+            hasItems={items.length > 0}
+            onApplied={(created) => {
+              reloadData();
+              showToast(`Molde aplicado: ${created} ${created === 1 ? "etapa" : "etapas"}.`);
+            }}
+          />
+          <SaveOrderTemplateModal
+            key={serviceOrder.id}
+            open={saveTemplateOpen}
+            onOpenChange={setSaveTemplateOpen}
+            serviceOrderId={serviceOrder.id}
+            defaultName={instance?.celebration.name ?? ""}
+            onSaved={() => showToast("Molde salvo.")}
+          />
+        </>
       )}
     </>
   );
