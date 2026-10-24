@@ -61,8 +61,7 @@ export function OrderTemplatesPanel({ canEdit }: { canEdit: boolean }) {
     setFormError(null);
   }
 
-  async function submit() {
-    if (!editing) return;
+  async function submit(target: OrderTemplate) {
     if (!name.trim()) {
       setFormError("Dê um nome ao molde.");
       return;
@@ -70,7 +69,7 @@ export function OrderTemplatesPanel({ canEdit }: { canEdit: boolean }) {
     setSaving(true);
     setFormError(null);
     try {
-      await api.patch(`/celebrations/order-templates/${editing.id}`, {
+      await api.patch(`/celebrations/order-templates/${target.id}`, {
         name: name.trim(),
         description: description.trim(),
       });
@@ -188,69 +187,69 @@ export function OrderTemplatesPanel({ canEdit }: { canEdit: boolean }) {
         </div>
       )}
 
-      <Modal
-        open={editing !== null}
-        onOpenChange={(next) => {
-          if (!next) setEditing(null);
-        }}
-        title="Renomear molde"
-        description="Muda só o nome e a descrição. As etapas do molde ficam como estão."
-        className="max-w-md"
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="otp-name" className="text-xs">
-              Nome
-            </Label>
-            <Input
-              id="otp-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={saving}
-              maxLength={120}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="otp-desc" className="text-xs">
-              Descrição (opcional)
-            </Label>
-            <Input
-              id="otp-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={saving}
-              maxLength={500}
-            />
-          </div>
-
-          {formError ? (
-            <div role="alert" className="flex items-start gap-2 rounded-[8px] bg-crimson-dim p-3">
-              <AlertTriangle size={15} strokeWidth={1.5} className="mt-0.5 flex-shrink-0 text-crimson" />
-              <p className="text-sm text-crimson">{formError}</p>
+      {editing ? (
+        <Modal
+          open
+          onOpenChange={() => setEditing(null)}
+          title="Renomear molde"
+          description="Muda só o nome e a descrição. As etapas do molde ficam como estão."
+          className="max-w-md"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="otp-name" className="text-xs">
+                Nome
+              </Label>
+              <Input
+                id="otp-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={saving}
+                maxLength={120}
+              />
             </div>
-          ) : null}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="otp-desc" className="text-xs">
+                Descrição (opcional)
+              </Label>
+              <Input
+                id="otp-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                disabled={saving}
+                maxLength={500}
+              />
+            </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setEditing(null)}
-              disabled={saving}
-              className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
-            >
-              Cancelar
-            </button>
-            <Button
-              type="button"
-              onClick={submit}
-              disabled={saving}
-              className="flex items-center gap-1.5 rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-              Salvar
-            </Button>
+            {formError ? (
+              <div role="alert" className="flex items-start gap-2 rounded-[8px] bg-crimson-dim p-3">
+                <AlertTriangle size={15} strokeWidth={1.5} className="mt-0.5 flex-shrink-0 text-crimson" />
+                <p className="text-sm text-crimson">{formError}</p>
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                disabled={saving}
+                className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
+              >
+                Cancelar
+              </button>
+              <Button
+                type="button"
+                onClick={() => submit(editing)}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+                Salvar
+              </Button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      ) : null}
     </div>
   );
 }

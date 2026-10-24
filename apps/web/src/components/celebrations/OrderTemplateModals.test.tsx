@@ -139,6 +139,18 @@ describe("SaveOrderTemplateModal", () => {
     expect(await screen.findByText("Não foi possível salvar o molde.")).toBeInTheDocument();
   });
 
+  it("fecha com Esc e descarta o que foi digitado", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.type(screen.getByLabelText("Nome"), " extra");
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByLabelText("Nome")).not.toBeInTheDocument());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it("restaura o nome sugerido ao reabrir e fecha pelo Cancelar", async () => {
     const user = userEvent.setup();
     function Reopen() {
@@ -293,6 +305,67 @@ describe("ApplyOrderTemplateModal", () => {
 
     expect(await screen.findByText("Ordem de culto não encontrada")).toBeInTheDocument();
     expect(onApplied).not.toHaveBeenCalled();
+  });
+
+  it("fecha com Esc", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await screen.findByText("Culto de domingo");
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByText("Culto de domingo")).not.toBeInTheDocument());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("ignora a lista que chega depois de o modal ser fechado", async () => {
+    let resolveList: (v: { data: OrderTemplate[] }) => void = () => {};
+    vi.mocked(api.get).mockReturnValue(new Promise((resolve) => (resolveList = resolve)));
+    const user = userEvent.setup();
+    function Close() {
+      const [open, setOpen] = useState(true);
+      return (
+        <ApplyOrderTemplateModal
+          open={open}
+          onOpenChange={setOpen}
+          serviceOrderId="so1"
+          hasItems={false}
+          onApplied={onApplied}
+        />
+      );
+    }
+    render(<Close />);
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    resolveList({ data: templates });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.queryByText("Culto de domingo")).not.toBeInTheDocument();
+  });
+
+  it("ignora o erro que chega depois de o modal ser fechado", async () => {
+    let rejectList: (e: unknown) => void = () => {};
+    vi.mocked(api.get).mockReturnValue(new Promise((_, reject) => (rejectList = reject)));
+    const user = userEvent.setup();
+    function Close() {
+      const [open, setOpen] = useState(true);
+      return (
+        <ApplyOrderTemplateModal
+          open={open}
+          onOpenChange={setOpen}
+          serviceOrderId="so1"
+          hasItems={false}
+          onApplied={onApplied}
+        />
+      );
+    }
+    render(<Close />);
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    rejectList(new Error("rede"));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.queryByText("Não foi possível carregar os moldes.")).not.toBeInTheDocument();
   });
 
   it("não busca nada enquanto está fechado e recarrega a lista a cada abertura", async () => {

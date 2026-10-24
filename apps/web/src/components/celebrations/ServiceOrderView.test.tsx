@@ -1883,6 +1883,17 @@ describe("ServiceOrderView — escala e moldes", () => {
     expect(screen.getByRole("button", { name: "Salvar como molde" })).toBeInTheDocument();
   });
 
+  it("abre o seletor de moldes pelo botão da barra do topo", async () => {
+    mockLoad();
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(await screen.findByRole("button", { name: "Aplicar molde" }));
+
+    // Com etapas na OC, o seletor pergunta se acrescenta ou substitui.
+    expect(await screen.findByText("Esta ordem já tem etapas")).toBeInTheDocument();
+  });
+
   it("esconde as ações de molde de quem só lê", async () => {
     mockLoad();
     renderView({ canEdit: false });

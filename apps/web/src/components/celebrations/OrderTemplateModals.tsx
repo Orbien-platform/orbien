@@ -68,16 +68,15 @@ export function SaveOrderTemplateModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // O pai controla `open`, então reabrir não passa por aqui: o que sobrou do
-  // uso anterior é limpo no fechamento. Quem troca de OC remonta o modal
+  // O pai controla `open` e o Modal só avisa quando pedem para fechar (Esc,
+  // clique fora), então reabrir não passa por aqui: o que sobrou do uso
+  // anterior é limpo no fechamento. Quem troca de OC remonta o modal
   // (`key` no pai), e é isso que renova `defaultName`.
-  function handleOpenChange(next: boolean) {
-    if (!next) {
-      setName(defaultName);
-      setDescription("");
-      setError(null);
-    }
-    onOpenChange(next);
+  function close() {
+    setName(defaultName);
+    setDescription("");
+    setError(null);
+    onOpenChange(false);
   }
 
   async function submit() {
@@ -93,7 +92,7 @@ export function SaveOrderTemplateModal({
         description: description.trim() || undefined,
         service_order_id: serviceOrderId,
       });
-      handleOpenChange(false);
+      close();
       onSaved();
     } catch (err) {
       setError(apiErrorMessage(err, "Não foi possível salvar o molde."));
@@ -105,7 +104,7 @@ export function SaveOrderTemplateModal({
   return (
     <Modal
       open={open}
-      onOpenChange={handleOpenChange}
+      onOpenChange={close}
       title="Salvar como molde"
       description="Guarda as etapas, os horários e os responsáveis desta ordem. As músicas e a escala não entram."
       className="max-w-md"
@@ -142,7 +141,7 @@ export function SaveOrderTemplateModal({
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => handleOpenChange(false)}
+            onClick={close}
             disabled={saving}
             className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
           >
@@ -210,15 +209,13 @@ export function ApplyOrderTemplateModal({
     };
   }, [open]);
 
-  function handleOpenChange(next: boolean) {
-    if (!next) {
-      setTemplates(null);
-      setLoadError(null);
-      setSelectedId(null);
-      setReplace(false);
-      setError(null);
-    }
-    onOpenChange(next);
+  function close() {
+    setTemplates(null);
+    setLoadError(null);
+    setSelectedId(null);
+    setReplace(false);
+    setError(null);
+    onOpenChange(false);
   }
 
   async function submit() {
@@ -230,7 +227,7 @@ export function ApplyOrderTemplateModal({
         `/celebrations/order-templates/${selectedId}/apply`,
         { service_order_id: serviceOrderId, replace: hasItems && replace },
       );
-      handleOpenChange(false);
+      close();
       onApplied(data.created);
     } catch (err) {
       setError(apiErrorMessage(err, "Não foi possível aplicar o molde."));
@@ -242,7 +239,7 @@ export function ApplyOrderTemplateModal({
   return (
     <Modal
       open={open}
-      onOpenChange={handleOpenChange}
+      onOpenChange={close}
       title="Aplicar molde"
       description="Copia as etapas do molde para esta ordem de culto. Depois de aplicadas, dá para ajustar uma a uma."
       className="max-w-lg"
@@ -321,7 +318,7 @@ export function ApplyOrderTemplateModal({
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => handleOpenChange(false)}
+            onClick={close}
             disabled={applying}
             className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
           >

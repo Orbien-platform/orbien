@@ -72,6 +72,30 @@ describe("OrderTemplatesPanel", () => {
     expect(await screen.findByText("Não foi possível carregar os moldes.")).toBeInTheDocument();
   });
 
+  it("ignora a lista que chega depois de a tela ser desmontada", async () => {
+    let resolveList: (v: { data: OrderTemplate[] }) => void = () => {};
+    vi.mocked(api.get).mockReturnValue(new Promise((resolve) => (resolveList = resolve)));
+    const { unmount } = render(<OrderTemplatesPanel canEdit />);
+
+    unmount();
+    resolveList({ data: templates });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignora o erro que chega depois de a tela ser desmontada", async () => {
+    let rejectList: (e: unknown) => void = () => {};
+    vi.mocked(api.get).mockReturnValue(new Promise((_, reject) => (rejectList = reject)));
+    const { unmount } = render(<OrderTemplatesPanel canEdit />);
+
+    unmount();
+    rejectList(new Error("rede"));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
   it("não mostra renomear nem excluir sem permissão de edição", async () => {
     render(<OrderTemplatesPanel canEdit={false} />);
 
@@ -143,6 +167,18 @@ describe("OrderTemplatesPanel", () => {
 
     await user.click(await screen.findByRole("button", { name: "Renomear Culto de domingo" }));
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(screen.queryByLabelText("Nome")).not.toBeInTheDocument());
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("fecha a edição com Esc sem salvar", async () => {
+    const user = userEvent.setup();
+    render(<OrderTemplatesPanel canEdit />);
+
+    await user.click(await screen.findByRole("button", { name: "Renomear Culto de domingo" }));
+    await screen.findByLabelText("Nome");
+    await user.keyboard("{Escape}");
 
     await waitFor(() => expect(screen.queryByLabelText("Nome")).not.toBeInTheDocument());
     expect(api.patch).not.toHaveBeenCalled();
