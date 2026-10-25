@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, FileText, Calendar } from "lucide-react";
+import { Plus, FileText, Calendar, Users } from "lucide-react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -13,6 +13,7 @@ import { CreateCelebrationModal, RECURRENCE_LABELS, WEEKDAY_LABELS } from "@/com
 import { CelebrationDetailSheet } from "@/components/celebrations/CelebrationDetailSheet";
 import { ScheduleSheet } from "@/components/celebrations/ScheduleSheet";
 import { TemplatesPanel } from "@/components/celebrations/TemplatesPanel";
+import { OrderTemplatesPanel } from "@/components/celebrations/OrderTemplatesPanel";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -98,6 +99,9 @@ function CelebracoesContent() {
   const [activeTab, setActiveTab] = useState("celebrations");
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleInst, setScheduleInst] = useState<CelebrationInstance | null>(null);
+  // Templates tem dois acervos: o de escala (ministérios e vagas) e o de OC
+  // (etapas do culto). Cada um tem a própria tela.
+  const [templateKind, setTemplateKind] = useState<"schedule" | "order">("schedule");
 
   // ── Celebrations tab state ──
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
@@ -332,7 +336,7 @@ function CelebracoesContent() {
                   sched === undefined
                     ? "Escala"
                     : sched === null
-                      ? "Sem escala"
+                      ? "Montar escala"
                       : sched.status === "published"
                         ? "Escala publicada"
                         : sched.status === "archived"
@@ -380,16 +384,18 @@ function CelebracoesContent() {
                       >
                         {cancelled ? "Cancelado" : hasOC ? "Com OC" : "Sem OC"}
                       </span>
+                      {/* Botão de verdade, não selo: é por aqui que se escala o culto. */}
                       <button
                         type="button"
                         onClick={() => openSchedule(inst)}
                         className={cn(
-                          "rounded-full px-2 py-0.5 text-xs font-medium transition-colors",
+                          "flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                           sched?.status === "published"
-                            ? "bg-teal-dim text-teal hover:bg-teal hover:text-white"
-                            : "bg-[var(--surface-subtle)] text-stone hover:bg-navy hover:text-white"
+                            ? "border-teal/30 bg-teal-dim text-teal hover:bg-teal hover:text-white"
+                            : "border-[var(--border-default)] text-ink hover:bg-navy hover:text-white dark:text-white"
                         )}
                       >
+                        <Users size={12} strokeWidth={1.5} />
                         {schedLabel}
                       </button>
                     </div>
@@ -402,7 +408,38 @@ function CelebracoesContent() {
 
         {/* ── Tab: Templates de escala ── */}
         <Tabs.Panel value="templates" className="pt-5">
-          <TemplatesPanel canEdit={canEdit} />
+          <div
+            role="group"
+            aria-label="Tipo de template"
+            className="mb-4 inline-flex rounded-[8px] border border-[var(--border-default)] p-0.5"
+          >
+            {(
+              [
+                ["schedule", "Escala"],
+                ["order", "Ordem de culto"],
+              ] as const
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={templateKind === kind}
+                onClick={() => setTemplateKind(kind)}
+                className={cn(
+                  "rounded-[6px] px-3 py-1 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  templateKind === kind
+                    ? "bg-navy text-white"
+                    : "text-stone hover:text-ink dark:hover:text-white"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {templateKind === "schedule" ? (
+            <TemplatesPanel canEdit={canEdit} />
+          ) : (
+            <OrderTemplatesPanel canEdit={canEdit} />
+          )}
         </Tabs.Panel>
       </Tabs.Root>
 
@@ -439,6 +476,11 @@ function CelebracoesContent() {
         instanceId={selectedInstId}
         canEdit={canEdit}
         canAddSongs={canAddSongs}
+        onOpenSchedule={(inst) => {
+          // Os dois painéis ocupam a tela inteira: fecha a OC e abre a escala.
+          setSoViewOpen(false);
+          openSchedule(inst);
+        }}
       />
 
       <ScheduleSheet

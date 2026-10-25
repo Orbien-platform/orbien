@@ -7,6 +7,7 @@ import {
 import { CelebrationAssignmentService } from './celebration-assignment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../content/notifications.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,12 +36,18 @@ function serviceWith(client: ReturnType<typeof clientWith>, notifications?: Part
   const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client));
   const prisma = { client, runInTx } as unknown as PrismaService;
   const notificationsService = {
-    sendPush: jest.fn().mockResolvedValue(undefined),
+    sendPushToPersons: jest.fn().mockResolvedValue(true),
     ...notifications,
   } as unknown as NotificationsService;
+  const removalNotifier = { notifyRemoved: jest.fn() };
   return {
-    service: new CelebrationAssignmentService(prisma, notificationsService),
+    service: new CelebrationAssignmentService(
+      prisma,
+      notificationsService,
+      removalNotifier as unknown as CelebrationRemovalNotifier,
+    ),
     notificationsService,
+    removalNotifier,
     runInTx,
   };
 }
@@ -361,10 +368,19 @@ describe('CelebrationAssignmentService', () => {
 
     it('remove a atribuição quando admin', async () => {
       const client = clientWith();
-      client.celebrationMinistry.findFirst.mockResolvedValue({ id: 'cm1', ministry_id: 'm1' });
-      client.celebrationAssignment.findFirst.mockResolvedValue({ id: 'a1' });
+      client.celebrationMinistry.findFirst.mockResolvedValue({
+        id: 'cm1',
+        ministry_id: 'm1',
+        schedule: { status: 'draft' },
+      });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'pending',
+        notified_at: null,
+        volunteerProfile: { person_id: 'p1' },
+      });
       client.celebrationAssignment.delete.mockResolvedValue({ id: 'a1' });
-      const { service } = serviceWith(client);
+      const { service, removalNotifier } = serviceWith(client);
 
       const result = await service.removeAssignment(
         't1',
@@ -377,6 +393,28 @@ describe('CelebrationAssignmentService', () => {
       );
 
       expect(result).toEqual({ id: 'a1' });
+      expect(removalNotifier.notifyRemoved).toHaveBeenCalledWith('t1', 'g1', 'i1', []);
+    });
+
+    it('avisa a pessoa removida quando a escala está publicada e ela já tinha sido avisada', async () => {
+      const client = clientWith();
+      client.celebrationMinistry.findFirst.mockResolvedValue({
+        id: 'cm1',
+        ministry_id: 'm1',
+        schedule: { status: 'published' },
+      });
+      client.celebrationAssignment.findFirst.mockResolvedValue({
+        id: 'a1',
+        status: 'confirmed',
+        notified_at: new Date('2026-09-01'),
+        volunteerProfile: { person_id: 'p1' },
+      });
+      client.celebrationAssignment.delete.mockResolvedValue({ id: 'a1' });
+      const { service, removalNotifier } = serviceWith(client);
+
+      await service.removeAssignment('t1', 'g1', 'i1', 'cm1', 'a1', 'u1', ['admin_congregation']);
+
+      expect(removalNotifier.notifyRemoved).toHaveBeenCalledWith('t1', 'g1', 'i1', ['p1']);
     });
 
     it('bloqueia ministry_leader que não é líder do ministério', async () => {
@@ -441,11 +479,21 @@ describe('CelebrationAssignmentService', () => {
         where: { id: { in: ['a1', 'a2'] } },
         data: { notified_at: expect.any(Date) },
       });
-      expect(notificationsService.sendPush).toHaveBeenCalledTimes(2);
+      expect(notificationsService.sendPushToPersons).toHaveBeenCalledTimes(2);
+      expect(notificationsService.sendPushToPersons).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 't1',
+          congregationId: 'g1',
+          title: 'Você está na escala!',
+          body: 'Culto de Domingo',
+          data: { type: 'celebration_assignment', assignment_id: 'a1' },
+        }),
+        ['p1'],
+      );
       expect(result).toEqual({ id: 's1', status: 'published' });
     });
 
-    it('não chama updateMany nem sendPush quando não há pendentes', async () => {
+    it('não chama updateMany nem sendPushToPersons quando não há pendentes', async () => {
       const client = clientWith();
       client.celebrationSchedule.findUnique
         .mockResolvedValueOnce({
@@ -460,7 +508,7 @@ describe('CelebrationAssignmentService', () => {
       await service.publish('t1', 'g1', 'i1');
 
       expect(client.celebrationAssignment.updateMany).not.toHaveBeenCalled();
-      expect(notificationsService.sendPush).not.toHaveBeenCalled();
+      expect(notificationsService.sendPushToPersons).not.toHaveBeenCalled();
     });
 
     it('loga o erro sem propagar quando o envio de push falha', async () => {
@@ -476,14 +524,14 @@ describe('CelebrationAssignmentService', () => {
         { id: 'a1', volunteerProfile: { person_id: 'p1' } },
       ]);
       const { service, notificationsService } = serviceWith(client, {
-        sendPush: jest.fn().mockRejectedValue(new Error('falha de rede')),
+        sendPushToPersons: jest.fn().mockRejectedValue(new Error('falha de rede')),
       });
 
       await service.publish('t1', 'g1', 'i1');
       // Dá um tick para o .catch() fire-and-forget rodar
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(notificationsService.sendPush).toHaveBeenCalledTimes(1);
+      expect(notificationsService.sendPushToPersons).toHaveBeenCalledTimes(1);
     });
   });
 

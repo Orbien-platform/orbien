@@ -20,6 +20,7 @@ import { NotificationsService } from '../content/notifications.service';
 import { AddCelebrationAssignmentDto } from './dto/add-celebration-assignment.dto';
 import { RespondCelebrationAssignmentDto } from './dto/respond-celebration-assignment.dto';
 import { toCounts } from './celebration-attendance.service';
+import { CelebrationRemovalNotifier, personsToNotifyOnRemoval } from './celebration-removal.notifier';
 
 @Injectable()
 export class CelebrationAssignmentService {
@@ -28,6 +29,7 @@ export class CelebrationAssignmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly removalNotifier: CelebrationRemovalNotifier,
   ) {}
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -192,7 +194,7 @@ export class CelebrationAssignmentService {
         congregation_id: congregationId,
         schedule: { celebration_instance_id: instanceId },
       },
-      select: { id: true, ministry_id: true },
+      select: { id: true, ministry_id: true, schedule: { select: { status: true } } },
     });
     if (!cm) throw new NotFoundException('Ministério da escala não encontrado');
 
@@ -200,10 +202,19 @@ export class CelebrationAssignmentService {
 
     const assignment = await this.prisma.client.celebrationAssignment.findFirst({
       where: { id: assignmentId, tenant_id: tenantId, celebration_ministry_id: cm.id },
+      include: { volunteerProfile: { select: { person_id: true } } },
     });
     if (!assignment) throw new NotFoundException('Atribuição não encontrada');
 
-    return this.prisma.client.celebrationAssignment.delete({ where: { id: assignmentId } });
+    const removed = await this.prisma.client.celebrationAssignment.delete({ where: { id: assignmentId } });
+
+    this.removalNotifier.notifyRemoved(
+      tenantId,
+      congregationId,
+      instanceId,
+      personsToNotifyOnRemoval(cm.schedule.status, [assignment]),
+    );
+    return removed;
   }
 
   // ── Publish ────────────────────────────────────────────────────────────────
@@ -256,16 +267,20 @@ export class CelebrationAssignmentService {
     });
 
     for (const { assignmentId, personId } of toNotify) {
+      // Por conta, não por tag: o app só registra `external_id`, `tenant_id`,
+      // `congregation_id` e `role` no OneSignal — não existe tag `person_id`.
       this.notifications
-        .sendPush({
-          tenantId,
-          congregationId,
-          contentPostId: null,
-          title: 'Você está na escala!',
-          body: celebrationName,
-          filters: [{ field: 'tag', key: 'person_id', relation: '=', value: personId }],
-          data: { type: 'celebration_assignment', assignment_id: assignmentId },
-        })
+        .sendPushToPersons(
+          {
+            tenantId,
+            congregationId,
+            contentPostId: null,
+            title: 'Você está na escala!',
+            body: celebrationName,
+            data: { type: 'celebration_assignment', assignment_id: assignmentId },
+          },
+          [personId],
+        )
         .catch((err: unknown) => {
           this.logger.error(`Falha ao notificar assignment ${assignmentId}: ${String(err)}`);
         });

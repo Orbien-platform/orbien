@@ -1538,6 +1538,65 @@ describe('23. Songs — isolamento por congregação (AD-001)', () => {
     );
     expect(created.congregation_id).toBe(congregationA2Id);
   });
+
+  // `028_rls_service_order_templates.sql`: o molde de OC segue a mesma regra, e
+  // as etapas dele (tabela filha) também.
+  it('moldes de OC: Tenant B não vê; admin_congregation da A-Main não lê o da A-Second; tenant_admin lê e grava', async () => {
+    const template = await prismaAdmin.serviceOrderTemplate.create({
+      data: {
+        tenant_id: tenantAId,
+        congregation_id: congregationA2Id,
+        name: 'Molde RLS',
+        items: {
+          create: [
+            {
+              tenant_id: tenantAId,
+              congregation_id: congregationA2Id,
+              sequence: 1,
+              name: 'Abertura',
+              start_offset_minutes: 0,
+              duration_minutes: 5,
+              responsible_type: 'free_text',
+              responsible_label: 'Dirigente',
+            },
+          ],
+        },
+      },
+    });
+
+    try {
+      const fromB = await runAsTenant(tenantBId, congregationBId, async (tx) => ({
+        templates: await tx.serviceOrderTemplate.findMany({ where: { tenant_id: tenantAId } }),
+        items: await tx.serviceOrderTemplateItem.findMany({ where: { tenant_id: tenantAId } }),
+      }));
+      expect(fromB.templates).toHaveLength(0);
+      expect(fromB.items).toHaveLength(0);
+
+      const asCongAdmin = await runAsUser(tenantAId, congregationAId, congAdminUserId, async (tx) => ({
+        templates: await tx.serviceOrderTemplate.findMany({ where: { id: template.id } }),
+        items: await tx.serviceOrderTemplateItem.findMany({ where: { template_id: template.id } }),
+      }));
+      expect(asCongAdmin.templates).toHaveLength(0);
+      expect(asCongAdmin.items).toHaveLength(0);
+
+      const asTenantAdmin = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, async (tx) => ({
+        templates: await tx.serviceOrderTemplate.findMany({ where: { id: template.id } }),
+        items: await tx.serviceOrderTemplateItem.findMany({ where: { template_id: template.id } }),
+      }));
+      expect(asTenantAdmin.templates).toHaveLength(1);
+      expect(asTenantAdmin.items).toHaveLength(1);
+
+      const created = await runAsUser(tenantAId, congregationAId, tenantAdminUserId, (tx) =>
+        tx.serviceOrderTemplate.create({
+          data: { tenant_id: tenantAId, congregation_id: congregationA2Id, name: 'Molde RLS 2' },
+        }),
+      );
+      expect(created.congregation_id).toBe(congregationA2Id);
+      await prismaAdmin.serviceOrderTemplate.delete({ where: { id: created.id } });
+    } finally {
+      await prismaAdmin.serviceOrderTemplate.delete({ where: { id: template.id } });
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
