@@ -404,7 +404,7 @@ describe('guardiões: POST /kids/children/:id/guardians e DELETE /kids/guardians
       where: { id: res.body.guardian_person_id },
       include: { userAccounts: true },
     });
-    expect(rosa).toMatchObject({ full_name: name('Rosa'), phone: '11988887777', is_child: false });
+    expect(rosa).toMatchObject({ full_name: name('Rosa'), phone: '11988887777', is_child: false, classification: 'visitor' });
     expect(rosa.userAccounts).toHaveLength(0);
   });
 

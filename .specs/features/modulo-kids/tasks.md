@@ -119,6 +119,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **T35b** Job de retenção: anonimizar check-ins com mais de 12 meses, pulando responsável membro ativo. *Depends:* T19 · *Tests:* unit (membro ativo, ex-membro) · *Reqs:* KIDS-06
 - [x] **T36** Atualizar `orbien-lgpd-mapping.md`, termo do responsável e `docs/PLANO.md` (PROD-kids). *Depends:* T15 · *Tests:* `node scripts/check-skills.mjs` não se aplica · *Reqs:* KIDS-06
 - [x] **FIX1** (S1 do validation.md) Reimpressão de etiquetas só para quem fez o check-in e com ele aberto; 403 aos demais, gestão e voluntário escalado inclusos. *Depends:* T19 · *Tests:* jest unit + integration · *Reqs:* KIDS-09
+- [x] **FIX2** (M12) Teste de integração assere `classification === 'visitor'` do terceiro autorizado. *Depends:* T10 · *Tests:* jest integration · *Reqs:* KIDS-03
 
 ---
 
