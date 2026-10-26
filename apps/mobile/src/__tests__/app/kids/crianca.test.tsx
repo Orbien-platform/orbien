@@ -17,12 +17,14 @@ jest.mock("expo-router", () => {
 
 const mockGetChild = jest.fn();
 const mockGetOpen = jest.fn();
+const mockListOpen = jest.fn();
 const mockUpdate = jest.fn();
 const mockRemove = jest.fn();
 jest.mock("../../../lib/kids/kids-client", () => ({
   ...jest.requireActual("../../../lib/kids/kids-client"),
   getChild: (...a: unknown[]) => mockGetChild(...a),
   getOpenCheckin: (...a: unknown[]) => mockGetOpen(...a),
+  listOpenSessions: (...a: unknown[]) => mockListOpen(...a),
   updateGuardian: (...a: unknown[]) => mockUpdate(...a),
   removeGuardian: (...a: unknown[]) => mockRemove(...a),
 }));
@@ -68,6 +70,7 @@ describe("CriancaScreen", () => {
     mockParams = { id: "c1" };
     mockGetChild.mockResolvedValue(FICHA);
     mockGetOpen.mockResolvedValue(null);
+    mockListOpen.mockResolvedValue([]);
   });
 
   it("mostra a alergia com ícone e texto, e a observação de saúde", async () => {
@@ -159,20 +162,34 @@ describe("CriancaScreen", () => {
       expect(mockPush).toHaveBeenCalledWith({ pathname: "/kids/codigo/[id]", params: { id: "c1" } });
     });
 
-    it("sem culto na rota, não há ação de check-in nem de código", async () => {
+    const TODAY = [{ session_id: "s1", status: "open", room: {}, instance: { id: "i1" } }];
+
+    it("sem sessão aberta hoje, não há ação de check-in nem de código", async () => {
+      mockListOpen.mockResolvedValue([]);
       await renderScreen();
       expect(screen.queryByTestId("crianca-checkin")).toBeNull();
       expect(screen.queryByTestId("crianca-codigo")).toBeNull();
     });
 
-    it("com o culto na rota, oferece 'Fazer check-in'", async () => {
-      mockParams = { id: "c1", instanceId: "i1" };
+    it("com sessão aberta hoje, oferece 'Fazer check-in' sem culto na rota", async () => {
+      mockListOpen.mockResolvedValue(TODAY);
       await renderScreen();
       await press("crianca-checkin");
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: "/kids/checkin/[childId]",
-        params: { childId: "c1", instanceId: "i1" },
-      });
+      expect(mockPush).toHaveBeenCalledWith({ pathname: "/kids/checkin/[childId]", params: { childId: "c1" } });
+    });
+
+    it("com check-in aberto, não oferece novo check-in mesmo havendo sessão", async () => {
+      mockGetOpen.mockResolvedValue(OPEN);
+      mockListOpen.mockResolvedValue(TODAY);
+      await renderScreen();
+      expect(screen.queryByTestId("crianca-checkin")).toBeNull();
+    });
+
+    it("falha ao listar as sessões do dia não derruba a ficha nem oferece check-in", async () => {
+      mockListOpen.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByText("Ana Souza")).toBeTruthy();
+      expect(screen.queryByTestId("crianca-checkin")).toBeNull();
     });
 
     it("falha ao consultar o check-in aberto não derruba a ficha", async () => {

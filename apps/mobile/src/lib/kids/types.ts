@@ -72,6 +72,20 @@ export interface KidsSession {
   room: KidsRoom;
 }
 
+/** `GET /kids/sessions/open` — sessão aberta de HOJE, com o culto a que pertence. */
+export interface KidsOpenSession {
+  session_id: string;
+  status: "open";
+  room: Omit<KidsRoom, "capacity">;
+  instance: {
+    id: string;
+    scheduled_date: string;
+    celebration_name: string;
+    /** `HH:mm`; `null` quando o culto não tem horário. */
+    start_time: string | null;
+  };
+}
+
 export interface KidsCheckinResult {
   id: string;
   session_id: string;

@@ -3,9 +3,8 @@
 // mensagem — a regra é da API (422), a tela só a conduz. Feito o check-in,
 // segue para o código grande. A ação primária fica fixa no rodapé.
 //
-// Quem chega aqui já sabe o culto (`instanceId`). A lista de turmas é rota de
-// equipe (`KIDS_READ_ROLES`): para o responsável (`member`) a API responde 403
-// e a tela diz isso, em vez de fingir uma lista vazia.
+// As turmas vêm de `GET /kids/sessions/open`: as sessões abertas de HOJE, sem
+// o app precisar saber o culto. Gestão e responsável veem todas.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -17,7 +16,6 @@ import { Screen } from "../../../components/Screen";
 import { SectionLabel } from "../../../components/SectionLabel";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { AllergyNote } from "../../../components/kids/AllergyNote";
-import { HttpError } from "../../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
 import {
   ageInMonths,
@@ -27,10 +25,10 @@ import {
   getChild,
   isInRange,
   kidsErrorCode,
-  listSessions,
+  listOpenSessions,
   suggestSession,
 } from "../../../lib/kids/kids-client";
-import type { KidsChildFicha, KidsGuardian, KidsSession } from "../../../lib/kids/types";
+import type { KidsChildFicha, KidsGuardian, KidsOpenSession } from "../../../lib/kids/types";
 import { getMyPersonId } from "../../../lib/privacidade/privacidade-client";
 import { Baby, CircleAlert, CircleCheck, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
@@ -38,21 +36,26 @@ import { ICON_STROKE_WIDTH, iconSize, radius, spacing, touchTarget, typography }
 
 interface Loaded {
   child: KidsChildFicha;
-  sessions: KidsSession[];
+  sessions: KidsOpenSession[];
   myPersonId: string | null;
 }
 
-function rangeLabel(room: KidsSession["room"]): string {
+function rangeLabel(room: KidsOpenSession["room"]): string {
   return `${formatAge(room.min_age_months)} a ${formatAge(room.max_age_months)}`;
+}
+
+/** O culto da sessão: nome e, havendo, o horário. */
+function sessionWhen(s: KidsOpenSession): string {
+  const { celebration_name, start_time } = s.instance;
+  return start_time ? `${celebration_name} às ${start_time}` : celebration_name;
 }
 
 export default function CheckinScreen() {
   const router = useRouter();
   const { colors, primaryColor } = useTheme();
-  const { childId, instanceId } = useLocalSearchParams<{ childId: string; instanceId: string }>();
+  const { childId } = useLocalSearchParams<{ childId: string }>();
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
-  const [forbidden, setForbidden] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [guardianId, setGuardianId] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
@@ -62,7 +65,7 @@ export default function CheckinScreen() {
   const load = useCallback(() => {
     Promise.all([
       getChild(childId),
-      listSessions(instanceId),
+      listOpenSessions(),
       // O id da pessoa só escolhe quem entrega por padrão: sem ele, o
       // responsável principal assume.
       getMyPersonId().catch(() => null),
@@ -70,19 +73,15 @@ export default function CheckinScreen() {
       .then(([child, sessions, myPersonId]) => {
         setData({ child, sessions, myPersonId });
         setError(null);
-        setForbidden(false);
         const months = child.birth_date ? ageInMonths(child.birth_date) : null;
         const suggested = months === null ? null : suggestSession(sessions, months);
-        setSessionId(suggested?.id ?? null);
+        setSessionId(suggested?.session_id ?? null);
         const mine = child.guardians.find((g) => g.guardian_person_id === myPersonId);
         const fallback = child.guardians.find((g) => g.is_primary) ?? child.guardians[0];
         setGuardianId((mine ?? fallback)?.guardian_person_id ?? null);
       })
-      .catch((err: unknown) => {
-        if (err instanceof HttpError && err.status === 403) setForbidden(true);
-        else setError(describeLoadError(err, "o check-in"));
-      });
-  }, [childId, instanceId]);
+      .catch((err: unknown) => setError(describeLoadError(err, "o check-in")));
+  }, [childId]);
 
   useEffect(load, [load]);
 
@@ -113,17 +112,6 @@ export default function CheckinScreen() {
     }
   }
 
-  if (forbidden) {
-    return (
-      <StatusMessage
-        testID="checkin-forbidden"
-        icon={CircleAlert}
-        message="Você não pode escolher a turma por aqui"
-        description="Peça ao líder kids para fazer o check-in no balcão."
-      />
-    );
-  }
-
   if (error) {
     return (
       <StatusMessage
@@ -141,10 +129,10 @@ export default function CheckinScreen() {
   if (!data) return <Screen>{null}</Screen>;
 
   const { child, sessions } = data;
-  const open = sessions.filter((s) => s.status === "open");
+  const open = sessions;
   const months = child.birth_date ? ageInMonths(child.birth_date) : null;
-  const selected = open.find((s) => s.id === sessionId) ?? null;
-  const suggestedId = months === null ? null : suggestSession(sessions, months)?.id;
+  const selected = open.find((s) => s.session_id === sessionId) ?? null;
+  const suggestedId = months === null ? null : suggestSession(sessions, months)?.session_id;
 
   if (months === null) {
     return (
@@ -162,8 +150,8 @@ export default function CheckinScreen() {
       <StatusMessage
         testID="checkin-sem-turma"
         icon={Baby}
-        message="Nenhuma turma aberta neste culto"
-        description="O líder kids ainda não abriu as turmas deste culto."
+        message="Hoje não há turma aberta."
+        description="Procure o líder kids."
       />
     );
   }
@@ -188,7 +176,7 @@ export default function CheckinScreen() {
               testID="checkin-confirmar-sim"
               title="Fazer check-in mesmo assim"
               loading={submitting}
-              onPress={() => submit(selected.id, guardianId!, true)}
+              onPress={() => submit(selected.session_id, guardianId!, true)}
             />
             <AppButton
               testID="checkin-confirmar-nao"
@@ -202,15 +190,15 @@ export default function CheckinScreen() {
 
         <SectionLabel>Turma</SectionLabel>
         {open.map((s) => {
-          const active = s.id === sessionId;
+          const active = s.session_id === sessionId;
           return (
             <Pressable
-              key={s.id}
-              testID={`checkin-turma-${s.id}`}
+              key={s.session_id}
+              testID={`checkin-turma-${s.session_id}`}
               accessibilityRole="radio"
               accessibilityState={{ selected: active }}
               onPress={() => {
-                setSessionId(s.id);
+                setSessionId(s.session_id);
                 setNeedsConfirm(false);
                 setMessage(null);
               }}
@@ -218,9 +206,11 @@ export default function CheckinScreen() {
             >
               <View style={styles.rowText}>
                 <Text style={[typography.h3, { color: colors.textPrimary }]}>{s.room.name}</Text>
-                <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>{rangeLabel(s.room)}</Text>
+                <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+                  {sessionWhen(s)} · {rangeLabel(s.room)}
+                </Text>
               </View>
-              {s.id === suggestedId && isInRange(s, months) ? <Badge label="Pela idade" tone="info" /> : null}
+              {s.session_id === suggestedId && isInRange(s, months) ? <Badge label="Pela idade" tone="info" /> : null}
               {active ? (
                 <CircleCheck size={iconSize.action} color={primaryColor} strokeWidth={ICON_STROKE_WIDTH} />
               ) : null}

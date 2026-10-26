@@ -14,7 +14,8 @@ import type {
   KidsGuardian,
   KidsOpenCheckin,
   KidsRoster,
-  KidsSession,
+  KidsOpenSession,
+  KidsRoom,
   KidsCheckoutResult,
   UpdateKidsGuardianInput,
 } from "./types";
@@ -64,9 +65,12 @@ export async function revokeConsent(): Promise<void> {
   await authenticatedRequest<unknown>("post", "/kids/consent/revoke", { body: {} });
 }
 
-/** Sessões kids de uma celebração. Rota de equipe: o responsável recebe 403. */
-export async function listSessions(instanceId: string): Promise<KidsSession[]> {
-  return authenticatedRequest<KidsSession[]>("get", `/celebrations/instances/${instanceId}/kids-sessions`);
+/**
+ * Sessões abertas de HOJE. Gestão e responsável veem todas; o voluntário só as
+ * que está escalado. Sem culto kids hoje, a lista vem vazia.
+ */
+export async function listOpenSessions(): Promise<KidsOpenSession[]> {
+  return authenticatedRequest<KidsOpenSession[]>("get", "/kids/sessions/open");
 }
 
 export async function checkInChild(
@@ -135,8 +139,10 @@ export function formatAge(months: number): string {
   return `${y} e ${rest === 1 ? "1 mês" : `${rest} meses`}`;
 }
 
+type RoomSession = { status: string; room: Omit<KidsRoom, "capacity" | "id" | "name"> };
+
 /** A turma cuja faixa contém a idade; sem ela, a primeira que aceita fora da faixa. */
-export function suggestSession(sessions: KidsSession[], months: number): KidsSession | null {
+export function suggestSession<T extends RoomSession>(sessions: T[], months: number): T | null {
   const open = sessions.filter((s) => s.status === "open");
   return (
     open.find((s) => months >= s.room.min_age_months && months <= s.room.max_age_months) ??
@@ -145,7 +151,7 @@ export function suggestSession(sessions: KidsSession[], months: number): KidsSes
   );
 }
 
-export function isInRange(session: KidsSession, months: number): boolean {
+export function isInRange(session: RoomSession, months: number): boolean {
   return months >= session.room.min_age_months && months <= session.room.max_age_months;
 }
 

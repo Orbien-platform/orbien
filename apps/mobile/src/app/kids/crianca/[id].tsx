@@ -1,7 +1,7 @@
 // Kids — ficha do filho (T31/T32, KIDS-04/05/07): idade, alergia em destaque,
 // autorizados para retirada (editar, remover, adicionar) e o código do
-// check-in aberto. Com `instanceId` na rota (quem já sabe o culto), a ação
-// fixa do rodapé é "Fazer check-in".
+// check-in aberto. Havendo sessão kids aberta hoje, a ação fixa do
+// rodapé é "Fazer check-in".
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
@@ -20,6 +20,7 @@ import {
   formatAge,
   getChild,
   getOpenCheckin,
+  listOpenSessions,
   removeGuardian,
   updateGuardian,
 } from "../../../lib/kids/kids-client";
@@ -31,9 +32,10 @@ import { spacing, touchTarget, typography } from "../../../lib/theme/tokens";
 export default function CriancaScreen() {
   const router = useRouter();
   const { colors, primaryColor } = useTheme();
-  const { id, instanceId } = useLocalSearchParams<{ id: string; instanceId?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [child, setChild] = useState<KidsChildFicha | null>(null);
   const [open, setOpen] = useState<KidsOpenCheckin | null>(null);
+  const [hasOpenSession, setHasOpenSession] = useState(false);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -41,13 +43,19 @@ export default function CriancaScreen() {
 
   const load = useCallback(() => {
     let cancelled = false;
-    Promise.all([getChild(id), getOpenCheckin(id).catch(() => null)])
-      .then(([ficha, checkin]) => {
+    Promise.all([
+      getChild(id),
+      getOpenCheckin(id).catch(() => null),
+      // Só decide se o botão aparece; falhar aqui não derruba a ficha.
+      listOpenSessions().catch(() => []),
+    ])
+      .then(([ficha, checkin, sessions]) => {
         if (cancelled) return;
         hasDataRef.current = true;
         setError(null);
         setChild(ficha);
         setOpen(checkin);
+        setHasOpenSession(sessions.length > 0);
       })
       .catch((err: unknown) => {
         if (!cancelled && !hasDataRef.current) setError(describeLoadError(err, "a ficha da criança"));
@@ -89,7 +97,7 @@ export default function CriancaScreen() {
   if (!child) return <Screen>{null}</Screen>;
 
   const months = child.birth_date ? ageInMonths(child.birth_date) : null;
-  const showCheckin = !open && instanceId;
+  const showCheckin = !open && hasOpenSession;
 
   return (
     <Screen>
@@ -180,9 +188,7 @@ export default function CriancaScreen() {
         <AppButton
           testID="crianca-checkin"
           title="Fazer check-in"
-          onPress={() =>
-            router.push({ pathname: "/kids/checkin/[childId]", params: { childId: id, instanceId: instanceId! } })
-          }
+          onPress={() => router.push({ pathname: "/kids/checkin/[childId]", params: { childId: id } })}
           style={styles.footer}
         />
       ) : null}

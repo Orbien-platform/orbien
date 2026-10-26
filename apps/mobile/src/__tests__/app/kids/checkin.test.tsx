@@ -1,21 +1,21 @@
 // Kids — check-in do filho (T32, KIDS-08): turma sugerida pela idade, fora da
-// faixa (confirmação / recusa), quem entrega, 409 e o caminho do responsável
-// sem acesso à lista de turmas.
+// faixa (confirmação / recusa), quem entrega, 409 e as sessões abertas de hoje
+// (sem culto na rota).
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 const mockReplace = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ replace: mockReplace }),
-  useLocalSearchParams: () => ({ childId: "c1", instanceId: "i1" }),
+  useLocalSearchParams: () => ({ childId: "c1" }),
 }));
 
 const mockGetChild = jest.fn();
-const mockListSessions = jest.fn();
+const mockListOpen = jest.fn();
 const mockCheckIn = jest.fn();
 jest.mock("../../../lib/kids/kids-client", () => ({
   ...jest.requireActual("../../../lib/kids/kids-client"),
   getChild: (...a: unknown[]) => mockGetChild(...a),
-  listSessions: (...a: unknown[]) => mockListSessions(...a),
+  listOpenSessions: (...a: unknown[]) => mockListOpen(...a),
   checkInChild: (...a: unknown[]) => mockCheckIn(...a),
 }));
 const mockGetMyPersonId = jest.fn();
@@ -49,9 +49,10 @@ const FICHA = {
   guardians: [guardian("g1", "p1", { is_primary: true })],
 };
 const room = (id: string, name: string, min: number, max: number, lenient = false) => ({
-  id: `s-${id}`,
+  session_id: `s-${id}`,
   status: "open" as const,
-  room: { id, name, min_age_months: min, max_age_months: max, allows_out_of_range: lenient, capacity: null },
+  room: { id, name, min_age_months: min, max_age_months: max, allows_out_of_range: lenient },
+  instance: { id: "i1", scheduled_date: "2026-10-26", celebration_name: "Culto da família", start_time: "10:00" },
 });
 const MATERNAL = room("m", "Maternal", 12, 35);
 const JUNIOR = room("j", "Júnior", 72, 120, true);
@@ -72,7 +73,7 @@ describe("CheckinScreen", () => {
     jest.clearAllMocks();
     jest.useFakeTimers({ now: NOW, doNotFake: ["nextTick", "setImmediate", "setTimeout", "clearTimeout"] });
     mockGetChild.mockResolvedValue(FICHA);
-    mockListSessions.mockResolvedValue([MATERNAL, JUNIOR]);
+    mockListOpen.mockResolvedValue([MATERNAL, JUNIOR]);
     mockGetMyPersonId.mockResolvedValue("p1");
   });
   afterEach(() => jest.useRealTimers());
@@ -81,11 +82,28 @@ describe("CheckinScreen", () => {
     mockCheckIn.mockResolvedValue({ id: "k1", code: "7KQ2" });
     await renderScreen();
     expect(screen.getByText("Pela idade")).toBeTruthy();
-    expect(screen.getByText("1 ano a 2 anos e 11 meses")).toBeTruthy();
+    expect(screen.getByText(/1 ano a 2 anos e 11 meses/)).toBeTruthy();
 
     await press("checkin-fazer");
     expect(mockCheckIn).toHaveBeenCalledWith("s-m", { child_id: "c1", guardian_person_id: "p1" });
     expect(mockReplace).toHaveBeenCalledWith({ pathname: "/kids/codigo/[id]", params: { id: "c1", feito: "1" } });
+  });
+
+  it("lista as sessões abertas do dia com culto, horário e faixa, sem instanceId na rota", async () => {
+    await renderScreen();
+    expect(mockListOpen).toHaveBeenCalledWith();
+    expect(screen.getByText("Maternal")).toBeTruthy();
+    expect(screen.getByText("Júnior")).toBeTruthy();
+    expect(screen.getByText("Culto da família às 10:00 · 1 ano a 2 anos e 11 meses")).toBeTruthy();
+    expect(screen.getAllByText("Pela idade")).toHaveLength(1);
+  });
+
+  it("culto sem horário mostra só o nome", async () => {
+    mockListOpen.mockResolvedValue([
+      { ...MATERNAL, instance: { ...MATERNAL.instance, start_time: null } },
+    ]);
+    await renderScreen();
+    expect(screen.getByText("Culto da família · 1 ano a 2 anos e 11 meses")).toBeTruthy();
   });
 
   it("mostra a alergia da criança antes de confirmar", async () => {
@@ -127,7 +145,7 @@ describe("CheckinScreen", () => {
   });
 
   it("turma que não aceita fora da faixa: mensagem, sem confirmação", async () => {
-    mockListSessions.mockResolvedValue([MATERNAL, room("b", "Bebês", 0, 11)]);
+    mockListOpen.mockResolvedValue([MATERNAL, room("b", "Bebês", 0, 11)]);
     mockCheckIn.mockRejectedValue(new HttpError(422, { code: "kids_out_of_range", message: "Criança fora da faixa etária da turma" }));
     await renderScreen();
     await press("checkin-turma-s-b");
@@ -200,10 +218,12 @@ describe("CheckinScreen", () => {
   });
 
   describe("estados sem ação", () => {
-    it("sem turma aberta, diz que o líder ainda não abriu", async () => {
-      mockListSessions.mockResolvedValue([{ ...MATERNAL, status: "cancelled" }]);
+    it("sem culto kids hoje, manda procurar o líder", async () => {
+      mockListOpen.mockResolvedValue([]);
       await renderScreen();
       expect(screen.getByTestId("checkin-sem-turma")).toBeTruthy();
+      expect(screen.getByText("Hoje não há turma aberta.")).toBeTruthy();
+      expect(screen.getByText("Procure o líder kids.")).toBeTruthy();
       expect(screen.queryByTestId("checkin-fazer")).toBeNull();
     });
 
@@ -213,15 +233,8 @@ describe("CheckinScreen", () => {
       expect(screen.getByTestId("checkin-sem-nascimento")).toBeTruthy();
     });
 
-    it("responsável sem acesso à lista de turmas (403) recebe a orientação, não um erro genérico", async () => {
-      mockListSessions.mockRejectedValue(new HttpError(403, { message: "Forbidden" }));
-      await renderScreen();
-      expect(screen.getByTestId("checkin-forbidden")).toBeTruthy();
-      expect(screen.getByText("Peça ao líder kids para fazer o check-in no balcão.")).toBeTruthy();
-    });
-
     it("erro de rede ao carregar oferece tentar de novo", async () => {
-      mockListSessions.mockRejectedValueOnce(new NetworkError());
+      mockListOpen.mockRejectedValueOnce(new NetworkError());
       await renderScreen();
       expect(screen.getByTestId("checkin-error")).toBeTruthy();
       await press("checkin-retry");

@@ -23,7 +23,7 @@ import {
   isInRange,
   kidsErrorCode,
   listChildren,
-  listSessions,
+  listOpenSessions,
   removeGuardian,
   revokeConsent,
   suggestSession,
@@ -92,11 +92,11 @@ describe("KidsClient", () => {
     ]);
   });
 
-  it("lista sessões e faz check-in com o corpo do contrato", async () => {
-    await listSessions("i1");
+  it("lista as sessões abertas de hoje e faz check-in com o corpo do contrato", async () => {
+    await listOpenSessions();
     await checkInChild("s1", { child_id: "c1", guardian_person_id: "p1", confirm_out_of_range: true });
     expect(mockRequest.mock.calls).toEqual([
-      ["get", "/celebrations/instances/i1/kids-sessions"],
+      ["get", "/kids/sessions/open"],
       ["post", "/kids/sessions/s1/checkins", { body: { child_id: "c1", guardian_person_id: "p1", confirm_out_of_range: true } }],
     ]);
   });

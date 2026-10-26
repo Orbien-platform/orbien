@@ -111,6 +111,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **T33** Equipe: roster da sessão e check-out por código. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-09
 - [x] **T34** "Minhas escalas" mostra turma da sessão. *Depends:* T21 · *Tests:* jest · *Reqs:* KIDS-10
 - [x] **T34b** Preferência de notificação `kids` (toggle, tag OneSignal `pref_kids`) e tag `person_id` registrada pelo app. *Depends:* T19d · *Tests:* jest · *Reqs:* KIDS-09
+- [x] **T32b** Check-in do responsável por `GET /kids/sessions/open` (sessões abertas de hoje, sem `instanceId` na rota; estado vazio "Hoje não há turma aberta"). *Depends:* T32 · *Tests:* jest · *Reqs:* KIDS-08
 
 ### F8 — Documentos e seed
 
