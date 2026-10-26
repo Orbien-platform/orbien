@@ -1845,7 +1845,9 @@ model CelebrationMinistry {
   kidsSession KidsSession?            @relation(fields: [kids_session_id], references: [id], onDelete: SetNull)
   assignments CelebrationAssignment[]
 
-  @@unique([schedule_id, ministry_id])
+  // Unicidade em índices parciais (migration 20261026140000): um ministério
+  // por escala, ou um por (escala, sessão kids) — o mesmo ministério "Kids"
+  // escala N turmas da mesma instância. O Prisma não modela índice parcial.
   @@index([congregation_id])
   @@map("celebration_ministries")
 }

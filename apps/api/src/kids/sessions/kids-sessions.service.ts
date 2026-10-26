@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { CelebrationInstanceStatus, KidsSession, KidsSessionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { STAFFING_STATUSES, countScheduledVolunteers, volunteersMissing } from './kids-staffing';
 
 @Injectable()
 export class KidsSessionsService {
@@ -23,10 +24,32 @@ export class KidsSessionsService {
   // Instância sem sessões é "sem culto kids": lista vazia, nunca erro.
   async listByInstance(tenantId: string, congregationId: string, instanceId: string) {
     await this.findInstance(tenantId, congregationId, instanceId);
-    return this.prisma.client.kidsSession.findMany({
+    const sessions = await this.prisma.client.kidsSession.findMany({
       where: { tenant_id: tenantId, congregation_id: congregationId, celebration_instance_id: instanceId },
       include: { room: true },
       orderBy: [{ room: { min_age_months: 'asc' } }, { room: { name: 'asc' } }],
+    });
+    if (sessions.length === 0) return [];
+
+    // Escala (spec P2, AC 2): `volunteers_scheduled` = voluntários distintos
+    // pending/confirmed ligados à sessão; `volunteers_missing` = quanto falta
+    // para `room.min_volunteers` (>= 0).
+    const rows = await this.prisma.client.celebrationAssignment.findMany({
+      where: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        status: { in: [...STAFFING_STATUSES] },
+        celebrationMinistry: { kids_session_id: { in: sessions.map((s) => s.id) } },
+      },
+      select: { status: true, volunteer_profile_id: true, celebrationMinistry: { select: { kids_session_id: true } } },
+    });
+    return sessions.map((s) => {
+      const scheduled = countScheduledVolunteers(rows, s.id);
+      return {
+        ...s,
+        volunteers_scheduled: scheduled,
+        volunteers_missing: volunteersMissing(s.room.min_volunteers, scheduled),
+      };
     });
   }
 

@@ -398,6 +398,7 @@ export class CelebrationAssignmentService {
         celebrationMinistry: {
           include: {
             ministry: true,
+            kidsSession: { select: { id: true, status: true, room: { select: { id: true, name: true } } } },
             schedule: {
               include: {
                 celebrationInstance: {
@@ -433,6 +434,15 @@ export class CelebrationAssignmentService {
         id: a.celebrationMinistry.ministry.id,
         name: a.celebrationMinistry.ministry.name,
       },
+      // Turma kids da escala (módulo Kids): o horário é o da celebração, acima.
+      kids_session: a.celebrationMinistry.kidsSession
+        ? {
+            id: a.celebrationMinistry.kidsSession.id,
+            room_id: a.celebrationMinistry.kidsSession.room.id,
+            room_name: a.celebrationMinistry.kidsSession.room.name,
+            status: a.celebrationMinistry.kidsSession.status,
+          }
+        : null,
       scheduled_date: a.celebrationMinistry.schedule.celebrationInstance.scheduled_date,
       celebration_instance_id: a.celebrationMinistry.schedule.celebrationInstance.id,
       // Quem está neste ministério (e ainda não recusou nem trocou) lança a contagem.

@@ -1,4 +1,4 @@
-import { IsInt, IsUUID, Min } from 'class-validator';
+import { IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 
 export class AddScheduleMinistryDto {
   @IsUUID()
@@ -7,4 +7,9 @@ export class AddScheduleMinistryDto {
   @IsInt()
   @Min(1)
   slots!: number;
+
+  // Liga a escala a uma sessão kids da MESMA instância (módulo Kids, T21).
+  @IsOptional()
+  @IsUUID()
+  kids_session_id?: string;
 }

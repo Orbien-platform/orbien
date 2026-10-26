@@ -86,7 +86,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 ### F5 — Escala e contagem
 
-- **T21** `kids_session_id` na escala + `kids_session` em `my-celebration-assignments` + mínimo de voluntários. *Depends:* T9 · *Tests:* unit + integração · *Reqs:* KIDS-10
+- [x] **T21** `kids_session_id` na escala + `kids_session` em `my-celebration-assignments` + mínimo de voluntários. *Depends:* T9 · *Tests:* unit + integração · *Reqs:* KIDS-10
 - **T22** `checkin_total` na contagem de público como valor inicial de `children`, editável (sem mudar o contrato do `PUT`). *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-11
 - **T23** `GET /kids/attendance/summary` (média por turma, vazio ≠ zero). *Depends:* T19 · *Tests:* unit + integração · *Reqs:* KIDS-12
 

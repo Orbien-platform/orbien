@@ -14,6 +14,7 @@ function clientWith() {
       update: jest.fn(),
     },
     kidsCheckin: { count: jest.fn() },
+    celebrationAssignment: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -46,15 +47,72 @@ describe('KidsSessionsService', () => {
     it('lista as sessões da instância com a turma, por idade mínima', async () => {
       const client = clientWith();
       client.celebrationInstance.findFirst.mockResolvedValue(instance);
-      client.kidsSession.findMany.mockResolvedValue([{ id: 's1' }]);
+      client.kidsSession.findMany.mockResolvedValue([{ id: 's1', room: { min_volunteers: 0 } }]);
 
       const out = await serviceWith(client).listByInstance('t1', 'g1', 'i1');
 
-      expect(out).toEqual([{ id: 's1' }]);
+      expect(out.map((s) => s.id)).toEqual(['s1']);
       expect(client.kidsSession.findMany).toHaveBeenCalledWith({
         where: { tenant_id: 't1', congregation_id: 'g1', celebration_instance_id: 'i1' },
         include: { room: true },
         orderBy: [{ room: { min_age_months: 'asc' } }, { room: { name: 'asc' } }],
+      });
+    });
+
+    // spec P2 Escala, AC 2: a falta de voluntários é sinalizada na leitura da sessão.
+    describe('volunteers_missing (AC 2)', () => {
+      const asg = (session: string, vol: string, status: string) => ({
+        status,
+        volunteer_profile_id: vol,
+        celebrationMinistry: { kids_session_id: session },
+      });
+
+      function withSessions(minA: number, minB: number, assignments: ReturnType<typeof asg>[]) {
+        const client = clientWith();
+        client.celebrationInstance.findFirst.mockResolvedValue(instance);
+        client.kidsSession.findMany.mockResolvedValue([
+          { id: 'sA', room: { min_volunteers: minA } },
+          { id: 'sB', room: { min_volunteers: minB } },
+        ]);
+        client.celebrationAssignment.findMany.mockResolvedValue(assignments);
+        return client;
+      }
+
+      it('menos escalados que o mínimo: volunteers_missing = diferença', async () => {
+        const client = withSessions(3, 0, [asg('sA', 'v1', 'pending')]);
+        const out = await serviceWith(client).listByInstance('t1', 'g1', 'i1');
+        expect(out[0]).toEqual(expect.objectContaining({ volunteers_scheduled: 1, volunteers_missing: 2 }));
+      });
+
+      it('mínimo atingido ou turma sem mínimo: volunteers_missing = 0, nunca negativo', async () => {
+        const client = withSessions(1, 0, [asg('sA', 'v1', 'confirmed'), asg('sA', 'v2', 'confirmed')]);
+        const out = await serviceWith(client).listByInstance('t1', 'g1', 'i1');
+        expect(out[0]).toEqual(expect.objectContaining({ volunteers_scheduled: 2, volunteers_missing: 0 }));
+        expect(out[1]).toEqual(expect.objectContaining({ volunteers_scheduled: 0, volunteers_missing: 0 }));
+      });
+
+      it('recusado e trocado não contam como escalados', async () => {
+        const client = withSessions(2, 0, [
+          asg('sA', 'v1', 'declined'),
+          asg('sA', 'v2', 'swapped'),
+          asg('sA', 'v3', 'confirmed'),
+        ]);
+        const out = await serviceWith(client).listByInstance('t1', 'g1', 'i1');
+        expect(out[0]).toEqual(expect.objectContaining({ volunteers_scheduled: 1, volunteers_missing: 1 }));
+      });
+
+      it('consulta as escalas só das sessões listadas, pending/confirmed', async () => {
+        const client = withSessions(1, 1, []);
+        await serviceWith(client).listByInstance('t1', 'g1', 'i1');
+        expect(client.celebrationAssignment.findMany).toHaveBeenCalledWith({
+          where: {
+            tenant_id: 't1',
+            congregation_id: 'g1',
+            status: { in: ['pending', 'confirmed'] },
+            celebrationMinistry: { kids_session_id: { in: ['sA', 'sB'] } },
+          },
+          select: { status: true, volunteer_profile_id: true, celebrationMinistry: { select: { kids_session_id: true } } },
+        });
       });
     });
   });
