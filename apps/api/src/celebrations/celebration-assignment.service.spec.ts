@@ -27,6 +27,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     },
     celebrationSchedule: { findUnique: jest.fn(), update: jest.fn() },
     serviceOrder: { findMany: jest.fn().mockResolvedValue([]) },
+    kidsCheckin: { findMany: jest.fn().mockResolvedValue([]) },
     ...overrides,
   };
 }
@@ -821,6 +822,43 @@ describe('CelebrationAssignmentService', () => {
     });
 
     // spec P2 Escala, AC 5: "Minhas escalas" mostra a turma da sessão em que está escalado.
+    // spec P2 Escala, AC 3: quem lança a contagem vê o total de check-ins como valor inicial.
+    it('traz checkin_total (crianças distintas com check-in) por escala; 0 sem check-in', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      const row = (id: string, day: string) => ({
+        id,
+        status: 'confirmed',
+        celebrationMinistry: {
+          ministry_id: 'm1',
+          ministry: { id: 'm1', name: 'Recepção', counts_attendance: true },
+          schedule: {
+            celebrationInstance: {
+              id: `i-${id}`,
+              scheduled_date: new Date(day),
+              celebration: { id: 'c1', name: 'Culto' },
+              attendance: null,
+            },
+          },
+        },
+      });
+      client.celebrationAssignment.findMany.mockResolvedValue([row('a1', '2026-09-06'), row('a2', '2026-09-07')]);
+      client.kidsCheckin.findMany.mockResolvedValue([
+        { celebration_instance_id: 'i-a1', child_id: 'k1' },
+        { celebration_instance_id: 'i-a1', child_id: 'k2' },
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result.map((r) => r.checkin_total)).toEqual([2, 0]);
+      expect(result[0]!.attendance).toBeNull(); // o total não vira `children` sozinho
+      expect(client.kidsCheckin.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { tenant_id: 't1', celebration_instance_id: { in: ['i-a1', 'i-a2'] } } }),
+      );
+    });
+
     it('expõe kids_session (turma) quando a escala está ligada a uma sessão kids, senão null', async () => {
       const client = clientWith();
       client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });

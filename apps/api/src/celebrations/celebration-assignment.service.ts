@@ -19,7 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../content/notifications.service';
 import { AddCelebrationAssignmentDto } from './dto/add-celebration-assignment.dto';
 import { RespondCelebrationAssignmentDto } from './dto/respond-celebration-assignment.dto';
-import { toCounts } from './celebration-attendance.service';
+import { checkinTotalsByInstance, toCounts } from './celebration-attendance.service';
 
 @Injectable()
 export class CelebrationAssignmentService {
@@ -417,6 +417,11 @@ export class CelebrationAssignmentService {
 
     const setlistByKey = await this.attachSetlists(assignments);
     const cuesByKey = await this.attachCues(assignments, profile.person_id);
+    const checkinTotals = await checkinTotalsByInstance(
+      this.prisma.client,
+      tenantId,
+      [...new Set(assignments.map((a) => a.celebrationMinistry.schedule.celebrationInstance.id))],
+    );
 
     const result = assignments.map((a) => ({
       id: a.id,
@@ -452,6 +457,8 @@ export class CelebrationAssignmentService {
       attendance: a.celebrationMinistry.schedule.celebrationInstance.attendance
         ? toCounts(a.celebrationMinistry.schedule.celebrationInstance.attendance)
         : null,
+      // Crianças distintas com check-in: valor inicial sugerido para `children`.
+      checkin_total: checkinTotals.get(a.celebrationMinistry.schedule.celebrationInstance.id) ?? 0,
       service_order_id: a.celebrationMinistry.schedule.celebrationInstance.serviceOrder?.id ?? null,
       setlist: setlistByKey.get(
         `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,
