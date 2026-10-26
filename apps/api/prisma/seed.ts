@@ -32,6 +32,7 @@ import {
   AssignmentStatus,
 } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { seedKidsDemo } from './kids-seed';
 
 // Bypassa RLS (postgres/DIRECT_URL) — necessário pois o seed cria o próprio
 // tenant/congregação, sem contexto de sessão (app.tenant_id) para satisfazer
@@ -610,7 +611,7 @@ const DEMO_PERSONS: {
  * Idempotente pelo mesmo padrão do resto do arquivo: cada bloco confere se o
  * registro já existe (por nome/chave natural) antes de criar.
  */
-async function seedDemoData(seeded: SeededTenant): Promise<void> {
+async function seedDemoData(seeded: SeededTenant, slug: string): Promise<void> {
   const { tenantId, congregationId, adminUserId, adminPersonId, ministryId, celebrationId } = seeded;
   console.log('  ── dado de demonstração ──');
 
@@ -1538,6 +1539,7 @@ async function seedDemoData(seeded: SeededTenant): Promise<void> {
       },
     });
   }
+  await seedKidsDemo(prisma, { tenantId, congregationId, celebrationId }, slug);
   console.log('  ── fim do dado de demonstração ──');
 }
 
@@ -1554,7 +1556,7 @@ async function main(): Promise<void> {
     const tenant = await seedTenant(spec);
     seeded.set(spec.slug, tenant);
     if (spec.demoData) {
-      await seedDemoData(tenant);
+      await seedDemoData(tenant, spec.slug);
     }
   }
 

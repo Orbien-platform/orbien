@@ -16,6 +16,7 @@
     "db:deploy": "bash scripts/bootstrap-db.sh",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
+    "db:kids": "ts-node prisma/kids-seed.ts",
     "db:studio": "prisma studio",
     "test": "jest --selectProjects unit --passWithNoTests",
     "test:unit": "jest --selectProjects unit --passWithNoTests",
