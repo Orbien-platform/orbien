@@ -694,6 +694,58 @@ Falta:
   (a API aceita; a tela edita só alcance e liberação).
 - `addMaterial` não confere se o material tem o PG do encontro como alvo.
 
+### PROD-39 · Módulo Kids: turmas, check-in e check-out seguros · entregue, faltam o jurídico e o refino
+
+A celebração passa a ter 0, 1 ou N sessões kids (uma por turma/faixa etária). O
+responsável cadastra os filhos e quem pode buscá-los, aceita o termo, e a equipe
+faz entrada e saída da criança por **código** de 4 caracteres único na sessão.
+Premium (`@RequiresPlan('premium')`). Spec e desenho em
+`.specs/features/modulo-kids/`.
+
+- Turmas: `/kids/rooms` (faixa etária obrigatória, `allows_out_of_range`,
+  capacidade que só avisa, mínimo de voluntários). Sessões:
+  `/celebrations/instances/:id/kids-sessions`, `/kids/sessions/open`, modelo por
+  celebração em `/celebrations/:id/kids-template` (+ `apply`).
+- Criança e responsáveis: `/kids/children`, `/kids/children/:id/guardians`,
+  `PATCH|DELETE /kids/guardians/:id` (terceiro autorizado, ao menos um primário),
+  `/kids/consent` (+ `revoke`). A criança é `Person.is_child` e fica fora das
+  listagens, indicadores e retenções de pessoas (AD-013). Alergia e observação
+  médica em `kids_child_health`, com leitura auditada.
+- Check-in/out: `POST /kids/sessions/:id/checkins`, `.../checkout` (código;
+  recusa 403 genérica que avisa o líder), `.../checkout-override` (líder, com
+  motivo), `GET /kids/sessions/:id/roster` (sem o código),
+  `GET /kids/children/:id/checkin` (o responsável relê o código),
+  `GET /kids/checkins/:id/labels`. Push "Criança entregue" ao responsável
+  primário (categoria `kids`).
+- Escala e contagem: `kids_session_id` na escala; `checkin_total` sugere o
+  `children` da contagem (`PROD-37`); `GET /kids/attendance/summary` alimenta o
+  cartão Kids em `/pessoas/indicadores`.
+- Web: `/kids` (balcão), turmas, ficha da criança. App: responsável (filhos,
+  consentimento, check-in com código grande) e equipe (roster, saída por código).
+- RLS: `028_rls_kids.sql` e `029_rls_kids_child_health.sql`, escopo de
+  congregação, no `bootstrap-db.sh` e no passo 7; testes em
+  `test/rls/kids.spec.ts`.
+- Retenção: `KidsRetentionService` anonimiza check-ins com mais de 12 meses
+  (apaga quem retirou e o motivo de exceção), pulando enquanto o responsável é
+  membro ativo; exclusão da criança 30 dias após o fim do contrato.
+- Seed: `npm run db:kids -w orbien-backend` (só `teste1-church` e
+  `teste2-church`), que também limpa o resíduo do e2e do balcão.
+
+Falta:
+- **Texto jurídico completo do termo do responsável** (pendência para o
+  jurídico). O app usa um texto curto versionado em `kids-consent.terms.ts`
+  (`kids-2026-10`); trocar o texto sobe a versão e pede novo aceite.
+- Decisão do jurídico: após os 12 meses, desvincular também criança e
+  responsável do check-in (hoje ficam como referência e só a identificação de
+  quem retirou é apagada). Exige tornar as FKs anuláveis e perde a contagem
+  distinta por criança.
+- Check-in e check-out por **QR** (o código já é gravado por check-in, o QR
+  entra sem mudar o modelo).
+- Etiqueta no app (hoje o web imprime pelo navegador) e em PDF.
+- Limite de tentativas de código no check-out (throttle por criança/sessão).
+- Push a outros papéis (líder, voluntário) além do responsável primário.
+- Testar o fluxo do responsável no aparelho (código grande, toque ≥ 48px).
+
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
 
 Quem está escalado num ministério marcado como **responsável pela contagem**

@@ -117,7 +117,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **T35** Seed de turmas e crianças em `teste1-church`/`teste2-church`. *Depends:* T19 · *Tests:* none · *Reqs:* —
 - [x] **T35b** Job de retenção: anonimizar check-ins com mais de 12 meses, pulando responsável membro ativo. *Depends:* T19 · *Tests:* unit (membro ativo, ex-membro) · *Reqs:* KIDS-06
-- **T36** Atualizar `orbien-lgpd-mapping.md`, termo do responsável e `docs/PLANO.md` (PROD-kids). *Depends:* T15 · *Tests:* `node scripts/check-skills.mjs` não se aplica · *Reqs:* KIDS-06
+- [x] **T36** Atualizar `orbien-lgpd-mapping.md`, termo do responsável e `docs/PLANO.md` (PROD-kids). *Depends:* T15 · *Tests:* `node scripts/check-skills.mjs` não se aplica · *Reqs:* KIDS-06
 
 ---
 
