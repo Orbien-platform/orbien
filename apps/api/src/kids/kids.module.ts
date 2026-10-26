@@ -5,6 +5,7 @@ import { KidsChildrenController } from './children/kids-children.controller';
 import { KidsGuardiansController } from './children/kids-guardians.controller';
 import { KidsConsentController } from './consent/kids-consent.controller';
 import { KidsCheckinController } from './checkin/kids-checkin.controller';
+import { KidsLabelsService } from './checkin/kids-labels.service';
 import { KidsRosterService } from './checkin/kids-roster.service';
 import { KidsCheckinService } from './checkin/kids-checkin.service';
 import { KidsLeaderAlertService } from './checkin/kids-leader-alert.service';
@@ -32,6 +33,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsTemplateController,
   ],
   providers: [
+    KidsLabelsService,
     KidsRosterService,
     KidsLeaderAlertService,
     KidsSessionAccessService,
@@ -45,6 +47,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsTemplateService,
   ],
   exports: [
+    KidsLabelsService,
     KidsRosterService,
     KidsSessionAccessService,
     KidsCheckinService,

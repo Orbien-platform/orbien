@@ -217,7 +217,9 @@ describe('POST /kids/sessions/:id/checkins', () => {
     expect(res.status).toBe(201);
     expect(res.body.code).toMatch(CODE);
     expect(res.body).toMatchObject({ session_id: ids.sMat, child_id: child, guardian_person_id: mae, age_override: false, capacity_warning: null });
-    expect(JSON.stringify(res.body)).not.toContain(ALERGIA);
+    // Saúde só viaja na etiqueta da criança (AC 5), nunca nos campos do check-in.
+    const { labels: _labels, ...checkinFields } = res.body;
+    expect(JSON.stringify(checkinFields)).not.toContain(ALERGIA);
 
     const row = await admin.kidsCheckin.findUniqueOrThrow({ where: { id: res.body.id } });
     expect(row).toMatchObject({
@@ -650,5 +652,71 @@ describe('GET /kids/sessions/:id/roster', () => {
     expect((await roster(leader, GHOST)).status).toBe(404);
     expect((await roster(h.tokenT1('premium', 'ministry_leader'), ids.sMat)).status).toBe(404);
     expect((await roster(leader, 'x')).status).toBe(400);
+  });
+});
+
+describe('etiquetas (AC 5) — POST /kids/sessions/:id/checkins e GET /kids/checkins/:id/labels', () => {
+  const labels = (token: string, id: string) => http().get(`/api/kids/checkins/${id}/labels`).set(auth(token));
+
+  it('o check-in devolve as duas etiquetas com o mesmo código; alergia só na da criança; sem QR', async () => {
+    const child = await mkChild({ label: 'Etiquetada' });
+    const res = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+
+    expect(res.status).toBe(201);
+    const { child_label, guardian_label } = res.body.labels;
+    expect(child_label).toMatchObject({
+      child_name: expect.stringContaining('Etiquetada'),
+      room_name: `Maternal ${tag}`,
+      has_allergy: true,
+      allergy: ALERGIA,
+      code: res.body.code,
+    });
+    expect(guardian_label).toEqual({ child_name: child_label.child_name, room_name: `Maternal ${tag}`, code: res.body.code });
+    expect(JSON.stringify(res.body)).not.toContain(NOTA);
+    expect(JSON.stringify(res.body)).not.toMatch(/"qr|qr_/i);
+  });
+
+  it('GET devolve as mesmas etiquetas; a leitura de saúde pela equipe é auditada sem o conteúdo', async () => {
+    const child = await mkChild();
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+    const before = await admin.auditLog.count({ where: { subject_person_id: child, action: 'kids.health_read' } });
+
+    const res = await labels(leader, inn.body.id);
+
+    expect(res.status).toBe(200);
+    expect(res.body.child_label.code).toBe(inn.body.code);
+    expect(await admin.auditLog.count({ where: { subject_person_id: child, action: 'kids.health_read' } })).toBe(before + 1);
+    const rows = await admin.auditLog.findMany({ where: { subject_person_id: child, action: 'kids.health_read' } });
+    expect(JSON.stringify(rows)).not.toContain(ALERGIA);
+  });
+
+  it('criança sem alergia: etiqueta sem destaque', async () => {
+    const child = await mkChild({ allergy: null });
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+    expect(inn.body.labels.child_label).toMatchObject({ has_allergy: false, allergy: null });
+  });
+
+  it('o responsável lê a etiqueta do filho dele; outro responsável, voluntário fora da sessão e visitante não', async () => {
+    const child = await mkChild();
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+
+    expect((await labels(tokenMae, inn.body.id)).status).toBe(200);
+    expect((await labels(tokenOutra, inn.body.id)).status).toBe(404);
+    expect((await labels(tokenVolFora, inn.body.id)).status).toBe(403);
+    expect((await labels(h.tokenFor('visitor'), inn.body.id)).status).toBe(403);
+    expect((await labels(tokenVol, inn.body.id)).status).toBe(200); // escalada em sMat
+  });
+
+  it('404 inexistente/outro tenant, 400 com id inválido, 401 sem token, 409 depois da retirada', async () => {
+    const child = await mkChild();
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+
+    expect((await labels(leader, GHOST)).status).toBe(404);
+    expect((await labels(h.tokenT1('premium', 'ministry_leader'), inn.body.id)).status).toBe(404);
+    expect((await labels(leader, 'x')).status).toBe(400);
+    expect((await http().get(`/api/kids/checkins/${inn.body.id}/labels`)).status).toBe(401);
+
+    await http().post(`/api/kids/checkins/${inn.body.id}/checkout`).set(auth(leader)).send({ code: inn.body.code, picked_up_by_person_id: mae });
+    expect((await labels(leader, inn.body.id)).status).toBe(409);
   });
 });

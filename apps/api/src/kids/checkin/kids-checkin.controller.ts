@@ -11,6 +11,7 @@ import { KIDS_FAMILY_ROLES, KIDS_MANAGE_ROLES, KIDS_READ_ROLES } from '../kids.r
 import { toKidsActor } from '../children/kids-child-access.service';
 import { KidsCheckinService } from './kids-checkin.service';
 import { KidsRosterService } from './kids-roster.service';
+import { KidsLabelsService } from './kids-labels.service';
 import { CreateKidsCheckinDto } from './dto/create-kids-checkin.dto';
 import { CheckoutKidsCheckinDto } from './dto/checkout-kids-checkin.dto';
 import { CheckoutOverrideKidsCheckinDto } from './dto/checkout-override-kids-checkin.dto';
@@ -27,13 +28,28 @@ export class KidsCheckinController {
   constructor(
     private readonly checkinService: KidsCheckinService,
     private readonly rosterService: KidsRosterService,
+    private readonly labelsService: KidsLabelsService,
   ) {}
 
   // Equipe, voluntário escalado ou o responsável (só do próprio filho, pelo app).
   @Post('kids/sessions/:id/checkins')
   @Roles(...KIDS_FAMILY_ROLES, 'volunteer')
-  checkIn(@Param('id', ParseUUIDPipe) sessionId: string, @Body() dto: CreateKidsCheckinDto, @CurrentUser() user: JwtPayload) {
-    return this.checkinService.checkIn(toKidsActor(user), sessionId, dto);
+  async checkIn(
+    @Param('id', ParseUUIDPipe) sessionId: string,
+    @Body() dto: CreateKidsCheckinDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const actor = toKidsActor(user);
+    const checkin = await this.checkinService.checkIn(actor, sessionId, dto);
+    // AC 5: as duas etiquetas saem junto com o código.
+    return { ...checkin, labels: await this.labelsService.forCheckin(actor, checkin.id) };
+  }
+
+  // Dados das etiquetas (criança e responsável) prontos para o front imprimir.
+  @Get('kids/checkins/:id/labels')
+  @Roles(...KIDS_FAMILY_ROLES, 'volunteer')
+  labels(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.labelsService.forCheckin(toKidsActor(user), id);
   }
 
   // Check-out é ação da equipe: o responsável não fecha o próprio check-in.

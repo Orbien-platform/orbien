@@ -24,6 +24,7 @@ describe('KidsCheckinController', () => {
     expect(rolesFor('checkOut')).not.toContain('member');
     expect(rolesFor('checkOutOverride')).toEqual(MANAGE);
     expect(rolesFor('checkOutOverride')).not.toContain('volunteer');
+    expect(rolesFor('labels')).toEqual([...MANAGE, 'member', 'volunteer']);
     expect(rolesFor('roster')).toEqual([...MANAGE, 'volunteer']);
     expect(rolesFor('roster')).not.toContain('member');
   });
@@ -40,12 +41,14 @@ describe('KidsCheckinController', () => {
       checkOutOverride: jest.fn().mockResolvedValue({ id: 'k1' }),
     };
     const roster = { roster: jest.fn().mockResolvedValue({ items: [] }) };
-    const c = new KidsCheckinController(checkin as never, roster as never);
+    const labels = { forCheckin: jest.fn().mockResolvedValue({ checkin_id: 'k1', child_label: {}, guardian_label: {} }) };
+    const c = new KidsCheckinController(checkin as never, roster as never, labels as never);
     const inDto = { child_id: 'c', guardian_person_id: 'g' };
     const outDto = { code: 'A2B3', picked_up_by_name: 'Maria' };
     const ovDto = { reason: 'Perdeu a etiqueta', picked_up_by_name: 'Maria' };
 
-    await c.checkIn('s1', inDto, USER);
+    const created = await c.checkIn('s1', inDto, USER);
+    await c.labels('k1', USER);
     await c.checkOut('k1', outDto, USER);
     await c.checkOutOverride('k1', ovDto, USER);
     await c.roster('s1', USER);
@@ -54,5 +57,9 @@ describe('KidsCheckinController', () => {
     expect(checkin.checkOut).toHaveBeenCalledWith(ACTOR, 'k1', outDto);
     expect(checkin.checkOutOverride).toHaveBeenCalledWith(ACTOR, 'k1', ovDto);
     expect(roster.roster).toHaveBeenCalledWith(ACTOR, 's1');
+    expect(labels.forCheckin).toHaveBeenCalledTimes(2);
+    expect(labels.forCheckin).toHaveBeenCalledWith(ACTOR, 'k1');
+    // AC 5: o check-in devolve o código e as duas etiquetas juntos
+    expect(created).toMatchObject({ id: 'k1', labels: { checkin_id: 'k1' } });
   });
 });
