@@ -268,6 +268,21 @@ export async function deactivateRoom(id: string): Promise<KidsRoom> {
   return data;
 }
 
+export interface KidsInstance {
+  id: string;
+  scheduled_date: string;
+  status?: string;
+  celebration: { id: string; name: string; start_time: string };
+}
+
+/** Cultos de um dia (YYYY-MM-DD): a porta de entrada do balcão. */
+export async function listInstancesOn(day: string): Promise<KidsInstance[]> {
+  const { data } = await api.get<KidsInstance[]>("/celebrations/instances", {
+    params: { date_from: day, date_to: day },
+  });
+  return Array.isArray(data) ? data : [];
+}
+
 // ─── Sessões e modelo ─────────────────────────────────────────────────────────
 
 export async function listSessions(instanceId: string): Promise<KidsSession[]> {

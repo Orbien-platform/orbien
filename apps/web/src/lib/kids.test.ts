@@ -118,6 +118,16 @@ describe("cliente: cada função fala a rota e o corpo que a API espera", () => 
     expect(del).toHaveBeenLastCalledWith("/kids/rooms/r1");
   });
 
+  it("cultos do dia", async () => {
+    get.mockResolvedValueOnce({ data: [{ id: "i1" }] });
+    expect(await kids.listInstancesOn("2026-10-25")).toEqual([{ id: "i1" }]);
+    expect(get).toHaveBeenLastCalledWith("/celebrations/instances", {
+      params: { date_from: "2026-10-25", date_to: "2026-10-25" },
+    });
+    get.mockResolvedValueOnce({ data: null });
+    expect(await kids.listInstancesOn("2026-10-25")).toEqual([]);
+  });
+
   it("sessões e modelo", async () => {
     get.mockResolvedValueOnce({ data: [{ id: "s1" }] });
     expect(await kids.listSessions("i1")).toEqual([{ id: "s1" }]);
