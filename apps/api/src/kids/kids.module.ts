@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ContentModule } from '../content/content.module';
+import { KidsAttendanceController } from './attendance/kids-attendance.controller';
+import { KidsAttendanceService } from './attendance/kids-attendance.service';
 import { KidsChildrenController } from './children/kids-children.controller';
 import { KidsGuardiansController } from './children/kids-guardians.controller';
 import { KidsConsentController } from './consent/kids-consent.controller';
@@ -24,6 +26,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
 @Module({
   imports: [PrismaModule, ContentModule],
   controllers: [
+    KidsAttendanceController,
     KidsCheckinController,
     KidsChildrenController,
     KidsGuardiansController,
@@ -33,6 +36,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsTemplateController,
   ],
   providers: [
+    KidsAttendanceService,
     KidsLabelsService,
     KidsRosterService,
     KidsLeaderAlertService,
@@ -47,6 +51,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsTemplateService,
   ],
   exports: [
+    KidsAttendanceService,
     KidsLabelsService,
     KidsRosterService,
     KidsSessionAccessService,

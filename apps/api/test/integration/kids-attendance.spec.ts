@@ -99,6 +99,14 @@ beforeAll(async () => {
   await checkin(sessions['B_com3']!, ids.iCom3, ids.c3);
   // iCom1: uma criança só.
   await checkin(sessions['A_com1']!, ids.iCom1, ids.c1);
+  // Culto cancelado dentro da janela: nunca entra no indicador.
+  const iCancelado = (
+    await admin.celebrationInstance.create({
+      data: { ...scope, celebration_id: ids.celebration, scheduled_date: daysAgo(5), status: 'cancelled' },
+    })
+  ).id;
+  await sess('A_cancelado', iCancelado, ids.rA);
+  await checkin(sessions['A_cancelado']!, iCancelado, ids.c3);
   // iAntigo: fora do período padrão de 90 dias.
   await checkin(sessions['A_antigo']!, ids.iAntigo, ids.c1);
   await checkin(sessions['A_antigo']!, ids.iAntigo, ids.c2);
@@ -169,5 +177,83 @@ describe('GET /celebrations/attendance: checkin_total (KIDS-11)', () => {
       .set(auth(h.tokenT1('premium', 'pastor')));
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
+  });
+});
+
+describe('GET /kids/attendance/summary (KIDS-12)', () => {
+  const GHOST = '00000000-0000-4000-8000-000000000000';
+  const summary = (token: string, query: Record<string, string> = {}) =>
+    http().get('/api/kids/attendance/summary').query(query).set(auth(token));
+  const roomOf = (body: { rooms: Array<{ room_id: string }> }, id: string) => body.rooms.find((r) => r.room_id === id);
+
+  it('AC 1: média de crianças por turma no período padrão, só entre sessões com check-in', async () => {
+    const res = await summary(h.tokenFor('pastor'));
+
+    expect(res.status).toBe(200);
+    // Turma A: sessões com check-in = A_com1 (1) e A_com3 (2); A_vazio, o culto cancelado
+    // e o culto de 200 dias atrás ficam de fora. Média 1,5.
+    expect(roomOf(res.body, ids.rA)).toEqual({
+      room_id: ids.rA, room_name: `Maternal ${tag}`, sessions_counted: 2, total_children: 3, average_children: 1.5,
+    });
+    // Turma B: uma sessão com c1 e c3 (c1 já passou pela A no mesmo culto, e conta em cada sessão).
+    expect(roomOf(res.body, ids.rB)).toMatchObject({ sessions_counted: 1, total_children: 2, average_children: 2 });
+    expect(res.body.sessions_counted).toBe(3);
+    expect(res.body.period.date_to).toBe(daysAgo(0).toISOString().slice(0, 10));
+  });
+
+  it('período informado alcança o culto antigo; o filtro por turma restringe a resposta', async () => {
+    const from = daysAgo(210).toISOString().slice(0, 10);
+    const res = await summary(h.tokenFor('tenant_admin'), { date_from: from, room_id: ids.rA });
+
+    expect(res.status).toBe(200);
+    expect(res.body.rooms).toHaveLength(1);
+    // + A_antigo com 2 crianças: (1 + 2 + 2) / 3 = 1,7
+    expect(res.body.rooms[0]).toMatchObject({ sessions_counted: 3, total_children: 5, average_children: 1.7 });
+  });
+
+  it('AC 2: nenhuma sessão com check-in no filtro devolve estrutura vazia, nunca zero', async () => {
+    const recent = daysAgo(3).toISOString().slice(0, 10);
+    const res = await summary(h.tokenFor('pastor'), { date_from: recent, date_to: recent });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      period: { date_from: recent, date_to: recent },
+      sessions_counted: 0,
+      rooms: [],
+    });
+  });
+
+  it('todos os papéis de leitura da contagem passam', async () => {
+    for (const role of ['admin_congregation', 'pastor', 'tenant_admin', 'secretary', 'ministry_leader']) {
+      expect((await summary(h.tokenFor(role))).status).toBe(200);
+    }
+  });
+
+  it('403 para member e volunteer', async () => {
+    expect((await summary(h.tokenFor('member'))).status).toBe(403);
+    expect((await summary(h.tokenFor('volunteer'))).status).toBe(403);
+  });
+
+  it('403 no plano Starter (gate premium)', async () => {
+    expect((await summary(h.tokenT1('starter', 'pastor'))).status).toBe(403);
+  });
+
+  it('400 com data inválida ou turma que não é UUID; 422 com início depois do fim', async () => {
+    const token = h.tokenFor('pastor');
+    expect((await summary(token, { date_from: 'ontem' })).status).toBe(400);
+    expect((await summary(token, { room_id: 'abc' })).status).toBe(400);
+    expect((await summary(token, { tenant_id: 'x' })).status).toBe(400);
+    expect((await summary(token, { date_from: '2026-10-02', date_to: '2026-10-01' })).status).toBe(422);
+  });
+
+  it('404 com turma que não existe ou é de outro tenant', async () => {
+    expect((await summary(h.tokenFor('pastor'), { room_id: GHOST })).status).toBe(404);
+    expect((await summary(h.tokenT1('premium', 'pastor'), { room_id: ids.rA })).status).toBe(404);
+  });
+
+  it('isolamento: outro tenant não enxerga os check-ins daqui', async () => {
+    const res = await summary(h.tokenT1('premium', 'pastor'));
+    expect(res.status).toBe(200);
+    expect(res.body.rooms.find((r: { room_id: string }) => r.room_id === ids.rA)).toBeUndefined();
   });
 });

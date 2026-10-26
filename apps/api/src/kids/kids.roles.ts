@@ -15,3 +15,8 @@ export const KIDS_FAMILY_ROLES = [...KIDS_MANAGE_ROLES, 'member'];
 // Quem recebe o aviso de retirada recusada: a liderança, sem a secretaria
 // (que não está no balcão). O `ministry_leader` é o "líder kids" da spec.
 export const KIDS_ALERT_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'ministry_leader'];
+
+// Indicador de presença kids (spec P3): os mesmos papéis que leem a contagem de
+// público (`READ_ROLES` em celebration-attendance.controller.ts). `member` e
+// `volunteer` ficam de fora.
+export const KIDS_ATTENDANCE_READ_ROLES = ['admin_congregation', 'pastor', 'tenant_admin', 'secretary', 'ministry_leader'];
