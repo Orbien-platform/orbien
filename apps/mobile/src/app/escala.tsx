@@ -43,6 +43,7 @@ import { addMinutesToClock, formatOffsetFromStart } from "../lib/format/clock";
 import { formatDateTime, localWhen } from "../lib/format/date";
 import {
   ArrowLeftRight,
+  Baby,
   CalendarCheck,
   CalendarOff,
   Church,
@@ -313,6 +314,20 @@ export default function EscalaScreen() {
                           {when}
                         </Text>
                       ) : null}
+                      {item.kids_session ? (
+                        <View testID={`assignment-${item.id}-turma`} style={styles.metaRow}>
+                          <Baby
+                            size={iconSize.inline}
+                            color={colors.textTertiary}
+                            strokeWidth={ICON_STROKE_WIDTH}
+                          />
+                          <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+                            {item.kids_session.status === "cancelled"
+                              ? `Turma ${item.kids_session.room_name} (cancelada)`
+                              : `Turma ${item.kids_session.room_name}`}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                     {item.checked_in_at ? (
                       <Badge
@@ -371,6 +386,20 @@ export default function EscalaScreen() {
                         style={styles.actionButton}
                       />
                     </View>
+                  ) : null}
+
+                  {item.kids_session?.status === "open" &&
+                  (item.status === "pending" || item.status === "confirmed") ? (
+                    <AppButton
+                      testID={`turma-${item.id}`}
+                      title="Abrir turma"
+                      variant="secondary"
+                      icon={Baby}
+                      onPress={() =>
+                        router.push({ pathname: "/kids/sessao/[id]", params: { id: item.kids_session!.id } })
+                      }
+                      style={styles.checkInButton}
+                    />
                   ) : null}
 
                   {item.status === "confirmed" && !item.checked_in_at ? (
