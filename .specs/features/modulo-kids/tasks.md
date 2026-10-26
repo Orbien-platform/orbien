@@ -96,7 +96,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 ### F6 — Web
 
 - [x] **T24** Tipos e cliente `lib/kids`. *Depends:* T19 · *Tests:* unit · *Reqs:* —
-- **T25** Tela de turmas. *Depends:* T24 · *Tests:* componente · *Reqs:* KIDS-01
+- [x] **T25** Tela de turmas. *Depends:* T24 · *Tests:* componente · *Reqs:* KIDS-01
 - **T26** Sessões no detalhe da celebração (abrir 0..N, modelo). *Depends:* T24 · *Tests:* componente · *Reqs:* KIDS-02,03
 - **T27** Ficha da criança e responsáveis (alergia em destaque). *Depends:* T24 · *Tests:* componente · *Reqs:* KIDS-04,05,07
 - **T28** Balcão: busca, check-in, roster, check-out, recusa, etiqueta `@page`. *Depends:* T24 · *Tests:* componente + e2e · *Reqs:* KIDS-08,09
