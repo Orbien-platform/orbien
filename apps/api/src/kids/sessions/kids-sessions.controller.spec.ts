@@ -23,6 +23,7 @@ describe('KidsSessionsController', () => {
   beforeEach(() => {
     service = {
       listByInstance: jest.fn().mockResolvedValue([]),
+      listOpenToday: jest.fn().mockResolvedValue([]),
       open: jest.fn().mockResolvedValue([]),
       cancel: jest.fn().mockResolvedValue({ id: 's1' }),
     } as unknown as jest.Mocked<KidsSessionsService>;
@@ -33,6 +34,19 @@ describe('KidsSessionsController', () => {
     expect(rolesFor('open')).toEqual(MANAGE);
     expect(rolesFor('cancel')).toEqual(MANAGE);
     expect(rolesFor('list')).toEqual([...MANAGE, 'volunteer']);
+  });
+
+  it('GET kids/sessions/open: gestão, responsável e voluntário; declarada antes de qualquer :id', async () => {
+    expect(rolesFor('listOpen')).toEqual([...MANAGE, 'member', 'volunteer']);
+    const names = Object.getOwnPropertyNames(KidsSessionsController.prototype);
+    expect(names.indexOf('listOpen')).toBeLessThan(names.indexOf('cancel'));
+    await controller.listOpen({ ...USER, roles: ['member'] });
+    expect(service.listOpenToday).toHaveBeenCalledWith({
+      userId: 'u1',
+      tenantId: 't1',
+      congregationId: 'g1',
+      roles: ['member'],
+    });
   });
 
   it('delega ao service com tenant/congregação do usuário', async () => {

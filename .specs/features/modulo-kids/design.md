@@ -84,6 +84,7 @@ equipe confere → **check-out**.
 - **Purpose**: abrir/cancelar sessões por instância, em lote por modelo.
 - **Location**: `apps/api/src/kids/sessions/`
 - **Interfaces**:
+  - `GET /kids/sessions/open` (T19e): sessões **abertas de hoje** (dia da instância no fuso da congregação; instância não cancelada) para o responsável achar o `session_id` do próprio check-in. Papéis: gestão + `member` + `volunteer` (volunteer só as em que está escalado). Devolve `{ session_id, status, room{id,name,min_age_months,max_age_months,allows_out_of_range}, instance{id,scheduled_date,celebration_name,start_time} }`, **sem** dado de criança ou de saúde. Declarada antes de qualquer `kids/sessions/:id`
   - `GET /celebrations/instances/:id/kids-sessions`
   - `POST /celebrations/instances/:id/kids-sessions` `{ room_ids[] }`, 409 no par repetido
   - `DELETE /kids/sessions/:id` (cancela; com check-in aberto → 422)

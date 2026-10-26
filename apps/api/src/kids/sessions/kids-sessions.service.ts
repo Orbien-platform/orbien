@@ -7,10 +7,81 @@ import {
 import { CelebrationInstanceStatus, KidsSession, KidsSessionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { STAFFING_STATUSES, countScheduledVolunteers, volunteersMissing } from './kids-staffing';
+import { KidsSessionAccessService } from '../checkin/kids-session-access.service';
+import { KidsActor } from '../children/kids-child-access.service';
+import { KIDS_FAMILY_ROLES } from '../kids.roles';
+
+const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
+/** Dia civil de hoje no fuso da congregação, como `scheduled_date` é gravada (meia-noite UTC). */
+const todayUtcMidnight = (timezone: string, now: Date) =>
+  new Date(`${new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(now)}T00:00:00.000Z`);
 
 @Injectable()
 export class KidsSessionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessionAccess: KidsSessionAccessService,
+  ) {}
+
+  /**
+   * Sessões ABERTAS do dia na congregação (para o responsável achar o
+   * `session_id` do check-in). Só turma e culto: nenhum dado de criança ou de
+   * saúde. Gestão e responsável veem todas; o voluntário só as em que está
+   * escalado (mesma regra do KidsSessionAccessService).
+   */
+  async listOpenToday(actor: KidsActor, now: Date = new Date()) {
+    const congregation = await this.prisma.client.congregation.findFirst({
+      where: { id: actor.congregationId, tenant_id: actor.tenantId },
+      select: { timezone: true },
+    });
+    const sessions = await this.prisma.client.kidsSession.findMany({
+      where: {
+        tenant_id: actor.tenantId,
+        congregation_id: actor.congregationId,
+        status: KidsSessionStatus.open,
+        celebrationInstance: {
+          scheduled_date: todayUtcMidnight(congregation?.timezone ?? DEFAULT_TIMEZONE, now),
+          status: { not: CelebrationInstanceStatus.cancelled },
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        room: {
+          select: { id: true, name: true, min_age_months: true, max_age_months: true, allows_out_of_range: true },
+        },
+        celebrationInstance: {
+          select: { id: true, scheduled_date: true, celebration: { select: { name: true, start_time: true } } },
+        },
+      },
+      orderBy: [{ room: { min_age_months: 'asc' } }, { room: { name: 'asc' } }],
+    });
+
+    const seesAll = actor.roles.some((r) => KIDS_FAMILY_ROLES.includes(r));
+    const visible = seesAll
+      ? sessions
+      : await this.onlyScheduled(actor, sessions);
+    return visible.map((s) => ({
+      session_id: s.id,
+      status: s.status,
+      room: s.room,
+      instance: {
+        id: s.celebrationInstance.id,
+        scheduled_date: s.celebrationInstance.scheduled_date,
+        celebration_name: s.celebrationInstance.celebration.name,
+        start_time: s.celebrationInstance.celebration.start_time,
+      },
+    }));
+  }
+
+  private async onlyScheduled<T extends { id: string }>(actor: KidsActor, sessions: T[]): Promise<T[]> {
+    if (!actor.roles.includes('volunteer') || sessions.length === 0) return [];
+    const scheduled = await this.sessionAccess.scheduledAmong(
+      actor.userId,
+      sessions.map((s) => s.id),
+    );
+    return sessions.filter((s) => scheduled.has(s.id));
+  }
 
   private async findInstance(tenantId: string, congregationId: string, instanceId: string) {
     const instance = await this.prisma.client.celebrationInstance.findFirst({

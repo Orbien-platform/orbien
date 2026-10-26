@@ -86,6 +86,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **T19b** Código de retirada fora do roster; `GET /kids/children/:id/checkin` devolve o check-in aberto com `code` ao responsável (decisão do dono, 2026-10-26). *Depends:* T19 · *Tests:* unit + integração · *Reqs:* KIDS-08,09
 - [x] **T19c** `PATCH /kids/guardians/:id` (`can_pickup`, `is_primary`, `relationship`), ≥ 1 primário, troca atômica. *Depends:* T15 · *Tests:* unit + integração (400/403/404/422) · *Reqs:* KIDS-05
 - [x] **T19d** Push "Criança entregue" ao responsável primário no check-out e no override, categoria própria `kids` (AD-003). *Depends:* T18 · *Tests:* unit + integração · *Reqs:* KIDS-09
+- [x] **T19e** `GET /kids/sessions/open`: sessões kids abertas de hoje (sem dado de criança/saúde) para o responsável fazer o check-in do próprio filho; volunteer só as escaladas. *Depends:* T19 · *Tests:* unit + integração · *Reqs:* KIDS-08
 
 ### F5 — Escala e contagem
 

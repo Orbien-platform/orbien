@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException, UnprocessableEntityException } fr
 import { Prisma } from '@prisma/client';
 import { KidsSessionsService } from './kids-sessions.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { KidsSessionAccessService } from '../checkin/kids-session-access.service';
 
 function clientWith() {
   return {
@@ -15,17 +16,104 @@ function clientWith() {
     },
     kidsCheckin: { count: jest.fn() },
     celebrationAssignment: { findMany: jest.fn().mockResolvedValue([]) },
+    congregation: { findFirst: jest.fn().mockResolvedValue({ timezone: 'America/Sao_Paulo' }) },
   };
 }
 
-function serviceWith(client: ReturnType<typeof clientWith>) {
-  return new KidsSessionsService({ client } as unknown as PrismaService);
+function serviceWith(client: ReturnType<typeof clientWith>, scheduled: string[] = []) {
+  const access = { scheduledAmong: jest.fn().mockResolvedValue(new Set(scheduled)) };
+  const svc = new KidsSessionsService({ client } as unknown as PrismaService, access as unknown as KidsSessionAccessService);
+  return Object.assign(svc, { access });
 }
 
 const instance = { id: 'i1', status: 'published' };
 const room = (id: string, extra = {}) => ({ id, is_active: true, ...extra });
 
 describe('KidsSessionsService', () => {
+  describe('listOpenToday', () => {
+    const row = (id: string) => ({
+      id,
+      status: 'open',
+      room: { id: `r-${id}`, name: 'Maternal', min_age_months: 24, max_age_months: 47, allows_out_of_range: false },
+      celebrationInstance: {
+        id: `i-${id}`,
+        scheduled_date: new Date('2026-10-25T00:00:00.000Z'),
+        celebration: { name: 'Culto', start_time: '10:00' },
+      },
+    });
+    const actor = (...roles: string[]) => ({ userId: 'u1', tenantId: 't1', congregationId: 'g1', roles });
+    // 2026-10-26 01:00 UTC ainda é dia 25 em São Paulo.
+    const now = new Date('2026-10-26T01:00:00.000Z');
+
+    it('filtra sessão aberta, do dia no fuso da congregação, de instância não cancelada', async () => {
+      const client = clientWith();
+      client.kidsSession.findMany.mockResolvedValue([]);
+      await expect(serviceWith(client).listOpenToday(actor('pastor'), now)).resolves.toEqual([]);
+      const where = client.kidsSession.findMany.mock.calls[0][0].where;
+      expect(where).toEqual({
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        status: 'open',
+        celebrationInstance: { scheduled_date: new Date('2026-10-25T00:00:00.000Z'), status: { not: 'cancelled' } },
+      });
+    });
+
+    it('usa o fuso padrão quando a congregação não tem registro', async () => {
+      const client = clientWith();
+      client.congregation.findFirst.mockResolvedValue(null);
+      client.kidsSession.findMany.mockResolvedValue([]);
+      await serviceWith(client).listOpenToday(actor('pastor'), now);
+      expect(client.kidsSession.findMany.mock.calls[0][0].where.celebrationInstance.scheduled_date).toEqual(
+        new Date('2026-10-25T00:00:00.000Z'),
+      );
+    });
+
+    it('mapeia o contrato e não pede dado de criança nem de saúde', async () => {
+      const client = clientWith();
+      client.kidsSession.findMany.mockResolvedValue([row('s1')]);
+      const out = await serviceWith(client).listOpenToday(actor('member'), now);
+      expect(out).toEqual([
+        {
+          session_id: 's1',
+          status: 'open',
+          room: { id: 'r-s1', name: 'Maternal', min_age_months: 24, max_age_months: 47, allows_out_of_range: false },
+          instance: {
+            id: 'i-s1',
+            scheduled_date: new Date('2026-10-25T00:00:00.000Z'),
+            celebration_name: 'Culto',
+            start_time: '10:00',
+          },
+        },
+      ]);
+      const select = JSON.stringify(client.kidsSession.findMany.mock.calls[0][0].select);
+      expect(select).not.toMatch(/checkin|child|allerg|medical|notes/i);
+    });
+
+    it.each(['pastor', 'ministry_leader', 'member'])('%s vê todas, sem consultar a escala', async (role) => {
+      const client = clientWith();
+      client.kidsSession.findMany.mockResolvedValue([row('s1'), row('s2')]);
+      const svc = serviceWith(client);
+      const out = await svc.listOpenToday(actor(role), now);
+      expect(out.map((s) => s.session_id)).toEqual(['s1', 's2']);
+      expect(svc.access.scheduledAmong).not.toHaveBeenCalled();
+    });
+
+    it('voluntário vê só as sessões em que está escalado', async () => {
+      const client = clientWith();
+      client.kidsSession.findMany.mockResolvedValue([row('s1'), row('s2')]);
+      const svc = serviceWith(client, ['s2']);
+      const out = await svc.listOpenToday(actor('volunteer'), now);
+      expect(out.map((s) => s.session_id)).toEqual(['s2']);
+      expect(svc.access.scheduledAmong).toHaveBeenCalledWith('u1', ['s1', 's2']);
+    });
+
+    it('papel fora da lista não vê nada, mesmo que o service seja chamado', async () => {
+      const client = clientWith();
+      client.kidsSession.findMany.mockResolvedValue([row('s1')]);
+      await expect(serviceWith(client).listOpenToday(actor('visitor'), now)).resolves.toEqual([]);
+    });
+  });
+
   describe('listByInstance', () => {
     it('404 quando a instância não é da congregação', async () => {
       const client = clientWith();

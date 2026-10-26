@@ -7,7 +7,7 @@ const actor = (...roles: string[]): KidsActor => ({ userId: 'u1', tenantId: 't1'
 function build(personId: string | null, assignment: object | null) {
   const client = {
     userAccount: { findUnique: jest.fn().mockResolvedValue(personId ? { person_id: personId } : null) },
-    celebrationAssignment: { findFirst: jest.fn().mockResolvedValue(assignment) },
+    celebrationAssignment: { findFirst: jest.fn().mockResolvedValue(assignment), findMany: jest.fn().mockResolvedValue([]) },
   };
   const prisma = { client } as unknown as PrismaService;
   return { client, svc: new KidsSessionAccessService(prisma, new KidsChildAccessService(prisma)) };
@@ -51,5 +51,28 @@ describe('KidsSessionAccessService', () => {
     const { svc, client } = build('p1', { id: 'a1' });
     await expect(svc.canOperate(actor(role), 's1')).resolves.toBe(false);
     expect(client.celebrationAssignment.findFirst).not.toHaveBeenCalled();
+  });
+
+  describe('scheduledAmong', () => {
+    it('devolve só as sessões em que há escala pending/confirmed da pessoa', async () => {
+      const { svc, client } = build('p1', null);
+      client.celebrationAssignment.findMany.mockResolvedValue([{ celebrationMinistry: { kids_session_id: 's2' } }]);
+      const out = await svc.scheduledAmong('u1', ['s1', 's2']);
+      expect([...out]).toEqual(['s2']);
+      expect(client.celebrationAssignment.findMany).toHaveBeenCalledWith({
+        where: {
+          status: { in: ['pending', 'confirmed'] },
+          volunteerProfile: { person_id: 'p1' },
+          celebrationMinistry: { kids_session_id: { in: ['s1', 's2'] } },
+        },
+        select: { celebrationMinistry: { select: { kids_session_id: true } } },
+      });
+    });
+
+    it('conta sem pessoa vinculada: vazio, sem consultar a escala', async () => {
+      const { svc, client } = build(null, null);
+      expect((await svc.scheduledAmong('u1', ['s1'])).size).toBe(0);
+      expect(client.celebrationAssignment.findMany).not.toHaveBeenCalled();
+    });
   });
 });

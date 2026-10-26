@@ -9,7 +9,8 @@ import { TenantContextInterceptor } from '../../common/interceptors/tenant-conte
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { KidsSessionsService } from './kids-sessions.service';
 import { OpenKidsSessionsDto } from './dto/open-kids-sessions.dto';
-import { KIDS_MANAGE_ROLES, KIDS_READ_ROLES } from '../kids.roles';
+import { KIDS_FAMILY_ROLES, KIDS_MANAGE_ROLES, KIDS_READ_ROLES } from '../kids.roles';
+import { toKidsActor } from '../children/kids-child-access.service';
 
 // Caminhos completos nos métodos, e não no `@Controller`: a sessão é filha da
 // instância de celebração na abertura (`celebrations/instances/:id/...`) e
@@ -22,6 +23,14 @@ import { KIDS_MANAGE_ROLES, KIDS_READ_ROLES } from '../kids.roles';
 @RequiresPlan('premium')
 export class KidsSessionsController {
   constructor(private readonly sessionsService: KidsSessionsService) {}
+
+  // Rota literal ANTES de qualquer `kids/sessions/:id`: o Nest casa na ordem de
+  // declaração, então `open` nunca vira um `:id`.
+  @Get('kids/sessions/open')
+  @Roles(...KIDS_FAMILY_ROLES, 'volunteer')
+  listOpen(@CurrentUser() user: JwtPayload) {
+    return this.sessionsService.listOpenToday(toKidsActor(user));
+  }
 
   @Get('celebrations/instances/:id/kids-sessions')
   @Roles(...KIDS_READ_ROLES)
