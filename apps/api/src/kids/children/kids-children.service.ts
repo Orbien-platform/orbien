@@ -1,19 +1,31 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Person } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { writeAuditLog } from '../../common/audit/write-audit-log';
 import { KidsConsentService } from '../consent/kids-consent.service';
 import { KidsChildAccessService, KidsActor } from './kids-child-access.service';
+import { KidsGuardianView, KidsGuardiansService } from './kids-guardians.service';
 import { CreateKidsChildDto } from './dto/create-kids-child.dto';
 import { UpdateKidsChildDto } from './dto/update-kids-child.dto';
+import { ListKidsChildrenQueryDto } from './dto/list-kids-children-query.dto';
 
+// Resposta de listagem e de escrita: NUNCA traz dado de saúde. Quem lê saúde
+// passa por `getFicha`, que audita a leitura da equipe (AD-013 item 4) — se a
+// resposta do PATCH devolvesse a linha toda, a equipe leria sem rastro.
 export type KidsChildView = {
   id: string;
   full_name: string;
   birth_date: Date | null;
   household_id: string | null;
+};
+
+export type KidsChildFicha = KidsChildView & {
   allergies: string | null;
   medical_notes: string | null;
+  guardians: KidsGuardianView[];
 };
+
+const DEFAULT_LIST_LIMIT = 50;
 
 const MAX_CHILD_AGE_YEARS = 18;
 
@@ -43,7 +55,87 @@ export class KidsChildrenService {
     private readonly prisma: PrismaService,
     private readonly access: KidsChildAccessService,
     private readonly consent: KidsConsentService,
+    private readonly guardians: KidsGuardiansService,
   ) {}
+
+  private readonly logger = new Logger(KidsChildrenService.name);
+
+  /**
+   * Responsável: todos os filhos do próprio Household. Equipe: busca por nome
+   * na congregação. Sem dado de saúde.
+   */
+  async list(actor: KidsActor, query: ListKidsChildrenQueryDto): Promise<KidsChildView[]> {
+    const base = {
+      tenant_id: actor.tenantId,
+      congregation_id: actor.congregationId,
+      is_child: true,
+      deleted_at: null,
+      anonymized_at: null,
+    };
+    const select = { id: true, full_name: true, birth_date: true, household_id: true } as const;
+
+    if (this.access.isManager(actor.roles)) {
+      return this.prisma.client.person.findMany({
+        where: {
+          ...base,
+          ...(query.search && { full_name: { contains: query.search, mode: 'insensitive' as const } }),
+        },
+        orderBy: { full_name: 'asc' },
+        take: query.limit ?? DEFAULT_LIST_LIMIT,
+        select,
+      });
+    }
+
+    const ownId = await this.access.requireOwnPersonId(actor.userId);
+    return this.prisma.client.person.findMany({
+      where: {
+        ...base,
+        householdMemberships: {
+          some: {
+            role: 'child',
+            household: { members: { some: { person_id: ownId, role: { not: 'child' } } } },
+          },
+        },
+      },
+      orderBy: { full_name: 'asc' },
+      select,
+    });
+  }
+
+  /**
+   * Ficha: criança, saúde e responsáveis. Leitura da equipe/liderança é
+   * auditada (quem, quando, qual criança) — o conteúdo da alergia nunca vai
+   * para `audit_logs`. O responsável lendo o filho dele não é auditado.
+   */
+  async getFicha(actor: KidsActor, childId: string): Promise<KidsChildFicha> {
+    const child = await this.access.assertCanAccess(actor, childId);
+    const [health, guardians] = await Promise.all([
+      this.prisma.client.kidsChildHealth.findUnique({ where: { person_id: childId } }),
+      this.guardians.list(actor, childId),
+    ]);
+
+    if (this.access.isManager(actor.roles)) {
+      await writeAuditLog(
+        this.prisma,
+        {
+          tenant_id: actor.tenantId,
+          congregation_id: actor.congregationId,
+          actor_user_id: actor.userId,
+          subject_person_id: childId,
+          entity: 'kids_child_health',
+          action: 'kids.health_read',
+        },
+        this.logger,
+      );
+    }
+
+    return {
+      ...toView(child),
+      allergies: health?.allergies ?? null,
+      medical_notes: health?.medical_notes ?? null,
+      guardians,
+    };
+  }
 
   async create(
     actor: KidsActor,
@@ -116,7 +208,7 @@ export class KidsChildrenService {
       await this.writeHealth(actor, child.id, { allergies, medical_notes: medicalNotes });
     }
 
-    return toView(child, allergies, medicalNotes);
+    return toView(child);
   }
 
   async update(actor: KidsActor, childId: string, dto: UpdateKidsChildDto): Promise<KidsChildView> {
@@ -135,10 +227,9 @@ export class KidsChildrenService {
       ...(dto.allergies !== undefined && { allergies: dto.allergies }),
       ...(dto.medical_notes !== undefined && { medical_notes: dto.medical_notes }),
     };
-    let row: { allergies: string | null; medical_notes: string | null } | undefined;
-    if (Object.keys(health).length) row = await this.writeHealth(actor, childId, health);
+    if (Object.keys(health).length) await this.writeHealth(actor, childId, health);
 
-    return toView(updated, row?.allergies ?? null, row?.medical_notes ?? null);
+    return toView(updated);
   }
 
   private async writeHealth(
@@ -189,13 +280,11 @@ export class KidsChildrenService {
   }
 }
 
-function toView(child: Person, allergies: string | null, medicalNotes: string | null): KidsChildView {
+function toView(child: Person): KidsChildView {
   return {
     id: child.id,
     full_name: child.full_name,
     birth_date: child.birth_date,
     household_id: child.household_id,
-    allergies,
-    medical_notes: medicalNotes,
   };
 }

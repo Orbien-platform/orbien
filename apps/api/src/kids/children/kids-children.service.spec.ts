@@ -3,6 +3,13 @@ import { KidsChildrenService } from './kids-children.service';
 import type { KidsActor } from './kids-child-access.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
+const mockWriteAuditLog = jest.fn();
+jest.mock('../../common/audit/write-audit-log', () => ({
+  writeAuditLog: (...args: unknown[]) => mockWriteAuditLog(...args),
+}));
+
+beforeEach(() => mockWriteAuditLog.mockReset().mockResolvedValue(undefined));
+
 const resp: KidsActor = { userId: 'u-resp', tenantId: 't1', congregationId: 'g1', roles: ['member'] };
 const sec: KidsActor = { userId: 'u-sec', tenantId: 't1', congregationId: 'g1', roles: ['secretary'] };
 
@@ -15,14 +22,14 @@ const dto = (extra: Record<string, unknown> = {}) => ({
 
 function setup() {
   const client = {
-    person: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    person: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
     household: { create: jest.fn() },
     householdMember: { findFirst: jest.fn(), create: jest.fn() },
     kidsGuardian: { create: jest.fn() },
-    kidsChildHealth: { upsert: jest.fn() },
+    kidsChildHealth: { upsert: jest.fn(), findUnique: jest.fn() },
   };
   const access = {
-    isManager: jest.fn((roles: string[]) => roles.includes('secretary')),
+    isManager: jest.fn((roles: string[]) => roles.includes('secretary') || roles.includes('pastor')),
     requireOwnPersonId: jest.fn().mockResolvedValue('p-resp'),
     assertCanAccess: jest.fn(),
   };
@@ -38,12 +45,10 @@ function setup() {
     id: 'child1',
     ...data,
   }));
-  const service = new KidsChildrenService(
-    { client } as unknown as PrismaService,
-    access as never,
-    consent as never,
-  );
-  return { client, access, consent, service };
+  const guardians = { list: jest.fn().mockResolvedValue([]) };
+  const prisma = { client } as unknown as PrismaService;
+  const service = new KidsChildrenService(prisma, access as never, consent as never, guardians as never);
+  return { client, access, consent, guardians, prisma, service };
 }
 
 describe('KidsChildrenService.create', () => {
@@ -64,7 +69,10 @@ describe('KidsChildrenService.create', () => {
     expect(client.householdMember.create).toHaveBeenCalledWith({
       data: { household_id: 'h1', person_id: 'child1', role: 'child' },
     });
-    expect(result).toMatchObject({ id: 'child1', full_name: 'Ana Souza', allergies: 'amendoim' });
+    expect(result).toMatchObject({ id: 'child1', full_name: 'Ana Souza' });
+    // A resposta de escrita não devolve saúde: a leitura é da ficha, auditada.
+    expect(result).not.toHaveProperty('allergies');
+    expect(result).not.toHaveProperty('medical_notes');
   });
 
   it('o dado de saúde não vai para Person: grava na tabela própria', async () => {
@@ -253,5 +261,119 @@ describe('KidsChildrenService.update', () => {
     await expect(
       service.update(resp, 'child1', { birth_date: new Date(Date.now() + 86_400_000) }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('KidsChildrenService.getFicha — leitura de saúde auditada (AC 5, AD-013)', () => {
+  const equipe: KidsActor = { userId: 'u-pastor', tenantId: 't1', congregationId: 'g1', roles: ['pastor'] };
+  const child = { id: 'child1', full_name: 'Ana Souza', birth_date: null, household_id: 'h1' };
+
+  function withHealth() {
+    const ctx = setup();
+    ctx.access.assertCanAccess.mockResolvedValue(child);
+    ctx.client.kidsChildHealth.findUnique.mockResolvedValue({ allergies: 'amendoim', medical_notes: 'asma' });
+    ctx.guardians.list.mockResolvedValue([{ id: 'kg1', full_name: 'Maria', is_primary: true }]);
+    return ctx;
+  }
+
+  it('devolve alergias, observações e responsáveis', async () => {
+    const { service } = withHealth();
+
+    const ficha = await service.getFicha(equipe, 'child1');
+
+    expect(ficha).toMatchObject({
+      id: 'child1',
+      allergies: 'amendoim',
+      medical_notes: 'asma',
+      guardians: [{ id: 'kg1' }],
+    });
+  });
+
+  it('leitura pela equipe grava auditoria com quem/qual criança — e NUNCA o conteúdo', async () => {
+    const { service, prisma } = withHealth();
+
+    await service.getFicha(equipe, 'child1');
+
+    expect(mockWriteAuditLog).toHaveBeenCalledTimes(1);
+    const [client, entry] = mockWriteAuditLog.mock.calls[0];
+    expect(client).toBe(prisma);
+    expect(entry).toMatchObject({
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      actor_user_id: 'u-pastor',
+      subject_person_id: 'child1',
+      action: 'kids.health_read',
+    });
+    expect(JSON.stringify(entry)).not.toMatch(/amendoim|asma/);
+    expect(entry.before).toBeUndefined();
+    expect(entry.after).toBeUndefined();
+  });
+
+  it('o responsável lendo o próprio filho não é auditado como acesso da equipe', async () => {
+    const { service } = withHealth();
+
+    await service.getFicha(resp, 'child1');
+
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('sem acesso à criança (404), não lê saúde nem audita', async () => {
+    const { service, access, client } = withHealth();
+    access.assertCanAccess.mockRejectedValue(new NotFoundException('Criança não encontrada'));
+
+    await expect(service.getFicha(resp, 'child1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(client.kidsChildHealth.findUnique).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('as respostas de escrita (PATCH) não devolvem saúde — a equipe não lê sem rastro', async () => {
+    const { service, access, client } = withHealth();
+    access.assertCanAccess.mockResolvedValue(child);
+    client.kidsChildHealth.upsert.mockResolvedValue({ allergies: 'amendoim', medical_notes: 'asma' });
+
+    const result = await service.update(equipe, 'child1', { allergies: 'amendoim' });
+
+    expect(result).not.toHaveProperty('allergies');
+    expect(result).not.toHaveProperty('medical_notes');
+  });
+});
+
+describe('KidsChildrenService.list', () => {
+  const equipe: KidsActor = { userId: 'u-pastor', tenantId: 't1', congregationId: 'g1', roles: ['pastor'] };
+
+  it('responsável: só crianças do próprio Household, sem saúde na seleção', async () => {
+    const { client, service } = setup();
+    client.person.findMany.mockResolvedValue([]);
+
+    await service.list(resp, {});
+
+    const arg = client.person.findMany.mock.calls[0][0];
+    expect(arg.where).toMatchObject({
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      is_child: true,
+      householdMemberships: {
+        some: { role: 'child', household: { members: { some: { person_id: 'p-resp', role: { not: 'child' } } } } },
+      },
+    });
+    expect(JSON.stringify(arg.select)).not.toMatch(/allerg|medical/);
+  });
+
+  it('equipe: busca por nome na congregação, só crianças, limitada', async () => {
+    const { client, service } = setup();
+    client.person.findMany.mockResolvedValue([]);
+
+    await service.list(equipe, { search: 'ana', limit: 10 });
+
+    const arg = client.person.findMany.mock.calls[0][0];
+    expect(arg.where).toMatchObject({
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      is_child: true,
+      deleted_at: null,
+      full_name: { contains: 'ana', mode: 'insensitive' },
+    });
+    expect(arg.where).not.toHaveProperty('householdMemberships');
+    expect(arg.take).toBe(10);
   });
 });

@@ -74,7 +74,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **T12** `KidsChildrenService.create/update` (Person `is_child`, Household, 422 sem consentimento, cadastro pela secretaria). *Depends:* T11 · *Tests:* unit · *Reqs:* KIDS-04
 - [x] **T13** `KidsGuardiansService` (terceiro autorizado, ≥1 primário). *Depends:* T12 · *Tests:* unit · *Reqs:* KIDS-05
 - [x] **T14** Filtro `is_child=false` em `persons.service.ts` e demais listagens/indicadores. *Depends:* T1 · *Tests:* unit por listagem · *Reqs:* AD-013
-- **T15** `KidsChildrenController` + `KidsGuardiansController` + auditoria de leitura de saúde. *Depends:* T13,T14 · *Tests:* integração · *Reqs:* KIDS-04,05,07
+- [x] **T15** `KidsChildrenController` + `KidsGuardiansController` + auditoria de leitura de saúde. *Depends:* T13,T14 · *Tests:* integração · *Reqs:* KIDS-04,05,07
 
 ### F4 — API: check-in e check-out
 

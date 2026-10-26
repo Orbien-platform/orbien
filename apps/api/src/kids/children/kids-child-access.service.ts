@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Person } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { KIDS_MANAGE_ROLES } from '../kids.roles';
 
 /** Quem está agindo: o que o controller tira do JWT. */
@@ -10,6 +11,10 @@ export type KidsActor = {
   congregationId: string;
   roles: string[];
 };
+
+export function toKidsActor(user: JwtPayload): KidsActor {
+  return { userId: user.sub, tenantId: user.tenant_id, congregationId: user.congregation_id, roles: user.roles };
+}
 
 /**
  * Regra de acesso à ficha da criança (AD-013, spec "Quem gerencia"):

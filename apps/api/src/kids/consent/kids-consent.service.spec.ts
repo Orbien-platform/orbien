@@ -1,7 +1,8 @@
-import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { KidsConsentService } from './kids-consent.service';
 import { KIDS_TERM_VERSION } from './kids-consent.terms';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { KidsActor } from '../children/kids-child-access.service';
 
 function clientWith() {
   return {
@@ -14,8 +15,13 @@ function clientWith() {
   };
 }
 
-function serviceWith(client: ReturnType<typeof clientWith>) {
-  return new KidsConsentService({ client } as unknown as PrismaService);
+function serviceWith(client: ReturnType<typeof clientWith>, access: Partial<Record<'ownPersonId' | 'isManager', jest.Mock>> = {}) {
+  const stub = {
+    ownPersonId: jest.fn().mockResolvedValue('p-own'),
+    isManager: jest.fn((roles: string[]) => roles.includes('secretary')),
+    ...access,
+  };
+  return new KidsConsentService({ client } as unknown as PrismaService, stub as never);
 }
 
 describe('KidsConsentService', () => {
@@ -135,5 +141,84 @@ describe('KidsConsentService', () => {
       });
       expect(result).toEqual({ revoked: 1 });
     });
+  });
+});
+
+describe('KidsConsentService — pedidos do usuário (POST /kids/consent)', () => {
+  const resp: KidsActor = { userId: 'u1', tenantId: 't1', congregationId: 'g1', roles: ['member'] };
+  const sec: KidsActor = { userId: 'u2', tenantId: 't1', congregationId: 'g1', roles: ['secretary'] };
+
+  function ready() {
+    const client = clientWith();
+    client.person.findFirst.mockResolvedValue({ id: 'p-own' });
+    client.consentRecord.findFirst.mockResolvedValue(null);
+    client.consentRecord.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'c1', ...data }));
+    return client;
+  }
+
+  it('o responsável aceita o próprio termo: origin kids, na pessoa da conta', async () => {
+    const client = ready();
+
+    const result = await serviceWith(client).register(resp, { term_version: KIDS_TERM_VERSION }, {});
+
+    expect(client.consentRecord.create.mock.calls[0][0].data).toMatchObject({ person_id: 'p-own', origin: 'kids' });
+    expect(result).toMatchObject({ valid: true, origin: 'kids', version: KIDS_TERM_VERSION });
+  });
+
+  it('a secretaria aceita por outra pessoa: origin secretaria (AC 7)', async () => {
+    const client = ready();
+
+    await serviceWith(client).register(sec, { term_version: KIDS_TERM_VERSION, guardian_person_id: 'p-outro' }, {});
+
+    expect(client.consentRecord.create.mock.calls[0][0].data).toMatchObject({ person_id: 'p-outro', origin: 'secretaria' });
+  });
+
+  it('quem não é da gestão não registra por outra pessoa: 403', async () => {
+    const client = ready();
+
+    await expect(
+      serviceWith(client).register(resp, { term_version: KIDS_TERM_VERSION, guardian_person_id: 'p-outro' }, {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(client.consentRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('versão do termo desatualizada: 409 com o termo vigente, nada gravado', async () => {
+    const client = ready();
+
+    const err = await serviceWith(client)
+      .register(resp, { term_version: 'kids-antigo' }, {})
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(((err as ConflictException).getResponse() as Record<string, unknown>)['term_version']).toBe(KIDS_TERM_VERSION);
+    expect(client.consentRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('conta sem pessoa vinculada: 403', async () => {
+    const client = ready();
+
+    await expect(
+      serviceWith(client, { ownPersonId: jest.fn().mockResolvedValue(null) }).register(resp, { term_version: KIDS_TERM_VERSION }, {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('status devolve validade e o termo vigente', async () => {
+    const client = ready();
+    client.consentRecord.findFirst.mockResolvedValue({ id: 'c1' });
+
+    await expect(serviceWith(client).status(resp)).resolves.toMatchObject({
+      valid: true,
+      term_version: KIDS_TERM_VERSION,
+      term_text: expect.any(String),
+    });
+  });
+
+  it('revokeFor revoga o consentimento do próprio responsável', async () => {
+    const client = ready();
+    client.consentRecord.updateMany.mockResolvedValue({ count: 1 });
+
+    await serviceWith(client).revokeFor(resp, { reason: 'x' });
+
+    expect(client.consentRecord.updateMany.mock.calls[0][0].where).toMatchObject({ person_id: 'p-own' });
   });
 });
