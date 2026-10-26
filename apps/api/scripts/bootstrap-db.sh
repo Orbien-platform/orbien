@@ -208,6 +208,12 @@ fi
 if [ -f prisma/migrations/027_rls_song_versions.sql ]; then
   run_sql_file prisma/migrations/027_rls_song_versions.sql
 fi
+# `kids_rooms`, `kids_sessions`, `kids_guardians` e `kids_checkins` (módulo
+# Kids): tabelas novas, mesmo caso de 026/027 — nascem com a policy de
+# congregação. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/028_rls_kids.sql ]; then
+  run_sql_file prisma/migrations/028_rls_kids.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -653,6 +659,19 @@ BEGIN
   RAISE NOTICE 'song_versions com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em song_versions, encontrei % — 027_rls_song_versions.sql rodou?', n;
+  END IF;
+
+  -- 028: tabelas do módulo Kids, mesmo caso de 026/027. As quatro precisam da
+  -- policy simétrica; uma faltando deixa a ficha de criança aberta.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename IN ('kids_rooms', 'kids_sessions', 'kids_guardians', 'kids_checkins')
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'tabelas kids com app_congregation_allowed simetrico: %', n;
+  IF n <> 4 THEN
+    RAISE EXCEPTION 'esperava 4 policies tenant_congregation_isolation simétricas nas tabelas kids_*, encontrei % — 028_rls_kids.sql rodou?', n;
   END IF;
 
   -- 024: pix_webhook_scope() — o webhook da Asaas não tem contexto de tenant e
