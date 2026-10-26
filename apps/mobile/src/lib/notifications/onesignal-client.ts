@@ -66,6 +66,7 @@ export function syncNotificationPreferenceTags(prefs: {
   eventos: boolean;
   devocional: boolean;
   biblia: boolean;
+  kids: boolean;
 }): void {
   OneSignal.User.addTags({
     pref_avisos: String(prefs.avisos),
@@ -73,7 +74,18 @@ export function syncNotificationPreferenceTags(prefs: {
     pref_eventos: String(prefs.eventos),
     pref_devocional: String(prefs.devocional),
     pref_biblia: String(prefs.biblia),
+    pref_kids: String(prefs.kids),
   });
+}
+
+/**
+ * Tag `person_id`: é por ela que a API endereça push a uma PESSOA (aviso de
+ * escala, "Criança entregue" do Kids) — o `external_id` é o id da conta, não o
+ * da pessoa. O token não carrega o id da pessoa, então ele vem de
+ * `getMyPersonId()` e este é só o último passo.
+ */
+export function registerPersonTag(personId: string): void {
+  OneSignal.User.addTags({ person_id: personId });
 }
 
 interface NotificationClickAdditionalData {

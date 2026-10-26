@@ -37,6 +37,7 @@ import {
   initializeOneSignal,
   onNotificationClick,
   registerDevice,
+  registerPersonTag,
   syncNotificationPreferenceTags,
   unregisterDevice,
 } from "./onesignal-client";
@@ -90,13 +91,14 @@ describe("onesignal-client", () => {
   });
 
   describe("syncNotificationPreferenceTags", () => {
-    it("chama addTags com as 5 chaves pref_* como string, nunca boolean", () => {
+    it("chama addTags com as 6 chaves pref_* como string, nunca boolean", () => {
       syncNotificationPreferenceTags({
         avisos: true,
         oracao: false,
         eventos: true,
         devocional: false,
         biblia: false,
+        kids: false,
       });
 
       expect(mockAddTags).toHaveBeenCalledWith({
@@ -105,7 +107,16 @@ describe("onesignal-client", () => {
         pref_eventos: "true",
         pref_devocional: "false",
         pref_biblia: "false",
+        pref_kids: "false",
       });
+    });
+  });
+
+  describe("registerPersonTag", () => {
+    it("grava a tag person_id — o destino de todo push endereçado a uma pessoa (escala, Kids)", () => {
+      registerPersonTag("person-9");
+
+      expect(mockAddTags).toHaveBeenCalledWith({ person_id: "person-9" });
     });
   });
 
