@@ -1562,18 +1562,22 @@ model VolunteerMinistry {
 }
 
 model Celebration {
-  id              String                @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  name            String
-  type            CelebrationType
-  day_of_week     Int?
-  start_time      String
-  recurrence      CelebrationRecurrence
-  anchor_date     DateTime?             @db.Date
-  is_active       Boolean               @default(true)
-  created_at      DateTime              @default(now())
-  updated_at      DateTime              @updatedAt
+  id                    String                @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  name                  String
+  type                  CelebrationType
+  day_of_week           Int?
+  start_time            String
+  recurrence            CelebrationRecurrence
+  anchor_date           DateTime?             @db.Date
+  is_active             Boolean               @default(true)
+  // Modelo kids: turmas (kids_rooms.id) abertas por padrão nesta celebração.
+  // Sem FK de propósito — é só uma lista de atalho; o service valida a turma
+  // ao gravar e de novo ao aplicar (turma desativada ou apagada é pulada).
+  kids_default_room_ids String[]              @default([])
+  created_at            DateTime              @default(now())
+  updated_at            DateTime              @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)

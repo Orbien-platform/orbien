@@ -87,7 +87,9 @@ equipe confere → **check-out**.
   - `GET /celebrations/instances/:id/kids-sessions`
   - `POST /celebrations/instances/:id/kids-sessions` `{ room_ids[] }`, 409 no par repetido
   - `DELETE /kids/sessions/:id` (cancela; com check-in aberto → 422)
-  - `POST /celebrations/:id/kids-template` `{ room_ids[] }` e aplicação nas próximas instâncias
+  - `GET /celebrations/:id/kids-template` → `{ celebration_id, room_ids, rooms }`
+  - `POST /celebrations/:id/kids-template` `{ room_ids[] }` substitui o modelo (vazio limpa); guardado em `celebrations.kids_default_room_ids` (sem FK, sem RLS nova)
+  - `POST /celebrations/:id/kids-template/apply` `{ date_from?, date_to? }` abre as turmas ativas do modelo nas instâncias futuras não canceladas; idempotente → `{ instances, created, already_open, skipped_rooms }`
 - **Reuses**: `CelebrationInstancesService` para status e cancelamento.
 
 ### KidsChildrenService (API)
