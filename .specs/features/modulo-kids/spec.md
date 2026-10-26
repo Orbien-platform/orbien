@@ -49,6 +49,10 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 | Contagem de crianças (PROD-37) | A contagem vem do check-in (total de crianças distintas) e **pode ser alterada manualmente**; sem check-in, segue manual | Resposta do usuário; mantém o contrato atual | y |
 | Escala | `CelebrationMinistry` ganha vínculo opcional com `KidsSession`; ministério "Kids" existente é reaproveitado | Evita escala paralela; resposta do usuário | y |
 | Plano | `premium` (`@RequiresPlan('premium')`) | Resposta do usuário | y |
+| Ficha da família (`GET /persons/households/:id`) | Continua listando os filhos para quem lê Pessoas; sem dado de saúde | Decisão do dono em 2026-10-26 (valida o Verifier: S2 aceito) | y |
+| Leitura do código de retirada por `GET /kids/children/:id/checkin` | Responsável (member do Household) e gestão kids; a gestão pode repassar o código a quem esqueceu | Decisão do dono em 2026-10-26 (S3 aceito) | y |
+| Autorizados a retirar: quem adiciona e remove | Qualquer adulto do Household; só o editar exige ser responsável primário ou gestão | Decisão do dono em 2026-10-26 (S4 aceito) | y |
+| Reimpressão de etiquetas | Só quem fez o check-in, enquanto aberto; outros papéis 403 | Corrige S1 do Verifier: a equipe não relê o código | y |
 | Quem gerencia | `tenant_admin`, `admin_congregation`, `pastor`, `secretary` e líder do ministério kids; `volunteer` escalado só opera check-in/out da sua sessão | Mínimo privilégio; resposta do usuário | y |
 | Retenção e anonimização | Check-ins guardados 12 meses e depois anonimizados pelo fluxo existente (`anonymized_at`). **Enquanto o responsável pelo check-in for membro ativo, o registro não é anonimizado**; deixou de ser membro ativo → segue a regra dos 12 meses. Exclusão em 30 dias pós-contrato | Resposta do usuário; contrato já prevê | y |
 | RLS | Todas as tabelas novas com `app_congregation_allowed()` em `USING` e `WITH CHECK`, script novo no bootstrap e passo 7 | Regra do monorepo | y |
