@@ -42,6 +42,12 @@ interface AttendanceFormModalProps {
   /** "Culto de domingo, 18/10" — o que a pessoa está contando. */
   subtitle: string;
   initial: Omit<AttendanceCounts, "total"> | null;
+  /**
+   * Crianças distintas com check-in no culto (módulo Kids). Vira o valor
+   * inicial de "Crianças" quando ainda não há contagem lançada e fica visível
+   * ao lado depois — o que vale é o número lançado, editável à vontade.
+   */
+  suggestedChildren?: number | null;
   onSaved: (counts: AttendanceCounts) => void;
 }
 
@@ -56,10 +62,12 @@ export function AttendanceFormModal({
   instanceId,
   subtitle,
   initial,
+  suggestedChildren = null,
   onSaved,
 }: AttendanceFormModalProps) {
+  const suggested = suggestedChildren !== null && suggestedChildren > 0 ? suggestedChildren : null;
   const [values, setValues] = useState<Record<Field, string>>({
-    children: initial ? String(initial.children) : "",
+    children: initial ? String(initial.children) : suggested !== null ? String(suggested) : "",
     members: initial ? String(initial.members) : "",
     attendees: initial ? String(initial.attendees) : "",
     visitors: initial ? String(initial.visitors) : "",
@@ -115,6 +123,23 @@ export function AttendanceFormModal({
             <span id={`att-${f.key}-hint`} className="text-xs text-stone">
               {f.hint}
             </span>
+            {f.key === "children" && suggested !== null ? (
+              <span className="flex items-center gap-2 text-xs text-stone">
+                <span>
+                  Check-in do Kids: {suggested} {suggested === 1 ? "criança" : "crianças"}
+                </span>
+                {values.children !== String(suggested) ? (
+                  <button
+                    type="button"
+                    onClick={() => setValues((v) => ({ ...v, children: String(suggested) }))}
+                    disabled={busy}
+                    className="rounded-full border border-[var(--border-strong)] px-2 py-0.5 font-medium text-ink outline-none hover:border-teal hover:text-teal focus-visible:ring-2 focus-visible:ring-ring/50 dark:text-white"
+                  >
+                    Usar {suggested}
+                  </button>
+                ) : null}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
