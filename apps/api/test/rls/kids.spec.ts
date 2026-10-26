@@ -30,6 +30,7 @@ type Side = {
   session2Id: string;
   kidsGuardianId: string;
   checkinId: string;
+  healthId: string;
 };
 
 let a1: Side;
@@ -113,9 +114,13 @@ async function seed(
       checked_in_by: "u",
     },
   });
+  const health = await prismaAdmin.kidsChildHealth.create({
+    data: { ...scope, person_id: child.id, allergies: `amendoim ${tag}` },
+  });
   return {
     tenantId,
     congId,
+    healthId: health.id,
     instanceId: instance.id,
     instance2Id: instance2.id,
     childId: child.id,
@@ -163,7 +168,7 @@ type Tx = Prisma.TransactionClient;
 type Row = { id: string } | null;
 type Updated = { count: number };
 
-/** As quatro tabelas, com leitura por id, tentativa de escrita alheia e UPDATE. */
+/** As tabelas, com leitura por id, tentativa de escrita alheia e UPDATE. */
 const tables: {
   name: string;
   find: (tx: Tx, id: string) => Promise<Row>;
@@ -257,6 +262,27 @@ const tables: {
       tx.kidsCheckin.updateMany({
         where: { id },
         data: { checked_out_by: "intruso" },
+      }),
+  },
+  {
+    name: "kids_child_health",
+    find: (tx: Tx, id: string) => tx.kidsChildHealth.findUnique({ where: { id } }),
+    list: (tx: Tx, tenant_id: string) =>
+      tx.kidsChildHealth.findMany({ where: { tenant_id } }),
+    own: (s: Side) => s.healthId,
+    create: (tx: Tx, s: Side) =>
+      tx.kidsChildHealth.create({
+        data: {
+          tenant_id: s.tenantId,
+          congregation_id: s.congId,
+          person_id: s.guardianId,
+          allergies: "invasora",
+        },
+      }),
+    update: (tx: Tx, id: string) =>
+      tx.kidsChildHealth.updateMany({
+        where: { id },
+        data: { allergies: "sequestrada" },
       }),
   },
 ];

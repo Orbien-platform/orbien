@@ -79,6 +79,7 @@ model Tenant {
   kidsSessions              KidsSession[]
   kidsGuardians             KidsGuardian[]
   kidsCheckins              KidsCheckin[]
+  kidsChildHealth           KidsChildHealth[]
   serviceOrders             ServiceOrder[]
   serviceOrderItems         ServiceOrderItem[]
   setlists                  Setlist[]
@@ -162,6 +163,7 @@ model Congregation {
   kidsSessions              KidsSession[]
   kidsGuardians             KidsGuardian[]
   kidsCheckins              KidsCheckin[]
+  kidsChildHealth           KidsChildHealth[]
   serviceOrders             ServiceOrder[]
   serviceOrderItems         ServiceOrderItem[]
   setlists                  Setlist[]
@@ -442,6 +444,7 @@ model Person {
   kidsGuardiansAsGuardian KidsGuardian[]          @relation("KidsGuardianGuardian")
   kidsCheckinsAsChild     KidsCheckin[]           @relation("KidsCheckinChild")
   kidsCheckinsAsGuardian  KidsCheckin[]           @relation("KidsCheckinGuardian")
+  kidsHealth              KidsChildHealth?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -2542,4 +2545,28 @@ model KidsCheckin {
   @@index([child_id])
   @@index([guardian_person_id])
   @@map("kids_checkins")
+}
+
+/// Dado de saúde da criança (alergia e observação médica — LGPD Art. 11).
+/// Tabela própria, 1:1 com a criança, de propósito: `Person` é devolvida inteira
+/// por muitas rotas (ficha 360, household, exportações) e uma coluna ali vazaria
+/// o dado para quem não deve vê-lo. Aqui só as rotas de kids leem, e a leitura
+/// por equipe é auditada (AD-013 item 4). Apagada na anonimização da pessoa.
+/// RLS por congregação em 029_rls_kids_child_health.sql.
+model KidsChildHealth {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  person_id       String   @unique
+  allergies       String?
+  medical_notes   String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, congregation_id])
+  @@map("kids_child_health")
 }
