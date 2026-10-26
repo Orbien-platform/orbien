@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Baby, HeartHandshake, Sigma, UserPlus, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { SectionHeader } from "@/components/dashboard/SectionHeader";
+import { DemographicsIndicators } from "@/components/people/DemographicsIndicators";
 import { PeriodNavigator } from "@/components/financial/PeriodNavigator";
 import { AttendanceFormModal } from "@/components/celebrations/AttendanceFormModal";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -261,6 +262,8 @@ function IndicadoresContent() {
           </section>
         </>
       )}
+
+      <DemographicsIndicators />
 
       {editing ? (
         <AttendanceFormModal
