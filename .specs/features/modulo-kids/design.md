@@ -183,6 +183,7 @@ model KidsCheckin {
   tenant_id String; congregation_id String
   session_id String; child_id String; guardian_person_id String
   code String; age_override Boolean @default(false)
+  celebration_instance_id String // desnormalizado: o índice parcial (child_id, celebration_instance_id) WHERE checked_out_at IS NULL não atravessa join; FK composta com kids_sessions(id, celebration_instance_id) o mantém igual ao da sessão
   checked_in_at DateTime @default(now()); checked_in_by String // quem recebe na turma (obrigatório)
   checked_out_at DateTime?; picked_up_by_person_id String?; picked_up_by_name String?
   override_reason String?; checked_out_by String?
