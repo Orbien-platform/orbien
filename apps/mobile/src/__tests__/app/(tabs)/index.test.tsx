@@ -147,6 +147,50 @@ describe("HomeScreen", () => {
     mockDecodeJwtPayload.mockReturnValue({ plan: "premium" });
   });
 
+  describe("Kids (módulo premium)", () => {
+    const session = { areas: null, session: { accessToken: "token" } };
+
+    it.each(["member", "pastor", "secretary", "ministry_leader", "tenant_admin", "admin_congregation"])(
+      "tenant Premium e papel %s: aparece e leva a /kids",
+      async (role) => {
+        mockUseAuth.mockReturnValue(session);
+        mockDecodeJwtPayload.mockReturnValue({ plan: "premium", roles: [role] });
+
+        await renderHome();
+
+        await fireEvent.press(screen.getByTestId("quick-action-kids"));
+        expect(mockPush).toHaveBeenCalledWith("/kids");
+      },
+    );
+
+    it("tenant Starter não vê a entrada, qualquer que seja o papel", async () => {
+      mockUseAuth.mockReturnValue(session);
+      mockDecodeJwtPayload.mockReturnValue({ plan: "starter", roles: ["pastor"] });
+
+      await renderHome();
+
+      expect(screen.queryByTestId("quick-action-kids")).toBeNull();
+    });
+
+    it("papel que a API não deixa usar as rotas de criança (voluntário, líder de célula) não vê a entrada", async () => {
+      mockUseAuth.mockReturnValue(session);
+      mockDecodeJwtPayload.mockReturnValue({ plan: "premium", roles: ["volunteer", "cell_leader"] });
+
+      await renderHome();
+
+      expect(screen.queryByTestId("quick-action-kids")).toBeNull();
+    });
+
+    it("sem sessão ou token indecodificável, a entrada não existe (falha fechada)", async () => {
+      mockUseAuth.mockReturnValue({ areas: null, session: { accessToken: "token" } });
+      mockDecodeJwtPayload.mockReturnValue(null);
+
+      await renderHome();
+
+      expect(screen.queryByTestId("quick-action-kids")).toBeNull();
+    });
+  });
+
   describe("Dízimo automático (PROD-28)", () => {
     const premiumSession = { areas: null, session: { accessToken: "token" } };
 
