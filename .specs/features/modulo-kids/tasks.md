@@ -56,7 +56,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **T1** Schema Prisma: `KidsRoom`, `KidsSession`, `KidsGuardian`, `KidsCheckin`, enum, `Person.is_child`, `CelebrationMinistry.kids_session_id` + migration. *Depends:* — · *Tests:* none (build) · *Reqs:* KIDS-01,02,05,08
 - [x] **T2** SQL do índice único parcial de check-in aberto na migration. *Depends:* T1 · *Tests:* RLS/integração em T4 · *Reqs:* KIDS-08
-- **T3** `028_rls_kids.sql` com `app_congregation_allowed()` simétrico. *Depends:* T1 · *Tests:* none · *Reqs:* KIDS-01
+- [x] **T3** `028_rls_kids.sql` com `app_congregation_allowed()` simétrico. *Depends:* T1 · *Tests:* none · *Reqs:* KIDS-01
 - **T4** Registrar `028` no `bootstrap-db.sh` (antes do passo 4) + verificação no passo 7. *Depends:* T3 · *Tests:* rodar bootstrap · *Reqs:* KIDS-01
 - **T5** Teste RLS `kids.spec.ts`: cada tabela, cross-congregação e cross-tenant. *Depends:* T4 · *Tests:* RLS · *Reqs:* KIDS-01
 
