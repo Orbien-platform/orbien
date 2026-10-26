@@ -106,8 +106,8 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 4. WHEN a sessão atinge a capacidade THEN o sistema SHALL avisar e permitir seguir (nunca bloquear).
 5. WHEN o check-in ocorre THEN o sistema SHALL gerar etiqueta imprimível da criança (nome, turma, alergia em destaque, código) e a do responsável (código).
 6. WHEN check-out recebe o código de responsável com `can_pickup` THEN o sistema SHALL fechar o check-in com horário e quem retirou.
-7. WHEN o código não confere ou a pessoa não pode retirar THEN o sistema SHALL recusar (403) sem revelar o motivo à tela da pessoa e avisar o líder.
-8. WHEN líder kids autoriza retirada por exceção THEN o sistema SHALL exigir motivo e gravá-lo.
+7. WHEN o código não confere ou a pessoa não pode retirar THEN o sistema SHALL recusar (403) sem revelar o motivo à tela da pessoa e avisar o líder. O código é mostrado no check-in (a quem o fez: o responsável no app, ou a equipe no balcão para repassá-lo) e ao responsável a qualquer momento (`GET /kids/children/:id/checkin`); **não** aparece à equipe no roster nem pode ser relido por ela depois — a etiqueta é opcional, o código não depende dela.
+8. WHEN líder kids autoriza retirada por exceção THEN o sistema SHALL exigir motivo e gravá-lo. É o caminho quando o responsável esqueceu o código, já que a equipe não consegue relê-lo.
 9. WHEN a sessão é lida por quem não é equipe/liderança THEN o sistema SHALL responder 403.
 
 **Independent Test**: check-in de uma criança com alergia, impressão das duas etiquetas, check-out com código correto passa e com código de outra criança é recusado.

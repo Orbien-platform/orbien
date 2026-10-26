@@ -71,6 +71,14 @@ export class KidsCheckinController {
     return this.checkinService.checkOutOverride(toKidsActor(user), id, dto);
   }
 
+  // O responsável relê o código do filho (ou a gestão). Voluntário não: a
+  // equipe vê o código no check-in e, se o responsável esqueceu, usa o override.
+  @Get('kids/children/:id/checkin')
+  @Roles(...KIDS_FAMILY_ROLES)
+  openForChild(@Param('id', ParseUUIDPipe) childId: string, @CurrentUser() user: JwtPayload) {
+    return this.checkinService.getOpenForChild(toKidsActor(user), childId);
+  }
+
   @Get('kids/sessions/:id/roster')
   @Roles(...KIDS_READ_ROLES)
   roster(@Param('id', ParseUUIDPipe) sessionId: string, @CurrentUser() user: JwtPayload) {

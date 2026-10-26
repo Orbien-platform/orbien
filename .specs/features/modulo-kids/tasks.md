@@ -83,6 +83,9 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **T18** `KidsCheckinService.checkOut` + `override` com motivo e evento de auditoria. *Depends:* T17 · *Tests:* unit · *Reqs:* KIDS-09
 - [x] **T19** `KidsCheckinController` + roster. *Depends:* T18 · *Tests:* integração (403 genérico, concorrência) · *Reqs:* KIDS-08,09
 - [x] **T20** Etiquetas (dados + PDF/HTML), sem QR. *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-08
+- [x] **T19b** Código de retirada fora do roster; `GET /kids/children/:id/checkin` devolve o check-in aberto com `code` ao responsável (decisão do dono, 2026-10-26). *Depends:* T19 · *Tests:* unit + integração · *Reqs:* KIDS-08,09
+- [ ] **T19c** `PATCH /kids/guardians/:id` (`can_pickup`, `is_primary`, `relationship`), ≥ 1 primário, troca atômica. *Depends:* T15 · *Tests:* unit + integração (400/403/404/422) · *Reqs:* KIDS-05
+- [ ] **T19d** Push "Criança entregue" ao responsável primário no check-out e no override, categoria própria `kids` (AD-003). *Depends:* T18 · *Tests:* unit + integração · *Reqs:* KIDS-09
 
 ### F5 — Escala e contagem
 

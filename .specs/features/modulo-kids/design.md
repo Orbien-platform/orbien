@@ -111,7 +111,8 @@ equipe confere → **check-out**.
   - `POST /kids/sessions/:id/checkins` `{ child_id, guardian_id, confirm_out_of_range? }` → `{ code, label }`; `guardian_id` é obrigatório (quem entrega) e `checked_in_by` vem do usuário (quem recebe); 422 se fora da faixa e a turma não aceita; pede `confirm_out_of_range` se aceita
   - `POST /kids/checkins/:id/checkout` `{ code }` (QR fica para o futuro)
   - `POST /kids/checkins/:id/checkout-override` `{ reason, picked_up_by_name }` (líder kids)
-  - `GET /kids/sessions/:id/roster` (quem está presente, alergias em destaque)
+  - `GET /kids/sessions/:id/roster` (quem está presente, alergias em destaque; **sem** `code` — a equipe vê o código no check-in e não o relê)
+  - `GET /kids/children/:id/checkin` (responsável do Household ou gestão): check-in aberto da criança com sessão, turma, horário e `code`; 404 se não há. Código esquecido: override do líder com motivo
 - **Dependencies**: índice único parcial, geração de código único por sessão.
 
 ### Web: Kids (gestão e balcão)
@@ -138,9 +139,9 @@ O brief é o design system existente: Geist, cor da igreja (`brand`, nome histó
 
 ```
 ┌ Culto 10h · domingo ───────────── [Maternal 8/12] [Júnior 14/20] ┐
-│ Buscar criança ou código  [____________]        [Check-in]       │
+│ Buscar criança  [____________]                  [Check-in]       │
 │ ─ Presentes (14) ───────────────────────────────────────────────│
-│  Ana Souza    Júnior   ⚠ Alergia: amendoim     código 7K2M  [Sair]│
+│  Ana Souza    Júnior   ⚠ Alergia: amendoim     [Sair: pedir código]│
 └──────────────────────────────────────────────────────────────────┘
 ```
 

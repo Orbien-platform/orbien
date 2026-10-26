@@ -90,6 +90,50 @@ beforeAll(() => {
 });
 afterAll(() => jest.useRealTimers());
 
+describe('KidsCheckinService.getOpenForChild (código ao responsável)', () => {
+  const open = {
+    id: 'k1',
+    code: 'A2B3',
+    checked_in_at: NOW,
+    session_id: 's1',
+    session: { room: { id: 'r1', name: 'Maternal' } },
+  };
+  const parentActor: KidsActor = { userId: 'p1', tenantId: 't1', congregationId: 'g1', roles: ['member'] };
+
+  it('devolve o check-in aberto da criança com sessão, turma, horário e código', async () => {
+    const { svc, client, access } = build();
+    client.kidsCheckin.findFirst.mockResolvedValue(open);
+    const out = await svc.getOpenForChild(parentActor, 'c1');
+
+    expect(access.assertCanAccess).toHaveBeenCalledWith(parentActor, 'c1');
+    expect(client.kidsCheckin.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { child_id: 'c1', tenant_id: 't1', congregation_id: 'g1', checked_out_at: null },
+      }),
+    );
+    expect(out).toEqual({
+      id: 'k1',
+      session_id: 's1',
+      room: { id: 'r1', name: 'Maternal' },
+      checked_in_at: NOW,
+      code: 'A2B3',
+    });
+  });
+
+  it('criança sem check-in aberto: 404', async () => {
+    const { svc, client } = build();
+    client.kidsCheckin.findFirst.mockResolvedValue(null);
+    expect(await errorOf(svc.getOpenForChild(parentActor, 'c1'))).toBeInstanceOf(NotFoundException);
+  });
+
+  it('criança que o ator não acessa: o 404 do acesso propaga, sem consultar check-in', async () => {
+    const { svc, client, access } = build();
+    access.assertCanAccess.mockRejectedValue(new NotFoundException());
+    expect(await errorOf(svc.getOpenForChild(parentActor, 'c1'))).toBeInstanceOf(NotFoundException);
+    expect(client.kidsCheckin.findFirst).not.toHaveBeenCalled();
+  });
+});
+
 describe('ageInMonths', () => {
   it('conta meses completos', () => {
     expect(ageInMonths(new Date('2023-10-26T00:00:00Z'), NOW)).toBe(36);

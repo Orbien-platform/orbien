@@ -141,6 +141,38 @@ export class KidsCheckinService {
   }
 
   /**
+   * O check-in aberto da criança, com o código, para o responsável (ou a
+   * gestão) rever a qualquer momento. A equipe de balcão não tem esta rota:
+   * o código só a ela no ato do check-in. 404 também para criança alheia.
+   */
+  async getOpenForChild(actor: KidsActor, childId: string) {
+    await this.access.assertCanAccess(actor, childId);
+    const checkin = await this.prisma.client.kidsCheckin.findFirst({
+      where: {
+        child_id: childId,
+        tenant_id: actor.tenantId,
+        congregation_id: actor.congregationId,
+        checked_out_at: null,
+      },
+      select: {
+        id: true,
+        code: true,
+        checked_in_at: true,
+        session_id: true,
+        session: { select: { room: { select: { id: true, name: true } } } },
+      },
+    });
+    if (!checkin) throw new NotFoundException('Criança sem check-in aberto');
+    return {
+      id: checkin.id,
+      session_id: checkin.session_id,
+      room: checkin.session.room,
+      checked_in_at: checkin.checked_in_at,
+      code: checkin.code,
+    };
+  }
+
+  /**
    * Check-out só com o código (AC 6). Código errado e pessoa sem `can_pickup`
    * caem na mesma recusa 403, auditada e avisada ao líder (AC 7). Check-in
    * fechado não reabre.

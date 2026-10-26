@@ -608,13 +608,15 @@ describe('GET /kids/sessions/:id/roster', () => {
     const byChild = (id: string) => res.body.items.find((i: { child: { id: string } }) => i.child.id === id);
     expect(byChild(a)).toMatchObject({
       checkin_id: ra.body.id,
-      code: ra.body.code,
       has_allergy: true,
       allergies: ALERGIA,
       guardian: { person_id: mae },
     });
     expect(byChild(b)).toMatchObject({ has_allergy: false, allergies: null, guardian: { person_id: avo } });
     expect(JSON.stringify(res.body)).not.toContain(NOTA);
+    // O código não sai no roster: a equipe o viu no check-in e não o relê.
+    expect(byChild(a)).not.toHaveProperty('code');
+    expect(JSON.stringify(res.body)).not.toContain(ra.body.code);
 
     const audit = await admin.auditLog.findMany({ where: { subject_person_id: a, action: 'kids.health_read', actor_user_id: leaderAccountId } });
     expect(audit.length).toBeGreaterThanOrEqual(1);
@@ -718,5 +720,54 @@ describe('etiquetas (AC 5) — POST /kids/sessions/:id/checkins e GET /kids/chec
 
     await http().post(`/api/kids/checkins/${inn.body.id}/checkout`).set(auth(leader)).send({ code: inn.body.code, picked_up_by_person_id: mae });
     expect((await labels(leader, inn.body.id)).status).toBe(409);
+  });
+});
+
+describe('GET /kids/children/:id/checkin (código ao responsável)', () => {
+  const open = (token: string, childId: string) => http().get(`/api/kids/children/${childId}/checkin`).set(auth(token));
+
+  it('o responsável do Household lê o check-in aberto do filho com o mesmo código do check-in', async () => {
+    const child = await mkChild({ months: 36 });
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+    expect(inn.status).toBe(201);
+
+    const res = await open(tokenMae, child);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: inn.body.id,
+      session_id: ids.sMat,
+      code: inn.body.code,
+      room: { name: `Maternal ${tag}` },
+    });
+    expect(res.body.checked_in_at).toBeDefined();
+  });
+
+  it('a gestão também lê; a equipe de balcão (voluntário) e quem não é da família, não', async () => {
+    const child = await mkChild({ months: 36 });
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+
+    expect((await open(leader, child)).body.code).toBe(inn.body.code);
+    expect((await open(tokenVol, child)).status).toBe(403);
+    expect((await open(h.tokenFor('visitor'), child)).status).toBe(403);
+    // Outro responsável: 404, igual a criança inexistente.
+    expect((await open(tokenOutra, child)).status).toBe(404);
+  });
+
+  it('sem check-in aberto (nunca entrou ou já foi retirada): 404', async () => {
+    const child = await mkChild({ months: 36 });
+    expect((await open(tokenMae, child)).status).toBe(404);
+
+    const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+    await http().post(`/api/kids/checkins/${inn.body.id}/checkout`).set(auth(leader)).send({ code: inn.body.code, picked_up_by_person_id: mae });
+    expect((await open(tokenMae, child)).status).toBe(404);
+  });
+
+  it('401 sem token, 400 para id malformado, 403 em plano starter e 404 para criança de outro tenant', async () => {
+    const child = await mkChild({ months: 36 });
+    expect((await http().get(`/api/kids/children/${child}/checkin`)).status).toBe(401);
+    expect((await open(tokenMae, 'x')).status).toBe(400);
+    expect((await open(h.tokenT1('starter', 'ministry_leader'), child)).status).toBe(403);
+    expect((await open(h.tokenT1('premium', 'ministry_leader'), child)).status).toBe(404);
   });
 });

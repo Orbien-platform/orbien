@@ -27,6 +27,9 @@ describe('KidsCheckinController', () => {
     expect(rolesFor('labels')).toEqual([...MANAGE, 'member', 'volunteer']);
     expect(rolesFor('roster')).toEqual([...MANAGE, 'volunteer']);
     expect(rolesFor('roster')).not.toContain('member');
+    // O responsável relê o código do filho; a equipe de balcão não tem rota para isso.
+    expect(rolesFor('openForChild')).toEqual([...MANAGE, 'member']);
+    expect(rolesFor('openForChild')).not.toContain('volunteer');
   });
 
   it('check-out responde 200 (fecha um recurso existente, não cria)', () => {
@@ -39,6 +42,7 @@ describe('KidsCheckinController', () => {
       checkIn: jest.fn().mockResolvedValue({ id: 'k1' }),
       checkOut: jest.fn().mockResolvedValue({ id: 'k1' }),
       checkOutOverride: jest.fn().mockResolvedValue({ id: 'k1' }),
+      getOpenForChild: jest.fn().mockResolvedValue({ id: 'k1' }),
     };
     const roster = { roster: jest.fn().mockResolvedValue({ items: [] }) };
     const labels = { forCheckin: jest.fn().mockResolvedValue({ checkin_id: 'k1', child_label: {}, guardian_label: {} }) };
@@ -52,11 +56,13 @@ describe('KidsCheckinController', () => {
     await c.checkOut('k1', outDto, USER);
     await c.checkOutOverride('k1', ovDto, USER);
     await c.roster('s1', USER);
+    await c.openForChild('c1', USER);
 
     expect(checkin.checkIn).toHaveBeenCalledWith(ACTOR, 's1', inDto);
     expect(checkin.checkOut).toHaveBeenCalledWith(ACTOR, 'k1', outDto);
     expect(checkin.checkOutOverride).toHaveBeenCalledWith(ACTOR, 'k1', ovDto);
     expect(roster.roster).toHaveBeenCalledWith(ACTOR, 's1');
+    expect(checkin.getOpenForChild).toHaveBeenCalledWith(ACTOR, 'c1');
     expect(labels.forCheckin).toHaveBeenCalledTimes(2);
     expect(labels.forCheckin).toHaveBeenCalledWith(ACTOR, 'k1');
     // AC 5: o check-in devolve o código e as duas etiquetas juntos

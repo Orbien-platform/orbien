@@ -62,6 +62,14 @@ describe('KidsRosterService.roster', () => {
     expect(out.session).toMatchObject({ id: 's1', room: { id: 'r1', name: 'Maternal', capacity: 12 } });
   });
 
+  it('o código de retirada não sai no roster: a equipe não o relê depois do check-in', async () => {
+    const { svc } = build({ checkins: [checkin('1', 'c1', 'Ana')] });
+    const out = await svc.roster(leader, 's1');
+
+    expect(out.items[0]).not.toHaveProperty('code');
+    expect(JSON.stringify(out)).not.toContain('C1XX');
+  });
+
   it('sessão sem ninguém presente devolve lista vazia, não erro', async () => {
     const { svc, children } = build();
     await expect(svc.roster(leader, 's1')).resolves.toMatchObject({ present_count: 0, items: [] });

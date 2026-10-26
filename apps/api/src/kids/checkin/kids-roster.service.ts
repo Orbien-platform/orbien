@@ -6,7 +6,6 @@ import { KidsSessionAccessService } from './kids-session-access.service';
 
 export type KidsRosterItem = {
   checkin_id: string;
-  code: string;
   checked_in_at: Date;
   age_override: boolean;
   child: { id: string; full_name: string; birth_date: Date | null };
@@ -17,7 +16,9 @@ export type KidsRosterItem = {
 
 /**
  * Quem está presente na sessão (design: balcão). Alergia vem em destaque; a
- * observação médica fica na ficha. Ler saúde pela equipe é auditado como em
+ * observação médica fica na ficha. O código de retirada NÃO sai aqui: a equipe
+ * o vê no check-in e o responsável o relê por `GET /kids/children/:id/checkin`;
+ * esquecido, o caminho é o override do líder. Ler saúde pela equipe é auditado como em
  * `KidsChildrenService.getFicha` — o conteúdo nunca vai para o log.
  */
 @Injectable()
@@ -66,7 +67,6 @@ export class KidsRosterService {
       const allergies = allergiesOf.get(c.child.id) ?? null;
       return {
         checkin_id: c.id,
-        code: c.code,
         checked_in_at: c.checked_in_at,
         age_override: c.age_override,
         child: c.child,
