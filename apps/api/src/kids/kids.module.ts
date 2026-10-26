@@ -3,6 +3,8 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { KidsChildrenController } from './children/kids-children.controller';
 import { KidsGuardiansController } from './children/kids-guardians.controller';
 import { KidsConsentController } from './consent/kids-consent.controller';
+import { KidsCheckinService } from './checkin/kids-checkin.service';
+import { KidsSessionAccessService } from './checkin/kids-session-access.service';
 import { KidsChildAccessService } from './children/kids-child-access.service';
 import { KidsGuardiansService } from './children/kids-guardians.service';
 import { KidsChildrenService } from './children/kids-children.service';
@@ -25,6 +27,8 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsTemplateController,
   ],
   providers: [
+    KidsSessionAccessService,
+    KidsCheckinService,
     KidsChildAccessService,
     KidsChildrenService,
     KidsGuardiansService,
@@ -34,6 +38,8 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsTemplateService,
   ],
   exports: [
+    KidsSessionAccessService,
+    KidsCheckinService,
     KidsChildAccessService,
     KidsChildrenService,
     KidsGuardiansService,
