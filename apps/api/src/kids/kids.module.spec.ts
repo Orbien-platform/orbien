@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PrismaModule } from '../prisma/prisma.module';
 import { KidsModule } from './kids.module';
 import { KidsRoomsService } from './rooms/kids-rooms.service';
+import { KidsSessionsService } from './sessions/kids-sessions.service';
 
 describe('KidsModule', () => {
   it('compila e registra os providers', async () => {
@@ -11,6 +12,7 @@ describe('KidsModule', () => {
     }).compile();
 
     expect(moduleRef.get(KidsRoomsService)).toBeInstanceOf(KidsRoomsService);
+    expect(moduleRef.get(KidsSessionsService)).toBeInstanceOf(KidsSessionsService);
 
     await moduleRef.close();
   });
