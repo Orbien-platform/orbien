@@ -78,6 +78,7 @@ function build(opts: { session?: object | null; birth?: Date | null; guardians?:
     consent as never,
     sessionAccess as never,
     { notifyCheckoutDenied: jest.fn() } as never,
+    { notifyChildReleased: jest.fn() } as never,
   );
   return { svc, client, access, consent, sessionAccess };
 }

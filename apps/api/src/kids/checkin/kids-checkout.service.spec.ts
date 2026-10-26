@@ -42,8 +42,16 @@ function build(checkin: object | null = openCheckin()) {
   const sessionAccess = { canOperate: jest.fn(async (a: KidsActor) => a.roles.includes('ministry_leader')) };
   const alert = { notifyCheckoutDenied: jest.fn().mockResolvedValue(undefined) };
   const access = { isManager: jest.fn((roles: string[]) => roles.includes('ministry_leader')) };
-  const svc = new KidsCheckinService({ client } as unknown as PrismaService, access as never, {} as never, sessionAccess as never, alert as never);
-  return { svc, client, sessionAccess, alert };
+  const notice = { notifyChildReleased: jest.fn().mockResolvedValue(undefined) };
+  const svc = new KidsCheckinService(
+    { client } as unknown as PrismaService,
+    access as never,
+    {} as never,
+    sessionAccess as never,
+    alert as never,
+    notice as never,
+  );
+  return { svc, client, sessionAccess, alert, notice };
 }
 
 const errorOf = async (p: Promise<unknown>) => p.then(() => null, (e: unknown) => e);
@@ -236,5 +244,49 @@ describe('KidsCheckinService.checkOutOverride', () => {
     const race = build();
     race.client.kidsCheckin.updateMany.mockResolvedValue({ count: 0 });
     await expect(race.svc.checkOutOverride(leader, 'k1', dto)).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('aviso "Criança entregue" ao responsável primário (best-effort)', () => {
+  const released = (picked: string | null) => ({
+    checkinId: 'k1',
+    sessionId: 's1',
+    childId: 'c1',
+    roomName: 'Maternal',
+    pickedUpByPersonId: picked,
+  });
+
+  it('check-out com código avisa, informando quem retirou para não avisá-lo', async () => {
+    const { svc, notice } = build();
+    await svc.checkOut(leader, 'k1', { code: 'A2B3', picked_up_by_person_id: 'avo' });
+    expect(notice.notifyChildReleased).toHaveBeenCalledWith('t1', 'g1', released('avo'));
+  });
+
+  it('o override também avisa (retirada por exceção, sem pessoa cadastrada)', async () => {
+    const { svc, notice } = build();
+    await svc.checkOutOverride(leader, 'k1', { reason: 'Perdeu a etiqueta', picked_up_by_name: 'Maria' });
+    expect(notice.notifyChildReleased).toHaveBeenCalledWith('t1', 'g1', released(null));
+  });
+
+  it('retirada recusada, check-in já fechado ou corrida perdida: ninguém é avisado', async () => {
+    const denied = build();
+    await errorOf(denied.svc.checkOut(leader, 'k1', { code: 'ZZZZ', picked_up_by_person_id: 'avo' }));
+    expect(denied.notice.notifyChildReleased).not.toHaveBeenCalled();
+
+    const closed = build(openCheckin({ checked_out_at: NOW }));
+    await errorOf(closed.svc.checkOut(leader, 'k1', { code: 'A2B3', picked_up_by_person_id: 'avo' }));
+    expect(closed.notice.notifyChildReleased).not.toHaveBeenCalled();
+
+    const lost = build();
+    lost.client.kidsCheckin.updateMany.mockResolvedValue({ count: 0 });
+    await errorOf(lost.svc.checkOut(leader, 'k1', { code: 'A2B3', picked_up_by_person_id: 'avo' }));
+    expect(lost.notice.notifyChildReleased).not.toHaveBeenCalled();
+  });
+
+  it('falha no aviso nunca desfaz o check-out', async () => {
+    const { svc, notice } = build();
+    notice.notifyChildReleased.mockRejectedValue(new Error('OneSignal fora do ar'));
+    const out = await svc.checkOut(leader, 'k1', { code: 'A2B3', picked_up_by_person_id: 'mae' });
+    expect(out).toMatchObject({ id: 'k1', picked_up_by_person_id: 'mae' });
   });
 });

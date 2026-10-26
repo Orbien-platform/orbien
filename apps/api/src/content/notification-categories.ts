@@ -10,11 +10,14 @@ import { ContentPostType } from '@prisma/client';
  * do feed da Bíblia (`BibleMarkInteractionsService`), por isso fica fora de
  * `CATEGORY_BY_POST_TYPE`.
  *
+ * `kids` também não vem de post: cobre o aviso "Criança entregue" ao
+ * responsável primário no check-out (`KidsPickupNoticeService`).
+ *
  * Ver `.specs/features/preferencias-notificacao-mobile/spec.md` (Assumptions)
  * para a decisão dos 4 grupos e o motivo (usuário quis oração separada de
  * avisos).
  */
-export const NOTIFICATION_CATEGORIES = ['avisos', 'oracao', 'eventos', 'devocional', 'biblia'] as const;
+export const NOTIFICATION_CATEGORIES = ['avisos', 'oracao', 'eventos', 'devocional', 'biblia', 'kids'] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 

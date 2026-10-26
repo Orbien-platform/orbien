@@ -18,6 +18,7 @@ import { CreateKidsCheckinDto } from './dto/create-kids-checkin.dto';
 import { KIDS_CODE_MAX_ATTEMPTS, generateUniqueCode } from './kids-checkin-code';
 import { KidsSessionAccessService } from './kids-session-access.service';
 import { KidsLeaderAlertService } from './kids-leader-alert.service';
+import { KidsPickupNoticeService } from './kids-pickup-notice.service';
 import { CheckoutKidsCheckinDto } from './dto/checkout-kids-checkin.dto';
 import { CheckoutOverrideKidsCheckinDto } from './dto/checkout-override-kids-checkin.dto';
 
@@ -87,6 +88,7 @@ export class KidsCheckinService {
     private readonly consent: KidsConsentService,
     private readonly sessionAccess: KidsSessionAccessService,
     private readonly leaderAlert: KidsLeaderAlertService,
+    private readonly pickupNotice: KidsPickupNoticeService,
   ) {}
 
   async checkIn(actor: KidsActor, sessionId: string, dto: CreateKidsCheckinDto): Promise<KidsCheckinResult> {
@@ -258,7 +260,7 @@ export class KidsCheckinService {
 
   private async close(
     actor: KidsActor,
-    checkin: { id: string; session_id: string; child_id: string },
+    checkin: { id: string; session_id: string; child_id: string; session: { room: { name: string } } },
     who: { picked_up_by_person_id: string | null; picked_up_by_name: string; override_reason: string | null },
   ): Promise<KidsCheckoutResult> {
     const checkedOutAt = new Date();
@@ -274,6 +276,7 @@ export class KidsCheckinService {
       },
     });
     if (count === 0) throw new ConflictException(ALREADY_CLOSED);
+    await this.notifyReleased(actor, checkin, who.picked_up_by_person_id);
     return {
       id: checkin.id,
       session_id: checkin.session_id,
@@ -282,6 +285,26 @@ export class KidsCheckinService {
       checked_out_by: actor.userId,
       ...who,
     };
+  }
+
+  // Aviso "Criança entregue" ao responsável primário: best-effort, o check-out
+  // já está fechado e nada daqui o desfaz.
+  private async notifyReleased(
+    actor: KidsActor,
+    checkin: { id: string; session_id: string; child_id: string; session: { room: { name: string } } },
+    pickedUpByPersonId: string | null,
+  ) {
+    try {
+      await this.pickupNotice.notifyChildReleased(actor.tenantId, actor.congregationId, {
+        checkinId: checkin.id,
+        sessionId: checkin.session_id,
+        childId: checkin.child_id,
+        roomName: checkin.session.room.name,
+        pickedUpByPersonId,
+      });
+    } catch (err) {
+      this.logger.error(`falha ao avisar a entrega ${checkin.id}: ${String(err)}`);
+    }
   }
 
   // Rastro e aviso são best-effort: a recusa sai 403 de qualquer jeito. O

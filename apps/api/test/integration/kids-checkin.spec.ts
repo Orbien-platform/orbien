@@ -13,6 +13,7 @@ import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { bootKids, type KidsHarness } from '../helpers/kids-app';
 import { KIDS_TERM_VERSION } from '../../src/kids/consent/kids-consent.terms';
+import { NotificationsService } from '../../src/content/notifications.service';
 
 const admin = new PrismaClient({ datasources: { db: { url: process.env['DIRECT_URL']! } }, log: [] });
 const ts = Date.now();
@@ -769,5 +770,74 @@ describe('GET /kids/children/:id/checkin (código ao responsável)', () => {
     expect((await open(tokenMae, 'x')).status).toBe(400);
     expect((await open(h.tokenT1('starter', 'ministry_leader'), child)).status).toBe(403);
     expect((await open(h.tokenT1('premium', 'ministry_leader'), child)).status).toBe(404);
+  });
+});
+
+describe('push "Criança entregue" ao responsável primário (check-out e override)', () => {
+  let push: jest.SpyInstance;
+  beforeEach(() => {
+    push = jest.spyOn(h.app.get(NotificationsService), 'sendPush').mockResolvedValue(true);
+  });
+  afterEach(() => push.mockRestore());
+
+  async function present() {
+    const child = await mkChild({ months: 36, label: 'Entrega' });
+    const res = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+    expect(res.status).toBe(201);
+    return { child, id: res.body.id as string, code: res.body.code as string };
+  }
+  const out = (id: string, body: Record<string, unknown>) =>
+    http().post(`/api/kids/checkins/${id}/checkout`).set(auth(leader)).send(body);
+
+  it('a avó retira com o código: o responsável primário (mãe) é avisado, sem dado de saúde', async () => {
+    const p = await present();
+    const res = await out(p.id, { code: p.code, picked_up_by_person_id: avo });
+
+    expect(res.status).toBe(200);
+    expect(push).toHaveBeenCalledTimes(1);
+    const opts = push.mock.calls[0][0];
+    expect(opts.filters).toEqual([
+      { field: 'tag', key: 'person_id', relation: '=', value: mae },
+      { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
+    ]);
+    expect(opts).toMatchObject({ title: 'Criança entregue', data: { type: 'kids_child_released', checkin_id: p.id } });
+    expect(opts.body).toContain(`Entrega`);
+    expect(opts.body).toContain(`Maternal ${tag}`);
+    expect(JSON.stringify(opts)).not.toContain(ALERGIA);
+    expect(JSON.stringify(opts)).not.toContain(NOTA);
+  });
+
+  it('quem retirou é o próprio primário: não precisa de aviso', async () => {
+    const p = await present();
+    expect((await out(p.id, { code: p.code, picked_up_by_person_id: mae })).status).toBe(200);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('o override do líder também avisa o primário', async () => {
+    const p = await present();
+    const res = await http()
+      .post(`/api/kids/checkins/${p.id}/checkout-override`)
+      .set(auth(leader))
+      .send({ reason: 'Perdeu o código', picked_up_by_name: 'Vizinha' });
+
+    expect(res.status).toBe(200);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0][0].filters[0]).toMatchObject({ value: mae });
+  });
+
+  it('retirada recusada não avisa ninguém', async () => {
+    const p = await present();
+    const res = await out(p.id, { code: p.code === 'ZZZZ' ? 'YYYY' : 'ZZZZ', picked_up_by_person_id: avo });
+    expect(res.status).toBe(403);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('push que falha ou rejeita (sem token, OneSignal fora): o check-out fecha do mesmo jeito', async () => {
+    const p = await present();
+    push.mockRejectedValue(new Error('OneSignal fora do ar'));
+    const res = await out(p.id, { code: p.code, picked_up_by_person_id: avo });
+
+    expect(res.status).toBe(200);
+    expect(await openCount(p.child)).toBe(0);
   });
 });
