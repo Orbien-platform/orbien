@@ -67,7 +67,7 @@ describe('MemberCapService', () => {
     await service.assertCanPromoteToMember('t1');
 
     expect(client.person.count).toHaveBeenCalledWith({
-      where: { tenant_id: 't1', classification: 'member', deleted_at: null },
+      where: { tenant_id: 't1', classification: 'member', deleted_at: null, is_child: false },
     });
   });
 });

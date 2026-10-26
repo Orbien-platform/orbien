@@ -62,7 +62,8 @@ export class PersonsService {
 
     if (dto.phone) {
       possible_duplicates = await this.prisma.client.person.findMany({
-        where: { phone: dto.phone, id: { not: person.id } },
+        // AD-013: criança fica fora de duplicados (e de qualquer lista de pessoas).
+        where: { phone: dto.phone, id: { not: person.id }, is_child: false },
         select: { id: true, full_name: true, phone: true, classification: true },
       });
     }
@@ -73,7 +74,8 @@ export class PersonsService {
   async findAll(query: ListPersonsQueryDto): Promise<PaginatedPersons> {
     const { classification, gender, tag, search, page, limit } = query;
 
-    const where: Prisma.PersonWhereInput = { deleted_at: null };
+    // AD-013: criança (is_child) só aparece nas rotas de kids, nunca aqui.
+    const where: Prisma.PersonWhereInput = { deleted_at: null, is_child: false };
     if (classification) where.classification = classification;
     if (gender) where.gender = gender;
     if (search) where.full_name = { contains: search, mode: 'insensitive' };
@@ -114,7 +116,8 @@ export class PersonsService {
 
   private async findOneWithAccounts(id: string) {
     const person = await this.prisma.client.person.findUnique({
-      where: { id },
+      // AD-013: a ficha de criança é das rotas de kids; aqui ela é 404.
+      where: { id, is_child: false },
       include: {
         householdMemberships: true,
         userAccounts: {
@@ -318,6 +321,10 @@ export class PersonsService {
       FROM persons p
       WHERE p.deleted_at IS NULL
         AND p.anonymized_at IS NULL
+        -- AD-013: criança não é visitante nem membro; sem sinal de atividade
+        -- "da pessoa" ela seria anonimizada em 1-2 anos mesmo frequentando.
+        -- Menor segue a regra própria de purgeMinorsAfterContractEnd.
+        AND p.is_child = false
         AND NOT EXISTS (
           SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
         )

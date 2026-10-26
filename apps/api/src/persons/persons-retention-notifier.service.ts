@@ -71,6 +71,7 @@ export class PersonsRetentionNotifier {
         FROM persons p
         WHERE p.deleted_at IS NULL
           AND p.anonymized_at IS NULL
+          AND p.is_child = false -- AD-013: criança não entra na retenção por inatividade
           AND NOT EXISTS (SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id)
           AND GREATEST(
             p.updated_at,

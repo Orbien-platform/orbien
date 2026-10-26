@@ -240,3 +240,23 @@ describe('RegisterVisitorByLeaderDto', () => {
     expect((await errorsFor({ ...base, origin: 'small_group' })).length).toBeGreaterThan(0);
   });
 });
+
+describe('VisitorService.registerByLeader — criança fora da busca (AD-013)', () => {
+  it('a busca de duplicados por telefone não traz criança', async () => {
+    const { service, client } = setup();
+
+    await service.registerByLeader({ ...base, phone: '11999990000' } as never, leader);
+
+    expect(client.person.findMany.mock.calls[0][0].where).toMatchObject({ is_child: false });
+  });
+
+  it('existing_person_id de criança é 404', async () => {
+    const { service, client } = setup();
+    client.person.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.registerByLeader({ existing_person_id: 'c1', origin: 'service', lgpd_consent: true } as never, leader),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(client.person.findFirst.mock.calls[0][0].where).toMatchObject({ id: 'c1', is_child: false });
+  });
+});

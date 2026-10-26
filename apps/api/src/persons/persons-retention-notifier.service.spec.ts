@@ -52,3 +52,16 @@ describe('PersonsRetentionNotifier', () => {
     expect(notifications.sendPush).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('PersonsRetentionNotifier — criança (AD-013)', () => {
+  it('o aviso de retenção por inatividade não conta criança', async () => {
+    const { notifier, system } = notifierWith([]);
+
+    await notifier.cronNotifyUpcomingRetentions();
+
+    const sql = (system.$queryRaw.mock.calls[0][0] as { sql: string }).sql;
+    // A ramificação de inatividade é a que usa o prazo de 1/2 anos.
+    const inactivity = sql.slice(sql.indexOf('inatividade'), sql.indexOf('financeiro:'));
+    expect(inactivity).toContain('p.is_child = false');
+  });
+});
