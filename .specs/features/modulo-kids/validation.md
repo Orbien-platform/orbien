@@ -262,3 +262,59 @@ Não rodados: `npm run e2e -w orbien-web` (Playwright) e `scripts/pre-push.sh` (
 **What works**: RLS por congregação, 409 em corrida, recusa genérica auditada, faixa etária e capacidade, consentimento, roster sem código, anonimização que preserva membro ativo, `is_child` nas listagens principais, escala por sessão, contagem sugerida, indicadores, premium e papéis em todas as rotas.
 
 **Next steps**: aplicar os fix plans 1 a 4 e re-verificar (iteração 1 de no máximo 3).
+
+---
+
+# Rodada 2
+
+Verifier independente (autor ≠ verificador). Escopo: `git diff 8feff3a..HEAD` (commits `5cd91cf`, `83b61e3`, `6ff58ef`). Nada foi corrigido pelo Verifier.
+
+## Veredito: PASS
+
+S1 e M12 fechados. S2, S3 e S4 estão aceitos pelo dono (spec, "Decisões", 2026-10-26). Gates verdes.
+
+## S1: reimpressão de etiquetas (`5cd91cf`)
+
+| Regra (spec AC 7) | Evidência `file:line` + asserção | Resultado |
+|---|---|---|
+| Só atende quem fez o check-in (`checked_in_by` = usuário do token) | `kids-labels.service.ts:43` `if (checkin.checked_in_by !== actor.userId) throw new ForbiddenException(...)`; `I:kids-checkin.spec.ts` `labels(leader, inn.body.id).status` `toBe(200)` (líder fez o check-in) | PASS |
+| Gestão que não fez o check-in: 403 | `I:kids-checkin.spec.ts` `labels(otherManager /*secretary*/, ...).status` `toBe(403)` | PASS |
+| Volunteer escalado que não fez: 403 | `labels(tokenVol, ...).status` `toBe(403)` (comentário "escalado em sMat") | PASS |
+| Member (outro responsável e a própria mãe quando o líder fez o check-in) e visitor: 403 | `labels(tokenMae|tokenOutra|visitor, ...)` `toBe(403)` | PASS |
+| Só enquanto aberto | `kids-labels.service.ts:44` 409 se `checked_out_at`; teste existente "409 depois da retirada" mantido | PASS |
+| Quem fez pelo app reimprime (200); outro depois não | `I:kids-checkin.spec.ts` novo teste: `labels(tokenMae)` `toBe(200)`, `labels(leader)` `toBe(403)` | PASS |
+| POST de check-in segue devolvendo `labels` | `kids-checkin.controller.ts:45` `{ ...checkin, labels: await this.labelsService.forCheckin(actor, checkin.id) }`; `inn.body.labels.child_label` asserido no mesmo spec | PASS |
+| Unit prende a regra | `kids-labels.service.spec.ts` "AC 7": para `outroLider`, `volunteer`, `parent`, `visitor` (com `canOperate` = true) `rejects.toBeInstanceOf(ForbiddenException)` e `kidsChildHealth.findUnique` `not.toHaveBeenCalled()` | PASS |
+
+**Alteração dos testes antigos: APROVADA.** Os asserts anteriores (200 para volunteer escalado, gestão lendo `child_label.code`, 404 para outro responsável) eram exatamente o que a validação da rodada 1 apontou como contradição do AC 7. A spec foi emendada no mesmo ciclo (AC 7 e linha "Reimpressão de etiquetas") e os testes passaram a assertar o valor da spec (403) em vez de enfraquecer a asserção. Um caso passou de 404 para 403 para "outro responsável", coerente com a checagem que agora vem antes do acesso à criança e não revela a existência por papel.
+
+**Contagem unit 4067 → 4066: justificada.** Removido em `kids-labels.service.spec.ts` o teste "responsável de outra criança: 404 do acesso, nada lido", que dependia do `KidsChildAccessService.assertCanAccess`, não mais injetado no service. Os outros dois ("403 para voluntário fora da sessão e papéis sem relação" e o do responsável) foram reescritos, não removidos. O cenário do outro responsável continua coberto: no loop do teste "AC 7" (`parent`, cujo `userId` ≠ `checked_in_by`) e na integração (`tokenOutra` 403). Integração subiu 384 → 385 (teste novo do responsável que fez o check-in).
+
+**Web não depende do GET:** `CheckinDialog.tsx:155` imprime com `result.labels` (retorno do POST); `getLabels` (`apps/web/src/lib/kids.ts:395`) só é referenciado por `kids.test.ts:205`, nenhum componente ou página o chama. Resíduo baixo: função morta no web (ver abaixo).
+
+## M12: classificação do terceiro autorizado (`83b61e3`)
+
+Teste: `I:kids-children.spec.ts:407` `expect(rosa).toMatchObject({ ..., is_child: false, classification: 'visitor' })`. O valor `visitor` vem do default do banco (`createThirdParty`, `kids-guardians.service.ts:196-206`, não passa `classification`).
+
+**Mutação refeita em worktree descartável** (removido ao final; árvore real intocada): `classification: 'member'` em `createThirdParty`. Resultado: **MORTA**: `Expected "classification": "visitor"`, `Received "member"`, falha em `kids-children.spec.ts:407` (1 failed, 44 passed). Discrimina.
+
+## Gate (árvore real, um runner por vez, banco local, tenants teste1/teste2)
+
+| Gate | Resultado |
+|---|---|
+| `npm run test:unit -w orbien-backend` | 347 suites, 4066 passed, 0 failed |
+| `npm run test:integration -w orbien-backend` | 34 suites, 385 passed, 0 failed |
+| `npm run test:rls -w orbien-backend` | 19 suites, 237 passed, 0 failed |
+
+`git status` limpo antes do commit deste relatório.
+
+## Continua aberto (baixo risco, não bloqueia)
+
+- **L1**: `PersonsService.update/remove/anonymize` e `PATCH /persons/:id/classification` aceitam id de criança (papéis de gestão, sem alergia).
+- **L2**: sem teste de sessão de suporte (`impersonate`) nas rotas kids; rotas sem checagem de papel no service (turmas, sessões, resumo) ficam abertas à sessão de suporte, sem dado de criança.
+- **L3**: sem limite de tentativas de código no check-out (cada recusa é auditada e avisa o líder).
+- **Precisões da spec** (rodada 1): itens ⚠️ de precisão ainda anotados (inclui a precisão 5, `ministry_leader` de qualquer ministério) e testes pendentes para "culto encerrado com criança presente", "turma desativada mantém sessões abertas" e troca de escala de sessão kids.
+- **M6 equivalente em HTTP** (lock do PATCH concorrente só pego por unit).
+- **Resíduo web**: `getLabels` em `apps/web/src/lib/kids.ts` ficou sem uso em produção; remover ou manter com teste é decisão do dev.
+- **PROD-39** (pendência registrada em `docs/PLANO.md`): continua aberta; fora do escopo desta rodada.
+- Fora do gate: `npm run e2e -w orbien-web` e `scripts/pre-push.sh` não rodados; teste intermitente do `CostCentersModal` (web, não é do Kids) segue pré-existente.
