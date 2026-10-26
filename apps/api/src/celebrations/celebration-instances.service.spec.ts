@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     celebration: { findFirst: jest.fn() },
+    kidsSession: { updateMany: jest.fn() },
     celebrationInstance: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -197,6 +198,32 @@ describe('CelebrationInstancesService', () => {
       await service.update('t1', 'g1', 'i1', {} as never);
 
       expect(client.celebrationInstance.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: {} });
+    });
+
+    it('cancelar a instância cancela as sessões kids dela (kids AC 6)', async () => {
+      const client = clientWith();
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationInstance.update.mockResolvedValue({ id: 'i1', status: 'cancelled' });
+      const service = serviceWith(client);
+
+      await service.update('t1', 'g1', 'i1', { status: 'cancelled' } as never);
+
+      expect(client.kidsSession.updateMany).toHaveBeenCalledWith({
+        where: { celebration_instance_id: 'i1', status: 'open' },
+        data: { status: 'cancelled' },
+      });
+    });
+
+    it('outro status ou só notes não mexe nas sessões kids', async () => {
+      const client = clientWith();
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
+      const service = serviceWith(client);
+
+      await service.update('t1', 'g1', 'i1', { status: 'published', notes: 'x' } as never);
+      await service.update('t1', 'g1', 'i1', { notes: 'y' } as never);
+
+      expect(client.kidsSession.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -613,6 +640,21 @@ describe('CelebrationInstancesService', () => {
       });
       expect(client.celebrationInstance.create).not.toHaveBeenCalled();
       expect(result).toEqual([{ id: 'i1', status: 'cancelled' }]);
+    });
+
+    it('cancelar a data cancela as sessões kids da instância que já existia (kids AC 6)', async () => {
+      const client = clientWith();
+      client.celebration.findFirst.mockResolvedValue(weekly);
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'draft' });
+      client.celebrationInstance.update.mockResolvedValue({ id: 'i1', status: 'cancelled' });
+      const service = serviceWith(client);
+
+      await service.cancelDates('t1', 'g1', 'c1', ['2026-09-13']);
+
+      expect(client.kidsSession.updateMany).toHaveBeenCalledWith({
+        where: { celebration_instance_id: 'i1', status: 'open' },
+        data: { status: 'cancelled' },
+      });
     });
 
     it('cria a instância já cancelada quando a data ainda não tem uma', async () => {

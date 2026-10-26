@@ -124,12 +124,23 @@ export class CelebrationInstancesService {
   ): Promise<CelebrationInstance> {
     await this.findOne(tenantId, congregationId, id);
 
-    return this.prisma.client.celebrationInstance.update({
+    const updated = await this.prisma.client.celebrationInstance.update({
       where: { id },
       data: {
         ...(dto.notes !== undefined && { notes: dto.notes }),
         ...(dto.status !== undefined && { status: dto.status }),
       },
+    });
+    if (dto.status === CelebrationInstanceStatus.cancelled) await this.cancelKidsSessions(id);
+    return updated;
+  }
+
+  // Culto cancelado não recebe criança: as sessões kids dele deixam de aceitar
+  // check-in. Check-in já aberto fica como está — a liderança fecha com motivo.
+  private async cancelKidsSessions(instanceId: string): Promise<void> {
+    await this.prisma.client.kidsSession.updateMany({
+      where: { celebration_instance_id: instanceId, status: 'open' },
+      data: { status: 'cancelled' },
     });
   }
 
@@ -189,6 +200,7 @@ export class CelebrationInstancesService {
       if (existing?.status === 'finalized') {
         throw new BadRequestException(`O culto de ${day.toISOString().slice(0, 10)} já foi finalizado`);
       }
+      if (existing) await this.cancelKidsSessions(existing.id);
       results.push(
         existing
           ? await this.prisma.client.celebrationInstance.update({

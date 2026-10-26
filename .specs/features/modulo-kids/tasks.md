@@ -64,7 +64,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **T6** `KidsRoomsService` + DTOs (faixa obrigatória, `allows_out_of_range`). *Depends:* T5 · *Tests:* unit · *Reqs:* KIDS-01
 - [x] **T7** `KidsRoomsController` (CRUD, desativar). *Depends:* T6 · *Tests:* integração · *Reqs:* KIDS-01
-- **T8** `KidsSessionsService`: abrir (409 no par), cancelar (422 com check-in aberto). *Depends:* T6 · *Tests:* unit · *Reqs:* KIDS-02
+- [x] **T8** `KidsSessionsService`: abrir (409 no par), cancelar (422 com check-in aberto). *Depends:* T6 · *Tests:* unit · *Reqs:* KIDS-02
 - **T9** `KidsSessionsController` (`/celebrations/instances/:id/kids-sessions`). *Depends:* T8 · *Tests:* integração · *Reqs:* KIDS-02
 - **T10** Modelo de turmas padrão por celebração + aplicação em lote. *Depends:* T9 · *Tests:* unit + integração · *Reqs:* KIDS-03
 
