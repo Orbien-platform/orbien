@@ -106,7 +106,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **T30** Cliente `lib/kids` e ícones em `theme/icons.ts`. *Depends:* T19 · *Tests:* unit · *Reqs:* —
 - [x] **T31** Responsável: filhos, cadastro, consentimento, autorizados. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-04,05,06
-- **T32** Responsável: check-in e tela do código grande. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-08
+- [x] **T32** Responsável: check-in e tela do código grande. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-08
 - **T33** Equipe: roster da sessão e check-out por código. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-09
 - **T34** "Minhas escalas" mostra turma da sessão. *Depends:* T21 · *Tests:* jest · *Reqs:* KIDS-10
 
