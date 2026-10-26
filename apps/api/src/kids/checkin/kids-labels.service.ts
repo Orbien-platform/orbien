@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { KidsActor, KidsChildAccessService } from '../children/kids-child-access.service';
+import { KidsActor } from '../children/kids-child-access.service';
 import { KidsChildrenService } from '../children/kids-children.service';
 import { KidsSessionAccessService } from './kids-session-access.service';
 
@@ -22,7 +22,6 @@ export type KidsLabels = {
 export class KidsLabelsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly access: KidsChildAccessService,
     private readonly sessionAccess: KidsSessionAccessService,
     private readonly children: KidsChildrenService,
   ) {}
@@ -37,20 +36,19 @@ export class KidsLabelsService {
     });
     if (!checkin) throw new NotFoundException('Check-in não encontrado');
 
-    // Equipe vê a etiqueta de qualquer criança da sessão e a leitura de saúde
-    // é auditada; o responsável, só a do próprio filho.
-    const staff = await this.sessionAccess.canOperate(actor, checkin.session_id);
-    if (!staff) {
-      if (!actor.roles.includes('member')) throw new ForbiddenException('Sem permissão para esta etiqueta');
-      await this.access.assertCanAccess(actor, checkin.child.id);
-    }
+    // Reimpressão: só quem fez o check-in e só com ele aberto. A spec (AC 7)
+    // não deixa a equipe reler o código depois; gestão e voluntário escalado
+    // que não fizeram o check-in também levam 403.
+    if (checkin.checked_in_by !== actor.userId) throw new ForbiddenException('Sem permissão para esta etiqueta');
     if (checkin.checked_out_at) throw new ConflictException('Este check-in já foi encerrado');
 
     const health = await this.prisma.client.kidsChildHealth.findUnique({
       where: { person_id: checkin.child.id },
       select: { allergies: true },
     });
-    if (staff) await this.children.auditHealthRead(actor, checkin.child.id);
+    if (await this.sessionAccess.canOperate(actor, checkin.session_id)) {
+      await this.children.auditHealthRead(actor, checkin.child.id);
+    }
 
     const allergy = health?.allergies?.trim() || null;
     const roomName = checkin.session.room.name;

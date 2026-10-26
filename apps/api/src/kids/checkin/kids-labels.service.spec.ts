@@ -12,6 +12,7 @@ const checkin = (extra = {}) => ({
   session_id: 's1',
   code: 'A2B3',
   checked_out_at: null,
+  checked_in_by: 'lider1',
   child: { id: 'c1', full_name: 'Ana Souza' },
   guardian: { full_name: 'Maria Souza' },
   session: { room: { name: 'Maternal' } },
@@ -28,14 +29,12 @@ function build(opts: { checkin?: object | null; allergies?: string | null; hasHe
     },
   };
   const sessionAccess = { canOperate: jest.fn(async (a: KidsActor) => a.roles.includes('ministry_leader')) };
-  const access = { assertCanAccess: jest.fn().mockResolvedValue({ id: 'c1' }) };
   const children = { auditHealthRead: jest.fn().mockResolvedValue(undefined) };
   return {
     client,
     sessionAccess,
-    access,
     children,
-    svc: new KidsLabelsService({ client } as unknown as PrismaService, access as never, sessionAccess as never, children as never),
+    svc: new KidsLabelsService({ client } as unknown as PrismaService, sessionAccess as never, children as never),
   };
 }
 
@@ -79,35 +78,29 @@ describe('KidsLabelsService.forCheckin (AC 5, sem QR)', () => {
     }
   });
 
-  it('a leitura de saúde pela equipe é auditada (voluntário escalado incluso)', async () => {
+  it('a leitura de saúde pela equipe que fez o check-in é auditada (voluntário escalado incluso)', async () => {
     const a = build();
     await a.svc.forCheckin(leader, 'k1');
     expect(a.children.auditHealthRead).toHaveBeenCalledWith(leader, 'c1');
 
-    const b = build();
+    const b = build({ checkin: checkin({ checked_in_by: 'vol1' }) });
     b.sessionAccess.canOperate.mockResolvedValueOnce(true);
     await b.svc.forCheckin(volunteer, 'k1');
     expect(b.children.auditHealthRead).toHaveBeenCalledWith(volunteer, 'c1');
   });
 
-  it('o responsável lê a etiqueta do PRÓPRIO filho, sem auditoria de equipe', async () => {
-    const { svc, access, children } = build();
+  it('o responsável que fez o próprio check-in pelo app reimprime, sem auditoria de equipe', async () => {
+    const { svc, children } = build({ checkin: checkin({ checked_in_by: 'mae1' }) });
     const out = await svc.forCheckin(parent, 'k1');
-    expect(access.assertCanAccess).toHaveBeenCalledWith(parent, 'c1');
     expect(out.child_label.code).toBe('A2B3');
     expect(children.auditHealthRead).not.toHaveBeenCalled();
   });
 
-  it('responsável de outra criança: 404 do acesso, nada lido', async () => {
-    const { svc, access, client } = build();
-    access.assertCanAccess.mockRejectedValueOnce(new NotFoundException('Criança não encontrada'));
-    await expect(svc.forCheckin(parent, 'k1')).rejects.toBeInstanceOf(NotFoundException);
-    expect(client.kidsChildHealth.findUnique).not.toHaveBeenCalled();
-  });
-
-  it('403 para voluntário fora da sessão e papéis sem relação', async () => {
-    for (const actor of [volunteer, { ...leader, roles: ['visitor'] }]) {
-      const { svc, client } = build();
+  it('AC 7: quem não fez o check-in leva 403 e nada é lido — gestão e voluntário escalado inclusos', async () => {
+    const outroLider = { ...leader, userId: 'lider2' };
+    for (const actor of [outroLider, volunteer, parent, { ...leader, userId: 'v9', roles: ['visitor'] }]) {
+      const { svc, client, sessionAccess } = build();
+      sessionAccess.canOperate.mockResolvedValue(true);
       await expect(svc.forCheckin(actor, 'k1')).rejects.toBeInstanceOf(ForbiddenException);
       expect(client.kidsChildHealth.findUnique).not.toHaveBeenCalled();
     }

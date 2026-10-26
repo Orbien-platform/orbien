@@ -110,6 +110,7 @@ equipe confere → **check-out**.
 - **Location**: `apps/api/src/kids/checkin/`
 - **Interfaces**:
   - `POST /kids/sessions/:id/checkins` `{ child_id, guardian_id, confirm_out_of_range? }` → `{ code, label }`; `guardian_id` é obrigatório (quem entrega) e `checked_in_by` vem do usuário (quem recebe); 422 se fora da faixa e a turma não aceita; pede `confirm_out_of_range` se aceita
+  - `GET /kids/checkins/:id/labels` → reimpressão das etiquetas; 403 para quem não fez o check-in (`checked_in_by` ≠ usuário do token), 409 depois do check-out. A equipe não relê o código (spec AC 7)
   - `POST /kids/checkins/:id/checkout` `{ code }` (QR fica para o futuro)
   - `POST /kids/checkins/:id/checkout-override` `{ reason, picked_up_by_name }` (líder kids)
   - `GET /kids/sessions/:id/roster` (quem está presente, alergias em destaque; **sem** `code` — a equipe vê o código no check-in e não o relê)

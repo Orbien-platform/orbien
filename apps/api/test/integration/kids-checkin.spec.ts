@@ -699,15 +699,26 @@ describe('etiquetas (AC 5) — POST /kids/sessions/:id/checkins e GET /kids/chec
     expect(inn.body.labels.child_label).toMatchObject({ has_allergy: false, allergy: null });
   });
 
-  it('o responsável lê a etiqueta do filho dele; outro responsável, voluntário fora da sessão e visitante não', async () => {
+  it('AC 7: só quem fez o check-in reimprime; gestão, volunteer escalado, outro responsável e visitante levam 403', async () => {
     const child = await mkChild();
     const inn = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });
+    const otherManager = (await mkUser('Gestor', ['secretary'])).token;
 
-    expect((await labels(tokenMae, inn.body.id)).status).toBe(200);
-    expect((await labels(tokenOutra, inn.body.id)).status).toBe(404);
+    expect((await labels(leader, inn.body.id)).status).toBe(200);
+    expect((await labels(otherManager, inn.body.id)).status).toBe(403);
+    expect((await labels(tokenVol, inn.body.id)).status).toBe(403); // escalado em sMat, mas não fez o check-in
     expect((await labels(tokenVolFora, inn.body.id)).status).toBe(403);
+    expect((await labels(tokenMae, inn.body.id)).status).toBe(403);
+    expect((await labels(tokenOutra, inn.body.id)).status).toBe(403);
     expect((await labels(h.tokenFor('visitor'), inn.body.id)).status).toBe(403);
-    expect((await labels(tokenVol, inn.body.id)).status).toBe(200); // escalada em sMat
+  });
+
+  it('o responsável que fez o próprio check-in pelo app reimprime; depois da retirada, 409', async () => {
+    const child = await mkChild();
+    const inn = await checkIn(tokenMae, ids.sMat, { child_id: child, guardian_person_id: mae });
+    expect(inn.status).toBe(201);
+    expect((await labels(tokenMae, inn.body.id)).status).toBe(200);
+    expect((await labels(leader, inn.body.id)).status).toBe(403);
   });
 
   it('404 inexistente/outro tenant, 400 com id inválido, 401 sem token, 409 depois da retirada', async () => {

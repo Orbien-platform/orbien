@@ -45,7 +45,8 @@ export class KidsCheckinController {
     return { ...checkin, labels: await this.labelsService.forCheckin(actor, checkin.id) };
   }
 
-  // Dados das etiquetas (criança e responsável) prontos para o front imprimir.
+  // Reimpressão: o service só entrega a quem fez o check-in e enquanto ele está
+  // aberto (AC 7: a equipe não relê o código depois). O papel aqui é rejeição barata.
   @Get('kids/checkins/:id/labels')
   @Roles(...KIDS_FAMILY_ROLES, 'volunteer')
   labels(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
