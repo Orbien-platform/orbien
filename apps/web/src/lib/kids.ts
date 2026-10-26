@@ -321,6 +321,20 @@ export async function updateChild(id: string, patch: KidsChildPatch): Promise<Ki
   return data;
 }
 
+export interface PersonOption {
+  id: string;
+  full_name: string;
+  phone?: string | null;
+}
+
+/** Adultos já cadastrados, para escolher o responsável de uma criança nova. */
+export async function searchPersons(search: string): Promise<PersonOption[]> {
+  const { data } = await api.get<{ data: PersonOption[] }>("/persons", {
+    params: { search: search.trim(), limit: 8 },
+  });
+  return Array.isArray(data?.data) ? data.data : [];
+}
+
 export async function addGuardian(childId: string, input: KidsGuardianInput): Promise<void> {
   await api.post(`/kids/children/${childId}/guardians`, input);
 }
