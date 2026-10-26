@@ -26,7 +26,6 @@ export default function AutorizadoScreen() {
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (submitting) return;
     if (!name.trim()) return setError("Informe o nome de quem vai buscar.");
     if (!isValidPhone(phone)) return setError("Informe o telefone com DDD.");
     if (!relationship.trim()) return setError("Informe o parentesco (avó, tio, vizinha...).");

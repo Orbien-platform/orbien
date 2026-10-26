@@ -60,7 +60,6 @@ export default function CriancaScreen() {
   useFocusEffect(load);
 
   async function change(guardian: KidsGuardian, action: () => Promise<unknown>, fallback: string) {
-    if (busyId) return;
     setBusyId(guardian.id);
     setActionError(null);
     try {

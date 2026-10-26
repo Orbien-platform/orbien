@@ -99,4 +99,33 @@ describe("KidsScreen (filhos do responsável)", () => {
     });
     expect(screen.getByText("Não foi possível carregar seus filhos.")).toBeTruthy();
   });
+
+  describe("resposta que chega depois de sair da tela", () => {
+    async function unmountBeforeAnswer(): Promise<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> {
+      let resolve: (v: unknown) => void = () => undefined;
+      let reject: (e: unknown) => void = () => undefined;
+      mockListChildren.mockReturnValue(new Promise((res, rej) => ((resolve = res), (reject = rej))));
+      let view!: Awaited<ReturnType<typeof render>>;
+      await act(async () => {
+        view = await render(<KidsScreen />);
+      });
+      await act(async () => {
+        await view.unmount();
+      });
+      return { resolve, reject };
+    }
+
+    it("é descartada, com sucesso", async () => {
+      const { resolve } = await unmountBeforeAnswer();
+      await act(async () => resolve([]));
+      expect(screen.queryByTestId("kids-empty")).toBeNull();
+    });
+
+    it("é descartada, com erro", async () => {
+      const { reject } = await unmountBeforeAnswer();
+      await act(async () => reject(new NetworkError()));
+      expect(screen.queryByTestId("kids-error")).toBeNull();
+    });
+  });
+
 });

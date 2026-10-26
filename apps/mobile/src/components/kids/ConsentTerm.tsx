@@ -26,7 +26,6 @@ export function ConsentTerm({ status, onChanged }: ConsentTermProps) {
   const [error, setError] = useState<string | null>(null);
 
   async function run(action: () => Promise<void>, fallback: string) {
-    if (busy) return;
     setBusy(true);
     setError(null);
     try {

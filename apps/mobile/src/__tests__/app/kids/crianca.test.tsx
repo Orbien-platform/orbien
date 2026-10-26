@@ -200,4 +200,30 @@ describe("CriancaScreen", () => {
     expect(screen.queryByTestId("crianca-error")).toBeNull();
     expect(screen.getByText("Ana Souza")).toBeTruthy();
   });
+
+  it("resposta que chega depois de sair da tela é descartada (sucesso e erro)", async () => {
+    let resolve: (v: unknown) => void = () => undefined;
+    mockGetChild.mockReturnValueOnce(new Promise((res) => (resolve = res)));
+    let view!: Awaited<ReturnType<typeof render>>;
+    await act(async () => {
+      view = await render(<CriancaScreen />);
+    });
+    await act(async () => {
+      await view.unmount();
+    });
+    await act(async () => resolve(FICHA));
+    expect(screen.queryByText("Ana Souza")).toBeNull();
+
+    let reject: (e: unknown) => void = () => undefined;
+    mockGetChild.mockReturnValueOnce(new Promise((_res, rej) => (reject = rej)));
+    await act(async () => {
+      view = await render(<CriancaScreen />);
+    });
+    await act(async () => {
+      await view.unmount();
+    });
+    await act(async () => reject(new NetworkError()));
+    expect(screen.queryByTestId("crianca-error")).toBeNull();
+  });
+
 });

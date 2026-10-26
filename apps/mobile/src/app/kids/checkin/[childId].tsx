@@ -86,8 +86,9 @@ export default function CheckinScreen() {
 
   useEffect(load, [load]);
 
-  async function submit(confirmOutOfRange: boolean) {
-    if (submitting || !sessionId || !guardianId) return;
+  // O botão só existe habilitado com turma e quem entrega escolhidos, e fica
+  // inerte enquanto carrega — por isso recebe os dois já resolvidos.
+  async function submit(sessionId: string, guardianId: string, confirmOutOfRange: boolean) {
     setSubmitting(true);
     setMessage(null);
     try {
@@ -187,7 +188,7 @@ export default function CheckinScreen() {
               testID="checkin-confirmar-sim"
               title="Fazer check-in mesmo assim"
               loading={submitting}
-              onPress={() => submit(true)}
+              onPress={() => submit(selected.id, guardianId!, true)}
             />
             <AppButton
               testID="checkin-confirmar-nao"
@@ -260,7 +261,7 @@ export default function CheckinScreen() {
         title="Fazer check-in"
         disabled={!sessionId || !guardianId || needsConfirm}
         loading={submitting && !needsConfirm}
-        onPress={() => submit(false)}
+        onPress={() => submit(sessionId!, guardianId!, false)}
         style={styles.footer}
       />
     </Screen>

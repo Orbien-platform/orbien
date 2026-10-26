@@ -44,7 +44,6 @@ export default function NovaCriancaScreen() {
   useEffect(loadConsent, [loadConsent]);
 
   async function submit() {
-    if (submitting) return;
     const birthIso = parseBirthDate(birth);
     if (!name.trim()) return setError("Informe o nome da criança.");
     if (!birthIso) return setError("Informe a data de nascimento no formato DD/MM/AAAA.");

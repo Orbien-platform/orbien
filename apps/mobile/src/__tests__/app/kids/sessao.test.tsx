@@ -235,4 +235,32 @@ describe("SessaoScreen", () => {
       expect(screen.getByTestId("sessao-vazia")).toBeTruthy();
     });
   });
+
+  it("resposta que chega depois de sair da tela é descartada (sucesso, 403 e erro)", async () => {
+    for (const settle of [
+      (r: { res: (v: unknown) => void; rej: (e: unknown) => void }) => r.res(roster([])),
+      (r: { res: (v: unknown) => void; rej: (e: unknown) => void }) => r.rej(new HttpError(403, {})),
+      (r: { res: (v: unknown) => void; rej: (e: unknown) => void }) => r.rej(new NetworkError()),
+    ]) {
+      const handle = { res: (_v: unknown): void => undefined, rej: (_e: unknown): void => undefined };
+      mockGetRoster.mockReturnValueOnce(
+        new Promise((res, rej) => {
+          handle.res = res;
+          handle.rej = rej;
+        }),
+      );
+      let view!: Awaited<ReturnType<typeof render>>;
+      await act(async () => {
+        view = await render(<SessaoScreen />);
+      });
+      await act(async () => {
+        await view.unmount();
+      });
+      await act(async () => settle(handle));
+      expect(screen.queryByTestId("sessao-vazia")).toBeNull();
+      expect(screen.queryByTestId("sessao-forbidden")).toBeNull();
+      expect(screen.queryByTestId("sessao-error")).toBeNull();
+    }
+  });
+
 });

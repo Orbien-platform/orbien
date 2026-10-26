@@ -89,7 +89,6 @@ export default function SessaoScreen() {
   }
 
   async function submit(item: KidsRosterItem) {
-    if (submitting) return;
     setSubmitting(true);
     setRefusal(null);
     try {
