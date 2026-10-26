@@ -9,7 +9,7 @@ Implement these tasks with the `fillsd` skill: **activate it by name and follow 
 ---
 
 **Design**: `.specs/features/modulo-kids/design.md`
-**Status**: Draft
+**Status**: Approved (spec confirmada em 2026-10-26)
 
 Antes de qualquer Edit em `apps/web` ou `apps/mobile`, carregar a skill `frontend-design` (hook `require-frontend-design.mjs`). Testes só em `teste1-church` e `teste2-church`. Antes de subir: `bash scripts/pre-push.sh` verde.
 
@@ -62,7 +62,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 ### F2 — API: turmas e sessões
 
-- **T6** `KidsRoomsService` + DTOs (validação de faixa). *Depends:* T5 · *Tests:* unit · *Reqs:* KIDS-01
+- **T6** `KidsRoomsService` + DTOs (faixa obrigatória, `allows_out_of_range`). *Depends:* T5 · *Tests:* unit · *Reqs:* KIDS-01
 - **T7** `KidsRoomsController` (CRUD, desativar). *Depends:* T6 · *Tests:* integração · *Reqs:* KIDS-01
 - **T8** `KidsSessionsService`: abrir (409 no par), cancelar (422 com check-in aberto). *Depends:* T6 · *Tests:* unit · *Reqs:* KIDS-02
 - **T9** `KidsSessionsController` (`/celebrations/instances/:id/kids-sessions`). *Depends:* T8 · *Tests:* integração · *Reqs:* KIDS-02
@@ -79,15 +79,15 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 ### F4 — API: check-in e check-out
 
 - **T16** Gerador de código único por sessão. *Depends:* T5 · *Tests:* unit (colisão) · *Reqs:* KIDS-08
-- **T17** `KidsCheckinService.checkIn` (idade fora da faixa, capacidade, 409, consentimento). *Depends:* T8,T15,T16 · *Tests:* unit · *Reqs:* KIDS-08
+- **T17** `KidsCheckinService.checkIn` (responsável que entrega e quem recebe obrigatórios, faixa com `allows_out_of_range`, capacidade só avisa, 409, consentimento). *Depends:* T8,T15,T16 · *Tests:* unit · *Reqs:* KIDS-08
 - **T18** `KidsCheckinService.checkOut` + `override` com motivo e evento de auditoria. *Depends:* T17 · *Tests:* unit · *Reqs:* KIDS-09
 - **T19** `KidsCheckinController` + roster. *Depends:* T18 · *Tests:* integração (403 genérico, concorrência) · *Reqs:* KIDS-08,09
-- **T20** Etiquetas (dados + PDF/HTML) e QR. *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-08
+- **T20** Etiquetas (dados + PDF/HTML), sem QR. *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-08
 
 ### F5 — Escala e contagem
 
 - **T21** `kids_session_id` na escala + `kids_session` em `my-celebration-assignments` + mínimo de voluntários. *Depends:* T9 · *Tests:* unit + integração · *Reqs:* KIDS-10
-- **T22** `suggested_children` na contagem de público (sem mudar o contrato do `PUT`). *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-11
+- **T22** `checkin_total` na contagem de público como valor inicial de `children`, editável (sem mudar o contrato do `PUT`). *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-11
 - **T23** `GET /kids/attendance/summary` (média por turma, vazio ≠ zero). *Depends:* T19 · *Tests:* unit + integração · *Reqs:* KIDS-12
 
 ### F6 — Web
@@ -104,12 +104,13 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - **T30** Cliente `lib/kids` e ícones em `theme/icons.ts`. *Depends:* T19 · *Tests:* unit · *Reqs:* —
 - **T31** Responsável: filhos, cadastro, consentimento, autorizados. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-04,05,06
 - **T32** Responsável: check-in e tela do código grande. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-08
-- **T33** Equipe: roster da sessão e leitura de QR no check-out. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-09
+- **T33** Equipe: roster da sessão e check-out por código. *Depends:* T30 · *Tests:* jest · *Reqs:* KIDS-09
 - **T34** "Minhas escalas" mostra turma da sessão. *Depends:* T21 · *Tests:* jest · *Reqs:* KIDS-10
 
 ### F8 — Documentos e seed
 
 - **T35** Seed de turmas e crianças em `teste1-church`/`teste2-church`. *Depends:* T19 · *Tests:* none · *Reqs:* —
+- **T35b** Job de retenção: anonimizar check-ins com mais de 12 meses, pulando responsável membro ativo. *Depends:* T19 · *Tests:* unit (membro ativo, ex-membro) · *Reqs:* KIDS-06
 - **T36** Atualizar `orbien-lgpd-mapping.md`, termo do responsável e `docs/PLANO.md` (PROD-kids). *Depends:* T15 · *Tests:* `node scripts/check-skills.mjs` não se aplica · *Reqs:* KIDS-06
 
 ---
@@ -138,4 +139,4 @@ KIDS-01..12 mapeados (01:T3–T7, 02:T8–T9, 03:T10, 04:T12/T15, 05:T13, 06:T11
 
 ## Execução
 
-36 tarefas > ~8: pela skill, ofereço sub-agentes por **fase inteira** (F2–F3 podem ir em paralelo; F6 e F7 também após F4). O Verifier roda sozinho ao fim.
+37 tarefas > ~8: pela skill, ofereço sub-agentes por **fase inteira** (F2–F3 podem ir em paralelo; F6 e F7 também após F4). O Verifier roda sozinho ao fim.

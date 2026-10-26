@@ -12,14 +12,15 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 
 - [ ] Uma celebração tem 0, 1 ou N sessões kids (uma por turma/faixa etária), sem duplicar a agenda da celebração.
 - [ ] O responsável cadastra a criança e autoriza quem pode buscá-la; a igreja registra o consentimento.
-- [ ] Entrada e saída da criança em segundos, com etiqueta/QR casada entre criança e responsável.
+- [ ] Entrada e saída da criança em segundos, com etiqueta e código casados entre criança e responsável.
 - [ ] Voluntários kids são escalados por sessão e a contagem de crianças do culto deriva do check-in.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---|---|
-| Reconhecimento facial | Risco LGPD alto; benchmark aberto usa QR/etiqueta |
+| Reconhecimento facial | Risco LGPD alto |
+| Check-in e check-out por QR | **Futuro.** MVP é só código; o código já é gravado por check-in, então o QR entra depois sem mudar o modelo |
 | Currículo, lição, galeria de fotos | Não é o núcleo de operação e segurança |
 | Comunicação por WhatsApp com pais | Notificação push/in-app cobre o MVP |
 | Cobrança de eventos kids | Passaria pelo montador Asaas (AD-008); fora do MVP |
@@ -33,25 +34,26 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 |---|---|---|---|
 | Modelo | `KidsRoom` (turma, catálogo da congregação) + `KidsSession` (instância × turma, único) | Cobre 0/1/N; resposta do usuário | y |
-| Faixa etária | `min_age_months` e `max_age_months` (inteiros, nullable em um dos lados); sem sobreposição obrigatória nem proibida | Bebês precisam de meses; igrejas variam | n |
-| Criança sem turma que a comporte | Check-in permite escolher turma manualmente com aviso, nunca bloqueia | Segurança operacional > regra rígida | n |
+| Faixa etária | **Obrigatória em toda turma**, cada turma com a sua: `min_age_months` e `max_age_months` (inteiros ≥ 0, min ≤ max); sem regra sobre sobreposição entre turmas | Resposta do usuário; meses para caber bebês | y |
+| Criança fora da faixa da turma | Cada turma tem `allows_out_of_range` (bool, padrão `false`). Se `true`: aviso com confirmação e segue (`age_override = true`). Se `false`: check-in recusado com a mensagem "fora da faixa etária da turma" | Resposta do usuário | y |
 | Quem é "criança" | `Person` com `birth_date`; guardada em `Household` com `HouseholdMember.role = child` | Reusa 360°; MVP-doc já prevê Household para infantil | n |
 | Criança sem conta | Sem `UserAccount`; só o responsável tem login | Menores não autenticam | y |
 | Responsáveis | Novo `KidsGuardian` (criança, pessoa, parentesco, `can_pickup`, `is_primary`); ≥1 primário | Retirada exige lista explícita, não só o Household | n |
-| Terceiro autorizado sem conta | Pessoa cadastrada pelo responsável com nome + telefone + foto opcional; retira com código | Avó/vizinho buscam; precisa rastro | n |
+| Terceiro autorizado sem conta | Pessoa cadastrada pelo responsável com nome + telefone + foto opcional; retira com código | Avó/vizinho buscam; precisa rastro; resposta do usuário | y |
 | Consentimento | `ConsentRecord` do responsável com `origin = 'kids'` e versão do termo; sem consentimento válido não há check-in | LGPD Art. 14; responsável cadastra | y |
-| Dados sensíveis | Alergia/restrição e observação médica: texto livre, visível só a equipe kids e liderança, auditado | Art. 11 (saúde) | n |
-| Check-in | Responsável (app) ou equipe (web/mobile) lê QR; gera `KidsCheckin` com `code` curto de 4 caracteres único por sessão | Etiqueta criança + responsável com o mesmo código | n |
-| Check-out | Só com código ou QR do responsável; quem não tem `can_pickup` é recusado; override só por líder kids com motivo gravado | Núcleo de segurança | n |
-| Capacidade da turma | Aviso ao atingir; não bloqueia | Decisão pastoral na hora | n |
-| Contagem de crianças (PROD-37) | `CelebrationAttendance.children` passa a sugerir o total de check-ins do culto, editável; sem check-in, segue manual | Mantém contrato atual, sem migração de dados | n |
-| Escala | `CelebrationMinistry` ganha vínculo opcional com `KidsSession`; ministério "Kids" existente é reaproveitado | Evita escala paralela | n |
-| Plano | `premium`, como celebrações (`@RequiresPlan('premium')`) | Depende da escala/celebração | n |
-| Quem gerencia | `tenant_admin`, `admin_congregation`, `pastor`, `secretary` e líder do ministério kids; `volunteer` escalado só opera check-in/out da sua sessão | Mínimo privilégio | n |
-| Retenção | Check-ins guardados 12 meses; criança anonimizada via fluxo existente de `anonymized_at`; exclusão em 30 dias pós-contrato | Contrato já prevê; `Person` já tem `anonymized_at` | n |
+| Dados sensíveis | Alergia/restrição e observação médica: texto livre, visível só a equipe kids e liderança, auditado | Art. 11 (saúde); resposta do usuário | y |
+| Check-in | **Só por código no MVP** (QR fica para o futuro, ver Out of Scope). Gera `KidsCheckin` com `code` de 4 caracteres único na sessão | Etiqueta criança + responsável com o mesmo código; resposta do usuário | y |
+| Responsável pela entrada | Todo check-in grava **quem entrega** (`guardian_person_id`, obrigatório, de `KidsGuardian`) e **quem recebe na turma** (`checked_in_by`, obrigatório, usuário da equipe) | Resposta do usuário ("tem que ter um responsável pela entrada") | y |
+| Check-out | Só com o código; quem não tem `can_pickup` é recusado; override só por líder kids com motivo gravado | Núcleo de segurança; resposta do usuário | y |
+| Capacidade da turma | Aviso ao atingir; **não bloqueia** | Resposta do usuário | y |
+| Contagem de crianças (PROD-37) | A contagem vem do check-in (total de crianças distintas) e **pode ser alterada manualmente**; sem check-in, segue manual | Resposta do usuário; mantém o contrato atual | y |
+| Escala | `CelebrationMinistry` ganha vínculo opcional com `KidsSession`; ministério "Kids" existente é reaproveitado | Evita escala paralela; resposta do usuário | y |
+| Plano | `premium` (`@RequiresPlan('premium')`) | Resposta do usuário | y |
+| Quem gerencia | `tenant_admin`, `admin_congregation`, `pastor`, `secretary` e líder do ministério kids; `volunteer` escalado só opera check-in/out da sua sessão | Mínimo privilégio; resposta do usuário | y |
+| Retenção e anonimização | Check-ins guardados 12 meses e depois anonimizados pelo fluxo existente (`anonymized_at`). **Enquanto o responsável pelo check-in for membro ativo, o registro não é anonimizado**; deixou de ser membro ativo → segue a regra dos 12 meses. Exclusão em 30 dias pós-contrato | Resposta do usuário; contrato já prevê | y |
 | RLS | Todas as tabelas novas com `app_congregation_allowed()` em `USING` e `WITH CHECK`, script novo no bootstrap e passo 7 | Regra do monorepo | y |
 
-**Open questions:** nenhuma sem default registrado. Linhas `n` valem se não houver discordância. Duas merecem olho do dono do produto: a faixa etária em meses (bebês) e o prazo de retenção de check-ins.
+**Open questions:** nenhuma. Revisão de 2026-10-26: o dono do produto respondeu os pontos em aberto. Seguem como `n` só Household, responsáveis (`KidsGuardian`) e consentimento, que seguem o desenho proposto.
 
 ---
 
@@ -62,8 +64,8 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 **User Story**: Como líder kids, quero cadastrar turmas e abrir uma ou mais delas em cada culto, para refletir como a igreja realmente opera.
 
 **Acceptance Criteria**:
-1. WHEN líder cria turma com nome e faixa etária THEN o sistema SHALL gravá-la na congregação e listá-la ordenada por idade mínima.
-2. WHEN a faixa tem `min` > `max` ou valores negativos THEN o sistema SHALL responder 400.
+1. WHEN líder cria turma com nome, faixa etária e a opção de aceitar fora da faixa THEN o sistema SHALL gravá-la na congregação e listá-la ordenada por idade mínima.
+2. WHEN a faixa está ausente, tem `min` > `max` ou valores negativos THEN o sistema SHALL responder 400.
 3. WHEN líder abre sessão kids numa instância com uma turma THEN o sistema SHALL criar `KidsSession` única para o par instância×turma.
 4. WHEN o par já existe THEN o sistema SHALL responder 409, sem duplicar.
 5. WHEN a instância não tem sessões THEN o sistema SHALL tratá-la como sem culto kids, sem erro e sem exigir cadastro.
@@ -96,12 +98,14 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 **User Story**: Como voluntário kids, quero receber e devolver crianças com confirmação do responsável, para ninguém sair com a pessoa errada.
 
 **Acceptance Criteria**:
-1. WHEN responsável ou equipe faz check-in de criança numa sessão aberta THEN o sistema SHALL criar `KidsCheckin` com horário, turma, responsável e `code` de 4 caracteres único na sessão.
+1. WHEN responsável ou equipe faz check-in de criança numa sessão aberta THEN o sistema SHALL criar `KidsCheckin` com horário, responsável que entrega, membro da equipe que recebe e `code` de 4 caracteres único na sessão.
+1b. WHEN o check-in vem sem responsável que entrega ou sem quem recebe THEN o sistema SHALL responder 400.
 2. WHEN a criança já tem check-in aberto na mesma instância THEN o sistema SHALL responder 409.
-3. WHEN a idade da criança não cabe na faixa da turma THEN o sistema SHALL avisar e permitir confirmar, gravando `age_override = true`.
-4. WHEN a sessão atinge a capacidade THEN o sistema SHALL avisar e permitir seguir.
+3. WHEN a idade da criança não cabe na faixa e a turma tem `allows_out_of_range = true` THEN o sistema SHALL avisar, pedir confirmação e, confirmado, gravar `age_override = true`.
+3b. WHEN a idade não cabe e a turma tem `allows_out_of_range = false` THEN o sistema SHALL responder 422 "fora da faixa etária da turma", sem confirmação possível.
+4. WHEN a sessão atinge a capacidade THEN o sistema SHALL avisar e permitir seguir (nunca bloquear).
 5. WHEN o check-in ocorre THEN o sistema SHALL gerar etiqueta imprimível da criança (nome, turma, alergia em destaque, código) e a do responsável (código).
-6. WHEN check-out recebe código/QR de responsável com `can_pickup` THEN o sistema SHALL fechar o check-in com horário e quem retirou.
+6. WHEN check-out recebe o código de responsável com `can_pickup` THEN o sistema SHALL fechar o check-in com horário e quem retirou.
 7. WHEN o código não confere ou a pessoa não pode retirar THEN o sistema SHALL recusar (403) sem revelar o motivo à tela da pessoa e avisar o líder.
 8. WHEN líder kids autoriza retirada por exceção THEN o sistema SHALL exigir motivo e gravá-lo.
 9. WHEN a sessão é lida por quem não é equipe/liderança THEN o sistema SHALL responder 403.
@@ -117,8 +121,8 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 **Acceptance Criteria**:
 1. WHEN líder escala voluntário numa sessão kids THEN o sistema SHALL criar a atribuição ligada à sessão, reaproveitando confirmação e troca de escala existentes.
 2. WHEN a sessão tem menos voluntários que o mínimo definido na turma THEN o sistema SHALL sinalizar a falta na escala.
-3. WHEN o culto tem check-ins THEN a contagem de público SHALL sugerir `children` = total de crianças distintas com check-in, editável por quem pode lançar.
-4. WHEN o líder substitui o valor sugerido THEN o sistema SHALL guardar o valor lançado e manter o total de check-ins visível ao lado.
+3. WHEN o culto tem check-ins THEN a contagem de público SHALL trazer `children` = total de crianças distintas com check-in como valor inicial.
+4. WHEN quem pode lançar altera o valor manualmente THEN o sistema SHALL guardar o valor lançado e manter o total de check-ins visível ao lado.
 5. WHEN voluntário abre "Minhas escalas" THEN o sistema SHALL mostrar a turma e o horário da sessão em que está escalado.
 
 **Independent Test**: escalar dois voluntários, fazer cinco check-ins, abrir contagem e ver `children = 5` sugerido.
@@ -138,10 +142,10 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 ## Edge Cases
 
 - Duas pessoas fazem check-in da mesma criança ao mesmo tempo: índice único parcial (criança × instância, aberto) → 409 para o segundo, sem 500.
-- Criança sem `birth_date`: check-in pede a data antes de seguir.
+- Criança sem `birth_date`: check-in pede a data antes de seguir (sem ela a faixa não se valida).
 - Código de 4 caracteres colide dentro da sessão: gerar de novo até ser único; fora da sessão pode repetir.
 - Culto termina com check-in aberto: a liderança vê a lista de crianças não retiradas e fecha com motivo.
-- Responsável perde o celular: líder kids identifica por documento e autoriza por exceção (AC 8).
+- Responsável perde a etiqueta ou esquece o código: líder kids identifica por documento e autoriza por exceção (AC 8).
 - Criança em duas turmas no mesmo culto: permitida só após check-out da anterior.
 - Turma desativada com sessões futuras: sessões abertas permanecem; novas não podem ser criadas.
 
@@ -158,7 +162,7 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 | KIDS-05 | P1 Responsáveis e terceiros autorizados (AC 3–4) | Design | Pending |
 | KIDS-06 | P1 Consentimento Art. 14 (AC 2, 6) | Design | Pending |
 | KIDS-07 | P1 Dados de saúde com auditoria (AC 5) | Design | Pending |
-| KIDS-08 | P1 Check-in com código e etiquetas | Design | Pending |
+| KIDS-08 | P1 Check-in por código, responsável pela entrada e etiquetas | Design | Pending |
 | KIDS-09 | P1 Check-out seguro e exceção | Design | Pending |
 | KIDS-10 | P2 Escala por sessão | Design | Pending |
 | KIDS-11 | P2 Contagem derivada (PROD-37) | Design | Pending |

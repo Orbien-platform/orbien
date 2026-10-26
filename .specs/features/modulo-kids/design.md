@@ -34,7 +34,7 @@ graph TD
 ```
 
 Fluxo do dia: responsável abre o app → seleciona criança → **check-in** (gera
-`code`) → etiqueta impressa no balcão → ao buscar, mostra o QR/código →
+`code`) → etiqueta impressa no balcão → ao buscar, informa o código →
 equipe confere → **check-out**.
 
 ---
@@ -106,8 +106,8 @@ equipe confere → **check-out**.
 - **Purpose**: check-in/out com código e exceções.
 - **Location**: `apps/api/src/kids/checkin/`
 - **Interfaces**:
-  - `POST /kids/sessions/:id/checkins` `{ child_id, guardian_id }` → `{ code, label }`
-  - `POST /kids/checkins/:id/checkout` `{ code }` ou `{ qr }`
+  - `POST /kids/sessions/:id/checkins` `{ child_id, guardian_id, confirm_out_of_range? }` → `{ code, label }`; `guardian_id` é obrigatório (quem entrega) e `checked_in_by` vem do usuário (quem recebe); 422 se fora da faixa e a turma não aceita; pede `confirm_out_of_range` se aceita
+  - `POST /kids/checkins/:id/checkout` `{ code }` (QR fica para o futuro)
   - `POST /kids/checkins/:id/checkout-override` `{ reason, picked_up_by_name }` (líder kids)
   - `GET /kids/sessions/:id/roster` (quem está presente, alergias em destaque)
 - **Dependencies**: índice único parcial, geração de código único por sessão.
@@ -156,7 +156,8 @@ model KidsRoom {
   id String @id @default(uuid())
   tenant_id String; congregation_id String
   name String
-  min_age_months Int?; max_age_months Int?
+  min_age_months Int; max_age_months Int
+  allows_out_of_range Boolean @default(false)
   capacity Int?; min_volunteers Int @default(0)
   is_active Boolean @default(true)
   sessions KidsSession[]
@@ -182,7 +183,7 @@ model KidsCheckin {
   tenant_id String; congregation_id String
   session_id String; child_id String; guardian_person_id String
   code String; age_override Boolean @default(false)
-  checked_in_at DateTime @default(now()); checked_in_by String
+  checked_in_at DateTime @default(now()); checked_in_by String // quem recebe na turma (obrigatório)
   checked_out_at DateTime?; picked_up_by_person_id String?; picked_up_by_name String?
   override_reason String?; checked_out_by String?
   @@unique([session_id, code])
@@ -216,6 +217,7 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 |---|---|---|---|
 | Criança aparece em listas, indicadores e exportações de pessoas | `apps/api/src/persons/persons.service.ts:85` | Vazamento de dado de menor; contagem de membros inflada | `Person.is_child` e filtro padrão `is_child=false`; teste dedicado em cada listagem |
 | Retirada por pessoa errada | `kids/checkin` (novo) | Dano real a menor | Código + `can_pickup` + override com motivo e auditoria; teste de recusa |
+| Anonimização de check-in |  `apps/api/src/persons/persons-retention-notifier.service.ts` | Apagar histórico de quem ainda é membro ativo | Job de 12 meses pula check-in cujo `guardian_person_id` é membro ativo (`classification=member`, `deleted_at` nulo) e volta a valer ao deixar de ser | 
 | Dado de saúde em log | `AuditInterceptor` global | Alergia em texto em `audit_logs` | Auditar o acesso (quem/quando), nunca o conteúdo |
 | `children` manual vs sugerido divergem | `celebration-attendance.service.ts:80` | Número duplo confunde | Mostrar os dois lado a lado; só o manual é gravado (AC 4) |
 | Menor sem conta e RLS por congregação | `app_congregation_allowed()` | Responsável de outra congregação do tenant não vê o filho | Ficha restrita à congregação da criança; troca de congregação fora do MVP |
@@ -229,8 +231,8 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 |---|---|---|
 | Código de retirada | 4 caracteres de `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (sem 0/O/1/I/L) | Legível em etiqueta; único por sessão |
 | Etiqueta | HTML/CSS impresso (web), PDF (mobile) | Sem impressora térmica nem dependência nova |
-| Check-out por QR | QR codifica `checkin_id`+`code`; confere no servidor | Leitor de câmera já existe no mobile (check-in de PG) |
-| Plano | `premium` | Segue celebrações |
+| Check-out | Só por código no MVP; QR é futuro | Decisão do dono do produto; leitor de câmera do check-in de PG fica para depois |
+| Plano | `premium` | Decisão do dono do produto |
 | Criança sem login | `Person` sem `UserAccount`, `is_child=true` | Menor não autentica |
 
 > **AD-013** (convenção para futuras features): dado de criança é `Person` com `is_child=true`, sem conta, fora de listas por padrão. Ver `.specs/STATE.md`.

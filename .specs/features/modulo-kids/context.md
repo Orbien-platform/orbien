@@ -2,7 +2,7 @@
 
 **Gathered:** 2026-10-22
 **Spec:** `.specs/features/modulo-kids/spec.md`
-**Status:** Aguardando confirmação da spec (Design ainda não começou)
+**Status:** Spec confirmada em 2026-10-26; Design e Tasks atualizados
 
 ---
 
@@ -38,6 +38,17 @@ voluntários kids com contagem derivada.
   (LGPD Art. 14). Igreja é controladora. Exclusão em até 30 dias após o
   cancelamento do contrato já está no contrato (cláusula "cadastros infantis").
 
+### Decisões de 2026-10-26 (dono do produto)
+
+- Faixa etária obrigatória na criação da turma, cada turma com a sua.
+- Cada turma diz se aceita criança fora da faixa: aceita → aviso e confirmação; não aceita → recusa com "fora da faixa etária da turma".
+- Todo check-in tem responsável pela entrada (quem entrega) e quem recebe na turma.
+- Terceiro autorizado, dados sensíveis, escala e quem gerencia: como proposto.
+- Check-in/out só por código; QR anotado para o futuro.
+- Capacidade não bloqueia; contagem vem do check-in e pode ser editada.
+- Plano premium.
+- Anonimização do registro não ocorre enquanto o responsável pelo check-in for membro ativo.
+
 ### Pesquisa de concorrentes (resultado)
 
 - Dono do produto: **a Doca não usa módulo kids hoje** (tem uma turma infantil
@@ -70,6 +81,7 @@ Ver tabela "Assumptions & Open Questions" na spec.
 
 ## Deferred Ideas
 
+- Check-in e check-out por QR (o código já fica gravado por check-in).
 - Reconhecimento facial no check-in; pulseira térmica própria.
 - Currículo/lição por turma, galeria de fotos, comunicação com pais por WhatsApp.
 - Cobrança de evento kids (passaria pelo montador Asaas com split).
