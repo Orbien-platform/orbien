@@ -8,6 +8,29 @@ vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
+// Os dois componentes do Kids têm testes próprios; aqui só interessa a fiação.
+vi.mock("@/components/kids/KidsTemplateSection", () => ({
+  KidsTemplateSection: ({ celebrationId }: { celebrationId: string }) => (
+    <div data-testid="kids-template">modelo:{celebrationId}</div>
+  ),
+}));
+vi.mock("@/components/kids/KidsSessionsModal", () => ({
+  KidsSessionsModal: ({
+    instanceId,
+    subtitle,
+    onOpenChange,
+  }: {
+    instanceId: string;
+    subtitle: string;
+    onOpenChange: (open: boolean) => void;
+  }) => (
+    <div data-testid="kids-sessions">
+      sessões:{instanceId}:{subtitle}
+      <button onClick={() => onOpenChange(false)}>fechar kids</button>
+    </div>
+  ),
+}));
+
 const celebration = {
   id: "c1",
   name: "Culto Domingo",
@@ -506,6 +529,36 @@ describe("CelebrationDetailSheet", () => {
       await screen.findByText("Instâncias (1)");
       expect(screen.getByText("Finalizado")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /^Cancelar o culto de/ })).not.toBeInTheDocument();
+    });
+  });
+  describe("Kids", () => {
+    function renderKids(canEdit: boolean) {
+      mockGet();
+      render(
+        <CelebrationDetailSheet open onOpenChange={vi.fn()} celebrationId="c1" canEdit={canEdit} canAddSongs={false} />
+      );
+    }
+
+    it("quem edita vê o modelo de turmas e abre as turmas de um culto", async () => {
+      const user = userEvent.setup();
+      renderKids(true);
+      await screen.findByText("Instâncias (2)");
+      expect(screen.getByTestId("kids-template")).toHaveTextContent("modelo:c1");
+
+      const buttons = screen.getAllByRole("button", { name: /^Turmas kids do culto de/ });
+      expect(buttons).toHaveLength(2);
+      await user.click(buttons[0]);
+      expect(screen.getByTestId("kids-sessions")).toHaveTextContent("sessões:i2");
+
+      await user.click(screen.getByRole("button", { name: "fechar kids" }));
+      expect(screen.queryByTestId("kids-sessions")).not.toBeInTheDocument();
+    });
+
+    it("quem só lê não vê nada de Kids", async () => {
+      renderKids(false);
+      await screen.findByText("Instâncias (2)");
+      expect(screen.queryByTestId("kids-template")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Turmas kids do culto/ })).not.toBeInTheDocument();
     });
   });
 });

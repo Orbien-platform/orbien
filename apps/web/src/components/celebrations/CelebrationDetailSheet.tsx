@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, FileText, Calendar, Trash2, Ban, RotateCcw, Users } from "lucide-react";
+import { Loader2, FileText, Calendar, Trash2, Ban, RotateCcw, Users, Baby } from "lucide-react";
 import {
   DetailPage,
   DetailPageContent,
@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/detail-page";
 import { ServiceOrderView } from "@/components/celebrations/ServiceOrderView";
 import { AttendanceFormModal } from "@/components/celebrations/AttendanceFormModal";
+import { KidsSessionsModal } from "@/components/kids/KidsSessionsModal";
+import { KidsTemplateSection } from "@/components/kids/KidsTemplateSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,6 +103,8 @@ export function CelebrationDetailSheet({
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   // Culto cuja contagem de público está aberta no formulário.
   const [attendanceTarget, setAttendanceTarget] = useState<CelebrationInstance | null>(null);
+  // Culto cujas turmas kids estão abertas no modal.
+  const [kidsTarget, setKidsTarget] = useState<CelebrationInstance | null>(null);
   const [soViewOpen, setSoViewOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -260,6 +264,8 @@ export function CelebrationDetailSheet({
                 )}
               </DetailPageHeader>
 
+              {canEdit && <KidsTemplateSection celebrationId={celebration.id} />}
+
               {/* Instances list */}
               <div className="flex flex-col flex-1 overflow-y-auto">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-default)]">
@@ -332,6 +338,17 @@ export function CelebrationDetailSheet({
                         {canEdit && !cancelled && (
                           <button
                             type="button"
+                            onClick={() => setKidsTarget(inst)}
+                            aria-label={`Turmas kids do culto de ${fmtDate(inst.scheduled_date)}`}
+                            title="Turmas kids"
+                            className="flex flex-shrink-0 items-center rounded-[6px] p-1.5 text-stone hover:bg-[var(--surface-subtle)] hover:text-ink dark:hover:text-white"
+                          >
+                            <Baby size={14} strokeWidth={1.5} />
+                          </button>
+                        )}
+                        {canEdit && !cancelled && (
+                          <button
+                            type="button"
                             onClick={() => setAttendanceTarget(inst)}
                             aria-label={`Contagem de público do culto de ${fmtDate(inst.scheduled_date)}`}
                             title="Contagem de público"
@@ -372,6 +389,16 @@ export function CelebrationDetailSheet({
           )}
         </DetailPageContent>
       </DetailPage>
+
+      {kidsTarget ? (
+        <KidsSessionsModal
+          key={kidsTarget.id}
+          open
+          onOpenChange={(next) => !next && setKidsTarget(null)}
+          instanceId={kidsTarget.id}
+          subtitle={fmtDate(kidsTarget.scheduled_date)}
+        />
+      ) : null}
 
       {attendanceTarget ? (
         <AttendanceFormModal
