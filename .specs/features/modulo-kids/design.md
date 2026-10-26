@@ -116,6 +116,15 @@ equipe confere → **check-out**.
   - `GET /kids/children/:id/checkin` (responsável do Household ou gestão): check-in aberto da criança com sessão, turma, horário e `code`; 404 se não há. Código esquecido: override do líder com motivo
 - **Dependencies**: índice único parcial, geração de código único por sessão.
 
+### KidsRetentionService (API): retenção de check-in
+
+`apps/api/src/kids/retention/kids-retention.service.ts`, cron diário `0 7 * * *` (depois dos jobs de pessoas, 3h-6h), via `prisma.system` (sem tenant), mesmo padrão de `PersonsService.purge*`. Coluna nova `kids_checkins.anonymized_at` (migration `20261026160000`; sem tabela nova, sem RLS nova).
+
+- **Elegível**: `anonymized_at IS NULL`, `checked_in_at` estritamente anterior a "agora - 12 meses" (exatamente 12 meses ainda está no prazo) e responsável (`guardian_person_id`) que **não** é membro ativo.
+- **Membro ativo** = `classification = member`, `deleted_at` nulo e `anonymized_at` nulo (a retenção por inatividade anonimiza sem preencher `deleted_at`; pessoa já anonimizada não é "ativa"). Reavaliado a cada rodada: quem deixa de ser membro ativo volta à regra dos 12 meses sem nenhum passo extra.
+- **Anonimizar = menor dano**: apaga `picked_up_by_name`, `picked_up_by_person_id` (quem retirou, inclusive o terceiro autorizado) e `override_reason` (texto livre que costuma citar nome e documento) e carimba `anonymized_at`. Ficam `checked_in_at`/`checked_out_at`, sessão, turma, `age_override`, `code`, `child_id`, `guardian_person_id` e `checked_in_by`/`checked_out_by` (conta da equipe): a contagem por culto e os indicadores (`checkin_total`, média por turma) dependem deles, e `child_id`/`guardian_person_id` são FK `NOT NULL`. Esses ponteiros deixam de identificar quando a `Person` é anonimizada pelos fluxos existentes (titular, fim de contrato em 30 dias); enquanto isso, o histórico nominal da criança permanece. Se o jurídico exigir desvincular também criança e responsável, é migration para tornar as FKs anuláveis e perde-se a contagem distinta por criança (decisão em aberto, registrada no PROD-kids).
+- **Idempotência e falha**: `updateMany` com `anonymized_at: null` no `where`; erro em um registro é logado e contado, o lote segue; erro de consulta é logado e a próxima rodada retoma. Varredura em lotes de 200 com cursor por `id`.
+
 ### Web: Kids (gestão e balcão)
 
 - **Location**: `apps/web/src/app/(admin)/kids/` (`page.tsx` sessões do dia, `turmas/`, `criancas/`) e `apps/web/src/components/kids/`

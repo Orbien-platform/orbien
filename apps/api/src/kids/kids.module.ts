@@ -17,6 +17,7 @@ import { KidsChildAccessService } from './children/kids-child-access.service';
 import { KidsGuardiansService } from './children/kids-guardians.service';
 import { KidsChildrenService } from './children/kids-children.service';
 import { KidsConsentService } from './consent/kids-consent.service';
+import { KidsRetentionService } from './retention/kids-retention.service';
 import { KidsRoomsController } from './rooms/kids-rooms.controller';
 import { KidsRoomsService } from './rooms/kids-rooms.service';
 import { KidsSessionsController } from './sessions/kids-sessions.controller';
@@ -48,6 +49,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsChildrenService,
     KidsGuardiansService,
     KidsConsentService,
+    KidsRetentionService,
     KidsRoomsService,
     KidsSessionsService,
     KidsTemplateService,

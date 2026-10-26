@@ -2536,6 +2536,9 @@ model KidsCheckin {
   checked_out_by          String?
   picked_up_by_person_id  String?
   picked_up_by_name       String?
+  // Retenção de 12 meses (KIDS-06): preenchido pelo KidsRetentionService quando
+  // a identificação de quem retirou e o motivo da exceção foram apagados.
+  anonymized_at           DateTime?
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
