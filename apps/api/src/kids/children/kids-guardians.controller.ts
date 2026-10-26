@@ -4,6 +4,7 @@ import {
   Delete,
   HttpCode,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   UseGuards,
@@ -21,6 +22,7 @@ import { KIDS_FAMILY_ROLES } from '../kids.roles';
 import { toKidsActor } from './kids-child-access.service';
 import { KidsGuardiansService } from './kids-guardians.service';
 import { AddKidsGuardianDto } from './dto/add-kids-guardian.dto';
+import { UpdateKidsGuardianDto } from './dto/update-kids-guardian.dto';
 
 // Caminhos completos nos métodos: a criação é filha da criança
 // (`kids/children/:id/guardians`) e a remoção tem raiz própria
@@ -36,6 +38,11 @@ export class KidsGuardiansController {
   @Post('kids/children/:id/guardians')
   add(@Param('id', ParseUUIDPipe) childId: string, @Body() dto: AddKidsGuardianDto, @CurrentUser() user: JwtPayload) {
     return this.guardiansService.add(toKidsActor(user), childId, dto);
+  }
+
+  @Patch('kids/guardians/:id')
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateKidsGuardianDto, @CurrentUser() user: JwtPayload) {
+    return this.guardiansService.update(toKidsActor(user), id, dto);
   }
 
   @Delete('kids/guardians/:id')

@@ -49,15 +49,21 @@ describe('KidsChildrenController', () => {
 
 describe('KidsGuardiansController', () => {
   it('delega add e remove ao service com o ator do JWT', async () => {
-    const service = { add: jest.fn().mockResolvedValue({}), remove: jest.fn().mockResolvedValue(undefined) };
+    const service = {
+      add: jest.fn().mockResolvedValue({}),
+      remove: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue({}),
+    };
     const controller = new KidsGuardiansController(service as never);
     const dto = { full_name: 'Rosa', phone: '1', relationship: 'avó' };
 
     await controller.add('c1', dto, USER);
     await controller.remove('kg1', USER);
+    await controller.update('kg1', { can_pickup: false }, USER);
 
     expect(service.add).toHaveBeenCalledWith(ACTOR, 'c1', dto);
     expect(service.remove).toHaveBeenCalledWith(ACTOR, 'kg1');
+    expect(service.update).toHaveBeenCalledWith(ACTOR, 'kg1', { can_pickup: false });
   });
 });
 

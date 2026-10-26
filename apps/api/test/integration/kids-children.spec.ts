@@ -479,6 +479,106 @@ describe('guardiões: POST /kids/children/:id/guardians e DELETE /kids/guardians
   });
 });
 
+describe('PATCH /kids/guardians/:id (editar responsável)', () => {
+  let biaId: string;
+  let paiRow: string; // pai: responsável da família, não primário, com conta (tokenB)
+  let rosaRow: string; // avó: terceiro sem conta
+  let maeRow: string; // responsável A: primária
+  const patch = (token: string, id: string, body: Record<string, unknown>) =>
+    http().patch(`/api/kids/guardians/${id}`).set(auth(token)).send(body);
+  const row = (id: string) => admin.kidsGuardian.findUniqueOrThrow({ where: { id } });
+
+  beforeAll(async () => {
+    expect((await accept(tokenA)).status).toBeLessThan(300);
+    const created = await http().post('/api/kids/children').set(auth(tokenA)).send(childBody({ full_name: name('Bia') }));
+    expect(created.status).toBe(201);
+    biaId = created.body.id;
+    const bia = await admin.person.findUniqueOrThrow({ where: { id: biaId } });
+    // B entra na família da Bia como cônjuge, autorizado mas não primário.
+    await admin.householdMember.create({ data: { household_id: bia.household_id!, person_id: personB, role: 'spouse' } });
+    const pai = await http()
+      .post(`/api/kids/children/${biaId}/guardians`)
+      .set(auth(tokenA))
+      .send({ guardian_person_id: personB, relationship: 'pai' });
+    paiRow = pai.body.id;
+    const rosa = await http()
+      .post(`/api/kids/children/${biaId}/guardians`)
+      .set(auth(tokenA))
+      .send({ full_name: name('Rosa2'), phone: '11911112222', relationship: 'avó' });
+    rosaRow = rosa.body.id;
+    maeRow = (await admin.kidsGuardian.findFirstOrThrow({ where: { child_id: biaId, guardian_person_id: personA } })).id;
+  });
+
+  it('o responsável primário altera parentesco e retirada de um autorizado', async () => {
+    const res = await patch(tokenA, rosaRow, { can_pickup: false, relationship: 'vizinha' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: rosaRow, can_pickup: false, relationship: 'vizinha', is_primary: false });
+    expect(await row(rosaRow)).toMatchObject({ can_pickup: false, relationship: 'vizinha' });
+    await patch(tokenA, rosaRow, { can_pickup: true });
+  });
+
+  it('403 para o responsável da família que não é o primário; nada muda', async () => {
+    const res = await patch(tokenB, rosaRow, { relationship: 'intruso' });
+
+    expect(res.status).toBe(403);
+    expect((await row(rosaRow)).relationship).toBe('vizinha');
+  });
+
+  it('404 para criança alheia (responsável de outra família) e para autorizado inexistente', async () => {
+    const outra = await accept(tokenB);
+    expect(outra.status).toBeLessThan(300);
+    const mk = await http().post('/api/kids/children').set(auth(tokenB)).send(childBody({ full_name: name('Caio') }));
+    expect(mk.status).toBe(201);
+    const caioRow = await admin.kidsGuardian.findFirstOrThrow({ where: { child_id: mk.body.id, is_primary: true } });
+    expect((await patch(tokenA, caioRow.id, { relationship: 'x' })).status).toBe(404);
+    expect((await patch(tokenA, '00000000-0000-4000-8000-000000000000', { relationship: 'x' })).status).toBe(404);
+  });
+
+  it('a gestão edita sem ser da família; voluntário, visitante e plano Starter são barrados', async () => {
+    expect((await patch(pastor, rosaRow, { relationship: 'avó' })).status).toBe(200);
+    expect((await patch(h.tokenFor('volunteer'), rosaRow, { relationship: 'x' })).status).toBe(403);
+    expect((await patch(h.tokenFor('visitor'), rosaRow, { relationship: 'x' })).status).toBe(403);
+    expect((await patch(h.tokenT1('starter', 'pastor'), rosaRow, { relationship: 'x' })).status).toBe(403);
+    expect((await row(rosaRow)).relationship).toBe('avó');
+  });
+
+  it('400 para corpo vazio, tipos errados, campo extra, parentesco em branco e id malformado', async () => {
+    expect((await patch(tokenA, rosaRow, {})).status).toBe(400);
+    expect((await patch(tokenA, rosaRow, { can_pickup: 'sim' })).status).toBe(400);
+    expect((await patch(tokenA, rosaRow, { relationship: '   ' })).status).toBe(400);
+    expect((await patch(tokenA, rosaRow, { guardian_person_id: personB })).status).toBe(400);
+    expect((await patch(tokenA, 'xyz', { relationship: 'x' })).status).toBe(400);
+  });
+
+  it('400 quando o primário ficaria sem poder retirar', async () => {
+    expect((await patch(tokenA, maeRow, { can_pickup: false })).status).toBe(400);
+    expect((await patch(tokenA, paiRow, { is_primary: true, can_pickup: false })).status).toBe(400);
+    expect((await row(maeRow)).can_pickup).toBe(true);
+  });
+
+  it('422 ao rebaixar o único primário; nada muda', async () => {
+    const res = await patch(tokenA, maeRow, { is_primary: false });
+
+    expect(res.status).toBe(422);
+    expect((await row(maeRow)).is_primary).toBe(true);
+  });
+
+  it('promover outro rebaixa o anterior de uma vez: a criança segue com exatamente um primário', async () => {
+    const res = await patch(tokenA, paiRow, { is_primary: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.is_primary).toBe(true);
+    expect((await row(maeRow)).is_primary).toBe(false);
+    expect(await admin.kidsGuardian.count({ where: { child_id: biaId, is_primary: true } })).toBe(1);
+  });
+
+  it('depois da troca, a antiga primária deixa de poder editar (403) e o novo primário pode', async () => {
+    expect((await patch(tokenA, rosaRow, { relationship: 'x' })).status).toBe(403);
+    expect((await patch(tokenB, rosaRow, { relationship: 'avó materna' })).status).toBe(200);
+  });
+});
+
 describe('POST /kids/consent/revoke (AC 6)', () => {
   it('revogar mantém o histórico e volta a exigir consentimento no cadastro', async () => {
     const res = await http().post('/api/kids/consent/revoke').set(auth(tokenA)).send({ reason: 'teste' });

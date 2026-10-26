@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -9,6 +10,7 @@ import { KidsGuardian } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { KidsChildAccessService, KidsActor } from './kids-child-access.service';
 import { AddKidsGuardianDto } from './dto/add-kids-guardian.dto';
+import { UpdateKidsGuardianDto } from './dto/update-kids-guardian.dto';
 
 export type KidsGuardianView = {
   id: string;
@@ -69,6 +71,64 @@ export class KidsGuardiansService {
     });
   }
 
+  /**
+   * Edita parentesco, permissão de retirada e primário de um responsável. Só o
+   * responsável primário da criança (ou a gestão) pode; a criança mantém ao
+   * menos um primário. Marcar alguém como primário rebaixa os demais na mesma
+   * transação, com as linhas da criança travadas para duas edições simultâneas
+   * não deixarem a criança sem primário.
+   */
+  async update(actor: KidsActor, guardianRowId: string, dto: UpdateKidsGuardianDto): Promise<KidsGuardian> {
+    if (dto.relationship === undefined && dto.can_pickup === undefined && dto.is_primary === undefined) {
+      throw new BadRequestException('Informe ao menos um campo para alterar');
+    }
+    const relationship = dto.relationship?.trim();
+    if (dto.relationship !== undefined && !relationship) {
+      throw new BadRequestException('Informe o parentesco');
+    }
+
+    const row = await this.prisma.client.kidsGuardian.findFirst({
+      where: { id: guardianRowId, tenant_id: actor.tenantId, congregation_id: actor.congregationId },
+    });
+    if (!row) throw new NotFoundException('Autorizado não encontrado');
+    await this.access.assertCanAccess(actor, row.child_id);
+    if (!this.access.isManager(actor.roles)) await this.assertIsPrimaryGuardian(actor, row.child_id);
+
+    return this.prisma.runInTx(async () => {
+      await this.prisma.client.$queryRaw`SELECT id FROM kids_guardians WHERE child_id = ${row.child_id} FOR UPDATE`;
+
+      const isPrimary = dto.is_primary ?? row.is_primary;
+      const canPickup = dto.can_pickup ?? row.can_pickup;
+      if (isPrimary && !canPickup) {
+        throw new BadRequestException('O responsável primário precisa poder retirar a criança');
+      }
+
+      if (row.is_primary && !isPrimary) {
+        const others = await this.prisma.client.kidsGuardian.count({
+          where: { child_id: row.child_id, is_primary: true, id: { not: row.id } },
+        });
+        if (others === 0) {
+          throw new UnprocessableEntityException('A criança precisa de ao menos um responsável primário');
+        }
+      }
+      if (!row.is_primary && isPrimary) {
+        await this.prisma.client.kidsGuardian.updateMany({
+          where: { child_id: row.child_id, is_primary: true, id: { not: row.id } },
+          data: { is_primary: false },
+        });
+      }
+
+      return this.prisma.client.kidsGuardian.update({
+        where: { id: row.id },
+        data: {
+          ...(relationship !== undefined && { relationship }),
+          ...(dto.can_pickup !== undefined && { can_pickup: dto.can_pickup }),
+          ...(dto.is_primary !== undefined && { is_primary: dto.is_primary }),
+        },
+      });
+    });
+  }
+
   async remove(actor: KidsActor, guardianRowId: string): Promise<void> {
     const row = await this.prisma.client.kidsGuardian.findFirst({
       where: { id: guardianRowId, tenant_id: actor.tenantId, congregation_id: actor.congregationId },
@@ -104,6 +164,19 @@ export class KidsGuardiansService {
       can_pickup: r.can_pickup,
       is_primary: r.is_primary,
     }));
+  }
+
+  // Quem edita sem ser da gestão precisa ser o responsável primário da criança.
+  // Ser do Household não basta: um autorizado não-primário só lê.
+  private async assertIsPrimaryGuardian(actor: KidsActor, childId: string): Promise<void> {
+    const ownId = await this.access.ownPersonId(actor.userId);
+    const mine = ownId
+      ? await this.prisma.client.kidsGuardian.findFirst({
+          where: { child_id: childId, guardian_person_id: ownId, is_primary: true },
+          select: { id: true },
+        })
+      : null;
+    if (!mine) throw new ForbiddenException('Só o responsável primário pode alterar os autorizados');
   }
 
   private async existingGuardian(actor: KidsActor, personId: string): Promise<string> {
