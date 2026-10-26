@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from '../prisma/prisma.module';
 import { KidsModule } from './kids.module';
 import { KidsCheckinService } from './checkin/kids-checkin.service';
@@ -11,7 +12,12 @@ import { KidsTemplateService } from './sessions/kids-template.service';
 describe('KidsModule', () => {
   it('compila e registra os providers', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ global: true, secret: 'segredo-de-teste' }), PrismaModule, KidsModule],
+      imports: [
+        JwtModule.register({ global: true, secret: 'segredo-de-teste' }),
+        ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+        PrismaModule,
+        KidsModule,
+      ],
     }).compile();
 
     expect(moduleRef.get(KidsRoomsService)).toBeInstanceOf(KidsRoomsService);

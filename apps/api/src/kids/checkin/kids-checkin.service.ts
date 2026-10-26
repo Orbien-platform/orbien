@@ -10,12 +10,16 @@ import {
 } from '@nestjs/common';
 import { KidsSessionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { writeAuditLog } from '../../common/audit/write-audit-log';
 import { KidsActor, KidsChildAccessService } from '../children/kids-child-access.service';
 import { KidsConsentService } from '../consent/kids-consent.service';
 import { KIDS_TERM_TEXT, KIDS_TERM_VERSION } from '../consent/kids-consent.terms';
 import { CreateKidsCheckinDto } from './dto/create-kids-checkin.dto';
 import { KIDS_CODE_MAX_ATTEMPTS, generateUniqueCode } from './kids-checkin-code';
 import { KidsSessionAccessService } from './kids-session-access.service';
+import { KidsLeaderAlertService } from './kids-leader-alert.service';
+import { CheckoutKidsCheckinDto } from './dto/checkout-kids-checkin.dto';
+import { CheckoutOverrideKidsCheckinDto } from './dto/checkout-override-kids-checkin.dto';
 
 export type KidsCapacityWarning = { capacity: number; present: number };
 
@@ -49,6 +53,23 @@ function unprocessable(code: string, message: string, extra: Record<string, unkn
 }
 
 const ALREADY_PRESENT = 'Esta criança já está presente';
+const ALREADY_CLOSED = 'Este check-in já foi encerrado';
+// A mesma mensagem para código errado e para pessoa sem permissão de retirar:
+// quem está no balcão não descobre qual das duas falhou (AC 7).
+const CHECKOUT_DENIED = 'Não foi possível confirmar a retirada. Chame o líder kids.';
+
+export type KidsCheckoutResult = {
+  id: string;
+  session_id: string;
+  child_id: string;
+  checked_out_at: Date;
+  checked_out_by: string;
+  picked_up_by_person_id: string | null;
+  picked_up_by_name: string;
+  override_reason: string | null;
+};
+
+const normalizeName = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
 /**
  * Check-in e check-out seguros (KIDS-08/09). Check-in só por código — o QR é
@@ -65,6 +86,7 @@ export class KidsCheckinService {
     private readonly access: KidsChildAccessService,
     private readonly consent: KidsConsentService,
     private readonly sessionAccess: KidsSessionAccessService,
+    private readonly leaderAlert: KidsLeaderAlertService,
   ) {}
 
   async checkIn(actor: KidsActor, sessionId: string, dto: CreateKidsCheckinDto): Promise<KidsCheckinResult> {
@@ -116,6 +138,161 @@ export class KidsCheckinService {
       age_override: created.age_override,
       capacity_warning: capacity !== null && present >= capacity ? { capacity, present } : null,
     };
+  }
+
+  /**
+   * Check-out só com o código (AC 6). Código errado e pessoa sem `can_pickup`
+   * caem na mesma recusa 403, auditada e avisada ao líder (AC 7). Check-in
+   * fechado não reabre.
+   */
+  async checkOut(actor: KidsActor, checkinId: string, dto: CheckoutKidsCheckinDto): Promise<KidsCheckoutResult> {
+    const checkin = await this.loadCheckin(actor, checkinId);
+    if (!(await this.sessionAccess.canOperate(actor, checkin.session_id))) {
+      throw new ForbiddenException('Sem permissão para operar esta sessão');
+    }
+    if (checkin.checked_out_at) throw new ConflictException(ALREADY_CLOSED);
+    if (!dto.picked_up_by_person_id && !dto.picked_up_by_name?.trim()) {
+      throw new BadRequestException('Informe quem está retirando a criança');
+    }
+
+    const codeOk = dto.code.trim().toUpperCase() === checkin.code;
+    const picker = codeOk ? await this.findPicker(checkin.child_id, dto) : null;
+    if (!picker) {
+      await this.denyCheckout(actor, checkin, codeOk ? 'pickup_not_allowed' : 'code_mismatch');
+      throw new ForbiddenException(CHECKOUT_DENIED);
+    }
+
+    return this.close(actor, checkin, {
+      picked_up_by_person_id: picker.guardian_person_id,
+      picked_up_by_name: picker.guardian.full_name,
+      override_reason: null,
+    });
+  }
+
+  /** Retirada por exceção (AC 8): só a gestão, com motivo gravado e auditado. */
+  async checkOutOverride(
+    actor: KidsActor,
+    checkinId: string,
+    dto: CheckoutOverrideKidsCheckinDto,
+  ): Promise<KidsCheckoutResult> {
+    if (!this.access.isManager(actor.roles)) {
+      throw new ForbiddenException('Só a liderança kids autoriza retirada por exceção');
+    }
+    const reason = dto.reason?.trim();
+    const name = dto.picked_up_by_name?.trim();
+    if (!reason) throw new BadRequestException('Informe o motivo da retirada por exceção');
+    if (!name) throw new BadRequestException('Informe quem está retirando a criança');
+
+    const checkin = await this.loadCheckin(actor, checkinId);
+    if (checkin.checked_out_at) throw new ConflictException(ALREADY_CLOSED);
+
+    const out = await this.close(actor, checkin, {
+      picked_up_by_person_id: null,
+      picked_up_by_name: name,
+      override_reason: reason,
+    });
+    await this.audit(actor, checkin.child_id, 'kids.checkout_override', {
+      checkin_id: checkin.id,
+      session_id: checkin.session_id,
+      picked_up_by_name: name,
+      reason,
+    });
+    return out;
+  }
+
+  private async loadCheckin(actor: KidsActor, checkinId: string) {
+    const checkin = await this.prisma.client.kidsCheckin.findFirst({
+      where: { id: checkinId, tenant_id: actor.tenantId, congregation_id: actor.congregationId },
+      include: { session: { select: { room: { select: { name: true } } } } },
+    });
+    if (!checkin) throw new NotFoundException('Check-in não encontrado');
+    return checkin;
+  }
+
+  // Quem pode retirar: KidsGuardian com can_pickup, por id ou pelo nome do
+  // terceiro cadastrado. Nome ambíguo (duas pessoas iguais) não vale.
+  private async findPicker(childId: string, dto: CheckoutKidsCheckinDto) {
+    const candidates = await this.prisma.client.kidsGuardian.findMany({
+      where: { child_id: childId, can_pickup: true },
+      select: { guardian_person_id: true, guardian: { select: { full_name: true } } },
+    });
+    if (dto.picked_up_by_person_id) {
+      return candidates.find((g) => g.guardian_person_id === dto.picked_up_by_person_id) ?? null;
+    }
+    const wanted = normalizeName(dto.picked_up_by_name ?? '');
+    const byName = candidates.filter((g) => normalizeName(g.guardian.full_name) === wanted);
+    return byName.length === 1 ? byName[0] : null;
+  }
+
+  private async close(
+    actor: KidsActor,
+    checkin: { id: string; session_id: string; child_id: string },
+    who: { picked_up_by_person_id: string | null; picked_up_by_name: string; override_reason: string | null },
+  ): Promise<KidsCheckoutResult> {
+    const checkedOutAt = new Date();
+    // `checked_out_at: null` no WHERE: dois fechamentos simultâneos, só um vence.
+    const { count } = await this.prisma.client.kidsCheckin.updateMany({
+      where: { id: checkin.id, checked_out_at: null },
+      data: {
+        checked_out_at: checkedOutAt,
+        checked_out_by: actor.userId,
+        picked_up_by_name: who.picked_up_by_name,
+        ...(who.picked_up_by_person_id !== null && { picked_up_by_person_id: who.picked_up_by_person_id }),
+        ...(who.override_reason !== null && { override_reason: who.override_reason }),
+      },
+    });
+    if (count === 0) throw new ConflictException(ALREADY_CLOSED);
+    return {
+      id: checkin.id,
+      session_id: checkin.session_id,
+      child_id: checkin.child_id,
+      checked_out_at: checkedOutAt,
+      checked_out_by: actor.userId,
+      ...who,
+    };
+  }
+
+  // Rastro e aviso são best-effort: a recusa sai 403 de qualquer jeito. O
+  // código digitado NÃO vai para o log (poderia ser o de outra criança).
+  private async denyCheckout(
+    actor: KidsActor,
+    checkin: { id: string; session_id: string; child_id: string; session: { room: { name: string } } },
+    reason: 'code_mismatch' | 'pickup_not_allowed',
+  ) {
+    await this.audit(actor, checkin.child_id, 'kids.checkout_denied', {
+      checkin_id: checkin.id,
+      session_id: checkin.session_id,
+      reason,
+    });
+    try {
+      await this.leaderAlert.notifyCheckoutDenied(actor.tenantId, actor.congregationId, {
+        sessionId: checkin.session_id,
+        checkinId: checkin.id,
+        roomName: checkin.session.room.name,
+      });
+    } catch (err) {
+      this.logger.error(`falha ao avisar o líder da recusa ${checkin.id}: ${String(err)}`);
+    }
+  }
+
+  private async audit(actor: KidsActor, childId: string, action: string, after: Record<string, unknown>) {
+    try {
+      await writeAuditLog(
+        this.prisma,
+        {
+          tenant_id: actor.tenantId,
+          congregation_id: actor.congregationId,
+          actor_user_id: actor.userId,
+          subject_person_id: childId,
+          entity: 'kids_checkin',
+          action,
+          after,
+        },
+        this.logger,
+      );
+    } catch (err) {
+      this.logger.error(`falha ao auditar ${action}: ${String(err)}`);
+    }
   }
 
   // Equipe (gestão ou voluntário escalado) vê qualquer criança da congregação;

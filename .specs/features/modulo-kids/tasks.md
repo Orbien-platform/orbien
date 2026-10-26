@@ -80,7 +80,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **T16** Gerador de código único por sessão. *Depends:* T5 · *Tests:* unit (colisão) · *Reqs:* KIDS-08
 - [x] **T17** `KidsCheckinService.checkIn` (responsável que entrega e quem recebe obrigatórios, faixa com `allows_out_of_range`, capacidade só avisa, 409, consentimento). *Depends:* T8,T15,T16 · *Tests:* unit · *Reqs:* KIDS-08
-- **T18** `KidsCheckinService.checkOut` + `override` com motivo e evento de auditoria. *Depends:* T17 · *Tests:* unit · *Reqs:* KIDS-09
+- [x] **T18** `KidsCheckinService.checkOut` + `override` com motivo e evento de auditoria. *Depends:* T17 · *Tests:* unit · *Reqs:* KIDS-09
 - **T19** `KidsCheckinController` + roster. *Depends:* T18 · *Tests:* integração (403 genérico, concorrência) · *Reqs:* KIDS-08,09
 - **T20** Etiquetas (dados + PDF/HTML), sem QR. *Depends:* T19 · *Tests:* unit · *Reqs:* KIDS-08
 

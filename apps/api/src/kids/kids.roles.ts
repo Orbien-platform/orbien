@@ -11,3 +11,7 @@ export const KIDS_READ_ROLES = [...KIDS_MANAGE_ROLES, 'volunteer'];
 // KidsChildAccessService, não da lista de papéis. O voluntário escalado lê a
 // ficha do que opera na F4 (roster), não por estas rotas.
 export const KIDS_FAMILY_ROLES = [...KIDS_MANAGE_ROLES, 'member'];
+
+// Quem recebe o aviso de retirada recusada: a liderança, sem a secretaria
+// (que não está no balcão). O `ministry_leader` é o "líder kids" da spec.
+export const KIDS_ALERT_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'ministry_leader'];
