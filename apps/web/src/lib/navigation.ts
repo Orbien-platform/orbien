@@ -51,10 +51,10 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Pessoas",
     items: [
-      { href: "/pessoas", label: "Pessoas", icon: Users },
       // Presença nos cultos: média por categoria, a partir da contagem lançada
       // por quem está na escala. É o "Indicadores" que o design Órbita já previa.
       { href: "/pessoas/indicadores", label: "Indicadores", icon: ChartNoAxesColumn },
+      { href: "/pessoas", label: "Pessoas", icon: Users },
     ],
   },
   {
