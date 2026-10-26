@@ -143,6 +143,12 @@ function ThemedShell() {
           <Stack.Screen name="perfil" options={{ title: "Meu perfil" }} />
           <Stack.Screen name="visitante" options={{ title: "Cadastrar visitante" }} />
           <Stack.Screen name="privacidade" options={{ title: "Privacidade" }} />
+          {/* Kids (premium): filhos do responsável, termo, cadastro e ficha. */}
+          <Stack.Screen name="kids/index" options={{ title: "Kids" }} />
+          <Stack.Screen name="kids/consentimento" options={{ title: "Termo de consentimento" }} />
+          <Stack.Screen name="kids/crianca/novo" options={{ title: "Cadastrar criança" }} />
+          <Stack.Screen name="kids/crianca/[id]" options={{ title: "Criança" }} />
+          <Stack.Screen name="kids/crianca/[id]/autorizado" options={{ title: "Adicionar autorizado" }} />
           {/* PROD-31: Contribuir (chave PIX) não depende da trava de
               pagamentos — vale para todo plano. */}
           <Stack.Screen name="contribuir" options={{ title: "Contribuir" }} />

@@ -14,6 +14,7 @@ import {
   checkOut,
   checkOutOverride,
   createChild,
+  describeKidsActionError,
   formatAge,
   getChild,
   getConsentStatus,
@@ -170,5 +171,19 @@ describe("KidsClient", () => {
       expect(suggestSession([strict], 60)).toBeNull();
       expect(suggestSession([session("c", {}, "cancelled")], 20)).toBeNull();
     });
+  });
+});
+
+describe("describeKidsActionError", () => {
+  it("repete a regra recusada pela API (400/409/422)", () => {
+    expect(describeKidsActionError(new HttpError(422, { message: "A criança precisa de um responsável principal" }), "x")).toBe(
+      "A criança precisa de um responsável principal",
+    );
+  });
+
+  it("cai no texto da tela quando não há mensagem, quando é 500 ou rede", () => {
+    expect(describeKidsActionError(new HttpError(422, undefined), "falhou")).toBe("falhou");
+    expect(describeKidsActionError(new HttpError(500, { message: "boom" }), "falhou")).toBe("falhou");
+    expect(describeKidsActionError(new NetworkError(), "falhou")).toBe("falhou");
   });
 });

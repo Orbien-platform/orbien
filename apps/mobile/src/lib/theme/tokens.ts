@@ -192,6 +192,17 @@ export const typography = {
   button: { fontFamily: fontFamily.medium, fontSize: 15 },
 } satisfies Record<string, TextStyle>;
 
+/** Código de retirada do Kids (4 caracteres): o objeto que a equipe e o
+ * responsável reconhecem a 3 metros. Mono, tabular e com tracking largo — o
+ * único texto do app nesse tamanho. */
+export const pickupCode = {
+  fontFamily: fontFamily.monoMedium,
+  fontSize: 72,
+  lineHeight: 84,
+  letterSpacing: 16,
+  fontVariant: ["tabular-nums"],
+} satisfies TextStyle;
+
 /** Base 4px (§3). */
 export const spacing = {
   xs: 4,

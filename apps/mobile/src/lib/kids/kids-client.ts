@@ -148,3 +148,16 @@ export function suggestSession(sessions: KidsSession[], months: number): KidsSes
 export function isInRange(session: KidsSession, months: number): boolean {
   return months >= session.room.min_age_months && months <= session.room.max_age_months;
 }
+
+/**
+ * Mensagem de uma ação que falhou. As recusas de regra da API (400/409/422)
+ * já vêm em português e dizem o que fazer ("a criança precisa de ao menos um
+ * responsável principal"); o resto — rede, 500 — cai na mensagem genérica da
+ * tela, que não inventa causa.
+ */
+export function describeKidsActionError(err: unknown, fallback: string): string {
+  if (err instanceof HttpError && [400, 409, 422].includes(err.status) && !err.message.startsWith("HTTP ")) {
+    return err.message;
+  }
+  return fallback;
+}
