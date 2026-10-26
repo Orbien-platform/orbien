@@ -114,20 +114,7 @@ export class KidsChildrenService {
       this.guardians.list(actor, childId),
     ]);
 
-    if (this.access.isManager(actor.roles)) {
-      await writeAuditLog(
-        this.prisma,
-        {
-          tenant_id: actor.tenantId,
-          congregation_id: actor.congregationId,
-          actor_user_id: actor.userId,
-          subject_person_id: childId,
-          entity: 'kids_child_health',
-          action: 'kids.health_read',
-        },
-        this.logger,
-      );
-    }
+    if (this.access.isManager(actor.roles)) await this.auditHealthRead(actor, childId);
 
     return {
       ...toView(child),
@@ -135,6 +122,26 @@ export class KidsChildrenService {
       medical_notes: health?.medical_notes ?? null,
       guardians,
     };
+  }
+
+  /**
+   * Rastro de que a equipe leu dado de saúde da criança: quem, quando, qual
+   * criança — nunca o conteúdo. Compartilhado pela ficha, pelo roster e pela
+   * etiqueta (toda leitura de saúde pela equipe passa por aqui).
+   */
+  async auditHealthRead(actor: KidsActor, childId: string): Promise<void> {
+    await writeAuditLog(
+      this.prisma,
+      {
+        tenant_id: actor.tenantId,
+        congregation_id: actor.congregationId,
+        actor_user_id: actor.userId,
+        subject_person_id: childId,
+        entity: 'kids_child_health',
+        action: 'kids.health_read',
+      },
+      this.logger,
+    );
   }
 
   async create(
