@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { KidsChildAccessService } from './children/kids-child-access.service';
+import { KidsChildrenService } from './children/kids-children.service';
 import { KidsConsentService } from './consent/kids-consent.service';
 import { KidsRoomsController } from './rooms/kids-rooms.controller';
 import { KidsRoomsService } from './rooms/kids-rooms.service';
@@ -11,7 +13,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
 @Module({
   imports: [PrismaModule],
   controllers: [KidsRoomsController, KidsSessionsController, KidsTemplateController],
-  providers: [KidsConsentService, KidsRoomsService, KidsSessionsService, KidsTemplateService],
-  exports: [KidsConsentService, KidsRoomsService, KidsSessionsService, KidsTemplateService],
+  providers: [KidsChildAccessService, KidsChildrenService, KidsConsentService, KidsRoomsService, KidsSessionsService, KidsTemplateService],
+  exports: [KidsChildAccessService, KidsChildrenService, KidsConsentService, KidsRoomsService, KidsSessionsService, KidsTemplateService],
 })
 export class KidsModule {}

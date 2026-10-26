@@ -398,3 +398,36 @@ describe("kids_checkins — um check-in aberto por criança e culto (KIDS-08)", 
     ).rejects.toThrow();
   });
 });
+
+describe("kids_child_health — anonimizar a pessoa apaga o dado de saúde (LGPD Art. 11)", () => {
+  it("o app (app_user) anonimiza a criança e a linha de saúde some; a pessoa permanece", async () => {
+    const scope = { tenant_id: a1.tenantId, congregation_id: a1.congId };
+    const kid = await prismaAdmin.person.create({
+      data: { ...scope, full_name: "Criança anonimizável", is_child: true },
+    });
+    await prismaAdmin.kidsChildHealth.create({
+      data: { ...scope, person_id: kid.id, allergies: "amendoim" },
+    });
+
+    await runAsTenantWithRole(a1.tenantId, a1.congId, (tx) =>
+      tx.person.update({
+        where: { id: kid.id },
+        data: { full_name: "ANONIMIZADO", anonymized_at: new Date() },
+      }),
+    );
+
+    expect(
+      await prismaAdmin.kidsChildHealth.findUnique({ where: { person_id: kid.id } }),
+    ).toBeNull();
+    expect(await prismaAdmin.person.findUnique({ where: { id: kid.id } })).not.toBeNull();
+  });
+
+  it("atualizar a pessoa sem anonimizar não apaga a saúde", async () => {
+    await runAsTenantWithRole(a1.tenantId, a1.congId, (tx) =>
+      tx.person.update({ where: { id: a1.childId }, data: { full_name: "Criança A1 renomeada" } }),
+    );
+    expect(
+      await prismaAdmin.kidsChildHealth.findUnique({ where: { id: a1.healthId } }),
+    ).not.toBeNull();
+  });
+});
