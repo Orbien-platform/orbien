@@ -155,6 +155,7 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 - Criança sem `birth_date`: check-in pede a data antes de seguir (sem ela a faixa não se valida).
 - Código de 4 caracteres colide dentro da sessão: gerar de novo até ser único; fora da sessão pode repetir.
 - Culto termina com check-in aberto: a liderança vê a lista de crianças não retiradas e fecha com motivo.
+  - **Lacuna de precisão (COV-3):** a spec não diz o resultado exato. Comportamento adotado e testado (o mais simples e seguro): culto `finalized` ou `cancelled`, o roster segue listando quem não foi retirado, o check-out por código segue possível e o override do líder, com motivo, fecha; culto `finalized` continua contando a criança no resumo de presença. Em culto `cancelled` o resumo (`GET /kids/attendance/summary`) ignora a instância inteira, inclusive a criança que estava presente: decisão do dono pendente, não asserida em teste.
 - Responsável perde a etiqueta ou esquece o código: líder kids identifica por documento e autoriza por exceção (AC 8).
 - Criança em duas turmas no mesmo culto: permitida só após check-out da anterior.
 - Turma desativada com sessões futuras: sessões abertas permanecem; novas não podem ser criadas.
