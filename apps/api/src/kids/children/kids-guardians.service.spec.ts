@@ -318,6 +318,18 @@ describe('KidsGuardiansService.update', () => {
     expect(client.kidsGuardian.update).not.toHaveBeenCalled();
   });
 
+  it('rebaixar um primário quando há outro primário: permitido, a criança segue com ao menos um', async () => {
+    const { client, service } = ready(row({ id: 'kg-mae', guardian_person_id: 'mae', is_primary: true }));
+    client.kidsGuardian.count.mockResolvedValue(1);
+
+    await service.update(actor, 'kg-mae', { is_primary: false });
+
+    expect(client.kidsGuardian.count).toHaveBeenCalledWith({
+      where: { child_id: 'child1', is_primary: true, id: { not: 'kg-mae' } },
+    });
+    expect(client.kidsGuardian.update).toHaveBeenCalledWith({ where: { id: 'kg-mae' }, data: { is_primary: false } });
+  });
+
   it('o primário não pode perder o direito de retirar (já primário, can_pickup=false): 400', async () => {
     const { client, service } = ready(row({ is_primary: true }));
     await expect(service.update(actor, 'kg-avo', { can_pickup: false })).rejects.toBeInstanceOf(BadRequestException);

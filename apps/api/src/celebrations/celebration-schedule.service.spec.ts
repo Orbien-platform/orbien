@@ -306,6 +306,18 @@ describe('CelebrationScheduleService', () => {
 
         await expect(service.addMinistry('t1', 'g1', 'i1', dto)).rejects.toBeInstanceOf(ConflictException);
       });
+
+      it('outro erro do banco (não P2002) sobe como está, sem virar 409', async () => {
+        const client = ready();
+        const other = new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' });
+        client.celebrationMinistry.create.mockRejectedValue(other);
+        const { service } = serviceWith(client);
+        await expect(service.addMinistry('t1', 'g1', 'i1', dto)).rejects.toBe(other);
+
+        const boom = new Error('conexão caiu');
+        client.celebrationMinistry.create.mockRejectedValue(boom);
+        await expect(service.addMinistry('t1', 'g1', 'i1', dto)).rejects.toBe(boom);
+      });
     });
   });
 

@@ -47,6 +47,23 @@ describe('KidsChildrenController', () => {
   });
 });
 
+describe('metadados de IP/UA ausentes (proxy sem IP, cliente sem user-agent)', () => {
+  const bare = { ip: undefined, get: () => undefined } as unknown as Request;
+
+  it('cadastro de criança grava ip e userAgent nulos, não undefined', async () => {
+    const service = { create: jest.fn().mockResolvedValue({ id: 'c1' }) };
+    const dto = { full_name: 'Ana', birth_date: new Date() };
+    await new KidsChildrenController(service as never).create(dto, USER, bare);
+    expect(service.create).toHaveBeenCalledWith(ACTOR, dto, { ip: null, userAgent: null });
+  });
+
+  it('consentimento do termo grava ip e userAgent nulos, não undefined', async () => {
+    const service = { register: jest.fn().mockResolvedValue({}) };
+    await new KidsConsentController(service as never).register({ term_version: 'v' }, USER, bare);
+    expect(service.register).toHaveBeenCalledWith(ACTOR, { term_version: 'v' }, { ip: null, userAgent: null });
+  });
+});
+
 describe('KidsGuardiansController', () => {
   it('delega add e remove ao service com o ator do JWT', async () => {
     const service = {

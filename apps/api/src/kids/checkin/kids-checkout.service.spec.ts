@@ -404,6 +404,29 @@ describe('KidsCheckinService.checkOut: limite de 5 tentativas (R3-2)', () => {
     expect(await errorOf(svc.checkOut(leader, 'k1', wrong))).toBeInstanceOf(ForbiddenException);
   });
 
+  it('função de contagem sem linha de retorno também não muda a resposta: segue 403', async () => {
+    const { svc, queryRaw } = build();
+    queryRaw.mockResolvedValue([]);
+    expect(await errorOf(svc.checkOut(leader, 'k1', wrong))).toBeInstanceOf(ForbiddenException);
+  });
+
+  it('sem código nem QR no corpo (o DTO barra antes, o service não confia nisso): recusa genérica, nunca fecha', async () => {
+    const { svc, client, queryRaw } = build();
+    const err = await errorOf(svc.checkOut(leader, 'k1', { picked_up_by_person_id: 'mae' }));
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getResponse()).toMatchObject({
+      message: 'Não foi possível confirmar a retirada. Chame o líder kids.',
+    });
+    expect(client.kidsCheckin.updateMany).not.toHaveBeenCalled();
+    expect(queryRaw).toHaveBeenCalledTimes(1); // conta como tentativa errada
+  });
+
+  it('sem identificar quem retira (nem id nem nome), ninguém é autorizado a retirar', async () => {
+    const { svc } = build();
+    const findPicker = (svc as unknown as { findPicker: (childId: string, dto: object) => Promise<unknown> }).findPicker;
+    expect(await findPicker.call(svc, 'c1', { code: 'A2B3' })).toBeNull();
+  });
+
   it('quem não opera a sessão leva 403 sem gastar tentativa do check-in', async () => {
     const { svc, queryRaw } = build();
     await errorOf(svc.checkOut(volunteer, 'k1', wrong));

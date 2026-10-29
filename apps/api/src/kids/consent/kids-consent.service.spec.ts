@@ -141,6 +141,19 @@ describe('KidsConsentService', () => {
       });
       expect(result).toEqual({ revoked: 1 });
     });
+
+    it('sem motivo informado, grava revocation_reason nulo; nada vigente revoga 0', async () => {
+      const client = clientWith();
+      client.consentRecord.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await serviceWith(client).revoke('p1');
+
+      expect(client.consentRecord.updateMany.mock.calls[0][0].data).toEqual({
+        revoked_at: expect.any(Date),
+        revocation_reason: null,
+      });
+      expect(result).toEqual({ revoked: 0 });
+    });
   });
 });
 

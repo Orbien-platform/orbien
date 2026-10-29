@@ -330,6 +330,18 @@ describe('KidsCheckinService.checkIn', () => {
       await expect(svc.checkIn(staff, 's1', body())).rejects.toBeInstanceOf(ConflictException);
     });
 
+    it('erro do banco que não é a unicidade do check-in aberto sobe como está (nem 409 nem 500 genérico)', async () => {
+      const { Prisma } = await import('@prisma/client');
+      const { svc, client } = build();
+      const fk = new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' });
+      client.kidsCheckin.createManyAndReturn.mockRejectedValueOnce(fk);
+      await expect(svc.checkIn(staff, 's1', body())).rejects.toBe(fk);
+
+      const down = new Error('conexão caiu');
+      client.kidsCheckin.createManyAndReturn.mockRejectedValueOnce(down);
+      await expect(svc.checkIn(staff, 's1', body())).rejects.toBe(down);
+    });
+
     it('colisão de código na corrida (insert ignorado e criança não presente): sorteia de novo', async () => {
       const { svc, client } = build();
       client.kidsCheckin.createManyAndReturn.mockResolvedValueOnce([]);

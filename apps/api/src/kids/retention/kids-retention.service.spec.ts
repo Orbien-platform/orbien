@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { KidsRetentionService, KIDS_CHECKIN_RETENTION_MONTHS } from './kids-retention.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -85,6 +86,17 @@ describe('KidsRetentionService.anonymizeExpiredCheckins (KIDS-06, retenção de 
     expect(updateMany).toHaveBeenCalledTimes(201);
     expect(findMany).toHaveBeenCalledTimes(2);
     expect(findMany.mock.calls[1][0].where.id).toEqual({ gt: 'a199' });
+  });
+
+  it('o cron chama o job e registra quantos foram anonimizados e quantos falharam', async () => {
+    const { svc, updateMany } = build([[{ id: 'a1' }, { id: 'a2' }]]);
+    updateMany.mockResolvedValueOnce({ count: 1 }).mockRejectedValueOnce(new Error('lock'));
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+
+    await svc.cronAnonymizeExpiredCheckins();
+
+    expect(log).toHaveBeenCalledWith('Retenção de check-in kids: 1 anonimizado(s), 1 falha(s)');
+    log.mockRestore();
   });
 
   it('o cron chama o job e não propaga erro de consulta (próxima rodada tenta de novo)', async () => {

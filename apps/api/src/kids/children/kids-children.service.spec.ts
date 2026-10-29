@@ -143,6 +143,50 @@ describe('KidsChildrenService.create', () => {
     expect(client.person.create.mock.calls[0][0].data.household_id).toBe('h-new');
   });
 
+  it('responsável sem Person vinculada (404/403 do acesso): propaga e nada é criado', async () => {
+    const { client, access, service } = setup();
+    access.requireOwnPersonId.mockRejectedValue(new ForbiddenException('Conta sem cadastro de pessoa vinculado'));
+
+    await expect(service.create(resp, dto())).rejects.toBeInstanceOf(ForbiddenException);
+    // Gestão sem guardian_person_id informado também não escapa: não há quem seja o responsável.
+    await expect(service.create(sec, dto())).rejects.toBeInstanceOf(ForbiddenException);
+    expect(client.person.create).not.toHaveBeenCalled();
+  });
+
+  it('a gestão sem Person na conta cadastra no lugar do responsável informado', async () => {
+    const { client, access, service } = setup();
+    access.requireOwnPersonId.mockRejectedValue(new ForbiddenException('Conta sem cadastro de pessoa vinculado'));
+    client.person.findFirst.mockResolvedValue({ id: 'p-outro', household_id: 'h9', full_name: 'João Lima' });
+
+    await service.create(sec, dto({ guardian_person_id: 'p-outro' }));
+
+    expect(client.kidsGuardian.create.mock.calls[0][0].data.guardian_person_id).toBe('p-outro');
+  });
+
+  it('responsável sem household_id mas com participação em um Household: reaproveita, não cria outro', async () => {
+    const { client, service } = setup();
+    client.person.findFirst.mockResolvedValue({ id: 'p-resp', household_id: null, full_name: 'Maria Souza' });
+    client.householdMember.findFirst.mockResolvedValue({ household_id: 'h-existente' });
+
+    await service.create(resp, dto());
+
+    expect(client.household.create).not.toHaveBeenCalled();
+    expect(client.person.create.mock.calls[0][0].data.household_id).toBe('h-existente');
+  });
+
+  it('responsável com nome de uma palavra só: o Household leva o próprio nome', async () => {
+    const { client, service } = setup();
+    client.person.findFirst.mockResolvedValue({ id: 'p-resp', household_id: null, full_name: ' Maria ' });
+    client.householdMember.findFirst.mockResolvedValue(null);
+    client.household.create.mockResolvedValue({ id: 'h-new' });
+
+    await service.create(resp, dto());
+
+    expect(client.household.create).toHaveBeenCalledWith({
+      data: { tenant_id: 't1', congregation_id: 'g1', name: 'Família Maria' },
+    });
+  });
+
   it('sem consentimento vigente: 422 e nada é criado (AC 2)', async () => {
     const { client, consent, service } = setup();
     consent.assertValidConsent.mockRejectedValue(new UnprocessableEntityException({ code: 'kids_consent_required' }));
@@ -242,6 +286,28 @@ describe('KidsChildrenService.update', () => {
         update: { allergies: 'leite', medical_notes: null },
       }),
     );
+  });
+
+  it('só o nome: grava na Person e não cria linha de saúde', async () => {
+    const { client, access, service } = setup();
+    access.assertCanAccess.mockResolvedValue(child);
+    client.person.update.mockResolvedValue({ ...child, full_name: 'Ana S.' });
+
+    await service.update(resp, 'child1', { full_name: 'Ana S.' });
+
+    expect(client.person.update).toHaveBeenCalledWith({ where: { id: 'child1' }, data: { full_name: 'Ana S.' } });
+    expect(client.kidsChildHealth.upsert).not.toHaveBeenCalled();
+  });
+
+  it('só o nascimento: grava a data na Person', async () => {
+    const { client, access, service } = setup();
+    access.assertCanAccess.mockResolvedValue(child);
+    client.person.update.mockResolvedValue(child);
+    const birth = past(5);
+
+    await service.update(resp, 'child1', { birth_date: birth });
+
+    expect(client.person.update).toHaveBeenCalledWith({ where: { id: 'child1' }, data: { birth_date: birth } });
   });
 
   it('só saúde: não mexe na Person', async () => {

@@ -30,6 +30,7 @@ describe('CheckoutKidsCheckinDto', () => {
     ['código gigante', { code: 'A'.repeat(17) }],
     ['id que não é UUID', { code: 'A2B3', picked_up_by_person_id: 'x' }],
     ['nome vazio', { code: 'A2B3', picked_up_by_name: '   ' }],
+    ['nome que não é texto', { code: 'A2B3', picked_up_by_name: 42 }],
     ['campo desconhecido (quem fecha vem do token)', { code: 'A2B3', checked_out_by: 'u' }],
   ])('400 com %s', async (_l, body) => {
     expect((await run(CheckoutKidsCheckinDto, body)).length).toBeGreaterThan(0);
@@ -47,6 +48,8 @@ describe('CheckoutOverrideKidsCheckinDto', () => {
     ['motivo curto demais', { reason: 'ok', picked_up_by_name: 'Maria' }],
     ['sem nome de quem retira', { reason: 'Perdeu a etiqueta' }],
     ['nome em branco', { reason: 'Perdeu a etiqueta', picked_up_by_name: '  ' }],
+    ['motivo que não é texto', { reason: 12345678, picked_up_by_name: 'Maria' }],
+    ['nome que não é texto', { reason: 'Perdeu a etiqueta', picked_up_by_name: 42 }],
   ])('400 %s', async (_l, body) => {
     expect((await run(CheckoutOverrideKidsCheckinDto, body)).length).toBeGreaterThan(0);
   });

@@ -26,8 +26,8 @@ let scope: { tenant_id: string; congregation_id: string };
 let leader: string;
 let leaderAccountId: string;
 let child: string;
-let people: string[] = [];
-let rows: string[] = []; // KidsGuardian.id de A, B, C
+const people: string[] = [];
+const rows: string[] = []; // KidsGuardian.id de A, B, C
 
 const http = () => request(h.app.getHttpServer());
 const patch = (rowId: string, body: Record<string, unknown>) =>

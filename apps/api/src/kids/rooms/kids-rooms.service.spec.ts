@@ -157,6 +157,16 @@ describe('KidsRoomsService', () => {
       });
     });
 
+    it('min_volunteers: grava o mínimo informado e 0 também vale (sem voluntários exigidos)', async () => {
+      const client = clientWith();
+      client.kidsRoom.findFirst.mockResolvedValue(existing);
+      client.kidsRoom.update.mockResolvedValue({ id: 'r1' });
+      await serviceWith(client).update('t1', 'g1', 'r1', { min_volunteers: 3 });
+      expect(client.kidsRoom.update.mock.calls[0][0].data).toEqual({ min_volunteers: 3 });
+      await serviceWith(client).update('t1', 'g1', 'r1', { min_volunteers: 0 });
+      expect(client.kidsRoom.update.mock.calls[1][0].data).toEqual({ min_volunteers: 0 });
+    });
+
     it('capacity null remove o limite; is_active reativa', async () => {
       const client = clientWith();
       client.kidsRoom.findFirst.mockResolvedValue(existing);
