@@ -192,7 +192,7 @@ describe("cliente: cada função fala a rota e o corpo que a API espera", () => 
     expect(post).toHaveBeenLastCalledWith("/kids/consent/revoke", { guardian_person_id: "p1" });
   });
 
-  it("check-in, roster, etiquetas e check-out", async () => {
+  it("check-in, roster e check-out", async () => {
     await kids.checkIn("s1", { child_id: "k1", guardian_person_id: "p1", confirm_out_of_range: true });
     expect(post).toHaveBeenLastCalledWith("/kids/sessions/s1/checkins", {
       child_id: "k1",
@@ -201,8 +201,6 @@ describe("cliente: cada função fala a rota e o corpo que a API espera", () => 
     });
     await kids.getRoster("s1");
     expect(get).toHaveBeenLastCalledWith("/kids/sessions/s1/roster");
-    await kids.getLabels("c1");
-    expect(get).toHaveBeenLastCalledWith("/kids/checkins/c1/labels");
     await kids.checkOut("c1", { code: "A2B3", picked_up_by_person_id: "p1" });
     expect(post).toHaveBeenLastCalledWith("/kids/checkins/c1/checkout", {
       code: "A2B3",

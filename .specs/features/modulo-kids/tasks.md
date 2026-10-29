@@ -136,7 +136,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **WEB-2** Cadastro de criança (T27) busca o responsável em `GET /kids/guardians/search?q=` (nome/telefone mascarado; vale para `ministry_leader`) e perde a mensagem "Seu papel não busca pessoas". *Depends:* R3-4 · *Tests:* componente (resultado, vazio, erro, 403) · *Reqs:* KIDS-04,05
 - [x] **WEB-3** `CelebrationDetailSheet` passa `checkin_total` da instância como `suggestedChildren` ao `AttendanceFormModal`. *Depends:* R3-5 · *Tests:* componente · *Reqs:* KIDS-11
 - [x] **WEB-4** Causa raiz do teste intermitente `CostCentersModal.test.tsx` ("dismisses the delete confirmation on escape"), corrigida sem skip nem asserção enfraquecida; prova com 30+ execuções em loop e em paralelo com a suíte. *Depends:* — · *Tests:* o próprio arquivo · *Reqs:* —
-- [ ] **WEB-5** Remove `getLabels` (e seu teste) de `lib/kids.ts` se continuar sem uso: a reimpressão agora só vale a quem fez o check-in e a tela imprime com os `labels` do POST. *Depends:* FIX1 · *Tests:* grep + suíte · *Reqs:* KIDS-09
+- [x] **WEB-5** Remove `getLabels` (e seu teste) de `lib/kids.ts` se continuar sem uso: a reimpressão agora só vale a quem fez o check-in e a tela imprime com os `labels` do POST. *Depends:* FIX1 · *Tests:* grep + suíte · *Reqs:* KIDS-09
 
 ### MOB — Mobile da Rodada 3
 

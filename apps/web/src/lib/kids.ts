@@ -428,11 +428,6 @@ export async function getRoster(sessionId: string): Promise<KidsRoster> {
   return data;
 }
 
-export async function getLabels(checkinId: string): Promise<KidsLabels> {
-  const { data } = await api.get<KidsLabels>(`/kids/checkins/${checkinId}/labels`);
-  return data;
-}
-
 export async function checkOut(
   checkinId: string,
   body: ({ code: string } | { qr: string }) & { picked_up_by_person_id: string },
