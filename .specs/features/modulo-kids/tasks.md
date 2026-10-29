@@ -154,6 +154,11 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **COV-5** Troca de escala (celebration-swap) de sessão kids: quem aceita ganha roster/check-in da sessão, quem trocou perde. *Depends:* T21 · *Tests:* integração ponta a ponta (fluxo real de swap) · *Reqs:* KIDS-10 (AC 1 de Escala)
 - [x] **COV-6** Cobertura global: `npm run test:cov -w orbien-backend` sem baixar o piso (100%); testes para o que o Kids deixar descoberto. *Depends:* COV-1..5 · *Tests:* unit + integração · *Reqs:* —
 
+### FIX — Correções de revisão
+
+- [x] **FIX3** `data` dos push `kids_child_received`/`kids_child_released` passa a levar `child_id` (`{ type, checkin_id, session_id, child_id }`); `kids_checkout_locked` conferido (`{ type, session_id, checkin_id }`); contrato em design.md. *Depends:* R3-3,MOB-4 · *Tests:* unit + integração com `toEqual` no `data` (mutação: tirar `child_id` quebra) · *Reqs:* KIDS-09
+- [ ] **FIX4** Causa raiz do flaky "contador atômico: 8 erros simultâneos" (`kids-checkout-lock.spec.ts`): com o contador em 5 a tentativa seguinte é recusada como `locked` sem contar (design R3-2), então quantas das 8 contam depende da carga — o teste cravava o agendamento. Teste passa a afirmar a correção (sem atualização perdida, contadas + `locked` = 8, ≥ 5, exatamente UMA `kids.checkout_locked`) e ganha o caso de exatamente 5 simultâneas (soma 5, determinístico); código de produção correto, intocado. *Depends:* R3-2 · *Tests:* o próprio arquivo, 16 execuções isoladas + 8 em paralelo com outras suítes kids, 0 falhas (mutação: contagem perdida quebra) · *Reqs:* KIDS-09
+
 ---
 
 ## Validation Tables

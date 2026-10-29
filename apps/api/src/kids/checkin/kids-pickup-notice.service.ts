@@ -109,7 +109,7 @@ export class KidsPickupNoticeService {
               { field: 'tag', key: 'person_id', relation: '=', value: personId },
               { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
             ],
-            data: { type: msg.type, checkin_id: info.checkinId, session_id: info.sessionId },
+            data: { type: msg.type, checkin_id: info.checkinId, session_id: info.sessionId, child_id: info.childId },
           });
         } catch (err) {
           this.logger.error(`falha ao avisar (${msg.type}) o check-in ${info.checkinId}: ${String(err)}`);

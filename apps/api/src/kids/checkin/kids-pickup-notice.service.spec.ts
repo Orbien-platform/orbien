@@ -51,7 +51,7 @@ describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', 
         { field: 'tag', key: 'person_id', relation: '=', value: 'mae' },
         { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
       ],
-      data: { type: 'kids_child_released', checkin_id: 'k1', session_id: 's1' },
+      data: { type: 'kids_child_released', checkin_id: 'k1', session_id: 's1', child_id: 'c1' },
     });
   });
 
@@ -162,8 +162,10 @@ describe('KidsPickupNoticeService.notifyChildReceived — "Criança recebida na 
         { field: 'tag', key: 'person_id', relation: '=', value: 'mae' },
         { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
       ],
-      data: { type: 'kids_child_received', checkin_id: 'k1', session_id: 's1' },
+      data: { type: 'kids_child_received', checkin_id: 'k1', session_id: 's1', child_id: 'c1' },
     });
+    // toMatchObject aceita campo a mais: o contrato do `data` é exato (FIX3).
+    expect(opts.data).toEqual({ type: 'kids_child_received', checkin_id: 'k1', session_id: 's1', child_id: 'c1' });
     expect(opts.body).toContain('Ana');
     expect(`${opts.title} ${opts.body}`).not.toMatch(/Clara|Souza|alerg|médic|saúde/i);
   });

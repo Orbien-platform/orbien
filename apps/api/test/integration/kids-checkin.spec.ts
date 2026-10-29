@@ -812,7 +812,8 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
       { field: 'tag', key: 'person_id', relation: '=', value: mae },
       { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
     ]);
-    expect(opts).toMatchObject({ title: 'Criança entregue', data: { type: 'kids_child_released', checkin_id: p.id } });
+    expect(opts).toMatchObject({ title: 'Criança entregue' });
+    expect(opts.data).toEqual({ type: 'kids_child_released', checkin_id: p.id, session_id: ids.sMat, child_id: p.child }); // FIX3: contrato exato do data
     expect(opts.body).toContain(`Entrega`);
     expect(opts.body).toContain(`Maternal ${tag}`);
     expect(JSON.stringify(opts)).not.toContain(ALERGIA);
@@ -914,7 +915,8 @@ describe('push "Criança recebida na turma X" ao responsável primário (R3-3a)'
       { field: 'tag', key: 'person_id', relation: '=', value: mae },
       { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
     ]);
-    expect(opts).toMatchObject({ title: `Criança recebida na turma Maternal ${tag}`, data: { type: 'kids_child_received', checkin_id: res.body.id } });
+    expect(opts).toMatchObject({ title: `Criança recebida na turma Maternal ${tag}` });
+    expect(opts.data).toEqual({ type: 'kids_child_received', checkin_id: res.body.id, session_id: ids.sMat, child_id: child }); // FIX3
     expect(opts.body).toContain('Chegada');
     expect(JSON.stringify(opts)).not.toContain(ALERGIA);
     expect(JSON.stringify(opts)).not.toContain(NOTA);

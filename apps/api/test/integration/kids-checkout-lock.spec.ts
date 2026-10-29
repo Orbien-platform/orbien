@@ -169,6 +169,7 @@ describe('limite de 5 tentativas de código no check-out (R3-2)', () => {
     expect(types.filter((t) => t === 'kids_checkout_locked')).toHaveLength(1);
     const lockedPush = pushToPersons.mock.calls.find(([opts]) => opts.data.type === 'kids_checkout_locked')![0];
     expect(JSON.stringify(lockedPush)).not.toMatch(/Criança \d/); // sem nome de criança
+    expect(lockedPush.data).toEqual({ type: 'kids_checkout_locked', session_id: sessionId, checkin_id: c.id }); // FIX3: contrato exato
   });
 
   it('o checkout-override do líder continua encerrando um check-in travado', async () => {
