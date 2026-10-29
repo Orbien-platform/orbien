@@ -8,6 +8,7 @@ import type {
   AddKidsGuardianInput,
   CreateKidsChildInput,
   KidsChild,
+  KidsCheckinQr,
   KidsChildFicha,
   KidsCheckinResult,
   KidsConsentStatus,
@@ -90,6 +91,21 @@ export async function getOpenCheckin(childId: string): Promise<KidsOpenCheckin |
     if (err instanceof HttpError && err.status === 404) return null;
     throw err;
   }
+}
+
+/**
+ * QR de check-in do filho, emitido ao responsável: vale 5 minutos e uma única
+ * leitura. A API recusa com 409 se a criança já está presente.
+ */
+export async function issueCheckinQr(childId: string): Promise<KidsCheckinQr> {
+  return authenticatedRequest<KidsCheckinQr>("post", `/kids/children/${childId}/qr`, { body: {} });
+}
+
+/** "4:32" — o que falta do QR, em minutos e segundos; nunca negativo. */
+export function formatCountdown(ms: number): string {
+  const total = Math.max(Math.ceil(ms / 1000), 0);
+  const minutes = Math.floor(total / 60);
+  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
 }
 
 export async function getRoster(sessionId: string): Promise<KidsRoster> {

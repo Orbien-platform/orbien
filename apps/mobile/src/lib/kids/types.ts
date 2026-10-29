@@ -126,3 +126,13 @@ export interface KidsCheckoutResult {
   checked_out_at: string;
   picked_up_by_name: string;
 }
+
+/** `POST /kids/children/:id/qr` — QR de check-in do responsável (5 min, uso único). */
+export interface KidsCheckinQr {
+  qr: string;
+  child_id: string;
+  guardian_person_id: string;
+  /** ISO. */
+  expires_at: string;
+  ttl_seconds: number;
+}

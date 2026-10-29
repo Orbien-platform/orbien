@@ -25,7 +25,7 @@ import {
   updateGuardian,
 } from "../../../lib/kids/kids-client";
 import type { KidsChildFicha, KidsGuardian, KidsOpenCheckin } from "../../../lib/kids/types";
-import { CircleAlert, Plus, Trash, WifiOff } from "../../../lib/theme/icons";
+import { CircleAlert, Plus, QrCode, Trash, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
 import { spacing, touchTarget, typography } from "../../../lib/theme/tokens";
 
@@ -185,12 +185,22 @@ export default function CriancaScreen() {
         />
       ) : null}
       {showCheckin ? (
-        <AppButton
-          testID="crianca-checkin"
-          title="Fazer check-in"
-          onPress={() => router.push({ pathname: "/kids/checkin/[childId]", params: { childId: id } })}
-          style={styles.footer}
-        />
+        <>
+          <AppButton
+            testID="crianca-checkin"
+            title="Fazer check-in"
+            onPress={() => router.push({ pathname: "/kids/checkin/[childId]", params: { childId: id } })}
+            style={styles.footer}
+          />
+          <AppButton
+            testID="crianca-qr"
+            title="Mostrar QR para o check-in"
+            variant="secondary"
+            icon={QrCode}
+            onPress={() => router.push({ pathname: "/kids/qr/[childId]", params: { childId: id } })}
+            style={styles.footer}
+          />
+        </>
       ) : null}
     </Screen>
   );

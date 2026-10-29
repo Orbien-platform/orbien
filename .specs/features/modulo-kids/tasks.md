@@ -130,6 +130,21 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **R3-5** `checkin_total` por instância em `GET /celebrations/instances` (uma agregação, sem N+1) e conferência de que `ministry_leader` lê a contagem (papéis de READ já o incluíam; nada corrigido). *Depends:* T22 · *Tests:* unit + integração · *Reqs:* KIDS-11
 - [x] **R3-6** `028_rls_kids.sql` com `ENABLE`/`FORCE ROW LEVEL SECURITY` explícitos por tabela (o laço `DO $$` escondia as quatro tabelas do grep de `scripts/pre-push.sh`, que alertava em falso). *Depends:* T3 · *Tests:* bootstrap + `test:rls` + grep do portão (mutação: tirar o `ENABLE` de uma tabela faz o alerta voltar) · *Reqs:* KIDS-01
 
+### R3-web — Rodada 3, front web (decisões do dono, 2026-10-29)
+
+- [ ] **WEB-1** Leitura de QR no balcão: check-in por QR (`POST /kids/sessions/:id/checkins/by-qr`, leitor de mão como teclado e câmera via `BarcodeDetector` com fallback para o campo de texto; fora da faixa pede a confirmação já existente) e check-out por QR (`{ qr }` como o código digitado, localizando o check-in pelo `checkin_id` do QR); mesma recusa genérica e, após 3 recusas seguidas no mesmo check-in, "Chame o líder kids" com a retirada por exceção em destaque. *Depends:* R3-1,R3-2 · *Tests:* componente + unit (vitest) · *Reqs:* KIDS-08,09
+- [ ] **WEB-2** Cadastro de criança (T27) busca o responsável em `GET /kids/guardians/search?q=` (nome/telefone mascarado; vale para `ministry_leader`) e perde a mensagem "Seu papel não busca pessoas". *Depends:* R3-4 · *Tests:* componente (resultado, vazio, erro, 403) · *Reqs:* KIDS-04,05
+- [ ] **WEB-3** `CelebrationDetailSheet` passa `checkin_total` da instância como `suggestedChildren` ao `AttendanceFormModal`. *Depends:* R3-5 · *Tests:* componente · *Reqs:* KIDS-11
+- [ ] **WEB-4** Causa raiz do teste intermitente `CostCentersModal.test.tsx` ("dismisses the delete confirmation on escape"), corrigida sem skip nem asserção enfraquecida; prova com 30+ execuções em loop e em paralelo com a suíte. *Depends:* — · *Tests:* o próprio arquivo · *Reqs:* —
+- [ ] **WEB-5** Remove `getLabels` (e seu teste) de `lib/kids.ts` se continuar sem uso: a reimpressão agora só vale a quem fez o check-in e a tela imprime com os `labels` do POST. *Depends:* FIX1 · *Tests:* grep + suíte · *Reqs:* KIDS-09
+
+### MOB — Mobile da Rodada 3
+
+- [x] **MOB-1** QR do responsável para check-in: `POST /kids/children/:id/qr`, tela com QR grande, contagem regressiva do TTL, "Gerar novo QR" ao expirar/após uso, atalhos na ficha e no check-in (o manual por turma segue). *Depends:* R3-1 · *Tests:* jest · *Reqs:* KIDS-08
+- [ ] **MOB-2** QR no check-out: `qr` de `GET /kids/children/:id/checkin` na tela do código, junto do código (que segue o elemento principal). *Depends:* MOB-1 · *Tests:* jest · *Reqs:* KIDS-09
+- [ ] **MOB-3** Leitura de QR pela equipe na turma: check-in por QR (`by-qr`, fora da faixa, 403 genérico) e check-out por QR (`kidsco1.`), 3 recusas seguidas sugerem o líder e destacam a exceção, câmera negada leva ao código digitado. *Depends:* MOB-2 · *Tests:* jest · *Reqs:* KIDS-08,09
+- [ ] **MOB-4** Toque nos push `kids_child_received`, `kids_child_released` e `kids_checkout_locked` abre a criança/turma. *Depends:* R3-3 · *Tests:* jest · *Reqs:* KIDS-09
+
 ### COV — Lacunas de cobertura de testes (validation.md, PROD-39)
 
 - [x] **COV-1** Sessão de suporte (`POST /auth/impersonate`, `support_session: true`) nas rotas kids: GET aceito pelo `RolesGuard` com `support_access` em `audit_logs`; roster, ficha/saúde e check-in/out sem dado de criança nem escrita. *Depends:* T19 · *Tests:* integração (mutação: guard, auditoria, papéis) · *Reqs:* KIDS-08,09 (L2 do validation)

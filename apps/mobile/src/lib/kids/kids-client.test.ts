@@ -15,6 +15,8 @@ import {
   checkOutOverride,
   createChild,
   describeKidsActionError,
+  formatCountdown,
+  issueCheckinQr,
   formatAge,
   getChild,
   getConsentStatus,
@@ -185,5 +187,35 @@ describe("describeKidsActionError", () => {
     expect(describeKidsActionError(new HttpError(422, undefined), "falhou")).toBe("falhou");
     expect(describeKidsActionError(new HttpError(500, { message: "boom" }), "falhou")).toBe("falhou");
     expect(describeKidsActionError(new NetworkError(), "falhou")).toBe("falhou");
+  });
+});
+
+describe("QR de check-in do responsável (MOB-1)", () => {
+  beforeEach(() => mockRequest.mockReset());
+
+  it("emite o QR pelo filho com POST /kids/children/:id/qr", async () => {
+    const issued = {
+      qr: "kidsci1.t.s",
+      child_id: "c1",
+      guardian_person_id: "p1",
+      expires_at: "2026-10-29T12:05:00.000Z",
+      ttl_seconds: 300,
+    };
+    mockRequest.mockResolvedValue(issued);
+    await expect(issueCheckinQr("c1")).resolves.toEqual(issued);
+    expect(mockRequest).toHaveBeenCalledWith("post", "/kids/children/c1/qr", { body: {} });
+  });
+
+  it("deixa o 409 (criança já presente) chegar à tela", async () => {
+    mockRequest.mockRejectedValue(new HttpError(409, { message: "A criança já está presente" }));
+    await expect(issueCheckinQr("c1")).rejects.toBeInstanceOf(HttpError);
+  });
+
+  it("escreve o que falta como minutos:segundos, arredondando para cima e sem negativo", () => {
+    expect(formatCountdown(300_000)).toBe("5:00");
+    expect(formatCountdown(272_400)).toBe("4:33");
+    expect(formatCountdown(9_000)).toBe("0:09");
+    expect(formatCountdown(0)).toBe("0:00");
+    expect(formatCountdown(-5_000)).toBe("0:00");
   });
 });

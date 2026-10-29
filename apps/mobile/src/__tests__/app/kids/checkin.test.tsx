@@ -4,8 +4,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ replace: mockReplace }),
+  useRouter: () => ({ replace: mockReplace, push: mockPush }),
   useLocalSearchParams: () => ({ childId: "c1" }),
 }));
 
@@ -87,6 +88,14 @@ describe("CheckinScreen", () => {
     await press("checkin-fazer");
     expect(mockCheckIn).toHaveBeenCalledWith("s-m", { child_id: "c1", guardian_person_id: "p1" });
     expect(mockReplace).toHaveBeenCalledWith({ pathname: "/kids/codigo/[id]", params: { id: "c1", feito: "1" } });
+  });
+
+  it("oferece 'Mostrar QR para o check-in' sem tirar o check-in manual por turma", async () => {
+    await renderScreen();
+    expect(screen.getByTestId("checkin-fazer")).toBeTruthy();
+    expect(screen.getByTestId("checkin-turma-s-m")).toBeTruthy();
+    await press("checkin-qr");
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/kids/qr/[childId]", params: { childId: "c1" } });
   });
 
   it("lista as sessões abertas do dia com culto, horário e faixa, sem instanceId na rota", async () => {

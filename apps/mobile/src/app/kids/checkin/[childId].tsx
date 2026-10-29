@@ -30,7 +30,7 @@ import {
 } from "../../../lib/kids/kids-client";
 import type { KidsChildFicha, KidsGuardian, KidsOpenSession } from "../../../lib/kids/types";
 import { getMyPersonId } from "../../../lib/privacidade/privacidade-client";
-import { Baby, CircleAlert, CircleCheck, WifiOff } from "../../../lib/theme/icons";
+import { Baby, CircleAlert, CircleCheck, QrCode, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, radius, spacing, touchTarget, typography } from "../../../lib/theme/tokens";
 
@@ -252,6 +252,15 @@ export default function CheckinScreen() {
         disabled={!sessionId || !guardianId || needsConfirm}
         loading={submitting && !needsConfirm}
         onPress={() => submit(sessionId!, guardianId!, false)}
+        style={styles.footer}
+      />
+      <AppButton
+        testID="checkin-qr"
+        title="Mostrar QR para o check-in"
+        variant="secondary"
+        icon={QrCode}
+        disabled={submitting}
+        onPress={() => router.push({ pathname: "/kids/qr/[childId]", params: { childId } })}
         style={styles.footer}
       />
     </Screen>

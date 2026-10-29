@@ -178,6 +178,20 @@ describe("CriancaScreen", () => {
       expect(mockPush).toHaveBeenCalledWith({ pathname: "/kids/checkin/[childId]", params: { childId: "c1" } });
     });
 
+    it("com sessão aberta hoje, oferece 'Mostrar QR para o check-in' ao lado do manual", async () => {
+      mockListOpen.mockResolvedValue(TODAY);
+      await renderScreen();
+      expect(screen.getByTestId("crianca-checkin")).toBeTruthy();
+      await press("crianca-qr");
+      expect(mockPush).toHaveBeenCalledWith({ pathname: "/kids/qr/[childId]", params: { childId: "c1" } });
+    });
+
+    it("sem sessão aberta ou com a criança já presente, não oferece o QR", async () => {
+      mockListOpen.mockResolvedValue([]);
+      await renderScreen();
+      expect(screen.queryByTestId("crianca-qr")).toBeNull();
+    });
+
     it("com check-in aberto, não oferece novo check-in mesmo havendo sessão", async () => {
       mockGetOpen.mockResolvedValue(OPEN);
       mockListOpen.mockResolvedValue(TODAY);

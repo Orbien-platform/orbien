@@ -151,6 +151,7 @@ function ThemedShell() {
           <Stack.Screen name="kids/crianca/[id]/autorizado" options={{ title: "Adicionar autorizado" }} />
           <Stack.Screen name="kids/codigo/[id]" options={{ title: "Código de retirada" }} />
           <Stack.Screen name="kids/checkin/[childId]" options={{ title: "Check-in" }} />
+          <Stack.Screen name="kids/qr/[childId]" options={{ title: "QR para o check-in" }} />
           <Stack.Screen name="kids/sessao/[id]" options={{ title: "Turma" }} />
           {/* PROD-31: Contribuir (chave PIX) não depende da trava de
               pagamentos — vale para todo plano. */}
