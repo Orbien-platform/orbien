@@ -12,7 +12,7 @@ import { apiErrorMessage } from "@/lib/api-error";
 import {
   createChild,
   getConsent,
-  searchPersons,
+  searchGuardians,
   updateChild,
   type KidsConsentStatus,
   type KidsFicha,
@@ -66,13 +66,13 @@ export function ChildFormModal({ open, onOpenChange, child, onSaved }: ChildForm
       setCandidates(null);
       return;
     }
-    searchPersons(term)
+    searchGuardians(term)
       .then(setCandidates)
       .catch((err) => {
         setCandidates([]);
         setSearchError(
           isForbidden(err)
-            ? "Seu papel não busca pessoas. Peça à secretaria para cadastrar a criança."
+            ? "Você não tem permissão para buscar responsáveis."
             : apiErrorMessage(err, "Não foi possível buscar pessoas."),
         );
       });
@@ -215,6 +215,12 @@ export function ChildFormModal({ open, onOpenChange, child, onSaved }: ChildForm
                           className="w-full rounded-[8px] px-2 py-1.5 text-left text-sm text-ink hover:bg-[var(--surface-subtle)] dark:text-white"
                         >
                           {p.full_name}
+                          {p.phone_masked ? (
+                            <>
+                              {" "}
+                              <span className="ml-1 text-xs text-stone">{p.phone_masked}</span>
+                            </>
+                          ) : null}
                         </button>
                       </li>
                     ))}

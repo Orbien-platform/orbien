@@ -339,15 +339,18 @@ export async function updateChild(id: string, patch: KidsChildPatch): Promise<Ki
 export interface PersonOption {
   id: string;
   full_name: string;
-  phone?: string | null;
+  /** Telefone sem os 4 últimos dígitos: reconhece o adulto sem virar catálogo de contatos. */
+  phone_masked: string | null;
 }
 
-/** Adultos já cadastrados, para escolher o responsável de uma criança nova. */
-export async function searchPersons(search: string): Promise<PersonOption[]> {
-  const { data } = await api.get<{ data: PersonOption[] }>("/persons", {
-    params: { search: search.trim(), limit: 8 },
-  });
-  return Array.isArray(data?.data) ? data.data : [];
+/**
+ * Adultos da congregação, para escolher o responsável de uma criança nova. É a
+ * rota do Kids (papéis de gestão kids, o líder inclusive), não `GET /persons`,
+ * que o `ministry_leader` não lê. Nome ou telefone, de 2 a 100 caracteres.
+ */
+export async function searchGuardians(search: string): Promise<PersonOption[]> {
+  const { data } = await api.get<PersonOption[]>("/kids/guardians/search", { params: { q: search.trim() } });
+  return Array.isArray(data) ? data : [];
 }
 
 export async function addGuardian(childId: string, input: KidsGuardianInput): Promise<void> {

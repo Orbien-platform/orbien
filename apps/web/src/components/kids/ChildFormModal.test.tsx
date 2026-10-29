@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createChild, getConsent, searchPersons, updateChild, type KidsFicha } from "@/lib/kids";
+import { createChild, getConsent, searchGuardians, updateChild, type KidsFicha } from "@/lib/kids";
 import { ChildFormModal } from "./ChildFormModal";
 
 vi.mock("@/lib/api", () => ({
@@ -13,7 +13,7 @@ vi.mock("@/lib/kids", async (orig) => ({
   createChild: vi.fn(),
   updateChild: vi.fn(),
   getConsent: vi.fn(),
-  searchPersons: vi.fn(),
+  searchGuardians: vi.fn(),
 }));
 
 const TERM = "Autorizo a igreja a tratar os dados do meu filho.";
@@ -39,8 +39,8 @@ async function pickGuardian(user: ReturnType<typeof userEvent.setup>) {
 
 describe("ChildFormModal — cadastro pela secretaria", () => {
   beforeEach(() => {
-    for (const fn of [createChild, updateChild, getConsent, searchPersons]) vi.mocked(fn).mockReset();
-    vi.mocked(searchPersons).mockResolvedValue([{ id: "p1", full_name: "Maria Souza" }]);
+    for (const fn of [createChild, updateChild, getConsent, searchGuardians]) vi.mocked(fn).mockReset();
+    vi.mocked(searchGuardians).mockResolvedValue([{ id: "p1", full_name: "Maria Souza", phone_masked: null }]);
   });
 
   it("sem consentimento vigente exige o aceite do termo e manda register_consent", async () => {
@@ -109,7 +109,7 @@ describe("ChildFormModal — cadastro pela secretaria", () => {
   it("busca sem resultado explica que o responsável precisa estar em Pessoas", async () => {
     const user = userEvent.setup();
     setupCreate();
-    vi.mocked(searchPersons).mockResolvedValue([]);
+    vi.mocked(searchGuardians).mockResolvedValue([]);
     await user.type(screen.getByPlaceholderText("Buscar o responsável pelo nome"), "zzz");
     expect(await screen.findByText(/Ninguém encontrado/)).toBeInTheDocument();
   });
@@ -125,18 +125,42 @@ describe("ChildFormModal — cadastro pela secretaria", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Maria Souza" })).not.toBeInTheDocument());
   });
 
-  it("papel sem acesso a Pessoas recebe a explicação, não uma lista vazia", async () => {
+  it("a busca usa a rota do Kids (que o líder kids pode ler) e mostra o telefone mascarado para distinguir homônimos", async () => {
     const user = userEvent.setup();
     setupCreate();
-    vi.mocked(searchPersons).mockRejectedValue(httpError(403));
+    vi.mocked(searchGuardians).mockResolvedValue([
+      { id: "p1", full_name: "Maria Souza", phone_masked: "(11) *****-4321" },
+      { id: "p3", full_name: "Maria Souza", phone_masked: null },
+    ]);
     await user.type(screen.getByPlaceholderText("Buscar o responsável pelo nome"), "mar");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Seu papel não busca pessoas");
+    expect(await screen.findByRole("button", { name: "Maria Souza (11) *****-4321" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Maria Souza" })).toBeInTheDocument();
+    expect(searchGuardians).toHaveBeenCalledWith("mar");
+  });
+
+  it("escolher quem veio da busca confere o consentimento dessa pessoa", async () => {
+    const user = userEvent.setup();
+    setupCreate();
+    vi.mocked(getConsent).mockResolvedValue({ valid: true, term_version: "v1", term_text: TERM });
+    await pickGuardian(user);
+    expect(getConsent).toHaveBeenCalledWith("p1");
+    expect(await screen.findByText("Consentimento do responsável vigente.")).toBeInTheDocument();
+  });
+
+  it("403 na busca diz que falta permissão, sem o texto antigo de ‘papel não busca pessoas’", async () => {
+    const user = userEvent.setup();
+    setupCreate();
+    vi.mocked(searchGuardians).mockRejectedValue(httpError(403));
+    await user.type(screen.getByPlaceholderText("Buscar o responsável pelo nome"), "mar");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Você não tem permissão para buscar responsáveis.");
+    expect(alert).not.toHaveTextContent("Seu papel não busca pessoas");
   });
 
   it("outra falha na busca mostra a mensagem genérica", async () => {
     const user = userEvent.setup();
     setupCreate();
-    vi.mocked(searchPersons).mockRejectedValue(httpError(500));
+    vi.mocked(searchGuardians).mockRejectedValue(httpError(500));
     await user.type(screen.getByPlaceholderText("Buscar o responsável pelo nome"), "mar");
     expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível buscar pessoas.");
   });

@@ -164,11 +164,11 @@ describe("cliente: cada função fala a rota e o corpo que a API espera", () => 
     await kids.updateChild("k1", { allergies: null });
     expect(patch).toHaveBeenLastCalledWith("/kids/children/k1", { allergies: null });
 
-    get.mockResolvedValueOnce({ data: { data: [{ id: "p1", full_name: "Maria" }] } });
-    expect(await kids.searchPersons(" mar ")).toEqual([{ id: "p1", full_name: "Maria" }]);
-    expect(get).toHaveBeenLastCalledWith("/persons", { params: { search: "mar", limit: 8 } });
+    get.mockResolvedValueOnce({ data: [{ id: "p1", full_name: "Maria", phone_masked: "(11) *****-4321" }] });
+    expect(await kids.searchGuardians(" mar ")).toEqual([{ id: "p1", full_name: "Maria", phone_masked: "(11) *****-4321" }]);
+    expect(get).toHaveBeenLastCalledWith("/kids/guardians/search", { params: { q: "mar" } });
     get.mockResolvedValueOnce({ data: undefined });
-    expect(await kids.searchPersons("x")).toEqual([]);
+    expect(await kids.searchGuardians("xx")).toEqual([]);
 
     await kids.addGuardian("k1", { full_name: "Vó", phone: "11", relationship: "avó" });
     expect(post).toHaveBeenLastCalledWith("/kids/children/k1/guardians", {
