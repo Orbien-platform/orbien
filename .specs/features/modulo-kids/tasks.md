@@ -130,6 +130,15 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **R3-5** `checkin_total` por instância em `GET /celebrations/instances` (uma agregação, sem N+1) e conferência de que `ministry_leader` lê a contagem (papéis de READ já o incluíam; nada corrigido). *Depends:* T22 · *Tests:* unit + integração · *Reqs:* KIDS-11
 - [x] **R3-6** `028_rls_kids.sql` com `ENABLE`/`FORCE ROW LEVEL SECURITY` explícitos por tabela (o laço `DO $$` escondia as quatro tabelas do grep de `scripts/pre-push.sh`, que alertava em falso). *Depends:* T3 · *Tests:* bootstrap + `test:rls` + grep do portão (mutação: tirar o `ENABLE` de uma tabela faz o alerta voltar) · *Reqs:* KIDS-01
 
+### COV — Lacunas de cobertura de testes (validation.md, PROD-39)
+
+- [x] **COV-1** Sessão de suporte (`POST /auth/impersonate`, `support_session: true`) nas rotas kids: GET aceito pelo `RolesGuard` com `support_access` em `audit_logs`; roster, ficha/saúde e check-in/out sem dado de criança nem escrita. *Depends:* T19 · *Tests:* integração (mutação: guard, auditoria, papéis) · *Reqs:* KIDS-08,09 (L2 do validation)
+- [ ] **COV-2** `PATCH /kids/guardians/:id` concorrente (duas promoções a primário; promoção × rebaixamento): sempre exatamente 1 primário; prova do `FOR UPDATE` com corrida real no banco. *Depends:* T15 · *Tests:* integração (mutação: remover o lock) · *Reqs:* KIDS-05 (M6b)
+- [ ] **COV-3** Culto encerrado com criança presente: roster mostra, o check-out segue possível e o override com motivo fecha; resumo de presença não a perde. *Depends:* T19 · *Tests:* integração · *Reqs:* KIDS-09 (edge case)
+- [ ] **COV-4** Turma desativada com sessão aberta: sessão aberta segue operável (check-in/roster/check-out) e nova sessão da turma dá 422. *Depends:* T8 · *Tests:* integração · *Reqs:* KIDS-01 (edge case)
+- [ ] **COV-5** Troca de escala (celebration-swap) de sessão kids: quem aceita ganha roster/check-in da sessão, quem trocou perde. *Depends:* T21 · *Tests:* integração ponta a ponta (fluxo real de swap) · *Reqs:* KIDS-10 (AC 1 de Escala)
+- [ ] **COV-6** Cobertura global: `npm run test:cov -w orbien-backend` sem baixar o piso (100%); testes para o que o Kids deixar descoberto. *Depends:* COV-1..5 · *Tests:* unit + integração · *Reqs:* —
+
 ---
 
 ## Validation Tables
