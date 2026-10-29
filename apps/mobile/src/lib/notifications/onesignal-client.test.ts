@@ -149,6 +149,52 @@ describe("onesignal-client", () => {
       expect(handler).toHaveBeenCalledWith("/biblia/marcacao/m1");
     });
 
+    describe("avisos do Kids (MOB-4)", () => {
+      function tap(additionalData: object | undefined) {
+        const handler = jest.fn();
+        onNotificationClick(handler);
+        const listener = mockAddEventListener.mock.calls[0]![1];
+        listener({ notification: { additionalData } });
+        return handler;
+      }
+
+      it("'Criança recebida' abre o código de retirada do filho", () => {
+        expect(tap({ type: "kids_child_received", child_id: "c1", checkin_id: "k1", session_id: "s1" })).toHaveBeenCalledWith(
+          "/kids/codigo/c1",
+        );
+      });
+
+      it("'Criança entregue' abre a ficha do filho (o código já não existe)", () => {
+        expect(tap({ type: "kids_child_released", child_id: "c1", checkin_id: "k1" })).toHaveBeenCalledWith(
+          "/kids/crianca/c1",
+        );
+      });
+
+      it("sem child_id, os dois avisos levam à lista do Kids", () => {
+        expect(tap({ type: "kids_child_received", checkin_id: "k1" })).toHaveBeenCalledWith("/kids");
+        mockAddEventListener.mockClear();
+        expect(tap({ type: "kids_child_released" })).toHaveBeenCalledWith("/kids");
+      });
+
+      it("'Retirada travada', para o líder, abre a turma da sessão", () => {
+        expect(tap({ type: "kids_checkout_locked", session_id: "s1", checkin_id: "k1" })).toHaveBeenCalledWith(
+          "/kids/sessao/s1",
+        );
+      });
+
+      it("'Retirada travada' sem sessão ou tipo do Kids desconhecido só abre o app", () => {
+        expect(tap({ type: "kids_checkout_locked", checkin_id: "k1" })).not.toHaveBeenCalled();
+        mockAddEventListener.mockClear();
+        expect(tap({ type: "kids_algo_novo", child_id: "c1" })).not.toHaveBeenCalled();
+      });
+
+      it("ids vêm de fora: são codificados para não mudar o caminho", () => {
+        expect(tap({ type: "kids_child_released", child_id: "../perfil" })).toHaveBeenCalledWith(
+          "/kids/crianca/..%2Fperfil",
+        );
+      });
+    });
+
     it("não chama o handler quando o evento não aponta para nada", () => {
       const handler = jest.fn();
       onNotificationClick(handler);

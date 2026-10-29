@@ -143,7 +143,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **MOB-1** QR do responsável para check-in: `POST /kids/children/:id/qr`, tela com QR grande, contagem regressiva do TTL, "Gerar novo QR" ao expirar/após uso, atalhos na ficha e no check-in (o manual por turma segue). *Depends:* R3-1 · *Tests:* jest · *Reqs:* KIDS-08
 - [x] **MOB-2** QR no check-out: `qr` de `GET /kids/children/:id/checkin` na tela do código, junto do código (que segue o elemento principal). *Depends:* MOB-1 · *Tests:* jest · *Reqs:* KIDS-09
 - [x] **MOB-3** Leitura de QR pela equipe na turma: check-in por QR (`by-qr`, fora da faixa, 403 genérico) e check-out por QR (`kidsco1.`), 3 recusas seguidas sugerem o líder e destacam a exceção, câmera negada leva ao código digitado. *Depends:* MOB-2 · *Tests:* jest · *Reqs:* KIDS-08,09
-- [ ] **MOB-4** Toque nos push `kids_child_received`, `kids_child_released` e `kids_checkout_locked` abre a criança/turma. *Depends:* R3-3 · *Tests:* jest · *Reqs:* KIDS-09
+- [x] **MOB-4** Toque nos push `kids_child_received`, `kids_child_released` e `kids_checkout_locked` abre a criança/turma. *Depends:* R3-3 · *Tests:* jest · *Reqs:* KIDS-09
 
 ### COV — Lacunas de cobertura de testes (validation.md, PROD-39)
 
