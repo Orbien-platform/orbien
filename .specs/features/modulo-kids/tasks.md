@@ -121,6 +121,10 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **FIX1** (S1 do validation.md) Reimpressão de etiquetas só para quem fez o check-in e com ele aberto; 403 aos demais, gestão e voluntário escalado inclusos. *Depends:* T19 · *Tests:* jest unit + integration · *Reqs:* KIDS-09
 - [x] **FIX2** (M12) Teste de integração assere `classification === 'visitor'` do terceiro autorizado. *Depends:* T10 · *Tests:* jest integration · *Reqs:* KIDS-03
 
+### R3 — Rodada 3 (decisões do dono, 2026-10-29)
+
+- [x] **R3-6** `028_rls_kids.sql` com `ENABLE`/`FORCE ROW LEVEL SECURITY` explícitos por tabela (o laço `DO $$` escondia as quatro tabelas do grep de `scripts/pre-push.sh`, que alertava em falso). *Depends:* T3 · *Tests:* bootstrap + `test:rls` + grep do portão (mutação: tirar o `ENABLE` de uma tabela faz o alerta voltar) · *Reqs:* KIDS-01
+
 ---
 
 ## Validation Tables

@@ -7,28 +7,68 @@
 -- de 001 para derrubar. `USING` e `WITH CHECK` dizem a MESMA coisa em todas.
 -- =============================================================================
 
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['kids_rooms', 'kids_sessions', 'kids_guardians', 'kids_checkins']
-  LOOP
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
-    EXECUTE format('DROP POLICY IF EXISTS tenant_congregation_isolation ON %I', t);
-    EXECUTE format($p$
-      CREATE POLICY tenant_congregation_isolation ON %I
-        AS PERMISSIVE FOR ALL TO app_user
-        USING (
-          tenant_id = app_current_tenant()
-          AND app_congregation_allowed(congregation_id)
-        )
-        WITH CHECK (
-          tenant_id = app_current_tenant()
-          AND app_congregation_allowed(congregation_id)
-        )
-    $p$, t);
-  END LOOP;
-END $$;
+-- ENABLE/FORCE explícitos por tabela (e não num laço): é o que o grep de
+-- scripts/pre-push.sh reconhece como "tabela criada com RLS".
+
+ALTER TABLE kids_rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kids_rooms FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_congregation_isolation ON kids_rooms;
+CREATE POLICY tenant_congregation_isolation ON kids_rooms
+  AS PERMISSIVE FOR ALL TO app_user
+  USING (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  )
+  WITH CHECK (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  );
+
+ALTER TABLE kids_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kids_sessions FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_congregation_isolation ON kids_sessions;
+CREATE POLICY tenant_congregation_isolation ON kids_sessions
+  AS PERMISSIVE FOR ALL TO app_user
+  USING (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  )
+  WITH CHECK (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  );
+
+ALTER TABLE kids_guardians ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kids_guardians FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_congregation_isolation ON kids_guardians;
+CREATE POLICY tenant_congregation_isolation ON kids_guardians
+  AS PERMISSIVE FOR ALL TO app_user
+  USING (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  )
+  WITH CHECK (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  );
+
+ALTER TABLE kids_checkins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kids_checkins FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_congregation_isolation ON kids_checkins;
+CREATE POLICY tenant_congregation_isolation ON kids_checkins
+  AS PERMISSIVE FOR ALL TO app_user
+  USING (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  )
+  WITH CHECK (
+    tenant_id = app_current_tenant()
+    AND app_congregation_allowed(congregation_id)
+  );
 
 DO $$
 DECLARE n INT;
