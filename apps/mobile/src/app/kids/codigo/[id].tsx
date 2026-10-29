@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../../../components/Alert";
 import { AppButton } from "../../../components/AppButton";
+import { QrCode } from "../../../components/QrCode";
 import { Screen } from "../../../components/Screen";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { PickupCode } from "../../../components/kids/PickupCode";
@@ -18,6 +19,8 @@ import { formatTime } from "../../../lib/format/date";
 import { Baby, CircleAlert, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
 import { spacing, typography } from "../../../lib/theme/tokens";
+
+const QR_SIZE = 176;
 
 export default function CodigoScreen() {
   const { colors } = useTheme();
@@ -68,6 +71,19 @@ export default function CodigoScreen() {
     <Screen>
       {feito ? <Alert tone="success" messageTestID="codigo-feito" message="Check-in feito" /> : null}
       <PickupCode testID="codigo-valor" code={checkin.code} />
+      {/* O QR é o mesmo código em outro formato: o código segue como elemento
+          principal e funciona digitado. A placa do QR é branca nos dois modos. */}
+      <View style={styles.qr}>
+        <QrCode
+          testID="codigo-qr"
+          value={checkin.qr}
+          size={QR_SIZE}
+          accessibilityLabel="QR de retirada, o mesmo código para a equipe ler"
+        />
+        <Text style={[typography.bodyMedium, styles.qrHint, { color: colors.textSecondary }]}>
+          Ou mostre este QR ao líder: vale o mesmo que o código.
+        </Text>
+      </View>
       <View style={styles.meta}>
         <Text style={[typography.h3, { color: colors.textPrimary }]}>Turma {checkin.room.name}</Text>
         <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
@@ -83,6 +99,8 @@ export default function CodigoScreen() {
 }
 
 const styles = StyleSheet.create({
+  qr: { marginTop: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.lg },
+  qrHint: { flex: 1 },
   meta: { marginTop: spacing.xl, gap: spacing.xs },
   hint: { marginTop: spacing.md },
 });

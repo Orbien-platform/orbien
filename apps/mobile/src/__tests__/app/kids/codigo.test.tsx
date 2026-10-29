@@ -20,6 +20,7 @@ const OPEN = {
   room: { id: "r1", name: "Maternal" },
   checked_in_at: "2026-10-26T13:05:00.000Z",
   code: "7KQ2",
+  qr: "kidsco1.k1.7KQ2.abcdef",
 };
 
 async function renderScreen() {
@@ -41,6 +42,20 @@ describe("CodigoScreen", () => {
     expect(screen.getByTestId("codigo-valor").props.children).toBe("7KQ2");
     expect(screen.getByText("Turma Maternal")).toBeTruthy();
     expect(screen.queryByTestId("codigo-feito")).toBeNull();
+  });
+
+  it("mostra o QR de retirada junto do código, que continua o elemento principal", async () => {
+    mockGetOpen.mockResolvedValue(OPEN);
+    await renderScreen();
+    expect(screen.getByTestId("codigo-valor").props.children).toBe("7KQ2");
+    expect(screen.getByTestId("codigo-qr")).toBeTruthy();
+    expect(screen.getByText(/vale o mesmo que o código/)).toBeTruthy();
+  });
+
+  it("sem check-in aberto não há QR", async () => {
+    mockGetOpen.mockResolvedValue(null);
+    await renderScreen();
+    expect(screen.queryByTestId("codigo-qr")).toBeNull();
   });
 
   it("logo após o check-in, confirma com 'Check-in feito'", async () => {

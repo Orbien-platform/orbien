@@ -102,6 +102,8 @@ export interface KidsOpenCheckin {
   room: { id: string; name: string };
   checked_in_at: string;
   code: string;
+  /** `kidsco1.<checkin_id>.<code>.<hmac>` — o mesmo código, para a equipe ler. */
+  qr: string;
 }
 
 export interface KidsRosterItem {
