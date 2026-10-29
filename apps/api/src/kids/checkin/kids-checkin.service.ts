@@ -137,6 +137,7 @@ export class KidsCheckinService {
     const ageOverride = this.checkAgeRange(session.room, ageInMonths(child.birth_date), dto.confirm_out_of_range === true);
 
     const created = await this.insert(actor, session, child.id, dto.guardian_person_id, ageOverride);
+    await this.notifyReceived(actor, created, session.room.name);
 
     // Capacidade só avisa (AC 4): conta já com a criança recém-chegada.
     const present = await this.prisma.client.kidsCheckin.count({ where: { session_id: sessionId, checked_out_at: null } });
@@ -344,7 +345,27 @@ export class KidsCheckinService {
     };
   }
 
-  // Aviso "Criança entregue" ao responsável primário: best-effort, o check-out
+  // Aviso "Criança recebida na turma X" ao primário quando o check-in foi feito
+  // por OUTRA pessoa (R3-3): best-effort, o check-in já está gravado.
+  private async notifyReceived(
+    actor: KidsActor,
+    checkin: { id: string; session_id: string; child_id: string },
+    roomName: string,
+  ) {
+    try {
+      await this.pickupNotice.notifyChildReceived(actor.tenantId, actor.congregationId, {
+        checkinId: checkin.id,
+        sessionId: checkin.session_id,
+        childId: checkin.child_id,
+        roomName,
+        actorPersonId: await this.access.ownPersonId(actor.userId),
+      });
+    } catch (err) {
+      this.logger.error(`falha ao avisar a chegada do check-in ${checkin.id}: ${String(err)}`);
+    }
+  }
+
+  // Aviso "Criança entregue" aos responsáveis: best-effort, o check-out
   // já está fechado e nada daqui o desfaz.
   private async notifyReleased(
     actor: KidsActor,

@@ -73,9 +73,11 @@ function build(opts: { session?: object | null; birth?: Date | null; guardians?:
     isManager: jest.fn((roles: string[]) => roles.includes('ministry_leader')),
     assertCanAccess: jest.fn().mockResolvedValue({ id: 'c1', full_name: 'Ana', birth_date: opts.birth === undefined ? monthsAgo(36) : opts.birth }),
     requireOwnPersonId: jest.fn().mockResolvedValue('mae'),
+    ownPersonId: jest.fn(async (userId: string) => (userId === 'parent1' ? 'mae' : null)),
   };
   const consent = { hasValidConsent: jest.fn().mockResolvedValue(true) };
   const sessionAccess = { canOperate: jest.fn(async (a: KidsActor) => a.roles.includes('ministry_leader')) };
+  const notice = { notifyChildReleased: jest.fn(), notifyChildReceived: jest.fn().mockResolvedValue(undefined) };
   const qr = {
     signCheckout: jest.fn((id: string, code: string) => `kidsco1.${id}.${code}.sig`),
     consumeCheckin: jest.fn().mockResolvedValue({ ok: true, child_id: 'c1', guardian_person_id: 'mae' }),
@@ -86,10 +88,10 @@ function build(opts: { session?: object | null; birth?: Date | null; guardians?:
     consent as never,
     sessionAccess as never,
     { notifyCheckoutDenied: jest.fn() } as never,
-    { notifyChildReleased: jest.fn() } as never,
+    notice as never,
     qr as never,
   );
-  return { svc, client, access, consent, sessionAccess, qr };
+  return { svc, client, access, consent, sessionAccess, qr, notice };
 }
 
 const body = (extra = {}) => ({ child_id: 'c1', guardian_person_id: 'mae', ...extra });
@@ -503,5 +505,51 @@ describe('KidsCheckinService.checkInByQr (R3-1)', () => {
       expect(await errorOf(svc.checkInByQr(actor, 's1', dto))).toBeInstanceOf(ForbiddenException);
       expect(qr.consumeCheckin).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('KidsCheckinService.checkIn: push "Criança recebida" (R3-3a)', () => {
+  it('check-in pela equipe: avisa o primário com a turma, a criança e a pessoa de quem fez o check-in (conta da equipe sem pessoa = null)', async () => {
+    const { svc, notice } = build();
+    const out = await svc.checkIn(staff, 's1', body());
+    expect(notice.notifyChildReceived).toHaveBeenCalledTimes(1);
+    expect(notice.notifyChildReceived).toHaveBeenCalledWith('t1', 'g1', {
+      checkinId: out.id,
+      sessionId: 's1',
+      childId: 'c1',
+      roomName: 'Maternal',
+      actorPersonId: null,
+    });
+  });
+
+  it('check-in feito pelo próprio responsável no app: informa a pessoa dele, para o serviço de aviso não o notificar', async () => {
+    const { svc, notice } = build();
+    await svc.checkIn(parent, 's1', body());
+    expect(notice.notifyChildReceived).toHaveBeenCalledWith('t1', 'g1', expect.objectContaining({ actorPersonId: 'mae' }));
+  });
+
+  it('check-in que falha (409, 422, 403) não avisa ninguém', async () => {
+    const dup = build();
+    dup.client.kidsCheckin.findFirst.mockResolvedValue({ id: 'ja' });
+    await errorOf(dup.svc.checkIn(staff, 's1', body()));
+    const range = build({ session: session({ room: { min_age_months: 100, max_age_months: 119 } }) });
+    await errorOf(range.svc.checkIn(staff, 's1', body()));
+    expect(dup.notice.notifyChildReceived).not.toHaveBeenCalled();
+    expect(range.notice.notifyChildReceived).not.toHaveBeenCalled();
+  });
+
+  it('falha do aviso (ou da busca da pessoa) nunca desfaz o check-in: segue 201 com o código', async () => {
+    const a = build();
+    a.notice.notifyChildReceived.mockRejectedValue(new Error('OneSignal fora do ar'));
+    expect((await a.svc.checkIn(staff, 's1', body())).code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/);
+    const b = build();
+    b.access.ownPersonId.mockRejectedValue(new Error('db'));
+    expect((await b.svc.checkIn(staff, 's1', body())).code).toBeDefined();
+  });
+
+  it('check-in por QR também avisa (é o check-in normal)', async () => {
+    const { svc, notice } = build();
+    await svc.checkInByQr(staff, 's1', { qr: 'kidsci1.x.y' });
+    expect(notice.notifyChildReceived).toHaveBeenCalledTimes(1);
   });
 });

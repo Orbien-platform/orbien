@@ -64,7 +64,7 @@ equipe confere → **check-out**.
 |---|---|
 | Escala (`my-celebration-assignments`) | Item ganha `kids_session` (turma, horário) |
 | `/pessoas/indicadores` | Cartão "Kids" lê novo `GET /kids/attendance/summary` |
-| Push (OneSignal, AD-003) | "Criança retirada" ao responsável primário; categoria própria |
+| Push (OneSignal, AD-003) | "Criança entregue" (primário + demais com `can_pickup` e conta, menos quem retirou) e "Criança recebida na turma X" (primário, quando o check-in é de outra pessoa); categoria própria `kids` |
 | Importação de pessoas | Não importa crianças no MVP |
 
 ---
@@ -273,3 +273,15 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 - **Recusa.** QR expirado, usado, forjado, inexistente (ou de outra congregação, que a RLS esconde) ou malformado: o mesmo `403 "Não foi possível validar o QR. Peça um novo ao responsável."`. O motivo (`expired|used|forged|unknown|malformed`) só vai para `audit_logs` (`kids.checkin_qr_denied`), nunca para a resposta.
 - **Check-out.** `GET /kids/children/:id/checkin` passa a devolver `qr` = `kidsco1.<checkin_id>.<code>.<hmac>`: o código do check-in aberto, assinado com HMAC-SHA256 (chave derivada do `JWT_SECRET`). A equipe lê e manda `POST /kids/checkins/:id/checkout { qr, picked_up_by_* }`; o serviço verifica a assinatura E que o QR é daquele check-in e o trata como o código digitado: `can_pickup`, 403 idêntico, auditoria e contagem de tentativas (R3-2) iguais. Forjado, adulterado ou de outro check-in = código errado. `code` e `qr` juntos ou nenhum dos dois: 400.
 - **Limite aceito:** o QR de check-out vale enquanto o check-in estiver aberto e quem o fotografa tem o mesmo que o código (por desenho: o QR não é um segredo novo).
+
+### R3-3 · Push de chegada e de entrega
+
+`KidsPickupNoticeService` (mesma categoria `kids`, mesma tag `person_id`, `pref_kids != 'false'`, best-effort) ganhou `notifyChildReceived` e passou a filtrar destinatários por conta ativa.
+
+| Aviso | Quando | Destinatários | Excluídos |
+|---|---|---|---|
+| `kids_child_released` "Criança entregue" | check-out e override | `KidsGuardian` com `is_primary` OU `can_pickup`, com `UserAccount` ativa | a pessoa que retirou (`picked_up_by_person_id`) |
+| `kids_child_received` "Criança recebida na turma X" | `checkIn` e `checkInByQr` gravados | responsável(is) **primário(s)** com conta ativa | a pessoa (`UserAccount.person_id`) da conta que fez o check-in, se for o primário |
+
+- **Interpretação de "feito por outra pessoa":** o único excluído é o primário que operou o check-in (a pessoa da conta que chamou a rota). Se a equipe grava o check-in com o primário como `guardian_person_id`, ele recebe (é a confirmação de que a criança entrou na turma); se um terceiro entrega, o primário recebe. Conta da equipe sem pessoa vinculada não exclui ninguém. Check-in por QR também avisa (quem leu é a equipe).
+- Texto: título "Criança recebida na turma {turma}", corpo com o primeiro nome. A ficha de saúde não é consultada.

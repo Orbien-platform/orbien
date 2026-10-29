@@ -722,6 +722,12 @@ Premium (`@RequiresPlan('premium')`). Spec e desenho em
   equipe lê em `POST /kids/sessions/:id/checkins/by-qr`; `GET
   /kids/children/:id/checkin` devolve também o `qr` do código, que o check-out
   aceita no lugar do código digitado (`{ qr }`).
+- Limite de tentativas (R3-2): 5 códigos errados travam o check-out daquele
+  check-in (mesmo 403, `kids.checkout_locked`, push ao líder); só o override
+  encerra. Push (R3-3): "Criança recebida na turma X" ao primário quando o
+  check-in é de outra pessoa; "Criança entregue" também aos demais
+  responsáveis com `can_pickup` e conta.
+- Busca de adultos para o líder kids (R3-4): `GET /kids/guardians/search?q=`.
 - Escala e contagem: `kids_session_id` na escala; `checkin_total` sugere o
   `children` da contagem (`PROD-37`); `GET /kids/attendance/summary` alimenta o
   cartão Kids em `/pessoas/indicadores`.
@@ -745,8 +751,7 @@ Falta:
   quem retirou é apagada). Exige tornar as FKs anuláveis e perde a contagem
   distinta por criança.
 - Etiqueta no app (hoje o web imprime pelo navegador) e em PDF.
-- Limite de tentativas de código no check-out (throttle por criança/sessão).
-- Push a outros papéis (líder, voluntário) além do responsável primário.
+- Push a líder/voluntário além dos responsáveis (o líder já recebe a recusa e o travamento).
 - Testar o fluxo do responsável no aparelho (código grande, toque ≥ 48px).
 
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
