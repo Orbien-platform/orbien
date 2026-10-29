@@ -4,6 +4,13 @@
 // errado e pessoa sem permissão caem na MESMA recusa genérica: a tela nunca diz
 // qual dos dois falhou nem quem poderia retirar. Esqueceu o código: override do
 // líder kids, com motivo gravado.
+//
+// "Ler QR" (MOB-3): a equipe lê o QR de check-in do responsável (a criança entra
+// na turma) ou o QR de check-out da tela do código (vale como o código digitado,
+// com a mesma recusa). A API trava o check-out depois de 5 códigos errados e
+// responde o MESMO 403; por isso a tela conta as recusas seguidas por check-in
+// e, na terceira, manda chamar o líder kids e põe a retirada por exceção em
+// destaque — sem nunca dizer o que falhou.
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -14,19 +21,25 @@ import { Input } from "../../../components/Input";
 import { Screen } from "../../../components/Screen";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { AllergyNote } from "../../../components/kids/AllergyNote";
+import { QrScanner } from "../../../components/kids/QrScanner";
 import { HttpError } from "../../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
 import { useAuth } from "../../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../../lib/auth/jwt";
 import {
+  CHECKIN_QR_REFUSED_MESSAGE,
   CHECKOUT_REFUSED_MESSAGE,
+  checkInByQr,
   checkOut,
+  checkOutByQr,
   checkOutOverride,
   describeKidsActionError,
   getRoster,
+  kidsErrorCode,
+  parseKidsQr,
 } from "../../../lib/kids/kids-client";
 import type { KidsRoster, KidsRosterItem } from "../../../lib/kids/types";
-import { Baby, CircleAlert, WifiOff } from "../../../lib/theme/icons";
+import { Baby, CircleAlert, ScanLine, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../../lib/theme/tokens";
 
@@ -34,7 +47,12 @@ import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../../lib/t
  * o override de quem não pode — a API é quem nega. */
 const OVERRIDE_ROLES = ["tenant_admin", "admin_congregation", "pastor", "secretary", "ministry_leader"];
 
-type Mode = "code" | "override";
+type Mode = "code" | "qr" | "override";
+
+/** Recusas seguidas no mesmo check-in a partir das quais a tela chama o líder. */
+export const REFUSALS_BEFORE_LEADER = 3;
+
+const UNKNOWN_QR_NOTICE = "Este QR não é do Kids. Peça o QR da tela do responsável.";
 
 export default function SessaoScreen() {
   const { colors } = useTheme();
@@ -51,6 +69,15 @@ export default function SessaoScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const [qrMessage, setQrMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [qrBusy, setQrBusy] = useState(false);
+  // QR de check-in à espera da confirmação de "fora da faixa".
+  const [pendingQr, setPendingQr] = useState<string | null>(null);
+  // QR de check-out lido; vale para o check-in aberto no formulário.
+  const [scannedQr, setScannedQr] = useState<string | null>(null);
+  const [refusals, setRefusals] = useState<Record<string, number>>({});
   const hasDataRef = useRef(false);
 
   const roles = session ? (decodeJwtPayload(session.accessToken)?.roles ?? []) : [];
@@ -79,6 +106,7 @@ export default function SessaoScreen() {
   useFocusEffect(load);
 
   function open(item: KidsRosterItem, nextMode: Mode) {
+    setScanning(false);
     setOpenId(item.checkin_id);
     setMode(nextMode);
     setCode("");
@@ -94,6 +122,8 @@ export default function SessaoScreen() {
     try {
       if (mode === "code") {
         await checkOut(item.checkin_id, { code, picked_up_by_name: pickerName });
+      } else if (mode === "qr") {
+        await checkOutByQr(item.checkin_id, { qr: scannedQr!, picked_up_by_name: pickerName });
       } else {
         await checkOutOverride(item.checkin_id, { reason, picked_up_by_name: pickerName });
       }
@@ -106,17 +136,80 @@ export default function SessaoScreen() {
             }
           : current,
       );
+      setRefusals((current) => ({ ...current, [item.checkin_id]: 0 }));
       setOpenId(null);
       setDone(true);
     } catch (err) {
-      if (mode === "code" && err instanceof HttpError && err.status === 403) {
+      if (mode !== "override" && err instanceof HttpError && err.status === 403) {
         setRefusal(CHECKOUT_REFUSED_MESSAGE);
+        setRefusals((current) => ({ ...current, [item.checkin_id]: (current[item.checkin_id] ?? 0) + 1 }));
       } else {
         setRefusal(describeKidsActionError(err, "Não foi possível entregar a criança. Tente novamente."));
       }
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function checkInFromQr(qr: string, confirmOutOfRange: boolean) {
+    setQrBusy(true);
+    setQrMessage(null);
+    try {
+      await checkInByQr(id, { qr, ...(confirmOutOfRange ? { confirm_out_of_range: true } : {}) });
+      setPendingQr(null);
+      setQrMessage({ tone: "success", text: "Check-in feito" });
+      load();
+    } catch (err) {
+      const errCode = kidsErrorCode(err);
+      if (errCode === "OUT_OF_RANGE_CONFIRM") {
+        setPendingQr(qr);
+      } else {
+        setPendingQr(null);
+        const text =
+          errCode === "kids_out_of_range"
+            ? "Esta turma não aceita a idade da criança. Use outra turma."
+            : err instanceof HttpError && err.status === 403
+              ? CHECKIN_QR_REFUSED_MESSAGE
+              : describeKidsActionError(err, "Não foi possível fazer o check-in. Tente novamente.");
+        setQrMessage({ tone: "danger", text });
+      }
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
+  /** `true` se o QR é do Kids e foi tratado; `false` mantém o leitor aberto. */
+  function handleScan(data: string): boolean {
+    const parsed = parseKidsQr(data);
+    if (!parsed) {
+      setScanNotice(UNKNOWN_QR_NOTICE);
+      return false;
+    }
+    setScanNotice(null);
+    setScanning(false);
+    setDone(false);
+    setQrMessage(null);
+    setPendingQr(null);
+    if (parsed.kind === "checkin") {
+      void checkInFromQr(parsed.qr, false);
+      return true;
+    }
+    const target = roster?.items.find((i) => i.checkin_id === parsed.checkinId);
+    if (!target) {
+      setQrMessage({ tone: "danger", text: "Esta criança não está na lista desta turma." });
+      return true;
+    }
+    open(target, "qr");
+    setScannedQr(parsed.qr);
+    return true;
+  }
+
+  function startScanning() {
+    setScanNotice(null);
+    setQrMessage(null);
+    setPendingQr(null);
+    setOpenId(null);
+    setScanning(true);
   }
 
   if (forbidden) {
@@ -156,6 +249,43 @@ export default function SessaoScreen() {
         {capacity !== null ? ` de ${capacity}` : ""}
       </Text>
       {done ? <Alert tone="success" messageTestID="sessao-entregue" message="Criança entregue" /> : null}
+      {qrMessage ? (
+        <Alert tone={qrMessage.tone} messageTestID="sessao-qr-mensagem" message={qrMessage.text} />
+      ) : null}
+      {pendingQr ? (
+        <View testID="sessao-qr-confirmar" style={styles.confirm}>
+          <Text style={[typography.h3, { color: colors.warning }]}>Fora da faixa da turma</Text>
+          <Text style={[typography.body, { color: colors.warning }]}>
+            A criança está fora da faixa de {roster.session.room.name}. Fazer o check-in mesmo assim?
+          </Text>
+          <AppButton
+            testID="sessao-qr-confirmar-sim"
+            title="Fazer check-in mesmo assim"
+            loading={qrBusy}
+            onPress={() => checkInFromQr(pendingQr, true)}
+          />
+          <AppButton
+            testID="sessao-qr-confirmar-nao"
+            title="Cancelar"
+            variant="ghost"
+            disabled={qrBusy}
+            onPress={() => setPendingQr(null)}
+          />
+        </View>
+      ) : null}
+      {scanning ? (
+        <QrScanner onScan={handleScan} onClose={() => setScanning(false)} notice={scanNotice} />
+      ) : (
+        <AppButton
+          testID="sessao-ler-qr"
+          title="Ler QR"
+          icon={ScanLine}
+          variant="secondary"
+          loading={qrBusy}
+          onPress={startScanning}
+          style={styles.scan}
+        />
+      )}
 
       <FlatList
         testID="sessao-lista"
@@ -172,7 +302,9 @@ export default function SessaoScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          const callLeader = (refusals[item.checkin_id] ?? 0) >= REFUSALS_BEFORE_LEADER;
+          return (
           <View testID={`presente-${item.checkin_id}`} style={[styles.item, { borderBottomColor: colors.border }]}>
             <Text style={[typography.h3, { color: colors.textPrimary }]}>{item.child.full_name}</Text>
             <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
@@ -185,7 +317,16 @@ export default function SessaoScreen() {
             {openId === item.checkin_id ? (
               <View style={styles.form}>
                 {refusal ? <Alert messageTestID="sessao-recusa" message={refusal} /> : null}
-                {mode === "code" ? (
+                {callLeader ? (
+                  <Text testID="sessao-lider" style={[typography.h3, { color: colors.danger }]}>
+                    Chame o líder kids. Esta retirada pede conferência.
+                  </Text>
+                ) : null}
+                {mode === "qr" ? (
+                  <Text testID="sessao-qr-lido" style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+                    QR de retirada lido. Informe quem está retirando.
+                  </Text>
+                ) : mode === "code" ? (
                   <Input
                     testID="sessao-codigo"
                     label="Código de retirada"
@@ -215,14 +356,28 @@ export default function SessaoScreen() {
                   testID="sessao-confirmar"
                   title="Entregar criança"
                   loading={submitting}
-                  disabled={mode === "code" ? !code.trim() || !pickerName.trim() : reason.trim().length < 5 || !pickerName.trim()}
+                  disabled={
+                    mode === "code"
+                      ? !code.trim() || !pickerName.trim()
+                      : mode === "qr"
+                        ? !pickerName.trim()
+                        : reason.trim().length < 5 || !pickerName.trim()
+                  }
                   onPress={() => submit(item)}
                 />
-                {mode === "code" && canOverride ? (
+                {mode === "qr" ? (
+                  <AppButton
+                    testID="sessao-digitar-codigo"
+                    title="Digitar o código"
+                    variant="ghost"
+                    onPress={() => open(item, "code")}
+                  />
+                ) : null}
+                {mode !== "override" && canOverride ? (
                   <AppButton
                     testID="sessao-override"
-                    title="Esqueceu o código? Autorizar sem código"
-                    variant="ghost"
+                    title={callLeader ? "Autorizar sem código (retirada por exceção)" : "Esqueceu o código? Autorizar sem código"}
+                    variant={callLeader ? "primary" : "ghost"}
                     onPress={() => open(item, "override")}
                   />
                 ) : null}
@@ -244,14 +399,17 @@ export default function SessaoScreen() {
               />
             )}
           </View>
-        )}
+          );
+        }}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  count: { marginBottom: spacing.lg },
+  count: { marginBottom: spacing.md },
+  scan: { marginBottom: spacing.md },
+  confirm: { gap: spacing.md, marginBottom: spacing.md },
   empty: { gap: spacing.sm, paddingVertical: spacing.xxxl },
   item: { gap: spacing.xs, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   deliver: { marginTop: spacing.sm },

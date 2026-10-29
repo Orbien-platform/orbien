@@ -10,7 +10,10 @@ import {
   acceptConsent,
   addGuardian,
   ageInMonths,
+  checkInByQr,
   checkInChild,
+  checkOutByQr,
+  parseKidsQr,
   checkOut,
   checkOutOverride,
   createChild,
@@ -217,5 +220,51 @@ describe("QR de check-in do responsável (MOB-1)", () => {
     expect(formatCountdown(9_000)).toBe("0:09");
     expect(formatCountdown(0)).toBe("0:00");
     expect(formatCountdown(-5_000)).toBe("0:00");
+  });
+});
+
+describe("leitura de QR pela equipe (MOB-3)", () => {
+  beforeEach(() => mockRequest.mockReset());
+
+  it("check-in por QR: POST by-qr com o qr e a confirmação de faixa quando há", async () => {
+    mockRequest.mockResolvedValue({ id: "k1" });
+    await checkInByQr("s1", { qr: "kidsci1.t.s" });
+    expect(mockRequest).toHaveBeenCalledWith("post", "/kids/sessions/s1/checkins/by-qr", {
+      body: { qr: "kidsci1.t.s" },
+    });
+    await checkInByQr("s1", { qr: "kidsci1.t.s", confirm_out_of_range: true });
+    expect(mockRequest).toHaveBeenLastCalledWith("post", "/kids/sessions/s1/checkins/by-qr", {
+      body: { qr: "kidsci1.t.s", confirm_out_of_range: true },
+    });
+  });
+
+  it("check-out por QR: manda qr (sem code) e quem retira, aparados, ao check-in embutido", async () => {
+    mockRequest.mockResolvedValue({ id: "k1" });
+    await checkOutByQr("k1", { qr: " kidsco1.k1.7KQ2.sig ", picked_up_by_name: " Marta " });
+    expect(mockRequest).toHaveBeenCalledWith("post", "/kids/checkins/k1/checkout", {
+      body: { qr: "kidsco1.k1.7KQ2.sig", picked_up_by_name: "Marta" },
+    });
+  });
+
+  it("reconhece o QR de check-in e o de check-out (com o id do check-in)", () => {
+    expect(parseKidsQr(" kidsci1.tok.seg ")).toEqual({ kind: "checkin", qr: "kidsci1.tok.seg" });
+    expect(parseKidsQr("kidsco1.9f1c.7KQ2.abc-_")).toEqual({
+      kind: "checkout",
+      qr: "kidsco1.9f1c.7KQ2.abc-_",
+      checkinId: "9f1c",
+    });
+  });
+
+  it("recusa na hora o que não é QR do Kids", () => {
+    for (const other of [
+      "https://orbien.app/cadastro",
+      "orbien:checkin:3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "kidsci1.so-um-pedaco",
+      "kidsco1.a.b",
+      "kidsco1..7KQ2.sig",
+      "",
+    ]) {
+      expect(parseKidsQr(other)).toBeNull();
+    }
   });
 });

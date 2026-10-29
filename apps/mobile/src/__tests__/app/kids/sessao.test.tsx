@@ -20,6 +20,22 @@ jest.mock("../../../lib/auth/jwt", () => ({
   decodeJwtPayload: () => ({ roles: mockRoles }),
 }));
 
+type Permission = { granted: boolean; canAskAgain: boolean };
+let mockPermission: Permission = { granted: true, canAskAgain: true };
+let mockCameraProps: Record<string, unknown> = {};
+jest.mock("expo-camera", () => {
+  const { View } = jest.requireActual("react-native");
+  return {
+    useCameraPermissions: () => [mockPermission, jest.fn()],
+    CameraView: (props: Record<string, unknown>) => {
+      mockCameraProps = props;
+      return <View testID={props.testID as string} />;
+    },
+  };
+});
+
+const mockCheckInByQr = jest.fn();
+const mockCheckOutByQr = jest.fn();
 const mockGetRoster = jest.fn();
 const mockCheckOut = jest.fn();
 const mockOverride = jest.fn();
@@ -27,6 +43,8 @@ jest.mock("../../../lib/kids/kids-client", () => ({
   ...jest.requireActual("../../../lib/kids/kids-client"),
   getRoster: (...a: unknown[]) => mockGetRoster(...a),
   checkOut: (...a: unknown[]) => mockCheckOut(...a),
+  checkInByQr: (...a: unknown[]) => mockCheckInByQr(...a),
+  checkOutByQr: (...a: unknown[]) => mockCheckOutByQr(...a),
   checkOutOverride: (...a: unknown[]) => mockOverride(...a),
 }));
 
@@ -69,6 +87,8 @@ describe("SessaoScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRoles = ["volunteer"];
+    mockPermission = { granted: true, canAskAgain: true };
+    mockCameraProps = {};
   });
 
   it("lista as crianças presentes, a contagem com a capacidade e nunca o código", async () => {
@@ -217,6 +237,258 @@ describe("SessaoScreen", () => {
       expect(screen.getByTestId("sessao-recusa").props.children).toBe(
         "Não foi possível entregar a criança. Tente novamente.",
       );
+    });
+  });
+
+  describe("Ler QR (MOB-3)", () => {
+    const CHECKIN_QR = "kidsci1.tok.seg";
+    const CHECKOUT_QR = "kidsco1.k1.7KQ2.assinatura";
+
+    function scan(data: string) {
+      const onScanned = mockCameraProps.onBarcodeScanned as (r: { type: string; data: string }) => void;
+      onScanned({ type: "qr", data });
+    }
+    async function openScanner() {
+      await press("sessao-ler-qr");
+    }
+    async function scanAndSettle(data: string) {
+      await act(async () => {
+        scan(data);
+      });
+    }
+
+    beforeEach(() => {
+      mockGetRoster.mockResolvedValue(roster([item("k1", "Ana Souza"), item("k2", "Beto Lima")]));
+    });
+
+    describe("QR de check-in", () => {
+      it("faz o check-in pela sessão da tela, fecha o leitor e atualiza a lista", async () => {
+        mockCheckInByQr.mockResolvedValue({ id: "k9" });
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+
+        expect(mockCheckInByQr).toHaveBeenCalledWith("s1", { qr: CHECKIN_QR });
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe("Check-in feito");
+        expect(screen.queryByTestId("scanner")).toBeNull();
+        expect(mockGetRoster).toHaveBeenCalledTimes(2);
+      });
+
+      it("QR que não é do Kids fica no leitor com o aviso e não chama a API", async () => {
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle("https://exemplo.com/cardapio");
+        expect(screen.getByTestId("scanner-aviso")).toBeTruthy();
+        expect(screen.getByTestId("scanner")).toBeTruthy();
+        expect(mockCheckInByQr).not.toHaveBeenCalled();
+        expect(mockCheckOutByQr).not.toHaveBeenCalled();
+      });
+
+      it("403 mostra só a mensagem genérica, sem dizer se expirou, foi usado ou é falso", async () => {
+        mockCheckInByQr.mockRejectedValue(new HttpError(403, { message: "qr expirado" }));
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe(
+          "Não foi possível validar o QR. Peça um novo ao responsável.",
+        );
+      });
+
+      it("fora da faixa que aceita: pede confirmação e reenvia com confirm_out_of_range", async () => {
+        mockCheckInByQr
+          .mockRejectedValueOnce(new HttpError(422, { code: "OUT_OF_RANGE_CONFIRM", message: "fora" }))
+          .mockResolvedValueOnce({ id: "k9" });
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+        expect(screen.getByTestId("sessao-qr-confirmar")).toBeTruthy();
+        expect(screen.queryByTestId("sessao-qr-mensagem")).toBeNull();
+
+        await press("sessao-qr-confirmar-sim");
+        expect(mockCheckInByQr).toHaveBeenLastCalledWith("s1", { qr: CHECKIN_QR, confirm_out_of_range: true });
+        expect(screen.queryByTestId("sessao-qr-confirmar")).toBeNull();
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe("Check-in feito");
+      });
+
+      it("recusar a confirmação de faixa descarta o pedido", async () => {
+        mockCheckInByQr.mockRejectedValue(new HttpError(422, { code: "OUT_OF_RANGE_CONFIRM" }));
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+        await press("sessao-qr-confirmar-nao");
+        expect(screen.queryByTestId("sessao-qr-confirmar")).toBeNull();
+        expect(mockCheckInByQr).toHaveBeenCalledTimes(1);
+      });
+
+      it("turma que não aceita a idade, regra da API (409) e falha de rede têm mensagem própria", async () => {
+        mockCheckInByQr.mockRejectedValueOnce(new HttpError(422, { code: "kids_out_of_range" }));
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe(
+          "Esta turma não aceita a idade da criança. Use outra turma.",
+        );
+
+        mockCheckInByQr.mockRejectedValueOnce(new HttpError(409, { message: "A criança já está presente." }));
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe("A criança já está presente.");
+
+        mockCheckInByQr.mockRejectedValueOnce(new NetworkError());
+        await openScanner();
+        await scanAndSettle(CHECKIN_QR);
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe(
+          "Não foi possível fazer o check-in. Tente novamente.",
+        );
+      });
+    });
+
+    describe("QR de check-out", () => {
+      it("acha o check-in pelo id embutido, pede quem retira e entrega com o qr (sem digitar código)", async () => {
+        mockCheckOutByQr.mockResolvedValue({ id: "k1" });
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKOUT_QR);
+
+        expect(screen.getByTestId("sessao-qr-lido")).toBeTruthy();
+        expect(screen.queryByTestId("sessao-codigo")).toBeNull();
+        await press("sessao-confirmar");
+        expect(mockCheckOutByQr).not.toHaveBeenCalled();
+
+        await type("sessao-quem", "Marta Souza");
+        await press("sessao-confirmar");
+        expect(mockCheckOutByQr).toHaveBeenCalledWith("k1", { qr: CHECKOUT_QR, picked_up_by_name: "Marta Souza" });
+        expect(mockCheckOut).not.toHaveBeenCalled();
+        expect(screen.queryByText("Ana Souza")).toBeNull();
+        expect(screen.getByTestId("sessao-entregue")).toBeTruthy();
+      });
+
+      it("QR de criança que não está na lista desta turma não abre entrega", async () => {
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle("kidsco1.outro.7KQ2.assinatura");
+        expect(screen.getByTestId("sessao-qr-mensagem").props.children).toBe(
+          "Esta criança não está na lista desta turma.",
+        );
+        expect(screen.queryByTestId("sessao-qr-lido")).toBeNull();
+      });
+
+      it("a equipe pode trocar o QR pelo código digitado", async () => {
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKOUT_QR);
+        await press("sessao-digitar-codigo");
+        expect(screen.getByTestId("sessao-codigo")).toBeTruthy();
+        expect(screen.queryByTestId("sessao-qr-lido")).toBeNull();
+      });
+
+      it("recusa 403 do QR é a mesma mensagem do código errado", async () => {
+        mockCheckOutByQr.mockRejectedValue(new HttpError(403, { message: "x" }));
+        await renderScreen();
+        await openScanner();
+        await scanAndSettle(CHECKOUT_QR);
+        await type("sessao-quem", "Fulano");
+        await press("sessao-confirmar");
+        expect(screen.getByTestId("sessao-recusa").props.children).toBe(
+          "Este código não é de quem está buscando. Chame o líder kids.",
+        );
+      });
+    });
+
+    describe("recusas seguidas no mesmo check-in", () => {
+      async function refuseByQr(times: number) {
+        mockCheckOutByQr.mockRejectedValue(new HttpError(403, { message: "x" }));
+        for (let i = 0; i < times; i += 1) {
+          await openScanner();
+          await scanAndSettle(CHECKOUT_QR);
+          await type("sessao-quem", "Fulano");
+          await press("sessao-confirmar");
+        }
+      }
+
+      it("até a segunda recusa não escala; na terceira manda chamar o líder kids", async () => {
+        await renderScreen();
+        await refuseByQr(2);
+        expect(screen.queryByTestId("sessao-lider")).toBeNull();
+        await refuseByQr(1);
+        expect(screen.getByTestId("sessao-lider").props.children).toMatch(/Chame o líder kids/);
+        // A API segue respondendo o mesmo 403: a mensagem da recusa não muda.
+        expect(screen.getByTestId("sessao-recusa").props.children).toBe(
+          "Este código não é de quem está buscando. Chame o líder kids.",
+        );
+      });
+
+      it("para o líder, a retirada por exceção vira o botão principal", async () => {
+        mockRoles = ["ministry_leader"];
+        await renderScreen();
+        await refuseByQr(3);
+        const override = screen.getByTestId("sessao-override");
+        expect(screen.getByText("Autorizar sem código (retirada por exceção)")).toBeTruthy();
+        await act(async () => {
+          fireEvent.press(override);
+        });
+        expect(screen.getByTestId("sessao-motivo")).toBeTruthy();
+      });
+
+      it("voluntário vê o aviso para chamar o líder e não ganha a exceção", async () => {
+        await renderScreen();
+        await refuseByQr(3);
+        expect(screen.getByTestId("sessao-lider")).toBeTruthy();
+        expect(screen.queryByTestId("sessao-override")).toBeNull();
+      });
+
+      it("conta QR e código digitado juntos, e só por check-in", async () => {
+        mockCheckOut.mockRejectedValue(new HttpError(403, { message: "x" }));
+        await renderScreen();
+        await refuseByQr(2);
+        await press("sessao-digitar-codigo");
+        await type("sessao-codigo", "ZZZZ");
+        await type("sessao-quem", "Fulano");
+        await press("sessao-confirmar");
+        expect(screen.getByTestId("sessao-lider")).toBeTruthy();
+
+        // Outra criança começa do zero.
+        await press("sessao-cancelar");
+        await press("presente-k2-entregar");
+        await type("sessao-codigo", "ZZZZ");
+        await type("sessao-quem", "Fulano");
+        await press("sessao-confirmar");
+        expect(screen.queryByTestId("sessao-lider")).toBeNull();
+      });
+
+      it("recusa de outro tipo (rede) não conta", async () => {
+        mockCheckOutByQr.mockRejectedValue(new NetworkError());
+        await renderScreen();
+        for (let i = 0; i < 3; i += 1) {
+          await openScanner();
+          await scanAndSettle(CHECKOUT_QR);
+          await type("sessao-quem", "Fulano");
+          await press("sessao-confirmar");
+        }
+        expect(screen.queryByTestId("sessao-lider")).toBeNull();
+      });
+    });
+
+    describe("câmera", () => {
+      it("permissão negada: estado claro e o caminho de digitar o código segue funcionando", async () => {
+        mockPermission = { granted: false, canAskAgain: false };
+        await renderScreen();
+        await openScanner();
+        expect(screen.getByTestId("scanner-permissao-negada")).toBeTruthy();
+
+        await press("scanner-digitar");
+        expect(screen.queryByTestId("scanner-permissao-negada")).toBeNull();
+        await press("presente-k1-entregar");
+        expect(screen.getByTestId("sessao-codigo")).toBeTruthy();
+      });
+
+      it("abrir a entrega fecha o leitor", async () => {
+        await renderScreen();
+        await openScanner();
+        expect(screen.getByTestId("scanner")).toBeTruthy();
+        await press("presente-k1-entregar");
+        expect(screen.queryByTestId("scanner")).toBeNull();
+      });
     });
   });
 

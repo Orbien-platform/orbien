@@ -26,6 +26,10 @@ import type {
 export const CHECKOUT_REFUSED_MESSAGE =
   "Este código não é de quem está buscando. Chame o líder kids.";
 
+/** O 403 de QR é genérico de propósito: expirado, usado, forjado ou de outra
+ * turma dizem a mesma coisa à equipe (o motivo fica só na auditoria). */
+export const CHECKIN_QR_REFUSED_MESSAGE = "Não foi possível validar o QR. Peça um novo ao responsável.";
+
 export async function listChildren(search?: string): Promise<KidsChild[]> {
   const query = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
   return authenticatedRequest<KidsChild[]>("get", `/kids/children${query}`);
@@ -119,6 +123,42 @@ export async function checkOut(
   return authenticatedRequest<KidsCheckoutResult>("post", `/kids/checkins/${checkinId}/checkout`, {
     body: { code: input.code.trim().toUpperCase(), picked_up_by_name: input.picked_up_by_name.trim() },
   });
+}
+
+/** Check-in pela leitura do QR do responsável; a criança vem dentro do QR. */
+export async function checkInByQr(
+  sessionId: string,
+  input: { qr: string; confirm_out_of_range?: boolean },
+): Promise<KidsCheckinResult> {
+  return authenticatedRequest<KidsCheckinResult>("post", `/kids/sessions/${sessionId}/checkins/by-qr`, {
+    body: input,
+  });
+}
+
+/** Check-out com o QR da tela do código: o mesmo que digitar o código. */
+export async function checkOutByQr(
+  checkinId: string,
+  input: { qr: string; picked_up_by_name: string },
+): Promise<KidsCheckoutResult> {
+  return authenticatedRequest<KidsCheckoutResult>("post", `/kids/checkins/${checkinId}/checkout`, {
+    body: { qr: input.qr.trim(), picked_up_by_name: input.picked_up_by_name.trim() },
+  });
+}
+
+export type KidsQrKind = { kind: "checkin"; qr: string } | { kind: "checkout"; qr: string; checkinId: string };
+
+/**
+ * Reconhece o QR do Kids pelo prefixo. O de check-in (`kidsci1.`) é opaco para
+ * o app; o de check-out (`kidsco1.<checkin_id>.<código>.<assinatura>`) traz o
+ * check-in, que a equipe usa para achar a criança na lista. A assinatura só a
+ * API confere. Qualquer outro QR (boleto, cardápio, autocadastro) é `null`.
+ */
+export function parseKidsQr(data: string): KidsQrKind | null {
+  const text = data.trim();
+  if (/^kidsci1\.[^.]+\.[^.]+$/.test(text)) return { kind: "checkin", qr: text };
+  const match = /^kidsco1\.([^.]+)\.[^.]+\.[^.]+$/.exec(text);
+  if (match) return { kind: "checkout", qr: text, checkinId: match[1] };
+  return null;
 }
 
 export async function checkOutOverride(
