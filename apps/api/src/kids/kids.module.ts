@@ -15,6 +15,7 @@ import { KidsPickupNoticeService } from './checkin/kids-pickup-notice.service';
 import { KidsSessionAccessService } from './checkin/kids-session-access.service';
 import { KidsChildAccessService } from './children/kids-child-access.service';
 import { KidsGuardiansService } from './children/kids-guardians.service';
+import { KidsGuardianSearchService } from './children/kids-guardian-search.service';
 import { KidsChildrenService } from './children/kids-children.service';
 import { KidsConsentService } from './consent/kids-consent.service';
 import { KidsRetentionService } from './retention/kids-retention.service';
@@ -48,6 +49,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsChildAccessService,
     KidsChildrenService,
     KidsGuardiansService,
+    KidsGuardianSearchService,
     KidsConsentService,
     KidsRetentionService,
     KidsRoomsService,

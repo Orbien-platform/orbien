@@ -2,11 +2,13 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   Param,
   Patch,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -18,9 +20,11 @@ import { RequiresPlan } from '../../auth/decorators/requires-plan.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { TenantContextInterceptor } from '../../common/interceptors/tenant-context.interceptor';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
-import { KIDS_FAMILY_ROLES } from '../kids.roles';
+import { KIDS_FAMILY_ROLES, KIDS_MANAGE_ROLES } from '../kids.roles';
 import { toKidsActor } from './kids-child-access.service';
 import { KidsGuardiansService } from './kids-guardians.service';
+import { KidsGuardianSearchService } from './kids-guardian-search.service';
+import { SearchKidsGuardiansQueryDto } from './dto/search-kids-guardians-query.dto';
 import { AddKidsGuardianDto } from './dto/add-kids-guardian.dto';
 import { UpdateKidsGuardianDto } from './dto/update-kids-guardian.dto';
 
@@ -33,7 +37,18 @@ import { UpdateKidsGuardianDto } from './dto/update-kids-guardian.dto';
 @RequiresPlan('premium')
 @Roles(...KIDS_FAMILY_ROLES)
 export class KidsGuardiansController {
-  constructor(private readonly guardiansService: KidsGuardiansService) {}
+  constructor(
+    private readonly guardiansService: KidsGuardiansService,
+    private readonly searchService: KidsGuardianSearchService,
+  ) {}
+
+  // Só a gestão (inclui o líder kids, que não lê `GET /persons`). O responsável
+  // não varre a congregação atrás de adultos: autoriza quem ele cadastra.
+  @Get('kids/guardians/search')
+  @Roles(...KIDS_MANAGE_ROLES)
+  search(@Query() query: SearchKidsGuardiansQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.searchService.search(toKidsActor(user), query);
+  }
 
   @Post('kids/children/:id/guardians')
   add(@Param('id', ParseUUIDPipe) childId: string, @Body() dto: AddKidsGuardianDto, @CurrentUser() user: JwtPayload) {

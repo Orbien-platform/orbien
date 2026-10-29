@@ -54,7 +54,8 @@ describe('KidsGuardiansController', () => {
       remove: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue({}),
     };
-    const controller = new KidsGuardiansController(service as never);
+    const search = { search: jest.fn().mockResolvedValue([]) };
+    const controller = new KidsGuardiansController(service as never, search as never);
     const dto = { full_name: 'Rosa', phone: '1', relationship: 'avó' };
 
     await controller.add('c1', dto, USER);
@@ -64,6 +65,16 @@ describe('KidsGuardiansController', () => {
     expect(service.add).toHaveBeenCalledWith(ACTOR, 'c1', dto);
     expect(service.remove).toHaveBeenCalledWith(ACTOR, 'kg1');
     expect(service.update).toHaveBeenCalledWith(ACTOR, 'kg1', { can_pickup: false });
+
+    await controller.search({ q: 'Ma' }, USER);
+    expect(search.search).toHaveBeenCalledWith(ACTOR, { q: 'Ma' });
+  });
+
+  it('R3-4: a busca de adultos é da gestão (inclui ministry_leader) e não do responsável', () => {
+    const roles = reflector.get<string[]>(ROLES_KEY, KidsGuardiansController.prototype.search);
+    expect(roles).toEqual(['tenant_admin', 'admin_congregation', 'pastor', 'secretary', 'ministry_leader']);
+    expect(roles).not.toContain('member');
+    expect(roles).not.toContain('volunteer');
   });
 });
 

@@ -92,6 +92,7 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 5. WHEN a equipe kids abre a ficha THEN o sistema SHALL mostrar alergias e responsáveis, e `AuditInterceptor` SHALL registrar a leitura de dado de saúde.
 6. WHEN o responsável revoga o consentimento THEN o sistema SHALL impedir novos check-ins e manter o histórico até a retenção.
 7. WHEN a secretaria cadastra a criança no lugar do responsável THEN o sistema SHALL exigir o registro do consentimento (origem `secretaria`) antes de salvar.
+8. WHEN a gestão kids (inclui o `ministry_leader`, que não lê `GET /persons`) busca adultos para cadastrar criança ou autorizado (`GET /kids/guardians/search?q=`) THEN o sistema SHALL devolver até 20 adultos (`is_child = false`, vivos, da mesma congregação) com `id`, nome e telefone mascarado, sem criança nem dado sensível; `member` e `volunteer` SHALL receber 403.
 
 **Independent Test**: responsável de `teste1-church` cadastra duas crianças e uma avó autorizada; sem consentimento, o cadastro falha.
 
