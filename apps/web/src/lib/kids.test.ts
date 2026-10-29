@@ -215,10 +215,58 @@ describe("cliente: cada função fala a rota e o corpo que a API espera", () => 
     });
   });
 
+  it("check-in por QR e check-out com o QR no lugar do código", async () => {
+    await kids.checkInByQr("s1", { qr: "kidsci1.x.y", confirm_out_of_range: true });
+    expect(post).toHaveBeenLastCalledWith("/kids/sessions/s1/checkins/by-qr", {
+      qr: "kidsci1.x.y",
+      confirm_out_of_range: true,
+    });
+    await kids.checkOut("c1", { qr: "kidsco1.c1.A2B3.sig", picked_up_by_person_id: "p1" });
+    expect(post).toHaveBeenLastCalledWith("/kids/checkins/c1/checkout", {
+      qr: "kidsco1.c1.A2B3.sig",
+      picked_up_by_person_id: "p1",
+    });
+  });
+
   it("indicador", async () => {
     await kids.getAttendanceSummary({ date_from: "2026-08-01", date_to: "2026-10-26" });
     expect(get).toHaveBeenLastCalledWith("/kids/attendance/summary", {
       params: { date_from: "2026-08-01", date_to: "2026-10-26" },
     });
+  });
+});
+
+describe("parseKidsQr (o que o leitor entrega ao balcão)", () => {
+  const ID = "0b9f3c1e-4d2a-4f6b-8c1d-2a3b4c5d6e7f";
+
+  it("reconhece o QR de check-in e devolve o texto inteiro, sem espaços das pontas", () => {
+    expect(kids.parseKidsQr(`  kidsci1.${ID}.${"A".repeat(43)}\n`)).toEqual({
+      kind: "checkin",
+      qr: `kidsci1.${ID}.${"A".repeat(43)}`,
+    });
+  });
+
+  it("reconhece o QR de check-out e extrai o check-in embutido", () => {
+    expect(kids.parseKidsQr(`kidsco1.${ID}.A2B3.abc_-123`)).toEqual({
+      kind: "checkout",
+      qr: `kidsco1.${ID}.A2B3.abc_-123`,
+      checkinId: ID,
+    });
+  });
+
+  it.each([
+    ["vazio", ""],
+    ["só espaços", "   "],
+    ["lixo", "https://exemplo.com"],
+    ["check-in com partes a menos", `kidsci1.${ID}`],
+    ["check-in com id que não é UUID", "kidsci1.abc.def"],
+    ["check-in sem segredo", `kidsci1.${ID}.`],
+    ["check-out sem assinatura", `kidsco1.${ID}.A2B3`],
+    ["check-out com código vazio", `kidsco1.${ID}..sig`],
+    ["check-out com assinatura vazia", `kidsco1.${ID}.A2B3.`],
+    ["check-out com id que não é UUID", "kidsco1.abc.A2B3.sig"],
+    ["prefixo desconhecido", `kidsxx1.${ID}.A2B3.sig`],
+  ])("não reconhece: %s", (_label, raw) => {
+    expect(kids.parseKidsQr(raw)).toBeNull();
   });
 });

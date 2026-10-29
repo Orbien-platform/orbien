@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Users } from "lucide-react";
 import { AllergyNote } from "@/components/kids/AllergyNote";
 import { CheckinDialog } from "@/components/kids/CheckinDialog";
 import { CheckoutDialog } from "@/components/kids/CheckoutDialog";
+import { QrDesk } from "@/components/kids/QrDesk";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -45,6 +46,10 @@ export function SessionDesk({ sessionId, canOverride }: SessionDeskProps) {
 
   const [checkinChild, setCheckinChild] = useState<KidsChild | null>(null);
   const [checkoutItem, setCheckoutItem] = useState<KidsRosterItem | null>(null);
+  const [checkoutQr, setCheckoutQr] = useState<string | undefined>(undefined);
+  // Recusas seguidas por check-in: sobrevivem a fechar e reabrir a entrega, porque
+  // o servidor também conta por check-in e não por diálogo.
+  const [refusals, setRefusals] = useState<Record<string, number>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   const key = `${sessionId}|${rosterKey}`;
@@ -145,6 +150,7 @@ export function SessionDesk({ sessionId, canOverride }: SessionDeskProps) {
             type="button"
             onClick={() => {
               setNotice(null);
+              setCheckoutQr(undefined);
               setCheckoutItem(i);
             }}
             aria-label={`Entregar criança: ${i.child.full_name}`}
@@ -205,6 +211,19 @@ export function SessionDesk({ sessionId, canOverride }: SessionDeskProps) {
             </ul>
           )
         ) : null}
+        {roster ? (
+          <QrDesk
+            sessionId={sessionId}
+            roomName={roster.session.room.name}
+            items={roster.items}
+            onCheckedIn={reload}
+            onCheckout={(item, qr) => {
+              setNotice(null);
+              setCheckoutQr(qr);
+              setCheckoutItem(item);
+            }}
+          />
+        ) : null}
       </section>
 
       <section aria-label="Presentes" className="flex flex-col gap-3">
@@ -258,6 +277,9 @@ export function SessionDesk({ sessionId, canOverride }: SessionDeskProps) {
         <CheckoutDialog
           item={checkoutItem}
           canOverride={canOverride}
+          initialQr={checkoutQr}
+          refusals={refusals[checkoutItem.checkin_id] ?? 0}
+          onRefused={(total) => setRefusals((r) => ({ ...r, [checkoutItem.checkin_id]: total }))}
           onClose={() => setCheckoutItem(null)}
           onDone={() => {
             setNotice(`Criança entregue: ${checkoutItem.child.full_name}.`);

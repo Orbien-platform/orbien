@@ -26,21 +26,32 @@ interface CheckoutDialogProps {
   item: KidsRosterItem;
   /** Líder kids: pode autorizar a saída por exceção, com motivo. */
   canOverride: boolean;
+  /** QR lido da tela do responsável: faz o papel do código digitado. */
+  initialQr?: string;
+  /** Recusas seguidas já sofridas por este check-in (a mesa lembra entre uma abertura e outra). */
+  refusals?: number;
+  /** Chamado a cada recusa, com o total do check-in. */
+  onRefused?: (total: number) => void;
   onClose: () => void;
   onDone: () => void;
 }
+
+/** A partir de quantas recusas seguidas a tela para de sugerir nova tentativa. */
+export const ESCALATE_AFTER = 3;
 
 /**
  * Entregar a criança (KIDS-09). O responsável diz o código; a equipe o digita e
  * indica quem está buscando. Código que não confere recusa de forma genérica —
  * o caminho para quem esqueceu o código é a exceção do líder, com motivo gravado.
  */
-export function CheckoutDialog({ item, canOverride, onClose, onDone }: CheckoutDialogProps) {
+export function CheckoutDialog({ item, canOverride, initialQr, refusals = 0, onRefused, onClose, onDone }: CheckoutDialogProps) {
   const [guardians, setGuardians] = useState<KidsGuardian[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadKey, setLoadKey] = useState(0);
   const [guardianId, setGuardianId] = useState("");
   const [code, setCode] = useState("");
+  const [qr, setQr] = useState<string | null>(initialQr ?? null);
+  const [refused, setRefused] = useState(refusals);
   const [override, setOverride] = useState(false);
   const [reason, setReason] = useState("");
   const [pickerName, setPickerName] = useState("");
@@ -67,12 +78,16 @@ export function CheckoutDialog({ item, canOverride, onClose, onDone }: CheckoutD
     setBusy(true);
     setError(null);
     try {
-      await checkOut(item.checkin_id, { code, picked_up_by_person_id: guardianId });
+      await checkOut(item.checkin_id, { ...(qr !== null ? { qr } : { code }), picked_up_by_person_id: guardianId });
       onDone();
     } catch (err) {
       if (kidsErrorStatus(err) === 403) {
         setError(REFUSAL);
         setCode("");
+        // Um QR recusado não se reenvia: o caminho seguinte é o código digitado.
+        setQr(null);
+        setRefused(refused + 1);
+        onRefused?.(refused + 1);
       } else {
         setError(apiErrorMessage(err, "Não foi possível entregar a criança. Tente de novo."));
       }
@@ -94,6 +109,7 @@ export function CheckoutDialog({ item, canOverride, onClose, onDone }: CheckoutD
     }
   }
 
+  const escalate = refused >= ESCALATE_AFTER;
   const title = override ? "Líder autoriza a saída" : "Entregar criança";
 
   return (
@@ -167,28 +183,47 @@ export function CheckoutDialog({ item, canOverride, onClose, onDone }: CheckoutD
             </div>
           )}
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="co-code" className="text-sm font-medium text-ink dark:text-white">
-              Código de retirada
-            </Label>
-            <Input
-              id="co-code"
-              value={code}
-              onChange={(e) => setCode(normalizeCode(e.target.value))}
-              disabled={busy}
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              maxLength={CODE_LENGTH}
-              className="h-14 max-w-[11rem] rounded-[10px] text-center font-mono text-3xl font-semibold tracking-[0.3em] tabular-nums"
-            />
-          </div>
+          {qr !== null ? (
+            <div className="flex items-center justify-between gap-3 rounded-[8px] bg-teal-dim px-3 py-2 text-sm font-medium text-teal">
+              <span>QR lido</span>
+              <button
+                type="button"
+                onClick={() => setQr(null)}
+                disabled={busy}
+                className="font-normal underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                Digitar o código
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="co-code" className="text-sm font-medium text-ink dark:text-white">
+                Código de retirada
+              </Label>
+              <Input
+                id="co-code"
+                value={code}
+                onChange={(e) => setCode(normalizeCode(e.target.value))}
+                disabled={busy}
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={CODE_LENGTH}
+                className="h-14 max-w-[11rem] rounded-[10px] text-center font-mono text-3xl font-semibold tracking-[0.3em] tabular-nums"
+              />
+            </div>
+          )}
         </div>
       )}
 
       {error ? (
         <p role="alert" className="mt-4 rounded-[8px] bg-crimson-dim px-3 py-2 text-sm font-medium text-crimson">
           {error}
+        </p>
+      ) : null}
+      {escalate && !override ? (
+        <p role="status" className="mt-3 rounded-[8px] bg-amber-dim px-3 py-2 text-sm font-medium text-amber-ink">
+          {refused} recusas seguidas neste check-in. Chame o líder kids: só ele libera a criança sem o código.
         </p>
       ) : null}
 
@@ -201,9 +236,13 @@ export function CheckoutDialog({ item, canOverride, onClose, onDone }: CheckoutD
               setOverride((o) => !o);
             }}
             disabled={busy}
-            className="rounded-[8px] px-2 py-1.5 text-sm text-stone underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+            className={
+              escalate && !override
+                ? "rounded-[8px] border border-amber-ink bg-amber-dim px-3 py-1.5 text-sm font-medium text-amber-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                : "rounded-[8px] px-2 py-1.5 text-sm text-stone underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+            }
           >
-            {override ? "Voltar ao código" : "Sem o código? Líder autoriza a saída"}
+            {override ? "Voltar ao código" : escalate ? "Líder autoriza a saída (sem o código)" : "Sem o código? Líder autoriza a saída"}
           </button>
         ) : (
           <span />
@@ -231,7 +270,7 @@ export function CheckoutDialog({ item, canOverride, onClose, onDone }: CheckoutD
             <Button
               type="button"
               onClick={confirm}
-              disabled={busy || code.length !== CODE_LENGTH || guardianId === ""}
+              disabled={busy || (qr === null && code.length !== CODE_LENGTH) || guardianId === ""}
               className="flex items-center gap-1.5 rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : null}

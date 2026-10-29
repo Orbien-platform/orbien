@@ -22,10 +22,20 @@ vi.mock("@/components/kids/CheckinDialog", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/kids/QrDesk", () => ({
+  QrDesk: ({ roomName, items, onCheckedIn, onCheckout }: { roomName: string; items: KidsRosterItem[]; onCheckedIn: () => void; onCheckout: (i: KidsRosterItem, qr: string) => void }) => (
+    <div data-testid="qrdesk">
+      qrdesk:{roomName}:{items.length}
+      <button onClick={onCheckedIn}>qr check-in feito</button>
+      <button onClick={() => onCheckout(items[0], "kidsco1.qr")}>qr check-out lido</button>
+    </div>
+  ),
+}));
 vi.mock("@/components/kids/CheckoutDialog", () => ({
-  CheckoutDialog: ({ item, canOverride, onClose, onDone }: { item: KidsRosterItem; canOverride: boolean; onClose: () => void; onDone: () => void }) => (
+  CheckoutDialog: ({ item, canOverride, initialQr, refusals, onRefused, onClose, onDone }: { item: KidsRosterItem; canOverride: boolean; initialQr?: string; refusals?: number; onRefused?: (n: number) => void; onClose: () => void; onDone: () => void }) => (
     <div data-testid="checkout">
-      checkout:{item.child.full_name}:{String(canOverride)}
+      checkout:{item.child.full_name}:{String(canOverride)}:qr={initialQr ?? "-"}:refusals={refusals}
+      <button onClick={() => onRefused?.((refusals ?? 0) + 1)}>recusou</button>
       <button onClick={onDone}>entregou</button>
       <button onClick={onClose}>fechar checkout</button>
     </div>
@@ -165,5 +175,44 @@ describe("SessionDesk", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getByText("Davi Souza")).toBeInTheDocument();
+  });
+
+  it("o campo de QR fica na mesa com o roster carregado e o check-in por QR recarrega os presentes", async () => {
+    vi.mocked(getRoster).mockResolvedValue(roster([item("k1", "Davi Souza")]));
+    const user = userEvent.setup();
+    render(<SessionDesk sessionId="s1" canOverride />);
+    expect(await screen.findByTestId("qrdesk")).toHaveTextContent("qrdesk:Maternal:1");
+    expect(getRoster).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "qr check-in feito" }));
+    await waitFor(() => expect(getRoster).toHaveBeenCalledTimes(2));
+  });
+
+  it("QR de check-out lido abre a entrega daquela criança já com o QR; o botão da linha abre sem QR", async () => {
+    vi.mocked(getRoster).mockResolvedValue(roster([item("k1", "Davi Souza")]));
+    const user = userEvent.setup();
+    render(<SessionDesk sessionId="s1" canOverride />);
+    await user.click(await screen.findByRole("button", { name: "qr check-out lido" }));
+    expect(screen.getByTestId("checkout")).toHaveTextContent("checkout:Davi Souza:true:qr=kidsco1.qr");
+    await user.click(screen.getByRole("button", { name: "fechar checkout" }));
+
+    await user.click(screen.getByRole("button", { name: "Entregar criança: Davi Souza" }));
+    expect(screen.getByTestId("checkout")).toHaveTextContent("qr=-");
+  });
+
+  it("as recusas do check-in sobrevivem a fechar e reabrir a entrega", async () => {
+    vi.mocked(getRoster).mockResolvedValue(roster([item("k1", "Davi Souza"), item("k2", "Bia Lima")]));
+    const user = userEvent.setup();
+    render(<SessionDesk sessionId="s1" canOverride />);
+    await user.click(await screen.findByRole("button", { name: "Entregar criança: Davi Souza" }));
+    expect(screen.getByTestId("checkout")).toHaveTextContent("refusals=0");
+    await user.click(screen.getByRole("button", { name: "recusou" }));
+    await user.click(screen.getByRole("button", { name: "fechar checkout" }));
+
+    await user.click(screen.getByRole("button", { name: "Entregar criança: Davi Souza" }));
+    expect(screen.getByTestId("checkout")).toHaveTextContent("refusals=1");
+    await user.click(screen.getByRole("button", { name: "fechar checkout" }));
+    // Outra criança não herda a contagem.
+    await user.click(screen.getByRole("button", { name: "Entregar criança: Bia Lima" }));
+    expect(screen.getByTestId("checkout")).toHaveTextContent("refusals=0");
   });
 });

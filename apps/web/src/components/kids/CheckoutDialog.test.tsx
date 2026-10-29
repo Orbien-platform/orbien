@@ -180,3 +180,122 @@ describe("CheckoutDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+const QR = "kidsco1.c1.A2B3.assinatura";
+
+function setupQr(props: { canOverride?: boolean; refusals?: number } = {}) {
+  const onClose = vi.fn();
+  const onDone = vi.fn();
+  const onRefused = vi.fn();
+  render(
+    <CheckoutDialog
+      item={ITEM}
+      canOverride={props.canOverride ?? true}
+      initialQr={QR}
+      refusals={props.refusals}
+      onRefused={onRefused}
+      onClose={onClose}
+      onDone={onDone}
+    />,
+  );
+  return { onClose, onDone, onRefused };
+}
+
+describe("CheckoutDialog — QR lido da tela do responsável", () => {
+  beforeEach(() => {
+    vi.mocked(checkOut).mockReset();
+    vi.mocked(checkOutOverride).mockReset();
+    vi.mocked(getChild).mockReset();
+    vi.mocked(getChild).mockResolvedValue(FICHA);
+  });
+
+  it("o QR faz o papel do código: some o campo do código e só falta dizer quem busca", async () => {
+    const user = userEvent.setup();
+    const { onDone } = setupQr();
+    vi.mocked(checkOut).mockResolvedValue();
+    expect(screen.getByText("QR lido")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Código de retirada")).not.toBeInTheDocument();
+    const confirm = screen.getByRole("button", { name: "Entregar criança" });
+    expect(confirm).toBeDisabled();
+
+    await user.selectOptions(await screen.findByLabelText("Quem está buscando"), "p1");
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    await waitFor(() => expect(checkOut).toHaveBeenCalledWith("c1", { qr: QR, picked_up_by_person_id: "p1" }));
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it("‘Digitar o código’ descarta o QR e volta ao campo do código", async () => {
+    const user = userEvent.setup();
+    setupQr();
+    await user.click(screen.getByRole("button", { name: "Digitar o código" }));
+    expect(screen.queryByText("QR lido")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Código de retirada")).toBeInTheDocument();
+  });
+
+  it("QR recusado usa a MESMA frase do código errado e devolve o campo do código", async () => {
+    const user = userEvent.setup();
+    const { onRefused } = setupQr();
+    vi.mocked(checkOut).mockRejectedValueOnce(apiError(403, "Não foi possível confirmar a retirada. Chame o líder kids."));
+    await user.selectOptions(await screen.findByLabelText("Quem está buscando"), "p2");
+    await user.click(screen.getByRole("button", { name: "Entregar criança" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(REFUSAL);
+    expect(screen.getByLabelText("Código de retirada")).toHaveValue("");
+    expect(onRefused).toHaveBeenCalledWith(1);
+  });
+});
+
+describe("CheckoutDialog — recusas seguidas no mesmo check-in", () => {
+  beforeEach(() => {
+    vi.mocked(checkOut).mockReset();
+    vi.mocked(getChild).mockReset();
+    vi.mocked(getChild).mockResolvedValue(FICHA);
+  });
+
+  async function refuseOnce(user: ReturnType<typeof userEvent.setup>) {
+    vi.mocked(checkOut).mockRejectedValueOnce(apiError(403, "x"));
+    await fillCode(user, "ZZZZ");
+    await user.selectOptions(await screen.findByLabelText("Quem está buscando"), "p2");
+    await user.click(screen.getByRole("button", { name: "Entregar criança" }));
+    await screen.findByRole("alert");
+  }
+
+  it("com 1 e 2 recusas, nada de escalar ainda", async () => {
+    const user = userEvent.setup();
+    const { onRefused } = setupQr({ refusals: 1 });
+    await user.click(screen.getByRole("button", { name: "Digitar o código" }));
+    await refuseOnce(user);
+    expect(onRefused).toHaveBeenLastCalledWith(2);
+    expect(screen.queryByText(/recusas seguidas/i)).not.toBeInTheDocument();
+  });
+
+  it("na 3ª recusa seguida manda chamar o líder kids e põe a exceção em destaque para o líder", async () => {
+    const user = userEvent.setup();
+    const { onRefused } = setupQr({ refusals: 2, canOverride: true });
+    await user.click(screen.getByRole("button", { name: "Digitar o código" }));
+    await refuseOnce(user);
+    expect(onRefused).toHaveBeenLastCalledWith(3);
+    const escalate = screen.getByText(/recusas seguidas/);
+    expect(escalate).toHaveTextContent("3 recusas seguidas");
+    expect(escalate).toHaveTextContent("Chame o líder kids");
+    expect(escalate.textContent).not.toMatch(/tente de novo/i);
+    const override = screen.getByRole("button", { name: "Líder autoriza a saída (sem o código)" });
+    expect(override).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sem o código? Líder autoriza a saída" })).not.toBeInTheDocument();
+  });
+
+  it("quem já abre o diálogo com 3 recusas vê o aviso desde o início", async () => {
+    setupQr({ refusals: 3, canOverride: false });
+    expect(await screen.findByText(/recusas seguidas/)).toHaveTextContent("Chame o líder kids");
+    // Quem não é líder não ganha a exceção: só a orientação.
+    expect(screen.queryByRole("button", { name: /Líder autoriza/ })).not.toBeInTheDocument();
+  });
+
+  it("o destaque leva ao formulário da exceção, que continua exigindo motivo", async () => {
+    const user = userEvent.setup();
+    setupQr({ refusals: 3, canOverride: true });
+    await user.click(screen.getByRole("button", { name: "Líder autoriza a saída (sem o código)" }));
+    expect(screen.getByRole("heading", { name: "Líder autoriza a saída" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Autorizar saída" })).toBeDisabled();
+  });
+});

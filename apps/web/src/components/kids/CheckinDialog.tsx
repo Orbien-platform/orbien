@@ -31,17 +31,131 @@ interface CheckinDialogProps {
   onCheckedIn: () => void;
 }
 
-interface RangeAsk {
+export interface RangeAsk {
   age_months: number;
   min_age_months: number;
   max_age_months: number;
 }
 
-function rangeFrom(err: unknown): RangeAsk | null {
+export function rangeFrom(err: unknown): RangeAsk | null {
   if (!axios.isAxiosError(err)) return null;
   const d = err.response?.data;
   if (typeof d?.age_months !== "number") return null;
   return { age_months: d.age_months, min_age_months: d.min_age_months, max_age_months: d.max_age_months };
+}
+
+/** A confirmação do check-in: o código grande e a etiqueta. Serve ao check-in por busca e ao por QR. */
+export function CheckinDone({
+  result,
+  childName,
+  roomName,
+  onClose,
+}: {
+  result: KidsCheckinResult;
+  childName: string;
+  roomName: string;
+  onClose: () => void;
+}) {
+  const [printing, setPrinting] = useState(false);
+  const stopPrinting = useCallback(() => setPrinting(false), []);
+  return (
+    <>
+      <Modal open onOpenChange={(next) => !next && onClose()} title="Check-in feito" description={`${childName} · ${roomName}`} className="max-w-xl">
+        <div className="flex flex-col items-start gap-4">
+          <p className="text-sm text-stone">
+            Passe este código ao responsável. Sem ele a criança não sai: a equipe não consegue relê-lo depois.
+          </p>
+          <div className="w-full overflow-x-auto py-2">
+            <PickupCode code={result.code} size="xl" />
+          </div>
+          {result.labels.child_label.has_allergy ? <AllergyNote allergy={result.labels.child_label.allergy} /> : null}
+          {result.age_override ? (
+            <p className="text-sm text-stone">Criança fora da faixa da turma, confirmada pela equipe.</p>
+          ) : null}
+          {result.capacity_warning ? (
+            <p role="status" className="flex items-center gap-1.5 rounded-[8px] bg-amber-dim px-2 py-1 text-sm font-medium text-amber-ink">
+              <AlertTriangle size={15} strokeWidth={2} aria-hidden="true" />
+              Turma na capacidade: {result.capacity_warning.present} de {result.capacity_warning.capacity}. Pode seguir.
+            </p>
+          ) : null}
+        </div>
+        <div className="mt-6 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setPrinting(true)}
+            className="flex items-center gap-1.5 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors hover:border-teal hover:text-teal focus-visible:ring-2 focus-visible:ring-ring/50 dark:text-white"
+          >
+            <Printer size={14} strokeWidth={1.6} aria-hidden="true" />
+            Imprimir etiqueta
+          </button>
+          <Button
+            type="button"
+            onClick={onClose}
+            className="rounded-[8px] bg-navy px-4 py-1.5 text-sm text-white hover:bg-navy/90"
+          >
+            Concluir
+          </Button>
+        </div>
+      </Modal>
+      {printing ? <PrintLabels labels={result.labels} onDone={stopPrinting} /> : null}
+    </>
+  );
+}
+
+/** Criança fora da faixa de uma turma que aceita: a equipe confirma ou volta. */
+export function OutOfRangeConfirm({
+  subject,
+  description,
+  roomName,
+  ask,
+  busy,
+  error,
+  onBack,
+  onConfirm,
+  onClose,
+}: {
+  subject: string;
+  description: string;
+  roomName: string;
+  ask: RangeAsk;
+  busy: boolean;
+  error: string | null;
+  onBack: () => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal open onOpenChange={(next) => !next && onClose()} title="Criança fora da faixa etária" description={description}>
+      <p className="text-sm text-ink dark:text-white">
+        {subject} tem {formatAge(ask.age_months)} e a turma {roomName} é de{" "}
+        {formatAgeRange(ask.min_age_months, ask.max_age_months)}. Esta turma aceita crianças fora da faixa.
+      </p>
+      {error ? (
+        <p role="alert" className="mt-3 text-sm text-crimson">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-5 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={busy}
+          className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
+        >
+          Voltar
+        </button>
+        <Button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          className="flex items-center gap-1.5 rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+          Fazer check-in mesmo assim
+        </Button>
+      </div>
+    </Modal>
+  );
 }
 
 /**
@@ -56,7 +170,6 @@ export function CheckinDialog({ sessionId, roomName, child, onClose, onCheckedIn
   const [guardianId, setGuardianId] = useState<string>("");
   const [ask, setAsk] = useState<RangeAsk | null>(null);
   const [result, setResult] = useState<KidsCheckinResult | null>(null);
-  const [printing, setPrinting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadKey, setLoadKey] = useState(0);
@@ -109,87 +222,25 @@ export function CheckinDialog({ sessionId, roomName, child, onClose, onCheckedIn
     }
   }
 
-  const stopPrinting = useCallback(() => setPrinting(false), []);
-
   // ─── Confirmação: o código grande ───
   if (result) {
-    return (
-      <>
-        <Modal open onOpenChange={(next) => !next && onClose()} title="Check-in feito" description={`${child.full_name} · ${roomName}`} className="max-w-xl">
-          <div className="flex flex-col items-start gap-4">
-            <p className="text-sm text-stone">
-              Passe este código ao responsável. Sem ele a criança não sai: a equipe não consegue relê-lo depois.
-            </p>
-            <div className="w-full overflow-x-auto py-2">
-              <PickupCode code={result.code} size="xl" />
-            </div>
-            {result.labels.child_label.has_allergy ? <AllergyNote allergy={result.labels.child_label.allergy} /> : null}
-            {result.age_override ? (
-              <p className="text-sm text-stone">Criança fora da faixa da turma, confirmada pela equipe.</p>
-            ) : null}
-            {result.capacity_warning ? (
-              <p role="status" className="flex items-center gap-1.5 rounded-[8px] bg-amber-dim px-2 py-1 text-sm font-medium text-amber-ink">
-                <AlertTriangle size={15} strokeWidth={2} aria-hidden="true" />
-                Turma na capacidade: {result.capacity_warning.present} de {result.capacity_warning.capacity}. Pode seguir.
-              </p>
-            ) : null}
-          </div>
-          <div className="mt-6 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setPrinting(true)}
-              className="flex items-center gap-1.5 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors hover:border-teal hover:text-teal focus-visible:ring-2 focus-visible:ring-ring/50 dark:text-white"
-            >
-              <Printer size={14} strokeWidth={1.6} aria-hidden="true" />
-              Imprimir etiqueta
-            </button>
-            <Button
-              type="button"
-              onClick={onClose}
-              className="rounded-[8px] bg-navy px-4 py-1.5 text-sm text-white hover:bg-navy/90"
-            >
-              Concluir
-            </Button>
-          </div>
-        </Modal>
-        {printing ? <PrintLabels labels={result.labels} onDone={stopPrinting} /> : null}
-      </>
-    );
+    return <CheckinDone result={result} childName={child.full_name} roomName={roomName} onClose={onClose} />;
   }
 
   // ─── Fora da faixa: confirmação da equipe ───
   if (ask) {
     return (
-      <Modal open onOpenChange={(next) => !next && onClose()} title="Criança fora da faixa etária" description={`${child.full_name} · ${roomName}`}>
-        <p className="text-sm text-ink dark:text-white">
-          {child.full_name} tem {formatAge(ask.age_months)} e a turma {roomName} é de{" "}
-          {formatAgeRange(ask.min_age_months, ask.max_age_months)}. Esta turma aceita crianças fora da faixa.
-        </p>
-        {error ? (
-          <p role="alert" className="mt-3 text-sm text-crimson">
-            {error}
-          </p>
-        ) : null}
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => setAsk(null)}
-            disabled={busy}
-            className="rounded-[8px] px-3 py-1.5 text-sm text-stone hover:bg-[var(--surface-subtle)]"
-          >
-            Voltar
-          </button>
-          <Button
-            type="button"
-            onClick={() => submit(true)}
-            disabled={busy}
-            className="flex items-center gap-1.5 rounded-[8px] bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy/90 disabled:opacity-50"
-          >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-            Fazer check-in mesmo assim
-          </Button>
-        </div>
-      </Modal>
+      <OutOfRangeConfirm
+        subject={child.full_name}
+        description={`${child.full_name} · ${roomName}`}
+        roomName={roomName}
+        ask={ask}
+        busy={busy}
+        error={error}
+        onBack={() => setAsk(null)}
+        onConfirm={() => submit(true)}
+        onClose={onClose}
+      />
     );
   }
 

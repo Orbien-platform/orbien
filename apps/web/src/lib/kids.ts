@@ -377,6 +377,30 @@ export async function revokeConsent(guardianPersonId: string): Promise<void> {
   await api.post("/kids/consent/revoke", { guardian_person_id: guardianPersonId });
 }
 
+// ─── QR ───────────────────────────────────────────────────────────────────────
+
+export type KidsQrRead =
+  | { kind: "checkin"; qr: string }
+  | { kind: "checkout"; qr: string; checkinId: string };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Classifica o texto que o leitor entregou. O QR de check-in é `kidsci1.<id>.<segredo>`
+ * e o de check-out, `kidsco1.<checkin_id>.<código>.<hmac>`. A tela só usa o `checkin_id`
+ * para achar a criança no roster: quem decide se o QR vale é o servidor (a assinatura
+ * é dele), e qualquer falha volta como a mesma recusa genérica.
+ */
+export function parseKidsQr(raw: string): KidsQrRead | null {
+  const qr = raw.trim();
+  const parts = qr.split(".");
+  if (parts[0] === "kidsci1" && parts.length === 3 && UUID_RE.test(parts[1]) && parts[2]) return { kind: "checkin", qr };
+  if (parts[0] === "kidsco1" && parts.length === 4 && UUID_RE.test(parts[1]) && parts[2] && parts[3]) {
+    return { kind: "checkout", qr, checkinId: parts[1] };
+  }
+  return null;
+}
+
 // ─── Check-in e check-out ─────────────────────────────────────────────────────
 
 export async function checkIn(
@@ -384,6 +408,15 @@ export async function checkIn(
   body: { child_id: string; guardian_person_id: string; confirm_out_of_range?: boolean },
 ): Promise<KidsCheckinResult> {
   const { data } = await api.post<KidsCheckinResult>(`/kids/sessions/${sessionId}/checkins`, body);
+  return data;
+}
+
+/** Check-in pela leitura do QR emitido no app do responsável (R3-1). */
+export async function checkInByQr(
+  sessionId: string,
+  body: { qr: string; confirm_out_of_range?: boolean },
+): Promise<KidsCheckinResult> {
+  const { data } = await api.post<KidsCheckinResult>(`/kids/sessions/${sessionId}/checkins/by-qr`, body);
   return data;
 }
 
@@ -399,7 +432,7 @@ export async function getLabels(checkinId: string): Promise<KidsLabels> {
 
 export async function checkOut(
   checkinId: string,
-  body: { code: string; picked_up_by_person_id: string },
+  body: ({ code: string } | { qr: string }) & { picked_up_by_person_id: string },
 ): Promise<void> {
   await api.post(`/kids/checkins/${checkinId}/checkout`, body);
 }
