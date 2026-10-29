@@ -16,6 +16,7 @@ describe('maskPhone', () => {
     ['11987654321', '*******4321'],
     ['+55 11 98765-4321', '+** ** *****-4321'],
     ['123', '***'],
+    ['1-23', '*-**'],
     ['', null],
     [null, null],
   ])('%p vira %p (só os 4 últimos dígitos ficam)', (input, expected) => {

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { KIDS_QR_TTL_SECONDS, KidsQrService } from './kids-qr.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { KidsActor } from '../children/kids-child-access.service';
@@ -63,6 +63,25 @@ describe('QR do check-out (código embutido de forma verificável)', () => {
     process.env['JWT_SECRET'] = 'outro-segredo';
     expect(svc.codeFromCheckoutQr(qr, 'k1')).toBeNull();
     process.env['JWT_SECRET'] = 'segredo-de-teste-do-kids-qr';
+  });
+});
+
+describe('bordas do verificador', () => {
+  it('sem JWT_SECRET configurado não assina nem verifica (500, nunca um QR sem chave)', () => {
+    const { svc } = build();
+    const saved = process.env['JWT_SECRET'];
+    delete process.env['JWT_SECRET'];
+    try {
+      expect(() => svc.signCheckout('k1', 'A2B3')).toThrow(InternalServerErrorException);
+    } finally {
+      process.env['JWT_SECRET'] = saved;
+    }
+  });
+
+  it('QR ausente (undefined/null) é lixo, não exceção', async () => {
+    const { svc } = build();
+    expect(svc.codeFromCheckoutQr(undefined as never, 'k1')).toBeNull();
+    expect(await svc.consumeCheckin(staff, null as never)).toEqual({ ok: false, reason: 'malformed' });
   });
 });
 
