@@ -7,6 +7,7 @@ import {
 import { KidsCheckinService } from './kids-checkin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { KidsActor } from '../children/kids-child-access.service';
+import { KidsQrService } from './kids-qr.service';
 import * as audit from '../../common/audit/write-audit-log';
 
 jest.mock('../../common/audit/write-audit-log', () => ({ writeAuditLog: jest.fn().mockResolvedValue(undefined) }));
@@ -57,13 +58,21 @@ function build(checkin: object | null = openCheckin()) {
     sessionAccess as never,
     alert as never,
     notice as never,
+    qr,
   );
   return { svc, client, sessionAccess, alert, notice, queryRaw };
 }
 
+// O verificador real (HMAC), não um mock: o que se testa aqui é a regra "QR vale
+// como código digitado", e isso depende de a assinatura ser de verdade.
+const qr = new KidsQrService({} as unknown as PrismaService, {} as never);
+
 const errorOf = async (p: Promise<unknown>) => p.then(() => null, (e: unknown) => e);
 
-beforeAll(() => jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate', 'setTimeout'] }));
+beforeAll(() => {
+  process.env['JWT_SECRET'] = 'segredo-de-teste-do-kids-qr';
+  jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate', 'setTimeout'] });
+});
 afterAll(() => jest.useRealTimers());
 beforeEach(() => writeAuditLog.mockClear());
 
@@ -399,5 +408,68 @@ describe('KidsCheckinService.checkOut: limite de 5 tentativas (R3-2)', () => {
     const { svc, queryRaw } = build();
     await errorOf(svc.checkOut(volunteer, 'k1', wrong));
     expect(queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe('KidsCheckinService.checkOut por QR (R3-1): equivalente ao código digitado', () => {
+  const GENERIC = 'Não foi possível confirmar a retirada. Chame o líder kids.';
+  const goodQr = () => qr.signCheckout('k1', 'A2B3');
+
+  it('QR válido fecha como o código certo: mesmas regras, mesmo resultado', async () => {
+    const { svc, client } = build();
+    const out = await svc.checkOut(leader, 'k1', { qr: goodQr(), picked_up_by_person_id: 'mae' });
+    expect(out).toMatchObject({ id: 'k1', picked_up_by_person_id: 'mae', picked_up_by_name: 'Maria Souza' });
+    expect(client.kidsCheckin.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('QR válido NÃO dispensa can_pickup: pessoa sem permissão leva o mesmo 403 genérico', async () => {
+    const { svc, client } = build();
+    client.kidsGuardian.findMany.mockResolvedValue([]);
+    const err = await errorOf(svc.checkOut(leader, 'k1', { qr: goodQr(), picked_up_by_person_id: 'tio' }));
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getResponse()).toMatchObject({ message: GENERIC });
+    expect(client.kidsCheckin.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['forjado (assinatura inválida)', () => `kidsco1.k1.A2B3.${'x'.repeat(43)}`],
+    ['de OUTRO check-in', () => qr.signCheckout('k2', 'A2B3')],
+    ['com código adulterado', () => goodQr().replace('A2B3', 'ZZZZ')],
+    ['de check-in (kidsci1), não de check-out', () => 'kidsci1.x.y'],
+    ['lixo', () => 'lixo'],
+  ])('QR %s: o MESMO 403 do código errado, auditado, conta tentativa e avisa o líder', async (_l, make) => {
+    const wrong = build();
+    const wrongErr = await errorOf(wrong.svc.checkOut(leader, 'k1', { code: 'ZZZZ', picked_up_by_person_id: 'mae' }));
+
+    writeAuditLog.mockClear();
+    const { svc, client, queryRaw, alert } = build();
+    const err = await errorOf(svc.checkOut(leader, 'k1', { qr: make(), picked_up_by_person_id: 'mae' }));
+
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getResponse()).toEqual((wrongErr as ForbiddenException).getResponse());
+    expect(client.kidsCheckin.updateMany).not.toHaveBeenCalled();
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(alert.notifyCheckoutDenied).toHaveBeenCalledTimes(1);
+    expect(writeAuditLog.mock.calls[0][1]).toMatchObject({ action: 'kids.checkout_denied' });
+    expect(JSON.stringify(writeAuditLog.mock.calls[0][1])).not.toMatch(/A2B3|kidsco1/);
+  });
+
+  it('travado: nem o QR válido fecha (mesmo 403), só o override', async () => {
+    const { svc, client } = build(openCheckin({ checkout_failed_attempts: 5 }));
+    const err = await errorOf(svc.checkOut(leader, 'k1', { qr: goodQr(), picked_up_by_person_id: 'mae' }));
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getResponse()).toMatchObject({ message: GENERIC });
+    expect(client.kidsCheckin.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('código E qr juntos: 400 (ambíguo), sem gastar tentativa', async () => {
+    const { svc, queryRaw } = build();
+    await expect(svc.checkOut(leader, 'k1', { code: 'A2B3', qr: goodQr(), picked_up_by_person_id: 'mae' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('quem não opera a sessão leva 403 também com QR', async () => {
+    const { svc } = build();
+    await expect(svc.checkOut(volunteer, 'k1', { qr: goodQr(), picked_up_by_person_id: 'mae' })).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

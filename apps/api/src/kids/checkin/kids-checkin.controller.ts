@@ -15,6 +15,8 @@ import { KidsLabelsService } from './kids-labels.service';
 import { CreateKidsCheckinDto } from './dto/create-kids-checkin.dto';
 import { CheckoutKidsCheckinDto } from './dto/checkout-kids-checkin.dto';
 import { CheckoutOverrideKidsCheckinDto } from './dto/checkout-override-kids-checkin.dto';
+import { CheckinByQrKidsCheckinDto } from './dto/checkin-by-qr-kids-checkin.dto';
+import { KidsQrService } from './kids-qr.service';
 
 // Caminhos completos nos métodos (mesmo motivo de KidsSessionsController): o
 // check-in é filho da sessão e o check-out, raiz própria. O recorte fino —
@@ -29,6 +31,7 @@ export class KidsCheckinController {
     private readonly checkinService: KidsCheckinService,
     private readonly rosterService: KidsRosterService,
     private readonly labelsService: KidsLabelsService,
+    private readonly qrService: KidsQrService,
   ) {}
 
   // Equipe, voluntário escalado ou o responsável (só do próprio filho, pelo app).
@@ -43,6 +46,31 @@ export class KidsCheckinController {
     const checkin = await this.checkinService.checkIn(actor, sessionId, dto);
     // AC 5: as duas etiquetas saem junto com o código.
     return { ...checkin, labels: await this.labelsService.forCheckin(actor, checkin.id) };
+  }
+
+  // R3-1: a equipe lê o QR emitido pelo app do responsável. Criança e quem entrega
+  // vêm do QR; quem recebe é o usuário que leu. Mesmas regras do check-in normal.
+  // Só quem opera a sessão (gestão, voluntário escalado): o responsável emite o
+  // QR, não o lê.
+  @Post('kids/sessions/:id/checkins/by-qr')
+  @Roles(...KIDS_READ_ROLES)
+  async checkInByQr(
+    @Param('id', ParseUUIDPipe) sessionId: string,
+    @Body() dto: CheckinByQrKidsCheckinDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const actor = toKidsActor(user);
+    const checkin = await this.checkinService.checkInByQr(actor, sessionId, dto);
+    return { ...checkin, labels: await this.labelsService.forCheckin(actor, checkin.id) };
+  }
+
+  // R3-1: QR de check-in de curta duração e uso único, emitido para o responsável
+  // do próprio Household. Papéis de família; o recorte (ser responsável DESTA
+  // criança, sem atalho de gestão) é do service.
+  @Post('kids/children/:id/qr')
+  @Roles(...KIDS_FAMILY_ROLES)
+  issueQr(@Param('id', ParseUUIDPipe) childId: string, @CurrentUser() user: JwtPayload) {
+    return this.qrService.issueCheckin(toKidsActor(user), childId);
   }
 
   // Reimpressão: o service só entrega a quem fez o check-in e enquanto ele está

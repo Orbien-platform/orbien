@@ -225,6 +225,11 @@ fi
 if [ -f prisma/migrations/030_rls_kids_checkout_attempts.sql ]; then
   run_sql_file prisma/migrations/030_rls_kids_checkout_attempts.sql
 fi
+# `kids_checkin_qr_tokens` (QR de check-in emitido pelo app do responsável):
+# tabela nova, mesmo caso de 028/029. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/031_rls_kids_checkin_qr_tokens.sql ]; then
+  run_sql_file prisma/migrations/031_rls_kids_checkin_qr_tokens.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -696,6 +701,19 @@ BEGIN
   RAISE NOTICE 'kids_child_health com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_child_health, encontrei % — 029_rls_kids_child_health.sql rodou?', n;
+  END IF;
+
+  -- 031: QR de check-in do Kids. Sem a policy, app_user leria o token de
+  -- qualquer congregação.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename = 'kids_checkin_qr_tokens'
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'kids_checkin_qr_tokens com app_congregation_allowed simetrico: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_checkin_qr_tokens, encontrei % — 031_rls_kids_checkin_qr_tokens.sql rodou?', n;
   END IF;
 
   -- 030: kids_register_checkout_failure() — o contador de tentativas de código

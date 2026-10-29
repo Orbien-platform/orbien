@@ -20,6 +20,8 @@ import { KidsSessionAccessService } from './kids-session-access.service';
 import { KidsLeaderAlertService } from './kids-leader-alert.service';
 import { KidsPickupNoticeService } from './kids-pickup-notice.service';
 import { CheckoutKidsCheckinDto } from './dto/checkout-kids-checkin.dto';
+import { CheckinByQrKidsCheckinDto } from './dto/checkin-by-qr-kids-checkin.dto';
+import { KidsQrService } from './kids-qr.service';
 import { CheckoutOverrideKidsCheckinDto } from './dto/checkout-override-kids-checkin.dto';
 
 export type KidsCapacityWarning = { capacity: number; present: number };
@@ -58,6 +60,8 @@ const ALREADY_CLOSED = 'Este check-in já foi encerrado';
 // A mesma mensagem para código errado e para pessoa sem permissão de retirar:
 // quem está no balcão não descobre qual das duas falhou (AC 7).
 const CHECKOUT_DENIED = 'Não foi possível confirmar a retirada. Chame o líder kids.';
+// Mesma mensagem para QR de check-in expirado, usado, forjado ou malformado.
+const QR_DENIED = 'Não foi possível validar o QR. Peça um novo ao responsável.';
 
 export type KidsCheckoutResult = {
   id: string;
@@ -80,8 +84,8 @@ export const KIDS_CHECKOUT_MAX_ATTEMPTS = 5;
 const normalizeName = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
 /**
- * Check-in e check-out seguros (KIDS-08/09). Check-in só por código — o QR é
- * futuro e entra sem mudar o modelo. Toda gravação tem quem entrega
+ * Check-in e check-out seguros (KIDS-08/09). O código é o segredo da retirada;
+ * o QR (R3-1) é só outro portador dele. Toda gravação tem quem entrega
  * (`guardian_person_id`, um KidsGuardian) e quem recebe (`checked_in_by`, o
  * usuário autenticado).
  */
@@ -96,6 +100,7 @@ export class KidsCheckinService {
     private readonly sessionAccess: KidsSessionAccessService,
     private readonly leaderAlert: KidsLeaderAlertService,
     private readonly pickupNotice: KidsPickupNoticeService,
+    private readonly qr: KidsQrService,
   ) {}
 
   async checkIn(actor: KidsActor, sessionId: string, dto: CreateKidsCheckinDto): Promise<KidsCheckinResult> {
@@ -150,6 +155,30 @@ export class KidsCheckinService {
   }
 
   /**
+   * Check-in pela leitura do QR do responsável (R3-1). O QR só diz QUEM é a
+   * criança e QUEM entrega (o responsável que o emitiu); o resto é o check-in
+   * normal, com todas as regras (faixa, consentimento, 409, capacidade só
+   * avisa) e `checked_in_by` = quem leu. Só a equipe que opera a sessão lê.
+   * Expirado, usado, forjado ou malformado: 403 genérico, motivo só na
+   * auditoria. A leitura é desfeita se o check-in falhar (mesma transação).
+   */
+  async checkInByQr(actor: KidsActor, sessionId: string, dto: CheckinByQrKidsCheckinDto): Promise<KidsCheckinResult> {
+    if (!(await this.sessionAccess.canOperate(actor, sessionId))) {
+      throw new ForbiddenException('Sem permissão para operar esta sessão');
+    }
+    const read = await this.qr.consumeCheckin(actor, dto.qr);
+    if (!read.ok) {
+      await this.audit(actor, null, 'kids.checkin_qr_denied', { session_id: sessionId, reason: read.reason });
+      throw new ForbiddenException(QR_DENIED);
+    }
+    return this.checkIn(actor, sessionId, {
+      child_id: read.child_id,
+      guardian_person_id: read.guardian_person_id,
+      confirm_out_of_range: dto.confirm_out_of_range,
+    });
+  }
+
+  /**
    * O check-in aberto da criança, com o código, para o responsável (ou a
    * gestão) rever a qualquer momento. A equipe de balcão não tem esta rota:
    * o código só a ela no ato do check-in. 404 também para criança alheia.
@@ -178,6 +207,8 @@ export class KidsCheckinService {
       room: checkin.session.room,
       checked_in_at: checkin.checked_in_at,
       code: checkin.code,
+      // Mesmo código, embutido e assinado (R3-1): a equipe lê no lugar de digitar.
+      qr: this.qr.signCheckout(checkin.id, checkin.code),
     };
   }
 
@@ -192,6 +223,9 @@ export class KidsCheckinService {
       throw new ForbiddenException('Sem permissão para operar esta sessão');
     }
     if (checkin.checked_out_at) throw new ConflictException(ALREADY_CLOSED);
+    if (dto.code !== undefined && dto.qr !== undefined) {
+      throw new BadRequestException('Informe o código ou o QR, não os dois');
+    }
     if (!dto.picked_up_by_person_id && !dto.picked_up_by_name?.trim()) {
       throw new BadRequestException('Informe quem está retirando a criança');
     }
@@ -208,7 +242,11 @@ export class KidsCheckinService {
       throw new ForbiddenException(CHECKOUT_DENIED);
     }
 
-    const codeOk = dto.code.trim().toUpperCase() === checkin.code;
+    // O QR é só outro portador do código (R3-1): lido e verificado, vira o
+    // mesmo código digitado — mesmas regras, mesma contagem de tentativas,
+    // mesma recusa. QR forjado ou de outro check-in conta como código errado.
+    const typed = dto.qr !== undefined ? this.qr.codeFromCheckoutQr(dto.qr, checkin.id) : (dto.code ?? '');
+    const codeOk = typed !== null && typed.trim().toUpperCase() === checkin.code;
     const picker = codeOk ? await this.findPicker(checkin.child_id, dto) : null;
     if (!picker) {
       await this.denyCheckout(actor, checkin, codeOk ? 'pickup_not_allowed' : 'code_mismatch');
@@ -378,7 +416,7 @@ export class KidsCheckinService {
     }
   }
 
-  private async audit(actor: KidsActor, childId: string, action: string, after: Record<string, unknown>) {
+  private async audit(actor: KidsActor, childId: string | null, action: string, after: Record<string, unknown>) {
     try {
       await writeAuditLog(
         this.prisma,

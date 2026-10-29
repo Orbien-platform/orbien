@@ -20,7 +20,7 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 | Feature | Reason |
 |---|---|
 | Reconhecimento facial | Risco LGPD alto |
-| Check-in e check-out por QR | **Futuro.** MVP é só código; o código já é gravado por check-in, então o QR entra depois sem mudar o modelo |
+| QR impresso na etiqueta | A etiqueta continua só com o código. O QR vive na tela do app do responsável (R3-1); etiqueta no app segue fora |
 | Currículo, lição, galeria de fotos | Não é o núcleo de operação e segurança |
 | Comunicação por WhatsApp com pais | Notificação push/in-app cobre o MVP |
 | Cobrança de eventos kids | Passaria pelo montador Asaas (AD-008); fora do MVP |
@@ -42,9 +42,9 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 | Terceiro autorizado sem conta | Pessoa cadastrada pelo responsável com nome + telefone + foto opcional; retira com código | Avó/vizinho buscam; precisa rastro; resposta do usuário | y |
 | Consentimento | `ConsentRecord` do responsável com `origin = 'kids'` e versão do termo; sem consentimento válido não há check-in | LGPD Art. 14; responsável cadastra | y |
 | Dados sensíveis | Alergia/restrição e observação médica: texto livre, visível só a equipe kids e liderança, auditado | Art. 11 (saúde); resposta do usuário | y |
-| Check-in | **Só por código no MVP** (QR fica para o futuro, ver Out of Scope). Gera `KidsCheckin` com `code` de 4 caracteres único na sessão | Etiqueta criança + responsável com o mesmo código; resposta do usuário | y |
+| Check-in | Por código (a equipe faz o check-in e o sistema gera o `code` de 4 caracteres, único na sessão) **ou pela leitura do QR** emitido pelo app do responsável (R3-1). O QR é só um portador: o código segue sendo o segredo da retirada | Etiqueta criança + responsável com o mesmo código; respostas do usuário e do dono (2026-10-29) | y |
 | Responsável pela entrada | Todo check-in grava **quem entrega** (`guardian_person_id`, obrigatório, de `KidsGuardian`) e **quem recebe na turma** (`checked_in_by`, obrigatório, usuário da equipe) | Resposta do usuário ("tem que ter um responsável pela entrada") | y |
-| Check-out | Só com o código; quem não tem `can_pickup` é recusado; override só por líder kids com motivo gravado | Núcleo de segurança; resposta do usuário | y |
+| Check-out | Com o código digitado **ou o QR** da tela do código do responsável (equivalentes: mesmas regras de `can_pickup`, mesma recusa 403, mesma auditoria); 5 tentativas erradas travam o check-in (R3-2); override só por líder kids com motivo gravado | Núcleo de segurança; respostas do usuário e do dono (2026-10-29) | y |
 | Capacidade da turma | Aviso ao atingir; **não bloqueia** | Resposta do usuário | y |
 | Contagem de crianças (PROD-37) | A contagem vem do check-in (total de crianças distintas) e **pode ser alterada manualmente**; sem check-in, segue manual | Resposta do usuário; mantém o contrato atual | y |
 | Escala | `CelebrationMinistry` ganha vínculo opcional com `KidsSession`; ministério "Kids" existente é reaproveitado | Evita escala paralela; resposta do usuário | y |
@@ -105,12 +105,14 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 **Acceptance Criteria**:
 1. WHEN responsável ou equipe faz check-in de criança numa sessão aberta THEN o sistema SHALL criar `KidsCheckin` com horário, responsável que entrega, membro da equipe que recebe e `code` de 4 caracteres único na sessão.
 1b. WHEN o check-in vem sem responsável que entrega ou sem quem recebe THEN o sistema SHALL responder 400.
+1c. WHEN o responsável pede o QR de check-in de um filho (`POST /kids/children/:id/qr`) THEN o sistema SHALL emitir um QR de curta duração (5 minutos) e uso único, preso à criança e ao responsável que o emitiu, e SHALL aceitar o pedido só de responsável cadastrado (`KidsGuardian`) e adulto do Household da criança (404 aos demais; 409 se a criança já está presente). WHEN a equipe lê o QR (`POST /kids/sessions/:id/checkins/by-qr`) THEN o check-in SHALL sair com `guardian_person_id` = quem emitiu e `checked_in_by` = quem leu, passando por TODAS as regras do check-in normal (faixa, consentimento, 409, capacidade só avisa); QR expirado, já usado, forjado ou malformado SHALL receber um 403 genérico, sem revelar o motivo (que fica só na auditoria `kids.checkin_qr_denied`). Falha do check-in (409, 422) SHALL NOT consumir o QR.
 2. WHEN a criança já tem check-in aberto na mesma instância THEN o sistema SHALL responder 409.
 3. WHEN a idade da criança não cabe na faixa e a turma tem `allows_out_of_range = true` THEN o sistema SHALL avisar, pedir confirmação e, confirmado, gravar `age_override = true`.
 3b. WHEN a idade não cabe e a turma tem `allows_out_of_range = false` THEN o sistema SHALL responder 422 "fora da faixa etária da turma", sem confirmação possível.
 4. WHEN a sessão atinge a capacidade THEN o sistema SHALL avisar e permitir seguir (nunca bloquear).
 5. WHEN o check-in ocorre THEN o sistema SHALL gerar etiqueta imprimível da criança (nome, turma, alergia em destaque, código) e a do responsável (código).
 6. WHEN check-out recebe o código de responsável com `can_pickup` THEN o sistema SHALL fechar o check-in com horário e quem retirou.
+6b. WHEN o check-out recebe o QR da tela do código do responsável (`GET /kids/children/:id/checkin` devolve `qr`, com o mesmo código embutido e assinado) no lugar do código digitado THEN o sistema SHALL tratá-lo como o código: mesmas regras de `can_pickup`, mesma recusa 403 idêntica, mesma auditoria e mesma contagem de tentativas; QR forjado, adulterado ou de outro check-in SHALL valer como código errado.
 7. WHEN o código não confere ou a pessoa não pode retirar THEN o sistema SHALL recusar (403) sem revelar o motivo à tela da pessoa e avisar o líder. O código é mostrado no check-in (a quem o fez: o responsável no app, ou a equipe no balcão para repassá-lo) e ao responsável a qualquer momento (`GET /kids/children/:id/checkin`); **não** aparece à equipe no roster nem pode ser relido por ela depois — a etiqueta é opcional, o código não depende dela. A reimpressão (`GET /kids/checkins/:id/labels`) é só de quem fez o check-in (`checked_in_by` = usuário do token) e só enquanto ele está aberto; qualquer outro usuário ou papel, gestão e voluntário escalado inclusos, recebe 403.
 7b. WHEN o check-out de um check-in acumula **5 tentativas de código errado** (por código digitado ou por QR) THEN o sistema SHALL travá-lo: toda tentativa seguinte, inclusive com o código certo e pessoa autorizada, SHALL receber o MESMO 403 genérico do AC 7 (o travamento não é revelado), sem fechar o check-in; SHALL gravar a auditoria `kids.checkout_locked` (uma vez) e avisar o líder por push; só `checkout-override` do líder kids o encerra. Acerto antes da 5ª falha fecha normalmente. Só código errado conta (código certo com pessoa sem `can_pickup` não gasta tentativa); o contador é por check-in e atômico sob concorrência.
 8. WHEN líder kids autoriza retirada por exceção THEN o sistema SHALL exigir motivo e gravá-lo. É o caminho quando o responsável esqueceu o código, já que a equipe não consegue relê-lo.

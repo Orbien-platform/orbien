@@ -13,12 +13,19 @@ describe('CheckoutKidsCheckinDto', () => {
     expect(await run(CheckoutKidsCheckinDto, { code: 'A2B3', picked_up_by_name: 'Maria' })).toHaveLength(0);
   });
 
+  it('R3-1: aceita o QR no lugar do código (por id ou por nome)', async () => {
+    expect(await run(CheckoutKidsCheckinDto, { qr: 'kidsco1.k.A2B3.sig', picked_up_by_person_id: U1 })).toHaveLength(0);
+    expect(await run(CheckoutKidsCheckinDto, { qr: 'qualquer-coisa', picked_up_by_name: 'Maria' })).toHaveLength(0);
+  });
+
   it('código de formato errado passa na validação (vira 403 genérico no serviço, não 400)', async () => {
     expect(await run(CheckoutKidsCheckinDto, { code: 'x', picked_up_by_name: 'Maria' })).toHaveLength(0);
   });
 
   it.each([
-    ['sem código', { picked_up_by_name: 'Maria' }],
+    ['sem código nem QR', { picked_up_by_name: 'Maria' }],
+    ['QR vazio', { qr: '', picked_up_by_name: 'Maria' }],
+    ['QR gigante', { qr: 'k'.repeat(201), picked_up_by_name: 'Maria' }],
     ['código vazio', { code: '', picked_up_by_name: 'Maria' }],
     ['código gigante', { code: 'A'.repeat(17) }],
     ['id que não é UUID', { code: 'A2B3', picked_up_by_person_id: 'x' }],

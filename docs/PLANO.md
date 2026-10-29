@@ -717,6 +717,11 @@ Premium (`@RequiresPlan('premium')`). Spec e desenho em
   `GET /kids/children/:id/checkin` (o responsável relê o código),
   `GET /kids/checkins/:id/labels`. Push "Criança entregue" ao responsável
   primário (categoria `kids`).
+- QR (R3-1): é só um portador dos segredos que já existem. O responsável emite
+  um QR de check-in (`POST /kids/children/:id/qr`, 5 min, uso único) que a
+  equipe lê em `POST /kids/sessions/:id/checkins/by-qr`; `GET
+  /kids/children/:id/checkin` devolve também o `qr` do código, que o check-out
+  aceita no lugar do código digitado (`{ qr }`).
 - Escala e contagem: `kids_session_id` na escala; `checkin_total` sugere o
   `children` da contagem (`PROD-37`); `GET /kids/attendance/summary` alimenta o
   cartão Kids em `/pessoas/indicadores`.
@@ -739,8 +744,6 @@ Falta:
   responsável do check-in (hoje ficam como referência e só a identificação de
   quem retirou é apagada). Exige tornar as FKs anuláveis e perde a contagem
   distinta por criança.
-- Check-in e check-out por **QR** (o código já é gravado por check-in, o QR
-  entra sem mudar o modelo).
 - Etiqueta no app (hoje o web imprime pelo navegador) e em PDF.
 - Limite de tentativas de código no check-out (throttle por criança/sessão).
 - Push a outros papéis (líder, voluntário) além do responsável primário.

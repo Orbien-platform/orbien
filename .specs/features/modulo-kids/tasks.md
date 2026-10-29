@@ -123,6 +123,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 ### R3 — Rodada 3 (decisões do dono, 2026-10-29)
 
+- [x] **R3-1** QR para check-in e check-out (portador dos mesmos segredos): `POST /kids/children/:id/qr`, `POST /kids/sessions/:id/checkins/by-qr`, `qr` em `GET /kids/children/:id/checkin` e `{ qr }` no check-out; tabela `kids_checkin_qr_tokens` + `031_rls_kids_checkin_qr_tokens.sql`. *Depends:* T19b · *Tests:* unit + integração + RLS (uso único, expiração, forjado, regras do check-in, concorrência) · *Reqs:* KIDS-08,09
 - [x] **R3-2** Limite de 5 tentativas de código no check-out: coluna `kids_checkins.checkout_failed_attempts` (migration) + `kids_register_checkout_failure()` SECURITY DEFINER (`030_rls_kids_checkout_attempts.sql`, no bootstrap e no passo 7), travamento com o mesmo 403, auditoria `kids.checkout_locked` e push ao líder. *Depends:* T18 · *Tests:* unit + integração (4+acerto, 5+certo, override, concorrência) · *Reqs:* KIDS-09
 - [x] **R3-4** `GET /kids/guardians/search?q=` (adultos da congregação, limite 20, telefone mascarado) para `KIDS_MANAGE_ROLES`. *Depends:* T13 · *Tests:* unit + integração (papéis, isolamento teste1×teste2, sem criança) · *Reqs:* KIDS-04,05
 - [x] **R3-5** `checkin_total` por instância em `GET /celebrations/instances` (uma agregação, sem N+1) e conferência de que `ministry_leader` lê a contagem (papéis de READ já o incluíam; nada corrigido). *Depends:* T22 · *Tests:* unit + integração · *Reqs:* KIDS-11

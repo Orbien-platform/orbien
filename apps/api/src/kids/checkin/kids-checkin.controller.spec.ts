@@ -30,6 +30,11 @@ describe('KidsCheckinController', () => {
     // O responsável relê o código do filho; a equipe de balcão não tem rota para isso.
     expect(rolesFor('openForChild')).toEqual([...MANAGE, 'member']);
     expect(rolesFor('openForChild')).not.toContain('volunteer');
+    // R3-1: a equipe LÊ o QR de check-in (sem o responsável); o responsável EMITE (sem voluntário).
+    expect(rolesFor('checkInByQr')).toEqual([...MANAGE, 'volunteer']);
+    expect(rolesFor('checkInByQr')).not.toContain('member');
+    expect(rolesFor('issueQr')).toEqual([...MANAGE, 'member']);
+    expect(rolesFor('issueQr')).not.toContain('volunteer');
   });
 
   it('check-out responde 200 (fecha um recurso existente, não cria)', () => {
@@ -40,13 +45,15 @@ describe('KidsCheckinController', () => {
   it('delega aos services com o ator do JWT', async () => {
     const checkin = {
       checkIn: jest.fn().mockResolvedValue({ id: 'k1' }),
+      checkInByQr: jest.fn().mockResolvedValue({ id: 'k2' }),
       checkOut: jest.fn().mockResolvedValue({ id: 'k1' }),
       checkOutOverride: jest.fn().mockResolvedValue({ id: 'k1' }),
       getOpenForChild: jest.fn().mockResolvedValue({ id: 'k1' }),
     };
     const roster = { roster: jest.fn().mockResolvedValue({ items: [] }) };
     const labels = { forCheckin: jest.fn().mockResolvedValue({ checkin_id: 'k1', child_label: {}, guardian_label: {} }) };
-    const c = new KidsCheckinController(checkin as never, roster as never, labels as never);
+    const qr = { issueCheckin: jest.fn().mockResolvedValue({ qr: 'kidsci1.x.y' }) };
+    const c = new KidsCheckinController(checkin as never, roster as never, labels as never, qr as never);
     const inDto = { child_id: 'c', guardian_person_id: 'g' };
     const outDto = { code: 'A2B3', picked_up_by_name: 'Maria' };
     const ovDto = { reason: 'Perdeu a etiqueta', picked_up_by_name: 'Maria' };
@@ -57,13 +64,19 @@ describe('KidsCheckinController', () => {
     await c.checkOutOverride('k1', ovDto, USER);
     await c.roster('s1', USER);
     await c.openForChild('c1', USER);
+    const byQr = await c.checkInByQr('s1', { qr: 'kidsci1.x.y', confirm_out_of_range: true }, USER);
+    await c.issueQr('c1', USER);
 
     expect(checkin.checkIn).toHaveBeenCalledWith(ACTOR, 's1', inDto);
     expect(checkin.checkOut).toHaveBeenCalledWith(ACTOR, 'k1', outDto);
     expect(checkin.checkOutOverride).toHaveBeenCalledWith(ACTOR, 'k1', ovDto);
     expect(roster.roster).toHaveBeenCalledWith(ACTOR, 's1');
     expect(checkin.getOpenForChild).toHaveBeenCalledWith(ACTOR, 'c1');
-    expect(labels.forCheckin).toHaveBeenCalledTimes(2);
+    expect(checkin.checkInByQr).toHaveBeenCalledWith(ACTOR, 's1', { qr: 'kidsci1.x.y', confirm_out_of_range: true });
+    expect(qr.issueCheckin).toHaveBeenCalledWith(ACTOR, 'c1');
+    expect(byQr).toMatchObject({ id: 'k2', labels: { checkin_id: 'k1' } }); // etiquetas do check-in feito
+    expect(labels.forCheckin).toHaveBeenCalledTimes(3);
+    expect(labels.forCheckin).toHaveBeenCalledWith(ACTOR, 'k2');
     expect(labels.forCheckin).toHaveBeenCalledWith(ACTOR, 'k1');
     // AC 5: o check-in devolve o código e as duas etiquetas juntos
     expect(created).toMatchObject({ id: 'k1', labels: { checkin_id: 'k1' } });

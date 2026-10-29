@@ -2,7 +2,8 @@
  * RLS — módulo Kids (KIDS-01, AD-001, AD-013)
  *
  * `kids_rooms`, `kids_sessions`, `kids_guardians` e `kids_checkins` nasceram
- * com escopo de CONGREGAÇÃO (`028_rls_kids.sql`). Sem o script, `app_user`
+ * com escopo de CONGREGAÇÃO (`028_rls_kids.sql`); `kids_checkin_qr_tokens`
+ * (R3-1) nasceu em `031_rls_kids_checkin_qr_tokens.sql`. Sem o script, `app_user`
  * leria — e escreveria — a ficha de criança de qualquer outra igreja.
  *
  * Duas congregações do MESMO tenant (o caso que só tenant_id deixaria passar)
@@ -31,6 +32,7 @@ type Side = {
   kidsGuardianId: string;
   checkinId: string;
   healthId: string;
+  qrTokenId: string;
 };
 
 let a1: Side;
@@ -117,10 +119,21 @@ async function seed(
   const health = await prismaAdmin.kidsChildHealth.create({
     data: { ...scope, person_id: child.id, allergies: `amendoim ${tag}` },
   });
+  const qr = await prismaAdmin.kidsCheckinQrToken.create({
+    data: {
+      ...scope,
+      child_id: child.id,
+      guardian_person_id: guardian.id,
+      issued_by: "u",
+      secret_hash: `hash-${tag}`,
+      expires_at: new Date(Date.now() + 300_000),
+    },
+  });
   return {
     tenantId,
     congId,
     healthId: health.id,
+    qrTokenId: qr.id,
     instanceId: instance.id,
     instance2Id: instance2.id,
     childId: child.id,
@@ -283,6 +296,30 @@ const tables: {
       tx.kidsChildHealth.updateMany({
         where: { id },
         data: { allergies: "sequestrada" },
+      }),
+  },
+  {
+    name: "kids_checkin_qr_tokens",
+    find: (tx: Tx, id: string) => tx.kidsCheckinQrToken.findUnique({ where: { id } }),
+    list: (tx: Tx, tenant_id: string) =>
+      tx.kidsCheckinQrToken.findMany({ where: { tenant_id } }),
+    own: (s: Side) => s.qrTokenId,
+    create: (tx: Tx, s: Side) =>
+      tx.kidsCheckinQrToken.create({
+        data: {
+          tenant_id: s.tenantId,
+          congregation_id: s.congId,
+          child_id: s.childId,
+          guardian_person_id: s.guardianId,
+          issued_by: "intruso",
+          secret_hash: "x",
+          expires_at: new Date(Date.now() + 300_000),
+        },
+      }),
+    update: (tx: Tx, id: string) =>
+      tx.kidsCheckinQrToken.updateMany({
+        where: { id },
+        data: { used_by: "intruso" },
       }),
   },
 ];

@@ -111,7 +111,7 @@ equipe confere → **check-out**.
 - **Interfaces**:
   - `POST /kids/sessions/:id/checkins` `{ child_id, guardian_id, confirm_out_of_range? }` → `{ code, label }`; `guardian_id` é obrigatório (quem entrega) e `checked_in_by` vem do usuário (quem recebe); 422 se fora da faixa e a turma não aceita; pede `confirm_out_of_range` se aceita
   - `GET /kids/checkins/:id/labels` → reimpressão das etiquetas; 403 para quem não fez o check-in (`checked_in_by` ≠ usuário do token), 409 depois do check-out. A equipe não relê o código (spec AC 7)
-  - `POST /kids/checkins/:id/checkout` `{ code }` (QR fica para o futuro)
+  - `POST /kids/checkins/:id/checkout` `{ code }` ou `{ qr }` (R3-1; mais `picked_up_by_person_id`/`picked_up_by_name`)
   - `POST /kids/checkins/:id/checkout-override` `{ reason, picked_up_by_name }` (líder kids)
   - `GET /kids/sessions/:id/roster` (quem está presente, alergias em destaque; **sem** `code` — a equipe vê o código no check-in e não o relê)
   - `GET /kids/children/:id/checkin` (responsável do Household ou gestão): check-in aberto da criança com sessão, turma, horário e `code`; 404 se não há. Código esquecido: override do líder com motivo
@@ -246,7 +246,7 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 |---|---|---|
 | Código de retirada | 4 caracteres de `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (sem 0/O/1/I/L) | Legível em etiqueta; único por sessão |
 | Etiqueta | HTML/CSS impresso (web), PDF (mobile) | Sem impressora térmica nem dependência nova |
-| Check-out | Só por código no MVP; QR é futuro | Decisão do dono do produto; leitor de câmera do check-in de PG fica para depois |
+| Check-in/out por QR | O QR é só um portador dos segredos que já existem (R3-1, ver "Rodada 3") | Decisão do dono, 2026-10-29 |
 | Plano | `premium` | Decisão do dono do produto |
 | Criança sem login | `Person` sem `UserAccount`, `is_child=true` | Menor não autentica |
 
@@ -263,3 +263,13 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 - **Regra:** só código errado conta (`code_mismatch`; QR forjado ou de outro check-in entra aqui, R3-1). Pessoa sem `can_pickup` com o código certo é recusa, mas não gasta tentativa. Com `checkout_failed_attempts >= 5` a tentativa seguinte (qualquer código) devolve o mesmo 403 e audita `kids.checkout_denied` com `reason: 'locked'`, sem contar e sem novo push. A tentativa que leva o contador a exatamente 5 (só uma, mesmo sob concorrência) audita `kids.checkout_locked`, e o push ao líder (`kids_checkout_locked`, no lugar do `kids_checkout_denied` daquela tentativa) diz que só a retirada por exceção libera.
 - **Limite conhecido:** a checagem de "travado" lê o contador carregado no início da requisição; tentativas simultâneas já em voo quando o 5º erro é gravado ainda são avaliadas. O teto é 5 + a concorrência do momento, e o contador final é exato.
 - **Sem destravar:** não há rota que zere o contador; o `checkout-override` é o caminho (AC 8).
+
+### R3-1 · QR para check-in e check-out
+
+**Interpretação adotada:** o QR é só um **portador** dos mesmos segredos que já existem. O código NÃO deixa de ser o segredo da retirada; o QR não cria um caminho com regras próprias.
+
+- **Check-in (emitido pelo servidor).** `POST /kids/children/:id/qr` (papéis `KIDS_FAMILY_ROLES`) emite `kidsci1.<token_id>.<segredo>`: segredo aleatório de 32 bytes (base64url), **5 minutos**, **uso único**, preso a criança + responsável que o emitiu. Só quem é `KidsGuardian` da criança E adulto do Household dela emite (a gestão não ganha atalho: usa o check-in normal) — 404 aos demais, 409 se a criança já está presente. Emitir de novo apaga os QRs não usados do par. Tabela nova `kids_checkin_qr_tokens` (única exceção ao "sem tabela nova", necessária ao uso único; RLS de congregação em `031_rls_kids_checkin_qr_tokens.sql`, bootstrap e passo 7); só o `sha256` do segredo é guardado, comparado em tempo constante.
+- **Leitura pela equipe.** `POST /kids/sessions/:id/checkins/by-qr { qr, confirm_out_of_range? }` (papéis `KIDS_READ_ROLES`: gestão e voluntário escalado; o responsável emite, não lê). O serviço confere que o ator opera a sessão, consome o QR (`UPDATE ... WHERE used_at IS NULL AND expires_at > now()`, atômico) e chama o `checkIn` normal com a criança e o responsável do token — todas as regras valem. O consumo roda na transação da requisição: se o check-in falhar (409, 422 de faixa/consentimento), tudo é desfeito e o QR segue valendo até expirar.
+- **Recusa.** QR expirado, usado, forjado, inexistente (ou de outra congregação, que a RLS esconde) ou malformado: o mesmo `403 "Não foi possível validar o QR. Peça um novo ao responsável."`. O motivo (`expired|used|forged|unknown|malformed`) só vai para `audit_logs` (`kids.checkin_qr_denied`), nunca para a resposta.
+- **Check-out.** `GET /kids/children/:id/checkin` passa a devolver `qr` = `kidsco1.<checkin_id>.<code>.<hmac>`: o código do check-in aberto, assinado com HMAC-SHA256 (chave derivada do `JWT_SECRET`). A equipe lê e manda `POST /kids/checkins/:id/checkout { qr, picked_up_by_* }`; o serviço verifica a assinatura E que o QR é daquele check-in e o trata como o código digitado: `can_pickup`, 403 idêntico, auditoria e contagem de tentativas (R3-2) iguais. Forjado, adulterado ou de outro check-in = código errado. `code` e `qr` juntos ou nenhum dos dois: 400.
+- **Limite aceito:** o QR de check-out vale enquanto o check-in estiver aberto e quem o fotografa tem o mesmo que o código (por desenho: o QR não é um segredo novo).

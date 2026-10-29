@@ -14,7 +14,8 @@ export type KidsLabels = {
 
 /**
  * Dados das duas etiquetas (AC 5) como JSON pronto para o front imprimir
- * (HTML/CSS `@page` no web). Sem QR: o check-in é só por código no MVP. O PDF
+ * (HTML/CSS `@page` no web). Sem QR na etiqueta: o código é o que se imprime; o QR vive
+ * na tela do app do responsável (R3-1). O PDF
  * fica para depois — o `pdf-export.service` é de relatórios de celebração e
  * não serve de molde barato para uma etiqueta 62×29 mm.
  */

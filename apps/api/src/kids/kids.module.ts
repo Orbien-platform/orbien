@@ -12,6 +12,7 @@ import { KidsRosterService } from './checkin/kids-roster.service';
 import { KidsCheckinService } from './checkin/kids-checkin.service';
 import { KidsLeaderAlertService } from './checkin/kids-leader-alert.service';
 import { KidsPickupNoticeService } from './checkin/kids-pickup-notice.service';
+import { KidsQrService } from './checkin/kids-qr.service';
 import { KidsSessionAccessService } from './checkin/kids-session-access.service';
 import { KidsChildAccessService } from './children/kids-child-access.service';
 import { KidsGuardiansService } from './children/kids-guardians.service';
@@ -44,6 +45,7 @@ import { KidsTemplateService } from './sessions/kids-template.service';
     KidsRosterService,
     KidsLeaderAlertService,
     KidsPickupNoticeService,
+    KidsQrService,
     KidsSessionAccessService,
     KidsCheckinService,
     KidsChildAccessService,

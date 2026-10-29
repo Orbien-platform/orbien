@@ -9,6 +9,10 @@ import {
 import { KidsCheckinService, ageInMonths } from './kids-checkin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { KidsActor } from '../children/kids-child-access.service';
+import * as audit from '../../common/audit/write-audit-log';
+
+jest.mock('../../common/audit/write-audit-log', () => ({ writeAuditLog: jest.fn().mockResolvedValue(undefined) }));
+const writeAuditLog = audit.writeAuditLog as jest.Mock;
 
 const NOW = new Date('2026-10-26T15:00:00Z');
 const monthsAgo = (m: number, dayShift = 0) => {
@@ -72,6 +76,10 @@ function build(opts: { session?: object | null; birth?: Date | null; guardians?:
   };
   const consent = { hasValidConsent: jest.fn().mockResolvedValue(true) };
   const sessionAccess = { canOperate: jest.fn(async (a: KidsActor) => a.roles.includes('ministry_leader')) };
+  const qr = {
+    signCheckout: jest.fn((id: string, code: string) => `kidsco1.${id}.${code}.sig`),
+    consumeCheckin: jest.fn().mockResolvedValue({ ok: true, child_id: 'c1', guardian_person_id: 'mae' }),
+  };
   const svc = new KidsCheckinService(
     { client } as unknown as PrismaService,
     access as never,
@@ -79,8 +87,9 @@ function build(opts: { session?: object | null; birth?: Date | null; guardians?:
     sessionAccess as never,
     { notifyCheckoutDenied: jest.fn() } as never,
     { notifyChildReleased: jest.fn() } as never,
+    qr as never,
   );
-  return { svc, client, access, consent, sessionAccess };
+  return { svc, client, access, consent, sessionAccess, qr };
 }
 
 const body = (extra = {}) => ({ child_id: 'c1', guardian_person_id: 'mae', ...extra });
@@ -118,7 +127,15 @@ describe('KidsCheckinService.getOpenForChild (código ao responsável)', () => {
       room: { id: 'r1', name: 'Maternal' },
       checked_in_at: NOW,
       code: 'A2B3',
+      qr: 'kidsco1.k1.A2B3.sig', // o mesmo código, assinado (R3-1)
     });
+  });
+
+  it('R3-1: o qr devolvido é assinado para ESTE check-in e este código', async () => {
+    const { svc, client, qr } = build();
+    client.kidsCheckin.findFirst.mockResolvedValue(open);
+    await svc.getOpenForChild(parentActor, 'c1');
+    expect(qr.signCheckout).toHaveBeenCalledWith('k1', 'A2B3');
   });
 
   it('criança sem check-in aberto: 404', async () => {
@@ -419,5 +436,72 @@ describe('KidsCheckinService.checkIn', () => {
     expect(client.person.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ id: 'c1', tenant_id: 't1', congregation_id: 'g1', is_child: true, deleted_at: null }) }),
     );
+  });
+});
+
+describe('KidsCheckinService.checkInByQr (R3-1)', () => {
+  const dto = { qr: 'kidsci1.x.y' };
+
+  it('a equipe lê o QR: check-in normal com a criança e o responsável de quem emitiu, e checked_in_by = quem leu', async () => {
+    const { svc, client, qr } = build();
+    const out = await svc.checkInByQr(staff, 's1', dto);
+
+    expect(qr.consumeCheckin).toHaveBeenCalledWith(staff, 'kidsci1.x.y');
+    const [{ data }] = client.kidsCheckin.createManyAndReturn.mock.calls[0];
+    expect(data[0]).toMatchObject({ child_id: 'c1', guardian_person_id: 'mae', checked_in_by: 'staff1', session_id: 's1' });
+    expect(out).toMatchObject({ child_id: 'c1', guardian_person_id: 'mae', checked_in_by: 'staff1' });
+    expect(out.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/);
+  });
+
+  it('passa por TODAS as regras do check-in: fora da faixa (422), 409, consentimento e capacidade só avisa', async () => {
+    const outOfRange = build({ session: session({ room: { min_age_months: 100, max_age_months: 119 } }) });
+    expect(await errorOf(outOfRange.svc.checkInByQr(staff, 's1', dto))).toBeInstanceOf(UnprocessableEntityException);
+
+    const dup = build();
+    dup.client.kidsCheckin.findFirst.mockResolvedValue({ id: 'ja' });
+    expect(await errorOf(dup.svc.checkInByQr(staff, 's1', dto))).toBeInstanceOf(ConflictException);
+
+    const noConsent = build();
+    noConsent.consent.hasValidConsent.mockResolvedValue(false);
+    expect(await errorOf(noConsent.svc.checkInByQr(staff, 's1', dto))).toBeInstanceOf(UnprocessableEntityException);
+
+    const cap = build({ session: session({ room: { capacity: 1 } }) });
+    expect((await cap.svc.checkInByQr(staff, 's1', dto)).capacity_warning).toEqual({ capacity: 1, present: 1 });
+  });
+
+  it('confirm_out_of_range segue para a regra da faixa', async () => {
+    const { svc, client } = build({ session: session({ room: { min_age_months: 0, max_age_months: 11, allows_out_of_range: true } }) });
+    await svc.checkInByQr(staff, 's1', { ...dto, confirm_out_of_range: true });
+    expect(client.kidsCheckin.createManyAndReturn.mock.calls[0][0].data[0].age_override).toBe(true);
+  });
+
+  it.each(['malformed', 'unknown', 'forged', 'expired', 'used'] as const)(
+    'QR %s: 403 com a MESMA mensagem, motivo só na auditoria, nada gravado',
+    async (reason) => {
+      const { svc, client, qr } = build();
+      qr.consumeCheckin.mockResolvedValue({ ok: false, reason });
+      const err = await errorOf(svc.checkInByQr(staff, 's1', dto));
+
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).getResponse()).toMatchObject({
+        statusCode: 403,
+        message: 'Não foi possível validar o QR. Peça um novo ao responsável.',
+      });
+      expect(JSON.stringify((err as ForbiddenException).getResponse())).not.toContain(reason);
+      expect(client.kidsCheckin.createManyAndReturn).not.toHaveBeenCalled();
+      expect(writeAuditLog).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ action: 'kids.checkin_qr_denied', after: { session_id: 's1', reason } }),
+        expect.anything(),
+      );
+    },
+  );
+
+  it('quem não opera a sessão (responsável, voluntário não escalado) leva 403 ANTES de o QR ser consumido', async () => {
+    for (const actor of [parent, volunteer]) {
+      const { svc, qr } = build();
+      expect(await errorOf(svc.checkInByQr(actor, 's1', dto))).toBeInstanceOf(ForbiddenException);
+      expect(qr.consumeCheckin).not.toHaveBeenCalled();
+    }
   });
 });
