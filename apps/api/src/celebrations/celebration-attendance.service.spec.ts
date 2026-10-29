@@ -268,7 +268,12 @@ describe('CelebrationAttendanceService', () => {
         await serviceWith(client).list(user(['pastor']), {}, NOW);
 
         expect(client.kidsCheckin.findMany).toHaveBeenCalledWith({
-          where: { tenant_id: 't1', celebration_instance_id: { in: ['i2'] } },
+          where: {
+            tenant_id: 't1',
+            celebration_instance_id: { in: ['i2'] },
+            // DEC-1: culto cancelado não conta criança nenhuma.
+            session: { celebrationInstance: { status: { not: 'cancelled' } } },
+          },
           select: { celebration_instance_id: true, child_id: true },
           distinct: ['celebration_instance_id', 'child_id'],
         });

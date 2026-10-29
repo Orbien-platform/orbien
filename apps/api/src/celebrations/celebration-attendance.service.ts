@@ -44,6 +44,8 @@ export function toCounts(a: Pick<CelebrationAttendance, 'children' | 'members' |
  * Crianças DISTINTAS com check-in por instância (qualquer status, aberto ou
  * fechado) — valor inicial sugerido para `children` (spec P2 Escala, AC 3).
  * Instância sem check-in fica fora do mapa: quem lê trata ausência como 0.
+ * Instância CANCELADA também fica fora (DEC-1): culto que não aconteceu não
+ * conta criança nenhuma, mesmo com check-in aberto que ainda precisa fechar.
  */
 export async function checkinTotalsByInstance(
   client: PrismaService['client'],
@@ -53,7 +55,11 @@ export async function checkinTotalsByInstance(
   const totals = new Map<string, number>();
   if (instanceIds.length === 0) return totals;
   const rows = await client.kidsCheckin.findMany({
-    where: { tenant_id: tenantId, celebration_instance_id: { in: instanceIds } },
+    where: {
+      tenant_id: tenantId,
+      celebration_instance_id: { in: instanceIds },
+      session: { celebrationInstance: { status: { not: CelebrationInstanceStatus.cancelled } } },
+    },
     select: { celebration_instance_id: true, child_id: true },
     distinct: ['celebration_instance_id', 'child_id'],
   });

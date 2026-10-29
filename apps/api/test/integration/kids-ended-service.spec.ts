@@ -10,8 +10,12 @@
  *   - o override do líder, com motivo, fecha o que ficou (sem motivo, 400);
  *   - culto finalizado: o resumo de presença continua contando a criança.
  *
- * O resumo de um culto CANCELADO com criança presente não é asserido: a spec
- * não define o número (ver "Lacunas de precisão" em spec.md).
+ * DEC-1 (decisão do dono, 2026-10-29): em instância CANCELADA nenhum número de
+ * Kids inclui a criança que estava presente — nem o resumo de presença, nem o
+ * `checkin_total` de `GET /celebrations/instances`, nem a sugestão da contagem
+ * de público (`GET /celebrations/attendance`, que sequer lista o culto).
+ * Fechar o check-in aberto (roster/check-out/override) segue valendo: isso é
+ * segurança, não contagem.
  *
  * Roda em `teste2-church` (Premium). Apaga o que criou.
  */
@@ -39,11 +43,11 @@ const dayKey = (d: Date) => d.toISOString().slice(0, 10);
 const http = () => request(h.app.getHttpServer());
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-async function mkScenario() {
+async function mkScenario(daysFromToday = 120) {
   dayOffset += 1;
   const date = new Date();
   date.setUTCHours(0, 0, 0, 0);
-  date.setUTCDate(date.getUTCDate() + 120 + dayOffset);
+  date.setUTCDate(date.getUTCDate() + daysFromToday + dayOffset);
   const instance = await admin.celebrationInstance.create({
     data: { ...scope, celebration_id: celebration, scheduled_date: date, status: 'published' },
   });
@@ -190,5 +194,66 @@ describe('culto cancelado com criança presente', () => {
     expect(ov.status).toBe(200);
     expect(ov.body.override_reason).toBe('Culto cancelado, criança ficou');
     expect((await roster(b.session)).body.present_count).toBe(0);
+  }, 60_000);
+});
+
+describe('DEC-1: culto cancelado não conta nada', () => {
+  const summaryOf = (s: { date: Date }) =>
+    http()
+      .get('/api/kids/attendance/summary')
+      .query({ date_from: dayKey(s.date), date_to: dayKey(s.date), room_id: room })
+      .set(auth(leader));
+  type Inst = { id: string; checkin_total: number };
+  const instancesOf = () =>
+    http().get('/api/celebrations/instances').query({ celebration_id: celebration }).set(auth(tokenAdmin));
+  const totalOf = (rows: Inst[], id: string) => rows.find((r) => r.id === id)?.checkin_total;
+
+  it('resumo de presença: a criança presente no culto cancelado não entra', async () => {
+    const s = await mkScenario();
+    expect((await summaryOf(s)).body.rooms).toEqual([
+      expect.objectContaining({ room_id: room, total_children: 1 }),
+    ]); // antes de cancelar, conta
+    await setStatus(s.instance.id, 'cancelled');
+    const after = await summaryOf(s);
+    expect(after.status).toBe(200);
+    expect(after.body.rooms).toEqual([]);
+  }, 60_000);
+
+  it('checkin_total de GET /celebrations/instances: 1 antes de cancelar, 0 depois (e o roster segue listando)', async () => {
+    const s = await mkScenario();
+    expect(totalOf((await instancesOf()).body, s.instance.id)).toBe(1);
+    await setStatus(s.instance.id, 'cancelled');
+    const after = await instancesOf();
+    expect(after.status).toBe(200);
+    expect(totalOf(after.body, s.instance.id)).toBe(0);
+    expect((await roster(s.session)).body.present_count).toBe(1);
+  }, 60_000);
+
+  it('sugestão da contagem de público: o culto cancelado não traz número (antes de cancelar, sugeria 1)', async () => {
+    // Culto passado: a lista de contagem só mostra o que já aconteceu (ou já tem lançamento).
+    const s = await mkScenario(-200);
+    const list = () =>
+      http()
+        .get('/api/celebrations/attendance')
+        .query({ celebration_id: celebration, date_from: dayKey(s.date), date_to: dayKey(s.date) })
+        .set(auth(tokenAdmin));
+    type Row = { celebration_instance_id: string; checkin_total: number };
+    const before = (await list()).body as Row[];
+    expect(before.find((r) => r.celebration_instance_id === s.instance.id)?.checkin_total).toBe(1);
+    await setStatus(s.instance.id, 'cancelled');
+    const after = await list();
+    expect(after.status).toBe(200);
+    expect((after.body as Row[]).find((r) => r.celebration_instance_id === s.instance.id)).toBeUndefined();
+  }, 60_000);
+
+  it('o check-out por código fecha o check-in e o total segue 0', async () => {
+    const s = await mkScenario();
+    await setStatus(s.instance.id, 'cancelled');
+    const out = await http()
+      .post(`/api/kids/checkins/${s.checkin}/checkout`)
+      .set(auth(leader))
+      .send({ code: s.code, picked_up_by_person_id: mae });
+    expect(out.status).toBe(200);
+    expect(totalOf((await instancesOf()).body, s.instance.id)).toBe(0);
   }, 60_000);
 });

@@ -92,7 +92,11 @@ describe('CelebrationInstancesService', () => {
       expect(client.kidsCheckin.findMany).toHaveBeenCalledTimes(1);
       expect(client.kidsCheckin.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenant_id: 't1', celebration_instance_id: { in: ['i1', 'i2', 'i3'] } },
+          where: {
+            tenant_id: 't1',
+            celebration_instance_id: { in: ['i1', 'i2', 'i3'] },
+            session: { celebrationInstance: { status: { not: 'cancelled' } } }, // DEC-1
+          },
         }),
       );
     });

@@ -159,6 +159,12 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [ ] **FIX3** `data` dos push `kids_child_received`/`kids_child_released` passa a levar `child_id` (`{ type, checkin_id, session_id, child_id }`); `kids_checkout_locked` conferido (`{ type, session_id, checkin_id }`); contrato em design.md. *Depends:* R3-3,MOB-4 · *Tests:* unit + integração com `toEqual` no `data` (mutação: tirar `child_id` quebra) · *Reqs:* KIDS-09
 - [x] **FIX4** Causa raiz do flaky "contador atômico: 8 erros simultâneos" (`kids-checkout-lock.spec.ts`): com o contador em 5 a tentativa seguinte é recusada como `locked` sem contar (design R3-2), então quantas das 8 contam depende da carga — o teste cravava o agendamento. Teste passa a afirmar a correção (sem atualização perdida, contadas + `locked` = 8, ≥ 5, exatamente UMA `kids.checkout_locked`) e ganha o caso de exatamente 5 simultâneas (soma 5, determinístico); código de produção correto, intocado. *Depends:* R3-2 · *Tests:* o próprio arquivo, 16 execuções isoladas + 8 em paralelo com outras suítes kids, 0 falhas (mutação: contagem perdida quebra) · *Reqs:* KIDS-09
 
+### DEC — Decisões do dono (2026-10-29)
+
+- [x] **DEC-1** Culto cancelado não conta nada: `checkin_total` (instâncias, escala, sugestão de contagem) = 0 em instância cancelada, como o resumo já fazia; check-in aberto segue fechável. Lacuna do spec vira critério definitivo. *Depends:* COV-3 · *Tests:* integração (um por superfície, mutação restaurada) + unit · *Reqs:* KIDS-09,11
+- [ ] **DEC-2** Folga de cobertura do web: branches ≥ 97,5% com testes reais nos arquivos de menor cobertura do Kids, sem tocar o piso. *Depends:* — · *Tests:* vitest · *Reqs:* —
+- [ ] **DEC-3** `test:cov` da API sem OOM no CI: heap do Node fixado no script versionado; motivo em docs/CI.md e docs/TESTES.md. *Depends:* COV-6 · *Tests:* o próprio `npm run test:cov` sem variável de ambiente · *Reqs:* —
+
 ---
 
 ## Validation Tables

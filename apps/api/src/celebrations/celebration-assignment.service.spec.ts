@@ -855,7 +855,13 @@ describe('CelebrationAssignmentService', () => {
       expect(result.map((r) => r.checkin_total)).toEqual([2, 0]);
       expect(result[0]!.attendance).toBeNull(); // o total não vira `children` sozinho
       expect(client.kidsCheckin.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { tenant_id: 't1', celebration_instance_id: { in: ['i-a1', 'i-a2'] } } }),
+        expect.objectContaining({
+          where: {
+            tenant_id: 't1',
+            celebration_instance_id: { in: ['i-a1', 'i-a2'] },
+            session: { celebrationInstance: { status: { not: 'cancelled' } } }, // DEC-1
+          },
+        }),
       );
     });
 
