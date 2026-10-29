@@ -40,6 +40,15 @@ const attempts = async (id: string) =>
 const auditCount = (checkinId: string, action: string) =>
   admin.auditLog.count({ where: { action, entity: 'kids_checkin', after: { path: ['checkin_id'], equals: checkinId } } });
 
+const denialCount = (checkinId: string, reason: string) =>
+  admin.auditLog.count({
+    where: {
+      action: 'kids.checkout_denied',
+      entity: 'kids_checkin',
+      AND: [{ after: { path: ['checkin_id'], equals: checkinId } }, { after: { path: ['reason'], equals: reason } }],
+    },
+  });
+
 let childN = 0;
 async function present() {
   childN += 1;
@@ -185,13 +194,35 @@ describe('limite de 5 tentativas de código no check-out (R3-2)', () => {
     expect(row.override_reason).toBe('Conferi o documento da mãe no balcão');
   });
 
-  it('contador atômico: 8 erros simultâneos somam 8 e só UM trava', async () => {
+  // Causa do flaky (FIX4): com o contador em 5 a tentativa SEGUINTE é recusada como
+  // 'locked' SEM contar (design R3-2). Das 8 simultâneas, as que leem o check-in depois
+  // do 5º commit caem nesse ramo — quantas, depende da carga. Cravar `attempts === 8`
+  // era cravar o agendamento, não a correção. O que é correção, e vale sempre: nenhuma
+  // atualização perdida (cada recusa contada tem a sua auditoria e soma exatamente no
+  // contador), toda requisição é contada OU recusada como 'locked' (8 no total), o
+  // contador chega a >= 5 e exatamente UMA auditoria de travamento.
+  it('contador atômico: 8 erros simultâneos — nenhuma perda, contadas + travadas = 8 e só UM trava', async () => {
     const c = await present();
     const results = await Promise.all(
       Array.from({ length: 8 }, () => checkout(c.id, { code: wrongCode(c.code), picked_up_by_person_id: mae })),
     );
     expect(results.map((r) => r.status)).toEqual(Array(8).fill(403));
-    expect(await attempts(c.id)).toBe(8);
+    const counted = await denialCount(c.id, 'code_mismatch');
+    const lockedDenials = await denialCount(c.id, 'locked');
+    expect(await attempts(c.id)).toBe(counted); // o UPDATE +1 não perdeu nenhuma
+    expect(counted + lockedDenials).toBe(8);
+    expect(counted).toBeGreaterThanOrEqual(5);
+    expect(await auditCount(c.id, 'kids.checkout_locked')).toBe(1);
+  });
+
+  it('contador atômico: exatamente 5 erros simultâneos somam 5 (todas contadas) e só UM trava', async () => {
+    const c = await present();
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => checkout(c.id, { code: wrongCode(c.code), picked_up_by_person_id: mae })),
+    );
+    expect(results.map((r) => r.status)).toEqual(Array(5).fill(403));
+    expect(await attempts(c.id)).toBe(5); // nenhuma lê >= 5 antes da última: nada cai no ramo 'locked'
+    expect(await denialCount(c.id, 'locked')).toBe(0);
     expect(await auditCount(c.id, 'kids.checkout_locked')).toBe(1);
   });
 
