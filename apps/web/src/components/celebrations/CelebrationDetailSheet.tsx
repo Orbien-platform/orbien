@@ -45,6 +45,8 @@ interface CelebrationInstance {
   status?: string;
   serviceOrder?: { id: string } | null;
   attendance?: { children: number; members: number; attendees: number; visitors: number } | null;
+  /** Crianças distintas com check-in no culto (Kids). */
+  checkin_total?: number;
 }
 
 interface CelebrationDetailSheetProps {
@@ -408,6 +410,7 @@ export function CelebrationDetailSheet({
           instanceId={attendanceTarget.id}
           subtitle={fmtDate(attendanceTarget.scheduled_date)}
           initial={attendanceTarget.attendance ?? null}
+          suggestedChildren={attendanceTarget.checkin_total}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
       ) : null}

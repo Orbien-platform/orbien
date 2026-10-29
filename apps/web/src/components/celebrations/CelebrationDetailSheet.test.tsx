@@ -335,6 +335,67 @@ describe("CelebrationDetailSheet", () => {
       );
     });
 
+    it("check-in do Kids vira o valor inicial de Crianças (editável) e o atalho ‘Usar N’ aparece quando o valor muda", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: celebration });
+        return Promise.resolve({
+          data: [
+            { id: "i2", scheduled_date: "2026-09-13T00:00:00.000Z", status: "scheduled", attendance: null, checkin_total: 7 },
+          ],
+        });
+      });
+      const user = userEvent.setup();
+      renderSheet();
+
+      await screen.findByText("Instâncias (1)");
+      await user.click(screen.getByRole("button", { name: /^Contagem de público do culto de/ }));
+      const children = await screen.findByLabelText("Crianças");
+      expect(children).toHaveValue("7");
+      expect(screen.getByText("Check-in do Kids: 7 crianças")).toBeInTheDocument();
+      expect(screen.getByTestId("attendance-total")).toHaveTextContent("7");
+      expect(screen.queryByRole("button", { name: "Usar 7" })).not.toBeInTheDocument();
+
+      await user.clear(children);
+      await user.type(children, "5");
+      await user.click(screen.getByRole("button", { name: "Usar 7" }));
+      expect(children).toHaveValue("7");
+    });
+
+    it("contagem já lançada vence o check-in, que fica à vista como sugestão", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: celebration });
+        return Promise.resolve({
+          data: [
+            {
+              id: "i1", scheduled_date: "2026-09-06T00:00:00.000Z", status: "scheduled",
+              attendance: { children: 3, members: 2, attendees: 3, visitors: 4 }, checkin_total: 9,
+            },
+          ],
+        });
+      });
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (1)");
+      await user.click(screen.getByRole("button", { name: /^Contagem de público do culto de/ }));
+      expect(await screen.findByLabelText("Crianças")).toHaveValue("3");
+      expect(screen.getByRole("button", { name: "Usar 9" })).toBeInTheDocument();
+    });
+
+    it("sem check-in no culto (0 ou ausente), Crianças começa vazio e não há sugestão", async () => {
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === "/celebrations/c1") return Promise.resolve({ data: celebration });
+        return Promise.resolve({
+          data: [{ id: "i2", scheduled_date: "2026-09-13T00:00:00.000Z", status: "scheduled", attendance: null, checkin_total: 0 }],
+        });
+      });
+      const user = userEvent.setup();
+      renderSheet();
+      await screen.findByText("Instâncias (1)");
+      await user.click(screen.getByRole("button", { name: /^Contagem de público do culto de/ }));
+      expect(await screen.findByLabelText("Crianças")).toHaveValue("");
+      expect(screen.queryByText(/Check-in do Kids/)).not.toBeInTheDocument();
+    });
+
     it("fecha o formulário sem salvar", async () => {
       mockGet();
       const user = userEvent.setup();
