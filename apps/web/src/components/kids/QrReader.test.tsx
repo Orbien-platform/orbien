@@ -144,4 +144,57 @@ describe("QrReader — câmera (BarcodeDetector)", () => {
     });
     expect(onRead).toHaveBeenCalledWith("kidsci1.a.b");
   });
+
+  it("a leitura que termina depois de fechar a câmera é descartada", async () => {
+    let finish: (v: { rawValue: string }[]) => void = () => {};
+    installCamera(() => new Promise((r) => (finish = r)));
+    const onRead = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<QrReader onRead={onRead} />);
+    await user.click(await screen.findByRole("button", { name: "Abrir câmera" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await user.click(screen.getByRole("button", { name: "Fechar câmera" }));
+    await act(async () => finish([{ rawValue: "kidsci1.tarde.demais" }]));
+    expect(onRead).not.toHaveBeenCalled();
+  });
+
+  it("enquanto um quadro ainda está sendo lido, o seguinte não dispara outra leitura", async () => {
+    let finish: (v: { rawValue: string }[]) => void = () => {};
+    const detect = vi.fn<Detect>(() => new Promise((r) => (finish = r)));
+    installCamera(detect);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<QrReader onRead={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Abrir câmera" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(detect).toHaveBeenCalledTimes(1);
+    await act(async () => finish([]));
+  });
+
+  it("câmera negada depois de fechada não mostra erro", async () => {
+    let fail: (e: Error) => void = () => {};
+    installCamera(async () => [], () => new Promise((_r, rej) => (fail = rej)));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<QrReader onRead={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Abrir câmera" }));
+    await user.click(screen.getByRole("button", { name: "Fechar câmera" }));
+    await act(async () => fail(new Error("NotAllowedError")));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("vídeo que não consegue tocar não impede a leitura", async () => {
+    installCamera(async () => [{ rawValue: "kidsci1.a.b" }]);
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("autoplay"));
+    const onRead = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<QrReader onRead={onRead} />);
+    await user.click(await screen.findByRole("button", { name: "Abrir câmera" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(onRead).toHaveBeenCalledWith("kidsci1.a.b");
+  });
 });

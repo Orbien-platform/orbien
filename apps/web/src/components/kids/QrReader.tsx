@@ -68,14 +68,13 @@ export function QrReader({ onRead, disabled = false }: QrReaderProps) {
           return;
         }
         stream = media;
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = media;
-          await video.play().catch(() => undefined);
-        }
+        // O <video> existe sempre que `scanning` é verdadeiro: é o que o renderiza.
+        const video = videoRef.current as HTMLVideoElement;
+        video.srcObject = media;
+        await video.play().catch(() => undefined);
         let busy = false;
         timer = setInterval(async () => {
-          if (busy || stopped || !video) return;
+          if (busy) return;
           busy = true;
           try {
             const found = await detector.detect(video);
