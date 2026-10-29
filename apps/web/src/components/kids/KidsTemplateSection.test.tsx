@@ -114,4 +114,41 @@ describe("KidsTemplateSection", () => {
     await user.click(await screen.findByRole("button", { name: "Abrir nas próximas datas" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Modelo sem turma ativa");
   });
+
+  describe("modelo de uma celebração que já foi trocada", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    it("modelo da celebração anterior que chega depois não substitui o da atual", async () => {
+      const antiga = deferred<ReturnType<typeof tpl>>();
+      vi.mocked(getTemplate).mockReturnValueOnce(antiga.promise).mockResolvedValue(tpl([J]));
+      const { rerender } = render(<KidsTemplateSection celebrationId="c1" />);
+      rerender(<KidsTemplateSection celebrationId="c2" />);
+      expect(await screen.findByText("Júnior")).toBeInTheDocument();
+
+      antiga.resolve(tpl([M]));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByText("Maternal")).not.toBeInTheDocument();
+      expect(screen.getByText("Júnior")).toBeInTheDocument();
+    });
+
+    it("falha tardia da celebração anterior não mostra erro sobre o modelo atual", async () => {
+      const antiga = deferred<ReturnType<typeof tpl>>();
+      vi.mocked(getTemplate).mockReturnValueOnce(antiga.promise).mockResolvedValue(tpl([J]));
+      const { rerender } = render(<KidsTemplateSection celebrationId="c1" />);
+      rerender(<KidsTemplateSection celebrationId="c2" />);
+      expect(await screen.findByText("Júnior")).toBeInTheDocument();
+
+      antiga.reject(new Error("falhou"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.getByText("Júnior")).toBeInTheDocument();
+      expect(screen.queryByText(/Não foi possível/)).not.toBeInTheDocument();
+    });
+  });
 });

@@ -156,4 +156,46 @@ describe("RoomsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Reativar a turma Maternal" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Não pode reativar");
   });
+
+  describe("resposta de um filtro que já foi trocado", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+
+    it("lista de turmas ativas que chega depois da lista com desativadas não a sobrescreve", async () => {
+      const user = userEvent.setup();
+      const antiga = deferred<KidsRoom[]>();
+      vi.mocked(listRooms)
+        .mockReturnValueOnce(antiga.promise)
+        .mockResolvedValue([room({ id: "r2", name: "Turma Inativa", is_active: false })]);
+      render(<RoomsPanel canManage />);
+      await user.click(screen.getByRole("checkbox", { name: "Mostrar desativadas" }));
+      expect(await screen.findByText("Turma Inativa")).toBeInTheDocument();
+
+      antiga.resolve([room()]);
+      await waitFor(() => expect(screen.queryByText("Maternal")).not.toBeInTheDocument());
+      expect(screen.getByText("Turma Inativa")).toBeInTheDocument();
+    });
+
+    it("falha tardia da carga antiga não vira erro nem acesso negado sobre a lista atual", async () => {
+      const user = userEvent.setup();
+      const antiga = deferred<KidsRoom[]>();
+      vi.mocked(listRooms)
+        .mockReturnValueOnce(antiga.promise)
+        .mockResolvedValue([room({ id: "r2", name: "Turma Inativa", is_active: false })]);
+      render(<RoomsPanel canManage />);
+      await user.click(screen.getByRole("checkbox", { name: "Mostrar desativadas" }));
+      expect(await screen.findByText("Turma Inativa")).toBeInTheDocument();
+
+      antiga.reject(httpError(403));
+      await waitFor(() => expect(listRooms).toHaveBeenCalledTimes(2));
+      expect(screen.getByText("Turma Inativa")).toBeInTheDocument();
+    });
+  });
 });

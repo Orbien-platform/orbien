@@ -220,6 +220,20 @@ describe("ChildFormModal — edição", () => {
     expect(onSaved).toHaveBeenCalledWith("k1");
   });
 
+  it("edita mantendo alergias e observações preenchidas, sem espaços nas pontas", async () => {
+    const user = userEvent.setup();
+    render(
+      <ChildFormModal open onOpenChange={vi.fn()} child={{ ...FICHA, allergies: "amendoim", medical_notes: "usa inalador" }} onSaved={vi.fn()} />,
+    );
+    vi.mocked(updateChild).mockResolvedValue({ id: "k1", full_name: "Davi Souza", birth_date: null, household_id: null });
+    await user.type(screen.getByLabelText("Observações médicas"), "  ");
+    await user.click(screen.getByRole("button", { name: "Salvar criança" }));
+
+    await waitFor(() =>
+      expect(updateChild).toHaveBeenCalledWith("k1", expect.objectContaining({ allergies: "amendoim", medical_notes: "usa inalador" })),
+    );
+  });
+
   it("abre vazio para uma criança sem nascimento e Voltar fecha", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();

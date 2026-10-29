@@ -201,4 +201,44 @@ describe("CheckinDialog", () => {
     await user.click(screen.getByRole("button", { name: "Voltar" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  describe("ficha de uma criança que já foi trocada", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const g = (id: string, name: string) => ({ ...FICHA.guardians[0], id: `g-${id}`, guardian_person_id: id, full_name: name, is_primary: true });
+    const rerenderWith = (rerender: (ui: React.ReactElement) => void) =>
+      rerender(<CheckinDialog sessionId="s1" roomName="Maternal" child={{ ...CHILD, id: "k2", full_name: "Bia Lima" }} onClose={vi.fn()} onCheckedIn={vi.fn()} />);
+
+    it("responsáveis da criança anterior que chegam depois não substituem os da atual", async () => {
+      const antiga = deferred<KidsFicha>();
+      vi.mocked(getChild).mockReturnValueOnce(antiga.promise).mockResolvedValue({ ...FICHA, guardians: [g("p9", "Rita Atual")] });
+      const { rerender } = render(<CheckinDialog sessionId="s1" roomName="Maternal" child={CHILD} onClose={vi.fn()} onCheckedIn={vi.fn()} />);
+      rerenderWith(rerender);
+      expect(await screen.findByRole("radio", { name: /Rita Atual/ })).toBeInTheDocument();
+
+      antiga.resolve({ ...FICHA, guardians: [g("p8", "Tia Antiga")] });
+      await waitFor(() => expect(getChild).toHaveBeenCalledTimes(2));
+      expect(screen.queryByRole("radio", { name: /Tia Antiga/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: /Rita Atual/ })).toBeChecked();
+    });
+
+    it("falha tardia da criança anterior não mostra erro de carga sobre a atual", async () => {
+      const antiga = deferred<KidsFicha>();
+      vi.mocked(getChild).mockReturnValueOnce(antiga.promise).mockResolvedValue({ ...FICHA, guardians: [g("p9", "Rita Atual")] });
+      const { rerender } = render(<CheckinDialog sessionId="s1" roomName="Maternal" child={CHILD} onClose={vi.fn()} onCheckedIn={vi.fn()} />);
+      rerenderWith(rerender);
+      expect(await screen.findByRole("radio", { name: /Rita Atual/ })).toBeInTheDocument();
+
+      antiga.reject(new Error("falhou"));
+      await waitFor(() => expect(getChild).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText("Não foi possível carregar os responsáveis.")).not.toBeInTheDocument();
+    });
+  });
 });

@@ -298,4 +298,45 @@ describe("CheckoutDialog — recusas seguidas no mesmo check-in", () => {
     expect(screen.getByRole("heading", { name: "Líder autoriza a saída" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Autorizar saída" })).toBeDisabled();
   });
+
+  describe("ficha de uma criança que já foi trocada", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const NEXT = { ...ITEM, child: { ...ITEM.child, id: "k2", full_name: "Bia Lima" } };
+    const mount = () =>
+      render(<CheckoutDialog item={ITEM} canOverride onClose={vi.fn()} onDone={vi.fn()} />);
+
+    it("falha tardia da criança anterior não vira erro de carga na entrega atual", async () => {
+      const antiga = deferred<KidsFicha>();
+      vi.mocked(getChild).mockReset();
+      vi.mocked(getChild).mockReturnValueOnce(antiga.promise).mockResolvedValue(FICHA);
+      const { rerender } = mount();
+      rerender(<CheckoutDialog item={NEXT} canOverride onClose={vi.fn()} onDone={vi.fn()} />);
+      await waitFor(() => expect(getChild).toHaveBeenCalledTimes(2));
+
+      antiga.reject(new Error("falhou"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByText(/Não foi possível carregar os responsáveis/)).not.toBeInTheDocument();
+    });
+
+    it("responsáveis da criança anterior que chegam depois não substituem os atuais", async () => {
+      const antiga = deferred<KidsFicha>();
+      vi.mocked(getChild).mockReset();
+      vi.mocked(getChild).mockReturnValueOnce(antiga.promise).mockResolvedValue(FICHA);
+      const { rerender } = mount();
+      rerender(<CheckoutDialog item={NEXT} canOverride onClose={vi.fn()} onDone={vi.fn()} />);
+      await waitFor(() => expect(getChild).toHaveBeenCalledTimes(2));
+
+      antiga.resolve({ ...FICHA, guardians: [{ ...FICHA.guardians[0], full_name: "Tia Antiga" }] });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByText("Tia Antiga")).not.toBeInTheDocument();
+    });
+  });
 });

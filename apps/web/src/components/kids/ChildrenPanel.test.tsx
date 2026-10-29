@@ -107,4 +107,47 @@ describe("ChildrenPanel", () => {
     await screen.findByText("Davi Souza");
     expect(screen.queryByRole("button", { name: "Nova criança" })).not.toBeInTheDocument();
   });
+
+  describe("resposta de uma busca que já foi trocada", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+
+    it("não sobrescreve a lista da busca atual quando chega depois dela", async () => {
+      const user = userEvent.setup();
+      const antiga = deferred<(typeof DAVI)[]>();
+      vi.mocked(searchChildren)
+        .mockReturnValueOnce(antiga.promise)
+        .mockResolvedValue([{ ...DAVI, id: "k9", full_name: "Zeca Atual" }]);
+      render(<ChildrenPanel canManage />);
+      await user.type(screen.getByPlaceholderText("Buscar criança pelo nome"), "z");
+      expect(await screen.findByText("Zeca Atual")).toBeInTheDocument();
+
+      antiga.resolve([DAVI]);
+      await waitFor(() => expect(screen.queryByText("Davi Souza")).not.toBeInTheDocument());
+      expect(screen.getByText("Zeca Atual")).toBeInTheDocument();
+    });
+
+    it("falha tardia da busca antiga não derruba a lista da busca atual", async () => {
+      const user = userEvent.setup();
+      const antiga = deferred<(typeof DAVI)[]>();
+      vi.mocked(searchChildren)
+        .mockReturnValueOnce(antiga.promise)
+        .mockResolvedValue([{ ...DAVI, id: "k9", full_name: "Zeca Atual" }]);
+      render(<ChildrenPanel canManage />);
+      await user.type(screen.getByPlaceholderText("Buscar criança pelo nome"), "z");
+      expect(await screen.findByText("Zeca Atual")).toBeInTheDocument();
+
+      antiga.reject(httpError(500));
+      await waitFor(() => expect(searchChildren).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText("Não foi possível carregar as crianças.")).not.toBeInTheDocument();
+      expect(screen.getByText("Zeca Atual")).toBeInTheDocument();
+    });
+  });
 });

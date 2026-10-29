@@ -215,4 +215,79 @@ describe("SessionDesk", () => {
     await user.click(screen.getByRole("button", { name: "Entregar criança: Bia Lima" }));
     expect(screen.getByTestId("checkout")).toHaveTextContent("refusals=0");
   });
+
+  describe("respostas de uma consulta que já foi trocada", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const outra = roster([item("k7", "Zeca Atual")]);
+
+    it("roster da turma anterior que chega depois não sobrescreve a turma aberta", async () => {
+      const antiga = deferred<KidsRoster>();
+      vi.mocked(getRoster).mockReturnValueOnce(antiga.promise).mockResolvedValue(outra);
+      const { rerender } = render(<SessionDesk sessionId="s1" canOverride />);
+      rerender(<SessionDesk sessionId="s2" canOverride />);
+      expect(await screen.findByText("Zeca Atual")).toBeInTheDocument();
+
+      antiga.resolve(roster([item("k1", "Davi Souza")]));
+      await waitFor(() => expect(screen.queryByText("Davi Souza")).not.toBeInTheDocument());
+      expect(screen.getByText("Zeca Atual")).toBeInTheDocument();
+    });
+
+    it("falha tardia do roster anterior não vira erro nem acesso negado na turma aberta", async () => {
+      const antiga = deferred<KidsRoster>();
+      vi.mocked(getRoster).mockReturnValueOnce(antiga.promise).mockResolvedValue(outra);
+      const { rerender } = render(<SessionDesk sessionId="s1" canOverride />);
+      rerender(<SessionDesk sessionId="s2" canOverride />);
+      expect(await screen.findByText("Zeca Atual")).toBeInTheDocument();
+
+      antiga.reject(httpError(403));
+      await waitFor(() => expect(getRoster).toHaveBeenCalledTimes(2));
+      expect(screen.getByText("Zeca Atual")).toBeInTheDocument();
+      expect(screen.queryByText(/sem acesso|Sem acesso/)).not.toBeInTheDocument();
+    });
+
+    it("resultado de uma busca antiga não aparece sobre a busca atual, nem o erro dela", async () => {
+      const user = userEvent.setup();
+      const antiga = deferred<(typeof DAVI)[]>();
+      const antigaErro = deferred<(typeof DAVI)[]>();
+      vi.mocked(getRoster).mockResolvedValue(roster([]));
+      vi.mocked(searchChildren)
+        .mockReturnValueOnce(antiga.promise)
+        .mockReturnValueOnce(antigaErro.promise)
+        .mockResolvedValue([{ ...DAVI, id: "k9", full_name: "Zeca Atual" }]);
+      render(<SessionDesk sessionId="s1" canOverride />);
+      await screen.findByText("Nenhuma criança presente");
+      const input = screen.getByPlaceholderText("Buscar criança pelo nome");
+      await user.type(input, "da");
+      await waitFor(() => expect(searchChildren).toHaveBeenCalledTimes(1));
+      await user.type(input, "v");
+      await waitFor(() => expect(searchChildren).toHaveBeenCalledTimes(2));
+      await user.type(input, "i");
+      expect(await screen.findByText("Zeca Atual")).toBeInTheDocument();
+
+      antiga.resolve([DAVI]);
+      antigaErro.reject(httpError(500));
+      await waitFor(() => expect(searchChildren).toHaveBeenCalledTimes(3));
+      expect(screen.queryByText("Davi Souza")).not.toBeInTheDocument();
+      expect(screen.queryByText("Não foi possível buscar crianças.")).not.toBeInTheDocument();
+      expect(screen.getByText("Zeca Atual")).toBeInTheDocument();
+    });
+  });
+
+  it("criança sem data de nascimento aparece com travessão, e turma sem capacidade nunca é lotada", async () => {
+    const semNascimento = item("k3", "Bia Lima");
+    semNascimento.child.birth_date = null;
+    vi.mocked(getRoster).mockResolvedValue(roster([semNascimento], null));
+    render(<SessionDesk sessionId="s1" canOverride />);
+    expect(await screen.findByText("Bia Lima")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText(/lotada/i)).not.toBeInTheDocument();
+  });
 });

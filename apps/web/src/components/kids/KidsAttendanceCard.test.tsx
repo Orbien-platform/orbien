@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getAttendanceSummary, type KidsAttendanceSummary } from "@/lib/kids";
@@ -71,5 +71,42 @@ describe("KidsAttendanceCard", () => {
     await vi.waitFor(() =>
       expect(getAttendanceSummary).toHaveBeenLastCalledWith({ date_from: "2026-01-01", date_to: "2026-03-31" }),
     );
+  });
+
+  describe("resposta de um período que já foi trocado", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const atual = summary({ rooms: [{ room_id: "r3", room_name: "Berçário", sessions_counted: 1, total_children: 4, average_children: 4 }] });
+
+    it("não sobrescreve o indicador do período atual quando chega depois dele", async () => {
+      const antiga = deferred<KidsAttendanceSummary>();
+      vi.mocked(getAttendanceSummary).mockReturnValueOnce(antiga.promise).mockResolvedValue(atual);
+      const { rerender } = render(<KidsAttendanceCard start="2026-08-01" end="2026-10-26" />);
+      rerender(<KidsAttendanceCard start="2026-09-01" end="2026-10-26" />);
+      expect(await screen.findByText("Berçário")).toBeInTheDocument();
+
+      antiga.resolve(summary());
+      await waitFor(() => expect(screen.queryByText("Maternal")).not.toBeInTheDocument());
+      expect(screen.getByText("Berçário")).toBeInTheDocument();
+    });
+
+    it("falha tardia do período antigo não esconde nem marca erro no indicador atual", async () => {
+      const antiga = deferred<KidsAttendanceSummary>();
+      vi.mocked(getAttendanceSummary).mockReturnValueOnce(antiga.promise).mockResolvedValue(atual);
+      const { rerender } = render(<KidsAttendanceCard start="2026-08-01" end="2026-10-26" />);
+      rerender(<KidsAttendanceCard start="2026-09-01" end="2026-10-26" />);
+      expect(await screen.findByText("Berçário")).toBeInTheDocument();
+
+      antiga.reject(httpError(403));
+      await waitFor(() => expect(getAttendanceSummary).toHaveBeenCalledTimes(2));
+      expect(screen.getByText("Berçário")).toBeInTheDocument();
+    });
   });
 });

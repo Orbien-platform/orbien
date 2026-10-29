@@ -129,4 +129,48 @@ describe("KidsSessionsModal", () => {
     await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
     expect(await screen.findByText(/Este culto não tem turma kids/)).toBeInTheDocument();
   });
+
+  describe("respostas de um culto que já foi trocado", () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const ui = (instanceId: string) => <KidsSessionsModal open onOpenChange={vi.fn()} instanceId={instanceId} subtitle="dom." />;
+
+    it("sessões do culto anterior que chegam depois não substituem as do culto aberto", async () => {
+      const antiga = deferred<KidsSession[]>();
+      const atual = room("r2", "Berçário");
+      vi.mocked(listRooms).mockResolvedValue([atual]);
+      vi.mocked(listSessions).mockReturnValueOnce(antiga.promise).mockResolvedValue([session("s2", atual)]);
+      const { rerender } = render(ui("i1"));
+      rerender(ui("i2"));
+      expect(await screen.findByText("Berçário")).toBeInTheDocument();
+
+      const m = room("r1", "Maternal");
+      antiga.resolve([session("s1", m)]);
+      await waitFor(() => expect(listSessions).toHaveBeenCalledTimes(2));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByText("Maternal")).not.toBeInTheDocument();
+    });
+
+    it("falha tardia do culto anterior não mostra erro sobre o culto aberto", async () => {
+      const antiga = deferred<KidsSession[]>();
+      const atual = room("r2", "Berçário");
+      vi.mocked(listRooms).mockResolvedValue([atual]);
+      vi.mocked(listSessions).mockReturnValueOnce(antiga.promise).mockResolvedValue([session("s2", atual)]);
+      const { rerender } = render(ui("i1"));
+      rerender(ui("i2"));
+      expect(await screen.findByText("Berçário")).toBeInTheDocument();
+
+      antiga.reject(new Error("falhou"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.getByText("Berçário")).toBeInTheDocument();
+      expect(screen.queryByText(/Não foi possível/)).not.toBeInTheDocument();
+    });
+  });
 });
