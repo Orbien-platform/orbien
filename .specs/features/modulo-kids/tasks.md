@@ -163,7 +163,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **DEC-1** Culto cancelado não conta nada: `checkin_total` (instâncias, escala, sugestão de contagem) = 0 em instância cancelada, como o resumo já fazia; check-in aberto segue fechável. Lacuna do spec vira critério definitivo. *Depends:* COV-3 · *Tests:* integração (um por superfície, mutação restaurada) + unit · *Reqs:* KIDS-09,11
 - [ ] **DEC-2** Folga de cobertura do web: branches ≥ 97,5% com testes reais nos arquivos de menor cobertura do Kids, sem tocar o piso. *Depends:* — · *Tests:* vitest · *Reqs:* —
-- [ ] **DEC-3** `test:cov` da API sem OOM no CI: heap do Node fixado no script versionado; motivo em docs/CI.md e docs/TESTES.md. *Depends:* COV-6 · *Tests:* o próprio `npm run test:cov` sem variável de ambiente · *Reqs:* —
+- [x] **DEC-3** `test:cov` da API sem OOM no CI: heap do Node fixado no script versionado; motivo em docs/CI.md e docs/TESTES.md. *Depends:* COV-6 · *Tests:* o próprio `npm run test:cov` sem variável de ambiente · *Reqs:* —
 
 ---
 
