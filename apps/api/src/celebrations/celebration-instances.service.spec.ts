@@ -6,6 +6,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   return {
     celebration: { findFirst: jest.fn() },
     kidsSession: { updateMany: jest.fn() },
+    kidsCheckin: { findMany: jest.fn().mockResolvedValue([]) },
     celebrationInstance: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -75,6 +76,36 @@ describe('CelebrationInstancesService', () => {
   });
 
   describe('findAll', () => {
+    it('R3-5: devolve checkin_total por instância com UMA agregação (sem N+1); 0 quando não há check-in', async () => {
+      const client = clientWith();
+      client.celebrationInstance.findMany.mockResolvedValue([{ id: 'i1' }, { id: 'i2' }, { id: 'i3' }]);
+      client.kidsCheckin.findMany.mockResolvedValue([
+        { celebration_instance_id: 'i1', child_id: 'a' },
+        { celebration_instance_id: 'i1', child_id: 'b' },
+        { celebration_instance_id: 'i2', child_id: 'a' },
+      ]);
+      const service = serviceWith(client);
+
+      const result = await service.findAll('t1', {} as never);
+
+      expect(result.map((r) => [r.id, r.checkin_total])).toEqual([['i1', 2], ['i2', 1], ['i3', 0]]);
+      expect(client.kidsCheckin.findMany).toHaveBeenCalledTimes(1);
+      expect(client.kidsCheckin.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenant_id: 't1', celebration_instance_id: { in: ['i1', 'i2', 'i3'] } },
+        }),
+      );
+    });
+
+    it('R3-5: lista vazia não consulta check-ins', async () => {
+      const client = clientWith();
+      client.celebrationInstance.findMany.mockResolvedValue([]);
+      const service = serviceWith(client);
+
+      expect(await service.findAll('t1', {} as never)).toEqual([]);
+      expect(client.kidsCheckin.findMany).not.toHaveBeenCalled();
+    });
+
     it('aplica todos os filtros quando informados', async () => {
       const client = clientWith();
       client.celebrationInstance.findMany.mockResolvedValue([{ id: 'i1' }]);

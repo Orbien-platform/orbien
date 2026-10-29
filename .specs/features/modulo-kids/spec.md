@@ -128,6 +128,7 @@ culto kids, nem como saber quem está em qual sala e quem pode buscar cada crian
 3. WHEN o culto tem check-ins THEN a contagem de público SHALL trazer `children` = total de crianças distintas com check-in como valor inicial.
 4. WHEN quem pode lançar altera o valor manualmente THEN o sistema SHALL guardar o valor lançado e manter o total de check-ins visível ao lado.
 5. WHEN voluntário abre "Minhas escalas" THEN o sistema SHALL mostrar a turma e o horário da sessão em que está escalado.
+6. WHEN a liderança lista as instâncias da celebração (`GET /celebrations/instances`) THEN cada instância SHALL trazer `checkin_total` (crianças distintas com check-in, aberto ou fechado; 0 quando não há), com o mesmo significado do `checkin_total` da contagem de público e calculado numa única agregação. O `ministry_leader` SHALL ler a lista e a contagem total.
 
 **Independent Test**: escalar dois voluntários, fazer cinco check-ins, abrir contagem e ver `children = 5` sugerido.
 

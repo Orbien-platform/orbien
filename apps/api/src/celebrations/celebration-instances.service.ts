@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateCelebrationInstanceDto } from './dto/create-celebration-instance.dto';
 import { UpdateCelebrationInstanceDto } from './dto/update-celebration-instance.dto';
 import { ListCelebrationInstancesQueryDto } from './dto/list-celebration-instances-query.dto';
+import { checkinTotalsByInstance } from './celebration-attendance.service';
 
 @Injectable()
 export class CelebrationInstancesService {
@@ -35,11 +36,11 @@ export class CelebrationInstancesService {
   async findAll(
     tenantId: string,
     query: ListCelebrationInstancesQueryDto,
-  ): Promise<CelebrationInstance[]> {
+  ) {
     // Sem `congregation_id` no `where` — mesmo motivo de `CelebrationsService.findAll`:
     // quem decide o alcance é a RLS, que abre a congregação inteira do tenant
     // para `tenant_admin`/`denomination_admin`.
-    return this.prisma.client.celebrationInstance.findMany({
+    const instances = await this.prisma.client.celebrationInstance.findMany({
       where: {
         tenant_id: tenantId,
         ...(query.celebration_id && { celebration_id: query.celebration_id }),
@@ -64,6 +65,15 @@ export class CelebrationInstancesService {
         attendance: { select: { children: true, members: true, attendees: true, visitors: true } },
       },
     });
+    // `checkin_total` (R3-5): crianças distintas com check-in, o mesmo número da
+    // contagem de público (`GET /celebrations/attendance`). Uma agregação para
+    // a lista inteira, não uma consulta por instância.
+    const totals = await checkinTotalsByInstance(
+      this.prisma.client,
+      tenantId,
+      instances.map((i) => i.id),
+    );
+    return instances.map((i) => ({ ...i, checkin_total: totals.get(i.id) ?? 0 }));
   }
 
   /**

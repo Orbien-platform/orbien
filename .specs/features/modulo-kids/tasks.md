@@ -123,6 +123,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 ### R3 — Rodada 3 (decisões do dono, 2026-10-29)
 
+- [x] **R3-5** `checkin_total` por instância em `GET /celebrations/instances` (uma agregação, sem N+1) e conferência de que `ministry_leader` lê a contagem (papéis de READ já o incluíam; nada corrigido). *Depends:* T22 · *Tests:* unit + integração · *Reqs:* KIDS-11
 - [x] **R3-6** `028_rls_kids.sql` com `ENABLE`/`FORCE ROW LEVEL SECURITY` explícitos por tabela (o laço `DO $$` escondia as quatro tabelas do grep de `scripts/pre-push.sh`, que alertava em falso). *Depends:* T3 · *Tests:* bootstrap + `test:rls` + grep do portão (mutação: tirar o `ENABLE` de uma tabela faz o alerta voltar) · *Reqs:* KIDS-01
 
 ---

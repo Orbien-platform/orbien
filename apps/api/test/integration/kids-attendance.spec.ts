@@ -257,3 +257,53 @@ describe('GET /kids/attendance/summary (KIDS-12)', () => {
     expect(res.body.rooms.find((r: { room_id: string }) => r.room_id === ids.rA)).toBeUndefined();
   });
 });
+
+describe('GET /celebrations/instances: checkin_total por instância (R3-5, spec P2 AC 6)', () => {
+  type Inst = { id: string; checkin_total: number };
+  const listInstances = (token: string) =>
+    http().get('/api/celebrations/instances').query({ celebration_id: ids.celebration }).set(auth(token));
+  const find = (rows: Inst[], id: string) => rows.find((r) => r.id === id)!;
+
+  it('cada instância traz checkin_total = crianças distintas com check-in; 0 sem check-in ou sem sessão', async () => {
+    const res = await listInstances(h.tokenFor('pastor'));
+    expect(res.status).toBe(200);
+    expect(find(res.body, ids.iCom3).checkin_total).toBe(3); // c1 passou por duas turmas e conta uma vez
+    expect(find(res.body, ids.iCom1).checkin_total).toBe(1);
+    expect(find(res.body, ids.iVazio).checkin_total).toBe(0);
+    expect(find(res.body, ids.iSemCheckin).checkin_total).toBe(0);
+  });
+
+  it('é o mesmo número de GET /celebrations/attendance (mesmo significado)', async () => {
+    const [a, b] = await Promise.all([
+      listInstances(h.tokenFor('pastor')),
+      http().get('/api/celebrations/attendance').query({ celebration_id: ids.celebration }).set(auth(h.tokenFor('pastor'))),
+    ]);
+    for (const row of b.body as { celebration_instance_id: string; checkin_total: number }[]) {
+      expect(find(a.body, row.celebration_instance_id).checkin_total).toBe(row.checkin_total);
+    }
+  });
+
+  it('ministry_leader lê a lista com checkin_total e a contagem total do culto', async () => {
+    const inst = await listInstances(h.tokenFor('ministry_leader'));
+    expect(inst.status).toBe(200);
+    expect(find(inst.body, ids.iCom3).checkin_total).toBe(3);
+    const att = await http()
+      .get('/api/celebrations/attendance')
+      .query({ celebration_id: ids.celebration })
+      .set(auth(h.tokenFor('ministry_leader')));
+    expect(att.status).toBe(200);
+    const sum = await http().get('/api/celebrations/attendance/summary').set(auth(h.tokenFor('ministry_leader')));
+    expect(sum.status).toBe(200);
+  });
+
+  it('403 para member e volunteer (a lista segue só da liderança)', async () => {
+    expect((await listInstances(h.tokenFor('member'))).status).toBe(403);
+    expect((await listInstances(h.tokenFor('volunteer'))).status).toBe(403);
+  });
+
+  it('instância de outro tenant não entra e não vaza check-in', async () => {
+    const res = await http().get('/api/celebrations/instances').set(auth(h.tokenT1('premium', 'pastor')));
+    expect(res.status).toBe(200);
+    expect((res.body as Inst[]).some((r) => r.id === ids.iCom3)).toBe(false);
+  });
+});
