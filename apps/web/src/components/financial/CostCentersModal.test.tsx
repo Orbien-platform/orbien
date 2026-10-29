@@ -235,20 +235,27 @@ describe("CostCentersModal", () => {
     expect(api.delete).not.toHaveBeenCalled();
   });
 
-  it("dismisses the delete confirmation on escape", async () => {
-    const user = userEvent.setup();
-
-    render(<CostCentersModal open={true} onOpenChange={vi.fn()} onChanged={vi.fn()} />);
-
+  // Causa da intermitência: o foco inicial do diálogo de confirmação (base-ui) é
+  // enfileirado em requestAnimationFrame, e uma tecla antes disso não o dispensa.
+  // A espera antiga — "o foco está em ALGUM role=dialog" — já era verdadeira no
+  // instante em que a confirmação abria, porque o modal de trás (o dos centros de
+  // custo) segue com o foco. Com a máquina carregada o quadro demora, o Escape
+  // saía cedo e o teste falhava. A espera correta é pelo foco DENTRO da confirmação.
+  async function openDeleteConfirmation(user: ReturnType<typeof userEvent.setup>) {
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/financial/cost-centers"));
     await screen.findByText("Missões");
 
     await user.click(screen.getAllByRole("button", { name: "Excluir centro de custo" })[0]);
-    expect(await screen.findByText("Excluir centro de custo?")).toBeInTheDocument();
-    // O diálogo move o foco para dentro de si ao abrir (base-ui autofocus,
-    // assíncrono) — esperar isso garante que o listener de Escape do
-    // diálogo certo já está ativo antes de disparar a tecla.
-    await waitFor(() => expect(document.activeElement?.closest('[role="dialog"]')).toBeTruthy());
+    const title = await screen.findByText("Excluir centro de custo?");
+    const confirmation = title.closest('[role="dialog"]') as HTMLElement;
+    await waitFor(() => expect(confirmation.contains(document.activeElement)).toBe(true));
+  }
+
+  it("dismisses the delete confirmation on escape", async () => {
+    const user = userEvent.setup();
+
+    render(<CostCentersModal open={true} onOpenChange={vi.fn()} onChanged={vi.fn()} />);
+    await openDeleteConfirmation(user);
 
     await user.keyboard("{Escape}");
 
@@ -256,6 +263,27 @@ describe("CostCentersModal", () => {
       () => expect(screen.queryByText("Excluir centro de custo?")).not.toBeInTheDocument(),
       { timeout: 3000 }
     );
+  });
+
+  it("dismisses the delete confirmation on escape even when animation frames are slow", async () => {
+    const realRaf = window.requestAnimationFrame;
+    // Quadros a 100ms simulam a máquina carregada do CI: o caso que antes falhava.
+    window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+      window.setTimeout(() => cb(performance.now()), 100) as unknown as number) as typeof window.requestAnimationFrame;
+    try {
+      const user = userEvent.setup();
+      render(<CostCentersModal open={true} onOpenChange={vi.fn()} onChanged={vi.fn()} />);
+      await openDeleteConfirmation(user);
+
+      await user.keyboard("{Escape}");
+
+      await waitFor(
+        () => expect(screen.queryByText("Excluir centro de custo?")).not.toBeInTheDocument(),
+        { timeout: 3000 }
+      );
+    } finally {
+      window.requestAnimationFrame = realRaf;
+    }
   });
 
   it("cancels the create/edit form without submitting", async () => {
