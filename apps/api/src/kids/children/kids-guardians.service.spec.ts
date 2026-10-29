@@ -16,6 +16,7 @@ function setup() {
     person: { findFirst: jest.fn(), create: jest.fn() },
     kidsGuardian: {
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
@@ -251,6 +252,8 @@ describe('KidsGuardiansService.update', () => {
   function ready(target = row(), actorRow: object | null = mae) {
     const ctx = setup();
     ctx.client.kidsGuardian.findFirst.mockResolvedValueOnce(target).mockResolvedValueOnce(actorRow);
+    // findUnique = a linha relida depois do lock (por padrão, igual à lida antes).
+    ctx.client.kidsGuardian.findUnique.mockResolvedValue(target);
     ctx.client.kidsGuardian.update.mockImplementation(async ({ data }: { data: object }) => ({ ...target, ...data }));
     ctx.client.kidsGuardian.count.mockResolvedValue(1);
     return ctx;
@@ -292,6 +295,26 @@ describe('KidsGuardiansService.update', () => {
     client.kidsGuardian.count.mockResolvedValue(0);
 
     await expect(service.update(actor, 'kg-mae', { is_primary: false })).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(client.kidsGuardian.update).not.toHaveBeenCalled();
+  });
+
+  it('relê a linha depois do lock: quem foi rebaixado enquanto esperava é promovido de novo, rebaixando o outro', async () => {
+    // Lida antes do lock como primária; depois do lock outra edição já a rebaixou.
+    const { client, service } = ready(row({ is_primary: true }));
+    client.kidsGuardian.findUnique.mockResolvedValue(row({ is_primary: false }));
+    await service.update(actor, 'kg-avo', { is_primary: true });
+
+    expect(client.kidsGuardian.findUnique).toHaveBeenCalledWith({ where: { id: 'kg-avo' } });
+    expect(client.kidsGuardian.updateMany).toHaveBeenCalledWith({
+      where: { child_id: 'child1', is_primary: true, id: { not: 'kg-avo' } },
+      data: { is_primary: false },
+    });
+  });
+
+  it('linha removida enquanto esperava o lock: 404 e nada é gravado', async () => {
+    const { client, service } = ready();
+    client.kidsGuardian.findUnique.mockResolvedValue(null);
+    await expect(service.update(actor, 'kg-avo', { relationship: 'x' })).rejects.toBeInstanceOf(NotFoundException);
     expect(client.kidsGuardian.update).not.toHaveBeenCalled();
   });
 

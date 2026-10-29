@@ -97,29 +97,34 @@ export class KidsGuardiansService {
     return this.prisma.runInTx(async () => {
       await this.prisma.client.$queryRaw`SELECT id FROM kids_guardians WHERE child_id = ${row.child_id} FOR UPDATE`;
 
-      const isPrimary = dto.is_primary ?? row.is_primary;
-      const canPickup = dto.can_pickup ?? row.can_pickup;
+      // `row` foi lido antes do lock: outra edição pode ter promovido ou rebaixado
+      // este responsável enquanto esperávamos. O estado que vale é o de depois do lock.
+      const current = await this.prisma.client.kidsGuardian.findUnique({ where: { id: row.id } });
+      if (!current) throw new NotFoundException('Autorizado não encontrado');
+
+      const isPrimary = dto.is_primary ?? current.is_primary;
+      const canPickup = dto.can_pickup ?? current.can_pickup;
       if (isPrimary && !canPickup) {
         throw new BadRequestException('O responsável primário precisa poder retirar a criança');
       }
 
-      if (row.is_primary && !isPrimary) {
+      if (current.is_primary && !isPrimary) {
         const others = await this.prisma.client.kidsGuardian.count({
-          where: { child_id: row.child_id, is_primary: true, id: { not: row.id } },
+          where: { child_id: current.child_id, is_primary: true, id: { not: current.id } },
         });
         if (others === 0) {
           throw new UnprocessableEntityException('A criança precisa de ao menos um responsável primário');
         }
       }
-      if (!row.is_primary && isPrimary) {
+      if (!current.is_primary && isPrimary) {
         await this.prisma.client.kidsGuardian.updateMany({
-          where: { child_id: row.child_id, is_primary: true, id: { not: row.id } },
+          where: { child_id: current.child_id, is_primary: true, id: { not: current.id } },
           data: { is_primary: false },
         });
       }
 
       return this.prisma.client.kidsGuardian.update({
-        where: { id: row.id },
+        where: { id: current.id },
         data: {
           ...(relationship !== undefined && { relationship }),
           ...(dto.can_pickup !== undefined && { can_pickup: dto.can_pickup }),
