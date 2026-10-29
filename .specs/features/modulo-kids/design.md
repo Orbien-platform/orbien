@@ -251,3 +251,15 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 | Criança sem login | `Person` sem `UserAccount`, `is_child=true` | Menor não autentica |
 
 > **AD-013** (convenção para futuras features): dado de criança é `Person` com `is_child=true`, sem conta, fora de listas por padrão. Ver `.specs/STATE.md`.
+
+---
+
+## Rodada 3 (decisões do dono, 2026-10-29)
+
+### R3-2 · Limite de tentativas de código no check-out
+
+- **Dados:** `kids_checkins.checkout_failed_attempts INT NOT NULL DEFAULT 0` (migration `20261029120000_add_kids_checkout_attempts`). Sem tabela nova; a RLS é a de `028`.
+- **Por que uma função SQL:** o 403 da recusa desfaz a transação da requisição, e um `UPDATE` feito dentro dela sumiria junto. `kids_register_checkout_failure(checkin_id, tenant_id, congregation_id)` (`030_rls_kids_checkout_attempts.sql`, bootstrap e passo 7) é `SECURITY DEFINER`, `search_path` fixo, `EXECUTE` só para `orbien_app`, e é chamada pelo client BASE (fora da transação), no desenho de `audit_insert()` e `pix_webhook_scope()`. `coluna = coluna + 1` no banco: atômico sob concorrência. Só toca linha aberta cujo id/tenant/congregação batem.
+- **Regra:** só código errado conta (`code_mismatch`; QR forjado ou de outro check-in entra aqui, R3-1). Pessoa sem `can_pickup` com o código certo é recusa, mas não gasta tentativa. Com `checkout_failed_attempts >= 5` a tentativa seguinte (qualquer código) devolve o mesmo 403 e audita `kids.checkout_denied` com `reason: 'locked'`, sem contar e sem novo push. A tentativa que leva o contador a exatamente 5 (só uma, mesmo sob concorrência) audita `kids.checkout_locked`, e o push ao líder (`kids_checkout_locked`, no lugar do `kids_checkout_denied` daquela tentativa) diz que só a retirada por exceção libera.
+- **Limite conhecido:** a checagem de "travado" lê o contador carregado no início da requisição; tentativas simultâneas já em voo quando o 5º erro é gravado ainda são avaliadas. O teto é 5 + a concorrência do momento, e o contador final é exato.
+- **Sem destravar:** não há rota que zere o contador; o `checkout-override` é o caminho (AC 8).

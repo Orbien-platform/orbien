@@ -22,6 +22,35 @@ export class KidsLeaderAlertService {
     congregationId: string,
     info: { sessionId: string; checkinId: string; roomName: string },
   ): Promise<void> {
+    await this.alertLeaders(tenantId, congregationId, info, {
+      title: 'Retirada recusada no Kids',
+      body: `Alguém tentou retirar uma criança da turma ${info.roomName} sem passar na conferência. Vá ao balcão.`,
+      type: 'kids_checkout_denied',
+    });
+  }
+
+  /**
+   * R3-2: a 5ª tentativa de código errado travou o check-out daquele check-in.
+   * Só a retirada por exceção do líder o encerra, então o aviso diz isso.
+   */
+  async notifyCheckoutLocked(
+    tenantId: string,
+    congregationId: string,
+    info: { sessionId: string; checkinId: string; roomName: string },
+  ): Promise<void> {
+    await this.alertLeaders(tenantId, congregationId, info, {
+      title: 'Retirada travada no Kids',
+      body: `Uma criança da turma ${info.roomName} teve 5 códigos errados na retirada. Só a retirada por exceção, com a sua conferência, libera. Vá ao balcão.`,
+      type: 'kids_checkout_locked',
+    });
+  }
+
+  private async alertLeaders(
+    tenantId: string,
+    congregationId: string,
+    info: { sessionId: string; checkinId: string; roomName: string },
+    msg: { title: string; body: string; type: string },
+  ): Promise<void> {
     try {
       const rows = await this.prisma.client.roleAssignment.findMany({
         where: {
@@ -40,14 +69,14 @@ export class KidsLeaderAlertService {
           tenantId,
           congregationId,
           contentPostId: null,
-          title: 'Retirada recusada no Kids',
-          body: `Alguém tentou retirar uma criança da turma ${info.roomName} sem passar na conferência. Vá ao balcão.`,
-          data: { type: 'kids_checkout_denied', session_id: info.sessionId, checkin_id: info.checkinId },
+          title: msg.title,
+          body: msg.body,
+          data: { type: msg.type, session_id: info.sessionId, checkin_id: info.checkinId },
         },
         personIds,
       );
     } catch (err) {
-      this.logger.error(`falha ao avisar o líder da retirada recusada ${info.checkinId}: ${String(err)}`);
+      this.logger.error(`falha ao avisar o líder (${msg.type}) do check-in ${info.checkinId}: ${String(err)}`);
     }
   }
 }

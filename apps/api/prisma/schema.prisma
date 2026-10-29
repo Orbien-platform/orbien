@@ -2539,6 +2539,11 @@ model KidsCheckin {
   // Retenção de 12 meses (KIDS-06): preenchido pelo KidsRetentionService quando
   // a identificação de quem retirou e o motivo da exceção foram apagados.
   anonymized_at           DateTime?
+  // R3-2: tentativas de código errado no check-out. Chegou a 5 (KIDS_CHECKOUT_
+  // MAX_ATTEMPTS), o check-out por código/QR trava e só o override do líder
+  // fecha. Incrementado por kids_register_checkout_failure() (030_rls_kids_
+  // checkout_attempts.sql), fora da transação da requisição.
+  checkout_failed_attempts Int      @default(0)
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)

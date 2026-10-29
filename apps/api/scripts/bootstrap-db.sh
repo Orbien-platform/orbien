@@ -219,6 +219,12 @@ fi
 if [ -f prisma/migrations/029_rls_kids_child_health.sql ]; then
   run_sql_file prisma/migrations/029_rls_kids_child_health.sql
 fi
+# `kids_register_checkout_failure()` (limite de tentativas de código no
+# check-out do Kids): função SECURITY DEFINER que incrementa o contador fora da
+# transação da requisição. Sem tabela nova; depende da coluna da migration.
+if [ -f prisma/migrations/030_rls_kids_checkout_attempts.sql ]; then
+  run_sql_file prisma/migrations/030_rls_kids_checkout_attempts.sql
+fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
 # ANTES do 001 (que precisa das tabelas existindo), mas a migration
@@ -690,6 +696,23 @@ BEGIN
   RAISE NOTICE 'kids_child_health com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_child_health, encontrei % — 029_rls_kids_child_health.sql rodou?', n;
+  END IF;
+
+  -- 030: kids_register_checkout_failure() — o contador de tentativas de código
+  -- precisa sobreviver ao rollback do 403, então roda fora da transação da
+  -- requisição, como SECURITY DEFINER com EXECUTE só para orbien_app.
+  SELECT count(*) INTO n
+    FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+   WHERE p.proname = 'kids_register_checkout_failure'
+     AND p.prosecdef
+     AND p.proconfig IS NOT NULL
+     AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+     AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE');
+  RAISE NOTICE 'kids_register_checkout_failure conforme: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava kids_register_checkout_failure() SECURITY DEFINER com search_path fixo e EXECUTE só para orbien_app, encontrei % — 030_rls_kids_checkout_attempts.sql rodou?', n;
   END IF;
 
   -- 024: pix_webhook_scope() — o webhook da Asaas não tem contexto de tenant e

@@ -70,6 +70,13 @@ export type KidsCheckoutResult = {
   override_reason: string | null;
 };
 
+/**
+ * Tentativas de código errado por check-in antes de travar o check-out (R3-2).
+ * Código de 4 caracteres tem ~920 mil combinações; sem teto, quem estivesse no
+ * balcão poderia tentar até acertar.
+ */
+export const KIDS_CHECKOUT_MAX_ATTEMPTS = 5;
+
 const normalizeName = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
 /**
@@ -187,6 +194,18 @@ export class KidsCheckinService {
     if (checkin.checked_out_at) throw new ConflictException(ALREADY_CLOSED);
     if (!dto.picked_up_by_person_id && !dto.picked_up_by_name?.trim()) {
       throw new BadRequestException('Informe quem está retirando a criança');
+    }
+
+    // Travado (R3-2): a mesma recusa de sempre, mesmo com o código certo e a
+    // pessoa autorizada. Não conta nem avisa de novo — o líder já foi avisado
+    // na 5ª falha; só o override encerra.
+    if (checkin.checkout_failed_attempts >= KIDS_CHECKOUT_MAX_ATTEMPTS) {
+      await this.audit(actor, checkin.child_id, 'kids.checkout_denied', {
+        checkin_id: checkin.id,
+        session_id: checkin.session_id,
+        reason: 'locked',
+      });
+      throw new ForbiddenException(CHECKOUT_DENIED);
     }
 
     const codeOk = dto.code.trim().toUpperCase() === checkin.code;
@@ -319,14 +338,43 @@ export class KidsCheckinService {
       session_id: checkin.session_id,
       reason,
     });
-    try {
-      await this.leaderAlert.notifyCheckoutDenied(actor.tenantId, actor.congregationId, {
-        sessionId: checkin.session_id,
-        checkinId: checkin.id,
-        roomName: checkin.session.room.name,
+    // Só código errado gasta tentativa (R3-2): acertar o código e falhar na
+    // pessoa não é adivinhação do código.
+    const attempts = reason === 'code_mismatch' ? await this.registerCodeFailure(actor, checkin.id) : null;
+    const locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS;
+    if (locked) {
+      await this.audit(actor, checkin.child_id, 'kids.checkout_locked', {
+        checkin_id: checkin.id,
+        session_id: checkin.session_id,
+        attempts,
       });
+    }
+    try {
+      const info = { sessionId: checkin.session_id, checkinId: checkin.id, roomName: checkin.session.room.name };
+      if (locked) await this.leaderAlert.notifyCheckoutLocked(actor.tenantId, actor.congregationId, info);
+      else await this.leaderAlert.notifyCheckoutDenied(actor.tenantId, actor.congregationId, info);
     } catch (err) {
       this.logger.error(`falha ao avisar o líder da recusa ${checkin.id}: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Soma uma falha de código ao check-in e devolve o novo total (ou `null` se
+   * não foi possível gravar). Vai pela função `kids_register_checkout_failure()`
+   * no client BASE, fora da transação da requisição: o 403 que vem a seguir a
+   * desfaria, e o contador sumiria junto. O UPDATE é `+ 1` no banco, atômico
+   * sob concorrência. Best-effort como a auditoria: a recusa sai 403 de
+   * qualquer jeito.
+   */
+  private async registerCodeFailure(actor: KidsActor, checkinId: string): Promise<number | null> {
+    try {
+      const rows = await this.prisma.$queryRaw<{ attempts: number | null }[]>`
+        SELECT kids_register_checkout_failure(${checkinId}, ${actor.tenantId}, ${actor.congregationId}) AS attempts
+      `;
+      return rows[0]?.attempts ?? null;
+    } catch (err) {
+      this.logger.error(`falha ao contar a tentativa de código do check-in ${checkinId}: ${String(err)}`);
+      return null;
     }
   }
 

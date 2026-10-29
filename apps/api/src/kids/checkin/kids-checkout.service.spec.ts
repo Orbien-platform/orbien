@@ -24,6 +24,7 @@ const openCheckin = (extra = {}) => ({
   code: 'A2B3',
   checked_out_at: null,
   session: { room: { name: 'Maternal' } },
+  checkout_failed_attempts: 0,
   ...extra,
 });
 const guardians = [
@@ -39,19 +40,25 @@ function build(checkin: object | null = openCheckin()) {
     },
     kidsGuardian: { findMany: jest.fn().mockResolvedValue(guardians) },
   };
+  // R3-2: o contador sobe por função SQL no client BASE (fora da transação da
+  // requisição, que o 403 desfaz). Devolve o novo total; por padrão, a 1ª falha.
+  const queryRaw = jest.fn().mockResolvedValue([{ attempts: 1 }]);
   const sessionAccess = { canOperate: jest.fn(async (a: KidsActor) => a.roles.includes('ministry_leader')) };
-  const alert = { notifyCheckoutDenied: jest.fn().mockResolvedValue(undefined) };
+  const alert = {
+    notifyCheckoutDenied: jest.fn().mockResolvedValue(undefined),
+    notifyCheckoutLocked: jest.fn().mockResolvedValue(undefined),
+  };
   const access = { isManager: jest.fn((roles: string[]) => roles.includes('ministry_leader')) };
   const notice = { notifyChildReleased: jest.fn().mockResolvedValue(undefined) };
   const svc = new KidsCheckinService(
-    { client } as unknown as PrismaService,
+    { client, $queryRaw: queryRaw } as unknown as PrismaService,
     access as never,
     {} as never,
     sessionAccess as never,
     alert as never,
     notice as never,
   );
-  return { svc, client, sessionAccess, alert, notice };
+  return { svc, client, sessionAccess, alert, notice, queryRaw };
 }
 
 const errorOf = async (p: Promise<unknown>) => p.then(() => null, (e: unknown) => e);
@@ -288,5 +295,109 @@ describe('aviso "Criança entregue" ao responsável primário (best-effort)', ()
     notice.notifyChildReleased.mockRejectedValue(new Error('OneSignal fora do ar'));
     const out = await svc.checkOut(leader, 'k1', { code: 'A2B3', picked_up_by_person_id: 'mae' });
     expect(out).toMatchObject({ id: 'k1', picked_up_by_person_id: 'mae' });
+  });
+});
+
+describe('KidsCheckinService.checkOut: limite de 5 tentativas (R3-2)', () => {
+  const GENERIC = 'Não foi possível confirmar a retirada. Chame o líder kids.';
+  const wrong = { code: 'ZZZZ', picked_up_by_person_id: 'mae' };
+  const right = { code: 'A2B3', picked_up_by_person_id: 'mae' };
+  const actions = () => writeAuditLog.mock.calls.map(([, e]) => e.action);
+
+  it('cada código errado registra UMA falha, no escopo do check-in, pela função fora da transação', async () => {
+    const { svc, queryRaw } = build();
+    await errorOf(svc.checkOut(leader, 'k1', wrong));
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(queryRaw.mock.calls[0].slice(1)).toEqual(['k1', 't1', 'g1']);
+  });
+
+  it('da 1ª à 4ª falha só recusa e avisa como antes (sem travar)', async () => {
+    for (const n of [1, 2, 3, 4]) {
+      writeAuditLog.mockClear();
+      const { svc, queryRaw, alert } = build(openCheckin({ checkout_failed_attempts: n - 1 }));
+      queryRaw.mockResolvedValue([{ attempts: n }]);
+      expect(await errorOf(svc.checkOut(leader, 'k1', wrong))).toBeInstanceOf(ForbiddenException);
+      expect(actions()).toEqual(['kids.checkout_denied']);
+      expect(alert.notifyCheckoutDenied).toHaveBeenCalledTimes(1);
+      expect(alert.notifyCheckoutLocked).not.toHaveBeenCalled();
+    }
+  });
+
+  it('4 falhas e depois o código certo: fecha normalmente', async () => {
+    const { svc, client, queryRaw } = build(openCheckin({ checkout_failed_attempts: 4 }));
+    const out = await svc.checkOut(leader, 'k1', right);
+    expect(out).toMatchObject({ id: 'k1', picked_up_by_person_id: 'mae' });
+    expect(client.kidsCheckin.updateMany).toHaveBeenCalledTimes(1);
+    expect(queryRaw).not.toHaveBeenCalled(); // acerto não conta como falha
+  });
+
+  it('na 5ª falha: 403 idêntico ao da recusa comum, auditoria kids.checkout_locked e aviso ao líder', async () => {
+    const common = build();
+    const commonErr = await errorOf(common.svc.checkOut(leader, 'k1', wrong));
+
+    writeAuditLog.mockClear();
+    const { svc, queryRaw, alert } = build(openCheckin({ checkout_failed_attempts: 4 }));
+    queryRaw.mockResolvedValue([{ attempts: 5 }]);
+    const err = await errorOf(svc.checkOut(leader, 'k1', wrong));
+
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getResponse()).toEqual((commonErr as ForbiddenException).getResponse());
+    expect((err as ForbiddenException).getResponse()).toMatchObject({ statusCode: 403, message: GENERIC });
+    expect(actions()).toEqual(['kids.checkout_denied', 'kids.checkout_locked']);
+    const locked = writeAuditLog.mock.calls[1][1];
+    expect(locked).toMatchObject({ tenant_id: 't1', congregation_id: 'g1', actor_user_id: 'lider1', subject_person_id: 'c1', entity: 'kids_checkin' });
+    expect(JSON.stringify(locked)).not.toMatch(/ZZZZ|A2B3|allerg|medical/i);
+    expect(alert.notifyCheckoutLocked).toHaveBeenCalledWith('t1', 'g1', { sessionId: 's1', checkinId: 'k1', roomName: 'Maternal' });
+    expect(alert.notifyCheckoutDenied).not.toHaveBeenCalled(); // um aviso só: o do travamento
+  });
+
+  it('5 falhas + código CERTO + pessoa autorizada: o MESMO 403, sem fechar e sem revelar o travamento', async () => {
+    const common = build();
+    const commonErr = await errorOf(common.svc.checkOut(leader, 'k1', wrong));
+
+    writeAuditLog.mockClear();
+    const { svc, client, queryRaw, alert } = build(openCheckin({ checkout_failed_attempts: 5 }));
+    const err = await errorOf(svc.checkOut(leader, 'k1', right));
+
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getResponse()).toEqual((commonErr as ForbiddenException).getResponse());
+    expect(client.kidsCheckin.updateMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled(); // travado não acumula contagem
+    expect(actions()).toEqual(['kids.checkout_denied']); // rastro de cada tentativa, mas
+    expect(writeAuditLog.mock.calls[0][1].after).toMatchObject({ reason: 'locked' });
+    expect(alert.notifyCheckoutLocked).not.toHaveBeenCalled(); // nenhum aviso repetido
+    expect(alert.notifyCheckoutDenied).not.toHaveBeenCalled();
+  });
+
+  it('travado também recusa por nome de terceiro e por contagem acima de 5', async () => {
+    const { svc, client } = build(openCheckin({ checkout_failed_attempts: 9 }));
+    expect(await errorOf(svc.checkOut(leader, 'k1', { code: 'A2B3', picked_up_by_name: 'Joana Lima' }))).toBeInstanceOf(ForbiddenException);
+    expect(client.kidsCheckin.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('código certo com pessoa sem can_pickup é recusa, mas NÃO conta como tentativa de código', async () => {
+    const { svc, client, queryRaw } = build();
+    client.kidsGuardian.findMany.mockResolvedValue([]);
+    await errorOf(svc.checkOut(leader, 'k1', right));
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('o override do líder continua fechando um check-in travado', async () => {
+    const { svc, client } = build(openCheckin({ checkout_failed_attempts: 5 }));
+    const out = await svc.checkOutOverride(leader, 'k1', { reason: 'Conferi o RG da mãe', picked_up_by_name: 'Maria Souza' });
+    expect(out).toMatchObject({ id: 'k1', override_reason: 'Conferi o RG da mãe' });
+    expect(client.kidsCheckin.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('falha ao gravar o contador não muda a resposta (best-effort): segue 403', async () => {
+    const { svc, queryRaw } = build();
+    queryRaw.mockRejectedValue(new Error('db'));
+    expect(await errorOf(svc.checkOut(leader, 'k1', wrong))).toBeInstanceOf(ForbiddenException);
+  });
+
+  it('quem não opera a sessão leva 403 sem gastar tentativa do check-in', async () => {
+    const { svc, queryRaw } = build();
+    await errorOf(svc.checkOut(volunteer, 'k1', wrong));
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 });
