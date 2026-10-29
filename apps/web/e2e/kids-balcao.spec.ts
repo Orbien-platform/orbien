@@ -185,4 +185,48 @@ test.describe("balcão do Kids", () => {
       await cenario.cleanup();
     }
   });
+
+  test("QR da tela do código abre a entrega, e 3 recusas seguidas mandam chamar o líder", async ({ page, api }) => {
+    const stamp = Date.now();
+    const cenario = await montarCenario(api, stamp);
+    try {
+      await abrirBalcao(page, cenario.roomName);
+      await fazerCheckin(page, cenario.childName);
+
+      const [child] = await api.call<Identified[]>("GET", `/kids/children?search=${encodeURIComponent(cenario.childName)}`);
+      const open = await api.call<{ qr: string }>("GET", `/kids/children/${child.id}/checkin`);
+      expect(open.qr).toMatch(/^kidsco1\./);
+
+      await test.step("QR adulterado: recusa genérica; na 3ª seguida, orientação e exceção em destaque", async () => {
+        const forjado = `${open.qr.slice(0, -2)}xx`;
+        for (let i = 1; i <= 3; i++) {
+          await page.getByLabel("Ler QR").fill(forjado);
+          await page.getByLabel("Ler QR").press("Enter");
+          const dialog = page.getByRole("dialog", { name: "Entregar criança" });
+          await expect(dialog.getByText("QR lido")).toBeVisible();
+          await dialog.getByLabel("Quem está buscando").selectOption({ index: 1 });
+          await dialog.getByRole("button", { name: "Entregar criança" }).click();
+          await expect(dialog.getByRole("alert")).toHaveText("Este código não é de quem está buscando. Chame o líder kids.");
+          if (i < 3) await dialog.getByRole("button", { name: "Cancelar" }).click();
+        }
+        const dialog = page.getByRole("dialog", { name: "Entregar criança" });
+        await expect(dialog.getByText(/3 recusas seguidas/)).toBeVisible();
+        await expect(dialog.getByRole("button", { name: "Líder autoriza a saída (sem o código)" })).toBeVisible();
+        await shot(page, "kids-04-tres-recusas");
+        await dialog.getByRole("button", { name: "Cancelar" }).click();
+      });
+
+      await test.step("QR verdadeiro: entrega sem digitar o código", async () => {
+        await page.getByLabel("Ler QR").fill(open.qr);
+        await page.getByLabel("Ler QR").press("Enter");
+        const dialog = page.getByRole("dialog", { name: "Entregar criança" });
+        await expect(dialog.getByText("QR lido")).toBeVisible();
+        await dialog.getByLabel("Quem está buscando").selectOption({ label: `${cenario.guardianName} (responsável)` });
+        await dialog.getByRole("button", { name: "Entregar criança" }).click();
+        await expect(page.getByRole("status")).toContainText(`Criança entregue: ${cenario.childName}`);
+      });
+    } finally {
+      await cenario.cleanup();
+    }
+  });
 });
