@@ -1,5 +1,5 @@
 -- Dado de saúde da criança (kids T12): tabela 1:1 própria, isolada de persons.
--- Nasce sem RLS aqui; a policy de congregação vem em 029_rls_kids_child_health.sql.
+-- Nasce sem RLS aqui; a policy de congregação vem em 030_rls_kids_child_health.sql.
 -- CreateTable
 CREATE TABLE "kids_child_health" (
     "id" TEXT NOT NULL,

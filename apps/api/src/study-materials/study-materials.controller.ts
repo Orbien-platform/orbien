@@ -72,7 +72,24 @@ export class StudyMaterialsController {
     upload_id: string;
     expires_in: number;
   } {
-    const upload_id = randomUUID();
+    return this.signUploadTicket(user, randomUUID());
+  }
+
+  /**
+   * Ticket para substituir o arquivo de um material que já existe: preso ao
+   * `id` dele, e só vale em `PATCH upload/:id`.
+   */
+  @Post(':id/upload-ticket')
+  @Roles(...WRITE_ROLES)
+  async replaceTicket(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.studyMaterialsService.findOne(id);
+    return this.signUploadTicket(user, id);
+  }
+
+  private signUploadTicket(user: JwtPayload, upload_id: string) {
     const payload: JwtPayload = {
       sub: user.sub,
       tenant_id: user.tenant_id,
@@ -102,6 +119,19 @@ export class StudyMaterialsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.studyMaterialsService.create(dto, file, user);
+  }
+
+  @Patch('upload/:id')
+  @Roles(...WRITE_ROLES)
+  @UploadTicketRoute('study_material')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: FILE_MAX_BYTES } }))
+  updateWithTicket(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStudyMaterialDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.studyMaterialsService.update(id, dto, file, user);
   }
 
   @Get()

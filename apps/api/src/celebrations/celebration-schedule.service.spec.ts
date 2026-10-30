@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { CelebrationScheduleService } from './celebration-schedule.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CelebrationInstancesService } from './celebration-instances.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -26,7 +27,17 @@ function serviceWith(
     materializeInstancesForPeriod: jest.fn(),
     ...instancesService,
   } as unknown as CelebrationInstancesService;
-  return { service: new CelebrationScheduleService(prisma, instances), instances, runInTx };
+  const removalNotifier = { notifyRemoved: jest.fn() };
+  return {
+    service: new CelebrationScheduleService(
+      prisma,
+      instances,
+      removalNotifier as unknown as CelebrationRemovalNotifier,
+    ),
+    instances,
+    removalNotifier,
+    runInTx,
+  };
 }
 
 describe('CelebrationScheduleService', () => {
@@ -342,14 +353,50 @@ describe('CelebrationScheduleService', () => {
     it('remove a escala publicada sem bloquear', async () => {
       const client = clientWith();
       client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
-      client.celebrationSchedule.findUnique.mockResolvedValue({ id: 's1', status: 'published' });
+      client.celebrationSchedule.findUnique.mockResolvedValue({
+        id: 's1',
+        status: 'published',
+        ministries: [
+          {
+            assignments: [
+              { status: 'confirmed', notified_at: new Date(), volunteerProfile: { person_id: 'p1' } },
+              { status: 'declined', notified_at: new Date(), volunteerProfile: { person_id: 'p2' } },
+              { status: 'pending', notified_at: null, volunteerProfile: { person_id: 'p3' } },
+            ],
+          },
+        ],
+      });
       client.celebrationSchedule.delete.mockResolvedValue({ id: 's1' });
-      const { service } = serviceWith(client);
+      const { service, removalNotifier } = serviceWith(client);
 
       const result = await service.remove('t1', 'g1', 'i1');
 
       expect(client.celebrationSchedule.delete).toHaveBeenCalledWith({ where: { id: 's1' } });
       expect(result).toEqual({ id: 's1' });
+      // Só quem foi avisado e ainda contava com a vaga recebe o aviso.
+      expect(removalNotifier.notifyRemoved).toHaveBeenCalledWith('t1', 'g1', 'i1', ['p1']);
+    });
+
+    it('não avisa ninguém ao remover escala em rascunho', async () => {
+      const client = clientWith();
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationSchedule.findUnique.mockResolvedValue({
+        id: 's1',
+        status: 'draft',
+        ministries: [
+          {
+            assignments: [
+              { status: 'pending', notified_at: new Date(), volunteerProfile: { person_id: 'p1' } },
+            ],
+          },
+        ],
+      });
+      client.celebrationSchedule.delete.mockResolvedValue({ id: 's1' });
+      const { service, removalNotifier } = serviceWith(client);
+
+      await service.remove('t1', 'g1', 'i1');
+
+      expect(removalNotifier.notifyRemoved).toHaveBeenCalledWith('t1', 'g1', 'i1', []);
     });
   });
 
@@ -390,32 +437,41 @@ describe('CelebrationScheduleService', () => {
     it('remove o ministério da escala', async () => {
       const client = clientWith();
       client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
-      client.celebrationSchedule.findUnique.mockResolvedValue({ id: 's1' });
-      client.celebrationMinistry.findFirst.mockResolvedValue({ id: 'cm1' });
+      client.celebrationSchedule.findUnique.mockResolvedValue({ id: 's1', status: 'published' });
+      client.celebrationMinistry.findFirst.mockResolvedValue({
+        id: 'cm1',
+        assignments: [
+          { status: 'pending', notified_at: new Date(), volunteerProfile: { person_id: 'p1' } },
+          { status: 'swapped', notified_at: new Date(), volunteerProfile: { person_id: 'p2' } },
+        ],
+      });
       client.celebrationMinistry.delete.mockResolvedValue({ id: 'cm1' });
-      const { service } = serviceWith(client);
+      const { service, removalNotifier } = serviceWith(client);
 
       const result = await service.removeMinistry('t1', 'g1', 'i1', 'm1');
 
       expect(client.celebrationMinistry.delete).toHaveBeenCalledWith({ where: { id: 'cm1' } });
       expect(client.celebrationMinistry.findFirst).toHaveBeenCalledWith({
         where: { schedule_id: 's1', ministry_id: 'm1', kids_session_id: null },
+        include: { assignments: expect.anything() },
       });
       expect(result).toEqual({ id: 'cm1' });
+      expect(removalNotifier.notifyRemoved).toHaveBeenCalledWith('t1', 'g1', 'i1', ['p1']);
     });
 
     it('com kids_session_id remove só o vínculo daquela sessão', async () => {
       const client = clientWith();
       client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
       client.celebrationSchedule.findUnique.mockResolvedValue({ id: 's1' });
-      client.celebrationMinistry.findFirst.mockResolvedValue({ id: 'cm2' });
-      client.celebrationMinistry.delete.mockResolvedValue({ id: 'cm2' });
+      client.celebrationMinistry.findFirst.mockResolvedValue({ id: 'cm2', assignments: [] });
+      client.celebrationMinistry.delete.mockResolvedValue({ id: 'cm2', assignments: [] });
       const { service } = serviceWith(client);
 
       await service.removeMinistry('t1', 'g1', 'i1', 'm1', 'ks1');
 
       expect(client.celebrationMinistry.findFirst).toHaveBeenCalledWith({
         where: { schedule_id: 's1', ministry_id: 'm1', kids_session_id: 'ks1' },
+        include: { assignments: expect.anything() },
       });
       expect(client.celebrationMinistry.delete).toHaveBeenCalledWith({ where: { id: 'cm2' } });
     });

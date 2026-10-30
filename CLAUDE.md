@@ -25,6 +25,22 @@ leia o do app antes de mexer nele.
   em português, como o histórico já faz. Se o prompt seguinte continua o
   mesmo trabalho, fique na branch que já existe; branch nova é por unidade
   de trabalho, não por mensagem. Commit e push continuam só quando pedidos.
+- **Antes de subir (push ou PR), o portão completo fica verde.** Rode
+  `bash scripts/pre-push.sh`: build, tipos e lint; testes e cobertura dos 5
+  apps (sempre); RLS se o diff toca a API; e2e **só dos specs que o diff
+  afeta** (`scripts/e2e-escopo.mjs`); smoke do site se o diff toca o site.
+  Banco, API e web sobem sozinhos num Postgres local — nunca no Supabase.
+  Bloqueou? Ache a **causa**, corrija e rode de novo, quantas vezes for
+  preciso; `--so=cobertura|rls|e2e|site` encurta o ciclo, mas só o completo
+  verde libera. Corrigir é no código ou no teste que está errado — nunca
+  baixar piso de cobertura, pular/`skip` teste, estreitar o escopo ou usar
+  `--rapido`/`--no-verify` para passar. Se a causa for decisão sua (produto,
+  contrato, teste que pode estar certo), pare e pergunte com a evidência.
+  `next build` com `NODE_ENV=development` (padrão em sessão remota) quebra
+  com `useContext` null; o portão já força `production` nos builds — faça o
+  mesmo se buildar na mão (`NODE_ENV=production npm run build:web`).
+  Alerta que sobrar vira pergunta, como na regra abaixo. Não diga que o CI
+  vai passar sem ter visto o portão completo liberar.
 - **Teste só em `teste1-church` e `teste2-church`.** São os dois tenants que
   existem para isso, e os únicos que podem ser usados — em e2e local, no CI, em
   teste manual, em demonstração, em qualquer ambiente, produção inclusive.

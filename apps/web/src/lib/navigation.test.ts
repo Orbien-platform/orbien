@@ -4,7 +4,7 @@ import { activeNavHref, findNavEntry, NAV_SECTIONS } from "./navigation";
 describe("navegação", () => {
   it("lista Indicadores em Pessoas", () => {
     const pessoas = NAV_SECTIONS.find((s) => s.title === "Pessoas");
-    expect(pessoas?.items.map((i) => i.href)).toEqual(["/pessoas", "/pessoas/indicadores"]);
+    expect(pessoas?.items.map((i) => i.href)).toEqual(["/pessoas/indicadores", "/pessoas"]);
   });
 
   it("o item mais específico vence: /pessoas/indicadores não acende Pessoas", () => {

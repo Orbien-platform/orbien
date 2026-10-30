@@ -1,8 +1,8 @@
 -- =============================================================================
--- 030_rls_kids_checkout_attempts.sql — contador de tentativas de código (R3-2)
+-- 031_rls_kids_checkout_attempts.sql — contador de tentativas de código (R3-2)
 --
 -- Sem tabela nova: a coluna `kids_checkins.checkout_failed_attempts` vem da
--- migration `add_kids_checkout_attempts`, e a RLS dela é a de 028. O que este
+-- migration `add_kids_checkout_attempts`, e a RLS dela é a de 029. O que este
 -- script cria é a função que incrementa o contador.
 --
 -- Por que função SECURITY DEFINER: a recusa do check-out responde 403, e a
@@ -56,9 +56,9 @@ BEGIN
      AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
      AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE');
 
-  RAISE NOTICE '030_rls_kids_checkout_attempts: % função(ões) conforme(s)', n;
+  RAISE NOTICE '031_rls_kids_checkout_attempts: % função(ões) conforme(s)', n;
 
   IF n <> 1 THEN
-    RAISE EXCEPTION '030_rls_kids_checkout_attempts: esperava kids_register_checkout_failure SECURITY DEFINER, search_path fixo, EXECUTE só para orbien_app; encontrei %', n;
+    RAISE EXCEPTION '031_rls_kids_checkout_attempts: esperava kids_register_checkout_failure SECURITY DEFINER, search_path fixo, EXECUTE só para orbien_app; encontrei %', n;
   END IF;
 END $$;

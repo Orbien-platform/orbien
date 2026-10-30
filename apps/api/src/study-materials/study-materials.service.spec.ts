@@ -609,7 +609,7 @@ describe('StudyMaterialsService', () => {
       });
     });
 
-    it('substitui o arquivo, removendo o antigo e enviando o novo', async () => {
+    it('substitui o arquivo, enviando o novo e mantendo o antigo para o histórico', async () => {
       const client = clientWith();
       client.studyMaterial.findUnique.mockResolvedValue({ ...EXISTING_MATERIAL, file_url: 'https://cdn/old.pdf' });
       client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
@@ -619,11 +619,11 @@ describe('StudyMaterialsService', () => {
 
       await service.update('m1', {} as never, file, USER);
 
-      expect(storageService.deleteByUrl).toHaveBeenCalledWith('https://cdn/old.pdf');
+      expect(storageService.deleteByUrl).not.toHaveBeenCalled();
       expect(storageService.upload).toHaveBeenCalledWith(file.buffer, expect.stringContaining('.pdf'), 'application/pdf');
       expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
         where: { id: 'm1', version: 1 },
-        data: { file_url: 'https://cdn/materiais/a.pdf', version: { increment: 1 } },
+        data: { file_url: 'https://cdn/materiais/a.pdf', source_type: 'pdf', version: { increment: 1 } },
       });
     });
 
@@ -640,6 +640,26 @@ describe('StudyMaterialsService', () => {
       );
 
       expect(storageService.upload).not.toHaveBeenCalled();
+      expect(storageService.deleteByUrl).not.toHaveBeenCalled();
+    });
+
+    it('troca o tipo para doc quando o arquivo novo é Word', async () => {
+      const client = clientWith();
+      client.studyMaterial.findUnique.mockResolvedValue({ ...EXISTING_MATERIAL, source_type: 'pdf', file_url: 'https://cdn/old.pdf' });
+      client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
+      client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
+      const { service } = serviceWith(client);
+      const file = {
+        originalname: 'novo.docx',
+        buffer: Buffer.from('x'),
+        mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      } as Express.Multer.File;
+
+      await service.update('m1', {} as never, file, USER);
+
+      expect(client.studyMaterial.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ source_type: 'doc' }) }),
+      );
     });
 
     it('converte publish_at e expires_at quando informados', async () => {

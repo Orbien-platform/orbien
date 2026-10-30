@@ -11,6 +11,8 @@ import { ServiceOrdersController } from './service-orders.controller';
 import { ServiceOrdersService } from './service-orders.service';
 import { ServiceOrderItemsController } from './service-order-items.controller';
 import { ServiceOrderItemsService } from './service-order-items.service';
+import { ServiceOrderTemplatesController } from './service-order-templates.controller';
+import { ServiceOrderTemplatesService } from './service-order-templates.service';
 import { SetlistSongsController } from './setlist-songs.controller';
 import { SetlistSongsService } from './setlist-songs.service';
 import { SetlistsController } from './setlists.controller';
@@ -24,6 +26,7 @@ import { CelebrationAssignmentController } from './celebration-assignment.contro
 import { ScheduleTemplateController } from './schedule-template.controller';
 import { ScheduleTemplateService } from './schedule-template.service';
 import { CelebrationAssignmentService } from './celebration-assignment.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
 import {
   CelebrationRespondController,
   CelebrationMyAssignmentsController,
@@ -42,6 +45,7 @@ import { CelebrationAttendanceService } from './celebration-attendance.service';
     CelebrationAttendanceController,
     CelebrationInstancesController,
     ServiceOrderItemsController,
+    ServiceOrderTemplatesController,
     ServiceOrdersController,
     SetlistSongsController,
     SetlistsController,
@@ -60,12 +64,14 @@ import { CelebrationAttendanceService } from './celebration-attendance.service';
     CelebrationInstancesService,
     ServiceOrdersService,
     ServiceOrderItemsService,
+    ServiceOrderTemplatesService,
     SetlistsService,
     SetlistSongsService,
     CelebrationSchedulerService,
     CelebrationScheduleService,
     CelebrationScheduleSuggestionService,
     CelebrationAssignmentService,
+    CelebrationRemovalNotifier,
     CelebrationSwapService,
     CelebrationAttendanceService,
     PdfExportService,

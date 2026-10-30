@@ -56,8 +56,8 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 - [x] **T1** Schema Prisma: `KidsRoom`, `KidsSession`, `KidsGuardian`, `KidsCheckin`, enum, `Person.is_child`, `CelebrationMinistry.kids_session_id` + migration. *Depends:* — · *Tests:* none (build) · *Reqs:* KIDS-01,02,05,08
 - [x] **T2** SQL do índice único parcial de check-in aberto na migration. *Depends:* T1 · *Tests:* RLS/integração em T4 · *Reqs:* KIDS-08
-- [x] **T3** `028_rls_kids.sql` com `app_congregation_allowed()` simétrico. *Depends:* T1 · *Tests:* none · *Reqs:* KIDS-01
-- [x] **T4** Registrar `028` no `bootstrap-db.sh` (antes do passo 4) + verificação no passo 7. *Depends:* T3 · *Tests:* rodar bootstrap · *Reqs:* KIDS-01
+- [x] **T3** `029_rls_kids.sql` com `app_congregation_allowed()` simétrico. *Depends:* T1 · *Tests:* none · *Reqs:* KIDS-01
+- [x] **T4** Registrar `029` no `bootstrap-db.sh` (antes do passo 4) + verificação no passo 7. *Depends:* T3 · *Tests:* rodar bootstrap · *Reqs:* KIDS-01
 - [x] **T5** Teste RLS `kids.spec.ts`: cada tabela, cross-congregação e cross-tenant. *Depends:* T4 · *Tests:* RLS · *Reqs:* KIDS-01
 
 ### F2 — API: turmas e sessões
@@ -123,12 +123,12 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 
 ### R3 — Rodada 3 (decisões do dono, 2026-10-29)
 
-- [x] **R3-1** QR para check-in e check-out (portador dos mesmos segredos): `POST /kids/children/:id/qr`, `POST /kids/sessions/:id/checkins/by-qr`, `qr` em `GET /kids/children/:id/checkin` e `{ qr }` no check-out; tabela `kids_checkin_qr_tokens` + `031_rls_kids_checkin_qr_tokens.sql`. *Depends:* T19b · *Tests:* unit + integração + RLS (uso único, expiração, forjado, regras do check-in, concorrência) · *Reqs:* KIDS-08,09
-- [x] **R3-2** Limite de 5 tentativas de código no check-out: coluna `kids_checkins.checkout_failed_attempts` (migration) + `kids_register_checkout_failure()` SECURITY DEFINER (`030_rls_kids_checkout_attempts.sql`, no bootstrap e no passo 7), travamento com o mesmo 403, auditoria `kids.checkout_locked` e push ao líder. *Depends:* T18 · *Tests:* unit + integração (4+acerto, 5+certo, override, concorrência) · *Reqs:* KIDS-09
+- [x] **R3-1** QR para check-in e check-out (portador dos mesmos segredos): `POST /kids/children/:id/qr`, `POST /kids/sessions/:id/checkins/by-qr`, `qr` em `GET /kids/children/:id/checkin` e `{ qr }` no check-out; tabela `kids_checkin_qr_tokens` + `032_rls_kids_checkin_qr_tokens.sql`. *Depends:* T19b · *Tests:* unit + integração + RLS (uso único, expiração, forjado, regras do check-in, concorrência) · *Reqs:* KIDS-08,09
+- [x] **R3-2** Limite de 5 tentativas de código no check-out: coluna `kids_checkins.checkout_failed_attempts` (migration) + `kids_register_checkout_failure()` SECURITY DEFINER (`031_rls_kids_checkout_attempts.sql`, no bootstrap e no passo 7), travamento com o mesmo 403, auditoria `kids.checkout_locked` e push ao líder. *Depends:* T18 · *Tests:* unit + integração (4+acerto, 5+certo, override, concorrência) · *Reqs:* KIDS-09
 - [x] **R3-3** Push "Criança recebida na turma X" ao primário (check-in por outra pessoa) e "Criança entregue" também aos demais responsáveis com `can_pickup` e conta (sem duplicar quem retirou). *Depends:* T19d · *Tests:* unit + integração por destinatário (inclui quem NÃO recebe) · *Reqs:* KIDS-09
 - [x] **R3-4** `GET /kids/guardians/search?q=` (adultos da congregação, limite 20, telefone mascarado) para `KIDS_MANAGE_ROLES`. *Depends:* T13 · *Tests:* unit + integração (papéis, isolamento teste1×teste2, sem criança) · *Reqs:* KIDS-04,05
 - [x] **R3-5** `checkin_total` por instância em `GET /celebrations/instances` (uma agregação, sem N+1) e conferência de que `ministry_leader` lê a contagem (papéis de READ já o incluíam; nada corrigido). *Depends:* T22 · *Tests:* unit + integração · *Reqs:* KIDS-11
-- [x] **R3-6** `028_rls_kids.sql` com `ENABLE`/`FORCE ROW LEVEL SECURITY` explícitos por tabela (o laço `DO $$` escondia as quatro tabelas do grep de `scripts/pre-push.sh`, que alertava em falso). *Depends:* T3 · *Tests:* bootstrap + `test:rls` + grep do portão (mutação: tirar o `ENABLE` de uma tabela faz o alerta voltar) · *Reqs:* KIDS-01
+- [x] **R3-6** `029_rls_kids.sql` com `ENABLE`/`FORCE ROW LEVEL SECURITY` explícitos por tabela (o laço `DO $$` escondia as quatro tabelas do grep de `scripts/pre-push.sh`, que alertava em falso). *Depends:* T3 · *Tests:* bootstrap + `test:rls` + grep do portão (mutação: tirar o `ENABLE` de uma tabela faz o alerta voltar) · *Reqs:* KIDS-01
 
 ### R3-web — Rodada 3, front web (decisões do dono, 2026-10-29)
 

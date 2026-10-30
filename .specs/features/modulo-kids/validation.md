@@ -189,7 +189,7 @@ Observação sobre M7, M33 e M34: são pegos por unit que prende o `where`; sozi
 
 ### Itens confirmados sem problema
 
-- (a) RLS 028/029 com `USING` = `WITH CHECK` e `app_congregation_allowed()` (`028_rls_kids.sql`, `029_rls_kids_child_health.sql`); bootstrap com passo 7 para as 5 tabelas (`bootstrap-db.sh` +37 linhas); todo service kids filtra tenant + congregação do token (M7, M33, M34 provam o `where`). `test/rls/kids.spec.ts` cobre cruzado, `USING`/`WITH CHECK`, índice parcial e FK composta.
+- (a) RLS 029/030 com `USING` = `WITH CHECK` e `app_congregation_allowed()` (`029_rls_kids.sql`, `030_rls_kids_child_health.sql`); bootstrap com passo 7 para as 5 tabelas (`bootstrap-db.sh` +37 linhas); todo service kids filtra tenant + congregação do token (M7, M33, M34 provam o `where`). `test/rls/kids.spec.ts` cobre cruzado, `USING`/`WITH CHECK`, índice parcial e FK composta.
 - (b) Alergia só em `kids_child_health`; `audit_logs` guarda quem/quando/qual criança, nunca o conteúdo (M19 morta; `I:kids-children.spec.ts:335`, `I:kids-checkin.spec.ts:511,624,693`). Respostas de PATCH/lista não trazem saúde (`kids-children.service.ts:12-20`). Roster e etiqueta pela equipe auditam (M9 morta). Anonimizar a pessoa apaga a saúde por trigger (`20261026130100_kids_child_health_erase_on_anonymize`, `test/rls/kids.spec.ts:403`).
 - (c) Check-out: código errado e sem `can_pickup` dão o mesmo 403 e a mesma mensagem (M1, M2, M27 mortas; `I:kids-checkin.spec.ts:485-486` `toEqual`).
 - (d) Fora o S1 e o S3, o código só aparece na resposta do check-in (a quem o fez) e no endpoint do responsável. Roster sem `code` (M4 morta).
@@ -349,7 +349,7 @@ Observação de leitura: HMAC com chave derivada de `JWT_SECRET` (`kids-qr.servi
 
 | Critério | Evidência | Resultado |
 |---|---|---|
-| Função `kids_register_checkout_failure`: `SECURITY DEFINER`, `search_path = public, pg_temp`, `REVOKE ... FROM PUBLIC`, `EXECUTE` só para `orbien_app`, escopo por id+tenant+congregação+aberto, `coluna + 1` atômico | `030_rls_kids_checkout_attempts.sql:27-47`; verificação com `RAISE EXCEPTION` no próprio script (`:49-66`) e no passo 7 (`bootstrap-db.sh:733`); sem escalada: só incrementa uma coluna de uma linha aberta, não executa SQL dinâmico, não recebe identificador de usuário | PASS |
+| Função `kids_register_checkout_failure`: `SECURITY DEFINER`, `search_path = public, pg_temp`, `REVOKE ... FROM PUBLIC`, `EXECUTE` só para `orbien_app`, escopo por id+tenant+congregação+aberto, `coluna + 1` atômico | `031_rls_kids_checkout_attempts.sql:27-47`; verificação com `RAISE EXCEPTION` no próprio script (`:49-66`) e no passo 7 (`bootstrap-db.sh:733`); sem escalada: só incrementa uma coluna de uma linha aberta, não executa SQL dinâmico, não recebe identificador de usuário | PASS |
 | Teste de privilégio da função | `I:kids-checkout-lock.spec.ts:247` (`app_user` não chama; fora do escopo devolve NULL) | PASS |
 | Contador sobrevive ao 403 (fora da transação) | `I:kids-checkout-lock.spec.ts:131` (3 erros = 3 no banco) | PASS |
 | 4 falhas + código certo fecha; 5ª trava | `I:kids-checkout-lock.spec.ts:140`, `:149` | PASS |
@@ -372,15 +372,15 @@ Observação de leitura: HMAC com chave derivada de `JWT_SECRET` (`kids-qr.servi
 | Preferência `kids` (AD-003, `!= 'false'`) | `kids-pickup-notice.service.ts:104`; `U:...spec.ts:36`; coluna/migration `20261026150000_add_kids_to_notification_preferences` (anterior à rodada 2, sem alteração) | PASS |
 | Best-effort: falha de push não desfaz o check-in/out | `U:...spec.ts:124`, `:137`, `:203` | PASS |
 
-## R3-4 · Busca de adultos · R3-5 · `checkin_total` · R3-6 · RLS 028
+## R3-4 · Busca de adultos · R3-5 · `checkin_total` · R3-6 · RLS 029
 
 | Critério | Evidência | Resultado |
 |---|---|---|
 | Só `KIDS_MANAGE_ROLES`; resposta mínima (id, nome, telefone mascarado); sem criança, removido, anonimizado, outro tenant/congregação; limite 20; mínimo 2 caracteres | `kids-guardians.controller.ts:47-51`; `I:kids-guardian-search.spec.ts:57`, `:65`, `:74`, `:83`, `:92`, `:99`, `:114`; `kids-guardian-search.service.ts:38-68` | PASS |
 | `checkin_total` por instância em `GET /celebrations/instances`, mesmo número da contagem de público | `celebration-instances.service.ts:68-76`; `I:kids-attendance.spec.ts:133-136`, `:151`, `:162` | PASS |
 | DEC-1: instância cancelada não conta nada | `celebration-attendance.service.ts:58-62` (filtro `status: { not: cancelled }`); mutante M10 morto | PASS |
-| RLS 028 com `ENABLE`/`FORCE` explícitos por tabela, policies simétricas (`USING` = `WITH CHECK`), verificação no próprio script | `028_rls_kids.sql:10-74`; `T:rls/kids.spec.ts` (+39 linhas) | PASS |
-| 030 e 031 no `bootstrap-db.sh` e no passo 7 | `bootstrap-db.sh:225-231`, `:716`, `:733` | PASS |
+| RLS 029 com `ENABLE`/`FORCE` explícitos por tabela, policies simétricas (`USING` = `WITH CHECK`), verificação no próprio script | `029_rls_kids.sql:10-74`; `T:rls/kids.spec.ts` (+39 linhas) | PASS |
+| 031 e 032 no `bootstrap-db.sh` e no passo 7 | `bootstrap-db.sh:225-231`, `:716`, `:733` | PASS |
 
 ## COV-1..6, WEB, MOB, DEC-2/DEC-3
 

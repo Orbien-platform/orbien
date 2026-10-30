@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import { MATERIAL_FILE_ACCEPT, validateMaterialFile } from "@/lib/upload-meeting-material";
-import { uploadStudyMaterial } from "@/lib/upload-study-material";
+import { replaceStudyMaterialFile, uploadStudyMaterial } from "@/lib/upload-study-material";
 
 type Audience = "all_networks" | "network" | "group";
 type Visibility = "all" | "leaders_only";
@@ -31,6 +31,8 @@ export interface EditableMaterial {
   network_id?: string | null;
   visibility: Visibility;
   publish_at: string;
+  source_type?: "pdf" | "doc" | "rich_text";
+  rich_content?: string | null;
   materialTargets: { small_group_id: string }[];
 }
 
@@ -38,7 +40,7 @@ interface MaterialFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
-  /** Presente = edita o alcance e a liberação; o conteúdo não muda por aqui. */
+  /** Presente = edita o material; o arquivo ou o texto só mudam se você trocar. */
   material?: EditableMaterial | null;
 }
 
@@ -52,14 +54,15 @@ function toLocalInput(iso: string): string {
 // Criação de material com alcance: todas as redes, uma rede ou um PG. O pai
 // (`MateriaisPage`) troca a `key` a cada abertura, remontando o formulário com
 // estado limpo — mesmo padrão de `NetworkFormModal`. Com `material`, o mesmo
-// formulário edita título, alcance, visibilidade e liberação (o arquivo ou o
-// texto ficam como estão).
+// formulário edita título, alcance, visibilidade e liberação, e permite trocar
+// o arquivo (ou reescrever o texto); sem troca, o conteúdo fica como está.
 export function MaterialFormModal({ open, onOpenChange, onSaved, material }: MaterialFormModalProps) {
   const editing = !!material;
+  const isText = material?.source_type === "rich_text";
   const [title, setTitle] = useState(material?.title ?? "");
   const [kind, setKind] = useState<Kind>("file");
   const [file, setFile] = useState<File | null>(null);
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(material?.rich_content ?? "");
   const [audience, setAudience] = useState<Audience>(material?.audience ?? "all_networks");
   const [networkId, setNetworkId] = useState(material?.network_id ?? "");
   const [groupId, setGroupId] = useState(material?.materialTargets[0]?.small_group_id ?? "");
@@ -99,7 +102,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
 
     if (!title.trim()) return setError("Informe o título do material.");
     if (!editing && kind === "file" && !file) return setError("Escolha o arquivo PDF ou Word.");
-    if (!editing && kind === "text" && !content.trim()) return setError("Escreva o texto ou cole o link.");
+    if ((isText || (!editing && kind === "text")) && !content.trim()) return setError("Escreva o texto ou cole o link.");
     if (audience === "network" && !networkId) return setError("Escolha a rede.");
     if (audience === "group" && !groupId) return setError("Escolha o PG.");
 
@@ -117,8 +120,13 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
     setIsSubmitting(true);
     setProgress(0);
     try {
-      if (material) {
-        await api.patch(`/study-materials/${material.id}`, fields);
+      if (material && file) {
+        await replaceStudyMaterialFile(material.id, file, fields, setProgress);
+      } else if (material) {
+        await api.patch(
+          `/study-materials/${material.id}`,
+          isText ? { ...fields, rich_content: content.trim() } : fields
+        );
       } else if (kind === "file") {
         await uploadStudyMaterial(file!, fields, setProgress);
       } else {
@@ -151,7 +159,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
       title={editing ? "Editar material" : "Novo material"}
       description={
         editing
-          ? "Mude quem recebe o material, quem pode vê-lo e quando é liberado."
+          ? "Mude o conteúdo, quem recebe o material, quem pode vê-lo e quando é liberado."
           : "Escolha o conteúdo e quem vai recebê-lo."
       }
       className="max-w-lg"
@@ -182,7 +190,10 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
         </fieldset>
         )}
 
-        {!editing && (kind === "file" ? (
+        {editing && !isText && (
+          <p className="-mb-2 text-sm text-ink dark:text-white">Substituir arquivo</p>
+        )}
+        {(editing ? !isText : kind === "file") && (
           <input
             type="file"
             accept={MATERIAL_FILE_ACCEPT}
@@ -197,7 +208,13 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
             }}
             className="text-sm text-stone file:mr-3 file:rounded-[8px] file:border file:border-[var(--border-default)] file:bg-[var(--surface-subtle)] file:px-3 file:py-1.5 file:text-sm file:text-ink"
           />
-        ) : (
+        )}
+        {editing && !isText && (
+          <p className="-mt-2 text-xs text-stone">
+            Deixe em branco para manter o arquivo atual. O arquivo anterior fica no histórico de versões.
+          </p>
+        )}
+        {(editing ? isText : kind === "text") && (
           <textarea
             aria-label="Texto ou link do material"
             value={content}
@@ -206,7 +223,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
             rows={5}
             className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink dark:text-white"
           />
-        ))}
+        )}
 
         <fieldset className="flex flex-col gap-1.5" disabled={isSubmitting}>
           <legend className="mb-1 text-sm font-medium text-ink dark:text-white">Para quem</legend>
@@ -284,7 +301,7 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
           </span>
         </label>
 
-        {isSubmitting && kind === "file" && (
+        {isSubmitting && file && (
           <div
             role="progressbar"
             aria-valuenow={progress}

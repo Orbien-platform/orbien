@@ -1,6 +1,6 @@
 -- Módulo Kids (AD-013): turmas, sessões por instância de culto, autorizados e
 -- check-in nominal. Tabelas novas: nascem sem RLS aqui e recebem a policy de
--- congregação em 028_rls_kids.sql (fora do histórico do Prisma, aplicado pelo
+-- congregação em 029_rls_kids.sql (fora do histórico do Prisma, aplicado pelo
 -- bootstrap-db.sh).
 -- CreateEnum
 CREATE TYPE "KidsSessionStatus" AS ENUM ('open', 'cancelled');

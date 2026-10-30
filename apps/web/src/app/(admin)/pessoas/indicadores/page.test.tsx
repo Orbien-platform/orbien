@@ -236,6 +236,7 @@ describe("Indicadores de presença", () => {
       user: { id: "u1", name: "Ana", email: "a@a.com", tenant_id: "t1", congregation_id: "g1", areas: null },
     } as never);
     mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/persons/demographics") return Promise.reject({ response: { status: 403 } });
       if (url === "/celebrations") return Promise.resolve({ data: [] });
       if (url === "/celebrations/attendance/summary")
         return Promise.resolve({ data: { ...summary, services_counted: 1 } });
@@ -249,6 +250,7 @@ describe("Indicadores de presença", () => {
     setup();
     const pending: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void; url: string }> = [];
     mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/persons/demographics") return Promise.reject({ response: { status: 403 } });
       if (url === "/celebrations") return Promise.resolve({ data: [{ id: "c1", name: "Culto Domingo" }] });
       return new Promise((resolve, reject) => pending.push({ resolve, reject, url }));
     });
@@ -278,6 +280,7 @@ describe("Indicadores de presença", () => {
     setup();
     const pending: Array<(v: unknown) => void> = [];
     mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/persons/demographics") return Promise.reject({ response: { status: 403 } });
       if (url === "/celebrations") return Promise.resolve({ data: [{ id: "c1", name: "Culto Domingo" }] });
       return new Promise((resolve) => pending.push(resolve));
     });

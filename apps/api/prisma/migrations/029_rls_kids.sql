@@ -1,5 +1,5 @@
 -- =============================================================================
--- 028_rls_kids.sql — RLS das tabelas do módulo Kids (AD-001, AD-013)
+-- 029_rls_kids.sql — RLS das tabelas do módulo Kids (AD-001, AD-013)
 --
 -- Roda DEPOIS de 003_rls_admin_write.sql (app_congregation_allowed()). Fora do
 -- histórico do Prisma. Quatro tabelas novas (migration `add_kids_module`), mesmo
@@ -80,9 +80,9 @@ BEGIN
      AND qual LIKE '%app_congregation_allowed%'
      AND with_check IS NOT DISTINCT FROM qual;
 
-  RAISE NOTICE '028_rls_kids: % policy(s) simétrica(s)', n;
+  RAISE NOTICE '029_rls_kids: % policy(s) simétrica(s)', n;
 
   IF n <> 4 THEN
-    RAISE EXCEPTION '028_rls_kids: esperava 4 policies tenant_congregation_isolation simétricas, encontrei %', n;
+    RAISE EXCEPTION '029_rls_kids: esperava 4 policies tenant_congregation_isolation simétricas, encontrei %', n;
   END IF;
 END $$;

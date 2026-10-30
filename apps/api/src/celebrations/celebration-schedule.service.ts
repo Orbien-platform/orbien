@@ -14,6 +14,15 @@ import { CelebrationInstancesService } from './celebration-instances.service';
 import { AddScheduleMinistryDto } from './dto/add-schedule-ministry.dto';
 import { ApplyTemplateDto } from './dto/apply-template.dto';
 import { countScheduledVolunteers, volunteersMissing } from '../kids/sessions/kids-staffing';
+import { CelebrationRemovalNotifier, personsToNotifyOnRemoval } from './celebration-removal.notifier';
+
+const NOTIFIED_ASSIGNMENTS = {
+  select: {
+    status: true,
+    notified_at: true,
+    volunteerProfile: { select: { person_id: true } },
+  },
+} as const;
 
 // A tela de escala precisa mostrar QUEM está escalado, não só quantos.
 type AssignmentRow = CelebrationAssignment & {
@@ -67,6 +76,7 @@ export class CelebrationScheduleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly instancesService: CelebrationInstancesService,
+    private readonly removalNotifier: CelebrationRemovalNotifier,
   ) {}
 
   private async assertInstance(tenantId: string, congregationId: string, instanceId: string) {
@@ -228,10 +238,22 @@ export class CelebrationScheduleService {
 
     const schedule = await this.prisma.client.celebrationSchedule.findUnique({
       where: { celebration_instance_id: instanceId },
+      include: { ministries: { include: { assignments: NOTIFIED_ASSIGNMENTS } } },
     });
     if (!schedule) throw new NotFoundException('Escala não encontrada para esta instância');
 
-    return this.prisma.client.celebrationSchedule.delete({ where: { id: schedule.id } });
+    const removed = await this.prisma.client.celebrationSchedule.delete({ where: { id: schedule.id } });
+
+    this.removalNotifier.notifyRemoved(
+      tenantId,
+      congregationId,
+      instanceId,
+      personsToNotifyOnRemoval(
+        schedule.status,
+        schedule.ministries.flatMap((m) => m.assignments),
+      ),
+    );
+    return removed;
   }
 
   async removeMinistry(
@@ -251,10 +273,19 @@ export class CelebrationScheduleService {
     // Sem `kidsSessionId`, remove o vínculo comum; com ele, só o daquela sessão.
     const cm = await this.prisma.client.celebrationMinistry.findFirst({
       where: { schedule_id: schedule.id, ministry_id: ministryId, kids_session_id: kidsSessionId ?? null },
+      include: { assignments: NOTIFIED_ASSIGNMENTS },
     });
     if (!cm) throw new NotFoundException('Ministério não encontrado na escala');
 
-    return this.prisma.client.celebrationMinistry.delete({ where: { id: cm.id } });
+    const removed = await this.prisma.client.celebrationMinistry.delete({ where: { id: cm.id } });
+
+    this.removalNotifier.notifyRemoved(
+      tenantId,
+      congregationId,
+      instanceId,
+      personsToNotifyOnRemoval(schedule.status, cm.assignments),
+    );
+    return removed;
   }
 
   async applyTemplate(

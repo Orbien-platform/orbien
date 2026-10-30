@@ -33,6 +33,9 @@ export default defineConfig({
     navigationTimeout: 60_000,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    // Ver apps/web/playwright.config.ts: vazio no CI, preenchido pelo
+    // scripts/pre-push.sh quando o Chromium da máquina é outra versão.
+    launchOptions: { executablePath: process.env.E2E_CHROMIUM_PATH || undefined },
   },
 
   projects: [

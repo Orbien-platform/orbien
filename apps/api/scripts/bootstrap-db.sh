@@ -208,27 +208,33 @@ fi
 if [ -f prisma/migrations/027_rls_song_versions.sql ]; then
   run_sql_file prisma/migrations/027_rls_song_versions.sql
 fi
+# `service_order_templates` e `service_order_template_items` (moldes de OC):
+# tabelas novas, mesmo caso de 026/027 — nascem com a policy de congregação.
+# Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/028_rls_service_order_templates.sql ]; then
+  run_sql_file prisma/migrations/028_rls_service_order_templates.sql
+fi
 # `kids_rooms`, `kids_sessions`, `kids_guardians` e `kids_checkins` (módulo
-# Kids): tabelas novas, mesmo caso de 026/027 — nascem com a policy de
+# Kids): tabelas novas, mesmo caso de 026/027/028 — nascem com a policy de
 # congregação. Depende de app_congregation_allowed() (003).
-if [ -f prisma/migrations/028_rls_kids.sql ]; then
-  run_sql_file prisma/migrations/028_rls_kids.sql
+if [ -f prisma/migrations/029_rls_kids.sql ]; then
+  run_sql_file prisma/migrations/029_rls_kids.sql
 fi
 # `kids_child_health` (alergia e observação médica da criança, 1:1): tabela
-# nova, mesmo caso de 028. Depende de app_congregation_allowed() (003).
-if [ -f prisma/migrations/029_rls_kids_child_health.sql ]; then
-  run_sql_file prisma/migrations/029_rls_kids_child_health.sql
+# nova, mesmo caso de 029. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/030_rls_kids_child_health.sql ]; then
+  run_sql_file prisma/migrations/030_rls_kids_child_health.sql
 fi
 # `kids_register_checkout_failure()` (limite de tentativas de código no
 # check-out do Kids): função SECURITY DEFINER que incrementa o contador fora da
 # transação da requisição. Sem tabela nova; depende da coluna da migration.
-if [ -f prisma/migrations/030_rls_kids_checkout_attempts.sql ]; then
-  run_sql_file prisma/migrations/030_rls_kids_checkout_attempts.sql
+if [ -f prisma/migrations/031_rls_kids_checkout_attempts.sql ]; then
+  run_sql_file prisma/migrations/031_rls_kids_checkout_attempts.sql
 fi
 # `kids_checkin_qr_tokens` (QR de check-in emitido pelo app do responsável):
-# tabela nova, mesmo caso de 028/029. Depende de app_congregation_allowed() (003).
-if [ -f prisma/migrations/031_rls_kids_checkin_qr_tokens.sql ]; then
-  run_sql_file prisma/migrations/031_rls_kids_checkin_qr_tokens.sql
+# tabela nova, mesmo caso de 029/030. Depende de app_congregation_allowed() (003).
+if [ -f prisma/migrations/032_rls_kids_checkin_qr_tokens.sql ]; then
+  run_sql_file prisma/migrations/032_rls_kids_checkin_qr_tokens.sql
 fi
 
 # Ordem invertida em relação à história do projeto: aqui as migrations rodam
@@ -677,7 +683,20 @@ BEGIN
     RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em song_versions, encontrei % — 027_rls_song_versions.sql rodou?', n;
   END IF;
 
-  -- 028: tabelas do módulo Kids, mesmo caso de 026/027. As quatro precisam da
+  -- 028: service_order_templates e service_order_template_items (moldes de
+  -- OC), mesmo caso de 026/027.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_congregation_isolation'
+     AND tablename  IN ('service_order_templates', 'service_order_template_items')
+     AND qual LIKE '%app_congregation_allowed%'
+     AND with_check IS NOT DISTINCT FROM qual;
+  RAISE NOTICE 'moldes de OC com app_congregation_allowed simetrico: %', n;
+  IF n <> 2 THEN
+    RAISE EXCEPTION 'esperava 2 policies tenant_congregation_isolation simétricas nos moldes de OC, encontrei % — 028_rls_service_order_templates.sql rodou?', n;
+  END IF;
+
+  -- 029: tabelas do módulo Kids, mesmo caso de 026/027. As quatro precisam da
   -- policy simétrica; uma faltando deixa a ficha de criança aberta.
   SELECT count(*) INTO n
     FROM pg_policies
@@ -687,10 +706,10 @@ BEGIN
      AND with_check IS NOT DISTINCT FROM qual;
   RAISE NOTICE 'tabelas kids com app_congregation_allowed simetrico: %', n;
   IF n <> 4 THEN
-    RAISE EXCEPTION 'esperava 4 policies tenant_congregation_isolation simétricas nas tabelas kids_*, encontrei % — 028_rls_kids.sql rodou?', n;
+    RAISE EXCEPTION 'esperava 4 policies tenant_congregation_isolation simétricas nas tabelas kids_*, encontrei % — 029_rls_kids.sql rodou?', n;
   END IF;
 
-  -- 029: dado de saúde da criança. Sem a policy, app_user leria alergia de
+  -- 030: dado de saúde da criança. Sem a policy, app_user leria alergia de
   -- qualquer congregação.
   SELECT count(*) INTO n
     FROM pg_policies
@@ -700,10 +719,10 @@ BEGIN
      AND with_check IS NOT DISTINCT FROM qual;
   RAISE NOTICE 'kids_child_health com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
-    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_child_health, encontrei % — 029_rls_kids_child_health.sql rodou?', n;
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_child_health, encontrei % — 030_rls_kids_child_health.sql rodou?', n;
   END IF;
 
-  -- 031: QR de check-in do Kids. Sem a policy, app_user leria o token de
+  -- 032: QR de check-in do Kids. Sem a policy, app_user leria o token de
   -- qualquer congregação.
   SELECT count(*) INTO n
     FROM pg_policies
@@ -713,10 +732,10 @@ BEGIN
      AND with_check IS NOT DISTINCT FROM qual;
   RAISE NOTICE 'kids_checkin_qr_tokens com app_congregation_allowed simetrico: %', n;
   IF n <> 1 THEN
-    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_checkin_qr_tokens, encontrei % — 031_rls_kids_checkin_qr_tokens.sql rodou?', n;
+    RAISE EXCEPTION 'esperava 1 policy tenant_congregation_isolation simétrica em kids_checkin_qr_tokens, encontrei % — 032_rls_kids_checkin_qr_tokens.sql rodou?', n;
   END IF;
 
-  -- 030: kids_register_checkout_failure() — o contador de tentativas de código
+  -- 031: kids_register_checkout_failure() — o contador de tentativas de código
   -- precisa sobreviver ao rollback do 403, então roda fora da transação da
   -- requisição, como SECURITY DEFINER com EXECUTE só para orbien_app.
   SELECT count(*) INTO n
@@ -730,7 +749,7 @@ BEGIN
      AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE');
   RAISE NOTICE 'kids_register_checkout_failure conforme: %', n;
   IF n <> 1 THEN
-    RAISE EXCEPTION 'esperava kids_register_checkout_failure() SECURITY DEFINER com search_path fixo e EXECUTE só para orbien_app, encontrei % — 030_rls_kids_checkout_attempts.sql rodou?', n;
+    RAISE EXCEPTION 'esperava kids_register_checkout_failure() SECURITY DEFINER com search_path fixo e EXECUTE só para orbien_app, encontrei % — 031_rls_kids_checkout_attempts.sql rodou?', n;
   END IF;
 
   -- 024: pix_webhook_scope() — o webhook da Asaas não tem contexto de tenant e
