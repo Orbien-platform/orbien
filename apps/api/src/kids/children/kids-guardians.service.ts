@@ -95,7 +95,11 @@ export class KidsGuardiansService {
     if (!this.access.isManager(actor.roles)) await this.assertIsPrimaryGuardian(actor, row.child_id);
 
     return this.prisma.runInTx(async () => {
-      await this.prisma.client.$queryRaw`SELECT id FROM kids_guardians WHERE child_id = ${row.child_id} FOR UPDATE`;
+      // ORDER BY id: o Postgres trava as linhas na ordem em que as devolve, e a
+      // ordem física muda a cada UPDATE. Sem ordem fixa, duas edições travam as
+      // mesmas linhas em sequências opostas e dão deadlock (40P01 -> 500).
+      await this.prisma.client
+        .$queryRaw`SELECT id FROM kids_guardians WHERE child_id = ${row.child_id} ORDER BY id FOR UPDATE`;
 
       // `row` foi lido antes do lock: outra edição pode ter promovido ou rebaixado
       // este responsável enquanto esperávamos. O estado que vale é o de depois do lock.

@@ -124,4 +124,20 @@ describe('PATCH /kids/guardians/:id concorrente', () => {
       expect(await primaries()).toHaveLength(1);
     }
   }, 120_000);
+
+  it('rajada de edições nas três linhas (promoções e troca de parentesco): nenhuma recusada com 5xx, um primário só', async () => {
+    // Cada UPDATE move a linha de lugar no heap, então a ordem física em que dois
+    // `FOR UPDATE` varrem as linhas da criança muda de uma edição para a outra.
+    // Sem ordem fixa no lock isso dá deadlock (40P01 -> 500).
+    for (let i = 0; i < ROUNDS; i++) {
+      await reset();
+      const res = await Promise.all(
+        [1, 2, 0, 2, 1, 0, 1, 2].map((n, k) =>
+          k % 2 === 0 ? patch(rows[n], { is_primary: true }) : patch(rows[n], { relationship: `r${k}` }),
+        ),
+      );
+      expect(res.map((r) => r.status)).toEqual(res.map(() => 200));
+      expect(await primaries()).toHaveLength(1);
+    }
+  }, 120_000);
 });
