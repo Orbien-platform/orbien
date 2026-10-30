@@ -318,3 +318,147 @@ Teste: `I:kids-children.spec.ts:407` `expect(rosa).toMatchObject({ ..., is_child
 - **Resíduo web**: `getLabels` em `apps/web/src/lib/kids.ts` ficou sem uso em produção; remover ou manter com teste é decisão do dev.
 - **PROD-39** (pendência registrada em `docs/PLANO.md`): continua aberta; fora do escopo desta rodada.
 - Fora do gate: `npm run e2e -w orbien-web` e `scripts/pre-push.sh` não rodados; teste intermitente do `CostCentersModal` (web, não é do Kids) segue pré-existente.
+
+---
+
+# Rodada 3
+
+Verifier independente (autor ≠ verificador). Escopo: `git diff 003f66e..HEAD -- apps .specs docs scripts .github` (30 commits, até `b8d035c`). Nada foi corrigido pelo Verifier; mutações só em worktree descartável (removido ao final, sem `git stash`; árvore real limpa).
+
+## Veredito: PASS
+
+Nenhum bloqueio de segurança. Gates verdes, 29 mutações novas (27 mortas, 2 sobreviventes equivalentes). Lacunas abertas são de baixo risco.
+
+## R3-1 · QR de check-in e de check-out
+
+| Critério | `file:line` + asserção | Resultado |
+|---|---|---|
+| QR de check-in: 5 min, uso único, preso a criança + responsável, só o hash do segredo no banco | `kids-qr.service.ts:100-118` (`sha256(secret)`, `KIDS_QR_TTL_SECONDS = 300`); `I:kids-qr.spec.ts:166` (201, só o HASH vai ao banco) | PASS |
+| Só responsável cadastrado + adulto do Household emite; 404 aos demais, 409 se presente, reemitir invalida o anterior | `I:kids-qr.spec.ts:182`, `:191`, `:199`; `kids-qr.service.ts:77-107` | PASS |
+| Expirado, usado, forjado, malformado, inexistente: 403 idêntico, motivo só na auditoria `kids.checkin_qr_denied` | `I:kids-qr.spec.ts:233` (todos `toEqual` ao mesmo corpo), `:255` (motivo em `audit_logs`) | PASS |
+| Uso único atômico (`UPDATE ... WHERE used_at IS NULL AND expires_at > now`) | `kids-qr.service.ts:148-152`; `I:kids-qr.spec.ts:224`, `:349` (duas leituras simultâneas: um 201, um 403) | PASS |
+| Falha do check-in (409, 422 faixa/consentimento/responsável removido/sessão cancelada) NÃO consome o QR | `I:kids-qr.spec.ts:265`, `:273`, `:286`, `:300`, `:311` (QR segue válido) | PASS |
+| Papéis: responsável não lê QR; voluntário não escalado também; outro tenant/congregação: 403 (RLS) | `I:kids-qr.spec.ts:323`, `:338` | PASS |
+| Check-out por QR = código digitado: `can_pickup`, 403 idêntico, auditoria, contagem | `I:kids-qr.spec.ts:378` (fecha), `:388` (tio sem `can_pickup`: mesmo corpo), `:398` (forjado/outro check-in/adulterado: `toEqual(wrong.body)`, tentativas = 4, 4 auditorias) | PASS |
+| `code` e `qr` juntos ou nenhum: 400; responsável não fecha o próprio check-in | `I:kids-qr.spec.ts:433`, `:440` | PASS |
+| Vazamento do `qr` de check-out | Só `getOpenForChild` o monta (`kids-checkin.service.ts:212`), atrás de `access.assertCanAccess` e `KIDS_FAMILY_ROLES` (`kids-checkin.controller.ts:106`); o `select` do roster e das listagens não traz `code`/`qr`; `AuditInterceptor` só lê `tenant_id` do corpo (`audit.interceptor.ts:161`); `audit()` só grava ids e `reason`; `KidsQrService` não tem logger | PASS (por estrutura; ver lacuna 3) |
+
+Observação de leitura: HMAC com chave derivada de `JWT_SECRET` (`kids-qr.service.ts:64-68`), comparação em tempo constante (`safeEqual`), checagem de que o QR é do check-in esperado antes da assinatura (`:47`).
+
+## R3-2 · Limite de 5 tentativas
+
+| Critério | Evidência | Resultado |
+|---|---|---|
+| Função `kids_register_checkout_failure`: `SECURITY DEFINER`, `search_path = public, pg_temp`, `REVOKE ... FROM PUBLIC`, `EXECUTE` só para `orbien_app`, escopo por id+tenant+congregação+aberto, `coluna + 1` atômico | `030_rls_kids_checkout_attempts.sql:27-47`; verificação com `RAISE EXCEPTION` no próprio script (`:49-66`) e no passo 7 (`bootstrap-db.sh:733`); sem escalada: só incrementa uma coluna de uma linha aberta, não executa SQL dinâmico, não recebe identificador de usuário | PASS |
+| Teste de privilégio da função | `I:kids-checkout-lock.spec.ts:247` (`app_user` não chama; fora do escopo devolve NULL) | PASS |
+| Contador sobrevive ao 403 (fora da transação) | `I:kids-checkout-lock.spec.ts:131` (3 erros = 3 no banco) | PASS |
+| 4 falhas + código certo fecha; 5ª trava | `I:kids-checkout-lock.spec.ts:140`, `:149` | PASS |
+| Travado devolve o MESMO 403 com código certo; check-in segue aberto; `kids.checkout_locked` uma vez | `I:kids-checkout-lock.spec.ts:149`; `kids-checkin.service.ts:237-244` | PASS |
+| Só `checkout-override` destrava | `I:kids-checkout-lock.spec.ts:184`; `I:kids-qr.spec.ts:417` (nem o QR verdadeiro fecha) | PASS |
+| Push ao líder: recusa nas 4 primeiras, `kids_checkout_locked` na 5ª, sem nome de criança | `I:kids-checkout-lock.spec.ts:173`; `kids-leader-alert.service.ts:41-56` | PASS |
+| Concorrência: nenhuma perda, só um trava | `I:kids-checkout-lock.spec.ts:204` (8 simultâneos), `:218` (5 simultâneos) | PASS |
+| Pessoa sem `can_pickup` com código certo não gasta tentativa | `I:kids-checkout-lock.spec.ts:237`; `kids-checkin.service.ts:~408` (`reason === 'code_mismatch'`) | PASS |
+
+**Limite conhecido (tentativas em voo): aceitável.** O teto efetivo é 5 + as requisições já em voo quando a 5ª é gravada; o contador final é exato e a rota é só da equipe autenticada e escalada. Sobre um espaço de ~920 mil códigos, mesmo uma rajada de dezenas de requisições paralelas move a chance de acerto na ordem de 1e-5 a 1e-4. Fechar de vez exigiria condicionar o sucesso a `checkout_failed_attempts < 5` num UPDATE atômico (lacuna 1, baixa).
+
+## R3-3 + FIX3 · Push
+
+| Critério | Evidência | Resultado |
+|---|---|---|
+| Entregue: primário + demais com `can_pickup`, com conta ativa, exceto quem retirou | `U:kids-pickup-notice.service.spec.ts:58`, `:64`, `:74`, `:93`, `:99` | PASS |
+| Recebida: só primário com conta; o primário que fez o check-in não recebe; dois primários: só o outro | `U:...spec.ts:146`, `:173`, `:179`, `:187`, `:193` | PASS |
+| Texto: só primeiro nome e turma, ficha de saúde nunca consultada | `U:...spec.ts:80`; `kids-pickup-notice.service.ts:55-66` | PASS |
+| `data` com `child_id` (strings; `toEqual` do objeto exato); alertas ao líder sem `child_id` | `kids-pickup-notice.service.ts:106`, `kids-leader-alert.service.ts:86`; `U:...spec.ts:36`, `:146` | PASS |
+| Preferência `kids` (AD-003, `!= 'false'`) | `kids-pickup-notice.service.ts:104`; `U:...spec.ts:36`; coluna/migration `20261026150000_add_kids_to_notification_preferences` (anterior à rodada 2, sem alteração) | PASS |
+| Best-effort: falha de push não desfaz o check-in/out | `U:...spec.ts:124`, `:137`, `:203` | PASS |
+
+## R3-4 · Busca de adultos · R3-5 · `checkin_total` · R3-6 · RLS 028
+
+| Critério | Evidência | Resultado |
+|---|---|---|
+| Só `KIDS_MANAGE_ROLES`; resposta mínima (id, nome, telefone mascarado); sem criança, removido, anonimizado, outro tenant/congregação; limite 20; mínimo 2 caracteres | `kids-guardians.controller.ts:47-51`; `I:kids-guardian-search.spec.ts:57`, `:65`, `:74`, `:83`, `:92`, `:99`, `:114`; `kids-guardian-search.service.ts:38-68` | PASS |
+| `checkin_total` por instância em `GET /celebrations/instances`, mesmo número da contagem de público | `celebration-instances.service.ts:68-76`; `I:kids-attendance.spec.ts:133-136`, `:151`, `:162` | PASS |
+| DEC-1: instância cancelada não conta nada | `celebration-attendance.service.ts:58-62` (filtro `status: { not: cancelled }`); mutante M10 morto | PASS |
+| RLS 028 com `ENABLE`/`FORCE` explícitos por tabela, policies simétricas (`USING` = `WITH CHECK`), verificação no próprio script | `028_rls_kids.sql:10-74`; `T:rls/kids.spec.ts` (+39 linhas) | PASS |
+| 030 e 031 no `bootstrap-db.sh` e no passo 7 | `bootstrap-db.sh:225-231`, `:716`, `:733` | PASS |
+
+## COV-1..6, WEB, MOB, DEC-2/DEC-3
+
+| Item | Evidência | Resultado |
+|---|---|---|
+| COV-1 sessão de suporte | `I:kids-support-session.spec.ts` (250 linhas, novo) | PASS |
+| COV-2 `FOR UPDATE` em `kids-guardians` | **Correção real**: `kids-guardians.service.ts:97-105` relê o responsável depois do lock (`current`), em vez de decidir com `row` lido antes. `I:kids-guardians-concurrency.spec.ts:76`, `:87`, `:100`, `:113` (invariante de um primário). Mutantes M18 (sem `FOR UPDATE`, morto em integração) e M19 (sem releitura, morto em unit) | PASS |
+| COV-3 culto encerrado com criança presente · COV-4 turma desativada · COV-5 troca de escala | `I:kids-ended-service.spec.ts`, `I:kids-room-deactivated.spec.ts`, `I:kids-swap.spec.ts` | PASS |
+| WEB-1 leitor de QR (câmera, `kidsci1` faz check-in, `kidsco1` abre a entrega, escalada após 3 recusas) | `QrReader.test.tsx`, `QrDesk.test.tsx`, `CheckoutDialog.test.tsx`; e2e `apps/web/e2e/kids-balcao.spec.ts` (+44, não executado aqui) | PASS |
+| WEB-2/3/5 busca de responsável no cadastro, sugestão de total no detalhe da celebração, `getLabels` removido | `ChildFormModal.test.tsx`, `CelebrationDetailSheet.test.tsx`; `grep getLabels apps/web/src` vazio no código de produção | PASS |
+| MOB-1..4 QR do responsável, QR de retirada, leitura pela equipe, toque no push | `qr.test.tsx`, `codigo.test.tsx`, `sessao.test.tsx`, `KidsQrScanner.test.tsx`, `onesignal-client.test.ts` | PASS |
+| DEC-3 `test:cov` com heap de 4096 | Único arquivo de configuração tocado: `apps/api/package.json` (script `test:cov` agora chama `node --max-old-space-size=4096 ../../node_modules/jest/bin/jest.js ...`, mesmos projetos e flags) e `docs/CI.md`. Nenhum `jest.config`, `vitest.config` ou `ci.yml` alterado | PASS |
+| DEC-2 piso de cobertura do web | Nenhum arquivo de configuração do web alterado; só testes (`CostCentersModal`, `ChildrenPanel`, `RoomsPanel`, etc.). Piso intacto | PASS |
+
+## Discrimination Sensor (rodada 3)
+
+Worktree descartável em `scratchpad/wt` (removido); suítes: unit `src/kids src/celebrations` e, se sobrevivesse, integração `test/integration/kids*`.
+
+| # | Mutação | Arquivo | Resultado |
+|---|---|---|---|
+| M1 | QR de check-in expirado aceito (pré-checagem e `expires_at > now` removidos) | `kids-qr.service.ts` | Morta |
+| M2 | QR de check-in sem uso único | `kids-qr.service.ts` | Morta |
+| M3 | HMAC inválido aceito no QR de check-out | `kids-qr.service.ts` | Morta |
+| M3b | QR de outro check-in aceito | `kids-qr.service.ts` | Morta |
+| M4 | QR errado não conta tentativa (variante com tipo novo) | `kids-checkin.service.ts` | Morta, mas por erro de tipo (compilação); refeita como M4b |
+| M4b | QR errado vira `pickup_not_allowed` (não conta) | `kids-checkin.service.ts` | Morta (5 testes) |
+| M5 / M5b | Trava na 6ª / na 4ª tentativa | `kids-checkin.service.ts` | Mortas |
+| M6 | Pré-checagem `>=` vira `>` (6ª tentativa com código certo passa) | `kids-checkin.service.ts` | Morta |
+| M7 / M7b | Travado destrava com código digitado certo / com QR certo | `kids-checkin.service.ts` | Mortas |
+| M8 | Push de entrega ao próprio que retirou | `kids-pickup-notice.service.ts` | Morta |
+| M8b | Push de recebida ao primário que fez o check-in | `kids-pickup-notice.service.ts` | Morta |
+| M8c | Push de recebida também aos `can_pickup` | `kids-pickup-notice.service.ts` | Morta |
+| M8d | Push sem filtro de preferência `kids` | `kids-pickup-notice.service.ts` | Morta |
+| M8e | Push a responsável sem conta ativa | `kids-pickup-notice.service.ts` | Morta |
+| M9 | `is_child` fora da busca (`findMany`) | `kids-guardian-search.service.ts` | Morta |
+| M9b | `is_child` fora da busca (SQL de dígitos) | `kids-guardian-search.service.ts` | **Sobreviveu, equivalente**: os ids do SQL entram num `OR` do `findMany`, que reaplica `is_child: false` |
+| M10 | Instância cancelada conta em `checkin_total` | `celebration-attendance.service.ts` | Morta |
+| M11 | Busca sem filtro de congregação (`findMany`) | `kids-guardian-search.service.ts` | Morta |
+| M11b | Busca sem filtro de congregação (SQL de dígitos) | `kids-guardian-search.service.ts` | **Sobreviveu, equivalente** (mesmo motivo de M9b) |
+| M12 | QR emitido a quem não é `KidsGuardian` | `kids-qr.service.ts` | Morta |
+| M13 | `pickup_not_allowed` gasta tentativa | `kids-checkin.service.ts` | Morta |
+| M14 | Emitir não invalida QRs anteriores | `kids-qr.service.ts` | Morta |
+| M15 | `kids.checkout_locked` na 4ª em vez da 5ª | `kids-checkin.service.ts` | Morta |
+| M16 | Segredo do QR guardado em claro | `kids-qr.service.ts` | Morta |
+| M17 | Push sem `child_id` no `data` | `kids-pickup-notice.service.ts` | Morta |
+| M18 | PATCH de responsável sem `FOR UPDATE` | `kids-guardians.service.ts` | Morta (só em integração, 3 falhas) |
+| M19 | PATCH de responsável sem releitura pós-lock | `kids-guardians.service.ts` | Morta |
+
+**Profundidade**: P0 completa (segurança/dados de criança). **Resultado**: 29 injetadas, 27 mortas, 2 sobreviventes equivalentes (M9b, M11b: filtros redundantes no SQL, defesa em profundidade). Nenhum sobrevivente real.
+
+## Gate (árvore real, um runner por vez, banco local, tenants teste1/teste2)
+
+| Gate | Resultado |
+|---|---|
+| `npm run build:api` | OK |
+| `npm run lint -w orbien-backend` | 0 problemas |
+| `npm run test:unit -w orbien-backend` | 352 suites, 4202 passed, 0 failed (rodada 2: 4066) |
+| `npm run test:integration -w orbien-backend` | 42 suites, 474 passed, 0 failed (rodada 2: 385) |
+| `npm run test:rls -w orbien-backend` | 19 suites, 244 passed, 0 failed (rodada 2: 237) |
+| `npm run test -w orbien-web` | 175 arquivos, 2209 passed, 0 failed |
+| `npm run test -w orbien-mobile` | 100 suites, 1081 passed, 0 failed |
+
+Nenhum teste removido do Kids na rodada (contagens só sobem). Não rodados: `npm run e2e -w orbien-web`, `test:cov` e `scripts/pre-push.sh`.
+
+## Continua aberto (baixo risco, não bloqueia), por prioridade
+
+1. **Travamento lê o contador carregado no início da requisição** (`kids-checkin.service.ts:237`): rajada paralela ainda avalia código a mais do que 5. Aceito no design (R3-2, "Limite conhecido"); fechar com `UPDATE ... WHERE checkout_failed_attempts < 5` no caminho de sucesso se o dono quiser.
+2. **Contador falha aberto**: se `kids_register_checkout_failure` der erro, `registerCodeFailure` devolve `null` e a tentativa não conta nem trava (`kids-checkin.service.ts`, `registerCodeFailure`). Best-effort por decisão; gera log de erro.
+3. **Sem asserção negativa de que `qr` não aparece** no roster, na resposta do POST de check-in nem no `after` da auditoria (hoje garantido por estrutura: `select` explícito e `audit()` só com ids). Um teste `not.toHaveProperty('qr')` travaria a regressão (`I:kids-qr.spec.ts:370` só cobre o caso positivo).
+4. **Filtros redundantes no SQL da busca** (`kids-guardian-search.service.ts:48-49`): equivalentes, mantidos como defesa em profundidade.
+5. **Contagem de recusas do balcão é do componente** (escala após 3, `CheckoutDialog.tsx`), o servidor trava em 5; a tela só orienta, a autoridade é o servidor.
+6. **Limite aceito pelo design**: o QR de check-out vale enquanto o check-in estiver aberto e equivale ao código.
+7. Herdado: L1 (`PersonsService` aceita id de criança), L2 parcial (rotas sem checagem de papel no service ficam abertas à sessão de suporte; COV-1 cobre o que expõe dado de criança), PROD-39 em `docs/PLANO.md`, intermitência do `CostCentersModal`.
+8. L3 da rodada 2 (sem limite de tentativas) está **fechada** por R3-2.
+
+## Summary
+
+**Overall**: ✅ Ready.
+**Spec-anchored check**: todos os ACs de R3-1 a R3-6 com `file:line` e asserção do valor da spec; 0 lacunas de precisão novas.
+**Sensor**: 27/29 mortas, 2 equivalentes.
+**Gate**: 4202 + 474 + 244 + 2209 + 1081 passed, build e lint limpos.
