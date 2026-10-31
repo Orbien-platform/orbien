@@ -2,6 +2,8 @@
 // posterior, o vazio e o erro.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
+import { qr } from "../../../lib/theme/tokens";
+
 let mockParams: Record<string, string> = { id: "c1" };
 jest.mock("expo-router", () => ({ useLocalSearchParams: () => mockParams }));
 
@@ -50,6 +52,14 @@ describe("CodigoScreen", () => {
     expect(screen.getByTestId("codigo-valor").props.children).toBe("7KQ2");
     expect(screen.getByTestId("codigo-qr")).toBeTruthy();
     expect(screen.getByText(/vale o mesmo que o código/)).toBeTruthy();
+  });
+
+  it("desenha o QR no tamanho do token qr.codeSize", async () => {
+    mockGetOpen.mockResolvedValue(OPEN);
+    await renderScreen();
+    const svg = screen.getByTestId("codigo-qr").children[0] as unknown as { props: { width: number; height: number } };
+    expect(svg.props.width).toBe(qr.codeSize);
+    expect(svg.props.height).toBe(qr.codeSize);
   });
 
   it("sem check-in aberto não há QR", async () => {

@@ -18,9 +18,7 @@ import type { KidsOpenCheckin } from "../../../lib/kids/types";
 import { formatTime } from "../../../lib/format/date";
 import { Baby, CircleAlert, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
-import { spacing, typography } from "../../../lib/theme/tokens";
-
-const QR_SIZE = 176;
+import { qr, spacing, typography } from "../../../lib/theme/tokens";
 
 export default function CodigoScreen() {
   const { colors } = useTheme();
@@ -77,7 +75,7 @@ export default function CodigoScreen() {
         <QrCode
           testID="codigo-qr"
           value={checkin.qr}
-          size={QR_SIZE}
+          size={qr.codeSize}
           accessibilityLabel="QR de retirada, o mesmo código para a equipe ler"
         />
         <Text style={[typography.bodyMedium, styles.qrHint, { color: colors.textSecondary }]}>

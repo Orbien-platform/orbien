@@ -26,6 +26,8 @@ export function Counter({ canManage }: { canManage: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadedKey, setLoadedKey] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
+  // Cultos cujas turmas não carregaram (falha parcial): as outras seguem na tela.
+  const [partialFailures, setPartialFailures] = useState<string[]>([]);
   const [denied, setDenied] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -36,12 +38,21 @@ export function Counter({ canManage }: { canManage: boolean }) {
     listInstancesOn(todayKey())
       .then(async (instances) => {
         const open = instances.filter((i) => i.status !== "cancelled");
-        const lists = await Promise.all(open.map((i) => listSessions(i.id)));
+        const results = await Promise.allSettled(open.map((i) => listSessions(i.id)));
         if (signal.cancelled) return;
-        const all = open.flatMap((i, idx) =>
-          lists[idx]
-            .filter((s) => s.status === "open")
-            .map((session) => ({ session, celebrationName: i.celebration.name, startTime: i.celebration.start_time })),
+        // Tudo falhou: é erro de carga (ou 403), como antes. Só parte: mostra o que carregou.
+        const firstRejected = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+        if (firstRejected && results.every((r) => r.status === "rejected")) throw firstRejected.reason;
+        const all = open.flatMap((i, idx) => {
+          const r = results[idx];
+          return r.status === "fulfilled"
+            ? r.value
+                .filter((s) => s.status === "open")
+                .map((session) => ({ session, celebrationName: i.celebration.name, startTime: i.celebration.start_time }))
+            : [];
+        });
+        setPartialFailures(
+          open.flatMap((i, idx) => (results[idx].status === "rejected" ? [`${i.celebration.name} · ${i.celebration.start_time}`] : [])),
         );
         all.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.session.room.min_age_months - b.session.room.min_age_months);
         setEntries(all);
@@ -52,6 +63,7 @@ export function Counter({ canManage }: { canManage: boolean }) {
       .catch((err) => {
         if (signal.cancelled) return;
         setEntries([]);
+        setPartialFailures([]);
         setDenied(isForbidden(err));
         setFailed(!isForbidden(err));
       })
@@ -62,6 +74,12 @@ export function Counter({ canManage }: { canManage: boolean }) {
       signal.cancelled = true;
     };
   }, [reloadKey]);
+
+  const retry = (
+    <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="underline">
+      Tentar de novo
+    </button>
+  );
 
   if (isLoading) {
     return (
@@ -75,12 +93,22 @@ export function Counter({ canManage }: { canManage: boolean }) {
   if (failed) {
     return (
       <div role="alert" className="rounded-[12px] border border-[var(--border-default)] p-4 text-sm text-crimson">
-        Não foi possível carregar as turmas de hoje.{" "}
-        <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="underline">
-          Tentar de novo
-        </button>
+        Não foi possível carregar as turmas de hoje. {retry}
       </div>
     );
+  }
+  const partialNotice =
+    partialFailures.length > 0 ? (
+      <div role="alert" className="rounded-[12px] border border-[var(--border-default)] px-3.5 py-2.5 text-sm text-amber-ink">
+        {partialFailures.length === 1
+          ? `As turmas de ${partialFailures[0]} não carregaram.`
+          : `As turmas de ${partialFailures.length} cultos não carregaram: ${partialFailures.join(", ")}.`}{" "}
+        {retry}
+      </div>
+    ) : null;
+
+  if (entries.length === 0 && partialNotice) {
+    return <div className="flex flex-col gap-5">{partialNotice}</div>;
   }
   if (entries.length === 0) {
     return (
@@ -102,6 +130,7 @@ export function Counter({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="flex flex-col gap-5">
+      {partialNotice}
       <div role="tablist" aria-label="Turmas de hoje" className="flex flex-wrap gap-2">
         {entries.map(({ session, celebrationName, startTime }) => {
           const active = session.id === selected.session.id;

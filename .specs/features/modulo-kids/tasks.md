@@ -163,7 +163,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 ### REV — Ajustes da revisão do PR #193 (decisões do dono)
 
 - [x] **REV-1** Check-in de Kids (responsável, quem retirou, `KidsGuardian` da criança) conta como atividade na retenção por inatividade e no aviso prévio; definição em design.md. *Depends:* T35b · *Tests:* unit nos dois serviços + integração em teste2-church (mutação restaurada) · *Reqs:* KIDS-06
-- [ ] **REV-2** Mobile: `QR_SIZE` vira token `qr.codeSize`; web: `Counter` com `Promise.allSettled` (falha parcial/total com aviso e nova tentativa). *Depends:* MOB-1,WEB-1 · *Tests:* jest + vitest · *Reqs:* KIDS-08
+- [x] **REV-2** Mobile: `QR_SIZE` vira token `qr.codeSize`; web: `Counter` com `Promise.allSettled` (falha parcial/total com aviso e nova tentativa). *Depends:* MOB-1,WEB-1 · *Tests:* jest + vitest · *Reqs:* KIDS-08
 - [x] **REV-3** `KidsTemplateService.apply` usa o dia local da congregação no default de `date_from`. *Depends:* T9 · *Tests:* unit/integração às 21:30 de São Paulo (mutação restaurada) · *Reqs:* KIDS-02
 - [ ] **REV-4** Pendências declaradas em `docs/PLANO.md` (PROD-39), sem alterar código. *Depends:* — · *Tests:* none · *Reqs:* —
 

@@ -325,6 +325,8 @@ export const qr = {
   quietZone: 4,
   /** Lado máximo do QR, em px: em tablet ou projetado, maior não lê melhor. */
   maxSize: 340,
+  /** Lado padrão do QR do código do responsável, em px (cabe na tela do celular sem rolar). */
+  codeSize: 176,
   /** Moldura do leitor: o quadro onde o membro encaixa o QR do líder. */
   scanFrame: 240,
   scanFrameBorder: 3,

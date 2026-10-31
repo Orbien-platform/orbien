@@ -113,6 +113,65 @@ describe("Counter (balcão)", () => {
     expect(await screen.findByTestId("desk")).toBeInTheDocument();
   });
 
+  it("falha parcial: mostra as turmas dos cultos que carregaram e avisa dos que falharam, com nova tentativa", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listInstancesOn).mockResolvedValue([instance("i1", "Culto da manhã", "10:00"), instance("i2", "Culto da noite", "19:00")]);
+    vi.mocked(listSessions).mockImplementation(async (id) => {
+      if (id === "i2") throw httpError(500);
+      return [session("s-m", "Maternal", 24)];
+    });
+    render(<Counter canManage />);
+    expect(await screen.findAllByRole("tab")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("As turmas de Culto da noite · 19:00 não carregaram.");
+    expect(screen.queryByText("Nenhuma turma kids aberta hoje")).not.toBeInTheDocument();
+
+    vi.mocked(listSessions).mockImplementation(async (id) => [session(`s-${id}`, id === "i1" ? "Maternal" : "Júnior", id === "i1" ? 24 : 72)]);
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findAllByRole("tab")).toHaveLength(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("falha parcial sem nenhuma turma aberta nos cultos que carregaram não vira estado vazio silencioso", async () => {
+    vi.mocked(listInstancesOn).mockResolvedValue([instance("i1", "Culto da manhã", "10:00"), instance("i2", "Culto da noite", "19:00")]);
+    vi.mocked(listSessions).mockImplementation(async (id) => {
+      if (id === "i2") throw httpError(500);
+      return [];
+    });
+    render(<Counter canManage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("As turmas de Culto da noite · 19:00 não carregaram.");
+    expect(screen.queryByText("Nenhuma turma kids aberta hoje")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tentar de novo" })).toBeInTheDocument();
+  });
+
+  it("falha parcial em vários cultos nomeia a quantidade", async () => {
+    vi.mocked(listInstancesOn).mockResolvedValue([
+      instance("i1", "Culto A", "08:00"),
+      instance("i2", "Culto B", "10:00"),
+      instance("i3", "Culto C", "19:00"),
+    ]);
+    vi.mocked(listSessions).mockImplementation(async (id) => {
+      if (id !== "i1") throw httpError(500);
+      return [session("s-m", "Maternal", 24)];
+    });
+    render(<Counter canManage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("As turmas de 2 cultos não carregaram: Culto B · 10:00, Culto C · 19:00.");
+  });
+
+  it("falha total das turmas é erro de carga com nova tentativa, não estado vazio", async () => {
+    vi.mocked(listInstancesOn).mockResolvedValue([instance("i1", "Culto A", "08:00"), instance("i2", "Culto B", "10:00")]);
+    vi.mocked(listSessions).mockRejectedValue(httpError(500));
+    render(<Counter canManage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar as turmas de hoje.");
+    expect(screen.queryByText("Nenhuma turma kids aberta hoje")).not.toBeInTheDocument();
+  });
+
+  it("403 em todas as turmas diz que falta acesso", async () => {
+    vi.mocked(listInstancesOn).mockResolvedValue([instance("i1", "Culto A", "08:00")]);
+    vi.mocked(listSessions).mockRejectedValue(httpError(403));
+    render(<Counter canManage />);
+    expect(await screen.findByText(/Você não tem acesso/)).toBeInTheDocument();
+  });
+
   it("403 diz que falta acesso ao balcão", async () => {
     vi.mocked(listInstancesOn).mockRejectedValue(httpError(403));
     render(<Counter canManage />);
