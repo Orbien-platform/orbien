@@ -679,4 +679,19 @@ describe('PersonsService — criança fora das listas (AD-013)', () => {
     const sql = (system.$queryRaw.mock.calls[0][0] as { sql: string }).sql;
     expect(sql).toContain('p.is_child = false');
   });
+
+  it('purgeInactivePersons: check-in de Kids e vínculo de responsável contam como atividade (REV-1)', async () => {
+    const { service, system } = serviceWith();
+    system.$queryRaw.mockResolvedValue([]);
+
+    await service.purgeInactivePersons();
+
+    const sql = (system.$queryRaw.mock.calls[0][0] as { sql: string }).sql;
+    const signal = sql.slice(sql.indexOf('GREATEST'));
+    expect(signal).toContain('FROM kids_checkins');
+    expect(signal).toContain('kc.guardian_person_id = p.id');
+    expect(signal).toContain('kc.picked_up_by_person_id = p.id');
+    expect(signal).toContain('FROM kids_guardians');
+    expect(signal).toContain('kg.guardian_person_id = p.id');
+  });
 });

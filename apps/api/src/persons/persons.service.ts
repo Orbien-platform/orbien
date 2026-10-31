@@ -12,6 +12,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { kidsActivitySignal } from './persons-kids-activity';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { MemberCapService } from './member-cap.service';
 import { CreatePersonDto } from './dto/create-person.dto';
@@ -312,7 +313,9 @@ export class PersonsService {
   // essa categoria tem prazo de 5 anos ligado ao vínculo financeiro, não à
   // inatividade, e não entra neste job. "Sinal de atividade" é o mais
   // recente entre updated_at do cadastro, uma visita e uma presença
-  // registrada — não há login de membro para usar como sinal.
+  // registrada, ou (REV-1) um check-in de Kids em que a pessoa é responsável,
+  // retirou a criança ou é responsável cadastrado dela — não há login de
+  // membro para usar como sinal.
   async purgeInactivePersons(): Promise<{ purged: number }> {
     const expired = await this.prisma.system.$queryRaw<
       Array<{ id: string; classification: PersonClassification }>
@@ -331,7 +334,8 @@ export class PersonsService {
         AND GREATEST(
           p.updated_at,
           COALESCE((SELECT MAX(v.visited_at) FROM visit_records v WHERE v.person_id = p.id), p.created_at),
-          COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at)
+          COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at),
+          ${kidsActivitySignal('p')}
         ) < now() - (CASE WHEN p.classification = 'visitor' THEN INTERVAL '1 year' ELSE INTERVAL '2 years' END)
     `);
 

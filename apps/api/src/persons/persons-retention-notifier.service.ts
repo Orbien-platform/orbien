@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { kidsActivitySignal } from './persons-kids-activity';
 import { NotificationsService } from '../content/notifications.service';
 
 interface UpcomingRetentionRow {
@@ -76,7 +77,8 @@ export class PersonsRetentionNotifier {
           AND GREATEST(
             p.updated_at,
             COALESCE((SELECT MAX(v.visited_at) FROM visit_records v WHERE v.person_id = p.id), p.created_at),
-            COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at)
+            COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at),
+            ${kidsActivitySignal('p')}
           ) + (CASE WHEN p.classification = 'visitor' THEN INTERVAL '1 year' ELSE INTERVAL '2 years' END)
             BETWEEN now() AND now() + INTERVAL '7 days'
 

@@ -286,3 +286,19 @@ Mais: `Person.is_child Boolean @default(false)` (lista de pessoas exclui por pad
 - **Interpretação de "feito por outra pessoa":** o único excluído é o primário que operou o check-in (a pessoa da conta que chamou a rota). Se a equipe grava o check-in com o primário como `guardian_person_id`, ele recebe (é a confirmação de que a criança entrou na turma); se um terceiro entrega, o primário recebe. Conta da equipe sem pessoa vinculada não exclui ninguém. Check-in por QR também avisa (quem leu é a equipe).
 - **Contrato do `data` dos push Kids** (o mobile abre a tela por ele; `routeForNotification`): `kids_child_received` e `kids_child_released` levam `{ type, checkin_id, session_id, child_id }`; `kids_checkout_denied` e `kids_checkout_locked` (ao líder, sem nome de criança) levam `{ type, session_id, checkin_id }`. Todos os valores são strings (ids); testes cravam o objeto exato (`toEqual`), não um subconjunto.
 - Texto: título "Criança recebida na turma {turma}", corpo com o primeiro nome. A ficha de saúde não é consultada.
+
+### REV-1 · Responsável que usa o Kids não é anonimizado por inatividade
+
+O sinal de atividade da retenção por inatividade (`purgeInactivePersons` e o
+aviso prévio de `PersonsRetentionNotifier`) ganha uma quarta parcela no
+`GREATEST`, compartilhada em `persons/persons-kids-activity.ts`
+(`kidsActivitySignal`): o `checked_in_at` mais recente de um check-in de Kids em
+que a pessoa é o responsável do check-in (`guardian_person_id`), quem retirou
+(`picked_up_by_person_id`) **ou** `KidsGuardian` da criança do check-in
+(vínculo cadastrado, cobre o terceiro autorizado e o outro responsável quando
+outra pessoa fez o check-in). Definição mínima: o próprio check-in recente é o
+sinal; sem janela extra de 12 meses, porque o `GREATEST` já é comparado ao
+prazo de 1 ano (visitante) ou 2 anos (demais). Sem check-in nenhum, cai em
+`created_at` (neutro). A criança (`is_child`) segue excluída da retenção por
+inatividade (AD-013), como antes.
+

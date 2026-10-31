@@ -64,4 +64,17 @@ describe('PersonsRetentionNotifier — criança (AD-013)', () => {
     const inactivity = sql.slice(sql.indexOf('inatividade'), sql.indexOf('financeiro:'));
     expect(inactivity).toContain('p.is_child = false');
   });
+
+  it('o aviso conta check-in de Kids e vínculo de responsável como atividade (REV-1)', async () => {
+    const { notifier, system } = notifierWith([]);
+
+    await notifier.cronNotifyUpcomingRetentions();
+
+    const sql = (system.$queryRaw.mock.calls[0][0] as { sql: string }).sql;
+    const inactivity = sql.slice(sql.indexOf('inatividade'), sql.indexOf('financeiro:'));
+    expect(inactivity).toContain('FROM kids_checkins');
+    expect(inactivity).toContain('kc.guardian_person_id = p.id');
+    expect(inactivity).toContain('kc.picked_up_by_person_id = p.id');
+    expect(inactivity).toContain('FROM kids_guardians');
+  });
 });
