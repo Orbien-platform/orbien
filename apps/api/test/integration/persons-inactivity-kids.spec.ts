@@ -115,7 +115,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await admin.celebration.deleteMany({ where: { id: celebrationId } });
   await admin.kidsRoom.deleteMany({ where: { id: roomId } });
-  await admin.person.deleteMany({ where: { full_name: { endsWith: tag } } });
+  // A purga renomeia para ANONIMIZADO: apaga por id, não por nome.
+  await admin.person.deleteMany({ where: { OR: [{ full_name: { endsWith: tag } }, { id: { in: Object.values(ids) } }] } });
   await admin.userAccount.deleteMany({ where: { id: accountId } });
   await prisma.$disconnect();
   await admin.$disconnect();
