@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 function clientWith() {
   return {
+    congregation: { findFirst: jest.fn().mockResolvedValue({ timezone: 'America/Sao_Paulo' }) },
     celebration: { findFirst: jest.fn(), update: jest.fn() },
     kidsRoom: { findMany: jest.fn() },
     celebrationInstance: { findMany: jest.fn() },
@@ -138,6 +139,30 @@ describe('KidsTemplateService', () => {
         room_id: 'r2',
       });
       expect(out).toEqual({ instances: 3, created: 6, already_open: 0, skipped_rooms: 0 });
+    });
+
+    it('sem date_from, "hoje" é o dia da congregação: 21:30 em São Paulo (00:30 UTC do dia seguinte) ainda inclui o culto de hoje (REV-3)', async () => {
+      const client = ready();
+      const night = new Date('2026-10-27T00:30:00Z'); // 21:30 de 26/10 em São Paulo
+
+      await serviceWith(client).apply('t1', 'g1', 'c1', {}, night);
+
+      expect(client.congregation.findFirst).toHaveBeenCalledWith({
+        where: { id: 'g1', tenant_id: 't1' },
+        select: { timezone: true },
+      });
+      expect(client.celebrationInstance.findMany.mock.calls[0][0].where.scheduled_date).toEqual({
+        gte: new Date('2026-10-26T00:00:00Z'),
+      });
+    });
+
+    it('usa o fuso da própria congregação quando não é o padrão', async () => {
+      const client = ready();
+      client.congregation.findFirst.mockResolvedValue({ timezone: 'Asia/Tokyo' });
+      await serviceWith(client).apply('t1', 'g1', 'c1', {}, new Date('2026-10-26T20:00:00Z')); // 05:00 de 27/10 em Tóquio
+      expect(client.celebrationInstance.findMany.mock.calls[0][0].where.scheduled_date).toEqual({
+        gte: new Date('2026-10-27T00:00:00Z'),
+      });
     });
 
     it('respeita a janela date_from/date_to', async () => {

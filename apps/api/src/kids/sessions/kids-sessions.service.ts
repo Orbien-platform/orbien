@@ -11,9 +11,9 @@ import { KidsSessionAccessService } from '../checkin/kids-session-access.service
 import { KidsActor } from '../children/kids-child-access.service';
 import { KIDS_FAMILY_ROLES } from '../kids.roles';
 
-const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
+export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 /** Dia civil de hoje no fuso da congregação, como `scheduled_date` é gravada (meia-noite UTC). */
-const todayUtcMidnight = (timezone: string, now: Date) =>
+export const todayUtcMidnight = (timezone: string, now: Date) =>
   new Date(`${new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(now)}T00:00:00.000Z`);
 
 @Injectable()

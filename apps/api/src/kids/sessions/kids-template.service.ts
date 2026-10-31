@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, UnprocessableEntityException } from '@ne
 import { CelebrationInstanceStatus, KidsRoom } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApplyKidsTemplateDto } from './dto/apply-kids-template.dto';
+import { DEFAULT_TIMEZONE, todayUtcMidnight } from './kids-sessions.service';
 
 export interface ApplyKidsTemplateResult {
   instances: number;
@@ -87,6 +88,19 @@ export class KidsTemplateService {
     }
     const skippedRooms = templateIds.length - rooms.length;
 
+    // Sem `date_from`, "hoje" é o dia civil da congregação (não o dia UTC): às
+    // 21:30 em São Paulo já é o dia seguinte em UTC e o culto de hoje ficaria de fora.
+    let from: Date;
+    if (dto.date_from) {
+      from = dayStart(dto.date_from);
+    } else {
+      const congregation = await this.prisma.client.congregation.findFirst({
+        where: { id: congregationId, tenant_id: tenantId },
+        select: { timezone: true },
+      });
+      from = todayUtcMidnight(congregation?.timezone ?? DEFAULT_TIMEZONE, now);
+    }
+
     const instances = await this.prisma.client.celebrationInstance.findMany({
       where: {
         tenant_id: tenantId,
@@ -94,7 +108,7 @@ export class KidsTemplateService {
         celebration_id: celebrationId,
         status: { notIn: [CelebrationInstanceStatus.cancelled, CelebrationInstanceStatus.finalized] },
         scheduled_date: {
-          gte: dto.date_from ? dayStart(dto.date_from) : dayStart(now.toISOString()),
+          gte: from,
           ...(dto.date_to && { lte: dayStart(dto.date_to) }),
         },
       },
