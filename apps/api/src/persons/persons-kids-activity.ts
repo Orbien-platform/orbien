@@ -13,7 +13,7 @@ import { Prisma } from '@prisma/client';
  * `personAlias` é o alias de `persons` na consulta chamadora (valor fixo do
  * código, nunca entrada do usuário).
  */
-export function kidsActivitySignal(personAlias = 'p'): Prisma.Sql {
+export function kidsActivitySignal(personAlias: string): Prisma.Sql {
   const p = Prisma.raw(personAlias);
   return Prisma.sql`COALESCE((
     SELECT MAX(kc.checked_in_at)

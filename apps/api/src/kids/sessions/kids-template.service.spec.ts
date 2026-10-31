@@ -156,6 +156,15 @@ describe('KidsTemplateService', () => {
       });
     });
 
+    it('congregação sem registro de fuso cai no padrão America/Sao_Paulo', async () => {
+      const client = ready();
+      client.congregation.findFirst.mockResolvedValue(null);
+      await serviceWith(client).apply('t1', 'g1', 'c1', {}, new Date('2026-10-27T00:30:00Z'));
+      expect(client.celebrationInstance.findMany.mock.calls[0][0].where.scheduled_date).toEqual({
+        gte: new Date('2026-10-26T00:00:00Z'),
+      });
+    });
+
     it('usa o fuso da própria congregação quando não é o padrão', async () => {
       const client = ready();
       client.congregation.findFirst.mockResolvedValue({ timezone: 'Asia/Tokyo' });
