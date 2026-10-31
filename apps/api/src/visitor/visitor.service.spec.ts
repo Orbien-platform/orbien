@@ -284,3 +284,25 @@ describe('VisitorService', () => {
     });
   });
 });
+
+describe('VisitorService.registerViaQr — criança (AD-013)', () => {
+  it('o reconhecimento por telefone não casa com criança', async () => {
+    const { service, qrTokenClient, tx } = serviceWith();
+    qrTokenClient.findUnique.mockResolvedValue({
+      id: 'qr1',
+      is_active: true,
+      tenant_id: 'tenant-1',
+      congregation_id: 'cong-1',
+      origin: 'service',
+      small_group_id: null,
+      created_by: 'creator-1',
+      congregation: { name: 'Sede' },
+    });
+    tx.person.findFirst.mockResolvedValue(null);
+    tx.person.create.mockResolvedValue({ id: 'new-1', full_name: 'João' });
+
+    await service.registerViaQr({ token: 'tok', full_name: 'João', phone: '+5511999999999' } as never, '1.2.3.4', 'ua');
+
+    expect(tx.person.findFirst.mock.calls[0][0].where).toMatchObject({ is_child: false });
+  });
+});

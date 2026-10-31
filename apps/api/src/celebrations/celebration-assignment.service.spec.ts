@@ -28,6 +28,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     },
     celebrationSchedule: { findUnique: jest.fn(), update: jest.fn() },
     serviceOrder: { findMany: jest.fn().mockResolvedValue([]) },
+    kidsCheckin: { findMany: jest.fn().mockResolvedValue([]) },
     ...overrides,
   };
 }
@@ -866,6 +867,106 @@ describe('CelebrationAssignmentService', () => {
       expect(result[0]!.celebration_instance_id).toBe('i-a1');
       expect(result[0]!.attendance).toEqual({ children: 1, members: 2, attendees: 3, visitors: 4, total: 10 });
       expect(result[1]!.attendance).toBeNull();
+    });
+
+    // spec P2 Escala, AC 5: "Minhas escalas" mostra a turma da sessão em que está escalado.
+    // spec P2 Escala, AC 3: quem lança a contagem vê o total de check-ins como valor inicial.
+    it('traz checkin_total (crianças distintas com check-in) por escala; 0 sem check-in', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      const row = (id: string, day: string) => ({
+        id,
+        status: 'confirmed',
+        celebrationMinistry: {
+          ministry_id: 'm1',
+          ministry: { id: 'm1', name: 'Recepção', counts_attendance: true },
+          schedule: {
+            celebrationInstance: {
+              id: `i-${id}`,
+              scheduled_date: new Date(day),
+              celebration: { id: 'c1', name: 'Culto' },
+              attendance: null,
+            },
+          },
+        },
+      });
+      client.celebrationAssignment.findMany.mockResolvedValue([row('a1', '2026-09-06'), row('a2', '2026-09-07')]);
+      client.kidsCheckin.findMany.mockResolvedValue([
+        { celebration_instance_id: 'i-a1', child_id: 'k1' },
+        { celebration_instance_id: 'i-a1', child_id: 'k2' },
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result.map((r) => r.checkin_total)).toEqual([2, 0]);
+      expect(result[0]!.attendance).toBeNull(); // o total não vira `children` sozinho
+      expect(client.kidsCheckin.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenant_id: 't1',
+            celebration_instance_id: { in: ['i-a1', 'i-a2'] },
+            session: { celebrationInstance: { status: { not: 'cancelled' } } }, // DEC-1
+          },
+        }),
+      );
+    });
+
+    it('expõe kids_session (turma) quando a escala está ligada a uma sessão kids, senão null', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      const row = (id: string, kidsSession: unknown, day: string) => ({
+        id,
+        status: 'confirmed',
+        celebrationMinistry: {
+          ministry_id: 'm1',
+          ministry: { id: 'm1', name: 'Kids' },
+          kidsSession,
+          schedule: {
+            celebrationInstance: {
+              id: `i-${id}`,
+              scheduled_date: new Date(day),
+              celebration: { id: 'c1', name: 'Culto', start_time: '10:00' },
+            },
+          },
+        },
+      });
+      client.celebrationAssignment.findMany.mockResolvedValue([
+        row('a1', { id: 'ks1', status: 'open', room: { id: 'r1', name: 'Maternal' } }, '2026-09-06'),
+        row('a2', null, '2026-09-07'),
+      ]);
+      const { service } = serviceWith(client);
+
+      const result = await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(result[0]!.kids_session).toEqual({ id: 'ks1', room_id: 'r1', room_name: 'Maternal', status: 'open' });
+      // O horário da sessão é o da celebração, que já vem no item.
+      expect(result[0]!.celebration.start_time).toBe('10:00');
+      expect(result[1]!.kids_session).toBeNull();
+    });
+
+    it('pede ao banco a sessão kids e a turma de cada escala', async () => {
+      const client = clientWith();
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p1' });
+      client.volunteerProfile.findFirst.mockResolvedValue({ id: 'vp1' });
+      client.celebrationAssignment.findMany.mockResolvedValue([]);
+      const { service } = serviceWith(client);
+
+      await service.getMyAssignments('u1', 't1', 'g1', false);
+
+      expect(client.celebrationAssignment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            celebrationMinistry: expect.objectContaining({
+              include: expect.objectContaining({
+                kidsSession: { select: { id: true, status: true, room: { select: { id: true, name: true } } } },
+              }),
+            }),
+          }),
+        }),
+      );
     });
 
     it('não filtra por data quando includePast=true (cancelados continuam de fora)', async () => {

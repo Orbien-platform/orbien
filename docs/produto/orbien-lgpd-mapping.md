@@ -53,11 +53,17 @@ Toda decisão de modelagem e exposição leva isso em conta.
 
 | Contexto | Tratamento |
 |---|---|
-| Cadastro de criança no ministério infantil | Responsabilidade da Igreja, consentimento dos responsáveis legais |
-| Foto de criança | Consentimento expresso dos responsáveis, com finalidade específica |
-| Anonimização em relatórios públicos | Obrigatória — nunca expor nome de menor em página pública (ex: "encontre uma célula") |
+| Cadastro de criança no ministério infantil (módulo Kids) | Responsabilidade da Igreja; consentimento específico e destacado do responsável legal (`consent_records`, `origin = 'kids'`, versão do termo; `secretaria` quando a secretaria registra por ele). Sem consentimento vigente não há cadastro nem check-in |
+| Alergia e observação médica | Dado de saúde (Art. 11): tabela própria `kids_child_health`, visível só à equipe kids e à liderança, com leitura auditada (quem/quando, nunca o conteúdo); apagada quando a pessoa é anonimizada |
+| Check-in e check-out (horário, turma, quem entregou, quem retirou, motivo de exceção) | Execução do serviço pedido pelo responsável; retenção de 12 meses (ver abaixo) |
+| Foto de criança | Consentimento expresso dos responsáveis, com finalidade específica; o módulo Kids não coleta foto da criança |
+| Anonimização em relatórios públicos | Obrigatória — nunca expor nome de menor em página pública (ex: "encontre uma célula"). A criança (`persons.is_child`) fica fora de listagens, indicadores e exportações de pessoas |
 
-**Decisão de produto:** o MVP **não trata cadastros do ministério infantil** diretamente — fica para fase futura. Quando entrar, requer fluxo de consentimento específico do responsável.
+**Decisão de produto:** o MVP **trata** o cadastro do ministério infantil (módulo Kids, `PROD-39` em `docs/PLANO.md`). Revogar o consentimento impede novos check-ins e mantém o histórico até o prazo de retenção.
+
+**Retenção dos check-ins:** 12 meses. Depois disso um job diário (`KidsRetentionService`) apaga a identificação de quem retirou e o motivo de exceção, mantendo horário, turma e criança para os indicadores. **Exceção:** enquanto o responsável pelo check-in é membro ativo (`classification = member`, sem exclusão nem anonimização), o registro não é anonimizado; ao deixar de ser, vale a regra dos 12 meses. O cadastro da criança segue a exclusão em 30 dias após o fim do contrato (seção 5) e o pedido de exclusão do titular.
+
+**Pendente para o jurídico:** o texto completo do termo do responsável. O app usa um texto curto e versionado (`apps/api/src/kids/consent/kids-consent.terms.ts`, versão `kids-2026-10`); a redação definitiva, e se criança e responsável devem ser desvinculados do check-in após os 12 meses, dependem de revisão jurídica.
 
 ### 2.5 Dado de autenticação e auditoria
 
@@ -221,6 +227,7 @@ async function deletePerson(personId: string) {
 | Logs de acesso e auditoria | 2 anos | Marco Civil Art. 15 |
 | Registros de consentimento | 5 anos após revogação | Evidência de conformidade |
 | Dados de menor de 18 anos | Eliminação em 30 dias após fim do contrato | Sem base legal residual |
+| Check-ins do ministério infantil | Identificação anonimizada após 12 meses; adiada enquanto o responsável é membro ativo | Execução de contrato; Art. 14 |
 | Dados sensíveis religiosos sem vínculo financeiro | 2 anos após inatividade | Resolução de disputas |
 
 ### 5.1 Job de retenção

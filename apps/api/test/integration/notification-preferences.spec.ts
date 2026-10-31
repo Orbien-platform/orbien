@@ -93,7 +93,7 @@ it('GET sem preferência salva devolve as 5 categorias ligadas (AC1)', async () 
     .set('Authorization', `Bearer ${tokenA}`);
 
   expect(res.status).toBe(200);
-  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
+  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true, kids: true });
 });
 
 it('PATCH persiste a mudança e o GET seguinte reflete (AC2, AC4)', async () => {
@@ -109,6 +109,7 @@ it('PATCH persiste a mudança e o GET seguinte reflete (AC2, AC4)', async () => 
     eventos: true,
     devocional: true,
     biblia: true,
+    kids: true,
   });
 
   const getRes = await request(app.getHttpServer())
@@ -122,6 +123,7 @@ it('PATCH persiste a mudança e o GET seguinte reflete (AC2, AC4)', async () => 
     eventos: true,
     devocional: true,
     biblia: true,
+    kids: true,
   });
 });
 
@@ -135,7 +137,7 @@ it('conta B nunca lê a preferência da conta A — a rota é sempre "a própria
     .set('Authorization', `Bearer ${tokenB}`);
 
   expect(res.status).toBe(200);
-  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
+  expect(res.body).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true, kids: true });
 });
 
 it('PATCH da conta B não altera a preferência da conta A', async () => {
@@ -151,6 +153,7 @@ it('PATCH da conta B não altera a preferência da conta A', async () => {
     eventos: false,
     devocional: true,
     biblia: true,
+    kids: true,
   });
 
   const getAResAfter = await request(app.getHttpServer())
@@ -163,5 +166,6 @@ it('PATCH da conta B não altera a preferência da conta A', async () => {
     eventos: true,
     devocional: true,
     biblia: true,
+    kids: true,
   });
 });

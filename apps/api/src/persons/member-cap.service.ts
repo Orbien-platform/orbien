@@ -38,6 +38,7 @@ export class MemberCapService {
         tenant_id: tenantId,
         classification: PersonClassification.member,
         deleted_at: null,
+        is_child: false,
       },
     });
 

@@ -749,4 +749,31 @@ describe("VoluntariosPage", () => {
       { children: 1, members: 2, attendees: 3, visitors: 4 },
     );
   });
+  it("Meus Turnos: a contagem abre com o total de check-in do Kids como valor inicial de Crianças", async () => {
+    setup(["volunteer"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/volunteers/ministries") return Promise.resolve({ data: [] });
+      if (url === "/volunteers/my-celebration-assignments") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "a1", status: "confirmed", notified_at: null, responded_at: null,
+              celebration: { id: "c1", name: "Culto Domingo" },
+              ministry: { id: "m1", name: "Recepção" },
+              scheduled_date: "2026-02-01T00:00:00Z",
+              celebration_instance_id: "i1", can_count_attendance: true, attendance: null, checkin_total: 5,
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    const user = userEvent.setup();
+    render(<VoluntariosPage />);
+    await screen.findByText(/Nenhum ministério cadastrado\./);
+    await user.click(screen.getByRole("tab", { name: "Meus Turnos" }));
+    await screen.findByText("Culto Domingo");
+    await user.click(screen.getByRole("button", { name: "Contar público" }));
+    expect(await screen.findByLabelText("Crianças")).toHaveValue("5");
+  });
 });

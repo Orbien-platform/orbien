@@ -24,6 +24,7 @@ import { listMyGroups } from "../../lib/pequenos-grupos/pequenos-grupos-client";
 import { fetchAsaasPaymentsEnabled } from "../../lib/pix-recorrente/pix-recorrente-client";
 import type { SmallGroupMine } from "../../lib/pequenos-grupos/types";
 import {
+  Baby,
   BookOpen,
   CalendarCheck,
   Bell,
@@ -38,6 +39,10 @@ import { ICON_STROKE_WIDTH, iconSize, spacing, touchTarget, typography } from ".
 
 // HOME-02: 2 grupos cabem sem a home virar uma segunda tela de Grupos.
 const MAX_HOME_GROUPS = 2;
+// Quem usa o Kids pelo app: o responsável (`member`) e a liderança. Espelho de
+// `KIDS_FAMILY_ROLES` (apps/api/src/kids/kids.roles.ts) — o voluntário escalado
+// chega pela escala, não por aqui.
+const KIDS_ROLES = ["member", "tenant_admin", "admin_congregation", "pastor", "secretary", "ministry_leader"];
 // HOME-03: mesmo limite já pedido à API — evita truncar client-side algo
 // que o backend já poderia ter paginado menor.
 const MAX_HOME_POSTS = 3;
@@ -138,6 +143,19 @@ export default function HomeScreen() {
       icon: Church,
       onPress: () => router.push("/celebracoes"),
     },
+    // Kids (módulo premium): espelha os papéis das rotas de criança da API
+    // (`KIDS_FAMILY_ROLES`). Sem o plano na claim, sem entrada — fail-closed,
+    // como o dízimo abaixo; quem nega de verdade é o PlanGuard.
+    ...(isPremium && roles.some((r) => KIDS_ROLES.includes(r))
+      ? [
+          {
+            key: "kids",
+            label: "Kids",
+            icon: Baby,
+            onPress: () => router.push("/kids"),
+          } satisfies QuickAction,
+        ]
+      : []),
     ...(asaasPaymentsEnabled && isPremium
       ? [
           {

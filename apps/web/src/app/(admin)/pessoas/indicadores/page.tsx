@@ -7,6 +7,7 @@ import { SectionHeader } from "@/components/dashboard/SectionHeader";
 import { DemographicsIndicators } from "@/components/people/DemographicsIndicators";
 import { PeriodNavigator } from "@/components/financial/PeriodNavigator";
 import { AttendanceFormModal } from "@/components/celebrations/AttendanceFormModal";
+import { KidsAttendanceCard } from "@/components/kids/KidsAttendanceCard";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import { PremiumInvite } from "@/components/ui/PremiumInvite";
@@ -37,6 +38,8 @@ interface ServiceRow {
   scheduled_date: string;
   celebration: { id: string; name: string; start_time: string };
   attendance: Counts | null;
+  /** Crianças distintas com check-in (Kids): valor inicial sugerido de "Crianças". */
+  checkin_total?: number;
 }
 
 interface CelebrationOption {
@@ -263,6 +266,8 @@ function IndicadoresContent() {
         </>
       )}
 
+      {rangeOk ? <KidsAttendanceCard start={period.start} end={period.end} /> : null}
+
       <DemographicsIndicators />
 
       {editing ? (
@@ -273,6 +278,7 @@ function IndicadoresContent() {
           instanceId={editing.celebration_instance_id}
           subtitle={`${editing.celebration.name} · ${fmtDate(editing.scheduled_date)}`}
           initial={editing.attendance}
+          suggestedChildren={editing.checkin_total}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
       ) : null}

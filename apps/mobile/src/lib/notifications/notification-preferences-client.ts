@@ -4,7 +4,7 @@
 // `content-client.ts`/`escala-client.ts`.
 import { authenticatedRequest } from "../auth/auth-client";
 
-/** Mesmas 5 categorias de `apps/api/src/content/notification-categories.ts`
+/** Mesmas 6 categorias de `apps/api/src/content/notification-categories.ts`
  * (MOB-10, Assumptions) — sem import cruzado entre apps (CLAUDE.md), o
  * shape é replicado aqui como o contrato HTTP já obriga. */
 export interface NotificationPreferenceValues {
@@ -13,10 +13,12 @@ export interface NotificationPreferenceValues {
   eventos: boolean;
   devocional: boolean;
   biblia: boolean;
+  /** Aviso "Criança entregue" ao responsável (módulo Kids, AD-003). */
+  kids: boolean;
 }
 
 /** `GET /me/notification-preferences` — sem preferência salva, o servidor
- * devolve as 5 categorias ligadas (default opt-out, ver spec.md). */
+ * devolve as 6 categorias ligadas (default opt-out, ver spec.md). */
 export async function getNotificationPreferences(): Promise<NotificationPreferenceValues> {
   return authenticatedRequest<NotificationPreferenceValues>("get", "/me/notification-preferences");
 }

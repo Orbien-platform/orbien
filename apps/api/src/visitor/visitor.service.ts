@@ -152,6 +152,7 @@ export class VisitorService {
               phone: dto.phone,
               tenant_id: qrToken.tenant_id,
               congregation_id: qrToken.congregation_id,
+              is_child: false,
             },
             select: { id: true, full_name: true },
           });
@@ -253,7 +254,7 @@ export class VisitorService {
 
     if (dto.existing_person_id) {
       const existing = await db.person.findFirst({
-        where: { id: dto.existing_person_id, deleted_at: null, anonymized_at: null },
+        where: { id: dto.existing_person_id, deleted_at: null, anonymized_at: null, is_child: false },
         select: { id: true, full_name: true },
       });
       if (!existing) throw new NotFoundException('Pessoa não encontrada');
@@ -267,6 +268,7 @@ export class VisitorService {
           phone: { in: Array.from(new Set([phone, dto.phone!.trim()])) },
           deleted_at: null,
           anonymized_at: null,
+          is_child: false,
         },
         take: MAX_DUPLICATE_MATCHES,
         orderBy: { created_at: 'asc' },

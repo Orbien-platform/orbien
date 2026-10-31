@@ -60,6 +60,8 @@ interface MyAssignment {
   celebration_instance_id?: string;
   can_count_attendance?: boolean;
   attendance?: AttendanceCounts | null;
+  /** Crianças distintas com check-in no culto (Kids): valor inicial sugerido de "Crianças". */
+  checkin_total?: number;
   setlist: { songs: RepertoireSong[] } | null;
   cues?: MyCue[];
 }
@@ -499,6 +501,7 @@ export default function VoluntariosPage() {
           instanceId={attendanceFor.celebration_instance_id}
           subtitle={`${attendanceFor.celebration.name} · ${fmtDate(attendanceFor.scheduled_date)}`}
           initial={attendanceFor.attendance ?? null}
+          suggestedChildren={attendanceFor.checkin_total}
           onSaved={(counts) =>
             setMyAssignments((list) =>
               list.map((x) =>

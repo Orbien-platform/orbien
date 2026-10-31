@@ -19,11 +19,31 @@ jest.mock("../../lib/notifications/onesignal-client", () => ({
 
 import NotificacoesScreen from "../../app/notificacoes";
 
-const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true };
+const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true, kids: true };
 
 describe("NotificacoesScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it("desligar Kids manda só { kids: false } e sincroniza pref_kids", async () => {
+    mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+    const updated = { ...ALL_ON, kids: false };
+    mockUpdateNotificationPreferences.mockResolvedValue(updated);
+
+    await act(async () => {
+      render(<NotificacoesScreen />);
+    });
+    expect(screen.getByText("Kids: criança entregue")).toBeTruthy();
+    expect(screen.getByTestId("switch-kids").props.value).toBe(true);
+
+    await act(async () => {
+      fireEvent(screen.getByTestId("switch-kids"), "valueChange", false);
+    });
+
+    expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith({ kids: false });
+    expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(updated);
+    expect(screen.getByTestId("switch-kids").props.value).toBe(false);
   });
 
   it("mount sem preferência salva mostra as 5 categorias ligadas (AC1)", async () => {

@@ -694,6 +694,106 @@ Falta:
   (a API aceita; a tela edita só alcance e liberação).
 - `addMaterial` não confere se o material tem o PG do encontro como alvo.
 
+### PROD-39 · Módulo Kids: turmas, check-in e check-out seguros · entregue, faltam o jurídico e o refino
+
+A celebração passa a ter 0, 1 ou N sessões kids (uma por turma/faixa etária). O
+responsável cadastra os filhos e quem pode buscá-los, aceita o termo, e a equipe
+faz entrada e saída da criança por **código** de 4 caracteres único na sessão.
+Premium (`@RequiresPlan('premium')`). Spec e desenho em
+`.specs/features/modulo-kids/`.
+
+- Turmas: `/kids/rooms` (faixa etária obrigatória, `allows_out_of_range`,
+  capacidade que só avisa, mínimo de voluntários). Sessões:
+  `/celebrations/instances/:id/kids-sessions`, `/kids/sessions/open`, modelo por
+  celebração em `/celebrations/:id/kids-template` (+ `apply`).
+- Criança e responsáveis: `/kids/children`, `/kids/children/:id/guardians`,
+  `PATCH|DELETE /kids/guardians/:id` (terceiro autorizado, ao menos um primário),
+  `/kids/consent` (+ `revoke`). A criança é `Person.is_child` e fica fora das
+  listagens, indicadores e retenções de pessoas (AD-013). Alergia e observação
+  médica em `kids_child_health`, com leitura auditada.
+- Check-in/out: `POST /kids/sessions/:id/checkins`, `.../checkout` (código;
+  recusa 403 genérica que avisa o líder), `.../checkout-override` (líder, com
+  motivo), `GET /kids/sessions/:id/roster` (sem o código),
+  `GET /kids/children/:id/checkin` (o responsável relê o código),
+  `GET /kids/checkins/:id/labels`. Push "Criança entregue" ao responsável
+  primário (categoria `kids`).
+- QR (R3-1): é só um portador dos segredos que já existem. O responsável emite
+  um QR de check-in (`POST /kids/children/:id/qr`, 5 min, uso único) que a
+  equipe lê em `POST /kids/sessions/:id/checkins/by-qr`; `GET
+  /kids/children/:id/checkin` devolve também o `qr` do código, que o check-out
+  aceita no lugar do código digitado (`{ qr }`).
+- Limite de tentativas (R3-2): 5 códigos errados travam o check-out daquele
+  check-in (mesmo 403, `kids.checkout_locked`, push ao líder); só o override
+  encerra. Push (R3-3): "Criança recebida na turma X" ao primário quando o
+  check-in é de outra pessoa; "Criança entregue" também aos demais
+  responsáveis com `can_pickup` e conta.
+- Busca de adultos para o líder kids (R3-4): `GET /kids/guardians/search?q=`.
+- Escala e contagem: `kids_session_id` na escala; `checkin_total` sugere o
+  `children` da contagem (`PROD-37`); `GET /kids/attendance/summary` alimenta o
+  cartão Kids em `/pessoas/indicadores`.
+- Web: `/kids` (balcão), turmas, ficha da criança. App: responsável (filhos,
+  consentimento, check-in com código grande) e equipe (roster, saída por código).
+- RLS: `029_rls_kids.sql` e `030_rls_kids_child_health.sql`, escopo de
+  congregação, no `bootstrap-db.sh` e no passo 7; testes em
+  `test/rls/kids.spec.ts`.
+- Retenção: `KidsRetentionService` anonimiza check-ins com mais de 12 meses
+  (apaga quem retirou e o motivo de exceção), pulando enquanto o responsável é
+  membro ativo; exclusão da criança 30 dias após o fim do contrato.
+- Seed: `npm run db:kids -w orbien-backend` (só `teste1-church` e
+  `teste2-church`), que também limpa o resíduo do e2e do balcão.
+
+Falta:
+- **Texto jurídico completo do termo do responsável** (pendência para o
+  jurídico). O app usa um texto curto versionado em `kids-consent.terms.ts`
+  (`kids-2026-10`); trocar o texto sobe a versão e pede novo aceite.
+- Decisão do jurídico: após os 12 meses, desvincular também criança e
+  responsável do check-in (hoje ficam como referência e só a identificação de
+  quem retirou é apagada). Exige tornar as FKs anuláveis e perde a contagem
+  distinta por criança.
+- Etiqueta no app (hoje o web imprime pelo navegador) e em PDF.
+- Push a líder/voluntário além dos responsáveis (o líder já recebe a recusa e o travamento).
+- Testar o fluxo do responsável no aparelho (código grande, toque ≥ 48px).
+
+Pendências declaradas da revisão do PR #193 (REV-4). Achados de `/code-review` e
+`pr-review` que o dono escolheu **não** ajustar agora; ficam abertas, com a
+evidência e a correção sugerida, e nenhum desses códigos foi alterado:
+- **REV-4.1 · `KidsGuardiansService.remove` sem lock e `add` aceita segundo
+  primário.** Evidência: `kids-guardians.service.ts` ~:140-156. O `update` ganhou
+  `FOR UPDATE ... ORDER BY id` (FIX5), o `remove` não: duas remoções simultâneas
+  de dois primários deixam a criança sem primário. Em `add` (:42, :69) um
+  responsável não primário aceita `is_primary: true`. Sugestão: o mesmo lock
+  `ORDER BY id` no `remove` e revalidar a invariante dentro dele; no `add`,
+  decidir se `is_primary` vale para não primário (e travar igual).
+- **REV-4.2 · Cancelar a instância fecha as sessões kids e reativar o culto não
+  as reabre.** Evidência: `celebration-instances.service.ts` ~:144-150 e
+  `kids-sessions.service.ts` ~:147-151; não há rota de reabrir sessão. Sugestão:
+  rota `POST /kids/sessions/:id/reopen` (ou reabrir junto com a reativação),
+  com teste de integração do ciclo cancelar, reativar e operar.
+- **REV-4.3 · Travamento das 5 tentativas lê o contador do início da
+  requisição.** Evidência: `kids-checkin.service.ts:237`. Sugestão (barata): usar
+  o valor devolvido por `kids_register_checkout_failure()` na decisão de travar,
+  em vez do contador lido antes.
+- **REV-4.4 · Tokens de QR usados ou expirados nunca são purgados.** Evidência:
+  `kids-qr.service.ts:114`; `kids_checkin_qr_tokens` só cresce. Sugestão: job
+  diário que apaga o que expirou há mais de um dia (ao lado do
+  `KidsRetentionService`).
+- **REV-4.5 · O consentimento ignora a versão do termo.** Evidência:
+  `kids-consent.service.ts:84-120`. Subir a versão de `kids-consent.terms.ts`
+  não pede novo aceite. Sugestão: tratar aceite de versão antiga como ausente;
+  **registrar antes de subir a versão do termo** (texto jurídico).
+- **REV-4.6 · O botão de check-in some em silêncio se `listOpenSessions`
+  falhar no mobile.** Evidência: `apps/mobile/src/app/kids/crianca/[id].tsx:50`.
+  Sugestão: estado de erro com nova tentativa, como o balcão do web.
+- **REV-4.7 · Sem e2e das telas de escrita do admin Kids** (criança, turma,
+  modelo, sessão, consentimento); só o balcão tem e2e. Sugestão: um spec
+  Playwright por tela de escrita, em `teste2-church`.
+- **REV-4.8 · Lembrete de deploy:** rodar o `bootstrap-db.sh` junto ou antes da
+  release da API. Sem o `031` o travamento do check-out falha aberto; sem
+  `029`, `030` e `032` as tabelas ficam sem RLS.
+- **REV-4.9 · `.claude/skills/pr-review/SKILL.md:80` cita só `isolation.spec.ts`**,
+  desatualizado em relação ao portão (`PEND-08`). Sugestão: apontar a skill para
+  `scripts/pre-push.sh`.
+
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
 
 Quem está escalado num ministério marcado como **responsável pela contagem**

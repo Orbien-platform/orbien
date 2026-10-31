@@ -66,6 +66,7 @@ export function syncNotificationPreferenceTags(prefs: {
   eventos: boolean;
   devocional: boolean;
   biblia: boolean;
+  kids: boolean;
 }): void {
   OneSignal.User.addTags({
     pref_avisos: String(prefs.avisos),
@@ -73,22 +74,56 @@ export function syncNotificationPreferenceTags(prefs: {
     pref_eventos: String(prefs.eventos),
     pref_devocional: String(prefs.devocional),
     pref_biblia: String(prefs.biblia),
+    pref_kids: String(prefs.kids),
   });
+}
+
+/**
+ * Tag `person_id`: é por ela que a API endereça push a uma PESSOA (aviso de
+ * escala, "Criança entregue" do Kids) — o `external_id` é o id da conta, não o
+ * da pessoa. O token não carrega o id da pessoa, então ele vem de
+ * `getMyPersonId()` e este é só o último passo.
+ */
+export function registerPersonTag(personId: string): void {
+  OneSignal.User.addTags({ person_id: personId });
 }
 
 interface NotificationClickAdditionalData {
   post_id?: string;
   bible_mark_id?: string;
+  /** Módulo Kids: `kids_child_received`, `kids_child_released`, `kids_checkout_locked`. */
+  type?: string;
+  child_id?: string;
+  session_id?: string;
+}
+
+function kidsRoute(data: NotificationClickAdditionalData | undefined): string | null {
+  switch (data?.type) {
+    case "kids_child_received":
+      return data.child_id ? `/kids/codigo/${encodeURIComponent(data.child_id)}` : "/kids";
+    case "kids_child_released":
+      return data.child_id ? `/kids/crianca/${encodeURIComponent(data.child_id)}` : "/kids";
+    case "kids_checkout_locked":
+      return data.session_id ? `/kids/sessao/${encodeURIComponent(data.session_id)}` : null;
+    default:
+      return null;
+  }
 }
 
 /**
  * Rota que o toque na push abre, a partir do `data` que a API manda:
  * `post_id` (`NotificationsService.notifyPost`) abre o post; `bible_mark_id`
  * (resposta a uma marcação da Bíblia, `BibleMarkInteractionsService`) abre a
- * marcação com as respostas. Sem nenhum dos dois, `null` — o toque só abre o
- * app.
+ * marcação com as respostas. Os avisos do Kids vêm com `type`:
+ * `kids_child_received` abre o código de retirada do filho, `kids_child_released`
+ * a ficha dele (o código já não existe depois da entrega) e
+ * `kids_checkout_locked`, para o líder, a turma da sessão. Sem `child_id`, os
+ * dois primeiros levam à lista do Kids. Sem nenhum destino, `null` — o toque só
+ * abre o app.
  */
 export function routeForNotification(data: NotificationClickAdditionalData | undefined): string | null {
+  const kids = kidsRoute(data);
+  if (kids) return kids;
   if (data?.post_id) return `/post/${data.post_id}`;
   if (data?.bible_mark_id) return `/biblia/marcacao/${data.bible_mark_id}`;
   return null;

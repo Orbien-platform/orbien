@@ -1,16 +1,19 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import {
   AssignmentStatus,
   CelebrationAssignment,
   CelebrationInstance,
   CelebrationMinistry,
   CelebrationSchedule,
+  KidsSessionStatus,
+  Prisma,
   ScheduleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CelebrationInstancesService } from './celebration-instances.service';
 import { AddScheduleMinistryDto } from './dto/add-schedule-ministry.dto';
 import { ApplyTemplateDto } from './dto/apply-template.dto';
+import { countScheduledVolunteers, volunteersMissing } from '../kids/sessions/kids-staffing';
 import { CelebrationRemovalNotifier, personsToNotifyOnRemoval } from './celebration-removal.notifier';
 
 const NOTIFIED_ASSIGNMENTS = {
@@ -26,13 +29,47 @@ type AssignmentRow = CelebrationAssignment & {
   volunteerProfile: { id: string; person: { id: string; full_name: string } };
 };
 
+// Sessão kids ligada ao ministério da escala (spec P2 Escala).
+type KidsSessionRef = {
+  id: string;
+  status: KidsSessionStatus;
+  room: { id: string; name: string; min_volunteers: number };
+};
+
 type MinistryRow = CelebrationMinistry & {
   ministry: { id: string; name: string };
   assignments: AssignmentRow[];
   assigned_count: number;
+  kids_session: {
+    id: string;
+    room_id: string;
+    room_name: string;
+    status: KidsSessionStatus;
+    min_volunteers: number;
+  } | null;
+  /** Quantos voluntários faltam para o mínimo da turma; `null` sem sessão kids. */
+  volunteers_missing: number | null;
 };
 
 type ScheduleDetail = CelebrationSchedule & { ministries: MinistryRow[] };
+
+const SCHEDULE_INCLUDE = {
+  ministries: {
+    orderBy: { created_at: 'asc' },
+    include: {
+      ministry: { select: { id: true, name: true } },
+      kidsSession: { select: { id: true, status: true, room: { select: { id: true, name: true, min_volunteers: true } } } },
+      assignments: {
+        orderBy: { created_at: 'asc' },
+        include: {
+          volunteerProfile: {
+            select: { id: true, person: { select: { id: true, full_name: true } } },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.CelebrationScheduleInclude;
 
 @Injectable()
 export class CelebrationScheduleService {
@@ -54,17 +91,40 @@ export class CelebrationScheduleService {
     schedule: CelebrationSchedule & {
       ministries: (CelebrationMinistry & {
         ministry: { id: string; name: string };
+        kidsSession?: KidsSessionRef | null;
         assignments: AssignmentRow[];
       })[];
     },
   ): ScheduleDetail {
+    // Falta de voluntários (spec P2 Escala, AC 2): a sessão pode ter mais de um
+    // vínculo na escala (ministérios diferentes), então os escalados são
+    // somados por sessão, e não por linha.
+    const staffingRows = schedule.ministries.flatMap((m) =>
+      m.assignments.map((a) => ({
+        status: a.status,
+        volunteer_profile_id: a.volunteer_profile_id,
+        celebrationMinistry: { kids_session_id: m.kids_session_id },
+      })),
+    );
     return {
       ...schedule,
-      ministries: schedule.ministries.map((m) => ({
+      ministries: schedule.ministries.map(({ kidsSession, ...m }) => ({
         ...m,
         // `swapped` fica na lista (a liderança vê quem trocou), mas não ocupa
         // a vaga: quem assumiu tem a própria linha.
         assigned_count: m.assignments.filter((a) => a.status !== AssignmentStatus.swapped).length,
+        kids_session: kidsSession
+          ? {
+              id: kidsSession.id,
+              room_id: kidsSession.room.id,
+              room_name: kidsSession.room.name,
+              status: kidsSession.status,
+              min_volunteers: kidsSession.room.min_volunteers,
+            }
+          : null,
+        volunteers_missing: kidsSession
+          ? volunteersMissing(kidsSession.room.min_volunteers, countScheduledVolunteers(staffingRows, kidsSession.id))
+          : null,
       })),
     };
   }
@@ -87,22 +147,7 @@ export class CelebrationScheduleService {
 
     const schedule = await this.prisma.client.celebrationSchedule.findUnique({
       where: { celebration_instance_id: instanceId },
-      include: {
-        ministries: {
-          orderBy: { created_at: 'asc' },
-          include: {
-            ministry: { select: { id: true, name: true } },
-            assignments: {
-              orderBy: { created_at: 'asc' },
-              include: {
-                volunteerProfile: {
-                  select: { id: true, person: { select: { id: true, full_name: true } } },
-                },
-              },
-            },
-          },
-        },
-      },
+      include: SCHEDULE_INCLUDE,
     });
     if (!schedule) throw new NotFoundException('Escala não encontrada para esta instância');
 
@@ -132,21 +177,50 @@ export class CelebrationScheduleService {
       });
       if (!ministry) throw new NotFoundException('Ministério não encontrado');
 
-      const duplicate = await this.prisma.client.celebrationMinistry.findUnique({
-        where: { schedule_id_ministry_id: { schedule_id: schedule.id, ministry_id: dto.ministry_id } },
+      // Sessão kids (spec P2 Escala, AC 1): tem que ser desta MESMA instância,
+      // do mesmo tenant e congregação — fora disso é 404, sem distinguir os casos.
+      const kidsSessionId = dto.kids_session_id ?? null;
+      if (kidsSessionId) {
+        const session = await this.prisma.client.kidsSession.findFirst({
+          where: {
+            id: kidsSessionId,
+            tenant_id: tenantId,
+            congregation_id: congregationId,
+            celebration_instance_id: instanceId,
+          },
+          select: { id: true, status: true },
+        });
+        if (!session) throw new NotFoundException('Sessão kids não encontrada nesta celebração');
+        if (session.status === KidsSessionStatus.cancelled) {
+          throw new UnprocessableEntityException('Sessão kids cancelada não recebe escala');
+        }
+      }
+
+      // Um vínculo por (escala, ministério, sessão): o mesmo ministério "Kids"
+      // escala N turmas, uma linha por turma (índices parciais na migration).
+      const duplicate = await this.prisma.client.celebrationMinistry.findFirst({
+        where: { schedule_id: schedule.id, ministry_id: dto.ministry_id, kids_session_id: kidsSessionId },
       });
       if (duplicate) throw new ConflictException('Ministério já vinculado à escala');
 
-      return this.prisma.client.celebrationMinistry.create({
-        data: {
-          tenant_id: tenantId,
-          congregation_id: congregationId,
-          schedule_id: schedule.id,
-          ministry_id: dto.ministry_id,
-          slots: dto.slots,
-        },
-        include: { ministry: { select: { id: true, name: true } } },
-      });
+      try {
+        return await this.prisma.client.celebrationMinistry.create({
+          data: {
+            tenant_id: tenantId,
+            congregation_id: congregationId,
+            schedule_id: schedule.id,
+            ministry_id: dto.ministry_id,
+            slots: dto.slots,
+            kids_session_id: kidsSessionId,
+          },
+          include: { ministry: { select: { id: true, name: true } } },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          throw new ConflictException('Ministério já vinculado à escala');
+        }
+        throw e;
+      }
     });
   }
 
@@ -187,6 +261,7 @@ export class CelebrationScheduleService {
     congregationId: string,
     instanceId: string,
     ministryId: string,
+    kidsSessionId?: string,
   ): Promise<CelebrationMinistry> {
     await this.assertInstance(tenantId, congregationId, instanceId);
 
@@ -195,8 +270,9 @@ export class CelebrationScheduleService {
     });
     if (!schedule) throw new NotFoundException('Escala não encontrada para esta instância');
 
-    const cm = await this.prisma.client.celebrationMinistry.findUnique({
-      where: { schedule_id_ministry_id: { schedule_id: schedule.id, ministry_id: ministryId } },
+    // Sem `kidsSessionId`, remove o vínculo comum; com ele, só o daquela sessão.
+    const cm = await this.prisma.client.celebrationMinistry.findFirst({
+      where: { schedule_id: schedule.id, ministry_id: ministryId, kids_session_id: kidsSessionId ?? null },
       include: { assignments: NOTIFIED_ASSIGNMENTS },
     });
     if (!cm) throw new NotFoundException('Ministério não encontrado na escala');
@@ -256,22 +332,7 @@ export class CelebrationScheduleService {
 
       const updated = await this.prisma.client.celebrationSchedule.findUnique({
         where: { id: schedule.id },
-        include: {
-          ministries: {
-            orderBy: { created_at: 'asc' },
-            include: {
-              ministry: { select: { id: true, name: true } },
-              assignments: {
-                orderBy: { created_at: 'asc' },
-                include: {
-                  volunteerProfile: {
-                    select: { id: true, person: { select: { id: true, full_name: true } } },
-                  },
-                },
-              },
-            },
-          },
-        },
+        include: SCHEDULE_INCLUDE,
       });
 
       return this.toDetail(updated!);

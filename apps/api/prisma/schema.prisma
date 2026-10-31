@@ -75,6 +75,12 @@ model Tenant {
   celebrations              Celebration[]
   celebrationInstances      CelebrationInstance[]
   celebrationAttendance     CelebrationAttendance[]
+  kidsRooms                 KidsRoom[]
+  kidsSessions              KidsSession[]
+  kidsGuardians             KidsGuardian[]
+  kidsCheckins              KidsCheckin[]
+  kidsCheckinQrTokens       KidsCheckinQrToken[]
+  kidsChildHealth           KidsChildHealth[]
   serviceOrders             ServiceOrder[]
   serviceOrderItems         ServiceOrderItem[]
   serviceOrderTemplates     ServiceOrderTemplate[]
@@ -156,6 +162,12 @@ model Congregation {
   celebrations              Celebration[]
   celebrationInstances      CelebrationInstance[]
   celebrationAttendance     CelebrationAttendance[]
+  kidsRooms                 KidsRoom[]
+  kidsSessions              KidsSession[]
+  kidsGuardians             KidsGuardian[]
+  kidsCheckins              KidsCheckin[]
+  kidsCheckinQrTokens       KidsCheckinQrToken[]
+  kidsChildHealth           KidsChildHealth[]
   serviceOrders             ServiceOrder[]
   serviceOrderItems         ServiceOrderItem[]
   serviceOrderTemplates     ServiceOrderTemplate[]
@@ -403,6 +415,7 @@ model Person {
   deleted_at           DateTime?
   anonymized_at        DateTime?
   anonymization_reason String?
+  is_child             Boolean              @default(false)
   created_at           DateTime             @default(now())
   updated_at           DateTime             @updatedAt
 
@@ -434,6 +447,13 @@ model Person {
   serviceOrderItems         ServiceOrderItem[]
   serviceOrderTemplateItems ServiceOrderTemplateItem[]
   eventRegistrations        EventRegistration[]
+  kidsGuardiansAsChild      KidsGuardian[]             @relation("KidsGuardianChild")
+  kidsGuardiansAsGuardian   KidsGuardian[]             @relation("KidsGuardianGuardian")
+  kidsCheckinsAsChild       KidsCheckin[]              @relation("KidsCheckinChild")
+  kidsCheckinsAsGuardian    KidsCheckin[]              @relation("KidsCheckinGuardian")
+  kidsQrTokensAsChild       KidsCheckinQrToken[]       @relation("KidsQrTokenChild")
+  kidsQrTokensAsGuardian    KidsCheckinQrToken[]       @relation("KidsQrTokenGuardian")
+  kidsHealth                KidsChildHealth?
 
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
@@ -1555,18 +1575,22 @@ model VolunteerMinistry {
 }
 
 model Celebration {
-  id              String                @id @default(uuid())
-  tenant_id       String
-  congregation_id String
-  name            String
-  type            CelebrationType
-  day_of_week     Int?
-  start_time      String
-  recurrence      CelebrationRecurrence
-  anchor_date     DateTime?             @db.Date
-  is_active       Boolean               @default(true)
-  created_at      DateTime              @default(now())
-  updated_at      DateTime              @updatedAt
+  id                    String                @id @default(uuid())
+  tenant_id             String
+  congregation_id       String
+  name                  String
+  type                  CelebrationType
+  day_of_week           Int?
+  start_time            String
+  recurrence            CelebrationRecurrence
+  anchor_date           DateTime?             @db.Date
+  is_active             Boolean               @default(true)
+  // Modelo kids: turmas (kids_rooms.id) abertas por padrão nesta celebração.
+  // Sem FK de propósito — é só uma lista de atalho; o service valida a turma
+  // ao gravar e de novo ao aplicar (turma desativada ou apagada é pulada).
+  kids_default_room_ids String[]              @default([])
+  created_at            DateTime              @default(now())
+  updated_at            DateTime              @updatedAt
 
   tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
@@ -1596,6 +1620,7 @@ model CelebrationInstance {
   serviceOrder ServiceOrder?
   schedule     CelebrationSchedule?
   attendance   CelebrationAttendance?
+  kidsSessions KidsSession[]
 
   @@index([tenant_id, celebration_id])
   @@index([tenant_id, scheduled_date])
@@ -1841,6 +1866,7 @@ model NotificationPreference {
   eventos         Boolean  @default(true)
   devocional      Boolean  @default(true)
   biblia          Boolean  @default(true)
+  kids            Boolean  @default(true)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
@@ -1875,13 +1901,17 @@ model CelebrationMinistry {
   schedule_id     String
   ministry_id     String
   slots           Int      @default(1)
+  kids_session_id String?
   created_at      DateTime @default(now())
 
   schedule    CelebrationSchedule     @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
   ministry    Ministry                @relation(fields: [ministry_id], references: [id], onDelete: Restrict)
+  kidsSession KidsSession?            @relation(fields: [kids_session_id], references: [id], onDelete: SetNull)
   assignments CelebrationAssignment[]
 
-  @@unique([schedule_id, ministry_id])
+  // Unicidade em índices parciais (migration 20261026140000): um ministério
+  // por escala, ou um por (escala, sessão kids) — o mesmo ministério "Kids"
+  // escala N turmas da mesma instância. O Prisma não modela índice parcial.
   @@index([congregation_id])
   @@map("celebration_ministries")
 }
@@ -2461,4 +2491,186 @@ model BankStatementTransaction {
   @@unique([tenant_id, congregation_id, fitid])
   @@index([tenant_id, congregation_id, import_job_id])
   @@map("bank_statement_transactions")
+}
+
+// =============================================================================
+// Ministério infantil (módulo Kids) — AD-013: criança é Person com is_child.
+// RLS por congregação em 029_rls_kids.sql (AD-001).
+// =============================================================================
+
+enum KidsSessionStatus {
+  open
+  cancelled
+}
+
+/// Turma do ministério infantil: catálogo reutilizável, com faixa etária
+/// obrigatória (em meses). Fora da faixa só entra com `allows_out_of_range` ou
+/// com exceção do líder (age_override no check-in).
+model KidsRoom {
+  id                  String   @id @default(uuid())
+  tenant_id           String
+  congregation_id     String
+  name                String
+  min_age_months      Int
+  max_age_months      Int
+  allows_out_of_range Boolean  @default(false)
+  capacity            Int?
+  min_volunteers      Int      @default(0)
+  is_active           Boolean  @default(true)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation  @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  sessions     KidsSession[]
+
+  @@index([tenant_id, congregation_id])
+  @@map("kids_rooms")
+}
+
+/// Uma turma funcionando em uma instância de culto (0..N por instância).
+model KidsSession {
+  id                      String            @id @default(uuid())
+  tenant_id               String
+  congregation_id         String
+  celebration_instance_id String
+  room_id                 String
+  status                  KidsSessionStatus @default(open)
+  created_at              DateTime          @default(now())
+  updated_at              DateTime          @updatedAt
+
+  tenant              Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation        Congregation          @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  celebrationInstance CelebrationInstance   @relation(fields: [celebration_instance_id], references: [id], onDelete: Cascade)
+  room                KidsRoom              @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  checkins            KidsCheckin[]
+  ministries          CelebrationMinistry[]
+
+  @@unique([celebration_instance_id, room_id])
+  // Alvo da FK composta de KidsCheckin: garante que o check-in aponta para a
+  // mesma instância da sessão.
+  @@unique([id, celebration_instance_id])
+  @@index([tenant_id, congregation_id])
+  @@map("kids_sessions")
+}
+
+/// Quem responde por uma criança e quem pode retirá-la.
+model KidsGuardian {
+  id                 String   @id @default(uuid())
+  tenant_id          String
+  congregation_id    String
+  child_id           String
+  guardian_person_id String
+  relationship       String
+  can_pickup         Boolean  @default(true)
+  is_primary         Boolean  @default(false)
+  created_at         DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  child        Person       @relation("KidsGuardianChild", fields: [child_id], references: [id], onDelete: Cascade)
+  guardian     Person       @relation("KidsGuardianGuardian", fields: [guardian_person_id], references: [id], onDelete: Cascade)
+
+  @@unique([child_id, guardian_person_id])
+  @@index([tenant_id, congregation_id])
+  @@index([guardian_person_id])
+  @@map("kids_guardians")
+}
+
+/// Presença nominal da criança em uma sessão. A retirada fecha por `code`.
+/// O índice único parcial (child_id, celebration_instance_id) WHERE
+/// checked_out_at IS NULL vive em SQL na migration — o Prisma não o modela.
+model KidsCheckin {
+  id                       String    @id @default(uuid())
+  tenant_id                String
+  congregation_id          String
+  session_id               String
+  // SPEC_DEVIATION: desnormalizado de KidsSession para o índice parcial de
+  // check-in aberto (design.md previa join); FK composta mantém a coerência.
+  celebration_instance_id  String
+  child_id                 String
+  guardian_person_id       String
+  code                     String
+  age_override             Boolean   @default(false)
+  override_reason          String?
+  checked_in_at            DateTime  @default(now())
+  checked_in_by            String
+  checked_out_at           DateTime?
+  checked_out_by           String?
+  picked_up_by_person_id   String?
+  picked_up_by_name        String?
+  // Retenção de 12 meses (KIDS-06): preenchido pelo KidsRetentionService quando
+  // a identificação de quem retirou e o motivo da exceção foram apagados.
+  anonymized_at            DateTime?
+  // R3-2: tentativas de código errado no check-out. Chegou a 5 (KIDS_CHECKOUT_
+  // MAX_ATTEMPTS), o check-out por código/QR trava e só o override do líder
+  // fecha. Incrementado por kids_register_checkout_failure() (030_rls_kids_
+  // checkout_attempts.sql), fora da transação da requisição.
+  checkout_failed_attempts Int       @default(0)
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  session      KidsSession  @relation(fields: [session_id, celebration_instance_id], references: [id, celebration_instance_id], onDelete: Cascade)
+  child        Person       @relation("KidsCheckinChild", fields: [child_id], references: [id], onDelete: Cascade)
+  guardian     Person       @relation("KidsCheckinGuardian", fields: [guardian_person_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, code])
+  @@index([tenant_id, congregation_id])
+  @@index([child_id])
+  @@index([guardian_person_id])
+  @@map("kids_checkins")
+}
+
+/// QR de check-in emitido pelo app do responsável (R3-1): portador de curta
+/// duração e de uso único do par criança + responsável. O QR NÃO substitui o
+/// código — a equipe que o lê faz o check-in normal e o código segue sendo o
+/// segredo da retirada. Só o hash do segredo é guardado (o QR é mostrado uma
+/// vez). RLS por congregação em 032_rls_kids_checkin_qr_tokens.sql.
+model KidsCheckinQrToken {
+  id                 String    @id @default(uuid())
+  tenant_id          String
+  congregation_id    String
+  child_id           String
+  guardian_person_id String
+  // Conta do responsável que emitiu (sem FK, como `checked_in_by`).
+  issued_by          String
+  secret_hash        String
+  expires_at         DateTime
+  used_at            DateTime?
+  // Conta da equipe que leu o QR.
+  used_by            String?
+  created_at         DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  child        Person       @relation("KidsQrTokenChild", fields: [child_id], references: [id], onDelete: Cascade)
+  guardian     Person       @relation("KidsQrTokenGuardian", fields: [guardian_person_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, congregation_id])
+  @@index([child_id, guardian_person_id])
+  @@map("kids_checkin_qr_tokens")
+}
+
+/// Dado de saúde da criança (alergia e observação médica — LGPD Art. 11).
+/// Tabela própria, 1:1 com a criança, de propósito: `Person` é devolvida inteira
+/// por muitas rotas (ficha 360, household, exportações) e uma coluna ali vazaria
+/// o dado para quem não deve vê-lo. Aqui só as rotas de kids leem, e a leitura
+/// por equipe é auditada (AD-013 item 4). Apagada na anonimização da pessoa.
+/// RLS por congregação em 030_rls_kids_child_health.sql.
+model KidsChildHealth {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  congregation_id String
+  person_id       String   @unique
+  allergies       String?
+  medical_notes   String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  congregation Congregation @relation(fields: [congregation_id], references: [id], onDelete: Cascade)
+  person       Person       @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, congregation_id])
+  @@map("kids_child_health")
 }
