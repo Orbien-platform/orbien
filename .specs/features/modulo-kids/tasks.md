@@ -172,6 +172,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **DEC-1** Culto cancelado não conta nada: `checkin_total` (instâncias, escala, sugestão de contagem) = 0 em instância cancelada, como o resumo já fazia; check-in aberto segue fechável. Lacuna do spec vira critério definitivo. *Depends:* COV-3 · *Tests:* integração (um por superfície, mutação restaurada) + unit · *Reqs:* KIDS-09,11
 - [x] **DEC-2** Folga de cobertura do web: branches ≥ 97,5% com testes reais nos arquivos de menor cobertura do Kids, sem tocar o piso. *Depends:* — · *Tests:* vitest · *Reqs:* —
 - [x] **DEC-3** `test:cov` da API sem OOM no CI: heap do Node fixado no script versionado; motivo em docs/CI.md e docs/TESTES.md. *Depends:* COV-6 · *Tests:* o próprio `npm run test:cov` sem variável de ambiente · *Reqs:* —
+- [x] **CI-1** Timeout de 90s das suítes com banco de fato em vigor: o Jest 30 ignora `testTimeout` dentro de `projects` (valia o 5000 padrão, e `kids-checkout-lock` estourava no CI de 2 vCPU); `jest.setTimeout(90_000)` em `test/setup.ts`. *Depends:* — · *Tests:* kids-checkout-lock 10x em 1 CPU sob carga + `npm run test:cov` · *Reqs:* —
 
 ---
 

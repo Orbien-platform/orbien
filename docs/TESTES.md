@@ -207,7 +207,6 @@ module.exports = {
       testMatch: ['<rootDir>/test/integration/**/*.spec.ts'],
       transform: { '^.+\\.ts$': tsJest },
       setupFiles: ['<rootDir>/test/setup.ts'],
-      testTimeout: 90000,
     },
     {
       displayName: 'rls',
@@ -216,10 +215,9 @@ module.exports = {
       testMatch: ['<rootDir>/test/rls/**/*.spec.ts'],
       transform: { '^.+\\.ts$': tsJest },
       setupFiles: ['<rootDir>/test/setup.ts'],
-      // 90s: os testes de RLS abrem $transaction contra o pooler do Supabase;
-      // sob carga, adquirir conexão pode passar de 60s. Falha em 90s é gap
-      // de segurança real — investigue, não aumente o timeout.
-      testTimeout: 90000,
+      // O timeout de 90s NÃO fica aqui: o Jest 30 ignora `testTimeout` dentro de
+      // `projects`. Ele vive em test/setup.ts (`jest.setTimeout(90_000)`).
+      // Falha em 90s é gap de segurança real — investigue, não aumente.
     },
   ],
   collectCoverageFrom: [
