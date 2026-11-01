@@ -173,6 +173,7 @@ F1 Dados ──► F2 API turmas/sessões ──► F3 API criança/consentiment
 - [x] **DEC-2** Folga de cobertura do web: branches ≥ 97,5% com testes reais nos arquivos de menor cobertura do Kids, sem tocar o piso. *Depends:* — · *Tests:* vitest · *Reqs:* —
 - [x] **DEC-3** `test:cov` da API sem OOM no CI: heap do Node fixado no script versionado; motivo em docs/CI.md e docs/TESTES.md. *Depends:* COV-6 · *Tests:* o próprio `npm run test:cov` sem variável de ambiente · *Reqs:* —
 - [x] **CI-1** Timeout de 90s das suítes com banco de fato em vigor: o Jest 30 ignora `testTimeout` dentro de `projects` (valia o 5000 padrão, e `kids-checkout-lock` estourava no CI de 2 vCPU); `jest.setTimeout(90_000)` em `test/setup.ts`. *Depends:* — · *Tests:* kids-checkout-lock 10x em 1 CPU sob carga + `npm run test:cov` · *Reqs:* —
+- [x] **CI-2** Check-out recusado sob concorrência não esgota o pool do Prisma: auditoria, contador e push (client base) rodam depois da transação da requisição (`afterTx`), não dentro dela. Causa comprovada: P2024 com `connection_limit` pequeno (5 requisições seguravam a conexão da transação esperando a 2ª). *Depends:* CI-1 · *Tests:* kids-checkout-lock com pool de 3 (falha no código antigo), 10x em `connection_limit=5` + 2 CPUs · *Reqs:* —
 
 ---
 

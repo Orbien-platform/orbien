@@ -24,7 +24,17 @@ export type KidsHarness = {
   close: () => Promise<void>;
 };
 
-export async function bootKids(admin: PrismaClient, tag: string): Promise<KidsHarness> {
+export type BootKidsOptions = {
+  /**
+   * Tamanho do pool de conexões do Prisma da API (`connection_limit`). Sem isto vale
+   * o padrão (num_cpus*2+1), que numa máquina grande esconde starvation do pool: o
+   * CI de 2 vCPU tem 5 e a produção também é finita. O pool é fixado na construção
+   * do client, então a variável só precisa valer durante o `compile()/init()`.
+   */
+  connectionLimit?: number;
+};
+
+export async function bootKids(admin: PrismaClient, tag: string, opts: BootKidsOptions = {}): Promise<KidsHarness> {
   const t1 = await loadTestTenant(admin, 'teste1-church');
   const t2 = await loadTestTenant(admin, 'teste2-church');
   const ts = Date.now();
@@ -42,11 +52,24 @@ export async function bootKids(admin: PrismaClient, tag: string): Promise<KidsHa
   const acc1 = await mkAccount(t1, 'teste1');
   const acc2 = await mkAccount(t2, 'teste2');
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication();
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
-  app.setGlobalPrefix('api');
-  await app.init();
+  const originalUrl = process.env['DATABASE_URL'];
+  if (opts.connectionLimit !== undefined && originalUrl) {
+    const url = new URL(originalUrl);
+    url.searchParams.set('connection_limit', String(opts.connectionLimit));
+    url.searchParams.set('pool_timeout', '20');
+    process.env['DATABASE_URL'] = url.toString();
+  }
+  let app: INestApplication;
+  try {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.setGlobalPrefix('api');
+    await app.init();
+  } finally {
+    if (originalUrl === undefined) delete process.env['DATABASE_URL'];
+    else process.env['DATABASE_URL'] = originalUrl;
+  }
 
   const jwt = app.get(JwtService);
   const sign = (acc: { id: string; email: string }, t: TestTenant, plan: string, roles: string[]) =>

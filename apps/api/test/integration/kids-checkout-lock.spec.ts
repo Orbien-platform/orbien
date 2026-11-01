@@ -83,7 +83,11 @@ async function present() {
 const wrongCode = (code: string) => (code === 'ZZZZ' ? 'YYYY' : 'ZZZZ');
 
 beforeAll(async () => {
-  h = await bootKids(admin, 'kids-lock');
+  // Pool de 3 conexões, menor que o do CI (5 em 2 vCPU): as 8 recusas simultâneas abaixo
+  // só fecham se a requisição NÃO segurar a conexão da transação enquanto espera outra
+  // (auditoria/contador pelo client base). Com a espera cruzada, o pool trava até o
+  // P2024 (500 e incremento perdido). Não aumente o pool para passar: é o sintoma.
+  h = await bootKids(admin, 'kids-lock', { connectionLimit: 3 });
   scope = { tenant_id: h.t2.tenantId, congregation_id: h.t2.congregationId };
   leader = h.tokenFor('ministry_leader');
   leaderAccountId = (h.app.get(JwtService).decode(leader) as { sub: string }).sub;

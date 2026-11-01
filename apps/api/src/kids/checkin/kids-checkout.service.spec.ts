@@ -46,6 +46,7 @@ function build(checkin: object | null = openCheckin()) {
   const queryRaw = jest.fn().mockResolvedValue([{ attempts: 1 }]);
   const sessionAccess = { canOperate: jest.fn(async (a: KidsActor) => a.roles.includes('ministry_leader')) };
   const alert = {
+    leaderPersonIds: jest.fn().mockResolvedValue(['pl1']),
     notifyCheckoutDenied: jest.fn().mockResolvedValue(undefined),
     notifyCheckoutLocked: jest.fn().mockResolvedValue(undefined),
   };
@@ -155,7 +156,7 @@ describe('KidsCheckinService.checkOut', () => {
       });
       const serialized = JSON.stringify(entry);
       expect(serialized).not.toMatch(/allerg|medical|ZZZZ|A2B3/i);
-      expect(alert.notifyCheckoutDenied).toHaveBeenCalledWith('t1', 'g1', { sessionId: 's1', checkinId: 'k1', roomName: 'Maternal' });
+      expect(alert.notifyCheckoutDenied).toHaveBeenCalledWith('t1', 'g1', { sessionId: 's1', checkinId: 'k1', roomName: 'Maternal' }, ['pl1']);
     });
 
     it('a recusa sai 403 mesmo se a auditoria ou o aviso falharem (ambos são best-effort)', async () => {
@@ -356,7 +357,7 @@ describe('KidsCheckinService.checkOut: limite de 5 tentativas (R3-2)', () => {
     const locked = writeAuditLog.mock.calls[1][1];
     expect(locked).toMatchObject({ tenant_id: 't1', congregation_id: 'g1', actor_user_id: 'lider1', subject_person_id: 'c1', entity: 'kids_checkin' });
     expect(JSON.stringify(locked)).not.toMatch(/ZZZZ|A2B3|allerg|medical/i);
-    expect(alert.notifyCheckoutLocked).toHaveBeenCalledWith('t1', 'g1', { sessionId: 's1', checkinId: 'k1', roomName: 'Maternal' });
+    expect(alert.notifyCheckoutLocked).toHaveBeenCalledWith('t1', 'g1', { sessionId: 's1', checkinId: 'k1', roomName: 'Maternal' }, ['pl1']);
     expect(alert.notifyCheckoutDenied).not.toHaveBeenCalled(); // um aviso só: o do travamento
   });
 

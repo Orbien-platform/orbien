@@ -88,3 +88,34 @@ describe('KidsLeaderAlertService.notifyCheckoutLocked (R3-2)', () => {
     expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 });
+
+describe('KidsLeaderAlertService: líderes resolvidos antes (para avisar depois da transação)', () => {
+  it('leaderPersonIds devolve as pessoas distintas dos líderes ativos', async () => {
+    const { svc } = build([
+      { userAccount: { person_id: 'p1' } },
+      { userAccount: { person_id: 'p1' } },
+      { userAccount: { person_id: null } },
+    ]);
+    expect(await svc.leaderPersonIds('t1', 'g1')).toEqual(['p1']);
+  });
+
+  it('leaderPersonIds engole a falha da busca e devolve vazio', async () => {
+    const { svc, client } = build([]);
+    client.roleAssignment.findMany.mockRejectedValue(new Error('db'));
+    expect(await svc.leaderPersonIds('t1', 'g1')).toEqual([]);
+  });
+
+  it('com a lista já resolvida, o aviso não consulta o banco de novo', async () => {
+    const { svc, client, notifications } = build([]);
+    await svc.notifyCheckoutLocked('t1', 'g1', info, ['p9']);
+    expect(client.roleAssignment.findMany).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons.mock.calls[0][1]).toEqual(['p9']);
+    expect(notifications.sendPushToPersons.mock.calls[0][0].data.type).toBe('kids_checkout_locked');
+  });
+
+  it('lista resolvida vazia = ninguém a avisar', async () => {
+    const { svc, notifications } = build([{ userAccount: { person_id: 'p1' } }]);
+    await svc.notifyCheckoutDenied('t1', 'g1', info, []);
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
+  });
+});

@@ -21,8 +21,9 @@ export class KidsLeaderAlertService {
     tenantId: string,
     congregationId: string,
     info: { sessionId: string; checkinId: string; roomName: string },
+    personIds?: string[],
   ): Promise<void> {
-    await this.alertLeaders(tenantId, congregationId, info, {
+    await this.alertLeaders(tenantId, congregationId, info, personIds, {
       title: 'Retirada recusada no Kids',
       body: `Alguém tentou retirar uma criança da turma ${info.roomName} sem passar na conferência. Vá ao balcão.`,
       type: 'kids_checkout_denied',
@@ -37,20 +38,21 @@ export class KidsLeaderAlertService {
     tenantId: string,
     congregationId: string,
     info: { sessionId: string; checkinId: string; roomName: string },
+    personIds?: string[],
   ): Promise<void> {
-    await this.alertLeaders(tenantId, congregationId, info, {
+    await this.alertLeaders(tenantId, congregationId, info, personIds, {
       title: 'Retirada travada no Kids',
       body: `Uma criança da turma ${info.roomName} teve 5 códigos errados na retirada. Só a retirada por exceção, com a sua conferência, libera. Vá ao balcão.`,
       type: 'kids_checkout_locked',
     });
   }
 
-  private async alertLeaders(
-    tenantId: string,
-    congregationId: string,
-    info: { sessionId: string; checkinId: string; roomName: string },
-    msg: { title: string; body: string; type: string },
-  ): Promise<void> {
+  /**
+   * Pessoas a avisar: líderes kids ativos da congregação. Lê pelo client da
+   * requisição (RLS), por isso quem vai avisar DEPOIS da transação (`afterTx`)
+   * resolve antes e passa a lista.
+   */
+  async leaderPersonIds(tenantId: string, congregationId: string): Promise<string[]> {
     try {
       const rows = await this.prisma.client.roleAssignment.findMany({
         where: {
@@ -61,7 +63,22 @@ export class KidsLeaderAlertService {
         },
         select: { userAccount: { select: { person_id: true } } },
       });
-      const personIds = [...new Set(rows.map((r) => r.userAccount.person_id).filter((id): id is string => !!id))];
+      return [...new Set(rows.map((r) => r.userAccount.person_id).filter((id): id is string => !!id))];
+    } catch (err) {
+      this.logger.error(`falha ao buscar os líderes do Kids: ${String(err)}`);
+      return [];
+    }
+  }
+
+  private async alertLeaders(
+    tenantId: string,
+    congregationId: string,
+    info: { sessionId: string; checkinId: string; roomName: string },
+    resolved: string[] | undefined,
+    msg: { title: string; body: string; type: string },
+  ): Promise<void> {
+    try {
+      const personIds = resolved ?? (await this.leaderPersonIds(tenantId, congregationId));
       if (personIds.length === 0) return;
 
       await this.notifications.sendPushToPersons(

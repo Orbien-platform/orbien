@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { KidsSessionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { afterTx } from '../../prisma/after-tx';
 import { writeAuditLog } from '../../common/audit/write-audit-log';
 import { KidsActor, KidsChildAccessService } from '../children/kids-child-access.service';
 import { KidsConsentService } from '../consent/kids-consent.service';
@@ -392,29 +393,38 @@ export class KidsCheckinService {
     checkin: { id: string; session_id: string; child_id: string; session: { room: { name: string } } },
     reason: 'code_mismatch' | 'pickup_not_allowed',
   ) {
-    await this.audit(actor, checkin.child_id, 'kids.checkout_denied', {
-      checkin_id: checkin.id,
-      session_id: checkin.session_id,
-      reason,
-    });
-    // Só código errado gasta tentativa (R3-2): acertar o código e falhar na
-    // pessoa não é adivinhação do código.
-    const attempts = reason === 'code_mismatch' ? await this.registerCodeFailure(actor, checkin.id) : null;
-    const locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS;
-    if (locked) {
-      await this.audit(actor, checkin.child_id, 'kids.checkout_locked', {
+    // Tudo o que segue usa o client BASE (auditoria, contador, push) e o 403 vai
+    // desfazer a transação da requisição. Rodar aqui, com a transação ainda
+    // segurando a sua conexão, faz N recusas simultâneas esperarem a 2ª
+    // conexão do pool umas pelas outras (P2024 → 500 e incremento perdido).
+    // Por isso só a leitura dos líderes (RLS) fica na transação; o resto roda
+    // quando ela termina (`afterTx`), com a conexão já devolvida.
+    const leaders = await this.leaderAlert.leaderPersonIds(actor.tenantId, actor.congregationId);
+    await afterTx(async () => {
+      await this.audit(actor, checkin.child_id, 'kids.checkout_denied', {
         checkin_id: checkin.id,
         session_id: checkin.session_id,
-        attempts,
+        reason,
       });
-    }
-    try {
-      const info = { sessionId: checkin.session_id, checkinId: checkin.id, roomName: checkin.session.room.name };
-      if (locked) await this.leaderAlert.notifyCheckoutLocked(actor.tenantId, actor.congregationId, info);
-      else await this.leaderAlert.notifyCheckoutDenied(actor.tenantId, actor.congregationId, info);
-    } catch (err) {
-      this.logger.error(`falha ao avisar o líder da recusa ${checkin.id}: ${String(err)}`);
-    }
+      // Só código errado gasta tentativa (R3-2): acertar o código e falhar na
+      // pessoa não é adivinhação do código.
+      const attempts = reason === 'code_mismatch' ? await this.registerCodeFailure(actor, checkin.id) : null;
+      const locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS;
+      if (locked) {
+        await this.audit(actor, checkin.child_id, 'kids.checkout_locked', {
+          checkin_id: checkin.id,
+          session_id: checkin.session_id,
+          attempts,
+        });
+      }
+      try {
+        const info = { sessionId: checkin.session_id, checkinId: checkin.id, roomName: checkin.session.room.name };
+        if (locked) await this.leaderAlert.notifyCheckoutLocked(actor.tenantId, actor.congregationId, info, leaders);
+        else await this.leaderAlert.notifyCheckoutDenied(actor.tenantId, actor.congregationId, info, leaders);
+      } catch (err) {
+        this.logger.error(`falha ao avisar o líder da recusa ${checkin.id}: ${String(err)}`);
+      }
+    });
   }
 
   /**
@@ -437,24 +447,29 @@ export class KidsCheckinService {
     }
   }
 
+  // Auditoria best-effort pelo client base (`audit_insert()`): vai depois da
+  // transação da requisição (`afterTx`), para não segurar uma conexão do pool
+  // esperando outra. Roda também quando o handler lança 403 e a transação desfaz.
   private async audit(actor: KidsActor, childId: string | null, action: string, after: Record<string, unknown>) {
-    try {
-      await writeAuditLog(
-        this.prisma,
-        {
-          tenant_id: actor.tenantId,
-          congregation_id: actor.congregationId,
-          actor_user_id: actor.userId,
-          subject_person_id: childId,
-          entity: 'kids_checkin',
-          action,
-          after,
-        },
-        this.logger,
-      );
-    } catch (err) {
-      this.logger.error(`falha ao auditar ${action}: ${String(err)}`);
-    }
+    await afterTx(async () => {
+      try {
+        await writeAuditLog(
+          this.prisma,
+          {
+            tenant_id: actor.tenantId,
+            congregation_id: actor.congregationId,
+            actor_user_id: actor.userId,
+            subject_person_id: childId,
+            entity: 'kids_checkin',
+            action,
+            after,
+          },
+          this.logger,
+        );
+      } catch (err) {
+        this.logger.error(`falha ao auditar ${action}: ${String(err)}`);
+      }
+    });
   }
 
   // Equipe (gestão ou voluntário escalado) vê qualquer criança da congregação;
