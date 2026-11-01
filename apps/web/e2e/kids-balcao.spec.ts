@@ -68,7 +68,7 @@ async function montarCenario(api: Api, stamp: number): Promise<Scenario & { clea
 
   const consent = await api.call<{ term_version: string }>("GET", `/kids/consent?guardian_person_id=${guardian.id}`);
   await api.call("POST", "/kids/consent", { guardian_person_id: guardian.id, term_version: consent.term_version });
-  await api.call("POST", "/kids/children", {
+  const child = await api.call<Identified>("POST", "/kids/children", {
     full_name: childName,
     birth_date: yearsAgo(3),
     allergies: "amendoim",
@@ -83,6 +83,10 @@ async function montarCenario(api: Api, stamp: number): Promise<Scenario & { clea
     sessionId: session.id,
     cleanup: async () => {
       await api.tryCall("DELETE", `/kids/sessions/${session.id}`);
+      // A criança é uma Person de teste2-church; sem isto cada rodada deixa
+      // uma, e a lista de Pessoas (20 por página) passa a empurrar o cadastro
+      // do pessoas.spec para a página 2.
+      await api.tryCall("DELETE", `/persons/${child.id}`);
       await api.tryCall("DELETE", `/kids/rooms/${room.id}`);
       await api.tryCall("DELETE", `/celebrations/instances/${instance.id}`);
     },
