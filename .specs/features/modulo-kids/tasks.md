@@ -202,3 +202,4 @@ KIDS-01..12 mapeados (01:T3–T7, 02:T8–T9, 03:T10, 04:T12/T15, 05:T13, 06:T11
 ## Execução
 
 37 tarefas > ~8: pela skill, ofereço sub-agentes por **fase inteira** (F2–F3 podem ir em paralelo; F6 e F7 também após F4). O Verifier roda sozinho ao fim.
+- [x] **GATE-1** `financial-dashboard.spec` falhava (300 esperado, 0 recebido) entre 00:00 e 03:00 UTC: o dashboard mede o mês no dia civil de Brasília (`todayInSaoPaulo`, decisão do produto, documentada em `dashboard-period.ts`) e o teste semeava `new Date()` cru, que cai no mês seguinte quando o dia UTC já virou e o de São Paulo não. O produto estava certo; o teste agora semeia como o web grava (meio-dia de Brasília, 15:00Z do dia civil de SP). *Depends:* — · *Tests:* spec com relógio forjado em 2026-10-31T23:30-03:00, 2026-11-01T12:00-03:00, 00:30Z, 02:59:59Z, domingo à noite (2026-11-02T01:30Z) e virada de dezembro: 4/4 verdes; mutação (voltar a `new Date()` cru) falha 2/4 na janela ruim · *Reqs:* —

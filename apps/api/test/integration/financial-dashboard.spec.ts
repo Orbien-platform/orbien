@@ -14,6 +14,17 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { JwtPayload } from '../../src/auth/interfaces/jwt-payload.interface';
 import { prismaAdmin, runAsTenant } from '../helpers/rls';
 
+/**
+ * O instante em que o web grava um lançamento de "hoje": meio-dia de Brasília
+ * (15:00Z) do dia civil de Brasília. O dashboard mede o mês nesse dia civil
+ * (`todayInSaoPaulo`), então semear com `new Date()` cru erra entre 00:00 e
+ * 03:00 UTC, quando o dia UTC já virou e o de Brasília ainda não.
+ */
+function saoPauloNoon(now: Date = new Date()): Date {
+  const key = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  return new Date(`${key}T15:00:00.000Z`);
+}
+
 const ts = Date.now();
 const slug = `dash-int-${ts}`;
 
@@ -96,7 +107,7 @@ afterAll(async () => {
 
 describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () => {
   it('soma receita e despesa por semana, calcula top categorias e média por contribuinte', async () => {
-    const now = new Date();
+    const now = saoPauloNoon();
 
     await tx({ type: TransactionType.income, amount: '150.00', occurred_at: now, category_id: incomeCategoryId, donor_person_id: undefined });
     await tx({ type: TransactionType.income, amount: '50.00', occurred_at: now, category_id: incomeCategoryId, donor_person_id: undefined });
@@ -174,7 +185,7 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
 
     // Mesmo mês de qualquer dia de execução: dia 15 às 15:00Z (meio-dia em
     // Brasília, como o web grava) e o último dia do mês às 00:00Z.
-    const today = new Date();
+    const today = saoPauloNoon();
     const y = today.getUTCFullYear();
     const m = today.getUTCMonth();
     await create('10.00', new Date(Date.UTC(y, m, 1, 15)));
@@ -229,7 +240,7 @@ describe('DashboardService.getWeeklyDashboard — SQL real (integração)', () =
     });
 
     try {
-      const now = new Date();
+      const now = saoPauloNoon();
 
       // Valores bem distintos (múltiplos de 1000) para nunca colidir por acaso
       // com o que o tenant principal já tem.
