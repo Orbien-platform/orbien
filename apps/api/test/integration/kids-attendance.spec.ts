@@ -198,7 +198,11 @@ describe('GET /kids/attendance/summary (KIDS-12)', () => {
     // Turma B: uma sessão com c1 e c3 (c1 já passou pela A no mesmo culto, e conta em cada sessão).
     expect(roomOf(res.body, ids.rB)).toMatchObject({ sessions_counted: 1, total_children: 2, average_children: 2 });
     expect(res.body.sessions_counted).toBe(3);
-    expect(res.body.period.date_to).toBe(daysAgo(0).toISOString().slice(0, 10));
+    // O padrão de `date_to` é "hoje" no fuso da congregação (America/Sao_Paulo quando não há fuso),
+    // não o dia UTC: entre 21h e 24h em São Paulo os dois diferem.
+    expect(res.body.period.date_to).toBe(
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+    );
   });
 
   it('período informado alcança o culto antigo; o filtro por turma restringe a resposta', async () => {
