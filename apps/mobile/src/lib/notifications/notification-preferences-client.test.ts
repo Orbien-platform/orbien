@@ -18,7 +18,7 @@ describe("NotificationPreferencesClient", () => {
 
   describe("getNotificationPreferences", () => {
     it("chama GET /me/notification-preferences", async () => {
-      const prefs = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true };
+      const prefs = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true, kids: true };
       mockAuthenticatedRequest.mockResolvedValue(prefs);
 
       const result = await getNotificationPreferences();
@@ -30,7 +30,7 @@ describe("NotificationPreferencesClient", () => {
 
   describe("updateNotificationPreferences", () => {
     it("chama PATCH /me/notification-preferences com o patch informado no body", async () => {
-      const updated = { avisos: true, oracao: false, eventos: true, devocional: true, biblia: true };
+      const updated = { avisos: true, oracao: false, eventos: true, devocional: true, biblia: true, kids: true };
       mockAuthenticatedRequest.mockResolvedValue(updated);
 
       const result = await updateNotificationPreferences({ oracao: false });

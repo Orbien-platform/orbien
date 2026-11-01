@@ -101,7 +101,7 @@ describe('PersonsService', () => {
       );
 
       expect(client.person.findMany).toHaveBeenCalledWith({
-        where: { phone: '+5511999999999', id: { not: 'p1' } },
+        where: { phone: '+5511999999999', id: { not: 'p1' }, is_child: false },
         select: { id: true, full_name: true, phone: true, classification: true },
       });
       expect(result.possible_duplicates).toEqual([{ id: 'p2', full_name: 'Ana Duplicada' }]);
@@ -157,6 +157,7 @@ describe('PersonsService', () => {
       expect(client.person.findMany).toHaveBeenCalledWith({
         where: {
           deleted_at: null,
+          is_child: false,
           classification: 'member',
           gender: 'male',
           full_name: { contains: 'ana', mode: 'insensitive' },
@@ -177,7 +178,7 @@ describe('PersonsService', () => {
       await service.findAll({ page: 1, limit: 20 } as never);
 
       expect(client.person.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { deleted_at: null }, skip: 0, take: 20 }),
+        expect.objectContaining({ where: { deleted_at: null, is_child: false }, skip: 0, take: 20 }),
       );
     });
   });
@@ -190,7 +191,7 @@ describe('PersonsService', () => {
       const result = await service.findOne('p1');
 
       expect(client.person.findUnique).toHaveBeenCalledWith({
-        where: { id: 'p1' },
+        where: { id: 'p1', is_child: false },
         include: {
           householdMemberships: true,
           userAccounts: {
@@ -629,5 +630,68 @@ describe('PersonsService', () => {
         service.addHouseholdMember('h1', { person_id: 'p1', role: 'spouse' } as never),
       ).rejects.toBe(boom);
     });
+  });
+});
+
+// AD-013: criança (`is_child`) só aparece nas rotas de kids.
+describe('PersonsService — criança fora das listas (AD-013)', () => {
+  it('findAll: a listagem e a contagem excluem criança, mesmo com busca e filtros', async () => {
+    const { service, client } = serviceWith();
+    client.person.findMany.mockResolvedValue([]);
+    client.person.count.mockResolvedValue(0);
+
+    await service.findAll({ search: 'ana', page: 1, limit: 20 } as never);
+
+    expect(client.person.findMany.mock.calls[0][0].where).toMatchObject({ is_child: false });
+    expect(client.person.count.mock.calls[0][0].where).toMatchObject({ is_child: false });
+  });
+
+  it('create: a busca de duplicados por telefone não traz criança', async () => {
+    const { service, client } = serviceWith();
+    client.person.create.mockResolvedValue({ id: 'p1' });
+    client.person.findMany.mockResolvedValue([]);
+
+    await service.create({ full_name: 'Ana', phone: '+5511999999999' } as never, {
+      sub: 'u',
+      tenant_id: 't1',
+      congregation_id: 'g1',
+      roles: [],
+      plan: 'premium',
+    });
+
+    expect(client.person.findMany.mock.calls[0][0].where).toMatchObject({ is_child: false });
+  });
+
+  it('findOne: id de criança é 404 (a ficha é da rota de kids)', async () => {
+    const { service, client } = serviceWith();
+    client.person.findUnique.mockResolvedValue(null);
+
+    await expect(service.findOne('crianca-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(client.person.findUnique.mock.calls[0][0].where).toEqual({ id: 'crianca-1', is_child: false });
+  });
+
+  it('purgeInactivePersons: a consulta de inatividade não alcança criança', async () => {
+    const { service, system } = serviceWith();
+    system.$queryRaw.mockResolvedValue([]);
+
+    await service.purgeInactivePersons();
+
+    const sql = (system.$queryRaw.mock.calls[0][0] as { sql: string }).sql;
+    expect(sql).toContain('p.is_child = false');
+  });
+
+  it('purgeInactivePersons: check-in de Kids e vínculo de responsável contam como atividade (REV-1)', async () => {
+    const { service, system } = serviceWith();
+    system.$queryRaw.mockResolvedValue([]);
+
+    await service.purgeInactivePersons();
+
+    const sql = (system.$queryRaw.mock.calls[0][0] as { sql: string }).sql;
+    const signal = sql.slice(sql.indexOf('GREATEST'));
+    expect(signal).toContain('FROM kids_checkins');
+    expect(signal).toContain('kc.guardian_person_id = p.id');
+    expect(signal).toContain('kc.picked_up_by_person_id = p.id');
+    expect(signal).toContain('FROM kids_guardians');
+    expect(signal).toContain('kg.guardian_person_id = p.id');
   });
 });

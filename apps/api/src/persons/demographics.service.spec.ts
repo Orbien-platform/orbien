@@ -146,3 +146,16 @@ describe('DemographicsService', () => {
     }
   });
 });
+
+describe('DemographicsService — criança (AD-013)', () => {
+  it('as quatro agregações excluem is_child, para não inflar o público adulto', async () => {
+    const { service, queryRaw } = serviceWithRows({});
+
+    await service.getStats(user, {} as never);
+
+    expect(queryRaw).toHaveBeenCalledTimes(4);
+    for (const call of queryRaw.mock.calls) {
+      expect((call[0] as ReadonlyArray<string>).join(' ')).toContain('is_child = false');
+    }
+  });
+});

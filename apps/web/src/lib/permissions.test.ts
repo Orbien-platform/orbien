@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccessRoute, ROUTE_AREAS } from "./permissions";
+import { canAccessRoute, isUpgradeRoute, ROUTE_AREAS } from "./permissions";
 
 const subject = (areas: string[] | null) => ({ areas });
 
@@ -8,6 +8,12 @@ describe("canAccessRoute", () => {
     expect(canAccessRoute(subject(["financial"]), "/financeiro")).toBe(true);
     expect(canAccessRoute(subject(["small_groups"]), "/grupos")).toBe(true);
     expect(canAccessRoute(subject(["celebrations"]), "/celebracoes")).toBe(true);
+  });
+
+  it("Kids segue a área de celebrações, que é a dos mesmos papéis e só Premium", () => {
+    expect(canAccessRoute(subject(["celebrations"]), "/kids")).toBe(true);
+    expect(canAccessRoute(subject(["content"]), "/kids")).toBe(false);
+    expect(isUpgradeRoute({ areas: [], upgrade_areas: ["celebrations"] }, "/kids")).toBe(true);
   });
 
   it("nega quando a área não veio na resposta", () => {

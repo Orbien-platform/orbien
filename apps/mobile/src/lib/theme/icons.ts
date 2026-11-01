@@ -14,6 +14,7 @@
 // não na tela, para o custo continuar visível num só lugar.
 export { default as ArrowLeftRight } from "lucide-react-native/icons/arrow-left-right";
 export { default as Bell } from "lucide-react-native/icons/bell";
+export { default as Baby } from "lucide-react-native/icons/baby";
 export { default as BookOpen } from "lucide-react-native/icons/book-open";
 export { default as Building2 } from "lucide-react-native/icons/building-2";
 export { default as CalendarCheck } from "lucide-react-native/icons/calendar-check";
@@ -37,6 +38,7 @@ export { default as Heart } from "lucide-react-native/icons/heart";
 export { default as Highlighter } from "lucide-react-native/icons/highlighter";
 export { default as Home } from "lucide-react-native/icons/house";
 export { default as Inbox } from "lucide-react-native/icons/inbox";
+export { default as KeyRound } from "lucide-react-native/icons/key-round";
 export { default as Layers } from "lucide-react-native/icons/layers";
 export { default as LayoutGrid } from "lucide-react-native/icons/layout-grid";
 export { default as ListMusic } from "lucide-react-native/icons/list-music";
@@ -66,6 +68,7 @@ export { default as Sun } from "lucide-react-native/icons/sun";
 export { default as Ticket } from "lucide-react-native/icons/ticket";
 export { default as Timer } from "lucide-react-native/icons/timer";
 export { default as Trash } from "lucide-react-native/icons/trash";
+export { default as TriangleAlert } from "lucide-react-native/icons/triangle-alert";
 export { default as UserCheck } from "lucide-react-native/icons/user-check";
 export { default as UserPlus } from "lucide-react-native/icons/user-plus";
 export { default as Users } from "lucide-react-native/icons/users";

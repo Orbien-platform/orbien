@@ -424,7 +424,7 @@ Após os prazos acima, os dados são eliminados de forma segura e irreversível.
 
 ## 8. Dados de crianças
 
-A Church Platform não coleta dados de menores de 18 anos diretamente. Quando a Igreja cadastra dados de crianças no ministério infantil, é responsabilidade da Igreja obter o consentimento prévio e expresso dos responsáveis legais, nos termos do Art. 14 da LGPD.
+A Church Platform não coleta dados de menores de 18 anos diretamente. Quando a Igreja cadastra dados de crianças no ministério infantil (módulo Kids), é responsabilidade da Igreja obter o consentimento prévio e expresso dos responsáveis legais, nos termos do Art. 14 da LGPD; a plataforma registra esse consentimento e o termo aceito. Alergias e observações de saúde da criança são dado sensível (Art. 11), de acesso restrito à equipe do ministério infantil e à liderança. Os registros de entrada e saída são mantidos por 12 meses e então anonimizados, salvo enquanto o responsável for membro ativo da Igreja. *(Redação a validar pelo jurídico.)*
 
 ---
 

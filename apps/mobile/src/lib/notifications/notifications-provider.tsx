@@ -8,11 +8,13 @@ import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 
 import { useAuth } from "../auth/auth-provider";
+import { getMyPersonId } from "../privacidade/privacidade-client";
 import { getNotificationPreferences } from "./notification-preferences-client";
 import {
   initializeOneSignal,
   onNotificationClick,
   registerDevice,
+  registerPersonTag,
   syncNotificationPreferenceTags,
   unregisterDevice,
 } from "./onesignal-client";
@@ -45,7 +47,19 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     getNotificationPreferences()
       .then(syncNotificationPreferenceTags)
       .catch(() => {});
-    return () => unregisterDevice();
+    // `person_id` é o destino do push endereçado a uma pessoa (escala, Kids).
+    // `cancelled` impede que a resposta de uma sessão já encerrada grave a tag
+    // da pessoa anterior no aparelho que acabou de voltar a anônimo.
+    let cancelled = false;
+    getMyPersonId()
+      .then((personId) => {
+        if (!cancelled) registerPersonTag(personId);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unregisterDevice();
+    };
   }, [session]);
 
   return <>{children}</>;

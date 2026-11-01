@@ -18,7 +18,9 @@ const mockUnregisterDevice = jest.fn();
 const mockOnNotificationClick = jest.fn();
 const mockRemoveClickListener = jest.fn();
 const mockSyncNotificationPreferenceTags = jest.fn();
+const mockRegisterPersonTag = jest.fn();
 jest.mock("./onesignal-client", () => ({
+  registerPersonTag: (...args: unknown[]) => mockRegisterPersonTag(...args),
   initializeOneSignal: (...args: unknown[]) => mockInitializeOneSignal(...args),
   registerDevice: (...args: unknown[]) => mockRegisterDevice(...args),
   unregisterDevice: (...args: unknown[]) => mockUnregisterDevice(...args),
@@ -34,6 +36,11 @@ jest.mock("./notification-preferences-client", () => ({
   getNotificationPreferences: (...args: unknown[]) => mockGetNotificationPreferences(...args),
 }));
 
+const mockGetMyPersonId = jest.fn();
+jest.mock("../privacidade/privacidade-client", () => ({
+  getMyPersonId: (...args: unknown[]) => mockGetMyPersonId(...args),
+}));
+
 import { NotificationsProvider } from "./notifications-provider";
 
 describe("NotificationsProvider", () => {
@@ -45,7 +52,9 @@ describe("NotificationsProvider", () => {
       eventos: true,
       devocional: true,
       biblia: true,
+      kids: true,
     });
+    mockGetMyPersonId.mockResolvedValue("person-9");
   });
 
   it("inicializa o SDK e registra o listener de clique no mount", async () => {
@@ -81,6 +90,65 @@ describe("NotificationsProvider", () => {
     expect(mockRegisterDevice).toHaveBeenCalledWith("token-abc");
   });
 
+  it("sessão presente: grava a tag person_id com a pessoa da conta (destino do push de escala e Kids)", async () => {
+    mockUseAuth.mockReturnValue({
+      session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
+    });
+
+    await act(async () => {
+      render(
+        <NotificationsProvider>
+          <Text>conteúdo</Text>
+        </NotificationsProvider>,
+      );
+    });
+
+    expect(mockRegisterPersonTag).toHaveBeenCalledWith("person-9");
+  });
+
+  it("não conseguir descobrir a pessoa não derruba o app nem grava tag", async () => {
+    mockGetMyPersonId.mockRejectedValue(new Error("rede fora"));
+    mockUseAuth.mockReturnValue({
+      session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
+    });
+
+    await act(async () => {
+      render(
+        <NotificationsProvider>
+          <Text>conteúdo</Text>
+        </NotificationsProvider>,
+      );
+    });
+
+    expect(screen.getByText("conteúdo")).toBeTruthy();
+    expect(mockRegisterPersonTag).not.toHaveBeenCalled();
+  });
+
+  it("sessão encerrada antes da resposta: a tag da pessoa anterior não vai para o aparelho", async () => {
+    let resolvePerson: (id: string) => void = () => undefined;
+    mockGetMyPersonId.mockReturnValue(new Promise<string>((resolve) => (resolvePerson = resolve)));
+    mockUseAuth.mockReturnValue({
+      session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },
+    });
+
+    let view!: Awaited<ReturnType<typeof render>>;
+    await act(async () => {
+      view = await render(
+        <NotificationsProvider>
+          <Text>conteúdo</Text>
+        </NotificationsProvider>,
+      );
+    });
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      resolvePerson("person-9");
+    });
+
+    expect(mockRegisterPersonTag).not.toHaveBeenCalled();
+  });
+
   it("sem sessão no mount: não registra o dispositivo", async () => {
     mockUseAuth.mockReturnValue({ session: null });
 
@@ -96,7 +164,7 @@ describe("NotificationsProvider", () => {
   });
 
   it("sessão presente: busca preferências e sincroniza as tags com o resultado (MOB-10b, AC2)", async () => {
-    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false, biblia: false };
+    const prefs = { avisos: true, oracao: false, eventos: true, devocional: false, biblia: false, kids: true };
     mockGetNotificationPreferences.mockResolvedValue(prefs);
     mockUseAuth.mockReturnValue({
       session: { accessToken: "token-abc", refreshToken: "r", accessTokenExpiresAt: Date.now() + 900_000 },

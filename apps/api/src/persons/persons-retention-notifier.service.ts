@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { kidsActivitySignal } from './persons-kids-activity';
 import { NotificationsService } from '../content/notifications.service';
 
 interface UpcomingRetentionRow {
@@ -71,11 +72,13 @@ export class PersonsRetentionNotifier {
         FROM persons p
         WHERE p.deleted_at IS NULL
           AND p.anonymized_at IS NULL
+          AND p.is_child = false -- AD-013: criança não entra na retenção por inatividade
           AND NOT EXISTS (SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id)
           AND GREATEST(
             p.updated_at,
             COALESCE((SELECT MAX(v.visited_at) FROM visit_records v WHERE v.person_id = p.id), p.created_at),
-            COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at)
+            COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at),
+            ${kidsActivitySignal('p')}
           ) + (CASE WHEN p.classification = 'visitor' THEN INTERVAL '1 year' ELSE INTERVAL '2 years' END)
             BETWEEN now() AND now() + INTERVAL '7 days'
 

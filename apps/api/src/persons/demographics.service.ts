@@ -84,6 +84,7 @@ export class DemographicsService {
         FROM persons
         WHERE tenant_id = ${tenant_id}
           AND congregation_id = ${congregation_id}
+          AND is_child = false
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY classification
       `,
@@ -92,6 +93,7 @@ export class DemographicsService {
         FROM persons
         WHERE tenant_id = ${tenant_id}
           AND congregation_id = ${congregation_id}
+          AND is_child = false
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY gender
       `,
@@ -100,6 +102,7 @@ export class DemographicsService {
         FROM persons
         WHERE tenant_id = ${tenant_id}
           AND congregation_id = ${congregation_id}
+          AND is_child = false
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY 1
       `,
@@ -108,6 +111,7 @@ export class DemographicsService {
         FROM persons
         WHERE tenant_id = ${tenant_id}
           AND congregation_id = ${congregation_id}
+          AND is_child = false
           ${classFilter} ${sinceFilter} ${untilFilter}
         GROUP BY 1, 2
       `,

@@ -51,6 +51,8 @@ export interface Assignment {
   setlist: { songs: SetlistSong[] } | null;
   /** Ausente em resposta antiga da API. */
   cues?: AssignmentCue[];
+  /** Turma kids da escala (módulo Kids); `null`/ausente: escala comum. */
+  kids_session?: { id: string; room_id: string; room_name: string; status: "open" | "cancelled" } | null;
   /** Ausentes em resposta antiga da API: sem eles, o app não oferece a contagem. */
   celebration_instance_id?: string;
   /** Escalado num ministério responsável pela contagem de público. */

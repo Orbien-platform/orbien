@@ -1,5 +1,5 @@
 import { ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { CelebrationAttendanceService, toCounts } from './celebration-attendance.service';
+import { CelebrationAttendanceService, checkinTotalsByInstance, toCounts } from './celebration-attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
@@ -10,6 +10,7 @@ function clientWith() {
     celebrationAssignment: { findFirst: jest.fn() },
     congregation: { findFirst: jest.fn() },
     userAccount: { findUnique: jest.fn() },
+    kidsCheckin: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -222,6 +223,71 @@ describe('CelebrationAttendanceService', () => {
       expect(result[1]!.attendance).toBeNull();
     });
 
+    // spec P2 Escala, AC 3 e 4: o total de check-ins vem AO LADO da contagem lançada.
+    describe('checkin_total (KIDS-11)', () => {
+      const celebration = { id: 'c1', name: 'Culto', start_time: '19:00' };
+      const checkin = (instance: string, child: string) => ({ celebration_instance_id: instance, child_id: child });
+
+      it('cada culto traz checkin_total = crianças distintas com check-in, sem alterar children', async () => {
+        const client = clientWith();
+        client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
+        client.celebrationInstance.findMany.mockResolvedValue([
+          { id: 'i3', scheduled_date: new Date('2026-10-18'), celebration, attendance: { children: 7, members: 0, attendees: 0, visitors: 0 } },
+          { id: 'i2', scheduled_date: new Date('2026-10-11'), celebration, attendance: null },
+        ]);
+        client.kidsCheckin.findMany.mockResolvedValue([checkin('i3', 'k1'), checkin('i3', 'k2'), checkin('i3', 'k3')]);
+
+        const result = await serviceWith(client).list(user(['pastor']), {}, NOW);
+
+        // O valor lançado à mão (7) é guardado; o total de check-ins (3) fica ao lado.
+        expect(result[0]).toEqual(expect.objectContaining({ checkin_total: 3 }));
+        expect(result[0]!.attendance!.children).toBe(7);
+      });
+
+      it('culto sem nenhum check-in tem checkin_total = 0 (contagem segue manual)', async () => {
+        const client = clientWith();
+        client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
+        client.celebrationInstance.findMany.mockResolvedValue([
+          { id: 'i2', scheduled_date: new Date('2026-10-11'), celebration, attendance: null },
+        ]);
+        client.kidsCheckin.findMany.mockResolvedValue([]);
+
+        const result = await serviceWith(client).list(user(['pastor']), {}, NOW);
+
+        expect(result[0]).toEqual(expect.objectContaining({ checkin_total: 0, attendance: null }));
+      });
+
+      it('consulta check-ins só dos cultos devolvidos, do tenant, distintos por criança', async () => {
+        const client = clientWith();
+        client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
+        client.celebrationInstance.findMany.mockResolvedValue([
+          { id: 'i2', scheduled_date: new Date('2026-10-11'), celebration, attendance: null },
+          { id: 'i9', scheduled_date: new Date('2026-12-11'), celebration, attendance: null }, // futuro: filtrado
+        ]);
+
+        await serviceWith(client).list(user(['pastor']), {}, NOW);
+
+        expect(client.kidsCheckin.findMany).toHaveBeenCalledWith({
+          where: {
+            tenant_id: 't1',
+            celebration_instance_id: { in: ['i2'] },
+            // DEC-1: culto cancelado não conta criança nenhuma.
+            session: { celebrationInstance: { status: { not: 'cancelled' } } },
+          },
+          select: { celebration_instance_id: true, child_id: true },
+          distinct: ['celebration_instance_id', 'child_id'],
+        });
+      });
+
+      it('lista vazia não consulta check-ins', async () => {
+        const client = clientWith();
+        client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
+        client.celebrationInstance.findMany.mockResolvedValue([]);
+        await serviceWith(client).list(user(['pastor']), {}, NOW);
+        expect(client.kidsCheckin.findMany).not.toHaveBeenCalled();
+      });
+    });
+
     it('usa a data atual quando `now` não é informado', async () => {
       const client = clientWith();
       client.congregation.findFirst.mockResolvedValue({ timezone: 'America/Sao_Paulo' });
@@ -249,6 +315,27 @@ describe('CelebrationAttendanceService', () => {
       client.congregation.findFirst.mockResolvedValue(null);
       client.celebrationInstance.findMany.mockResolvedValue([]);
       await expect(serviceWith(client).list(user(['pastor']), {}, NOW)).resolves.toEqual([]);
+    });
+  });
+
+  describe('checkinTotalsByInstance', () => {
+    it('conta a mesma criança uma vez por culto e separa os cultos', async () => {
+      const client = clientWith();
+      client.kidsCheckin.findMany.mockResolvedValue([
+        { celebration_instance_id: 'a', child_id: 'k1' },
+        { celebration_instance_id: 'a', child_id: 'k1' },
+        { celebration_instance_id: 'a', child_id: 'k2' },
+        { celebration_instance_id: 'b', child_id: 'k1' },
+      ]);
+      const totals = await checkinTotalsByInstance(client as never, 't1', ['a', 'b', 'c']);
+      expect([totals.get('a'), totals.get('b'), totals.get('c')]).toEqual([2, 1, undefined]);
+    });
+
+    it('sem ids não consulta e devolve mapa vazio', async () => {
+      const client = clientWith();
+      const totals = await checkinTotalsByInstance(client as never, 't1', []);
+      expect(totals.size).toBe(0);
+      expect(client.kidsCheckin.findMany).not.toHaveBeenCalled();
     });
   });
 

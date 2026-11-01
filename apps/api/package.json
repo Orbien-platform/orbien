@@ -16,12 +16,13 @@
     "db:deploy": "bash scripts/bootstrap-db.sh",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
+    "db:kids": "ts-node prisma/kids-seed.ts",
     "db:studio": "prisma studio",
     "test": "jest --selectProjects unit --passWithNoTests",
     "test:unit": "jest --selectProjects unit --passWithNoTests",
     "test:integration": "jest --selectProjects integration --runInBand --forceExit --passWithNoTests",
     "test:rls": "jest --selectProjects rls --runInBand --forceExit",
-    "test:cov": "jest --selectProjects unit integration --runInBand --coverage --passWithNoTests"
+    "test:cov": "node --max-old-space-size=4096 ../../node_modules/jest/bin/jest.js --selectProjects unit integration --runInBand --coverage --passWithNoTests"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1061.0",

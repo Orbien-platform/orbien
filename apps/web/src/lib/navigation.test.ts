@@ -17,6 +17,13 @@ describe("navegação", () => {
     expect(findNavEntry("/celebracoes/x")?.section).toBe("Cultos e serviço");
   });
 
+  it("Kids fica em Cultos e serviço e as sub-telas continuam nele", () => {
+    const cultos = NAV_SECTIONS.find((s) => s.title === "Cultos e serviço");
+    expect(cultos?.items.map((i) => i.href)).toContain("/kids");
+    expect(findNavEntry("/kids/turmas")?.item.label).toBe("Kids");
+    expect(activeNavHref("/kids/criancas")).toBe("/kids");
+  });
+
   it("tela fora do menu não tem item ativo", () => {
     expect(activeNavHref("/perfil")).toBeNull();
     expect(findNavEntry("/perfil")).toBeNull();

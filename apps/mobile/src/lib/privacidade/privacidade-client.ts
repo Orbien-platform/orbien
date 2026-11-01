@@ -79,6 +79,15 @@ export function getPersonalData(): Promise<PersonalData> {
   return authenticatedRequest<PersonalData>("get", "/me/personal-data");
 }
 
+/**
+ * O id da `Person` da conta logada — o que a API usa como `guardian_person_id`
+ * (Kids) e como valor da tag `person_id` do push. O token só carrega o id da
+ * conta (`sub`), não o da pessoa; esta é a rota que o devolve.
+ */
+export async function getMyPersonId(): Promise<string> {
+  return (await getPersonalData()).person.id;
+}
+
 /** O documento inteiro, como a API o entrega para portabilidade. */
 export function exportPersonalData(): Promise<Record<string, unknown>> {
   return authenticatedRequest<Record<string, unknown>>("get", "/me/export");

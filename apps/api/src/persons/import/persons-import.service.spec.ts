@@ -784,6 +784,7 @@ describe('PersonsImportService', () => {
       expect(client.person.findFirst).toHaveBeenCalledWith({
         where: {
           tenant_id: 'tenant-1',
+          is_child: false,
           OR: [{ email: { equals: 'soemail@test.com', mode: 'insensitive' } }],
         },
         select: { id: true },

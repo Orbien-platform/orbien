@@ -28,6 +28,14 @@ describe("proxy", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("exige sessão no balcão Kids e nas sub-telas dele", async () => {
+    for (const pathname of ["/kids", "/kids/turmas"]) {
+      const response = await proxy(makeRequest(false, pathname));
+      expect(response.status).toBe(307);
+      expect(new URL(response.headers.get("location")!).searchParams.get("from")).toBe(pathname);
+    }
+  });
+
   it("não exige sessão em / (pública, mesmo estando no matcher pelo rewrite de domínio)", async () => {
     const response = await proxy(makeRequest(false, "/"));
 

@@ -92,11 +92,19 @@ describe('CelebrationScheduleController', () => {
   it('removeMinistry delega ao service e exige papel de gestão', async () => {
     scheduleService.removeMinistry.mockResolvedValue({ id: 'cm1' } as never);
 
-    const result = await controller.removeMinistry('i1', 'm1', user);
+    const result = await controller.removeMinistry('i1', 'm1', undefined, user);
 
-    expect(scheduleService.removeMinistry).toHaveBeenCalledWith('tenant-1', 'cong-1', 'i1', 'm1');
+    expect(scheduleService.removeMinistry).toHaveBeenCalledWith('tenant-1', 'cong-1', 'i1', 'm1', undefined);
     expect(result).toEqual({ id: 'cm1' });
     expect(rolesFor('removeMinistry')).toEqual(MANAGE_ROLES);
+  });
+
+  it('removeMinistry repassa kids_session_id da query', async () => {
+    scheduleService.removeMinistry.mockResolvedValue({ id: 'cm2' } as never);
+
+    await controller.removeMinistry('i1', 'm1', 'ks1', user);
+
+    expect(scheduleService.removeMinistry).toHaveBeenCalledWith('tenant-1', 'cong-1', 'i1', 'm1', 'ks1');
   });
 
   it('applyTemplate delega ao service e exige papel de gestão', async () => {

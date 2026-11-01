@@ -263,6 +263,7 @@ export class PersonsImportService {
       const existing = await db.person.findFirst({
         where: {
           tenant_id: tenantId,
+          is_child: false,
           OR: [
             ...(phone ? [{ phone }] : []),
             ...(email ? [{ email: { equals: email, mode: 'insensitive' as const } }] : []),

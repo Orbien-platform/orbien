@@ -7,6 +7,7 @@ import {
   cancelDeletion,
   consentLabel,
   exportPersonalData,
+  getMyPersonId,
   getPersonalData,
   getProfileGaps,
   requestDeletion,
@@ -34,6 +35,12 @@ describe("privacidade-client", () => {
     expect(mockRequest).toHaveBeenLastCalledWith("post", "/me/deletion-request");
     await cancelDeletion();
     expect(mockRequest).toHaveBeenLastCalledWith("delete", "/me/deletion-request");
+  });
+
+  it("getMyPersonId devolve o id da pessoa da conta, não o da conta", async () => {
+    mockRequest.mockResolvedValue({ person: { id: "person-9" } });
+    await expect(getMyPersonId()).resolves.toBe("person-9");
+    expect(mockRequest).toHaveBeenLastCalledWith("get", "/me/personal-data");
   });
 
   it("dá nome legível ao termo e mostra o código quando não conhece", () => {

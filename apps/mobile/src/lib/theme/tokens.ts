@@ -192,6 +192,17 @@ export const typography = {
   button: { fontFamily: fontFamily.medium, fontSize: 15 },
 } satisfies Record<string, TextStyle>;
 
+/** Código de retirada do Kids (4 caracteres): o objeto que a equipe e o
+ * responsável reconhecem a 3 metros. Mono, tabular e com tracking largo — o
+ * único texto do app nesse tamanho. */
+export const pickupCode = {
+  fontFamily: fontFamily.monoMedium,
+  fontSize: 72,
+  lineHeight: 84,
+  letterSpacing: 16,
+  fontVariant: ["tabular-nums"],
+} satisfies TextStyle;
+
 /** Base 4px (§3). */
 export const spacing = {
   xs: 4,
@@ -314,6 +325,8 @@ export const qr = {
   quietZone: 4,
   /** Lado máximo do QR, em px: em tablet ou projetado, maior não lê melhor. */
   maxSize: 340,
+  /** Lado padrão do QR do código do responsável, em px (cabe na tela do celular sem rolar). */
+  codeSize: 176,
   /** Moldura do leitor: o quadro onde o membro encaixa o QR do líder. */
   scanFrame: 240,
   scanFrameBorder: 3,

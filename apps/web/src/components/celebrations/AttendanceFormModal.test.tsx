@@ -6,7 +6,10 @@ import api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({ default: { put: vi.fn() } }));
 
-function setup(initial = null as null | { children: number; members: number; attendees: number; visitors: number; total: number }) {
+function setup(
+  initial = null as null | { children: number; members: number; attendees: number; visitors: number; total: number },
+  suggestedChildren?: number | null,
+) {
   const onSaved = vi.fn();
   const onOpenChange = vi.fn();
   render(
@@ -16,6 +19,7 @@ function setup(initial = null as null | { children: number; members: number; att
       instanceId="i1"
       subtitle="Culto de domingo"
       initial={initial}
+      suggestedChildren={suggestedChildren}
       onSaved={onSaved}
     />,
   );
@@ -118,5 +122,50 @@ describe("AttendanceFormModal", () => {
     await user.click(screen.getByRole("button", { name: "Voltar" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(api.put).not.toHaveBeenCalled();
+  });
+  describe("sugestão do check-in do Kids (KIDS-11)", () => {
+    it("sem contagem lançada, o total de check-in vira o valor inicial de Crianças, editável", async () => {
+      const user = userEvent.setup();
+      setup(null, 5);
+      expect(screen.getByLabelText("Crianças")).toHaveValue("5");
+      expect(screen.getByText("Check-in do Kids: 5 crianças")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Usar 5" })).not.toBeInTheDocument();
+
+      await user.clear(screen.getByLabelText("Crianças"));
+      await user.type(screen.getByLabelText("Crianças"), "8");
+      // O total de check-in continua visível ao lado do valor lançado, com atalho para voltar.
+      expect(screen.getByText("Check-in do Kids: 5 crianças")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Usar 5" }));
+      expect(screen.getByLabelText("Crianças")).toHaveValue("5");
+    });
+
+    it("grava o valor editado, não o sugerido", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.put).mockResolvedValue({ data: { children: 6, members: 1, attendees: 1, visitors: 1, total: 9 } });
+      setup(null, 5);
+      await user.clear(screen.getByLabelText("Crianças"));
+      await user.type(screen.getByLabelText("Crianças"), "6");
+      await user.type(screen.getByLabelText("Membros"), "1");
+      await user.type(screen.getByLabelText("Frequentadores"), "1");
+      await user.type(screen.getByLabelText("Visitantes"), "1");
+      await user.click(screen.getByRole("button", { name: "Salvar contagem" }));
+      await waitFor(() =>
+        expect(api.put).toHaveBeenCalledWith("/celebrations/instances/i1/attendance", {
+          children: 6, members: 1, attendees: 1, visitors: 1,
+        }),
+      );
+    });
+
+    it("com contagem já lançada, vale o lançado e o total de check-in fica ao lado (singular)", () => {
+      setup({ children: 9, members: 2, attendees: 3, visitors: 4, total: 18 }, 1);
+      expect(screen.getByLabelText("Crianças")).toHaveValue("9");
+      expect(screen.getByText("Check-in do Kids: 1 criança")).toBeInTheDocument();
+    });
+
+    it("sem check-in (zero, nulo ou ausente) não sugere nada e o campo começa vazio", () => {
+      setup(null, 0);
+      expect(screen.getByLabelText("Crianças")).toHaveValue("");
+      expect(screen.queryByText(/Check-in do Kids/)).not.toBeInTheDocument();
+    });
   });
 });

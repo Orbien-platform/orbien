@@ -39,10 +39,10 @@ const transform = { '^.+\\.ts$': ['ts-jest', tsJestOptions] };
 // projects rodam juntos, mesmo com todo arquivo-fonte em 100%.
 const collectCoverageFrom = ['src/**/*.ts', '!src/main.ts', '!src/**/*.d.ts', '!src/**/*.spec.ts'];
 
-// 90s: as suítes com banco abrem $transaction contra o pooler do Supabase;
-// sob carga (dev server rodando junto) adquirir conexão pode passar de 60s.
-// Se um teste ainda falhar em 90s é gap real — investigue, não aumente.
-const DB_TIMEOUT = 90000;
+// ATENÇÃO: `testTimeout` dentro de um item de `projects` é IGNORADO pelo Jest 30
+// (só vale o da raiz, `--testTimeout` ou `jest.setTimeout`) — o 5000 padrão
+// continuava em vigor nas suítes com banco. O timeout de 90s dos projetos
+// `integration` e `rls` vive em `test/setup.ts` (`jest.setTimeout`).
 
 /** @type {import('jest').Config} */
 module.exports = {
@@ -70,7 +70,6 @@ module.exports = {
       testMatch: ['<rootDir>/test/integration/**/*.spec.ts'],
       transform,
       setupFiles: ['<rootDir>/test/setup.ts'],
-      testTimeout: DB_TIMEOUT,
       // Esta suíte sobe o AppModule inteiro, e o grafo alcança
       // financial/export, que importa `archiver` — ESM-only, que o Jest no
       // Node 22 não consegue `require`. Sem o stub a suíte não chega a rodar.
@@ -85,7 +84,6 @@ module.exports = {
       testMatch: ['<rootDir>/test/rls/**/*.spec.ts'],
       transform,
       setupFiles: ['<rootDir>/test/setup.ts'],
-      testTimeout: DB_TIMEOUT,
     },
   ],
 

@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
+import { runWithAfterTx } from '../../prisma/after-tx';
 import { PLATFORM_ROUTE_KEY } from '../decorators/platform-route.decorator';
 
 declare module 'express' {
@@ -53,7 +54,10 @@ export class TenantContextInterceptor implements NestInterceptor {
     // We use tx.$executeRaw here (not this.prisma.setTenantContext) because setTenantContext
     // uses the main client, which would open a separate implicit transaction and reset
     // the SET LOCAL vars before next.handle() ever runs.
+    // `runWithAfterTx` roda o que o handler adiou com `afterTx()` DEPOIS que a
+    // transação acabou (a conexão já voltou ao pool); ver prisma/after-tx.ts.
     return from(
+      runWithAfterTx(() =>
       this.prisma.$transaction(
         async (tx) => {
           // A conexão é `orbien_app`, que tem policies `orbien_app_auth ...
@@ -89,6 +93,7 @@ export class TenantContextInterceptor implements NestInterceptor {
           return this.prisma.withTx(tx, () => firstValueFrom(next.handle()));
         },
         { timeout: 30_000, maxWait: 10_000 },
+      ),
       ),
     );
   }

@@ -40,6 +40,41 @@ export function toCounts(a: Pick<CelebrationAttendance, 'children' | 'members' |
   };
 }
 
+/**
+ * Crianças DISTINTAS com check-in por instância (qualquer status, aberto ou
+ * fechado) — valor inicial sugerido para `children` (spec P2 Escala, AC 3).
+ * Instância sem check-in fica fora do mapa: quem lê trata ausência como 0.
+ * Instância CANCELADA também fica fora (DEC-1): culto que não aconteceu não
+ * conta criança nenhuma, mesmo com check-in aberto que ainda precisa fechar.
+ */
+export async function checkinTotalsByInstance(
+  client: PrismaService['client'],
+  tenantId: string,
+  instanceIds: string[],
+): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  if (instanceIds.length === 0) return totals;
+  const rows = await client.kidsCheckin.findMany({
+    where: {
+      tenant_id: tenantId,
+      celebration_instance_id: { in: instanceIds },
+      session: { celebrationInstance: { status: { not: CelebrationInstanceStatus.cancelled } } },
+    },
+    select: { celebration_instance_id: true, child_id: true },
+    distinct: ['celebration_instance_id', 'child_id'],
+  });
+  // `distinct` já resolve no banco; o Set garante a regra "distintas" mesmo
+  // que a consulta mude.
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const key = `${r.celebration_instance_id}:${r.child_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    totals.set(r.celebration_instance_id, (totals.get(r.celebration_instance_id) ?? 0) + 1);
+  }
+  return totals;
+}
+
 const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -186,13 +221,19 @@ export class CelebrationAttendanceService {
         attendance: true,
       },
     });
-    return instances
-      .filter((i) => i.attendance || i.scheduled_date <= upTo)
-      .map((i) => ({
-        celebration_instance_id: i.id,
-        scheduled_date: i.scheduled_date,
-        celebration: i.celebration,
-        attendance: i.attendance ? toCounts(i.attendance) : null,
-      }));
+    const visible = instances.filter((i) => i.attendance || i.scheduled_date <= upTo);
+    const checkins = await checkinTotalsByInstance(
+      this.prisma.client,
+      user.tenant_id,
+      visible.map((i) => i.id),
+    );
+    return visible.map((i) => ({
+      celebration_instance_id: i.id,
+      scheduled_date: i.scheduled_date,
+      celebration: i.celebration,
+      attendance: i.attendance ? toCounts(i.attendance) : null,
+      // Sugestão para `children` (módulo Kids); o valor lançado à mão é o que vale.
+      checkin_total: checkins.get(i.id) ?? 0,
+    }));
   }
 }

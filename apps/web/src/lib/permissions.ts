@@ -38,6 +38,10 @@ export const ROUTE_AREAS: Record<string, string> = {
   // Indicadores de presença nos cultos: mesma área e mesmos papéis de leitura
   // que a API dá a `GET /celebrations/attendance/summary`.
   "/pessoas/indicadores": "celebrations",
+  // Kids (Premium) não é uma área própria na API: os papéis que o gerenciam
+  // (`KIDS_MANAGE_ROLES`) são exatamente os de leitura de `celebrations`, e
+  // a área já é só-Premium — então o menu e o convite seguem a dela.
+  "/kids": "celebrations",
   // `PROD-21`. Área Premium e só de `tenant_admin`, os dois recortes vindo da
   // API (`readableAreas`) — aqui só mora o de→para de URL.
   "/auditoria": "audit",

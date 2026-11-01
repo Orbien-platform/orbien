@@ -12,6 +12,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { kidsActivitySignal } from './persons-kids-activity';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { MemberCapService } from './member-cap.service';
 import { CreatePersonDto } from './dto/create-person.dto';
@@ -62,7 +63,8 @@ export class PersonsService {
 
     if (dto.phone) {
       possible_duplicates = await this.prisma.client.person.findMany({
-        where: { phone: dto.phone, id: { not: person.id } },
+        // AD-013: criança fica fora de duplicados (e de qualquer lista de pessoas).
+        where: { phone: dto.phone, id: { not: person.id }, is_child: false },
         select: { id: true, full_name: true, phone: true, classification: true },
       });
     }
@@ -73,7 +75,8 @@ export class PersonsService {
   async findAll(query: ListPersonsQueryDto): Promise<PaginatedPersons> {
     const { classification, gender, tag, search, page, limit } = query;
 
-    const where: Prisma.PersonWhereInput = { deleted_at: null };
+    // AD-013: criança (is_child) só aparece nas rotas de kids, nunca aqui.
+    const where: Prisma.PersonWhereInput = { deleted_at: null, is_child: false };
     if (classification) where.classification = classification;
     if (gender) where.gender = gender;
     if (search) where.full_name = { contains: search, mode: 'insensitive' };
@@ -114,7 +117,8 @@ export class PersonsService {
 
   private async findOneWithAccounts(id: string) {
     const person = await this.prisma.client.person.findUnique({
-      where: { id },
+      // AD-013: a ficha de criança é das rotas de kids; aqui ela é 404.
+      where: { id, is_child: false },
       include: {
         householdMemberships: true,
         userAccounts: {
@@ -309,7 +313,9 @@ export class PersonsService {
   // essa categoria tem prazo de 5 anos ligado ao vínculo financeiro, não à
   // inatividade, e não entra neste job. "Sinal de atividade" é o mais
   // recente entre updated_at do cadastro, uma visita e uma presença
-  // registrada — não há login de membro para usar como sinal.
+  // registrada, ou (REV-1) um check-in de Kids em que a pessoa é responsável,
+  // retirou a criança ou é responsável cadastrado dela — não há login de
+  // membro para usar como sinal.
   async purgeInactivePersons(): Promise<{ purged: number }> {
     const expired = await this.prisma.system.$queryRaw<
       Array<{ id: string; classification: PersonClassification }>
@@ -318,13 +324,18 @@ export class PersonsService {
       FROM persons p
       WHERE p.deleted_at IS NULL
         AND p.anonymized_at IS NULL
+        -- AD-013: criança não é visitante nem membro; sem sinal de atividade
+        -- "da pessoa" ela seria anonimizada em 1-2 anos mesmo frequentando.
+        -- Menor segue a regra própria de purgeMinorsAfterContractEnd.
+        AND p.is_child = false
         AND NOT EXISTS (
           SELECT 1 FROM financial_transactions ft WHERE ft.donor_person_id = p.id
         )
         AND GREATEST(
           p.updated_at,
           COALESCE((SELECT MAX(v.visited_at) FROM visit_records v WHERE v.person_id = p.id), p.created_at),
-          COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at)
+          COALESCE((SELECT MAX(a.checked_in_at) FROM attendance_records a WHERE a.person_id = p.id), p.created_at),
+          ${kidsActivitySignal('p')}
         ) < now() - (CASE WHEN p.classification = 'visitor' THEN INTERVAL '1 year' ELSE INTERVAL '2 years' END)
     `);
 

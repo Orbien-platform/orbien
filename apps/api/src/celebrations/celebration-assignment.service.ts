@@ -19,7 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../content/notifications.service';
 import { AddCelebrationAssignmentDto } from './dto/add-celebration-assignment.dto';
 import { RespondCelebrationAssignmentDto } from './dto/respond-celebration-assignment.dto';
-import { toCounts } from './celebration-attendance.service';
+import { checkinTotalsByInstance, toCounts } from './celebration-attendance.service';
 import { CelebrationRemovalNotifier, personsToNotifyOnRemoval } from './celebration-removal.notifier';
 
 @Injectable()
@@ -413,6 +413,7 @@ export class CelebrationAssignmentService {
         celebrationMinistry: {
           include: {
             ministry: true,
+            kidsSession: { select: { id: true, status: true, room: { select: { id: true, name: true } } } },
             schedule: {
               include: {
                 celebrationInstance: {
@@ -431,6 +432,11 @@ export class CelebrationAssignmentService {
 
     const setlistByKey = await this.attachSetlists(assignments);
     const cuesByKey = await this.attachCues(assignments, profile.person_id);
+    const checkinTotals = await checkinTotalsByInstance(
+      this.prisma.client,
+      tenantId,
+      [...new Set(assignments.map((a) => a.celebrationMinistry.schedule.celebrationInstance.id))],
+    );
 
     const result = assignments.map((a) => ({
       id: a.id,
@@ -448,6 +454,15 @@ export class CelebrationAssignmentService {
         id: a.celebrationMinistry.ministry.id,
         name: a.celebrationMinistry.ministry.name,
       },
+      // Turma kids da escala (módulo Kids): o horário é o da celebração, acima.
+      kids_session: a.celebrationMinistry.kidsSession
+        ? {
+            id: a.celebrationMinistry.kidsSession.id,
+            room_id: a.celebrationMinistry.kidsSession.room.id,
+            room_name: a.celebrationMinistry.kidsSession.room.name,
+            status: a.celebrationMinistry.kidsSession.status,
+          }
+        : null,
       scheduled_date: a.celebrationMinistry.schedule.celebrationInstance.scheduled_date,
       celebration_instance_id: a.celebrationMinistry.schedule.celebrationInstance.id,
       // Quem está neste ministério (e ainda não recusou nem trocou) lança a contagem.
@@ -457,6 +472,8 @@ export class CelebrationAssignmentService {
       attendance: a.celebrationMinistry.schedule.celebrationInstance.attendance
         ? toCounts(a.celebrationMinistry.schedule.celebrationInstance.attendance)
         : null,
+      // Crianças distintas com check-in: valor inicial sugerido para `children`.
+      checkin_total: checkinTotals.get(a.celebrationMinistry.schedule.celebrationInstance.id) ?? 0,
       service_order_id: a.celebrationMinistry.schedule.celebrationInstance.serviceOrder?.id ?? null,
       setlist: setlistByKey.get(
         `${a.celebrationMinistry.schedule.celebrationInstance.id}:${a.celebrationMinistry.ministry_id}`,

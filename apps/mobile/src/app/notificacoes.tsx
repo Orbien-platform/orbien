@@ -1,4 +1,4 @@
-// Tela Notificações (MOB-10a/MOB-10b) — 5 toggles de categoria de push.
+// Tela Notificações (MOB-10a/MOB-10b) — 6 toggles de categoria de push.
 // Rota solta, como indisponibilidade.tsx, acessada a partir de Perfil.
 //
 // GET no mount (sem preferência salva, o servidor já devolve as 5 ligadas
@@ -38,9 +38,10 @@ const CATEGORY_LABELS: Record<Category, string> = {
   eventos: "Eventos",
   devocional: "Conteúdo devocional",
   biblia: "Respostas na Bíblia",
+  kids: "Kids: criança entregue",
 };
 
-const CATEGORY_ORDER: Category[] = ["avisos", "oracao", "eventos", "devocional", "biblia"];
+const CATEGORY_ORDER: Category[] = ["avisos", "oracao", "eventos", "devocional", "biblia", "kids"];
 
 const DEFAULT_PREFS: NotificationPreferenceValues = {
   avisos: true,
@@ -48,6 +49,7 @@ const DEFAULT_PREFS: NotificationPreferenceValues = {
   eventos: true,
   devocional: true,
   biblia: true,
+  kids: true,
 };
 
 const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";

@@ -1,4 +1,5 @@
 import {
+  Baby,
   Building2,
   CalendarDays,
   ChartLine,
@@ -70,6 +71,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/celebracoes", label: "Celebrações", icon: CalendarDays },
       { href: "/voluntarios", label: "Ministérios", icon: Layers },
+      // Balcão do Kids: check-in e retirada das crianças (Premium). As
+      // sub-telas (Crianças, Turmas) abrem pela navegação interna do módulo.
+      { href: "/kids", label: "Kids", icon: Baby },
       { href: "/repertorio", label: "Repertório", icon: Music },
     ],
   },

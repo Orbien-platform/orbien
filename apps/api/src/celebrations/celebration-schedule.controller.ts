@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanGuard } from '../auth/guards/plan.guard';
@@ -60,9 +60,16 @@ export class CelebrationScheduleController {
   removeMinistry(
     @Param('instanceId') instanceId: string,
     @Param('ministryId') ministryId: string,
+    @Query('kids_session_id', new ParseUUIDPipe({ optional: true })) kidsSessionId: string | undefined,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.scheduleService.removeMinistry(user.tenant_id, user.congregation_id, instanceId, ministryId);
+    return this.scheduleService.removeMinistry(
+      user.tenant_id,
+      user.congregation_id,
+      instanceId,
+      ministryId,
+      kidsSessionId,
+    );
   }
 
   @Post(':instanceId/schedule/apply-template')

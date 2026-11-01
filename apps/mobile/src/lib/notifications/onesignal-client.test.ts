@@ -37,6 +37,7 @@ import {
   initializeOneSignal,
   onNotificationClick,
   registerDevice,
+  registerPersonTag,
   syncNotificationPreferenceTags,
   unregisterDevice,
 } from "./onesignal-client";
@@ -90,13 +91,14 @@ describe("onesignal-client", () => {
   });
 
   describe("syncNotificationPreferenceTags", () => {
-    it("chama addTags com as 5 chaves pref_* como string, nunca boolean", () => {
+    it("chama addTags com as 6 chaves pref_* como string, nunca boolean", () => {
       syncNotificationPreferenceTags({
         avisos: true,
         oracao: false,
         eventos: true,
         devocional: false,
         biblia: false,
+        kids: false,
       });
 
       expect(mockAddTags).toHaveBeenCalledWith({
@@ -105,7 +107,16 @@ describe("onesignal-client", () => {
         pref_eventos: "true",
         pref_devocional: "false",
         pref_biblia: "false",
+        pref_kids: "false",
       });
+    });
+  });
+
+  describe("registerPersonTag", () => {
+    it("grava a tag person_id — o destino de todo push endereçado a uma pessoa (escala, Kids)", () => {
+      registerPersonTag("person-9");
+
+      expect(mockAddTags).toHaveBeenCalledWith({ person_id: "person-9" });
     });
   });
 
@@ -136,6 +147,52 @@ describe("onesignal-client", () => {
       listener({ notification: { additionalData: { type: "bible_mark_reply", bible_mark_id: "m1" } } });
 
       expect(handler).toHaveBeenCalledWith("/biblia/marcacao/m1");
+    });
+
+    describe("avisos do Kids (MOB-4)", () => {
+      function tap(additionalData: object | undefined) {
+        const handler = jest.fn();
+        onNotificationClick(handler);
+        const listener = mockAddEventListener.mock.calls[0]![1];
+        listener({ notification: { additionalData } });
+        return handler;
+      }
+
+      it("'Criança recebida' abre o código de retirada do filho", () => {
+        expect(tap({ type: "kids_child_received", child_id: "c1", checkin_id: "k1", session_id: "s1" })).toHaveBeenCalledWith(
+          "/kids/codigo/c1",
+        );
+      });
+
+      it("'Criança entregue' abre a ficha do filho (o código já não existe)", () => {
+        expect(tap({ type: "kids_child_released", child_id: "c1", checkin_id: "k1" })).toHaveBeenCalledWith(
+          "/kids/crianca/c1",
+        );
+      });
+
+      it("sem child_id, os dois avisos levam à lista do Kids", () => {
+        expect(tap({ type: "kids_child_received", checkin_id: "k1" })).toHaveBeenCalledWith("/kids");
+        mockAddEventListener.mockClear();
+        expect(tap({ type: "kids_child_released" })).toHaveBeenCalledWith("/kids");
+      });
+
+      it("'Retirada travada', para o líder, abre a turma da sessão", () => {
+        expect(tap({ type: "kids_checkout_locked", session_id: "s1", checkin_id: "k1" })).toHaveBeenCalledWith(
+          "/kids/sessao/s1",
+        );
+      });
+
+      it("'Retirada travada' sem sessão ou tipo do Kids desconhecido só abre o app", () => {
+        expect(tap({ type: "kids_checkout_locked", checkin_id: "k1" })).not.toHaveBeenCalled();
+        mockAddEventListener.mockClear();
+        expect(tap({ type: "kids_algo_novo", child_id: "c1" })).not.toHaveBeenCalled();
+      });
+
+      it("ids vêm de fora: são codificados para não mudar o caminho", () => {
+        expect(tap({ type: "kids_child_released", child_id: "../perfil" })).toHaveBeenCalledWith(
+          "/kids/crianca/..%2Fperfil",
+        );
+      });
     });
 
     it("não chama o handler quando o evento não aponta para nada", () => {

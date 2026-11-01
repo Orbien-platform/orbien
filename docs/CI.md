@@ -397,6 +397,17 @@ aqui. O que importa deste lado: **são cinco passos, um por app**, e um app sem
 passo é um app sem portão de cobertura, o que aconteceu com o mobile entre
 2026-09-08 e 2026-09-10.
 
+### Memória do `test:cov` da API
+
+O `test:cov` da API roda unit e integração num processo só, com coverage, e
+estoura o heap padrão do Node (OOM a 2 GB; o pico medido fica entre 2 e 3 GB).
+Em vez de uma variável de ambiente no passo do `ci.yml` (que o dev local não
+teria), o script em `apps/api/package.json` chama
+`node --max-old-space-size=4096 ../../node_modules/jest/bin/jest.js`, então
+CI e máquina local se comportam igual. 4 GB cabe no `ubuntu-latest` (7 GB em
+repositório privado, 16 GB em público) com ~33% de folga sobre o pico. O
+`ci.yml` não muda. Detalhe em [`TESTES.md`](TESTES.md).
+
 ## O bloqueio do lint — resolvido
 
 Isto foi impedimento real e é mantido aqui como registro. O estado que travava

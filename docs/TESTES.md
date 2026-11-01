@@ -207,7 +207,6 @@ module.exports = {
       testMatch: ['<rootDir>/test/integration/**/*.spec.ts'],
       transform: { '^.+\\.ts$': tsJest },
       setupFiles: ['<rootDir>/test/setup.ts'],
-      testTimeout: 90000,
     },
     {
       displayName: 'rls',
@@ -216,10 +215,9 @@ module.exports = {
       testMatch: ['<rootDir>/test/rls/**/*.spec.ts'],
       transform: { '^.+\\.ts$': tsJest },
       setupFiles: ['<rootDir>/test/setup.ts'],
-      // 90s: os testes de RLS abrem $transaction contra o pooler do Supabase;
-      // sob carga, adquirir conexão pode passar de 60s. Falha em 90s é gap
-      // de segurança real — investigue, não aumente o timeout.
-      testTimeout: 90000,
+      // O timeout de 90s NÃO fica aqui: o Jest 30 ignora `testTimeout` dentro de
+      // `projects`. Ele vive em test/setup.ts (`jest.setTimeout(90_000)`).
+      // Falha em 90s é gap de segurança real — investigue, não aumente.
     },
   ],
   collectCoverageFrom: [
@@ -238,9 +236,19 @@ Scripts em `apps/api/package.json`:
 "test:unit": "jest --selectProjects unit --passWithNoTests",
 "test:integration": "jest --selectProjects integration --runInBand --forceExit --passWithNoTests",
 "test:rls": "jest --selectProjects rls --runInBand --forceExit",
-"test:cov": "jest --selectProjects unit integration --runInBand --coverage --passWithNoTests"
+"test:cov": "node --max-old-space-size=4096 ../../node_modules/jest/bin/jest.js --selectProjects unit integration --runInBand --coverage --passWithNoTests"
 ```
 
+> **`test:cov` da API fixa o heap em 4 GB (2026-10-29).** Com unit e integração
+> no mesmo processo (`--runInBand`) e coverage ligado (~400 suítes), o heap
+> padrão do Node estourava (OOM com 2 GB; o pico real fica entre 2 e 3 GB: com
+> 3 GB passa, medido). O script invoca o jest pelo `node` com
+> `--max-old-space-size=4096` — portátil e versionado, sem `cross-env` nem
+> variável de ambiente, e `NODE_OPTIONS` do ambiente segue valendo junto. O
+> runner `ubuntu-latest` tem 7 GB (repositório privado) a 16 GB (público): 4 GB
+> dá folga de ~33% sobre o pico medido e não ameaça a RAM do runner. Se o OOM
+> voltar, suba o número aqui e em `docs/CI.md`, não rode o CI com variável solta.
+>
 > **`test:cov` roda tudo num processo só (`--runInBand`), desde 2026-10-05.**
 > Antes rodava a integração em paralelo, e isso quebrava o CI de vez em
 > quando — inclusive no `main`: `public-donation`, `public-intents` e

@@ -11,6 +11,14 @@ vi.mock("@/lib/api", () => ({
   default: { get: vi.fn(), put: vi.fn() },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: vi.fn() }));
+// O cartão do Kids tem teste próprio; aqui só interessa onde e com que período entra.
+vi.mock("@/components/kids/KidsAttendanceCard", () => ({
+  KidsAttendanceCard: ({ start, end }: { start: string; end: string }) => (
+    <div data-testid="kids-card">
+      {start}|{end}
+    </div>
+  ),
+}));
 
 const mockedApi = vi.mocked(api, true);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -154,6 +162,45 @@ describe("Indicadores de presença", () => {
     await waitFor(() =>
       expect(mockedApi.get.mock.calls.filter(([u]) => u === "/celebrations/attendance/summary").length).toBeGreaterThan(1),
     );
+  });
+
+  it("a contagem sem lançamento abre com o total de check-in do Kids como valor inicial, editável", async () => {
+    setup(["pastor"]);
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/celebrations") return Promise.resolve({ data: [] });
+      if (url === "/celebrations/attendance/summary") return Promise.resolve({ data: summary });
+      return Promise.resolve({ data: [{ ...rows[1], checkin_total: 7 }] });
+    });
+    const user = userEvent.setup();
+    render(<IndicadoresPage />);
+    await user.click(await screen.findByText("Sem contagem"));
+    expect(await screen.findByLabelText("Crianças")).toHaveValue("7");
+    expect(screen.getByText("Check-in do Kids: 7 crianças")).toBeInTheDocument();
+  });
+
+  it("o cartão do Kids recebe o período e fica na tela mesmo sem contagem de público", async () => {
+    setup();
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === "/celebrations") return Promise.resolve({ data: [] });
+      if (url === "/celebrations/attendance/summary")
+        return Promise.resolve({ data: { ...summary, services_counted: 0 } });
+      return Promise.resolve({ data: [] });
+    });
+    render(<IndicadoresPage />);
+    expect(await screen.findByText("Nenhuma contagem neste período")).toBeInTheDocument();
+    expect(screen.getByTestId("kids-card").textContent).toMatch(/^\d{4}-\d{2}-\d{2}\|\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("intervalo inválido não mostra o cartão do Kids", async () => {
+    setup();
+    mockOk();
+    const user = userEvent.setup();
+    render(<IndicadoresPage />);
+    await screen.findByText("52,7");
+    await user.click(screen.getByRole("button", { name: "Personalizado" }));
+    await user.clear(document.querySelectorAll('input[type="date"]')[0] as HTMLInputElement);
+    await screen.findByText(/Informe a data inicial e a final/);
+    expect(screen.queryByTestId("kids-card")).not.toBeInTheDocument();
   });
 
   it("quem só lê (ministry_leader) não abre o formulário pela linha", async () => {

@@ -22,7 +22,7 @@ describe('NotificationPreferencesService', () => {
 
       const result = await service.get('user-1');
 
-      expect(result).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true });
+      expect(result).toEqual({ avisos: true, oracao: true, eventos: true, devocional: true, biblia: true, kids: true });
       expect(client.notificationPreference.upsert).not.toHaveBeenCalled();
     });
 
@@ -38,12 +38,13 @@ describe('NotificationPreferencesService', () => {
         eventos: true,
         devocional: true,
         biblia: true,
+        kids: true,
       });
       const service = serviceWith(client);
 
       const result = await service.get('user-1');
 
-      expect(result).toEqual({ avisos: true, oracao: false, eventos: true, devocional: true, biblia: true });
+      expect(result).toEqual({ avisos: true, oracao: false, eventos: true, devocional: true, biblia: true, kids: true });
     });
 
     it('consulta pelo user_account_id recebido', async () => {
@@ -72,6 +73,7 @@ describe('NotificationPreferencesService', () => {
         eventos: true,
         devocional: true,
         biblia: true,
+        kids: true,
       });
       const service = serviceWith(client);
 
@@ -88,6 +90,7 @@ describe('NotificationPreferencesService', () => {
           eventos: true,
           devocional: true,
           biblia: true,
+          kids: true,
         },
         update: { oracao: false },
       });
@@ -105,6 +108,7 @@ describe('NotificationPreferencesService', () => {
         eventos: true,
         devocional: true,
         biblia: true,
+        kids: true,
       });
       const service = serviceWith(client);
 
@@ -113,7 +117,7 @@ describe('NotificationPreferencesService', () => {
       expect(client.notificationPreference.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ update: { avisos: false } }),
       );
-      expect(result).toEqual({ avisos: false, oracao: true, eventos: true, devocional: true, biblia: true });
+      expect(result).toEqual({ avisos: false, oracao: true, eventos: true, devocional: true, biblia: true, kids: true });
     });
   });
 });
