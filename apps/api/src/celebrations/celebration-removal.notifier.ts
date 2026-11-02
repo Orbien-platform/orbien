@@ -178,9 +178,8 @@ export class CelebrationRemovalNotifier {
    */
   notifyCancelled(tenantId: string, snapshot: CancellationSnapshot | null): void {
     if (!snapshot || snapshot.datesByPerson.size === 0) return;
-    this.sendCancelled(tenantId, snapshot).catch((err: unknown) =>
-      this.logger.error(`Falha ao avisar cancelamento do culto: ${String(err)}`),
-    );
+    // `sendCancelled` não rejeita: cada envio tem o próprio try/catch.
+    void this.sendCancelled(tenantId, snapshot);
   }
 
   private async sendCancelled(tenantId: string, snapshot: CancellationSnapshot): Promise<void> {
