@@ -482,7 +482,7 @@ em evento que não terminou, até 5, o mais próximo primeiro). Mobile: bloco
 **Falta:** o teste em aparelho dos blocos (`PEND` a abrir quando houver
 build de desenvolvimento).
 
-### PROD-31 · Contribuir nativo no app · variante Starter entregue, falta o Premium (`PROD-28`)
+### PROD-31 · Contribuir nativo no app · Starter entregue, falta o Premium (`PROD-28`)
 
 Na v2, Contribuir escolhe categoria, anônima ou identificada, e paga por PIX:
 no Starter, a chave copia-e-cola; no Premium, QR dinâmico e recorrente. Hoje a
@@ -498,19 +498,33 @@ anônima ou identificada (só o nome) e "Gerar PIX", que chama a doação públi
 chave para copiar. A categoria vai como palavra-chave em `category_slug`; a API
 cai em "Oferta" quando a igreja não tem categoria com aquele nome.
 
-**Falta:** QR dinâmico e recorrente (Premium, atrás de `ASAAS_PAYMENTS_ENABLED`
-— quando a API devolver `mode: "dynamic"` a tela mostra o copia-e-cola, sem
-QR nem acompanhamento do pagamento); lista de categorias vinda da igreja em
-vez de fixa; e o teste em aparelho.
+**Entregue (2026-11-02) — categorias da igreja.** A tela deixou de ter lista
+fixa. `GET /financial/pix/public-categories/:tenant_slug` (pública, sem login;
+tenant resolvido pelo slug no servidor, 404 igual ao da doação para slug
+desconhecido ou sem chave PIX) devolve só `id`, `name` e `description` das
+categorias de receita da congregação da doação, com `Cache-Control` de 5 min e
+limite de 60/min por igreja + origem. O app escolhe pela lista e envia
+`category_id`; a API valida (receita, mesmo tenant e congregação) e responde 400
+em vez de cair em "Oferta". Estados da tela: carregando (botão espera), erro de
+carga com "Tentar novamente" (valor e nome ficam), igreja sem categoria (avisa e
+doa como oferta) e categoria recusada pela API (recarrega a lista). Sem migration
+nem mudança de RLS.
 
-**Categoria — decisão em aberto (achado da revisão do PR #163).** A API
-resolve `category_slug` por `contains` no nome, com `findFirst` sem ordem
-(`PixService.resolveCategory`). Duas consequências: "oferta" casa com "Oferta",
-"Oferta Missionária" e "Oferta de Construção" do seed e pode lançar a oferta na
-categoria errada; e "dízimo" com acento não casa com uma categoria cadastrada
-como "Dizimo", caindo em "Oferta" sem aviso. O app não resolve sozinho — pede
-ou casar pelo nome exato na API, ou um `slug` de verdade na categoria, ou a
-lista vinda da igreja (o que já está acima).
+**Categoria — decisão fechada.** O `category_slug` legado continua aceito (app
+antigo em campo, e o `/doar/{slug}`, que não manda categoria), mas passou a casar
+de forma determinística em `PixService.resolveCategory`: nome igual, sem caixa
+nem acento; senão o nome mais curto que contém o termo; senão "Oferta". Resolve
+os dois achados do PR #163 ("oferta" não cai mais em "Oferta Missionária" e
+"dízimo" casa "Dizimo") e vale também para o web.
+
+**Falta:** (1) QR dinâmico e recorrente (Premium, atrás de
+`ASAAS_PAYMENTS_ENABLED`, `PROD-28`): hoje, se a API devolver `mode: "dynamic"`,
+a tela mostra o copia-e-cola, sem imagem do QR, sem acompanhamento do pagamento e
+sem recorrência — fica fora até a cobrança poder ser testada; (2) o teste em
+aparelho (build nativa); (3) opcionais, se a igreja pedir: marcar quais
+categorias de receita aparecem na contribuição (hoje todas, incluindo "Outros
+(Receita)" e "Doação Especial"), `slug` persistido na categoria e seletor de
+categoria no `/doar/{slug}`.
 
 ### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · aberto
 

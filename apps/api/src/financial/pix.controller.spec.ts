@@ -43,6 +43,7 @@ describe('PixController', () => {
       cancelSubscription: jest.fn(),
       createPublicDonation: jest.fn(),
       getPublicDonationStatus: jest.fn(),
+      listPublicCategories: jest.fn(),
       listPublicIntents: jest.fn(),
       settlePublicIntent: jest.fn(),
       handleWebhook: jest.fn(),
@@ -116,6 +117,15 @@ describe('PixController', () => {
 
     expect(pixService.createPublicDonation).toHaveBeenCalledWith({ tenant_slug: 'x' });
     expect(result).toEqual({ pix_key: 'k' });
+  });
+
+  it('listPublicCategories (público) delega ao service com o slug', async () => {
+    pixService.listPublicCategories.mockResolvedValue([{ id: 'c1' }] as never);
+
+    const result = await controller.listPublicCategories('igreja-x');
+
+    expect(pixService.listPublicCategories).toHaveBeenCalledWith('igreja-x');
+    expect(result).toEqual([{ id: 'c1' }]);
   });
 
   it('getPublicDonationStatus (público) delega ao service com slug e payment_id', async () => {

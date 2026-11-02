@@ -38,6 +38,20 @@ type TenantContext = {
   churchName: string;
 };
 
+const normalizeName = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** Nome igual ao termo; senão o nome mais curto que o contém (empate: ordem recebida). */
+function pickCategoryByKeyword<T extends { name: string }>(rows: T[], keyword: string): T | undefined {
+  const wanted = normalizeName(keyword);
+  if (!wanted) return undefined;
+  const exact = rows.find((r) => normalizeName(r.name) === wanted);
+  if (exact) return exact;
+  return rows
+    .filter((r) => normalizeName(r.name).includes(wanted))
+    .sort((a, b) => a.name.length - b.name.length)[0];
+}
+
 type PublicDonationTenant = TenantContext & {
   /** Plano Premium em vigor, lido do banco do tenant do slug (nunca do cliente). */
   dynamicEnabled: boolean;
@@ -300,31 +314,63 @@ export class PixService {
     });
   }
 
-  private async resolveCategory(tenantId: string, congregationId: string, slug?: string) {
-    const keyword = slug ?? 'oferta';
-
-    const category =
-      (await this.prisma.client.financialCategory.findFirst({
+  /**
+   * `categoryId` (o app novo) vence e tem que ser uma categoria de receita da
+   * congregação: id estranho dá 400, nunca cai em "Oferta" em silêncio. Sem id,
+   * vale a palavra-chave legada (`slug`; web e app antigo), casada de forma
+   * determinística — nome igual, depois o nome mais curto que contém, ambos
+   * sem caixa e sem acento — e, não achando, "Oferta".
+   */
+  private async resolveCategory(
+    tenantId: string,
+    congregationId: string,
+    slug?: string,
+    categoryId?: string,
+  ) {
+    if (categoryId) {
+      const chosen = await this.prisma.client.financialCategory.findFirst({
         where: {
+          id: categoryId,
           tenant_id: tenantId,
           congregation_id: congregationId,
-          name: { contains: keyword, mode: 'insensitive' },
           type: TransactionType.income,
         },
         select: { id: true },
-      })) ??
-      (await this.prisma.client.financialCategory.findFirst({
-        where: {
-          tenant_id: tenantId,
-          congregation_id: congregationId,
-          name: { contains: 'Oferta', mode: 'insensitive' },
-          type: TransactionType.income,
-        },
-        select: { id: true },
-      }));
+      });
+      if (!chosen) throw new BadRequestException('Categoria inválida');
+      return chosen;
+    }
 
+    const incomes = await this.prisma.client.financialCategory.findMany({
+      where: { tenant_id: tenantId, congregation_id: congregationId, type: TransactionType.income },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const category = pickCategoryByKeyword(incomes, slug ?? 'oferta') ?? pickCategoryByKeyword(incomes, 'oferta');
     if (!category) throw new BadRequestException('Categoria de receita não encontrada');
-    return category;
+    return { id: category.id };
+  }
+
+  /**
+   * Categorias de receita que a igreja oferece no Contribuir (app) — rota
+   * pública. O tenant vem do slug, resolvido aqui; a leitura roda sob o mesmo
+   * contexto da doação, então o RLS é a fronteira. Só `id`, `name` e
+   * `description`: nada de tenant, congregação ou valores.
+   */
+  async listPublicCategories(slug: string) {
+    const ctx = await this.resolvePublicDonationTenant(slug);
+    return this.runInPublicContext(ctx, () =>
+      this.prisma.client.financialCategory.findMany({
+        where: {
+          tenant_id: ctx.tenantId,
+          congregation_id: ctx.congregationId,
+          type: TransactionType.income,
+        },
+        select: { id: true, name: true, description: true },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   /**
@@ -784,7 +830,12 @@ export class PixService {
     }
 
     await this.runInPublicContext(ctx, async () => {
-      const category = await this.resolveCategory(ctx.tenantId, ctx.congregationId, dto.category_slug);
+      const category = await this.resolveCategory(
+        ctx.tenantId,
+        ctx.congregationId,
+        dto.category_slug,
+        dto.category_id,
+      );
 
       if (wantsCharge && (await this.countRecentPublicDynamic(ctx)) >= PUBLIC_DYNAMIC_PENDING_CAP_PER_HOUR) {
         this.logger.warn(`Teto de cobranças públicas pendentes atingido (tenant=${ctx.tenantId})`);

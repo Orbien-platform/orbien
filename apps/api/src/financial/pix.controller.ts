@@ -100,6 +100,17 @@ export class PixController {
     return this.pixService.createPublicDonation(dto);
   }
 
+  // Categorias de receita que a igreja oferece no Contribuir do app. Pública:
+  // o tenant vem do slug no servidor; devolve só id, nome e descrição. Cache de
+  // 5 min no navegador/CDN — a lista muda raramente.
+  @Get('public-categories/:tenant_slug')
+  @UseGuards(PublicDonationThrottlerGuard)
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Header('Cache-Control', 'public, max-age=300')
+  listPublicCategories(@Param('tenant_slug') tenantSlug: string) {
+    return this.pixService.listPublicCategories(tenantSlug);
+  }
+
   // ── Tesouraria: intenções da doação pública (PEND-14) ──────────────────────
   // Sem `@RequiresPlan`: o Starter é quem mais precisa — a chave estática só se
   // confirma pelo tesoureiro. Leitura e baixa têm o mesmo corte de papel dos

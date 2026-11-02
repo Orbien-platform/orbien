@@ -1,5 +1,5 @@
-// Tela "Contribuir" (PROD-31, variante Starter): categoria, valor e
-// identificação viram a doação pública; o resultado devolve o código PIX
+// Tela "Contribuir" (PROD-31, variante Starter): categoria (da lista da
+// igreja), valor e identificação viram a doação pública; o resultado devolve o código PIX
 // para copiar. Falha mantém os campos.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
@@ -12,9 +12,16 @@ jest.mock("expo-clipboard", () => ({
 }));
 
 const mockCreate = jest.fn();
+const mockCategories = jest.fn();
+const mockInvalidate = jest.fn();
 jest.mock("../../lib/contribuir/contribuir-client", () => {
   const actual = jest.requireActual("../../lib/contribuir/contribuir-client");
-  return { ...actual, createDonation: (...args: unknown[]) => mockCreate(...args) };
+  return {
+    ...actual,
+    createDonation: (...args: unknown[]) => mockCreate(...args),
+    fetchDonationCategories: (...args: unknown[]) => mockCategories(...args),
+    invalidateDonationCategories: (...args: unknown[]) => mockInvalidate(...args),
+  };
 });
 
 const mockUseTheme = jest.fn();
@@ -23,6 +30,12 @@ jest.mock("../../lib/theme/theme-provider", () => ({ useTheme: () => mockUseThem
 import ContribuirScreen from "../../app/contribuir";
 import { HttpError, NetworkError } from "../../lib/api/errors";
 import { palettes } from "../../lib/theme/tokens";
+
+const CATEGORIES = [
+  { id: "cat-dizimo", name: "Dízimo", description: null },
+  { id: "cat-oferta", name: "Oferta", description: null },
+  { id: "cat-missoes", name: "Oferta Missionária", description: "Missões" },
+];
 
 const RESULT = {
   mode: "static" as const,
@@ -59,7 +72,71 @@ describe("ContribuirScreen", () => {
       colors: palettes.dark,
     });
     mockCreate.mockResolvedValue(RESULT);
+    mockCategories.mockResolvedValue(CATEGORIES);
     mockSetString.mockResolvedValue(undefined);
+  });
+
+  it("busca as categorias da igreja pelo slug e pré-seleciona a primeira", async () => {
+    await renderScreen();
+
+    expect(mockCategories).toHaveBeenCalledWith("igreja-teste");
+    expect(screen.getByText("Oferta Missionária")).toBeTruthy();
+    await fill("20");
+    await submit();
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ categoryId: "cat-dizimo" }));
+  });
+
+  it("enquanto carrega as categorias, o botão espera", async () => {
+    mockCategories.mockReturnValue(new Promise(() => undefined));
+    await renderScreen();
+    await fill("20");
+
+    expect(screen.getByTestId("contribuir-categorias-carregando")).toBeTruthy();
+    await submit();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("sem conexão ao carregar: explica, não deixa enviar e tenta de novo pelo botão", async () => {
+    mockCategories.mockRejectedValueOnce(new NetworkError());
+    await renderScreen();
+    await fill("20");
+
+    expect(screen.getByTestId("contribuir-categorias-erro")).toBeTruthy();
+    expect(screen.getByText(/Verifique sua conexão/)).toBeTruthy();
+    await submit();
+    expect(mockCreate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await fireEvent.press(screen.getByTestId("contribuir-categorias-tentar"));
+    });
+
+    expect(mockCategories).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId("contribuir-categorias-erro")).toBeNull();
+    expect(screen.getByTestId("contribuir-valor-input").props.value).toBe("20");
+    await submit();
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ categoryId: "cat-dizimo" }));
+  });
+
+  it("igreja sem categorias avisa e deixa doar sem categoria", async () => {
+    mockCategories.mockResolvedValue([]);
+    await renderScreen();
+
+    expect(screen.getByTestId("contribuir-categorias-vazia")).toBeTruthy();
+    await fill("20");
+    await submit();
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ categoryId: undefined }));
+  });
+
+  it("categoria que a API recusou: recarrega a lista e pede para escolher de novo", async () => {
+    mockCreate.mockRejectedValue(new HttpError(400, { message: "Categoria inválida" }));
+    await renderScreen();
+    await fill("20");
+    await submit();
+
+    expect(mockInvalidate).toHaveBeenCalledWith("igreja-teste");
+    expect(mockCategories).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/categorias da igreja mudaram/)).toBeTruthy();
+    expect(screen.getByTestId("contribuir-valor-input").props.value).toBe("20");
   });
 
   it("sem valor o botão não envia", async () => {
@@ -78,14 +155,14 @@ describe("ContribuirScreen", () => {
 
   it("anônima por padrão: envia categoria e valor, sem nome", async () => {
     await renderScreen();
-    await fireEvent.press(screen.getByTestId("contribuir-categoria-oferta"));
+    await fireEvent.press(screen.getByTestId("contribuir-categoria-cat-oferta"));
     await fill("150,00");
     await submit();
 
     expect(mockCreate).toHaveBeenCalledWith({
       tenantSlug: "igreja-teste",
       amount: 150,
-      category: "oferta",
+      categoryId: "cat-oferta",
       donorName: undefined,
     });
     expect(screen.getByTestId("contribuir-valor")).toBeTruthy();
@@ -99,7 +176,7 @@ describe("ContribuirScreen", () => {
     await submit();
 
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ category: "dizimo", amount: 50, donorName: "Ana" }),
+      expect.objectContaining({ categoryId: "cat-dizimo", amount: 50, donorName: "Ana" }),
     );
   });
 
