@@ -189,4 +189,32 @@ export class KidsSessionsService {
       data: { status: KidsSessionStatus.cancelled },
     });
   }
+
+  /**
+   * Reabre sessão cancelada (REV-4.2). Cancelar o culto fecha as sessões e
+   * reativá-lo não as reabre sozinho: `status` não diz se a sessão foi cancelada
+   * pelo culto ou pela liderança, então a volta é um gesto explícito. Idempotente
+   * se já está aberta; culto cancelado e turma desativada não reabrem.
+   */
+  async reopen(tenantId: string, congregationId: string, sessionId: string): Promise<KidsSession> {
+    const session = await this.prisma.client.kidsSession.findFirst({
+      where: { id: sessionId, tenant_id: tenantId, congregation_id: congregationId },
+      include: { room: { select: { is_active: true } } },
+    });
+    if (!session) throw new NotFoundException('Sessão kids não encontrada');
+    if (session.status === KidsSessionStatus.open) return session;
+
+    const instance = await this.findInstance(tenantId, congregationId, session.celebration_instance_id);
+    if (instance.status === CelebrationInstanceStatus.cancelled) {
+      throw new UnprocessableEntityException('Culto cancelado não reabre sessão kids. Reative o culto primeiro');
+    }
+    if (!session.room.is_active) {
+      throw new UnprocessableEntityException('Turma desativada não reabre sessão');
+    }
+
+    return this.prisma.client.kidsSession.update({
+      where: { id: sessionId },
+      data: { status: KidsSessionStatus.open },
+    });
+  }
 }

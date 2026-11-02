@@ -421,6 +421,19 @@ mexer nisso:
 Escrever migration nova, portanto, é escrever também o script de RLS dela — o
 deploy não passa sem.
 
+> **Módulo Kids (`PROD-39`): os scripts `029` a `032` vão junto ou antes da
+> release da API.** O `db:deploy` do build já os aplica; se o banco for
+> atualizado por outro caminho (rodando só `prisma migrate deploy`, ou um banco
+> restaurado), rode `bash scripts/bootstrap-db.sh` antes de subir a API. O que
+> cada um protege:
+> - `029_rls_kids` e `030_rls_kids_child_health`: sem eles as tabelas do Kids
+>   (turmas, sessões, check-ins, responsáveis, saúde da criança) ficam **sem
+>   RLS** — o passo 7 falha o deploy por isso, mas só se o bootstrap rodar.
+> - `031_rls_kids_checkout_attempts`: cria `kids_register_checkout_failure()`.
+>   Sem ela o contador das 5 tentativas de check-out não grava e o
+>   travamento **falha aberto** (a recusa continua 403, mas nunca trava).
+> - `032_rls_kids_checkin_qr_tokens`: RLS dos QR de check-in.
+
 > **Histórico — o 500 em `/repertorio` (2026-09-08).** `20260907233843_add_songs_catalog`,
 > `20260908023535_add_service_order_item_type` e
 > `20260908034555_add_song_refs_and_alt_key` ficaram pendentes em produção

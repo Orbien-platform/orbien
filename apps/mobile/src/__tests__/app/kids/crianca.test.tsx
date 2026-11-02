@@ -206,6 +206,24 @@ describe("CriancaScreen", () => {
       expect(screen.queryByTestId("crianca-checkin")).toBeNull();
     });
 
+    it("falha ao listar as sessões avisa e oferece tentar de novo; ao conseguir, o check-in volta (REV-4.6)", async () => {
+      mockListOpen.mockRejectedValueOnce(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("crianca-sessoes-erro")).toBeTruthy();
+      expect(screen.queryByTestId("crianca-checkin")).toBeNull();
+
+      mockListOpen.mockResolvedValue(TODAY);
+      await press("crianca-sessoes-retry");
+      expect(screen.queryByTestId("crianca-sessoes-erro")).toBeNull();
+      expect(screen.getByTestId("crianca-checkin")).toBeTruthy();
+    });
+
+    it("sem falha na lista de sessões, não mostra o aviso", async () => {
+      mockListOpen.mockResolvedValue([]);
+      await renderScreen();
+      expect(screen.queryByTestId("crianca-sessoes-erro")).toBeNull();
+    });
+
     it("falha ao consultar o check-in aberto não derruba a ficha", async () => {
       mockGetOpen.mockRejectedValue(new NetworkError());
       await renderScreen();

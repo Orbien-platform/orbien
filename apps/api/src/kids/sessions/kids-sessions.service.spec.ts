@@ -334,4 +334,53 @@ describe('KidsSessionsService', () => {
       expect(client.kidsSession.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('reopen (REV-4.2)', () => {
+    const cancelled = (extra = {}) => ({
+      id: 's1',
+      status: 'cancelled',
+      celebration_instance_id: 'i1',
+      room: { is_active: true },
+      ...extra,
+    });
+
+    it('404 quando a sessão não é da congregação', async () => {
+      const client = clientWith();
+      client.kidsSession.findFirst.mockResolvedValue(null);
+      await expect(serviceWith(client).reopen('t1', 'g1', 's1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('sessão já aberta volta como está (idempotente)', async () => {
+      const client = clientWith();
+      client.kidsSession.findFirst.mockResolvedValue(cancelled({ status: 'open' }));
+      const out = await serviceWith(client).reopen('t1', 'g1', 's1');
+      expect(out.status).toBe('open');
+      expect(client.kidsSession.update).not.toHaveBeenCalled();
+    });
+
+    it('422 com o culto ainda cancelado', async () => {
+      const client = clientWith();
+      client.kidsSession.findFirst.mockResolvedValue(cancelled());
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'cancelled' });
+      await expect(serviceWith(client).reopen('t1', 'g1', 's1')).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(client.kidsSession.update).not.toHaveBeenCalled();
+    });
+
+    it('422 com a turma desativada', async () => {
+      const client = clientWith();
+      client.kidsSession.findFirst.mockResolvedValue(cancelled({ room: { is_active: false } }));
+      client.celebrationInstance.findFirst.mockResolvedValue(instance);
+      await expect(serviceWith(client).reopen('t1', 'g1', 's1')).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('reabre quando o culto está ativo e a turma também', async () => {
+      const client = clientWith();
+      client.kidsSession.findFirst.mockResolvedValue(cancelled());
+      client.celebrationInstance.findFirst.mockResolvedValue(instance);
+      client.kidsSession.update.mockResolvedValue({ id: 's1', status: 'open' });
+      const out = await serviceWith(client).reopen('t1', 'g1', 's1');
+      expect(client.kidsSession.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { status: 'open' } });
+      expect(out.status).toBe('open');
+    });
+  });
 });

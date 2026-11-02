@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { PlanGuard } from '../../auth/guards/plan.guard';
@@ -48,5 +48,12 @@ export class KidsSessionsController {
   @Roles(...KIDS_MANAGE_ROLES)
   cancel(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.sessionsService.cancel(user.tenant_id, user.congregation_id, id);
+  }
+
+  @Post('kids/sessions/:id/reopen')
+  @HttpCode(200)
+  @Roles(...KIDS_MANAGE_ROLES)
+  reopen(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.sessionsService.reopen(user.tenant_id, user.congregation_id, id);
   }
 }

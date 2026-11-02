@@ -97,6 +97,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  await admin.kidsCheckinQrToken.deleteMany({ where: { secret_hash: { endsWith: tag } } });
   await admin.celebration.deleteMany({ where: { id: celebrationId } });
   await admin.kidsRoom.deleteMany({ where: { id: roomId } });
   await admin.person.deleteMany({ where: { full_name: { endsWith: tag } } });
@@ -152,5 +153,48 @@ describe('KidsRetentionService (banco real)', () => {
     const r = await row('membroVelho');
     expect(r.anonymized_at).toEqual(NOW);
     expect(r.picked_up_by_name).toBeNull();
+  });
+});
+
+describe('KidsRetentionService.purgeQrTokens (banco real, REV-4.4)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const mk = (name: string, data: { expires_at: Date; used_at?: Date }) =>
+    admin.kidsCheckinQrToken.create({
+      data: {
+        ...scope,
+        child_id: childId,
+        guardian_person_id: guardians['membro']!,
+        issued_by: accountId,
+        secret_hash: `${name}-${tag}`,
+        ...data,
+      },
+    });
+  const alive = async () =>
+    (await admin.kidsCheckinQrToken.findMany({ where: { secret_hash: { endsWith: tag } }, select: { secret_hash: true } }))
+      .map((t) => t.secret_hash.replace(`-${tag}`, ''))
+      .sort();
+
+  it('apaga o usado ou expirado há mais de um dia; mantém o vigente, o recente e o limite exato', async () => {
+    await mk('expirado2d', { expires_at: new Date(NOW.getTime() - 2 * DAY) });
+    await mk('expiradoNoLimite', { expires_at: new Date(NOW.getTime() - DAY) });
+    await mk('expiradoHoje', { expires_at: new Date(NOW.getTime() - 60_000) });
+    await mk('vigente', { expires_at: new Date(NOW.getTime() + 60_000) });
+    await mk('usado2d', { expires_at: new Date(NOW.getTime() + 60_000), used_at: new Date(NOW.getTime() - 2 * DAY) });
+    await mk('usadoHoje', { expires_at: new Date(NOW.getTime() + 60_000), used_at: new Date(NOW.getTime() - 60_000) });
+
+    const res = await svc.purgeQrTokens(NOW, scope.tenant_id);
+
+    expect(res).toEqual({ purged: 2 });
+    expect(await alive()).toEqual(['expiradoHoje', 'expiradoNoLimite', 'usadoHoje', 'vigente']);
+  });
+
+  it('é idempotente: segunda rodada não apaga mais nada', async () => {
+    expect(await svc.purgeQrTokens(NOW, scope.tenant_id)).toEqual({ purged: 0 });
+  });
+
+  it('o limite exato passa a ser apagado assim que ultrapassa um dia', async () => {
+    const res = await svc.purgeQrTokens(new Date(NOW.getTime() + 1), scope.tenant_id);
+    expect(res).toEqual({ purged: 1 });
+    expect(await alive()).toEqual(['expiradoHoje', 'usadoHoje', 'vigente']);
   });
 });

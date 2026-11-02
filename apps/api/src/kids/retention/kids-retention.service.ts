@@ -5,6 +5,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 export const KIDS_CHECKIN_RETENTION_MONTHS = 12;
 const BATCH = 200;
+/** QR de check-in usado ou expirado há mais que isto é apagado (REV-4.4). */
+export const KIDS_QR_TOKEN_RETENTION_DAYS = 1;
 
 /**
  * Retenção de check-ins (KIDS-06): a identificação de quem retirou e o motivo
@@ -38,6 +40,48 @@ export class KidsRetentionService {
       // próxima rodada retoma de onde parou.
       this.logger.error(`Retenção de check-in kids falhou: ${String(err)}`);
     }
+  }
+
+  // 7h30, depois da anonimização das 7h.
+  @Cron('30 7 * * *')
+  async cronPurgeQrTokens(): Promise<void> {
+    try {
+      const { purged } = await this.purgeQrTokens();
+      this.logger.log(`Purga de QR de check-in kids: ${purged} apagado(s)`);
+    } catch (err) {
+      this.logger.error(`Purga de QR de check-in kids falhou: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Apaga os QR de check-in que já não servem: usados (`used_at`) ou expirados
+   * (`expires_at`) há mais de um dia. Token vigente nunca sai. O segredo só vive
+   * em hash e o token não é histórico de presença (o check-in é), então apagar
+   * não perde registro. `tenantId` restringe a varredura, como na anonimização.
+   */
+  async purgeQrTokens(now = new Date(), tenantId?: string): Promise<{ purged: number }> {
+    const cutoff = new Date(now.getTime() - KIDS_QR_TOKEN_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const where: Prisma.KidsCheckinQrTokenWhereInput = {
+      ...(tenantId ? { tenant_id: tenantId } : {}),
+      OR: [{ used_at: { lt: cutoff } }, { used_at: null, expires_at: { lt: cutoff } }],
+    };
+
+    let purged = 0;
+    for (;;) {
+      const batch = await this.prisma.system.kidsCheckinQrToken.findMany({
+        where,
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: BATCH,
+      });
+      if (batch.length === 0) break;
+      const res = await this.prisma.system.kidsCheckinQrToken.deleteMany({
+        where: { id: { in: batch.map((b) => b.id) } },
+      });
+      purged += res.count;
+      if (batch.length < BATCH) break;
+    }
+    return { purged };
   }
 
   // `tenantId` restringe a varredura a um tenant. O cron não o passa (varre

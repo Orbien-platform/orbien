@@ -3,6 +3,13 @@
 // sobe a versão. O texto completo e a base legal ficam em
 // docs/produto/orbien-lgpd-mapping.md (T36); aqui vai o que o app mostra no
 // aceite e devolve no 422.
+//
+// Subir a versão (REV-4.5): aceite de versão antiga vale como ausente, então todo
+// responsável fica sem consentimento vigente no mesmo instante e o check-in dele
+// passa a falhar com 422 `kids_consent_required`. Antes de subir: avisar a
+// secretaria, que pode registrar o aceite em nome do responsável (origem
+// `secretaria`), e conferir o texto novo com o jurídico. O aceite antigo é
+// revogado com o motivo `superseded_by_new_term` no novo aceite, nunca apagado.
 export const KIDS_TERM_VERSION = 'kids-2026-10';
 
 export const KIDS_TERM_TEXT =
