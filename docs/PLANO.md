@@ -757,13 +757,16 @@ Falta:
 Pendências declaradas da revisão do PR #193 (REV-4). Achados de `/code-review` e
 `pr-review` que o dono escolheu **não** ajustar agora; ficam abertas, com a
 evidência e a correção sugerida, e nenhum desses códigos foi alterado:
-- **REV-4.1 · `KidsGuardiansService.remove` sem lock e `add` aceita segundo
-  primário.** Evidência: `kids-guardians.service.ts` ~:140-156. O `update` ganhou
-  `FOR UPDATE ... ORDER BY id` (FIX5), o `remove` não: duas remoções simultâneas
-  de dois primários deixam a criança sem primário. Em `add` (:42, :69) um
-  responsável não primário aceita `is_primary: true`. Sugestão: o mesmo lock
-  `ORDER BY id` no `remove` e revalidar a invariante dentro dele; no `add`,
-  decidir se `is_primary` vale para não primário (e travar igual).
+- ~~**REV-4.1 · `KidsGuardiansService.remove` sem lock e `add` aceita segundo
+  primário.**~~ **Fechado** (branch `fix/kids-responsaveis-concorrencia`).
+  `remove` e `add` rodam em `runInTx` com `SELECT … ORDER BY id FOR UPDATE`
+  (helper `lockChildGuardians`, o mesmo do `update`) e revalidam depois do lock;
+  `add` com `is_primary: true` **promove** (rebaixa os primários atuais na mesma
+  transação, como o `update`). `remove` de linha já apagada por outra requisição
+  é idempotente. Evidência: 4 testes novos em
+  `test/integration/kids-guardians-concurrency.spec.ts` falhavam na main (zero
+  primários após duas remoções; 2–3 primários após `add`) e passam agora, mais
+  unitários em `kids-guardians.service.spec.ts`.
 - **REV-4.2 · Cancelar a instância fecha as sessões kids e reativar o culto não
   as reabre.** Evidência: `celebration-instances.service.ts` ~:144-150 e
   `kids-sessions.service.ts` ~:147-151; não há rota de reabrir sessão. Sugestão:

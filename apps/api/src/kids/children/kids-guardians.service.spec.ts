@@ -41,6 +41,30 @@ function setup() {
 }
 
 describe('KidsGuardiansService.add', () => {
+  it('is_primary no add promove: trava, rebaixa os primários atuais e cria o novo (REV-4.1)', async () => {
+    const { client, service } = setup();
+    client.kidsGuardian.findFirst.mockResolvedValue(null);
+    client.person.create.mockResolvedValue({ id: 'p2' });
+
+    await service.add(actor, 'child1', { full_name: 'Tio', phone: '11999990000', relationship: 'tio', is_primary: true });
+
+    expect(client.$queryRaw).toHaveBeenCalled();
+    expect(client.kidsGuardian.updateMany).toHaveBeenCalledWith({
+      where: { child_id: 'child1', is_primary: true },
+      data: { is_primary: false },
+    });
+    expect(client.kidsGuardian.create).toHaveBeenCalledWith({ data: expect.objectContaining({ is_primary: true }) });
+  });
+
+  it('add sem is_primary não rebaixa ninguém', async () => {
+    const { client, service } = setup();
+    client.kidsGuardian.findFirst.mockResolvedValue(null);
+
+    await service.add(actor, 'child1', { full_name: 'Tia', phone: '11999990000', relationship: 'tia' });
+
+    expect(client.kidsGuardian.updateMany).not.toHaveBeenCalled();
+  });
+
   it('terceiro novo: cria Person (nome, telefone, foto) sem conta e grava o KidsGuardian com can_pickup (AC 3)', async () => {
     const { client, service } = setup();
     client.kidsGuardian.findFirst.mockResolvedValue(null);
@@ -154,6 +178,7 @@ describe('KidsGuardiansService.remove', () => {
   it('remove terceiro autorizado', async () => {
     const { client, access, service } = setup();
     client.kidsGuardian.findFirst.mockResolvedValue(row());
+    client.kidsGuardian.findUnique.mockResolvedValue(row());
 
     await service.remove(actor, 'kg1');
 
@@ -164,6 +189,7 @@ describe('KidsGuardiansService.remove', () => {
   it('remover o último primário: 422 e nada é apagado (AC 4)', async () => {
     const { client, service } = setup();
     client.kidsGuardian.findFirst.mockResolvedValue(row({ is_primary: true }));
+    client.kidsGuardian.findUnique.mockResolvedValue(row({ is_primary: true }));
     client.kidsGuardian.count.mockResolvedValue(0);
 
     await expect(service.remove(actor, 'kg1')).rejects.toBeInstanceOf(UnprocessableEntityException);
@@ -176,11 +202,43 @@ describe('KidsGuardiansService.remove', () => {
   it('remover um primário havendo outro primário é permitido', async () => {
     const { client, service } = setup();
     client.kidsGuardian.findFirst.mockResolvedValue(row({ is_primary: true }));
+    client.kidsGuardian.findUnique.mockResolvedValue(row({ is_primary: true }));
     client.kidsGuardian.count.mockResolvedValue(1);
 
     await service.remove(actor, 'kg1');
 
     expect(client.kidsGuardian.delete).toHaveBeenCalled();
+  });
+
+  it('trava as linhas da criança (ORDER BY id) antes de decidir, e revalida depois do lock (REV-4.1)', async () => {
+    const { client, service } = setup();
+    const order: string[] = [];
+    client.$queryRaw.mockImplementation(async () => {
+      order.push('lock');
+      return [];
+    });
+    client.kidsGuardian.findFirst.mockResolvedValue(row({ is_primary: true }));
+    client.kidsGuardian.findUnique.mockImplementation(async () => {
+      order.push('reread');
+      return row({ is_primary: true });
+    });
+    client.kidsGuardian.count.mockImplementation(async () => {
+      order.push('count');
+      return 1;
+    });
+
+    await service.remove(actor, 'kg1');
+
+    expect(order).toEqual(['lock', 'reread', 'count']);
+  });
+
+  it('linha já apagada por outra requisição depois do lock: não apaga de novo, sem erro', async () => {
+    const { client, service } = setup();
+    client.kidsGuardian.findFirst.mockResolvedValue(row());
+    client.kidsGuardian.findUnique.mockResolvedValue(null);
+
+    await expect(service.remove(actor, 'kg1')).resolves.toBeUndefined();
+    expect(client.kidsGuardian.delete).not.toHaveBeenCalled();
   });
 
   it('autorizado inexistente na congregação: 404', async () => {
