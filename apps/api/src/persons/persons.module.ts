@@ -15,6 +15,7 @@ import { PersonsImportController } from './import/persons-import.controller';
 import { PersonsImportService } from './import/persons-import.service';
 import { PersonsRetentionScheduler } from './persons-retention.scheduler';
 import { PersonsRetentionNotifier } from './persons-retention-notifier.service';
+import { LogsConsentRetentionService } from './logs-consent-retention.service';
 
 @Module({
   imports: [StorageModule, ContentModule, MailModule],
@@ -29,6 +30,7 @@ import { PersonsRetentionNotifier } from './persons-retention-notifier.service';
     PersonsImportService,
     PersonsRetentionScheduler,
     PersonsRetentionNotifier,
+    LogsConsentRetentionService,
   ],
   exports: [ClassificationService, VisitsService],
 })
