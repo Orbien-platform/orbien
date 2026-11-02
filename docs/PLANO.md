@@ -2035,8 +2035,8 @@ molde como a escala tem. Três mudanças, uma só branch:
   remoção. Os outros usos da tag `person_id` estão no `PEND-22`.
 
 Não muda: a escala publicada continua editável (não há trava pós-publicação), e
-quem entra depois só é avisado ao publicar de novo. `PEND-20` (cancelar ou
-remover o culto) segue aberto — este item cobre só a remoção dentro da escala.
+quem entra depois só é avisado ao publicar de novo. Cancelar ou remover o culto
+é o `PEND-20` (fechado) — este item cobre só a remoção dentro da escala.
 
 ### ~~PROD-12 · Check-in de membros por QR no encontro~~ · fechado
 
@@ -2691,21 +2691,53 @@ mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 - **Marca da igreja na página pública**: a página mostra o nome da igreja,
   mas não a cor nem o logo — não há rota pública de identidade por slug.
 
-### PEND-20 · Avisar quem estava escalado quando o culto é cancelado ou removido · aberto
+### ~~PEND-20 · Avisar quem estava escalado quando o culto é cancelado ou removido~~ · fechado
 
-Cancelar uma data, cancelar uma instância ou remover uma celebração
-(`celebration-instances.service.ts`, `celebrations.service.ts`) tira o culto da
-agenda e da lista "minhas escalas" dos voluntários, mas **não notifica
-ninguém**. Quem estava escalado só descobre abrindo o app — ou chegando à
-igreja. Falta: push (e o canal que `PROD-14` respeitar) para os
-`celebration_assignments` ativos da instância, nos três casos — cancelar,
-remover a celebração com instâncias futuras e, se fizer sentido, reabrir.
-Ponto de atenção: na remoção a escala é apagada junto com a instância, então os
-destinatários têm de ser lidos **antes** do `deleteMany`.
-`CelebrationRemovalNotifier` (`PROD-39`) já avisa quem sai de uma escala publicada e
-pode ser reaproveitado aqui — hoje cobre só a remoção dentro da escala, não o
-cancelamento nem a remoção do culto. Respeitar a
-preferência de notificação do usuário (`notification_preferences`).
+Entregue em 2026-11-02. Quem estava escalado recebe push "Culto cancelado" nos
+quatro caminhos que tiram o culto da agenda:
+
+- `PATCH /celebration-instances/:id` com `status: cancelled`
+  (`CelebrationInstancesService.update`);
+- `cancelDates` (cancelar datas de uma recorrente) — **um** aviso para o lote;
+- `DELETE /celebration-instances/:id` (`CelebrationInstancesService.remove`),
+  que o item não listava mas apaga a escala do mesmo jeito;
+- `DELETE /celebrations/:id` (`CelebrationsService.remove`) — um aviso **por
+  pessoa**, com as datas afetadas, não um por instância.
+
+Como funciona: `CelebrationRemovalNotifier` ganhou `snapshotCancellation`, que lê
+os destinatários e as datas **antes** do `deleteMany`/`delete` (a escala some no
+cascade), e `notifyCancelled`, fire-and-forget como o aviso de remoção. Pessoas
+com o mesmo conjunto de datas saem na mesma chamada; o corpo lista até seis
+datas e depois "e mais N". Destinatário = a regra de `personsToNotifyOnRemoval`:
+escala `published`, `notified_at` preenchido, `pending` ou `confirmed` —
+rascunho, recusado e trocado não recebem. Só avisa quem **acabou** de ser
+cancelado: repetir o `PATCH`, instância já `cancelled`/`finalized` e culto já
+passado não geram aviso. Falha de leitura ou de OneSignal é logada e nunca
+desfaz o cancelamento.
+
+Preferência: `NotificationsService.sendPushToPersons` ganhou o parâmetro
+opcional `category`, que aplica o mesmo `excludeOptedOut` do segmento avançado.
+O aviso usa `avisos`; quem desligou esse grupo em `notification_preferences` não
+recebe. Sem `category` o comportamento é o de antes.
+
+Evidência: `celebration-removal.notifier.ts`, `celebration-instances.service.ts`,
+`celebrations.service.ts`, `content/notifications.service.ts`; testes em
+`celebration-removal.notifier.spec.ts` (snapshot, agrupamento, falha de push),
+`celebration-instances.service.spec.ts` (update, remove, cancelDates),
+`celebrations.service.spec.ts` (leitura antes do `deleteMany`) e
+`notifications.service.spec.ts` (preferência).
+
+**Ficou de fora, de propósito:**
+
+- **Reabrir** (`cancelled` → outro status) não avisa. Quem foi liberado pode já
+  ter feito outros planos; reavisar é decisão de produto à parte.
+- **Categoria própria de escala.** O aviso reaproveita `avisos`. Uma categoria
+  `escalas` pede coluna em `notification_preferences`, migration, tela do mobile
+  e tag `pref_escalas`.
+- **Quem estava em rascunho** (nunca foi avisado de que estava escalado) e quem
+  recusou ou trocou.
+- Os avisos de publicação (`PROD-39`) e de remoção da escala continuam sem
+  consultar a preferência — só o cancelamento passou a consultar.
 
 ### PEND-22 · Push endereçado por tag `person_id`, que o app não registra · aberto
 

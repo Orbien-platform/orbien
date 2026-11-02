@@ -1,13 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Celebration, CelebrationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
 import { CreateCelebrationDto } from './dto/create-celebration.dto';
 import { UpdateCelebrationDto } from './dto/update-celebration.dto';
 import { ListCelebrationsQueryDto } from './dto/list-celebrations-query.dto';
 
 @Injectable()
 export class CelebrationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: CelebrationRemovalNotifier,
+  ) {}
 
   async create(
     tenantId: string,
@@ -112,23 +116,37 @@ export class CelebrationsService {
     congregationId: string,
     id: string,
   ): Promise<Celebration & { removed_instances: number }> {
-    await this.findOne(tenantId, congregationId, id);
+    const celebrationRow = await this.findOne(tenantId, congregationId, id);
     const now = new Date();
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const toRemove = {
+      celebration_id: id,
+      tenant_id: tenantId,
+      scheduled_date: { gte: today },
+      status: { not: 'finalized' as const },
+    };
+
+    // Quem estava escalado é lido ANTES do deleteMany: a escala é apagada junto
+    // com a instância (cascade). Instância já cancelada fica de fora — já
+    // avisou. Um aviso por pessoa, com as datas, e não um por instância.
+    const upcoming = await this.prisma.client.celebrationInstance.findMany({
+      where: { ...toRemove, status: { notIn: ['finalized', 'cancelled'] } },
+      select: { id: true },
+    });
+    const snapshot = await this.notifier.snapshotCancellation(
+      tenantId,
+      celebrationRow.name,
+      celebrationRow.congregation_id,
+      upcoming.map((i) => i.id),
+    );
 
     // Mesma transação do request: se uma das duas falhar, nenhuma vale.
-    const { count } = await this.prisma.client.celebrationInstance.deleteMany({
-      where: {
-        celebration_id: id,
-        tenant_id: tenantId,
-        scheduled_date: { gte: today },
-        status: { not: 'finalized' },
-      },
-    });
+    const { count } = await this.prisma.client.celebrationInstance.deleteMany({ where: toRemove });
     const celebration = await this.prisma.client.celebration.update({
       where: { id },
       data: { is_active: false },
     });
+    this.notifier.notifyCancelled(tenantId, snapshot);
     return { ...celebration, removed_instances: count };
   }
 }

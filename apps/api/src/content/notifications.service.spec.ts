@@ -256,6 +256,35 @@ describe('NotificationsService', () => {
       expect(system.userAccount.findMany).not.toHaveBeenCalled();
     });
 
+    it('com categoria, tira quem desligou esse grupo nas preferências', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.userAccount.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
+      system.notificationPreference.findMany.mockResolvedValue([{ user_account_id: 'u2' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendPushToPersons(base, ['p1', 'p2'], 'avisos');
+
+      expect(system.notificationPreference.findMany).toHaveBeenCalledWith({
+        where: { tenant_id: 't1', user_account_id: { in: ['u1', 'u2'] }, avisos: false },
+        select: { user_account_id: true },
+      });
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).include_external_user_ids).toEqual(['u1']);
+    });
+
+    it('sem categoria não consulta preferência', async () => {
+      process.env['ONESIGNAL_APP_ID'] = 'app1';
+      const { prisma, system } = prismaWith();
+      system.userAccount.findMany.mockResolvedValue([{ id: 'u1' }]);
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'osig1' }) });
+      const service = new NotificationsService(prisma);
+
+      await service.sendPushToPersons(base, ['p1']);
+
+      expect(system.notificationPreference.findMany).not.toHaveBeenCalled();
+    });
+
     it('divide em lotes de 1000 e devolve false se algum lote falhar', async () => {
       process.env['ONESIGNAL_APP_ID'] = 'app1';
       const { prisma, system } = prismaWith();

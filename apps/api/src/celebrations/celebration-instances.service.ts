@@ -5,12 +5,18 @@ import { CreateCelebrationInstanceDto } from './dto/create-celebration-instance.
 import { UpdateCelebrationInstanceDto } from './dto/update-celebration-instance.dto';
 import { ListCelebrationInstancesQueryDto } from './dto/list-celebration-instances-query.dto';
 import { checkinTotalsByInstance } from './celebration-attendance.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
+
+type InstanceWithCelebration = CelebrationInstance & { celebration: { name: string } };
 
 @Injectable()
 export class CelebrationInstancesService {
   private readonly logger = new Logger(CelebrationInstancesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: CelebrationRemovalNotifier,
+  ) {}
 
   async create(
     tenantId: string,
@@ -111,7 +117,7 @@ export class CelebrationInstancesService {
     tenantId: string,
     congregationId: string,
     id: string,
-  ): Promise<CelebrationInstance> {
+  ): Promise<InstanceWithCelebration> {
     const instance = await this.prisma.client.celebrationInstance.findFirst({
       where: { id, tenant_id: tenantId, congregation_id: congregationId },
       include: {
@@ -132,7 +138,7 @@ export class CelebrationInstancesService {
     id: string,
     dto: UpdateCelebrationInstanceDto,
   ): Promise<CelebrationInstance> {
-    await this.findOne(tenantId, congregationId, id);
+    const before = await this.findOne(tenantId, congregationId, id);
 
     const updated = await this.prisma.client.celebrationInstance.update({
       where: { id },
@@ -141,7 +147,14 @@ export class CelebrationInstancesService {
         ...(dto.status !== undefined && { status: dto.status }),
       },
     });
-    if (dto.status === CelebrationInstanceStatus.cancelled) await this.cancelKidsSessions(id);
+    if (dto.status === CelebrationInstanceStatus.cancelled) {
+      await this.cancelKidsSessions(id);
+      // Só quem acabou de ser cancelado: repetir o PATCH não avisa de novo, e
+      // culto finalizado já aconteceu.
+      if (before.status !== 'cancelled' && before.status !== 'finalized') {
+        await this.warnCancelled(tenantId, congregationId, before.celebration.name, [id]);
+      }
+    }
     return updated;
   }
 
@@ -154,13 +167,45 @@ export class CelebrationInstancesService {
     });
   }
 
+  // Lê quem estava escalado e dispara o aviso. Em remoção, chamar ANTES do
+  // delete: a escala some junto com a instância. Nunca lança.
+  private async warnCancelled(
+    tenantId: string,
+    congregationId: string,
+    celebrationName: string,
+    instanceIds: string[],
+  ): Promise<void> {
+    const snapshot = await this.notifier.snapshotCancellation(
+      tenantId,
+      celebrationName,
+      congregationId,
+      instanceIds,
+    );
+    this.notifier.notifyCancelled(tenantId, snapshot);
+  }
+
   async remove(
     tenantId: string,
     congregationId: string,
     id: string,
   ): Promise<CelebrationInstance> {
-    await this.findOne(tenantId, congregationId, id);
-    return this.prisma.client.celebrationInstance.delete({ where: { id } });
+    const instance = await this.findOne(tenantId, congregationId, id);
+    // Culto que ainda ia acontecer: cancelado e finalizado não têm o que avisar
+    // (o primeiro já avisou, o segundo já foi).
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const snapshot =
+      instance.status !== 'cancelled' && instance.status !== 'finalized' && instance.scheduled_date >= today
+        ? await this.notifier.snapshotCancellation(
+            tenantId,
+            instance.celebration.name,
+            congregationId,
+            [id],
+          )
+        : null;
+    const removed = await this.prisma.client.celebrationInstance.delete({ where: { id } });
+    this.notifier.notifyCancelled(tenantId, snapshot);
+    return removed;
   }
 
   /**
@@ -198,6 +243,9 @@ export class CelebrationInstancesService {
     });
 
     const results: CelebrationInstance[] = [];
+    // Instâncias que existiam e passaram a cancelada agora; as já canceladas
+    // não reavisam, e a criada já cancelada não tem escala.
+    const newlyCancelled: string[] = [];
     for (const day of days) {
       const dayEnd = new Date(day.getTime() + 86_400_000);
       const existing = await this.prisma.client.celebrationInstance.findFirst({
@@ -211,6 +259,7 @@ export class CelebrationInstancesService {
         throw new BadRequestException(`O culto de ${day.toISOString().slice(0, 10)} já foi finalizado`);
       }
       if (existing) await this.cancelKidsSessions(existing.id);
+      if (existing && existing.status !== 'cancelled') newlyCancelled.push(existing.id);
       results.push(
         existing
           ? await this.prisma.client.celebrationInstance.update({
@@ -228,6 +277,7 @@ export class CelebrationInstancesService {
             }),
       );
     }
+    await this.warnCancelled(tenantId, congregationId, celebration.name, newlyCancelled);
     return results;
   }
 
