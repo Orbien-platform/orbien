@@ -45,6 +45,7 @@ import {
 import { describeLoadError, type LoadErrorState } from "../../../../lib/api/load-error";
 import { useTheme } from "../../../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../../../lib/theme/tokens";
+import { useReloadOnReconnect } from "../../../../lib/network/use-reload-on-reconnect";
 
 const SUBMIT_ERROR_MESSAGE = "Não foi possível registrar a presença. Tente novamente.";
 
@@ -60,6 +61,13 @@ export default function PresencaScreen() {
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, a tela relê sozinha quando ela volta — a mesma
+  // releitura do "Tentar novamente", nunca uma escrita.
+  const retry = () => {
+    setLoadError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(loadError?.offline === true, retry);
   // Quem fez check-in pelo QR enquanto a tela dele estava aberta já tem
   // presença gravada: na volta, a lista é relida para aparecer marcada.
   const openedQrRef = useRef(false);
@@ -142,10 +150,7 @@ export default function PresencaScreen() {
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setLoadError(null);
-            setRetryCount((n) => n + 1);
-          }}
+          onPress={retry}
         />
       </StatusMessage>
     );

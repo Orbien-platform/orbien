@@ -60,6 +60,7 @@ import {
   touchTarget,
   typography,
 } from "../../../lib/theme/tokens";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 
 type VerseRange = { start: number; end: number };
 
@@ -114,6 +115,13 @@ export default function BibliaChapterScreen() {
   const [data, setData] = useState<BibleChapter | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, a tela relê sozinha quando ela volta — a mesma
+  // releitura do "Tentar novamente", nunca uma escrita.
+  const retry = () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(error?.offline === true, retry);
   // Vindo do feed (BIB-06 AC4, "abrir a leitura completa... com o intervalo
   // em destaque"): a rota chega com `verse_start`/`verse_end` na query e o
   // capítulo já abre com esse intervalo marcado. Só lido na montagem (lazy
@@ -217,10 +225,7 @@ export default function BibliaChapterScreen() {
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setError(null);
-            setRetryCount((n) => n + 1);
-          }}
+          onPress={retry}
         />
       </StatusMessage>
     );

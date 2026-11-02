@@ -44,6 +44,7 @@ import { formatDateTime } from "../lib/format/date";
 import { CircleAlert, Copy, RefreshCw, Ticket, UserCheck, WifiOff } from "../lib/theme/icons";
 import { useTheme } from "../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, radius, spacing, typography } from "../lib/theme/tokens";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 
 const ACTION_ERROR = "Não foi possível concluir. Tente novamente.";
 
@@ -85,6 +86,13 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
   // Incrementado por "Tentar novamente" — mesma mecânica de `presenca.tsx`.
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, a tela relê sozinha quando ela volta — a mesma
+  // releitura do "Tentar novamente", nunca uma escrita.
+  const retry = () => {
+    setLoadError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(loadError?.offline === true, retry);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -208,10 +216,7 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setLoadError(null);
-            setRetryCount((n) => n + 1);
-          }}
+          onPress={retry}
         />
       </Card>
     );
