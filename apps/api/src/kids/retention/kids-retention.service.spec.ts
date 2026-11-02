@@ -146,10 +146,26 @@ describe('KidsRetentionService.purgeQrTokens (REV-4.4)', () => {
     expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['a', 'b'] } } });
   });
 
+  it('lote cheio pede o seguinte até esgotar', async () => {
+    const cheio = Array.from({ length: 200 }, (_, i) => ({ id: `t${i}` }));
+    const { svc, findMany, deleteMany } = buildQr([cheio, [{ id: 'ultimo' }]]);
+    await expect(svc.purgeQrTokens(NOW)).resolves.toEqual({ purged: 201 });
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(deleteMany).toHaveBeenCalledTimes(2);
+  });
+
   it('restringe ao tenant quando informado', async () => {
     const { svc, findMany } = buildQr([]);
     await svc.purgeQrTokens(NOW, 't2');
     expect(findMany.mock.calls[0][0].where.tenant_id).toBe('t2');
+  });
+
+  it('o cron registra quantos QR apagou', async () => {
+    const { svc, deleteMany } = buildQr([[{ id: 'a' }]]);
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    await expect(svc.cronPurgeQrTokens()).resolves.toBeUndefined();
+    expect(deleteMany).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith('Purga de QR de check-in kids: 1 apagado(s)');
   });
 
   it('o cron não derruba o processo se a purga falhar', async () => {
