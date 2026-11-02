@@ -2032,7 +2032,7 @@ molde como a escala tem. Três mudanças, uma só branch:
   `person_id`, e o app só registra `external_id`, `tenant_id`,
   `congregation_id` e `role` no OneSignal (`onesignal-client.ts`) — o filtro não
   alcançava ninguém. Passou a `sendPushToPersons`, o mesmo caminho do aviso de
-  remoção. Os outros usos da tag `person_id` estão no `PEND-22`.
+  remoção. Os outros usos da tag `person_id` foram corrigidos no `PEND-22`.
 
 Não muda: a escala publicada continua editável (não há trava pós-publicação), e
 quem entra depois só é avisado ao publicar de novo. `PEND-20` (cancelar ou
@@ -2707,19 +2707,39 @@ pode ser reaproveitado aqui — hoje cobre só a remoção dentro da escala, nã
 cancelamento nem a remoção do culto. Respeitar a
 preferência de notificação do usuário (`notification_preferences`).
 
-### PEND-22 · Push endereçado por tag `person_id`, que o app não registra · aberto
+### ~~PEND-22 · Push endereçado por tag `person_id`~~ · fechado
 
-O app mobile registra no OneSignal só `external_id` (id da conta), `tenant_id`,
-`congregation_id`, `role` e as `pref_*`. Não existe tag `person_id`, então todo
-envio que filtra por ela não chega a ninguém. O aviso de publicação da escala
-foi corrigido no `PROD-39`; seguem com o mesmo filtro, ainda sem correção:
-`service-orders.service.ts` (OC publicada), `celebration-swap.service.ts`
-(pedido de troca), `small-groups-absence.notifier.ts` (alerta de ausência ao
-líder) e `bible-mark-interactions.service.ts` (curtida e resposta em marca).
-A correção é a do `PROD-39`: `NotificationsService.sendPushToPersons`, que
-resolve a conta ativa de cada `person_id`. Confirmar antes, num aparelho real
-ou no painel do OneSignal, que nenhum desses chega hoje — a leitura do código
-diz que não, mas ninguém viu o push falhar.
+Fechado em 2026-11-02 (branch `fix/push-por-person-id`). Cinco envios filtravam o
+OneSignal pela tag `person_id` — um a mais do que o item listava: OC publicada
+(`service-orders.service.ts`), pedido de troca (`celebration-swap.service.ts`),
+alerta de ausência ao líder (`small-groups-absence.notifier.ts`), resposta em
+marca da Bíblia (`bible-mark-interactions.service.ts`) e os avisos "Criança
+entregue/recebida" do Kids (`kids-pickup-notice.service.ts`). Todos passaram a
+`NotificationsService.sendPushToPersons`, que resolve a conta ativa de cada
+`person_id` e manda por `include_external_user_ids`.
+
+- **Preferências.** `sendPushToPersons` ganhou o 3º parâmetro opcional
+  `category`: com ele, aplica `excludeOptedOut` sobre `notification_preferences`
+  (sem linha = ligado). A Bíblia usa `'biblia'` e o Kids `'kids'` — o que antes
+  era a tag `pref_biblia`/`pref_kids != false` do aparelho agora é lido do banco,
+  valendo na hora, sem depender de o app ter sincronizado a tag. OC, troca e
+  ausência não têm categoria (e não tinham `pref_*`).
+- **Correção do enunciado.** O app *registra* a tag `person_id` hoje
+  (`notifications-provider.tsx` → `registerPersonTag`, desde o módulo Kids), mas
+  num fetch sem retry que falha em silêncio e só em build novo — por isso a tag
+  não é endereço confiável. O app segue registrando; remover é decisão à parte.
+  E "curtida" nunca gerou push: só a resposta chama `notifyAuthor`.
+- **Evidência.** `src/content/push-addressing.guard.spec.ts` varre `apps/api/src`
+  e falha se algum arquivo voltar a combinar `field: 'tag'` com
+  `key: 'person_id'`; rodado contra o código anterior listou exatamente os cinco
+  arquivos acima. Cada ponto tem spec unitário afirmando `sendPushToPersons`
+  com os `person_id` certos (e a categoria) e sem `filters`;
+  `notifications.service.spec.ts` cobre `category`. Os specs antigos só provavam a
+  *forma* do payload (`filters` com a tag), não a entrega.
+- **Não verificado.** Ninguém viu o push falhar (nem chegar) em aparelho real ou
+  no painel do OneSignal; a conclusão vem da leitura do código e do payload.
+- **Fora do escopo.** Remover `registerPersonTag` do mobile; push de curtida;
+  preferência para OC/troca/ausência.
 
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 

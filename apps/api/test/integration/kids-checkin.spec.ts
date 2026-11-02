@@ -787,9 +787,11 @@ describe('GET /kids/children/:id/checkin (código ao responsável)', () => {
 describe('push "Criança entregue" aos responsáveis (check-out e override)', () => {
   let push: jest.SpyInstance;
   beforeEach(() => {
-    push = jest.spyOn(h.app.get(NotificationsService), 'sendPush').mockResolvedValue(true);
+    push = jest.spyOn(h.app.get(NotificationsService) as unknown as { dispatch: () => Promise<boolean> }, 'dispatch').mockResolvedValue(true);
   });
   afterEach(() => push.mockRestore());
+  // O alerta ao líder (kids_checkout_denied...) passa pelo mesmo dispatch; aqui só interessam os avisos aos responsáveis.
+  const notices = () => push.mock.calls.filter(([o]) => String(o.data.type).startsWith('kids_child_'));
 
   async function present() {
     const child = await mkChild({ months: 36, label: 'Entrega' });
@@ -806,12 +808,10 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
     const res = await out(p.id, { code: p.code, picked_up_by_person_id: avo });
 
     expect(res.status).toBe(200);
-    expect(push).toHaveBeenCalledTimes(1);
-    const opts = push.mock.calls[0][0];
-    expect(opts.filters).toEqual([
-      { field: 'tag', key: 'person_id', relation: '=', value: mae },
-      { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
-    ]);
+    expect(notices()).toHaveLength(1);
+    const opts = notices()[0][0];
+    expect(opts.filters).toBeUndefined(); // endereçado por conta, nunca por tag
+    expect(await recipients()).toEqual([mae]);
     expect(opts).toMatchObject({ title: 'Criança entregue' });
     expect(opts.data).toEqual({ type: 'kids_child_released', checkin_id: p.id, session_id: ids.sMat, child_id: p.child }); // FIX3: contrato exato do data
     expect(opts.body).toContain(`Entrega`);
@@ -823,7 +823,7 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
   it('quem retirou é o próprio primário: não precisa de aviso', async () => {
     const p = await present();
     expect((await out(p.id, { code: p.code, picked_up_by_person_id: mae })).status).toBe(200);
-    expect(push).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
   });
 
   it('o override do líder também avisa o primário', async () => {
@@ -834,15 +834,15 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
       .send({ reason: 'Perdeu o código', picked_up_by_name: 'Vizinha' });
 
     expect(res.status).toBe(200);
-    expect(push).toHaveBeenCalledTimes(1);
-    expect(push.mock.calls[0][0].filters[0]).toMatchObject({ value: mae });
+    expect(notices()).toHaveLength(1);
+    expect(await recipients()).toEqual([mae]);
   });
 
   it('retirada recusada não avisa ninguém', async () => {
     const p = await present();
     const res = await out(p.id, { code: p.code === 'ZZZZ' ? 'YYYY' : 'ZZZZ', picked_up_by_person_id: avo });
     expect(res.status).toBe(403);
-    expect(push).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
   });
 
   // R3-3(b): além do primário, os demais responsáveis com can_pickup que têm conta.
@@ -857,22 +857,27 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
     accountsByPerson.set(personId, account.id);
     return account.id;
   }
-  const recipients = () => push.mock.calls.map(([o]) => (o.filters[0] as { value: string }).value).sort();
+  // `sendPushToPersons` resolve pessoa -> conta ativa; o dispatch recebe ids de conta.
+  const recipients = async () => {
+    const accountIdsSent = notices().flatMap(([o]) => o.externalUserIds as string[]);
+    const rows = await admin.userAccount.findMany({ where: { id: { in: accountIdsSent } }, select: { person_id: true } });
+    return rows.map((a) => a.person_id as string).sort();
+  };
 
   it('R3-3(b): a mãe retira — a avó (can_pickup, com conta) é avisada; o tio (sem can_pickup, com conta) não', async () => {
     await accountFor(avo, 'avo');
     await accountFor(tio, 'tio');
     const p = await present();
     expect((await out(p.id, { code: p.code, picked_up_by_person_id: mae })).status).toBe(200);
-    expect(recipients()).toEqual([avo]); // mãe retirou: não duplica; tio não pode retirar: não recebe
-    expect(push.mock.calls[0][0].data.type).toBe('kids_child_released');
+    expect(await recipients()).toEqual([avo]); // mãe retirou: não duplica; tio não pode retirar: não recebe
+    expect(notices()[0][0].data.type).toBe('kids_child_released');
   });
 
   it('R3-3(b): a avó retira — a mãe é avisada e a avó (quem retirou) não', async () => {
     await accountFor(avo, 'avo');
     const p = await present();
     expect((await out(p.id, { code: p.code, picked_up_by_person_id: avo })).status).toBe(200);
-    expect(recipients()).toEqual([mae]);
+    expect(await recipients()).toEqual([mae]);
   });
 
   it('R3-3(b): override avisa todos os responsáveis com conta que podem retirar', async () => {
@@ -883,7 +888,7 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
       .set(auth(leader))
       .send({ reason: 'Perdeu o código', picked_up_by_name: 'Vizinha' });
     expect(res.status).toBe(200);
-    expect(recipients()).toEqual([mae, avo].sort());
+    expect(await recipients()).toEqual([mae, avo].sort());
   });
 
   it('push que falha ou rejeita (sem token, OneSignal fora): o check-out fecha do mesmo jeito', async () => {
@@ -899,22 +904,27 @@ describe('push "Criança entregue" aos responsáveis (check-out e override)', ()
 describe('push "Criança recebida na turma X" ao responsável primário (R3-3a)', () => {
   let push: jest.SpyInstance;
   beforeEach(() => {
-    push = jest.spyOn(h.app.get(NotificationsService), 'sendPush').mockResolvedValue(true);
+    push = jest.spyOn(h.app.get(NotificationsService) as unknown as { dispatch: () => Promise<boolean> }, 'dispatch').mockResolvedValue(true);
   });
   afterEach(() => push.mockRestore());
-  const recipients = () => push.mock.calls.map(([o]) => (o.filters[0] as { value: string }).value).sort();
+  // O alerta ao líder (kids_checkout_denied...) passa pelo mesmo dispatch; aqui só interessam os avisos aos responsáveis.
+  const notices = () => push.mock.calls.filter(([o]) => String(o.data.type).startsWith('kids_child_'));
+  // `sendPushToPersons` resolve pessoa -> conta ativa; o dispatch recebe ids de conta.
+  const recipients = async () => {
+    const accountIdsSent = notices().flatMap(([o]) => o.externalUserIds as string[]);
+    const rows = await admin.userAccount.findMany({ where: { id: { in: accountIdsSent } }, select: { person_id: true } });
+    return rows.map((a) => a.person_id as string).sort();
+  };
 
   it('a equipe faz o check-in: o primário (mãe) é avisado com a turma e só o primeiro nome, sem saúde', async () => {
     const child = await mkChild({ months: 36, label: 'Chegada' });
     const res = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: avo }); // a avó entrega
     expect(res.status).toBe(201);
 
-    expect(push).toHaveBeenCalledTimes(1);
-    const opts = push.mock.calls[0][0];
-    expect(opts.filters).toEqual([
-      { field: 'tag', key: 'person_id', relation: '=', value: mae },
-      { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
-    ]);
+    expect(notices()).toHaveLength(1);
+    const opts = notices()[0][0];
+    expect(opts.filters).toBeUndefined(); // endereçado por conta, nunca por tag
+    expect(await recipients()).toEqual([mae]);
     expect(opts).toMatchObject({ title: `Criança recebida na turma Maternal ${tag}` });
     expect(opts.data).toEqual({ type: 'kids_child_received', checkin_id: res.body.id, session_id: ids.sMat, child_id: child }); // FIX3
     expect(opts.body).toContain('Chegada');
@@ -926,7 +936,7 @@ describe('push "Criança recebida na turma X" ao responsável primário (R3-3a)'
     const child = await mkChild({ months: 36 });
     const res = await checkIn(tokenMae, ids.sMat, { child_id: child, guardian_person_id: mae });
     expect(res.status).toBe(201);
-    expect(push).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
   });
 
   it('só o primário recebe: a avó e o tio (mesmo com conta) não são avisados da chegada', async () => {
@@ -938,13 +948,13 @@ describe('push "Criança recebida na turma X" ao responsável primário (R3-3a)'
     }
     const child = await mkChild({ months: 36 });
     expect((await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: tio })).status).toBe(201);
-    expect(recipients()).toEqual([mae]);
+    expect(await recipients()).toEqual([mae]);
   });
 
   it('check-in recusado (409, faixa) não avisa; push que falha não desfaz o check-in', async () => {
     const child = await mkChild({ months: 36 });
     expect((await checkIn(leader, ids.sEstrito, { child_id: child, guardian_person_id: mae })).status).toBe(422);
-    expect(push).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
 
     push.mockRejectedValue(new Error('OneSignal fora do ar'));
     const ok = await checkIn(leader, ids.sMat, { child_id: child, guardian_person_id: mae });

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { AssignmentStatus, CelebrationInstanceStatus, Prisma, ScheduleStatus, SwapRequestStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService, orGroup, type OneSignalFilter } from '../content/notifications.service';
+import { NotificationsService } from '../content/notifications.service';
 import { CreateSwapRequestDto } from './dto/create-swap-request.dto';
 
 /**
@@ -131,13 +131,6 @@ function toView(req: RequestWithContext): SwapRequestView {
   };
 }
 
-/** Qualquer uma das pessoas: um filtro de tag por pessoa, intercalados por `OR`. */
-function anyPerson(personIds: string[]): OneSignalFilter[] {
-  return orGroup(
-    personIds.map((id): OneSignalFilter => ({ field: 'tag', key: 'person_id', relation: '=', value: id })),
-  );
-}
-
 @Injectable()
 export class CelebrationSwapService {
   private readonly logger = new Logger(CelebrationSwapService.name);
@@ -229,15 +222,17 @@ export class CelebrationSwapService {
   private notify(personIds: string[], tenantId: string, congregationId: string, title: string, body: string, requestId: string): void {
     if (personIds.length === 0) return;
     this.notifications
-      .sendPush({
-        tenantId,
-        congregationId,
-        contentPostId: null,
-        title,
-        body,
-        filters: anyPerson(personIds),
-        data: { type: 'assignment_swap_request', swap_request_id: requestId },
-      })
+      .sendPushToPersons(
+        {
+          tenantId,
+          congregationId,
+          contentPostId: null,
+          title,
+          body,
+          data: { type: 'assignment_swap_request', swap_request_id: requestId },
+        },
+        personIds,
+      )
       .catch((err: unknown) => {
         this.logger.error(`Falha ao notificar pedido de troca ${requestId}: ${String(err)}`);
       });

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ServiceOrder } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService, OneSignalFilter } from '../content/notifications.service';
+import { NotificationsService } from '../content/notifications.service';
 import { CreateServiceOrderDto } from './dto/create-service-order.dto';
 import { UpdateServiceOrderDto } from './dto/update-service-order.dto';
 import { SONG_REFERENCE_SELECT, SONG_VERSION_REFERENCE_SELECT } from './setlist-songs.service';
@@ -221,12 +221,6 @@ export class ServiceOrdersService {
 
     const personIds = [...new Set(assignments.map((a) => a.volunteerProfile.person_id))];
 
-    // Build OR filter: one tag per person_id
-    const filters: OneSignalFilter[] = personIds.flatMap((pid, i) => {
-      const f: OneSignalFilter = { field: 'tag', key: 'person_id', relation: '=', value: pid };
-      return i === 0 ? [f] : [{ operator: 'OR' }, f];
-    });
-
     const dateLabel = instance.scheduled_date.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
@@ -234,14 +228,16 @@ export class ServiceOrdersService {
       timeZone: 'UTC',
     });
 
-    await this.notifications.sendPush({
-      tenantId,
-      congregationId,
-      contentPostId: null,
-      title: 'Ordem de Culto publicada',
-      body: `A Ordem de Celebração de ${instance.celebration.name} do dia ${dateLabel} foi publicada.`,
-      filters,
-      data: { type: 'service_order_published', service_order_id: serviceOrderId },
-    });
+    await this.notifications.sendPushToPersons(
+      {
+        tenantId,
+        congregationId,
+        contentPostId: null,
+        title: 'Ordem de Culto publicada',
+        body: `A Ordem de Celebração de ${instance.celebration.name} do dia ${dateLabel} foi publicada.`,
+        data: { type: 'service_order_published', service_order_id: serviceOrderId },
+      },
+      personIds,
+    );
   }
 }

@@ -7,7 +7,6 @@ const received = { ...info, actorPersonId: 'staff-person' as string | null };
 
 type Opts = {
   guardians?: string[]; // o que o banco devolveria para o filtro pedido
-  accounts?: string[]; // pessoas com conta ativa
   child?: { full_name: string } | null;
   push?: jest.Mock;
 };
@@ -17,23 +16,18 @@ function build(opts: Opts = {}) {
     kidsGuardian: {
       findMany: jest.fn().mockResolvedValue((opts.guardians ?? ['mae']).map((guardian_person_id) => ({ guardian_person_id }))),
     },
-    userAccount: {
-      findMany: jest.fn(async ({ where }: { where: { person_id: { in: string[] } } }) =>
-        where.person_id.in.filter((id) => (opts.accounts ?? ['mae', 'pai', 'avo', 'tio']).includes(id)).map((person_id) => ({ person_id })),
-      ),
-    },
     person: {
       findFirst: jest.fn().mockResolvedValue(opts.child === undefined ? { full_name: 'Ana Clara Souza' } : opts.child),
     },
   };
-  const notifications = { sendPush: opts.push ?? jest.fn().mockResolvedValue(true) };
+  const notifications = { sendPushToPersons: opts.push ?? jest.fn().mockResolvedValue(true) };
   const svc = new KidsPickupNoticeService({ client } as unknown as PrismaService, notifications as never);
-  const sentTo = () => notifications.sendPush.mock.calls.map(([o]) => (o.filters[0] as { value: string }).value);
+  const sentTo = () => notifications.sendPushToPersons.mock.calls.flatMap(([, ids]) => ids as string[]);
   return { client, notifications, svc, sentTo };
 }
 
 describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', () => {
-  it('pede ao banco o primário e os demais com can_pickup, e avisa pela tag person_id respeitando a preferência kids com != (AD-003)', async () => {
+  it('pede ao banco o primário e os demais com can_pickup, e avisa pela conta (sendPushToPersons) respeitando a preferência kids', async () => {
     const { svc, client, notifications } = build();
     await svc.notifyChildReleased('t1', 'g1', released);
 
@@ -41,18 +35,18 @@ describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', 
       where: { child_id: 'c1', tenant_id: 't1', congregation_id: 'g1', OR: [{ is_primary: true }, { can_pickup: true }] },
       select: { guardian_person_id: true },
     });
-    expect(notifications.sendPush).toHaveBeenCalledWith({
-      tenantId: 't1',
-      congregationId: 'g1',
-      contentPostId: null,
-      title: 'Criança entregue',
-      body: 'Retirada de Ana confirmada na turma Maternal.',
-      filters: [
-        { field: 'tag', key: 'person_id', relation: '=', value: 'mae' },
-        { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
-      ],
-      data: { type: 'kids_child_released', checkin_id: 'k1', session_id: 's1', child_id: 'c1' },
-    });
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
+      {
+        tenantId: 't1',
+        congregationId: 'g1',
+        contentPostId: null,
+        title: 'Criança entregue',
+        body: 'Retirada de Ana confirmada na turma Maternal.',
+        data: { type: 'kids_child_released', checkin_id: 'k1', session_id: 's1', child_id: 'c1' },
+      },
+      ['mae'],
+      'kids',
+    );
   });
 
   it('R3-3(b): além do primário, os demais responsáveis com can_pickup e conta recebem; quem retirou, não', async () => {
@@ -61,18 +55,16 @@ describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', 
     expect(sentTo()).toEqual(['mae', 'pai']); // avó retirou: não duplica
   });
 
-  it('não recebe: responsável sem conta ativa (o filtro de conta corta antes do envio)', async () => {
-    const { svc, sentTo, client } = build({ guardians: ['mae', 'pai', 'avo'], accounts: ['mae'] });
+  it('conta ativa e preferência kids ficam com sendPushToPersons: todos os candidatos vão num único envio', async () => {
+    const { svc, notifications } = build({ guardians: ['mae', 'pai', 'avo'] });
     await svc.notifyChildReleased('t1', 'g1', { ...released, pickedUpByPersonId: null });
-    expect(sentTo()).toEqual(['mae']);
-    expect(client.userAccount.findMany).toHaveBeenCalledWith({
-      where: { tenant_id: 't1', person_id: { in: ['mae', 'pai', 'avo'] }, is_active: true },
-      select: { person_id: true },
-    });
+    expect(notifications.sendPushToPersons).toHaveBeenCalledTimes(1);
+    expect(notifications.sendPushToPersons.mock.calls[0].slice(1)).toEqual([['mae', 'pai', 'avo'], 'kids']);
+    expect(notifications.sendPushToPersons.mock.calls[0][0]).not.toHaveProperty('filters');
   });
 
   it('não recebe: terceiro sem can_pickup (o banco não o devolve para o filtro) e quem não é responsável da criança', async () => {
-    const { svc, sentTo } = build({ guardians: ['mae'], accounts: ['mae', 'tio', 'estranho'] });
+    const { svc, sentTo } = build({ guardians: ['mae'] });
     await svc.notifyChildReleased('t1', 'g1', released);
     expect(sentTo()).toEqual(['mae']);
   });
@@ -81,9 +73,9 @@ describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', 
     const { svc, client, notifications } = build();
     await svc.notifyChildReleased('t1', 'g1', released);
 
-    const opts = notifications.sendPush.mock.calls[0][0];
+    const opts = notifications.sendPushToPersons.mock.calls[0][0];
     expect(`${opts.title} ${opts.body}`).not.toMatch(/Clara|Souza|alerg|médic|saúde/i);
-    expect(Object.keys(client)).toEqual(['kidsGuardian', 'userAccount', 'person']); // nem toca em kidsChildHealth
+    expect(Object.keys(client)).toEqual(['kidsGuardian', 'person']); // nem toca em kidsChildHealth
     expect(client.person.findFirst).toHaveBeenCalledWith({
       where: { id: 'c1', tenant_id: 't1', congregation_id: 'g1' },
       select: { full_name: true },
@@ -105,14 +97,14 @@ describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', 
   it('só quem retirou era destinatário: nada é enviado', async () => {
     const { svc, notifications } = build();
     await svc.notifyChildReleased('t1', 'g1', { ...released, pickedUpByPersonId: 'mae' });
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
-  it('criança sem responsável, sem conta ou sem cadastro: não envia e não quebra', async () => {
-    for (const o of [{ guardians: [] }, { accounts: [] }, { child: null }] as Opts[]) {
+  it('criança sem responsável ou sem cadastro: não envia e não quebra', async () => {
+    for (const o of [{ guardians: [] }, { child: null }] as Opts[]) {
       const { svc, notifications } = build(o);
       await expect(svc.notifyChildReleased('t1', 'g1', released)).resolves.toBeUndefined();
-      expect(notifications.sendPush).not.toHaveBeenCalled();
+      expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
     }
   });
 
@@ -128,17 +120,14 @@ describe('KidsPickupNoticeService.notifyChildReleased — "Criança entregue"', 
     const db = build();
     db.client.kidsGuardian.findMany.mockRejectedValue(new Error('db'));
     await expect(db.svc.notifyChildReleased('t1', 'g1', released)).resolves.toBeUndefined();
-
-    const acc = build();
-    acc.client.userAccount.findMany.mockRejectedValue(new Error('db'));
-    await expect(acc.svc.notifyChildReleased('t1', 'g1', released)).resolves.toBeUndefined();
   });
 
-  it('um destinatário que falha não impede o aviso do outro', async () => {
-    const push = jest.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(true);
+  it('responsáveis vão num único envio em lote (uma chamada, todos os ids)', async () => {
+    const push = jest.fn().mockResolvedValue(true);
     const { svc } = build({ guardians: ['mae', 'pai'], push });
     await svc.notifyChildReleased('t1', 'g1', { ...released, pickedUpByPersonId: null });
-    expect(push).toHaveBeenCalledTimes(2);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0][1]).toEqual(['mae', 'pai']);
   });
 });
 
@@ -151,20 +140,17 @@ describe('KidsPickupNoticeService.notifyChildReceived — "Criança recebida na 
       where: { child_id: 'c1', tenant_id: 't1', congregation_id: 'g1', OR: [{ is_primary: true }] },
       select: { guardian_person_id: true },
     });
-    expect(notifications.sendPush).toHaveBeenCalledTimes(1);
-    const opts = notifications.sendPush.mock.calls[0][0];
+    expect(notifications.sendPushToPersons).toHaveBeenCalledTimes(1);
+    const opts = notifications.sendPushToPersons.mock.calls[0][0];
     expect(opts).toMatchObject({
       tenantId: 't1',
       congregationId: 'g1',
       contentPostId: null,
       title: 'Criança recebida na turma Maternal',
-      filters: [
-        { field: 'tag', key: 'person_id', relation: '=', value: 'mae' },
-        { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
-      ],
       data: { type: 'kids_child_received', checkin_id: 'k1', session_id: 's1', child_id: 'c1' },
     });
     // toMatchObject aceita campo a mais: o contrato do `data` é exato (FIX3).
+    expect(notifications.sendPushToPersons.mock.calls[0].slice(1)).toEqual([['mae'], 'kids']);
     expect(opts.data).toEqual({ type: 'kids_child_received', checkin_id: 'k1', session_id: 's1', child_id: 'c1' });
     expect(opts.body).toContain('Ana');
     expect(`${opts.title} ${opts.body}`).not.toMatch(/Clara|Souza|alerg|médic|saúde/i);
@@ -173,7 +159,7 @@ describe('KidsPickupNoticeService.notifyChildReceived — "Criança recebida na 
   it('o primário que fez o check-in ele mesmo NÃO recebe', async () => {
     const { svc, notifications } = build();
     await svc.notifyChildReceived('t1', 'g1', { ...received, actorPersonId: 'mae' });
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
   it('feito pela equipe (conta sem pessoa vinculada) ou por um terceiro: o primário recebe', async () => {
@@ -190,11 +176,7 @@ describe('KidsPickupNoticeService.notifyChildReceived — "Criança recebida na 
     expect(sentTo()).toEqual(['mae']);
   });
 
-  it('não recebe: primário sem conta; quem não é primário nunca é consultado (avó, tio)', async () => {
-    const noAccount = build({ accounts: [] });
-    await noAccount.svc.notifyChildReceived('t1', 'g1', received);
-    expect(noAccount.notifications.sendPush).not.toHaveBeenCalled();
-
+  it('quem não é primário nunca é consultado (avó, tio)', async () => {
     const { svc, client } = build();
     await svc.notifyChildReceived('t1', 'g1', received);
     expect(client.kidsGuardian.findMany.mock.calls[0][0].where.OR).toEqual([{ is_primary: true }]);
