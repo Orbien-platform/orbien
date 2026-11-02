@@ -19,7 +19,7 @@ function notifierWith(rows: AbsenceAlertRow[]) {
   const system = { $queryRaw: jest.fn().mockResolvedValue(rows) };
   const prisma = { system } as unknown as PrismaService;
   const notifications = {
-    sendPush: jest.fn().mockResolvedValue(undefined),
+    sendPushToPersons: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<NotificationsService>;
 
   return { notifier: new SmallGroupsAbsenceNotifier(prisma, notifications), notifications, system };
@@ -31,15 +31,15 @@ describe('SmallGroupsAbsenceNotifier', () => {
 
     await notifier.cronNotifyAbsenceAlerts();
 
-    expect(notifications.sendPush).toHaveBeenCalledWith(
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: 't1',
         congregationId: 'c1',
         title: 'Faltas na Célula Centro',
         body: '2 membros sem presença nas últimas 3 reuniões da célula.',
-        filters: [{ field: 'tag', key: 'person_id', relation: '=', value: 'p-lider' }],
         data: { type: 'absence_alert', small_group_id: 'sg1' },
       }),
+      ['p-lider'],
     );
   });
 
@@ -50,8 +50,9 @@ describe('SmallGroupsAbsenceNotifier', () => {
 
     await notifier.cronNotifyAbsenceAlerts();
 
-    expect(notifications.sendPush).toHaveBeenCalledWith(
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
       expect.objectContaining({ body: '1 membro sem presença na última reunião da célula.' }),
+      ['p-lider'],
     );
   });
 
@@ -60,7 +61,7 @@ describe('SmallGroupsAbsenceNotifier', () => {
 
     await notifier.cronNotifyAbsenceAlerts();
 
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
   it('segue para a próxima célula quando o envio de uma falha', async () => {
@@ -68,12 +69,12 @@ describe('SmallGroupsAbsenceNotifier', () => {
       row({ small_group_id: 'sg1' }),
       row({ small_group_id: 'sg2', leader_person_id: 'p-outro' }),
     ]);
-    notifications.sendPush
+    notifications.sendPushToPersons
       .mockRejectedValueOnce(new Error('OneSignal fora do ar'))
       .mockResolvedValueOnce(true);
 
     await notifier.cronNotifyAbsenceAlerts();
 
-    expect(notifications.sendPush).toHaveBeenCalledTimes(2);
+    expect(notifications.sendPushToPersons).toHaveBeenCalledTimes(2);
   });
 });

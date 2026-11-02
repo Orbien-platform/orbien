@@ -50,7 +50,7 @@ function setup(opts: { personId?: string; moderator?: boolean } = {}) {
     isModerator: jest.fn().mockReturnValue(opts.moderator ?? false),
   } as unknown as BibleVerseMarksService;
   const notifications = {
-    sendPush: jest.fn().mockResolvedValue(undefined),
+    sendPushToPersons: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<NotificationsService>;
   const service = new BibleMarkInteractionsService(
     { client } as unknown as PrismaService,
@@ -118,18 +118,18 @@ describe('BibleMarkInteractionsService', () => {
         }),
       );
       expect(view).toMatchObject({ id: 'r1', is_mine: true, can_delete: true });
-      expect(notifications.sendPush).toHaveBeenCalledWith({
-        tenantId: 't1',
-        congregationId: 'g1',
-        contentPostId: null,
-        title: 'Ana respondeu seu comentário em João 3:16-18',
-        body: REPLY_ROW.comment,
-        filters: [
-          { field: 'tag', key: 'person_id', relation: '=', value: 'author' },
-          { field: 'tag', key: 'pref_biblia', relation: '!=', value: 'false' },
-        ],
-        data: { type: 'bible_mark_reply', bible_mark_id: 'm1' },
-      });
+      expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
+        {
+          tenantId: 't1',
+          congregationId: 'g1',
+          contentPostId: null,
+          title: 'Ana respondeu seu comentário em João 3:16-18',
+          body: REPLY_ROW.comment,
+          data: { type: 'bible_mark_reply', bible_mark_id: 'm1' },
+        },
+        ['author'],
+        'biblia',
+      );
     });
 
     it('push de versículo único mostra só o número, e resposta longa vai cortada com reticências', async () => {
@@ -140,7 +140,7 @@ describe('BibleMarkInteractionsService', () => {
 
       await service.createReply('m1', { comment: long }, USER);
 
-      const push = notifications.sendPush.mock.calls[0]![0];
+      const push = notifications.sendPushToPersons.mock.calls[0]![0];
       expect(push.title).toBe('Ana respondeu seu comentário em João 3:16');
       expect(push.body).toHaveLength(120);
       expect(push.body.endsWith('…')).toBe(true);
@@ -153,7 +153,7 @@ describe('BibleMarkInteractionsService', () => {
 
       await service.createReply('m1', { comment: REPLY_ROW.comment }, USER);
 
-      expect(notifications.sendPush.mock.calls[0]![0].title).toBe(
+      expect(notifications.sendPushToPersons.mock.calls[0]![0].title).toBe(
         'Ana respondeu seu comentário em XXX 3:16-18',
       );
     });
@@ -164,13 +164,13 @@ describe('BibleMarkInteractionsService', () => {
 
       await service.createReply('m1', { comment: 'Complementando.' }, USER);
 
-      expect(notifications.sendPush).not.toHaveBeenCalled();
+      expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
     });
 
     it('push falhando não derruba a resposta', async () => {
       const { client, notifications, service } = setup();
       client.bibleVerseMarkReply.create.mockResolvedValue(REPLY_ROW);
-      notifications.sendPush.mockRejectedValue(new Error('OneSignal fora'));
+      notifications.sendPushToPersons.mockRejectedValue(new Error('OneSignal fora'));
 
       await expect(
         service.createReply('m1', { comment: REPLY_ROW.comment }, USER),

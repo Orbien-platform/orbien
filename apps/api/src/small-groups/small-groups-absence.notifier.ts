@@ -55,18 +55,20 @@ export class SmallGroupsAbsenceNotifier {
 
     for (const row of rows) {
       try {
-        await this.notifications.sendPush({
-          tenantId: row.tenant_id,
-          congregationId: row.congregation_id,
-          contentPostId: null,
-          title: `Faltas na ${row.group_name}`,
-          body: this.buildBody(row),
-          // Endereçado ao líder, não ao papel: `cell_leader` como tag pegaria
-          // todo líder da congregação, e a falta é da célula dele. Mesmo
-          // filtro do aviso de escala (`CelebrationAssignmentService`).
-          filters: [{ field: 'tag', key: 'person_id', relation: '=', value: row.leader_person_id }],
-          data: { type: 'absence_alert', small_group_id: row.small_group_id },
-        });
+        // Endereçado ao líder, não ao papel: `cell_leader` como tag pegaria
+        // todo líder da congregação, e a falta é da célula dele. Mesmo
+        // caminho do aviso de escala (`sendPushToPersons`).
+        await this.notifications.sendPushToPersons(
+          {
+            tenantId: row.tenant_id,
+            congregationId: row.congregation_id,
+            contentPostId: null,
+            title: `Faltas na ${row.group_name}`,
+            body: this.buildBody(row),
+            data: { type: 'absence_alert', small_group_id: row.small_group_id },
+          },
+          [row.leader_person_id],
+        );
       } catch (err) {
         this.logger.error(`Falha ao notificar a célula ${row.small_group_id}: ${String(err)}`);
       }

@@ -179,10 +179,16 @@ export class NotificationsService {
    * avançado já faz. Pessoa sem conta (nunca entrou no app) fica de fora.
    * Devolve `false` se qualquer lote falhou, para o chamador não dar o aviso
    * por feito.
+   *
+   * `category` aplica a preferência do usuário (`notification_preferences`,
+   * sem linha = ligado) lida do banco — não da tag `pref_*` do aparelho, que
+   * só vale depois de o app sincronizar. Sem `category`, não há preferência a
+   * respeitar (escala, OC, troca, ausência).
    */
   async sendPushToPersons(
     opts: Omit<SendPushOpts, 'filters'>,
     personIds: string[],
+    category?: NotificationCategory,
   ): Promise<boolean> {
     const accounts = personIds.length
       ? await this.prisma.system.userAccount.findMany({
@@ -190,7 +196,10 @@ export class NotificationsService {
           select: { id: true },
         })
       : [];
-    const ids = accounts.map((a) => a.id);
+    let ids = accounts.map((a) => a.id);
+    if (category && ids.length) {
+      ids = await this.excludeOptedOut(ids, opts.tenantId, category);
+    }
 
     // OneSignal aceita até 2000 external ids por chamada; 1000 deixa folga.
     let allDelivered = true;

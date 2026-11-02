@@ -198,22 +198,20 @@ export class BibleMarkInteractionsService {
     const excerpt =
       comment.length > PUSH_BODY_MAX ? `${comment.slice(0, PUSH_BODY_MAX - 1)}…` : comment;
 
-    await this.notifications.sendPush({
-      tenantId: mark.tenant_id,
-      congregationId: mark.congregation_id,
-      contentPostId: null,
-      title: `${replierName} respondeu seu comentário em ${book} ${mark.chapter}:${range}`,
-      body: excerpt,
-      // Endereçado ao autor, pela tag `person_id` — mesmo filtro do aviso de
-      // escala (`CelebrationAssignmentService`).
-      // E filtrado pela preferência `biblia`, no mesmo formato do `pref_*` de
-      // `NotificationsService.notifyPost`: sem a tag, conta como ligado.
-      filters: [
-        { field: 'tag', key: 'person_id', relation: '=', value: mark.person_id },
-        { field: 'tag', key: 'pref_biblia', relation: '!=', value: 'false' },
-      ],
-      data: { type: 'bible_mark_reply', bible_mark_id: mark.id },
-    });
+    // Endereçado ao autor pela conta (`sendPushToPersons`), e filtrado pela
+    // preferência `biblia` lida do banco: sem linha, conta como ligado.
+    await this.notifications.sendPushToPersons(
+      {
+        tenantId: mark.tenant_id,
+        congregationId: mark.congregation_id,
+        contentPostId: null,
+        title: `${replierName} respondeu seu comentário em ${book} ${mark.chapter}:${range}`,
+        body: excerpt,
+        data: { type: 'bible_mark_reply', bible_mark_id: mark.id },
+      },
+      [mark.person_id],
+      'biblia',
+    );
   }
 
   private toView(row: ReplyRow, personId: string, isModerator: boolean): BibleMarkReplyView {
