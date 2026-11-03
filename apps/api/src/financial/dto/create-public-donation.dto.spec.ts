@@ -128,6 +128,13 @@ describe('CreatePublicDonationDto', () => {
       });
     });
 
+    it('aceita category_id UUID e rejeita o que não é UUID', async () => {
+      expect(
+        await errorsFor({ category_id: '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11' }),
+      ).toHaveLength(0);
+      expect(await failsOn({ category_id: 'dizimo' }, 'category_id')).toBe(true);
+    });
+
     it('rejeita categoria acima de 40 caracteres', async () => {
       expect(await failsOn({ category_slug: 'a'.repeat(41) }, 'category_slug')).toBe(true);
     });

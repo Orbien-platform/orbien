@@ -449,6 +449,94 @@ describe('GET /api/financial/pix/public-donation/:slug/:id — polling e confirm
   });
 });
 
+describe('categorias da igreja — GET public-categories e category_id', () => {
+  const categories = (slug: string) =>
+    request(app.getHttpServer()).get(`/api/financial/pix/public-categories/${slug}`);
+
+  it('lista só receita da igreja do slug, com id, nome e descrição, sem cache de erro', async () => {
+    const res = await categories(starter.slug).expect(200);
+
+    const names = (res.body as { name: string }[]).map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(['Dízimo', 'Oferta', 'Oferta Missionária']));
+    expect(names).not.toContain('Aluguel'); // despesa
+    expect(names).not.toContain('Missões'); // despesa no seed
+    for (const c of res.body as Record<string, unknown>[]) {
+      expect(Object.keys(c).sort()).toEqual(['description', 'id', 'name']);
+    }
+    expect(res.headers['cache-control']).toContain('max-age=300');
+  });
+
+  it('as categorias de uma igreja não aparecem na lista da outra', async () => {
+    const [a, b] = await Promise.all([categories(starter.slug), categories(premium.slug)]);
+
+    const idsA = (a.body as { id: string }[]).map((c) => c.id);
+    const idsB = (b.body as { id: string }[]).map((c) => c.id);
+    expect(idsA.length).toBeGreaterThan(0);
+    expect(idsA.filter((id) => idsB.includes(id))).toEqual([]);
+  });
+
+  it('slug desconhecido responde 404', async () => {
+    await categories(`nao-existe-${ts}`).expect(404);
+  });
+
+  it('grava a categoria escolhida na intenção', async () => {
+    const list = (await categories(starter.slug)).body as { id: string; name: string }[];
+    const dizimo = list.find((c) => c.name === 'Dízimo')!;
+
+    const res = await post({ tenant_slug: starter.slug, amount: 25, category_id: dizimo.id }).expect(200);
+
+    const ref = (res.body as { transaction_ref: string }).transaction_ref.replace('PIX-', '').toLowerCase();
+    const row = await admin.pixPayment.findFirstOrThrow({
+      where: { tenant_id: starter.tenantId, id: { startsWith: ref } },
+    });
+    expect(row.category_id).toBe(dizimo.id);
+  });
+
+  it('category_id de outra igreja é recusado com 400 e nada é gravado', async () => {
+    const foreign = ((await categories(premium.slug)).body as { id: string }[])[0]!;
+    const before = await admin.pixPayment.count({
+      where: { tenant_id: starter.tenantId, scenario: 'public', created_at: { gte: startedAt } },
+    });
+
+    await post({ tenant_slug: starter.slug, amount: 25, category_id: foreign.id }).expect(400);
+
+    const after = await admin.pixPayment.count({
+      where: { tenant_id: starter.tenantId, scenario: 'public', created_at: { gte: startedAt } },
+    });
+    expect(after).toBe(before);
+  });
+
+  it('category_id de despesa é recusado com 400', async () => {
+    const expense = await admin.financialCategory.findFirstOrThrow({
+      where: { tenant_id: starter.tenantId, congregation_id: starter.congregationId, type: 'expense' },
+      select: { id: true },
+    });
+
+    await post({ tenant_slug: starter.slug, amount: 25, category_id: expense.id }).expect(400);
+  });
+
+  it('sem categoria (web), a doação cai em "Oferta" exata, não em "Oferta Missionária"', async () => {
+    const res = await post({ tenant_slug: starter.slug, amount: 25 }).expect(200);
+
+    const ref = (res.body as { transaction_ref: string }).transaction_ref.replace('PIX-', '').toLowerCase();
+    const row = await admin.pixPayment.findFirstOrThrow({
+      where: { tenant_id: starter.tenantId, id: { startsWith: ref } },
+    });
+    expect(row.category_id).toBe(starter.ofertaCategoryId);
+  });
+
+  it('palavra-chave legada com acento ("dízimo") acha "Dízimo"', async () => {
+    const list = (await categories(starter.slug)).body as { id: string; name: string }[];
+    const res = await post({ tenant_slug: starter.slug, amount: 25, category_slug: 'dizimo' }).expect(200);
+
+    const ref = (res.body as { transaction_ref: string }).transaction_ref.replace('PIX-', '').toLowerCase();
+    const row = await admin.pixPayment.findFirstOrThrow({
+      where: { tenant_id: starter.tenantId, id: { startsWith: ref } },
+    });
+    expect(row.category_id).toBe(list.find((c) => c.name === 'Dízimo')!.id);
+  });
+});
+
 describe('limite de requisições (DPUB-12) — por igreja + origem', () => {
   it('estoura o limite de uma igreja com 429, e outra igreja, na mesma origem, segue livre', async () => {
     let primeiro429 = -1;

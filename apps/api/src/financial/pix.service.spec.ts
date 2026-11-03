@@ -55,6 +55,8 @@ type Opts = {
   branding?: { pix_key: string | null; app_name: string | null } | null;
   congregation?: { id: string } | null;
   categories?: ({ id: string } | null)[];
+  /** Receitas da congregação que `findMany` devolve (casamento da palavra-chave). */
+  incomeCategories?: { id: string; name: string }[];
   assignment?: { user_account_id: string } | null;
   pixPayment?: Record<string, unknown> | null;
   /** Pessoa resolvida em `createSubscription` como doador (PROD-27). */
@@ -285,6 +287,12 @@ function harness(opts: Opts = {}) {
         findFirst: (args: { where: Record<string, unknown> }) => {
           cap.categoryQueries.push(args.where);
           return Promise.resolve(categories[catCall++] ?? null);
+        },
+        findMany: (args: { where: Record<string, unknown> }) => {
+          cap.categoryQueries.push(args.where);
+          if (opts.incomeCategories) return Promise.resolve(opts.incomeCategories);
+          const next = categories[catCall++];
+          return Promise.resolve(next ? [{ name: 'Oferta', ...next }] : []);
         },
       },
       roleAssignment: {
@@ -593,55 +601,125 @@ describe('PixService', () => {
   });
 
   describe('resolveCategory', () => {
-    it('usa o `category_slug` pedido', async () => {
-      const { service, cap } = harness();
+    const receitas = [
+      { id: 'c-construcao', name: 'Oferta de Construção' },
+      { id: 'c-dizimo', name: 'Dizimo' },
+      { id: 'c-missionaria', name: 'Oferta Missionária' },
+      { id: 'c-oferta', name: 'Oferta' },
+    ];
 
-      await service.createManual({ ...manualDto, category_slug: 'dizimo' });
-
-      expect(cap.categoryQueries[0]?.['name']).toEqual({
-        contains: 'dizimo',
-        mode: 'insensitive',
-      });
-    });
-
-    it('sem slug, procura por "oferta"', async () => {
-      const { service, cap } = harness();
+    it('sem slug, "Oferta" exata vence "Oferta Missionária" e "Oferta de Construção"', async () => {
+      const { service, cap } = harness({ incomeCategories: receitas });
 
       await service.createManual(manualDto);
 
-      expect(cap.categoryQueries[0]?.['name']).toEqual({
-        contains: 'oferta',
-        mode: 'insensitive',
-      });
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-oferta');
     });
 
-    it('slug que não casa cai para "Oferta" numa segunda consulta', async () => {
-      const { service, cap } = harness({ categories: [null, { id: 'cat-fallback' }] });
+    it('"dízimo" com acento casa a categoria cadastrada como "Dizimo"', async () => {
+      const { service, cap } = harness({ incomeCategories: receitas });
+
+      await service.createManual({ ...manualDto, category_slug: 'dízimo' });
+
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-dizimo');
+    });
+
+    it('sem nome igual, escolhe o nome mais curto que contém a palavra', async () => {
+      const { service, cap } = harness({ incomeCategories: receitas });
+
+      await service.createManual({ ...manualDto, category_slug: 'missionária' });
+
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-missionaria');
+    });
+
+    it('termo parcial que várias categorias contêm escolhe a de nome mais curto', async () => {
+      const { service, cap } = harness({ incomeCategories: receitas });
+
+      await service.createManual({ ...manualDto, category_slug: 'ofert' });
+
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-oferta');
+    });
+
+    it('slug em branco é ignorado e cai para "Oferta"', async () => {
+      const { service, cap } = harness({ incomeCategories: receitas });
+
+      await service.createManual({ ...manualDto, category_slug: '   ' });
+
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-oferta');
+    });
+
+    it('slug que não casa cai para "Oferta"', async () => {
+      const { service, cap } = harness({ incomeCategories: receitas });
 
       await service.createManual({ ...manualDto, category_slug: 'inexistente' });
 
-      expect(cap.categoryQueries).toHaveLength(2);
-      expect(cap.categoryQueries[1]?.['name']).toEqual({
-        contains: 'Oferta',
-        mode: 'insensitive',
-      });
-      expect(cap.pixPayments[0]?.['category_id']).toBe('cat-fallback');
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-oferta');
     });
 
     it('sem categoria de receita nenhuma, vira 400', async () => {
-      const { service } = harness({ categories: [null, null] });
+      const { service } = harness({ incomeCategories: [] });
 
       await expect(service.createManual(manualDto)).rejects.toThrow(
         'Categoria de receita não encontrada',
       );
     });
 
-    it('só aceita categoria de receita — despesa não serve para doação', async () => {
+    it('só aceita categoria de receita da congregação — despesa não serve para doação', async () => {
       const { service, cap } = harness();
 
       await service.createManual(manualDto);
 
-      expect(cap.categoryQueries[0]?.['type']).toBe('income');
+      expect(cap.categoryQueries[0]).toMatchObject({
+        type: 'income',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+      });
+    });
+  });
+
+  describe('category_id explícito (doação pública)', () => {
+    const id = '8c9f9a52-3b2e-4a40-9d63-6c6a2f0a1b11';
+
+    it('grava a categoria escolhida, validada como receita da congregação', async () => {
+      const { service, cap } = harness({ categories: [{ id }] });
+
+      await service.createPublicDonation({ ...manualDto, category_id: id, category_slug: 'oferta' });
+
+      expect(cap.categoryQueries[0]).toMatchObject({
+        id,
+        type: 'income',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+      });
+      expect(cap.pixPayments[0]?.['category_id']).toBe(id);
+    });
+
+    it('id que não é receita desta congregação vira 400, sem cair em "Oferta"', async () => {
+      const { service, cap } = harness({ categories: [] });
+
+      await expect(
+        service.createPublicDonation({ ...manualDto, category_id: id }),
+      ).rejects.toThrow('Categoria inválida');
+      expect(cap.pixPayments).toEqual([]);
+    });
+  });
+
+  describe('listPublicCategories', () => {
+    it('devolve só id, nome e descrição das receitas da congregação do slug', async () => {
+      const rows = [{ id: 'c1', name: 'Dízimo', description: null }];
+      const { service, cap } = harness({ incomeCategories: rows as never });
+
+      await expect(service.listPublicCategories('igreja-teste')).resolves.toEqual(rows);
+
+      expect(cap.categoryQueries[0]).toMatchObject({ type: 'income', tenant_id: 't1' });
+    });
+
+    it('slug desconhecido vira 404', async () => {
+      const { service } = harness({ tenant: null });
+
+      await expect(service.listPublicCategories('nao-existe')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -910,12 +988,17 @@ describe('PixService', () => {
       expect(cap.pixPayments).toEqual([]);
     });
 
-    it('busca a categoria por "inscri", caindo para "Oferta" se não achar', async () => {
-      const { service, cap } = harness();
+    it('usa a categoria "inscri" quando existe, senão "Oferta"', async () => {
+      const { service, cap } = harness({
+        incomeCategories: [
+          { id: 'c-oferta', name: 'Oferta' },
+          { id: 'c-inscricao', name: 'Inscrições' },
+        ],
+      });
 
       await service.createForEventRegistration('t1', 'g1', 50, 'Inscrição');
 
-      expect(cap.categoryQueries[0]?.['name']).toEqual({ contains: 'inscri', mode: 'insensitive' });
+      expect(cap.pixPayments[0]?.['category_id']).toBe('c-inscricao');
     });
 
     it('igreja sem chave PIX vira 400', async () => {

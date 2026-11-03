@@ -4,9 +4,10 @@
 // não do token, e a resposta traz a chave PIX para o membro colar no app do
 // banco. Nada aqui cobra: quem confirma o recebimento é o tesoureiro (PEND-14).
 //
-// A categoria viaja como palavra-chave (`category_slug`): a API procura uma
-// categoria de receita cujo nome contém o termo e cai em "Oferta" quando não
-// acha. Por isso a lista abaixo é fixa e usa termos que o seed da igreja já tem.
+// A categoria é escolhida na lista da própria igreja (`GET
+// /financial/pix/public-categories/:slug`) e viaja como `category_id`. O
+// `category_slug` (palavra-chave) era da primeira versão do app e deixou de ser
+// enviado; a API ainda o aceita para quem não atualizou.
 import { apiClient } from "../api/client";
 
 /** Espelho dos limites de `create-public-donation.dto.ts` — sem import entre
@@ -14,13 +15,32 @@ import { apiClient } from "../api/client";
 export const MIN_AMOUNT = 5;
 export const MAX_AMOUNT = 50_000;
 
-export type DonationCategory = "dizimo" | "oferta" | "missoes";
+/** Categoria de receita que a igreja oferece para contribuição. */
+export interface DonationCategory {
+  id: string;
+  name: string;
+  description: string | null;
+}
 
-export const DONATION_CATEGORIES: { value: DonationCategory; label: string; keyword: string }[] = [
-  { value: "dizimo", label: "Dízimo", keyword: "dízimo" },
-  { value: "oferta", label: "Oferta", keyword: "oferta" },
-  { value: "missoes", label: "Missões", keyword: "missionária" },
-];
+// A lista muda raramente: guardada por igreja enquanto o app estiver aberto, a
+// API ainda manda `Cache-Control` de 5 min. Só sucesso entra aqui — erro tenta
+// de novo na próxima abertura.
+const categoriesCache = new Map<string, DonationCategory[]>();
+
+export async function fetchDonationCategories(tenantSlug: string): Promise<DonationCategory[]> {
+  const cached = categoriesCache.get(tenantSlug);
+  if (cached) return cached;
+  const list = await apiClient.get<DonationCategory[]>(
+    `/financial/pix/public-categories/${encodeURIComponent(tenantSlug)}`,
+  );
+  categoriesCache.set(tenantSlug, list);
+  return list;
+}
+
+/** Descarta a lista guardada — para quando a API recusou um id que mudou. */
+export function invalidateDonationCategories(tenantSlug: string): void {
+  categoriesCache.delete(tenantSlug);
+}
 
 export interface DonationResult {
   mode?: "static" | "dynamic";
@@ -35,19 +55,19 @@ export interface DonationResult {
 export interface DonationInput {
   tenantSlug: string;
   amount: number;
-  category: DonationCategory;
+  /** Sem id (igreja sem categorias de receita), a API lança em "Oferta". */
+  categoryId?: string;
   /** Doação identificada leva o nome; anônima não manda nada. */
   donorName?: string;
 }
 
 export async function createDonation(input: DonationInput): Promise<DonationResult> {
-  const keyword = DONATION_CATEGORIES.find((c) => c.value === input.category)?.keyword;
   const donorName = input.donorName?.trim();
   return apiClient.post<DonationResult>("/financial/pix/public-donation", {
     body: {
       tenant_slug: input.tenantSlug,
       amount: input.amount,
-      ...(keyword ? { category_slug: keyword } : {}),
+      ...(input.categoryId ? { category_id: input.categoryId } : {}),
       ...(donorName ? { donor_name: donorName } : {}),
     },
   });

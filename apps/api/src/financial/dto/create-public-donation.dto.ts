@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -57,6 +58,15 @@ export class CreatePublicDonationDto {
   @Equals(true, { message: 'Aceite o uso do e-mail para receber o recibo' })
   donor_consent?: boolean;
 
+  /** Categoria de receita escolhida na lista da igreja (`GET public-categories/:slug`). Vence `category_slug`. */
+  @IsOptional()
+  @IsUUID()
+  category_id?: string;
+
+  /**
+   * @deprecated Palavra-chave do app antigo; o web ainda não manda categoria.
+   * Casa pelo nome (igual, depois o mais curto que contém), sem caixa/acento.
+   */
   @IsOptional()
   @IsString()
   @MaxLength(40)
