@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CelebrationInstancesService } from './celebration-instances.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -18,12 +19,23 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function serviceWith(client: ReturnType<typeof clientWith>, runInTx?: jest.Mock) {
+function notifierMock(snapshot: unknown = null) {
+  return {
+    snapshotCancellation: jest.fn().mockResolvedValue(snapshot),
+    notifyCancelled: jest.fn(),
+  };
+}
+
+function serviceWith(
+  client: ReturnType<typeof clientWith>,
+  runInTx?: jest.Mock,
+  notifier: ReturnType<typeof notifierMock> = notifierMock(),
+) {
   const prisma = {
     client,
     runInTx: runInTx ?? jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
   } as unknown as PrismaService;
-  return new CelebrationInstancesService(prisma);
+  return new CelebrationInstancesService(prisma, notifier as unknown as CelebrationRemovalNotifier);
 }
 
 describe('CelebrationInstancesService', () => {
@@ -212,7 +224,7 @@ describe('CelebrationInstancesService', () => {
   describe('update', () => {
     it('atualiza notes e status quando informados', async () => {
       const client = clientWith();
-      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'published', celebration: { name: 'Culto' } });
       client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
       const service = serviceWith(client);
 
@@ -226,7 +238,7 @@ describe('CelebrationInstancesService', () => {
 
     it('não altera nada quando dto vazio', async () => {
       const client = clientWith();
-      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'published', celebration: { name: 'Culto' } });
       client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
       const service = serviceWith(client);
 
@@ -237,7 +249,7 @@ describe('CelebrationInstancesService', () => {
 
     it('cancelar a instância cancela as sessões kids dela (kids AC 6)', async () => {
       const client = clientWith();
-      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'published', celebration: { name: 'Culto' } });
       client.celebrationInstance.update.mockResolvedValue({ id: 'i1', status: 'cancelled' });
       const service = serviceWith(client);
 
@@ -251,7 +263,7 @@ describe('CelebrationInstancesService', () => {
 
     it('outro status ou só notes não mexe nas sessões kids', async () => {
       const client = clientWith();
-      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1' });
+      client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'published', celebration: { name: 'Culto' } });
       client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
       const service = serviceWith(client);
 
@@ -259,6 +271,51 @@ describe('CelebrationInstancesService', () => {
       await service.update('t1', 'g1', 'i1', { notes: 'y' } as never);
 
       expect(client.kidsSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    describe('aviso a quem estava escalado (PEND-20)', () => {
+      const snapshot = { congregationId: 'g1', celebrationName: 'Culto', datesByPerson: new Map([['p1', ['2026-09-06']]]) };
+
+      it('cancelar a instância lê a escala e avisa', async () => {
+        const client = clientWith();
+        client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'published', celebration: { name: 'Culto' } });
+        client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
+        const notifier = notifierMock(snapshot);
+        const service = serviceWith(client, undefined, notifier);
+
+        await service.update('t1', 'g1', 'i1', { status: 'cancelled' } as never);
+
+        expect(notifier.snapshotCancellation).toHaveBeenCalledWith('t1', 'Culto', 'g1', ['i1']);
+        expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', snapshot);
+      });
+
+      it('não avisa de novo quando já estava cancelada nem quando já foi finalizada', async () => {
+        for (const status of ['cancelled', 'finalized']) {
+          const client = clientWith();
+          client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status, celebration: { name: 'Culto' } });
+          client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
+          const notifier = notifierMock(snapshot);
+          const service = serviceWith(client, undefined, notifier);
+
+          await service.update('t1', 'g1', 'i1', { status: 'cancelled' } as never);
+
+          expect(notifier.snapshotCancellation).not.toHaveBeenCalled();
+          expect(notifier.notifyCancelled).not.toHaveBeenCalled();
+        }
+      });
+
+      it('outro status (inclui reabrir) e só notes não avisam', async () => {
+        const client = clientWith();
+        client.celebrationInstance.findFirst.mockResolvedValue({ id: 'i1', status: 'cancelled', celebration: { name: 'Culto' } });
+        client.celebrationInstance.update.mockResolvedValue({ id: 'i1' });
+        const notifier = notifierMock(snapshot);
+        const service = serviceWith(client, undefined, notifier);
+
+        await service.update('t1', 'g1', 'i1', { status: 'draft' } as never);
+        await service.update('t1', 'g1', 'i1', { notes: 'x' } as never);
+
+        expect(notifier.notifyCancelled).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -278,6 +335,56 @@ describe('CelebrationInstancesService', () => {
       const service = serviceWith(client);
 
       await expect(service.remove('t1', 'g1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    describe('aviso a quem estava escalado (PEND-20)', () => {
+      const future = new Date(Date.now() + 7 * 86_400_000);
+      const instance = (over: Record<string, unknown> = {}) => ({
+        id: 'i1',
+        status: 'published',
+        scheduled_date: future,
+        celebration: { name: 'Culto' },
+        ...over,
+      });
+
+      it('lê os destinatários ANTES do delete e avisa depois dele', async () => {
+        const client = clientWith();
+        client.celebrationInstance.findFirst.mockResolvedValue(instance());
+        client.celebrationInstance.delete.mockResolvedValue({ id: 'i1' });
+        const notifier = notifierMock({ any: 'snapshot' });
+        const service = serviceWith(client, undefined, notifier);
+
+        await service.remove('t1', 'g1', 'i1');
+
+        expect(notifier.snapshotCancellation).toHaveBeenCalledWith('t1', 'Culto', 'g1', ['i1']);
+        const order = [
+          notifier.snapshotCancellation.mock.invocationCallOrder[0],
+          client.celebrationInstance.delete.mock.invocationCallOrder[0],
+          notifier.notifyCancelled.mock.invocationCallOrder[0],
+        ];
+        expect(order).toEqual([...order].sort((a, b) => a - b));
+        expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', { any: 'snapshot' });
+      });
+
+      it('culto cancelado, finalizado ou já passado não gera aviso', async () => {
+        const cases = [
+          instance({ status: 'cancelled' }),
+          instance({ status: 'finalized' }),
+          instance({ scheduled_date: new Date('2020-01-01T00:00:00Z') }),
+        ];
+        for (const inst of cases) {
+          const client = clientWith();
+          client.celebrationInstance.findFirst.mockResolvedValue(inst);
+          client.celebrationInstance.delete.mockResolvedValue({ id: 'i1' });
+          const notifier = notifierMock({ any: 'snapshot' });
+          const service = serviceWith(client, undefined, notifier);
+
+          await service.remove('t1', 'g1', 'i1');
+
+          expect(notifier.snapshotCancellation).not.toHaveBeenCalled();
+          expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', null);
+        }
+      });
     });
   });
 
@@ -658,7 +765,7 @@ describe('CelebrationInstancesService', () => {
   });
 
   describe('cancelDates', () => {
-    const weekly = { id: 'c1', congregation_id: 'g1', recurrence: 'weekly', day_of_week: 0 };
+    const weekly = { id: 'c1', name: 'Culto', congregation_id: 'g1', recurrence: 'weekly', day_of_week: 0 };
 
     it('cancela a instância que já existe na data', async () => {
       const client = clientWith();
@@ -740,6 +847,41 @@ describe('CelebrationInstancesService', () => {
       const service = serviceWith(client);
 
       await expect(service.cancelDates('t1', 'g1', 'x', ['2026-09-13'])).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    describe('aviso a quem estava escalado (PEND-20)', () => {
+      it('um aviso só para as instâncias que passaram a cancelada agora', async () => {
+        const client = clientWith();
+        client.celebration.findFirst.mockResolvedValue(weekly);
+        client.celebrationInstance.findFirst
+          .mockResolvedValueOnce({ id: 'i1', status: 'published' })
+          .mockResolvedValueOnce({ id: 'i2', status: 'cancelled' })
+          .mockResolvedValueOnce(null);
+        client.celebrationInstance.update.mockResolvedValue({ id: 'x' });
+        client.celebrationInstance.create.mockResolvedValue({ id: 'i3' });
+        const notifier = notifierMock({ any: 'snapshot' });
+        const service = serviceWith(client, undefined, notifier);
+
+        await service.cancelDates('t1', 'g1', 'c1', ['2026-09-13', '2026-09-20', '2026-09-27']);
+
+        expect(notifier.snapshotCancellation).toHaveBeenCalledTimes(1);
+        expect(notifier.snapshotCancellation).toHaveBeenCalledWith('t1', 'Culto', 'g1', ['i1']);
+        expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', { any: 'snapshot' });
+      });
+
+      it('data sem instância (criada já cancelada) não tem a quem avisar', async () => {
+        const client = clientWith();
+        client.celebration.findFirst.mockResolvedValue(weekly);
+        client.celebrationInstance.findFirst.mockResolvedValue(null);
+        client.celebrationInstance.create.mockResolvedValue({ id: 'i3' });
+        const notifier = notifierMock();
+        const service = serviceWith(client, undefined, notifier);
+
+        await service.cancelDates('t1', 'g1', 'c1', ['2026-12-27']);
+
+        expect(notifier.snapshotCancellation).toHaveBeenCalledWith('t1', 'Culto', 'g1', []);
+        expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', null);
+      });
     });
   });
 });

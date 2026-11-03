@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CelebrationsService } from './celebrations.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CelebrationRemovalNotifier } from './celebration-removal.notifier';
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -11,6 +12,7 @@ function clientWith(overrides: Record<string, unknown> = {}) {
       update: jest.fn(),
     },
     celebrationInstance: {
+      findMany: jest.fn().mockResolvedValue([]),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       create: jest.fn(),
     },
@@ -18,12 +20,26 @@ function clientWith(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function notifierMock(snapshot: unknown = null) {
+  return {
+    snapshotCancellation: jest.fn().mockResolvedValue(snapshot),
+    notifyCancelled: jest.fn(),
+  };
+}
+
+function serviceFor(client: unknown, notifier = notifierMock()) {
+  return new CelebrationsService(
+    { client } as unknown as PrismaService,
+    notifier as unknown as CelebrationRemovalNotifier,
+  );
+}
+
 describe('CelebrationsService', () => {
   describe('create', () => {
     it('cria a celebração com day_of_week nulo quando não informado', async () => {
       const client = clientWith();
       client.celebration.create.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       const result = await service.create('t1', 'g1', {
         name: 'Culto',
@@ -49,7 +65,7 @@ describe('CelebrationsService', () => {
     it('cria a celebração com day_of_week informado', async () => {
       const client = clientWith();
       client.celebration.create.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.create('t1', 'g1', {
         name: 'Culto',
@@ -71,7 +87,7 @@ describe('CelebrationsService', () => {
     it('cria a instância na data informada e deriva day_of_week dela', async () => {
       const client = clientWith();
       client.celebration.create.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.create('t1', 'g1', { ...base, scheduled_date: '2026-10-11' } as never);
 
@@ -88,7 +104,7 @@ describe('CelebrationsService', () => {
 
     it('exige scheduled_date e não grava nada sem ela', async () => {
       const client = clientWith();
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await expect(service.create('t1', 'g1', base as never)).rejects.toThrow(BadRequestException);
       expect(client.celebration.create).not.toHaveBeenCalled();
@@ -96,7 +112,7 @@ describe('CelebrationsService', () => {
 
     it('rejeita data inexistente', async () => {
       const client = clientWith();
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await expect(
         service.create('t1', 'g1', { ...base, scheduled_date: '2026-02-30' } as never),
@@ -106,7 +122,7 @@ describe('CelebrationsService', () => {
     it('recorrente não cria instância', async () => {
       const client = clientWith();
       client.celebration.create.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.create('t1', 'g1', { ...base, recurrence: 'weekly' } as never);
       expect(client.celebrationInstance.create).not.toHaveBeenCalled();
@@ -117,7 +133,7 @@ describe('CelebrationsService', () => {
     it('filtra por type quando informado e usa is_active default true', async () => {
       const client = clientWith();
       client.celebration.findMany.mockResolvedValue([{ id: 'c1' }]);
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       const result = await service.findAll('t1', { type: 'sunday_service' } as never);
 
@@ -131,7 +147,7 @@ describe('CelebrationsService', () => {
     it('não filtra por type quando ausente e respeita is_active informado', async () => {
       const client = clientWith();
       client.celebration.findMany.mockResolvedValue([]);
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.findAll('t1', { is_active: false } as never);
 
@@ -146,7 +162,7 @@ describe('CelebrationsService', () => {
     it('retorna a celebração quando encontrada', async () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       const result = await service.findOne('t1', 'g1', 'c1');
 
@@ -156,7 +172,7 @@ describe('CelebrationsService', () => {
     it('lança NotFoundException quando não encontrada', async () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue(null);
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await expect(service.findOne('t1', 'g1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
     });
@@ -167,7 +183,7 @@ describe('CelebrationsService', () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
       client.celebration.update.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.update('t1', 'g1', 'c1', {
         name: 'Novo nome',
@@ -193,7 +209,7 @@ describe('CelebrationsService', () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
       client.celebration.update.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.update('t1', 'g1', 'c1', {} as never);
 
@@ -203,7 +219,7 @@ describe('CelebrationsService', () => {
     it('lança NotFoundException quando a celebração não existe', async () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue(null);
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await expect(service.update('t1', 'g1', 'nope', {} as never)).rejects.toBeInstanceOf(
         NotFoundException,
@@ -220,7 +236,7 @@ describe('CelebrationsService', () => {
       client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
       client.celebration.update.mockResolvedValue({ id: 'c1', is_active: false });
       client.celebrationInstance.deleteMany.mockResolvedValue({ count: 3 });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       const result = await service.remove('t1', 'g1', 'c1');
 
@@ -236,7 +252,7 @@ describe('CelebrationsService', () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue({ id: 'c1' });
       client.celebration.update.mockResolvedValue({ id: 'c1' });
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await service.remove('t1', 'g1', 'c1');
 
@@ -253,10 +269,70 @@ describe('CelebrationsService', () => {
     it('lança NotFoundException quando a celebração não existe, sem apagar nada', async () => {
       const client = clientWith();
       client.celebration.findFirst.mockResolvedValue(null);
-      const service = new CelebrationsService({ client } as unknown as PrismaService);
+      const service = serviceFor(client);
 
       await expect(service.remove('t1', 'g1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
       expect(client.celebrationInstance.deleteMany).not.toHaveBeenCalled();
+    });
+
+    describe('aviso a quem estava escalado (PEND-20)', () => {
+      beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-09-10T15:30:00Z')));
+
+      it('lê os destinatários das instâncias futuras ANTES do deleteMany, um aviso para o lote', async () => {
+        const client = clientWith();
+        client.celebration.findFirst.mockResolvedValue({ id: 'c1', name: 'Culto da Família', congregation_id: 'g1' });
+        client.celebration.update.mockResolvedValue({ id: 'c1' });
+        client.celebrationInstance.findMany.mockResolvedValue([{ id: 'i1' }, { id: 'i2' }]);
+        client.celebrationInstance.deleteMany.mockResolvedValue({ count: 2 });
+        const notifier = notifierMock({ any: 'snapshot' });
+        const service = serviceFor(client, notifier);
+
+        await service.remove('t1', 'g1', 'c1');
+
+        expect(client.celebrationInstance.findMany).toHaveBeenCalledWith({
+          where: {
+            celebration_id: 'c1',
+            tenant_id: 't1',
+            scheduled_date: { gte: new Date('2026-09-10T00:00:00Z') },
+            status: { notIn: ['finalized', 'cancelled'] },
+          },
+          select: { id: true },
+        });
+        expect(notifier.snapshotCancellation).toHaveBeenCalledTimes(1);
+        expect(notifier.snapshotCancellation).toHaveBeenCalledWith('t1', 'Culto da Família', 'g1', ['i1', 'i2']);
+        expect(notifier.notifyCancelled).toHaveBeenCalledTimes(1);
+        const order = [
+          notifier.snapshotCancellation.mock.invocationCallOrder[0],
+          client.celebrationInstance.deleteMany.mock.invocationCallOrder[0],
+          notifier.notifyCancelled.mock.invocationCallOrder[0],
+        ];
+        expect(order).toEqual([...order].sort((a, b) => a - b));
+        expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', { any: 'snapshot' });
+      });
+
+      it('sem instâncias futuras ainda ativas, o snapshot vem vazio e nada é enviado', async () => {
+        const client = clientWith();
+        client.celebration.findFirst.mockResolvedValue({ id: 'c1', name: 'Culto', congregation_id: 'g1' });
+        client.celebration.update.mockResolvedValue({ id: 'c1' });
+        const notifier = notifierMock(null);
+        const service = serviceFor(client, notifier);
+
+        await service.remove('t1', 'g1', 'c1');
+
+        expect(notifier.snapshotCancellation).toHaveBeenCalledWith('t1', 'Culto', 'g1', []);
+        expect(notifier.notifyCancelled).toHaveBeenCalledWith('t1', null);
+      });
+
+      it('não avisa quando a celebração não existe', async () => {
+        const client = clientWith();
+        client.celebration.findFirst.mockResolvedValue(null);
+        const notifier = notifierMock({ any: 'snapshot' });
+        const service = serviceFor(client, notifier);
+
+        await expect(service.remove('t1', 'g1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+        expect(notifier.snapshotCancellation).not.toHaveBeenCalled();
+        expect(notifier.notifyCancelled).not.toHaveBeenCalled();
+      });
     });
   });
 });
