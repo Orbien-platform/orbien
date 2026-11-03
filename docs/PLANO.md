@@ -774,8 +774,11 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   fechou de propósito. `POST /kids/sessions/:id/reopen` (`KIDS_MANAGE_ROLES`,
   idempotente se já aberta; 422 com culto cancelado ou turma desativada) e o
   botão "Reabrir" no `KidsSessionsModal`. Evidência: ciclo cancelar, reativar,
-  reabrir em `test/integration/kids-sessions.spec.ts`, unitários, vitest do
-  modal e e2e `kids-modelo-sessoes.spec.ts`.
+  reabrir em `test/integration/kids-sessions.spec.ts`, unitários e vitest do
+  modal. **Fora de escopo, segue aberto:** o passo "reabrir" no e2e — o
+  `e2e-prod` roda os specs contra o ambiente publicado, que só tem o botão e a
+  rota depois do deploy, então ele entra em `kids-modelo-sessoes.spec.ts` num PR
+  depois do deploy.
 - ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
   requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
   travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
@@ -811,8 +814,8 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   três specs em `apps/web/e2e/`, todos em `teste2-church`: `kids-turmas.spec.ts`
   (criar, editar, desativar, reativar), `kids-criancas.spec.ts` (cadastro com
   aceite do termo, edição, revogar e registrar o consentimento) e
-  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir, cancelar e reabrir
-  sessão). **Fora de escopo, segue aberto:** a tela de autorizados
+  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir e cancelar sessão;
+  o reabrir fica para depois do deploy, ver REV-4.2). **Fora de escopo, segue aberto:** a tela de autorizados
   (`GuardianFormModal`: adicionar, editar e remover responsável) continua só com
   vitest.
 - ~~**REV-4.8 · Lembrete de deploy:** `bootstrap-db.sh` junto ou antes da release
