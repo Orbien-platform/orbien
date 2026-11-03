@@ -38,6 +38,7 @@ import {
   ORIGIN_LABELS,
   type SignupQr,
 } from "../lib/visitantes/visitantes-client";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 
 function qrTitle(item: Pick<SignupQr, "label" | "origin">): string {
   return item.label?.trim() || ORIGIN_LABELS[item.origin];
@@ -54,6 +55,13 @@ export default function AutocadastroScreen() {
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, a tela relê sozinha quando ela volta — a mesma
+  // releitura do "Tentar novamente", nunca uma escrita.
+  const retry = () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(error?.offline === true, retry);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(false);
   const creatingRef = useRef(false);
@@ -124,10 +132,7 @@ export default function AutocadastroScreen() {
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setError(null);
-            setRetryCount((n) => n + 1);
-          }}
+          onPress={retry}
         />
       </StatusMessage>
     );

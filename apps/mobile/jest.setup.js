@@ -31,3 +31,11 @@ jest.mock("react-native-safe-area-context", () =>
 // que monte o componente quebra com "Unable to locate attached view in the
 // native tree". Mock oficial recomendado pelo RN para este caso.
 jest.mock("react-native/src/private/animated/NativeAnimatedHelper");
+
+// NetInfo é módulo nativo (PROD-32): sem binário em Jest, o `import` quebra.
+// Mock inerte por padrão — o listener nunca dispara; os testes do hook
+// (use-reload-on-reconnect.test.ts) controlam o evento por conta própria.
+jest.mock("@react-native-community/netinfo", () => ({
+  __esModule: true,
+  default: { addEventListener: jest.fn(() => jest.fn()) },
+}));

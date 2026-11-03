@@ -117,6 +117,13 @@ function ThemedShell() {
           // — e a rota anterior é o grupo de abas, então o botão de voltar
           // do detalhe aparecia como "(tabs)".
           headerBackButtonDisplayMode: "minimal",
+          // Transição da v2 (PROD-33): fade de 180 ms no lugar do slide
+          // padrão; o deslocamento de 3px vem do `Screen`. `animationDuration`
+          // só vale no iOS — no Android a duração é a do sistema. O gesto de
+          // voltar do iOS segue o interativo nativo (`customAnimationOnSwipe`
+          // fica no padrão `false`) e o botão voltar do Android usa o fade.
+          animation: "fade",
+          animationDuration: 180,
         }}
       >
         {/* Toda rota autenticada precisa estar listada aqui: o que o

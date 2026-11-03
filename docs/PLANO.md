@@ -512,17 +512,62 @@ como "Dizimo", caindo em "Oferta" sem aviso. O app não resolve sozinho — pede
 ou casar pelo nome exato na API, ou um `slug` de verdade na categoria, ou a
 lista vinda da igreja (o que já está acima).
 
-### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · aberto
+### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · parcial (2026-11-02)
 
-A v2 pede, além do erro com "Tentar novamente" que já existe
-(`describeLoadError`), que a tela atualize sozinha quando a conexão volta.
-Precisa de `@react-native-community/netinfo` (dependência nativa: sai por
-build, não por OTA).
+Entregue na branch `feat/app-sem-conexao-e-transicoes`. Depende de
+`@react-native-community/netinfo@12.0.1` (a versão que o Expo SDK 57 fixa em
+`bundledNativeModules.json`; sem config plugin, autolinking).
 
-### PROD-33 · Transições entre telas no app (v2) · aberto
+**Esta mudança NÃO sai por OTA.** `netinfo` é módulo nativo. O app usa
+`runtimeVersion: { policy: "appVersion" }` (`app.config.js`), então o JS novo só
+pode ir num binário que já traga o módulo: é preciso **subir o `version`** do
+app e fazer **build nativa (EAS) nas duas lojas**; um `eas update` para o
+binário antigo quebraria no `import` do módulo (e a política de runtime barra
+isso de propósito). Quem não atualizar o binário fica no JS antigo, sem a
+recuperação automática.
 
-Fade + translateY(3px), 180 ms ease-out, no lugar do padrão do Expo Router.
-Respeitar "reduzir movimento".
+- `src/lib/network/use-reload-on-reconnect.ts` — `useReloadOnReconnect(enabled,
+  reload)`. Assina o NetInfo só com a tela no erro offline
+  (`describeLoadError(...).offline`); recarrega **na volta** da conexão (precisa
+  ter visto offline depois de assinar — "já estava online" não dispara, para não
+  virar laço com erro de servidor); uma releitura por retorno, após 800 ms de
+  espera (oscilação cancela e recomeça). O `reload` é o mesmo do "Tentar
+  novamente": só releitura, nunca escrita.
+- Decisão de desenho: **estado por tela, não banner global** — é o que o protótipo
+  v2 desenha (`StateBox` "Sem conexão… a tela atualiza sozinha") e o que o
+  PLANO pede. Sem decisão de produto em aberto.
+- Adotado nas telas com o padrão `retryCount`: `(tabs)/grupos`, `autocadastro`,
+  `grupo/[id]`, `grupo/encontro/[id]`, `grupo/encontro/[id]/presenca`,
+  `biblia/marcacao/[id]`, `biblia/[book]/[chapter]`, `EventRegistrationPanel`.
+- **Falta adotar** (uma linha por tela com o hook; ficaram de fora por serem de
+  outras sessões ou por não terem o padrão `retryCount`): `celebracao/[id]` e
+  `celebracoes` (PEND-20), `kids/*` (REV-4.x, inclusive `kids/crianca/[id]`),
+  `contribuir` (PROD-31), e as que carregam por outra função de releitura:
+  `(tabs)/conteudo`, `escala`, `post/[id]`, `biblia/feed`, `notificacoes`,
+  `privacidade`, `troca/[id]`, `indisponibilidade`, `dizimo-automatico`,
+  `BookChapterPickerModal`, `VolunteerProfilePanel`.
+- Testes: hook (cai→volta→1 releitura; já online não recarrega; oscilação;
+  desmontar), integração em `grupos`.
+- **Pendente humano — `PEND-23`:** teste em aparelho (modo avião ligado/desligado
+  com a tela no erro), só possível com a build nativa.
+
+### PROD-33 · Transições entre telas no app (v2) · fechado no código, falta aparelho (2026-11-02)
+
+Mesma branch; **sai por OTA** (só JS: `animation`/`animationDuration` do Stack já
+existem no `react-native-screens` embarcado).
+
+- `app/_layout.tsx`: `animation: "fade"`, `animationDuration: 180` no `Stack`.
+  `animationDuration` só vale no iOS; no Android a duração é a do sistema.
+- `components/Screen.tsx`: `translateY` 3 px → 0 em 180 ms ease-out
+  (`Animated`, driver nativo) no conteúdo; o header nativo não se mexe.
+- **Reduzir movimento** (`lib/a11y/use-reduce-motion.ts`): tira o deslocamento e
+  deixa o fade, que não é movimento (o handoff não diz mais que isso).
+- Gesto de voltar do iOS e botão voltar do Android: `customAnimationOnSwipe`
+  continua no padrão `false`, então o swipe segue o interativo nativo; o botão
+  do Android usa o fade. Sem `react-native-reanimated` (não está no app, não
+  foi adicionado).
+- Não cobre troca entre abas, que não é transição de pilha.
+- Teste em aparelho: `PEND-23`.
 
 ### ~~PROD-34 · Página pública de autocadastro de visitante no web~~ · fechado
 
@@ -2175,8 +2220,8 @@ está.
   membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
   para a liderança projetar no culto, com a página pública que esse QR abre
   no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
-  2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). Ficam pendentes `PROD-32` (sem conexão que se
-  recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
+  2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). `PROD-32` (sem conexão que se
+  recupera) e `PROD-33` (transições) saíram em 2026-11-02 (teste em aparelho em `PEND-23`). Ficam pendentes, dos QRs, `PEND-18` e `PEND-19` —
   lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
@@ -2740,6 +2785,15 @@ entregue/recebida" do Kids (`kids-pickup-notice.service.ts`). Todos passaram a
   no painel do OneSignal; a conclusão vem da leitura do código e do payload.
 - **Fora do escopo.** Remover `registerPersonTag` do mobile; push de curtida;
   preferência para OC/troca/ausência.
+
+### PEND-23 · Teste em aparelho do sem conexão e das transições (PROD-32/33) · aberto
+
+Só com a build nativa (netinfo). Roteiro, em `teste1-church`/`teste2-church`:
+(1) abrir uma tela adotada (ex.: Grupos), ligar modo avião e recarregar até o
+erro offline; desligar o modo avião e ver a tela atualizar sozinha, uma vez;
+(2) oscilar a rede e conferir que não há rajada de requisições; (3) transição
+fade + 3 px entre telas no iOS e no Android; (4) com "Reduzir movimento" ligado,
+sem deslocamento; (5) gesto de voltar no iOS e botão voltar no Android.
 
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 

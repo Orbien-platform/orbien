@@ -59,6 +59,8 @@ jest.mock("expo-router", () => {
       headerStyle?: { backgroundColor?: string };
       headerTintColor?: string;
       headerBackButtonDisplayMode?: string;
+      animation?: string;
+      animationDuration?: number;
     };
     children?: React.ReactNode;
   }) => {
@@ -68,6 +70,9 @@ jest.mock("expo-router", () => {
         <Text testID="header-color">{props.screenOptions?.headerTintColor ?? ""}</Text>
         <Text testID="header-back-display">
           {props.screenOptions?.headerBackButtonDisplayMode ?? ""}
+        </Text>
+        <Text testID="stack-animation">
+          {`${props.screenOptions?.animation}:${props.screenOptions?.animationDuration}`}
         </Text>
         {props.children}
       </>
@@ -174,6 +179,8 @@ describe("RootLayout — guarda de navegação", () => {
       "Ordem de Culto",
     );
     expect(screen.getByTestId("header-back-display").props.children).toBe("minimal");
+    // PROD-33: fade de 180 ms no lugar do slide padrão.
+    expect(screen.getByTestId("stack-animation").props.children).toBe("fade:180");
   });
 
   it("login nesta execução mostra a transição na cor da igreja; boot já logado não", async () => {

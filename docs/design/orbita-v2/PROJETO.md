@@ -351,8 +351,8 @@ na tela "em breve" do site.
 - [ ] **Celebração:** minha função em destaque já existe; o modo ao vivo do
   Host é `PROPOSTA`.
 - [ ] **Notificações:** central + preferências em abas (segmentado).
-- [ ] **Sem conexão** que atualiza sozinho (`PROD-32`, `netinfo`).
-- [ ] **Transições** fade + translateY(3px), 180 ms, entre telas (`PROD-33`).
+- [x] **Sem conexão** que atualiza sozinho (`PROD-32`, 2026-11-02, `netinfo`; exige build nativa e bump de versão, não sai por OTA; faltam telas de outras sessões e teste em aparelho, `PEND-23`).
+- [x] **Transições** fade + translateY(3px), 180 ms, entre telas (`PROD-33`, 2026-11-02; teste em aparelho em `PEND-23`).
 - [ ] **Convite Premium** ("Disponível no plano Premium" + "Conhecer o
   Premium") onde o app hoje esconde o recurso.
 
