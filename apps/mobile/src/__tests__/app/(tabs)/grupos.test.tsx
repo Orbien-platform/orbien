@@ -14,6 +14,8 @@ jest.mock("../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   listMyGroups: (...args: unknown[]) => mockListMyGroups(...args),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
+
 import GruposScreen from "../../../app/(tabs)/grupos";
 
 describe("GruposScreen", () => {
@@ -167,5 +169,34 @@ describe("GruposScreen", () => {
 
     expect(await screen.findByTestId("grupos-error")).toBeTruthy();
     expect(screen.queryByText(/Verifique sua conexão/)).toBeNull();
+  });
+
+  it("sem conexão, relê sozinha quando a conexão volta (PROD-32)", async () => {
+    jest.useFakeTimers();
+    let emit: (s: { isConnected: boolean; isInternetReachable: boolean }) => void = () => {};
+    (NetInfo.addEventListener as jest.Mock).mockImplementation((cb) => {
+      emit = cb;
+      return jest.fn();
+    });
+    mockListMyGroups.mockRejectedValueOnce(new NetworkError());
+    mockListMyGroups.mockResolvedValue([
+      { id: "sg1", name: "Grupo do Bairro", meeting_time: null, recurrence: null, role: "member" },
+    ]);
+
+    await act(async () => {
+      render(<GruposScreen />);
+    });
+    expect(screen.getByTestId("grupos-error")).toBeTruthy();
+
+    emit({ isConnected: false, isInternetReachable: false });
+    emit({ isConnected: true, isInternetReachable: true });
+    // O timer só agenda a releitura (setState dentro de `act` async).
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(mockListMyGroups).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("grupo-sg1")).toBeTruthy();
+    jest.useRealTimers();
   });
 });

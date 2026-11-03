@@ -5,10 +5,10 @@ import { NotificationsService } from '../../content/notifications.service';
 type NoticeInfo = { checkinId: string; sessionId: string; childId: string; roomName: string };
 
 /**
- * Push do Kids aos responsáveis (categoria própria `kids`: a preferência vive
- * em tag OneSignal e o filtro usa `!=` — AD-003 — então sem a tag conta como
- * ligado). O destino é a tag `person_id`, como no aviso de escala, e só quem
- * tem conta ativa entra na lista.
+ * Push do Kids aos responsáveis (categoria própria `kids`: a preferência é lida
+ * de `notification_preferences`, e sem linha conta como ligado). O destino é a
+ * conta de cada pessoa (`sendPushToPersons`), como no aviso de escala; só quem
+ * tem conta ativa recebe.
  *
  * - **Criança entregue** (check-out e override): ao responsável primário e aos
  *   demais com `can_pickup` que tenham conta, menos a pessoa que retirou.
@@ -81,15 +81,6 @@ export class KidsPickupNoticeService {
       const candidates = [...new Set(guardians.map((g) => g.guardian_person_id))].filter((id) => id !== msg.exclude);
       if (candidates.length === 0) return;
 
-      // Só quem tem conta ativa: sem conta não há aparelho nem tag a notificar.
-      const accounts = await this.prisma.client.userAccount.findMany({
-        where: { tenant_id: tenantId, person_id: { in: candidates }, is_active: true },
-        select: { person_id: true },
-      });
-      const withAccount = new Set(accounts.map((a) => a.person_id));
-      const recipients = candidates.filter((id) => withAccount.has(id));
-      if (recipients.length === 0) return;
-
       const child = await this.prisma.client.person.findFirst({
         where: { id: info.childId, tenant_id: tenantId, congregation_id: congregationId },
         select: { full_name: true },
@@ -97,23 +88,22 @@ export class KidsPickupNoticeService {
       if (!child) return;
       const firstName = child.full_name.trim().split(/\s+/)[0];
 
-      for (const personId of recipients) {
-        try {
-          await this.notifications.sendPush({
-            tenantId,
-            congregationId,
-            contentPostId: null,
-            title: msg.title(),
-            body: msg.body(firstName),
-            filters: [
-              { field: 'tag', key: 'person_id', relation: '=', value: personId },
-              { field: 'tag', key: 'pref_kids', relation: '!=', value: 'false' },
-            ],
-            data: { type: msg.type, checkin_id: info.checkinId, session_id: info.sessionId, child_id: info.childId },
-          });
-        } catch (err) {
-          this.logger.error(`falha ao avisar (${msg.type}) o check-in ${info.checkinId}: ${String(err)}`);
-        }
+      // Só quem tem conta ativa e não desligou `kids` entra (resolvido por
+      // `sendPushToPersons`, no banco).
+      const delivered = await this.notifications.sendPushToPersons(
+        {
+          tenantId,
+          congregationId,
+          contentPostId: null,
+          title: msg.title(),
+          body: msg.body(firstName),
+          data: { type: msg.type, checkin_id: info.checkinId, session_id: info.sessionId, child_id: info.childId },
+        },
+        candidates,
+        'kids',
+      );
+      if (!delivered) {
+        this.logger.error(`OneSignal não aceitou o aviso (${msg.type}) do check-in ${info.checkinId}`);
       }
     } catch (err) {
       this.logger.error(`falha ao avisar (${msg.type}) o check-in ${info.checkinId}: ${String(err)}`);

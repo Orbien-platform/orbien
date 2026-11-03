@@ -180,9 +180,10 @@ export class NotificationsService {
    * Devolve `false` se qualquer lote falhou, para o chamador não dar o aviso
    * por feito.
    *
-   * `category`, quando informada, tira quem desligou esse grupo em
-   * `notification_preferences` — o mesmo `excludeOptedOut` do segmento
-   * avançado. Sem ela, o envio não consulta preferência (comportamento antigo).
+   * `category` aplica a preferência do usuário (`notification_preferences`,
+   * sem linha = ligado) lida do banco — não da tag `pref_*` do aparelho, que
+   * só vale depois de o app sincronizar. Sem `category`, não há preferência a
+   * respeitar (escala, OC, troca, ausência).
    */
   async sendPushToPersons(
     opts: Omit<SendPushOpts, 'filters'>,
@@ -196,7 +197,9 @@ export class NotificationsService {
         })
       : [];
     let ids = accounts.map((a) => a.id);
-    if (category && ids.length) ids = await this.excludeOptedOut(ids, opts.tenantId, category);
+    if (category && ids.length) {
+      ids = await this.excludeOptedOut(ids, opts.tenantId, category);
+    }
 
     // OneSignal aceita até 2000 external ids por chamada; 1000 deixa folga.
     let allDelivered = true;

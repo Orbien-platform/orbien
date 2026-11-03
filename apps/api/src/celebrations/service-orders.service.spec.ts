@@ -17,7 +17,7 @@ function serviceWith(client: ReturnType<typeof clientWith>, notifications?: Part
   const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client));
   const prisma = { client, runInTx } as unknown as PrismaService;
   const notificationsService = {
-    sendPush: jest.fn().mockResolvedValue(undefined),
+    sendPushToPersons: jest.fn().mockResolvedValue(undefined),
     ...notifications,
   } as unknown as NotificationsService;
   return { service: new ServiceOrdersService(prisma, notificationsService), notificationsService, runInTx };
@@ -251,7 +251,7 @@ describe('ServiceOrdersService', () => {
       };
       const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx));
       const prisma = { client, runInTx } as unknown as PrismaService;
-      const notificationsService = { sendPush: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+      const notificationsService = { sendPushToPersons: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
       const service = new ServiceOrdersService(prisma, notificationsService);
 
       client.celebrationInstance.findUnique.mockResolvedValue({
@@ -283,7 +283,7 @@ describe('ServiceOrdersService', () => {
       };
       const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx));
       const prisma = { client, runInTx } as unknown as PrismaService;
-      const notificationsService = { sendPush: jest.fn() } as unknown as NotificationsService;
+      const notificationsService = { sendPushToPersons: jest.fn() } as unknown as NotificationsService;
       const service = new ServiceOrdersService(prisma, notificationsService);
       client.celebrationInstance.findUnique.mockRejectedValue(new Error('db fora'));
       const logSpy = jest.spyOn((service as unknown as { logger: { error: (m: string) => void } }).logger, 'error');
@@ -348,7 +348,7 @@ describe('ServiceOrdersService', () => {
       };
       const runInTx = jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx));
       const prisma = { client, runInTx } as unknown as PrismaService;
-      const notificationsService = { sendPush: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+      const notificationsService = { sendPushToPersons: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
       const service = new ServiceOrdersService(prisma, notificationsService);
       return { service, notificationsService };
     }
@@ -361,7 +361,7 @@ describe('ServiceOrdersService', () => {
       await service.publish('t1', 'g1', 'so1');
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(notificationsService.sendPush).not.toHaveBeenCalled();
+      expect(notificationsService.sendPushToPersons).not.toHaveBeenCalled();
     });
 
     it('não notifica quando não há itens de ministério na OC', async () => {
@@ -373,7 +373,7 @@ describe('ServiceOrdersService', () => {
       await service.publish('t1', 'g1', 'so1');
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(notificationsService.sendPush).not.toHaveBeenCalled();
+      expect(notificationsService.sendPushToPersons).not.toHaveBeenCalled();
     });
 
     it('não notifica quando não há atribuições confirmadas', async () => {
@@ -386,7 +386,7 @@ describe('ServiceOrdersService', () => {
       await service.publish('t1', 'g1', 'so1');
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(notificationsService.sendPush).not.toHaveBeenCalled();
+      expect(notificationsService.sendPushToPersons).not.toHaveBeenCalled();
     });
 
     it('notifica os voluntários confirmados dos ministérios da OC', async () => {
@@ -406,16 +406,12 @@ describe('ServiceOrdersService', () => {
       await service.publish('t1', 'g1', 'so1');
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(notificationsService.sendPush).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Ordem de Culto publicada',
-          filters: [
-            { field: 'tag', key: 'person_id', relation: '=', value: 'p1' },
-            { operator: 'OR' },
-            { field: 'tag', key: 'person_id', relation: '=', value: 'p2' },
-          ],
-        }),
+      expect(notificationsService.sendPushToPersons).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Ordem de Culto publicada' }),
+        ['p1', 'p2'],
       );
+      const [opts] = (notificationsService.sendPushToPersons as jest.Mock).mock.calls[0];
+      expect(opts).not.toHaveProperty('filters');
     });
   });
 });

@@ -224,8 +224,8 @@ async function deletePerson(personId: string) {
 | Cadastro de membro com histórico financeiro | 5 anos | Vinculado ao prazo financeiro |
 | Cadastro de membro sem vínculo financeiro | 2 anos após inatividade | Legítimo interesse |
 | Cadastro de visitante sem evolução | 1 ano após último contato | Legítimo interesse mínimo |
-| Logs de acesso e auditoria | 2 anos | Marco Civil Art. 15 |
-| Registros de consentimento | 5 anos após revogação | Evidência de conformidade |
+| Logs de acesso e auditoria | 2 anos (`DELETE` físico; exceto dado financeiro e titular com vínculo financeiro — ver `CONF-02`) | Marco Civil Art. 15 |
+| Registros de consentimento | 5 anos após revogação (`DELETE` físico; nunca revogado e titular com vínculo financeiro não expiram — ver `CONF-02`) | Evidência de conformidade |
 | Dados de menor de 18 anos | Eliminação em 30 dias após fim do contrato | Sem base legal residual |
 | Check-ins do ministério infantil | Identificação anonimizada após 12 meses; adiada enquanto o responsável é membro ativo | Execução de contrato; Art. 14 |
 | Dados sensíveis religiosos sem vínculo financeiro | 2 anos após inatividade | Resolução de disputas |

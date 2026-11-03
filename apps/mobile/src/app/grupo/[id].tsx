@@ -45,6 +45,7 @@ import {
 } from "../../lib/theme/icons";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 
 function MaterialCard({ material, now }: { material: GroupMaterial; now: number }) {
   const { colors } = useTheme();
@@ -108,6 +109,13 @@ export default function GrupoScreen() {
   const [materialsFailed, setMaterialsFailed] = useState(false);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, a tela relê sozinha quando ela volta — a mesma
+  // releitura do "Tentar novamente", nunca uma escrita.
+  const retry = () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(error?.offline === true, retry);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,10 +164,7 @@ export default function GrupoScreen() {
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setError(null);
-            setRetryCount((n) => n + 1);
-          }}
+          onPress={retry}
         />
       </StatusMessage>
     );

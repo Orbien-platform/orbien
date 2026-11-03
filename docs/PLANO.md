@@ -264,7 +264,7 @@ foi retomado — cinco no total.
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan`, com tela no console |
-| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
+| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin + logs de auditoria (2 anos) + consentimento (5 anos após revogação) — ver **CONF-02**; revisão jurídica das regras em **CONF-01** |
 | App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
@@ -327,12 +327,59 @@ Todas anonimizam (`anonymizedFields()`), nunca fazem `DELETE` físico: a
 cadastro da pessoa. O marco de fim de contrato é `TenantPlan.cancelled_at`,
 escrito por `POST /platform/tenants/:id/cancel` e limpo por `/reactivate`.
 
-**O que falta.** A tabela de retenção tem oito linhas; as que falam de cadastro
-de pessoa estão cobertas. Sobram as duas que não são cadastro, declaradas fora
-do escopo daquela entrega:
+**Entregue em 2026-11-02** — `LogsConsentRetentionService`
+(`apps/api/src/persons/logs-consent-retention.service.ts`), cron **2h UTC**
+(3h–6h são os purges de pessoa, 7h o Kids, 8h o notifier), como `prisma.system`
+como os purges existentes — sem policy, tabela ou exceção de RLS nova:
 
-- retenção de **logs de acesso e auditoria** (2 anos, Marco Civil Art. 15);
-- retenção de **registros de consentimento** (5 anos após a revogação).
+| O que | Prazo | Regra |
+|---|---|---|
+| Logs de acesso e auditoria (`audit_logs`, inclui `support_access` e `platform_access`) | 2 anos (Marco Civil, Art. 15) | `DELETE` físico de `at < now - 2 anos`, em lotes de 1000 (teto de 200 lotes por rodada) |
+| Registro de consentimento (`consent_records`) | 5 anos após a revogação | `DELETE` físico de `revoked_at < now - 5 anos` |
+
+Decisões do dono (2026-11-02):
+
+- apagar fisicamente o vencido: anonimizar o log tiraria `ip` e `before`/`after`
+  e deixaria uma linha sem valor de prova;
+- `support_access`/`platform_access` seguem o mesmo prazo de 2 anos e nunca
+  expiram antes; o `AuditInterceptor` e o `audit_insert()` não foram tocados;
+- **dado financeiro nunca sai, nem o dado pessoal que liga a origem ao CPF do
+  doador:** ficam de fora do expurgo as linhas de auditoria com `entity` em
+  `financial_transaction`, `bank_statement_transaction` e `pix_payment`, e
+  qualquer linha de auditoria ou consentimento cujo titular tem vínculo
+  financeiro (`financial_transactions` ou `pix_payments`, o mesmo critério do
+  notifier);
+- consentimento nunca revogado não expira, e a anonimização da pessoa **não** é
+  marco de revogação (o prazo só corre a partir de `revoked_at`).
+
+Evidência: `src/persons/logs-consent-retention.service.spec.ts` (corte no
+prazo, limite exato, lote, teto, idempotência, falha no meio preserva o já
+apagado, escopo de tenant) e `test/integration/logs-consent-retention.spec.ts`
+contra o Postgres local, só em `teste2-church`.
+
+**O que segue de fora:**
+
+- **CONF-01 (revisão jurídica)** precisa confirmar: DELETE em vez de
+  anonimização; se `support_access`/`platform_access` devem durar mais que 2
+  anos; consentimento nunca revogado (e `ip`/`user_agent` guardados sem prazo);
+  consentimento de pessoa anonimizada sem revogação; e a regra do doador, que
+  hoje mantém para sempre o log e o consentimento de quem tem vínculo
+  financeiro (mais restritiva que os 5 anos pós-contrato dos cadastros). Até
+  lá, as regras acima valem como decisão de produto, não como parecer.
+- **PEND-13:** o cron novo só dispara com o processo acordado. É idempotente e
+  reavalia o filtro a cada rodada, então execução perdida atrasa o expurgo
+  por dias, sem perder dado nem duplicar. Mesma mitigação (UptimeRobot) dos
+  demais.
+- **Sem linha de auditoria por execução:** `audit_insert()` exige tenant e ator
+  (`actor_user_id` NOT NULL com FK) e o cron não tem nenhum dos dois. O rastro é
+  o log estruturado do processo, só com contagens (sem dado pessoal).
+- **Não há trigger de imutabilidade em `audit_logs`** (o mapeamento 7.2 o
+  prevê, mas não foi implementado). Criá-lo exigiria exceção para este job.
+- Fora do escopo: `login_attempts`, `refresh_tokens` e `password_reset_tokens`
+  (contadores e tokens, sem IP; não verifiquei se algum job limpa expirados) e
+  o log de login com IP do mapeamento 7.1, que não existe em tabela alguma.
+- O aviso semanal da seção 5.1 não foi estendido a estas duas linhas: não são
+  cadastro de pessoa, e o aviso conta pessoas.
 
 ### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
@@ -512,17 +559,62 @@ como "Dizimo", caindo em "Oferta" sem aviso. O app não resolve sozinho — pede
 ou casar pelo nome exato na API, ou um `slug` de verdade na categoria, ou a
 lista vinda da igreja (o que já está acima).
 
-### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · aberto
+### PROD-32 · Estado "sem conexão" que se recupera sozinho no app · parcial (2026-11-02)
 
-A v2 pede, além do erro com "Tentar novamente" que já existe
-(`describeLoadError`), que a tela atualize sozinha quando a conexão volta.
-Precisa de `@react-native-community/netinfo` (dependência nativa: sai por
-build, não por OTA).
+Entregue na branch `feat/app-sem-conexao-e-transicoes`. Depende de
+`@react-native-community/netinfo@12.0.1` (a versão que o Expo SDK 57 fixa em
+`bundledNativeModules.json`; sem config plugin, autolinking).
 
-### PROD-33 · Transições entre telas no app (v2) · aberto
+**Esta mudança NÃO sai por OTA.** `netinfo` é módulo nativo. O app usa
+`runtimeVersion: { policy: "appVersion" }` (`app.config.js`), então o JS novo só
+pode ir num binário que já traga o módulo: é preciso **subir o `version`** do
+app e fazer **build nativa (EAS) nas duas lojas**; um `eas update` para o
+binário antigo quebraria no `import` do módulo (e a política de runtime barra
+isso de propósito). Quem não atualizar o binário fica no JS antigo, sem a
+recuperação automática.
 
-Fade + translateY(3px), 180 ms ease-out, no lugar do padrão do Expo Router.
-Respeitar "reduzir movimento".
+- `src/lib/network/use-reload-on-reconnect.ts` — `useReloadOnReconnect(enabled,
+  reload)`. Assina o NetInfo só com a tela no erro offline
+  (`describeLoadError(...).offline`); recarrega **na volta** da conexão (precisa
+  ter visto offline depois de assinar — "já estava online" não dispara, para não
+  virar laço com erro de servidor); uma releitura por retorno, após 800 ms de
+  espera (oscilação cancela e recomeça). O `reload` é o mesmo do "Tentar
+  novamente": só releitura, nunca escrita.
+- Decisão de desenho: **estado por tela, não banner global** — é o que o protótipo
+  v2 desenha (`StateBox` "Sem conexão… a tela atualiza sozinha") e o que o
+  PLANO pede. Sem decisão de produto em aberto.
+- Adotado nas telas com o padrão `retryCount`: `(tabs)/grupos`, `autocadastro`,
+  `grupo/[id]`, `grupo/encontro/[id]`, `grupo/encontro/[id]/presenca`,
+  `biblia/marcacao/[id]`, `biblia/[book]/[chapter]`, `EventRegistrationPanel`.
+- **Falta adotar** (uma linha por tela com o hook; ficaram de fora por serem de
+  outras sessões ou por não terem o padrão `retryCount`): `celebracao/[id]` e
+  `celebracoes` (PEND-20), `kids/*` (REV-4.x, inclusive `kids/crianca/[id]`),
+  `contribuir` (PROD-31), e as que carregam por outra função de releitura:
+  `(tabs)/conteudo`, `escala`, `post/[id]`, `biblia/feed`, `notificacoes`,
+  `privacidade`, `troca/[id]`, `indisponibilidade`, `dizimo-automatico`,
+  `BookChapterPickerModal`, `VolunteerProfilePanel`.
+- Testes: hook (cai→volta→1 releitura; já online não recarrega; oscilação;
+  desmontar), integração em `grupos`.
+- **Pendente humano — `PEND-23`:** teste em aparelho (modo avião ligado/desligado
+  com a tela no erro), só possível com a build nativa.
+
+### PROD-33 · Transições entre telas no app (v2) · fechado no código, falta aparelho (2026-11-02)
+
+Mesma branch; **sai por OTA** (só JS: `animation`/`animationDuration` do Stack já
+existem no `react-native-screens` embarcado).
+
+- `app/_layout.tsx`: `animation: "fade"`, `animationDuration: 180` no `Stack`.
+  `animationDuration` só vale no iOS; no Android a duração é a do sistema.
+- `components/Screen.tsx`: `translateY` 3 px → 0 em 180 ms ease-out
+  (`Animated`, driver nativo) no conteúdo; o header nativo não se mexe.
+- **Reduzir movimento** (`lib/a11y/use-reduce-motion.ts`): tira o deslocamento e
+  deixa o fade, que não é movimento (o handoff não diz mais que isso).
+- Gesto de voltar do iOS e botão voltar do Android: `customAnimationOnSwipe`
+  continua no padrão `false`, então o swipe segue o interativo nativo; o botão
+  do Android usa o fade. Sem `react-native-reanimated` (não está no app, não
+  foi adicionado).
+- Não cobre troca entre abas, que não é transição de pilha.
+- Teste em aparelho: `PEND-23`.
 
 ### ~~PROD-34 · Página pública de autocadastro de visitante no web~~ · fechado
 
@@ -2032,7 +2124,7 @@ molde como a escala tem. Três mudanças, uma só branch:
   `person_id`, e o app só registra `external_id`, `tenant_id`,
   `congregation_id` e `role` no OneSignal (`onesignal-client.ts`) — o filtro não
   alcançava ninguém. Passou a `sendPushToPersons`, o mesmo caminho do aviso de
-  remoção. Os outros usos da tag `person_id` estão no `PEND-22`.
+  remoção. Os outros usos da tag `person_id` foram corrigidos no `PEND-22`.
 
 Não muda: a escala publicada continua editável (não há trava pós-publicação), e
 quem entra depois só é avisado ao publicar de novo. Cancelar ou remover o culto
@@ -2175,8 +2267,8 @@ está.
   membro lê pela câmera — nota no `PROD-12`) e QR de autocadastro na Mais,
   para a liderança projetar no culto, com a página pública que esse QR abre
   no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
-  2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). Ficam pendentes `PROD-32` (sem conexão que se
-  recupera), `PROD-33` (transições) e, dos QRs, `PEND-18` e `PEND-19` —
+  2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). `PROD-32` (sem conexão que se
+  recupera) e `PROD-33` (transições) saíram em 2026-11-02 (teste em aparelho em `PEND-23`). Ficam pendentes, dos QRs, `PEND-18` e `PEND-19` —
   lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
@@ -2715,17 +2807,15 @@ cancelado: repetir o `PATCH`, instância já `cancelled`/`finalized` e culto já
 passado não geram aviso. Falha de leitura ou de OneSignal é logada e nunca
 desfaz o cancelamento.
 
-Preferência: `NotificationsService.sendPushToPersons` ganhou o parâmetro
-opcional `category`, que aplica o mesmo `excludeOptedOut` do segmento avançado.
-O aviso usa `avisos`; quem desligou esse grupo em `notification_preferences` não
-recebe. Sem `category` o comportamento é o de antes.
+Preferência: o aviso passa `avisos` como `category` a
+`NotificationsService.sendPushToPersons` (parâmetro introduzido junto com a
+`PEND-22`); quem desligou esse grupo em `notification_preferences` não recebe.
 
 Evidência: `celebration-removal.notifier.ts`, `celebration-instances.service.ts`,
-`celebrations.service.ts`, `content/notifications.service.ts`; testes em
+`celebrations.service.ts`; testes em
 `celebration-removal.notifier.spec.ts` (snapshot, agrupamento, falha de push),
 `celebration-instances.service.spec.ts` (update, remove, cancelDates),
-`celebrations.service.spec.ts` (leitura antes do `deleteMany`) e
-`notifications.service.spec.ts` (preferência).
+`celebrations.service.spec.ts` (leitura antes do `deleteMany`).
 
 **Ficou de fora, de propósito:**
 
@@ -2739,19 +2829,48 @@ Evidência: `celebration-removal.notifier.ts`, `celebration-instances.service.ts
 - Os avisos de publicação (`PROD-39`) e de remoção da escala continuam sem
   consultar a preferência — só o cancelamento passou a consultar.
 
-### PEND-22 · Push endereçado por tag `person_id`, que o app não registra · aberto
+### ~~PEND-22 · Push endereçado por tag `person_id`~~ · fechado
 
-O app mobile registra no OneSignal só `external_id` (id da conta), `tenant_id`,
-`congregation_id`, `role` e as `pref_*`. Não existe tag `person_id`, então todo
-envio que filtra por ela não chega a ninguém. O aviso de publicação da escala
-foi corrigido no `PROD-39`; seguem com o mesmo filtro, ainda sem correção:
-`service-orders.service.ts` (OC publicada), `celebration-swap.service.ts`
-(pedido de troca), `small-groups-absence.notifier.ts` (alerta de ausência ao
-líder) e `bible-mark-interactions.service.ts` (curtida e resposta em marca).
-A correção é a do `PROD-39`: `NotificationsService.sendPushToPersons`, que
-resolve a conta ativa de cada `person_id`. Confirmar antes, num aparelho real
-ou no painel do OneSignal, que nenhum desses chega hoje — a leitura do código
-diz que não, mas ninguém viu o push falhar.
+Fechado em 2026-11-02 (branch `fix/push-por-person-id`). Cinco envios filtravam o
+OneSignal pela tag `person_id` — um a mais do que o item listava: OC publicada
+(`service-orders.service.ts`), pedido de troca (`celebration-swap.service.ts`),
+alerta de ausência ao líder (`small-groups-absence.notifier.ts`), resposta em
+marca da Bíblia (`bible-mark-interactions.service.ts`) e os avisos "Criança
+entregue/recebida" do Kids (`kids-pickup-notice.service.ts`). Todos passaram a
+`NotificationsService.sendPushToPersons`, que resolve a conta ativa de cada
+`person_id` e manda por `include_external_user_ids`.
+
+- **Preferências.** `sendPushToPersons` ganhou o 3º parâmetro opcional
+  `category`: com ele, aplica `excludeOptedOut` sobre `notification_preferences`
+  (sem linha = ligado). A Bíblia usa `'biblia'` e o Kids `'kids'` — o que antes
+  era a tag `pref_biblia`/`pref_kids != false` do aparelho agora é lido do banco,
+  valendo na hora, sem depender de o app ter sincronizado a tag. OC, troca e
+  ausência não têm categoria (e não tinham `pref_*`).
+- **Correção do enunciado.** O app *registra* a tag `person_id` hoje
+  (`notifications-provider.tsx` → `registerPersonTag`, desde o módulo Kids), mas
+  num fetch sem retry que falha em silêncio e só em build novo — por isso a tag
+  não é endereço confiável. O app segue registrando; remover é decisão à parte.
+  E "curtida" nunca gerou push: só a resposta chama `notifyAuthor`.
+- **Evidência.** `src/content/push-addressing.guard.spec.ts` varre `apps/api/src`
+  e falha se algum arquivo voltar a combinar `field: 'tag'` com
+  `key: 'person_id'`; rodado contra o código anterior listou exatamente os cinco
+  arquivos acima. Cada ponto tem spec unitário afirmando `sendPushToPersons`
+  com os `person_id` certos (e a categoria) e sem `filters`;
+  `notifications.service.spec.ts` cobre `category`. Os specs antigos só provavam a
+  *forma* do payload (`filters` com a tag), não a entrega.
+- **Não verificado.** Ninguém viu o push falhar (nem chegar) em aparelho real ou
+  no painel do OneSignal; a conclusão vem da leitura do código e do payload.
+- **Fora do escopo.** Remover `registerPersonTag` do mobile; push de curtida;
+  preferência para OC/troca/ausência.
+
+### PEND-23 · Teste em aparelho do sem conexão e das transições (PROD-32/33) · aberto
+
+Só com a build nativa (netinfo). Roteiro, em `teste1-church`/`teste2-church`:
+(1) abrir uma tela adotada (ex.: Grupos), ligar modo avião e recarregar até o
+erro offline; desligar o modo avião e ver a tela atualizar sozinha, uma vez;
+(2) oscilar a rede e conferir que não há rajada de requisições; (3) transição
+fade + 3 px entre telas no iOS e no Android; (4) com "Reduzir movimento" ligado,
+sem deslocamento; (5) gesto de voltar no iOS e botão voltar no Android.
 
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 

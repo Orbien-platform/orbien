@@ -90,7 +90,7 @@ function setup() {
     runInTx: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
   } as unknown as PrismaService;
   const notifications = {
-    sendPush: jest.fn().mockResolvedValue(undefined),
+    sendPushToPersons: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<NotificationsService>;
   const service = new CelebrationSwapService(prisma, notifications);
   return { client, prisma, notifications, service };
@@ -238,16 +238,12 @@ describe('CelebrationSwapService.createRequest', () => {
       person: { deleted_at: null },
       celebrationAssignments: { none: { celebration_ministry_id: 'cm-1' } },
     });
-    expect(notifications.sendPush).toHaveBeenCalledWith(
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Caio pediu troca de escala',
         body: 'Mídia · Culto da manhã',
-        filters: [
-          { field: 'tag', key: 'person_id', relation: '=', value: 'p-ana' },
-          { operator: 'OR' },
-          { field: 'tag', key: 'person_id', relation: '=', value: 'p-bia' },
-        ],
       }),
+      ['p-ana', 'p-bia'],
     );
     expect(view).toEqual({
       id: 'req-1',
@@ -271,7 +267,7 @@ describe('CelebrationSwapService.createRequest', () => {
     const { client, service, notifications } = setup();
     client.assignmentSwapRequest.create.mockResolvedValue(request());
     await service.createRequest('asg-1', {}, ...ctx);
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
   it('pedido a um colega: valida que ele pode assumir e avisa só ele', async () => {
@@ -290,11 +286,7 @@ describe('CelebrationSwapService.createRequest', () => {
       target_profile_id: 'vp-bia',
       message: 'Viagem',
     });
-    expect(notifications.sendPush).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: [{ field: 'tag', key: 'person_id', relation: '=', value: 'p-bia' }],
-      }),
-    );
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(expect.any(Object), ['p-bia']);
     expect(view.target).toEqual({ volunteer_profile_id: 'vp-bia', full_name: 'Bianca Lopes' });
   });
 
@@ -351,7 +343,7 @@ describe('CelebrationSwapService.createRequest', () => {
     client.assignmentSwapRequest.create.mockResolvedValue(
       request({ target_profile_id: 'vp-bia', target: profile('vp-bia', 'p-bia', 'Bianca') }),
     );
-    notifications.sendPush.mockRejectedValue(new Error('onesignal fora'));
+    notifications.sendPushToPersons.mockRejectedValue(new Error('onesignal fora'));
     const logged = jest.spyOn(service['logger'], 'error').mockImplementation(() => undefined);
 
     await expect(
@@ -428,12 +420,12 @@ describe('CelebrationSwapService.accept', () => {
         status: 'confirmed',
       }),
     });
-    expect(notifications.sendPush).toHaveBeenCalledWith(
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Troca aceita',
         body: 'Caio assumiu sua escala de Mídia',
-        filters: [{ field: 'tag', key: 'person_id', relation: '=', value: 'p-ana' }],
       }),
+      ['p-ana'],
     );
     expect(view.status).toBe('accepted');
   });
@@ -538,8 +530,9 @@ describe('CelebrationSwapService.decline e cancel', () => {
       where: { id: 'req-1', status: 'pending' },
       data: { status: 'declined', responded_at: expect.any(Date) },
     });
-    expect(notifications.sendPush).toHaveBeenCalledWith(
+    expect(notifications.sendPushToPersons).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Troca recusada' }),
+      expect.any(Array),
     );
     expect(view.status).toBe('declined');
   });
@@ -557,7 +550,7 @@ describe('CelebrationSwapService.decline e cancel', () => {
     );
     client.assignmentSwapRequest.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.decline('req-1', ...ctx)).rejects.toBeInstanceOf(ConflictException);
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
   it('quem pediu cancela', async () => {
@@ -568,7 +561,7 @@ describe('CelebrationSwapService.decline e cancel', () => {
       .mockResolvedValueOnce({ ...meu, status: 'cancelled' });
 
     await expect(service.cancel('req-1', ...ctx)).resolves.toMatchObject({ status: 'cancelled' });
-    expect(notifications.sendPush).not.toHaveBeenCalled();
+    expect(notifications.sendPushToPersons).not.toHaveBeenCalled();
   });
 
   it('cancelar pedido de outra pessoa: 403', async () => {

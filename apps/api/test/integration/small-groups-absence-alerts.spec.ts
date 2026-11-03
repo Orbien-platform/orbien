@@ -161,7 +161,7 @@ beforeAll(async () => {
   await prismaService.onModuleInit();
   service = new SmallGroupsService(prismaService);
   notifier = new SmallGroupsAbsenceNotifier(prismaService, {
-    sendPush: jest.fn(),
+    sendPushToPersons: jest.fn(),
   } as unknown as NotificationsService);
 }, 60_000);
 

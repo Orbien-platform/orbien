@@ -29,6 +29,7 @@ import { formatDateTime } from "../../../lib/format/date";
 import { CircleAlert, MessageSquare, RefreshCw, Trash, WifiOff } from "../../../lib/theme/icons";
 import { useTheme } from "../../../lib/theme/theme-provider";
 import { spacing, typography } from "../../../lib/theme/tokens";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 
 // Espelha `CreateBibleVerseMarkReplyDto` (backend).
 const REPLY_MIN = 3;
@@ -58,6 +59,13 @@ export default function BibliaMarkScreen() {
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [gone, setGone] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, a tela relê sozinha quando ela volta — a mesma
+  // releitura do "Tentar novamente", nunca uma escrita.
+  const retry = () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(error?.offline === true, retry);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -143,10 +151,7 @@ export default function BibliaMarkScreen() {
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setError(null);
-            setRetryCount((n) => n + 1);
-          }}
+          onPress={retry}
         />
       </StatusMessage>
     );
