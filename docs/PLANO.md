@@ -264,7 +264,7 @@ foi retomado — cinco no total.
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan`, com tela no console |
-| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin — ver **CONF-02** |
+| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin + logs de auditoria (2 anos) + consentimento (5 anos após revogação) — ver **CONF-02**; revisão jurídica das regras em **CONF-01** |
 | App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
@@ -327,12 +327,59 @@ Todas anonimizam (`anonymizedFields()`), nunca fazem `DELETE` físico: a
 cadastro da pessoa. O marco de fim de contrato é `TenantPlan.cancelled_at`,
 escrito por `POST /platform/tenants/:id/cancel` e limpo por `/reactivate`.
 
-**O que falta.** A tabela de retenção tem oito linhas; as que falam de cadastro
-de pessoa estão cobertas. Sobram as duas que não são cadastro, declaradas fora
-do escopo daquela entrega:
+**Entregue em 2026-11-02** — `LogsConsentRetentionService`
+(`apps/api/src/persons/logs-consent-retention.service.ts`), cron **2h UTC**
+(3h–6h são os purges de pessoa, 7h o Kids, 8h o notifier), como `prisma.system`
+como os purges existentes — sem policy, tabela ou exceção de RLS nova:
 
-- retenção de **logs de acesso e auditoria** (2 anos, Marco Civil Art. 15);
-- retenção de **registros de consentimento** (5 anos após a revogação).
+| O que | Prazo | Regra |
+|---|---|---|
+| Logs de acesso e auditoria (`audit_logs`, inclui `support_access` e `platform_access`) | 2 anos (Marco Civil, Art. 15) | `DELETE` físico de `at < now - 2 anos`, em lotes de 1000 (teto de 200 lotes por rodada) |
+| Registro de consentimento (`consent_records`) | 5 anos após a revogação | `DELETE` físico de `revoked_at < now - 5 anos` |
+
+Decisões do dono (2026-11-02):
+
+- apagar fisicamente o vencido: anonimizar o log tiraria `ip` e `before`/`after`
+  e deixaria uma linha sem valor de prova;
+- `support_access`/`platform_access` seguem o mesmo prazo de 2 anos e nunca
+  expiram antes; o `AuditInterceptor` e o `audit_insert()` não foram tocados;
+- **dado financeiro nunca sai, nem o dado pessoal que liga a origem ao CPF do
+  doador:** ficam de fora do expurgo as linhas de auditoria com `entity` em
+  `financial_transaction`, `bank_statement_transaction` e `pix_payment`, e
+  qualquer linha de auditoria ou consentimento cujo titular tem vínculo
+  financeiro (`financial_transactions` ou `pix_payments`, o mesmo critério do
+  notifier);
+- consentimento nunca revogado não expira, e a anonimização da pessoa **não** é
+  marco de revogação (o prazo só corre a partir de `revoked_at`).
+
+Evidência: `src/persons/logs-consent-retention.service.spec.ts` (corte no
+prazo, limite exato, lote, teto, idempotência, falha no meio preserva o já
+apagado, escopo de tenant) e `test/integration/logs-consent-retention.spec.ts`
+contra o Postgres local, só em `teste2-church`.
+
+**O que segue de fora:**
+
+- **CONF-01 (revisão jurídica)** precisa confirmar: DELETE em vez de
+  anonimização; se `support_access`/`platform_access` devem durar mais que 2
+  anos; consentimento nunca revogado (e `ip`/`user_agent` guardados sem prazo);
+  consentimento de pessoa anonimizada sem revogação; e a regra do doador, que
+  hoje mantém para sempre o log e o consentimento de quem tem vínculo
+  financeiro (mais restritiva que os 5 anos pós-contrato dos cadastros). Até
+  lá, as regras acima valem como decisão de produto, não como parecer.
+- **PEND-13:** o cron novo só dispara com o processo acordado. É idempotente e
+  reavalia o filtro a cada rodada, então execução perdida atrasa o expurgo
+  por dias, sem perder dado nem duplicar. Mesma mitigação (UptimeRobot) dos
+  demais.
+- **Sem linha de auditoria por execução:** `audit_insert()` exige tenant e ator
+  (`actor_user_id` NOT NULL com FK) e o cron não tem nenhum dos dois. O rastro é
+  o log estruturado do processo, só com contagens (sem dado pessoal).
+- **Não há trigger de imutabilidade em `audit_logs`** (o mapeamento 7.2 o
+  prevê, mas não foi implementado). Criá-lo exigiria exceção para este job.
+- Fora do escopo: `login_attempts`, `refresh_tokens` e `password_reset_tokens`
+  (contadores e tokens, sem IP; não verifiquei se algum job limpa expirados) e
+  o log de login com IP do mapeamento 7.1, que não existe em tabela alguma.
+- O aviso semanal da seção 5.1 não foi estendido a estas duas linhas: não são
+  cadastro de pessoa, e o aviso conta pessoas.
 
 ### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
