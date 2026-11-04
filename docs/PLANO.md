@@ -2315,7 +2315,7 @@ está.
   para a liderança projetar no culto, com a página pública que esse QR abre
   no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
   2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). `PROD-32` (sem conexão que se
-  recupera) e `PROD-33` (transições) saíram em 2026-11-02 (teste em aparelho em `PEND-23`). Ficam pendentes, dos QRs, `PEND-18` e `PEND-19` —
+  recupera) e `PROD-33` (transições) saíram em 2026-11-02 (teste em aparelho em `PEND-23`). Fica pendente, dos QRs, `PEND-19` (`PEND-18` fechou em 2026-11-04) —
   lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
@@ -2806,15 +2806,44 @@ tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: mon
 (`DEC-07`, decidido: `AD-009`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
 Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
 
-### PEND-18 · Limite do autocadastro por IP é baixo para o wi-fi da igreja · aberto
+### ~~PEND-18 · Limite do autocadastro por IP é baixo para o wi-fi da igreja~~ · fechado
 
-`POST /public/visitor/register` aceita 20 envios por hora **por IP**
-(`visitor.public.controller.ts`). Com o QR projetado no culto (`PROD-34`), os
-visitantes na rede da igreja saem pelo mesmo IP: o 21º cadastro da hora
-recebe 429 — a página explica e mantém o que foi digitado, mas o cadastro não
-entra. Quem usa dados móveis não é afetado. Opções a decidir: limite por
-token do QR em vez de por IP, ou um teto por IP maior só nesta rota. Não foi
-mexido porque o limite é a defesa contra spam numa rota sem autenticação.
+Fechado em 2026-11-04. `POST /public/visitor/register` aceitava 20 envios por
+hora por IP; com o QR projetado no culto, o 21º visitante no wi-fi da igreja
+recebia 429. Decisão do dono: pode limitar; o desenho ficou a cargo da
+implementação.
+
+**Desenho** (três baldes, em memória, `visitor-register-limiter.service.ts`):
+
+| Balde | Teto/hora | Onde | Para quê |
+|---|---|---|---|
+| Por QR (`qr_tokens.id`) | 200 | `VisitorRegisterLimiter.hitToken`, depois de ler o token no banco | Limite real: o QR é a unidade do culto. 500 presentes × 10% de visitantes ≈ 50/h; 200 dá 4× de folga e ainda barra um despejo de milhares num QR só |
+| Por IP, só token inválido | 20 | `assertIpNotBlocked` antes da consulta; `recordInvalid` no 404 | O limite baixo de antes, agora só para quem erra token. QR válido nunca incrementa este balde, e IP bloqueado nem chega ao banco |
+| Por IP, qualquer envio | 300 | `@Throttle` da rota (`ThrottlerGuard`) | Rede de segurança. Dois QRs no mesmo IP somam aqui; fica acima do teto do QR para não o anular |
+
+- **Sem chave por token inventado.** O contador por token só nasce depois que o
+  token foi validado no banco (existe e está ativo); token inexistente conta
+  contra o IP. Os mapas têm teto de 10 000 chaves (varre o vencido, depois
+  descarta o mais antigo), então não crescem sem limite.
+- **IP** depende de `trust proxy 1` (`main.ts`) e do mesmo ponto em aberto de
+  `PEND-04`: o que a API vê atrás do `/api-proxy` da Vercel. Se `req.ip` for o
+  IP de saída do proxy, o balde de 300 é compartilhado entre igrejas — o risco
+  que o teto de IP maior assume. O balde por QR não depende de IP.
+- **Memória do processo.** Os contadores reiniciam em deploy e quando o Render
+  acorda a instância, e valem 1/N com N instâncias. Não importa: o pior caso é
+  a janela recomeçar (o limite por IP já era assim) e não há dado de pessoa em
+  jogo. Tabela compartilhada só se aparecer abuso real.
+- **Front sem mudança.** A página `/visitante/{tenant_slug}/{token}` já trata o
+  429 e guarda o digitado.
+- **Antifraude: nada novo.** Já existe a deduplicação por telefone no próprio
+  `registerViaQr` (telefone repetido vira visita, não pessoa nova); nome
+  repetido não foi tratado.
+
+**Fica de fora:** quem tem o QR (está no telão) ainda pode, de muitos IPs,
+cadastrar até 200 nomes falsos por hora naquele QR — antes eram 20 por IP, sem
+teto por QR, então não piora. Resposta, se aparecer: desativar/regerar o QR
+(`admin/visitor/qr`), ou captcha. Persistência dos contadores no banco, e
+limite por telefone/nome, só com evidência de abuso.
 
 ### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
 

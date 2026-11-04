@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import { maskName, normalizePhone, VisitorService } from './visitor.service';
 import { VisitorLeaderController, VISITOR_LEADER_ROLES } from './visitor.leader.controller';
 import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto';
+import { VisitorRegisterLimiter } from './visitor-register-limiter.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificationService } from '../persons/classification.service';
 import { VisitsService } from '../persons/visits.service';
@@ -42,6 +43,7 @@ function setup() {
     prisma,
     { checkAutoReclassification: checkAuto } as unknown as ClassificationService,
     {} as VisitsService,
+    new VisitorRegisterLimiter(),
   );
   return { service, tx, client, checkAuto };
 }
