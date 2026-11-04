@@ -1,8 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 const mockGetMyVolunteerProfile = jest.fn();
+const mockUpdateMyAvailability = jest.fn();
+const mockAcceptVolunteerTerm = jest.fn();
 jest.mock("../../lib/escala/escala-client", () => ({
   getMyVolunteerProfile: (...args: unknown[]) => mockGetMyVolunteerProfile(...args),
+  updateMyAvailability: (...args: unknown[]) => mockUpdateMyAvailability(...args),
+  acceptVolunteerTerm: (...args: unknown[]) => mockAcceptVolunteerTerm(...args),
 }));
 
 import { HttpError, NetworkError } from "../../lib/api/errors";
@@ -20,6 +24,7 @@ const PROFILE = {
   restrictions: "Não pode carregar peso",
   volunteer_since: "2024-03-02T12:00:00.000Z",
   served_count: 96,
+  term: { version: "volunteer_term_v1", text: "Texto do termo.", accepted_at: null as string | null },
 };
 
 describe("VolunteerProfilePanel", () => {
@@ -31,10 +36,12 @@ describe("VolunteerProfilePanel", () => {
 
     expect(await screen.findByText("Mídia (líder) e Recepção")).toBeTruthy();
     expect(screen.getByText("ProPresenter e OBS")).toBeTruthy();
-    expect(screen.getByText("Dom manhã e noite, Qua noite")).toBeTruthy();
+    expect(screen.getByTestId("disp-sunday-morning").props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId("disp-sunday-afternoon").props.accessibilityState.checked).toBe(false);
+    expect(screen.getByTestId("disp-wednesday-evening").props.accessibilityState.checked).toBe(true);
     expect(screen.getByText("Não pode carregar peso")).toBeTruthy();
     expect(screen.getByText("96 escalas servidas, desde março 2024")).toBeTruthy();
-    expect(screen.getByText("Para mudar o perfil, fale com a secretaria da igreja.")).toBeTruthy();
+    expect(screen.getByText("Ministérios, habilidades e restrições são cadastrados pela secretaria da igreja.")).toBeTruthy();
   });
 
   it("perfil recém-criado: os vazios dizem o que falta, e uma escala no singular", async () => {
@@ -50,9 +57,138 @@ describe("VolunteerProfilePanel", () => {
 
     expect(await screen.findByText("Nenhum ainda")).toBeTruthy();
     expect(screen.getByText("Nenhuma informada")).toBeTruthy();
-    expect(screen.getByText("Não informada")).toBeTruthy();
     expect(screen.queryByTestId("perfil-restricoes")).toBeNull();
     expect(screen.getByText(/^1 escala servida,/)).toBeTruthy();
+  });
+
+  it("não oferece edição de habilidade", async () => {
+    mockGetMyVolunteerProfile.mockResolvedValue(PROFILE);
+    await render(<VolunteerProfilePanel />);
+    await screen.findByTestId("perfil-voluntario");
+    expect(screen.getByTestId("perfil-habilidades").props.accessibilityRole).toBeUndefined();
+    expect(screen.queryByTestId("perfil-habilidades-editar")).toBeNull();
+  });
+
+  describe("disponibilidade editável", () => {
+    it("salvar fica desligado até mudar; salva só a disponibilidade e confirma", async () => {
+      mockGetMyVolunteerProfile.mockResolvedValue(PROFILE);
+      mockUpdateMyAvailability.mockResolvedValue({
+        ...PROFILE,
+        availability: { sunday: ["morning", "evening", "afternoon"], wednesday: ["evening"] },
+      });
+      await render(<VolunteerProfilePanel />);
+      await screen.findByTestId("perfil-voluntario");
+
+      const save = () => screen.getByTestId("disponibilidade-salvar");
+      expect(save().props.accessibilityState?.disabled).toBe(true);
+
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("disp-sunday-afternoon"));
+      });
+      expect(save().props.accessibilityState?.disabled).toBeFalsy();
+      await act(async () => {
+        fireEvent.press(save());
+      });
+
+      expect(mockUpdateMyAvailability).toHaveBeenCalledWith({
+        sunday: ["morning", "afternoon", "evening"],
+        monday: [],
+        tuesday: [],
+        wednesday: ["evening"],
+        thursday: [],
+        friday: [],
+        saturday: [],
+      });
+      expect(await screen.findByText("Disponibilidade salva.")).toBeTruthy();
+      expect(save().props.accessibilityState?.disabled).toBe(true);
+    });
+
+    it("desmarcar um turno e voltar ao original desliga o salvar de novo", async () => {
+      mockGetMyVolunteerProfile.mockResolvedValue(PROFILE);
+      await render(<VolunteerProfilePanel />);
+      await screen.findByTestId("perfil-voluntario");
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("disp-wednesday-evening"));
+      });
+      expect(screen.getByTestId("disp-wednesday-evening").props.accessibilityState.checked).toBe(false);
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("disp-wednesday-evening"));
+      });
+      expect(screen.getByTestId("disponibilidade-salvar").props.accessibilityState?.disabled).toBe(true);
+    });
+
+    it.each([
+      ["sem conexão", new NetworkError(), /Sem conexão/],
+      ["erro de servidor", new HttpError(500, {}), /Não foi possível salvar/],
+    ])("falha ao salvar (%s) avisa e mantém o rascunho", async (_n, error, text) => {
+      mockGetMyVolunteerProfile.mockResolvedValue(PROFILE);
+      mockUpdateMyAvailability.mockRejectedValue(error);
+      await render(<VolunteerProfilePanel />);
+      await screen.findByTestId("perfil-voluntario");
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("disp-monday-morning"));
+      });
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("disponibilidade-salvar"));
+      });
+      expect(await screen.findByText(text)).toBeTruthy();
+      expect(screen.getByTestId("disp-monday-morning").props.accessibilityState.checked).toBe(true);
+    });
+  });
+
+  describe("termo de voluntariado", () => {
+    it("ainda não aceito: mostra o texto e a versão, e aceita a versão exibida", async () => {
+      mockGetMyVolunteerProfile.mockResolvedValue(PROFILE);
+      mockAcceptVolunteerTerm.mockResolvedValue({
+        ...PROFILE,
+        term: { ...PROFILE.term, accepted_at: "2026-11-04T15:00:00.000Z" },
+      });
+      await render(<VolunteerProfilePanel />);
+
+      expect(await screen.findByText("Texto do termo.")).toBeTruthy();
+      expect(screen.getByText("Versão volunteer_term_v1")).toBeTruthy();
+      expect(screen.queryByTestId("perfil-termo-aceito")).toBeNull();
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("perfil-termo-aceitar"));
+      });
+
+      expect(mockAcceptVolunteerTerm).toHaveBeenCalledWith("volunteer_term_v1");
+      expect(await screen.findByText("Aceito em 4 de novembro de 2026")).toBeTruthy();
+      expect(screen.queryByTestId("perfil-termo-aceitar")).toBeNull();
+    });
+
+    it("já aceito: mostra a data e não oferece aceitar", async () => {
+      mockGetMyVolunteerProfile.mockResolvedValue({
+        ...PROFILE,
+        term: { ...PROFILE.term, accepted_at: "2026-10-01T12:00:00.000Z" },
+      });
+      await render(<VolunteerProfilePanel />);
+      expect(await screen.findByText("Aceito em 1 de outubro de 2026")).toBeTruthy();
+      expect(screen.queryByTestId("perfil-termo-aceitar")).toBeNull();
+    });
+
+    it("data ilegível não quebra a tela", async () => {
+      mockGetMyVolunteerProfile.mockResolvedValue({ ...PROFILE, term: { ...PROFILE.term, accepted_at: "ontem" } });
+      await render(<VolunteerProfilePanel />);
+      expect(await screen.findByText("Aceito em data não informada")).toBeTruthy();
+    });
+
+    it("termo atualizado no servidor (409): mostra a mensagem da API", async () => {
+      mockAcceptVolunteerTerm.mockRejectedValue(
+        new HttpError(409, { code: "volunteer_term_outdated", message: "O termo foi atualizado; leia a versão vigente antes de aceitar" }),
+      );
+      mockGetMyVolunteerProfile.mockResolvedValueOnce(PROFILE).mockResolvedValueOnce({
+        ...PROFILE,
+        term: { ...PROFILE.term, version: "volunteer_term_v2", text: "Texto novo." },
+      });
+      await render(<VolunteerProfilePanel />);
+      await screen.findByTestId("perfil-voluntario");
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("perfil-termo-aceitar"));
+      });
+      expect(await screen.findByText(/O termo foi atualizado/)).toBeTruthy();
+      expect(await screen.findByText("Texto novo.")).toBeTruthy();
+    });
   });
 
   it("ninguém serviu ainda", async () => {

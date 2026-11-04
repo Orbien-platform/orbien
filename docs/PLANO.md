@@ -306,7 +306,8 @@ sugestão, não fila.
 de que passaram por advogado. Inclui os itens da seção 10 do mapeamento LGPD
 e o checklist de pré-go-live da seção 9.
 
-Depende de gente de fora, não de código.
+Depende de gente de fora, não de código. Inclui o texto provisório do termo de
+voluntariado (`legal/consent-terms/volunteer_term_v1.md`, `PROD-36`).
 
 ### CONF-02 · Retenção de dados — o que falta da seção 5 · dívida
 
@@ -979,19 +980,56 @@ Falta: conferir o formulário no aparelho (teclado numérico, rolagem com os
 quatro campos abertos dentro do card). Spec em
 `.specs/features/contagem-presenca-culto/`.
 
-### PROD-36 · Voluntário edita o próprio perfil e aceita o termo de voluntariado · aberto
+### PROD-36 · Voluntário edita a própria disponibilidade e aceita o termo de voluntariado · parcial
 
-"Meu perfil" (`PROD-35`) só lê. O protótipo deixa a disponibilidade semanal
-tocável e mostra o "Termo de voluntariado" com a data do aceite (`promessa`).
+Entregue em 2026-11-04 (código; falta o aparelho e o jurídico). "Meu perfil"
+(`PROD-35`) deixou de ser só leitura em dois pontos.
 
-Para fazer:
-- uma rota `PATCH /volunteers/me/profile` restrita a `availability`, com
-  auditoria como a do `PATCH /me`;
-- o texto do termo, em `legal/consent-terms/` (revisão em `CONF-01`);
-- o aceite gravado como `consent_records`.
+- **Decisão do dono (2026-11-04):** a habilidade **não** é editável pelo
+  voluntário; continua sendo da liderança, assim como ministérios e restrições.
+- **API.**
+  - `PATCH /volunteers/me/profile` aceita só `availability`. Com o
+    `ValidationPipe` global (`forbidNonWhitelisted`), `skills`, `restrictions`,
+    `person_id` ou qualquer outro campo é 400, e nada é gravado. A pessoa vem de
+    `user_accounts.person_id` no banco; a rota não tem `:id`, então não há como
+    apontar para o perfil de outro. Auditoria `volunteer_profile.self_updated`,
+    com antes/depois, pelo `writeAuditLog` — o mesmo desenho do `PATCH /me`.
+  - `POST /volunteers/me/term` (`term_version` no corpo) grava `consent_records`
+    com versão `volunteer_term_v1`, origem `volunteer_app`, IP e user-agent, e
+    audita `consent.granted`. Reaceitar a mesma versão não duplica nem audita de
+    novo; aceite de versão anterior é revogado (`superseded_by_new_term`), não
+    apagado; versão que não é a vigente é 409 `volunteer_term_outdated`.
+  - `GET /volunteers/me/profile` passou a trazer `term { version, text,
+    accepted_at }` (`accepted_at` nulo se não aceitou ou se revogou).
+  - Sessão de suporte (`support_session`) recebe 403 nas duas rotas: editar e
+    aceitar são atos do titular.
+  - Revogação: `POST /me/revoke-consent` com `version: volunteer_term_v1` já
+    serve. **CONF-02:** o job só apaga `consent_records` com `revoked_at` mais
+    velho que 5 anos; o registro novo nasce sem `revoked_at`, então não
+    conflita. Sem tabela nem policy nova.
+- **Texto do termo:** `legal/consent-terms/volunteer_term_v1.md`, provisório e
+  marcado `[REVISÃO JURÍDICA OBRIGATÓRIA]`. Sem cláusula de peso legal: diz só
+  o que a Orbien guarda e que dá para pedir revogação/correção. **Depende de
+  `CONF-01`**; mudar o texto sobe a versão (`volunteer_term_v2`) e o código
+  (`volunteers/volunteer-term.ts`) muda junto.
+- **App.** `AvailabilityEditor` (sete dias × manhã/tarde/noite, "Salvar
+  disponibilidade" ligado só com mudança) e o card "Termo de voluntariado" com a
+  data do aceite, ambos no `VolunteerProfilePanel`. Termo trocado no servidor
+  (409) recarrega o perfil para ler a versão nova. O hook
+  `useReloadOnReconnect` **não** foi adotado nesta tela (é da `PROD-32`).
+- **Web:** a `PROD-35` não deu a visão no web, então não há paridade a fazer.
+- **Testes.** Unidade (`volunteer-profiles.service.spec.ts`, controller, DTO) e
+  `test/integration/volunteer-self-profile.spec.ts` em `teste1-church`: edita só
+  a própria disponibilidade, habilidade/outro campo é 400, a edição de um não
+  toca o outro, aceite grava `consent_records` e auditoria, reaceite não duplica,
+  revogado volta a "não aceito". App: painel e cliente.
 
-Decisão em aberto: se a habilidade também é editável pelo voluntário, ou se
-continua sendo da liderança.
+Falta: **(1)** conferir no aparelho o editor (alvo de toque dos turnos, largura
+em tela estreita, teclado/rolagem) e o card do termo — pendência humana;
+**(2)** revisão jurídica do texto (`CONF-01`); **(3)** corrida de dois aceites
+simultâneos do mesmo voluntário pode gravar duas linhas (não há unique parcial
+em `consent_records`; o `kids` tem o mesmo comportamento) — baixa chance, sem
+efeito além de uma linha a mais.
 
 ---
 

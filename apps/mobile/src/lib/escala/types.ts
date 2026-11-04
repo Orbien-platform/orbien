@@ -120,4 +120,6 @@ export interface MyVolunteerProfile {
   restrictions: string | null;
   volunteer_since: string;
   served_count: number;
+  /** Termo de voluntariado vigente; `accepted_at` é `null` até a pessoa aceitar. */
+  term: { version: string; text: string; accepted_at: string | null };
 }

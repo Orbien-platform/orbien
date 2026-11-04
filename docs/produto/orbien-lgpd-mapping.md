@@ -86,6 +86,7 @@ Toda decisão de modelagem e exposição leva isso em conta.
 | Cadastro completo de membro (autoatualização) | `member_consent_v1` | Aceito comunicações + tratamento de dado religioso |
 | Onboarding de admin/secretária | `staff_consent_v1` | Aceito tratamento de dados em nome da entidade |
 | Doação avulsa (página pública) | `donor_consent_v1` | Aceito uso para emissão de recibo |
+| Voluntário (app, Meu perfil) | `volunteer_term_v1` | Guarda de disponibilidade, ministérios e histórico de escalas |
 
 ### 3.2 Schema obrigatório do consent_record
 
