@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cancelSession, listRooms, listSessions, openSessions, type KidsRoom, type KidsSession } from "@/lib/kids";
+import { cancelSession, listRooms, reopenSession, listSessions, openSessions, type KidsRoom, type KidsSession } from "@/lib/kids";
 import { KidsSessionsModal } from "./KidsSessionsModal";
 
 vi.mock("@/lib/kids", async (orig) => ({
@@ -10,6 +10,7 @@ vi.mock("@/lib/kids", async (orig) => ({
   listRooms: vi.fn(),
   openSessions: vi.fn(),
   cancelSession: vi.fn(),
+  reopenSession: vi.fn(),
 }));
 
 const room = (id: string, name: string, over: Partial<KidsRoom> = {}): KidsRoom => ({
@@ -48,6 +49,7 @@ describe("KidsSessionsModal", () => {
     vi.mocked(listRooms).mockReset();
     vi.mocked(openSessions).mockReset();
     vi.mocked(cancelSession).mockReset();
+    vi.mocked(reopenSession).mockReset();
   });
 
   it("culto sem sessão é estado normal e convida a abrir turmas", async () => {
@@ -111,6 +113,30 @@ describe("KidsSessionsModal", () => {
     await user.click(screen.getByRole("button", { name: "Cancelar a sessão Maternal" }));
     await waitFor(() => expect(cancelSession).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("sessão cancelada pode ser reaberta; o erro do servidor aparece (culto cancelado)", async () => {
+    const user = userEvent.setup();
+    const m = room("r1", "Maternal");
+    vi.mocked(listSessions).mockResolvedValue([session("s1", m, { status: "cancelled" })]);
+    vi.mocked(listRooms).mockResolvedValue([m]);
+    vi.mocked(reopenSession).mockRejectedValueOnce(httpError(422, "Culto cancelado não reabre sessão kids")).mockResolvedValueOnce();
+    setup();
+    await user.click(await screen.findByRole("button", { name: "Reabrir a sessão Maternal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Culto cancelado não reabre sessão kids");
+
+    await user.click(screen.getByRole("button", { name: "Reabrir a sessão Maternal" }));
+    await waitFor(() => expect(reopenSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("sessão aberta não oferece reabrir", async () => {
+    const m = room("r1", "Maternal");
+    vi.mocked(listSessions).mockResolvedValue([session("s1", m)]);
+    vi.mocked(listRooms).mockResolvedValue([m]);
+    setup();
+    await screen.findByRole("button", { name: "Cancelar a sessão Maternal" });
+    expect(screen.queryByRole("button", { name: /Reabrir a sessão/ })).not.toBeInTheDocument();
   });
 
   it("sem turma cadastrada, manda cadastrar", async () => {

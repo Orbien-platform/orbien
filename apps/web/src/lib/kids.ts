@@ -298,6 +298,10 @@ export async function cancelSession(sessionId: string): Promise<void> {
   await api.delete(`/kids/sessions/${sessionId}`);
 }
 
+export async function reopenSession(sessionId: string): Promise<void> {
+  await api.post(`/kids/sessions/${sessionId}/reopen`);
+}
+
 export async function getTemplate(celebrationId: string): Promise<KidsTemplate> {
   const { data } = await api.get<KidsTemplate>(`/celebrations/${celebrationId}/kids-template`);
   return data;

@@ -861,44 +861,77 @@ Falta:
 - Testar o fluxo do responsável no aparelho (código grande, toque ≥ 48px).
 
 Pendências declaradas da revisão do PR #193 (REV-4). Achados de `/code-review` e
-`pr-review` que o dono escolheu **não** ajustar agora; ficam abertas, com a
-evidência e a correção sugerida, e nenhum desses códigos foi alterado:
-- **REV-4.1 · `KidsGuardiansService.remove` sem lock e `add` aceita segundo
-  primário.** Evidência: `kids-guardians.service.ts` ~:140-156. O `update` ganhou
-  `FOR UPDATE ... ORDER BY id` (FIX5), o `remove` não: duas remoções simultâneas
-  de dois primários deixam a criança sem primário. Em `add` (:42, :69) um
-  responsável não primário aceita `is_primary: true`. Sugestão: o mesmo lock
-  `ORDER BY id` no `remove` e revalidar a invariante dentro dele; no `add`,
-  decidir se `is_primary` vale para não primário (e travar igual).
-- **REV-4.2 · Cancelar a instância fecha as sessões kids e reativar o culto não
-  as reabre.** Evidência: `celebration-instances.service.ts` ~:144-150 e
-  `kids-sessions.service.ts` ~:147-151; não há rota de reabrir sessão. Sugestão:
-  rota `POST /kids/sessions/:id/reopen` (ou reabrir junto com a reativação),
-  com teste de integração do ciclo cancelar, reativar e operar.
-- **REV-4.3 · Travamento das 5 tentativas lê o contador do início da
-  requisição.** Evidência: `kids-checkin.service.ts:237`. Sugestão (barata): usar
-  o valor devolvido por `kids_register_checkout_failure()` na decisão de travar,
-  em vez do contador lido antes.
-- **REV-4.4 · Tokens de QR usados ou expirados nunca são purgados.** Evidência:
-  `kids-qr.service.ts:114`; `kids_checkin_qr_tokens` só cresce. Sugestão: job
-  diário que apaga o que expirou há mais de um dia (ao lado do
-  `KidsRetentionService`).
-- **REV-4.5 · O consentimento ignora a versão do termo.** Evidência:
-  `kids-consent.service.ts:84-120`. Subir a versão de `kids-consent.terms.ts`
-  não pede novo aceite. Sugestão: tratar aceite de versão antiga como ausente;
-  **registrar antes de subir a versão do termo** (texto jurídico).
-- **REV-4.6 · O botão de check-in some em silêncio se `listOpenSessions`
-  falhar no mobile.** Evidência: `apps/mobile/src/app/kids/crianca/[id].tsx:50`.
-  Sugestão: estado de erro com nova tentativa, como o balcão do web.
-- **REV-4.7 · Sem e2e das telas de escrita do admin Kids** (criança, turma,
-  modelo, sessão, consentimento); só o balcão tem e2e. Sugestão: um spec
-  Playwright por tela de escrita, em `teste2-church`.
-- **REV-4.8 · Lembrete de deploy:** rodar o `bootstrap-db.sh` junto ou antes da
-  release da API. Sem o `031` o travamento do check-out falha aberto; sem
-  `029`, `030` e `032` as tabelas ficam sem RLS.
-- **REV-4.9 · `.claude/skills/pr-review/SKILL.md:80` cita só `isolation.spec.ts`**,
-  desatualizado em relação ao portão (`PEND-08`). Sugestão: apontar a skill para
-  `scripts/pre-push.sh`.
+`pr-review` que o dono escolheu não ajustar na hora. **Todas tratadas** (REV-4.1
+a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
+- ~~**REV-4.1 · `KidsGuardiansService.remove` sem lock e `add` aceita segundo
+  primário.**~~ **Fechado** (branch `fix/kids-responsaveis-concorrencia`).
+  `remove` e `add` rodam em `runInTx` com `SELECT … ORDER BY id FOR UPDATE`
+  (helper `lockChildGuardians`, o mesmo do `update`) e revalidam depois do lock;
+  `add` com `is_primary: true` **promove** (rebaixa os primários atuais na mesma
+  transação, como o `update`). `remove` de linha já apagada por outra requisição
+  é idempotente. Evidência: 4 testes novos em
+  `test/integration/kids-guardians-concurrency.spec.ts` falhavam na main (zero
+  primários após duas remoções; 2–3 primários após `add`) e passam agora, mais
+  unitários em `kids-guardians.service.spec.ts`.
+- ~~**REV-4.2 · Cancelar a instância fecha as sessões kids e reativar o culto não
+  as reabre.**~~ **Fechado.** Decisão: rota explícita, sem reabrir sozinho na
+  reativação — `KidsSession.status` não distingue "cancelada pelo culto" de
+  "cancelada à mão pela liderança", e reabrir tudo reabriria a que a liderança
+  fechou de propósito. `POST /kids/sessions/:id/reopen` (`KIDS_MANAGE_ROLES`,
+  idempotente se já aberta; 422 com culto cancelado ou turma desativada) e o
+  botão "Reabrir" no `KidsSessionsModal`. Evidência: ciclo cancelar, reativar,
+  reabrir em `test/integration/kids-sessions.spec.ts`, unitários e vitest do
+  modal. **Fora de escopo, segue aberto:** o passo "reabrir" no e2e — o
+  `e2e-prod` roda os specs contra o ambiente publicado, que só tem o botão e a
+  rota depois do deploy, então ele entra em `kids-modelo-sessoes.spec.ts` num PR
+  depois do deploy.
+- ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
+  requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
+  travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
+  usa o valor devolvido por `kids_register_checkout_failure()`; o contador lido
+  no início só serve ao pré-teste "já travado". Evidência: os testes de rajada de
+  `test/integration/kids-checkout-lock.spec.ts` (8 e 5 erros simultâneos: nenhum
+  perdido e só um trava).
+- ~~**REV-4.4 · Tokens de QR usados ou expirados nunca são purgados.**~~
+  **Fechado.** `KidsRetentionService.purgeQrTokens` apaga o QR usado ou expirado
+  há mais de 1 dia (`KIDS_QR_TOKEN_RETENTION_DAYS`), em lotes, com cron diário às
+  7h30 (depois da anonimização das 7h). Sem tabela nem policy nova, então o
+  `bootstrap-db.sh` não muda. Evidência: `test/integration/kids-retention.spec.ts`
+  (limite exato, vigente preservado, idempotência) e unitários.
+- ~~**REV-4.5 · O consentimento ignora a versão do termo.**~~ **Fechado, sem
+  tocar no texto nem na versão do termo.** `hasValidConsent` exige
+  `version = KIDS_TERM_VERSION`; `grant` com aceite vigente de versão antiga
+  revoga o antigo como histórico (`superseded_by_new_term`, não apaga) e cria o
+  novo; `GET /kids/consent` devolve `outdated`. Hoje não bloqueia ninguém: todo
+  registro existente é `kids-2026-10`, a única versão emitida. **Ao subir a
+  versão do termo** (texto jurídico, decisão do dono): todo responsável fica sem
+  consentimento vigente de uma vez e o check-in dele falha com 422
+  `kids_consent_required` — avisar a secretaria antes, que pode registrar o
+  aceite em nome do responsável (checklist no comentário de
+  `kids-consent.terms.ts`). Evidência: `test/integration/kids-consent-version.spec.ts`
+  e unitários.
+- ~~**REV-4.6 · O botão de check-in some em silêncio se `listOpenSessions`
+  falhar no mobile.**~~ **Fechado.** A ficha (`kids/crianca/[id].tsx`) avisa que
+  não foi possível verificar a turma aberta e oferece "Tentar de novo"; ao
+  conseguir, o check-in volta. Evidência: dois testes novos em
+  `__tests__/app/kids/crianca.test.tsx`. Falta o teste em aparelho, como no resto
+  do mobile do Kids.
+- ~~**REV-4.7 · Sem e2e das telas de escrita do admin Kids.**~~ **Fechado** com
+  três specs em `apps/web/e2e/`, todos em `teste2-church`: `kids-turmas.spec.ts`
+  (criar, editar, desativar, reativar), `kids-criancas.spec.ts` (cadastro com
+  aceite do termo, edição, revogar e registrar o consentimento) e
+  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir e cancelar sessão;
+  o reabrir fica para depois do deploy, ver REV-4.2). **Fora de escopo, segue aberto:** a tela de autorizados
+  (`GuardianFormModal`: adicionar, editar e remover responsável) continua só com
+  vitest.
+- ~~**REV-4.8 · Lembrete de deploy:** `bootstrap-db.sh` junto ou antes da release
+  da API.~~ **Fechado** com a nota em `DEPLOY.md` (seção 1.9) que diz o que cada
+  script 029 a 032 protege e o efeito de omitir cada um. O `db:deploy` do build
+  do Render já os aplica; o aviso vale para quem atualizar o banco por outro
+  caminho.
+- ~~**REV-4.9 · `.claude/skills/pr-review/SKILL.md:80` cita só
+  `isolation.spec.ts`.**~~ **Fechado.** A skill passa a apontar para
+  `bash scripts/pre-push.sh`; `node scripts/check-skills.mjs` verde.
 
 ### PROD-37 · Contagem de público por culto e indicadores de presença · entregue, falta o teste em aparelho
 

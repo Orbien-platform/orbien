@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { apiErrorMessage } from "@/lib/api-error";
 import {
   cancelSession,
+  reopenSession,
   formatAgeRange,
   listRooms,
   listSessions,
@@ -141,6 +142,17 @@ export function KidsSessionsModal({ open, onOpenChange, instanceId, subtitle }: 
                           className="rounded-[6px] p-1.5 text-stone outline-none hover:bg-[var(--surface-subtle)] hover:text-crimson focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
                         >
                           <X size={14} strokeWidth={1.5} />
+                        </button>
+                      ) : null}
+                      {cancelled ? (
+                        <button
+                          type="button"
+                          onClick={() => run(() => reopenSession(s.id), "Não foi possível reabrir a sessão.")}
+                          disabled={busy}
+                          aria-label={`Reabrir a sessão ${s.room.name}`}
+                          className="rounded-[6px] px-2 py-1 text-xs font-medium text-ink outline-none hover:bg-[var(--surface-subtle)] focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 dark:text-white"
+                        >
+                          Reabrir
                         </button>
                       ) : null}
                     </li>

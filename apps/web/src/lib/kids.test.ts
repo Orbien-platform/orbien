@@ -139,6 +139,8 @@ describe("cliente: cada função fala a rota e o corpo que a API espera", () => 
     expect(post).toHaveBeenLastCalledWith("/celebrations/instances/i1/kids-sessions", { room_ids: ["r1", "r2"] });
     await kids.cancelSession("s1");
     expect(del).toHaveBeenLastCalledWith("/kids/sessions/s1");
+    await kids.reopenSession("s1");
+    expect(post).toHaveBeenLastCalledWith("/kids/sessions/s1/reopen");
 
     await kids.getTemplate("c1");
     expect(get).toHaveBeenLastCalledWith("/celebrations/c1/kids-template");

@@ -17,8 +17,9 @@ import {
 
 /**
  * Consentimento do responsável para o módulo Kids (KIDS-06, LGPD Art. 14).
- * Vigente = existe `ConsentRecord` de origem `kids`/`secretaria` não revogado.
- * Outras origens (formulário de visitante etc.) não valem para criança.
+ * Vigente = existe `ConsentRecord` de origem `kids`/`secretaria`, não revogado
+ * e **da versão vigente do termo** (REV-4.5): aceite de versão antiga vale como
+ * ausente. Outras origens (formulário de visitante etc.) não valem para criança.
  * Revogar mantém a linha (histórico até a retenção); o bloqueio do check-in
  * usa `hasValidConsent` na F4.
  */
@@ -48,8 +49,11 @@ export class KidsConsentService {
   /** Situação do consentimento e o termo vigente (o app mostra antes do aceite). */
   async status(actor: KidsActor, guardianPersonId?: string) {
     const { personId } = await this.target(actor, guardianPersonId);
+    const valid = await this.hasValidConsent(personId);
     return {
-      valid: await this.hasValidConsent(personId),
+      valid,
+      // Aceite de uma versão anterior do termo: a tela pede novo aceite.
+      outdated: !valid && (await this.hasOutdatedConsent(personId)),
       term_version: KIDS_TERM_VERSION,
       term_text: KIDS_TERM_TEXT,
     };
@@ -83,7 +87,26 @@ export class KidsConsentService {
 
   async hasValidConsent(guardianPersonId: string): Promise<boolean> {
     const record = await this.prisma.client.consentRecord.findFirst({
-      where: { person_id: guardianPersonId, origin: { in: [...KIDS_CONSENT_ORIGINS] }, revoked_at: null },
+      where: {
+        person_id: guardianPersonId,
+        origin: { in: [...KIDS_CONSENT_ORIGINS] },
+        revoked_at: null,
+        version: KIDS_TERM_VERSION,
+      },
+      select: { id: true },
+    });
+    return record !== null;
+  }
+
+  /** Há aceite não revogado, mas de uma versão anterior do termo. */
+  private async hasOutdatedConsent(guardianPersonId: string): Promise<boolean> {
+    const record = await this.prisma.client.consentRecord.findFirst({
+      where: {
+        person_id: guardianPersonId,
+        origin: { in: [...KIDS_CONSENT_ORIGINS] },
+        revoked_at: null,
+        version: { not: KIDS_TERM_VERSION },
+      },
       select: { id: true },
     });
     return record !== null;
@@ -116,8 +139,12 @@ export class KidsConsentService {
 
     const current = await this.prisma.client.consentRecord.findFirst({
       where: { person_id: guardianPersonId, origin: { in: [...KIDS_CONSENT_ORIGINS] }, revoked_at: null },
+      orderBy: { consented_at: 'desc' },
     });
-    if (current) return current;
+    if (current?.version === KIDS_TERM_VERSION) return current;
+    // Aceite de versão anterior: fica como histórico (revogado, não apagado) e o
+    // novo aceite vira o registro vigente.
+    if (current) await this.supersedeOutdated(guardianPersonId);
 
     return this.prisma.client.consentRecord.create({
       data: {
@@ -130,6 +157,18 @@ export class KidsConsentService {
         ip: meta.ip ?? null,
         user_agent: meta.userAgent ?? null,
       },
+    });
+  }
+
+  private async supersedeOutdated(guardianPersonId: string): Promise<void> {
+    await this.prisma.client.consentRecord.updateMany({
+      where: {
+        person_id: guardianPersonId,
+        origin: { in: [...KIDS_CONSENT_ORIGINS] },
+        revoked_at: null,
+        version: { not: KIDS_TERM_VERSION },
+      },
+      data: { revoked_at: new Date(), revocation_reason: 'superseded_by_new_term' },
     });
   }
 

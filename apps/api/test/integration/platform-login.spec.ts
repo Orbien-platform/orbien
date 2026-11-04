@@ -263,6 +263,11 @@ describe('POST /api/auth/platform/login', () => {
       linha = await admin.auditLog.findFirst({
         where: {
           tenant_id: tenantAId,
+          // Do ator deste teste: o de "papel atribuído em outra congregação"
+          // também grava `platform_access` no mesmo tenant, e a escrita é
+          // assíncrona, então sem o filtro o `findFirst` pode pegar a linha da
+          // outra conta quando a suíte roda sob carga.
+          actor_user_id: supportUserId,
           action: 'platform_access',
           entity: '/api/platform/tenants',
         },

@@ -233,3 +233,47 @@ describe('instância cancelada cancela as sessões (AC 6)', () => {
     expect(sessions.every((s) => s.status === 'cancelled')).toBe(true);
   });
 });
+
+describe('POST /kids/sessions/:id/reopen (REV-4.2)', () => {
+  const patchInstance = (id: string, status: string) =>
+    http().patch(`/api/celebrations/instances/${id}`).set(auth(h.tokenFor('pastor'))).send({ status });
+  const reopen = (id: string, token = lider) => http().post(`/api/kids/sessions/${id}/reopen`).set(auth(token));
+
+  it('ciclo: cancelar o culto fecha a sessão, reativar não reabre, reabrir à mão volta a operar', async () => {
+    const inst = await newInstance();
+    const [session] = (await http().post(URL(inst.id)).set(auth(lider)).send({ room_ids: [roomMaternal] })).body as { id: string }[];
+
+    await patchInstance(inst.id, 'cancelled');
+    expect((await admin.kidsSession.findUniqueOrThrow({ where: { id: session.id } })).status).toBe('cancelled');
+
+    // Culto ainda cancelado: não reabre.
+    expect((await reopen(session.id)).status).toBe(422);
+
+    // Reativar o culto não reabre sozinho (a sessão pode ter sido cancelada de propósito).
+    await patchInstance(inst.id, 'published');
+    expect((await admin.kidsSession.findUniqueOrThrow({ where: { id: session.id } })).status).toBe('cancelled');
+
+    const res = await reopen(session.id);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('open');
+    // Idempotente.
+    expect((await reopen(session.id)).status).toBe(200);
+  });
+
+  it('422 com a turma desativada; 404 inexistente e de outro tenant; 403 para volunteer', async () => {
+    const inst = await newInstance();
+    const [session] = (await http().post(URL(inst.id)).set(auth(lider)).send({ room_ids: [roomMaternal] })).body as { id: string }[];
+    await http().delete(`/api/kids/sessions/${session.id}`).set(auth(lider));
+
+    await admin.kidsRoom.update({ where: { id: roomMaternal }, data: { is_active: false } });
+    try {
+      expect((await reopen(session.id)).status).toBe(422);
+    } finally {
+      await admin.kidsRoom.update({ where: { id: roomMaternal }, data: { is_active: true } });
+    }
+
+    expect((await reopen('00000000-0000-0000-0000-000000000000')).status).toBe(404);
+    expect((await reopen(session.id, h.tokenT1('premium', 'ministry_leader'))).status).toBe(404);
+    expect((await reopen(session.id, h.tokenFor('volunteer'))).status).toBe(403);
+  });
+});

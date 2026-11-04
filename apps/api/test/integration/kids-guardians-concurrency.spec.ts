@@ -141,3 +141,81 @@ describe('PATCH /kids/guardians/:id concorrente', () => {
     }
   }, 120_000);
 });
+
+/**
+ * REV-4.1: `remove` e `add` também seguram a invariante sob corrida. Cada rodada
+ * recria as linhas (o `remove` apaga), então os ids mudam a cada vez.
+ */
+describe('DELETE e POST de responsáveis concorrentes (REV-4.1)', () => {
+  const del = (rowId: string) =>
+    http().delete(`/api/kids/guardians/${rowId}`).set({ Authorization: `Bearer ${leader}` });
+  const add = (personId: string, body: Record<string, unknown> = {}) =>
+    http()
+      .post(`/api/kids/children/${child}/guardians`)
+      .set({ Authorization: `Bearer ${leader}` })
+      .send({ guardian_person_id: personId, relationship: 'resp', ...body });
+  const extra: string[] = [];
+
+  /** A, B primários; C autorizado. Devolve os ids das linhas, na ordem A, B, C. */
+  async function seedTwoPrimaries(): Promise<string[]> {
+    await admin.kidsGuardian.deleteMany({ where: { child_id: child } });
+    const out: string[] = [];
+    for (const [i, p] of people.entries()) {
+      out.push(
+        (
+          await admin.kidsGuardian.create({
+            data: { ...scope, child_id: child, guardian_person_id: p, relationship: 'resp', can_pickup: true, is_primary: i < 2 },
+          })
+        ).id,
+      );
+    }
+    return out;
+  }
+
+  beforeAll(async () => {
+    for (const nome of ['D', 'E']) {
+      extra.push((await admin.person.create({ data: { ...scope, full_name: `Resp ${nome} ${tag}`, classification: 'member' } })).id);
+    }
+  });
+
+  it('duas remoções simultâneas dos dois primários: uma passa, a outra leva 422, sobra um primário', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const [a, b] = await seedTwoPrimaries();
+      const res = await Promise.all([del(a), del(b)]);
+      expect(res.map((r) => r.status).sort()).toEqual([204, 422]);
+      expect(await primaries()).toHaveLength(1);
+    }
+  }, 120_000);
+
+  it('remoções dos dois primários e do autorizado ao mesmo tempo: nunca zero primários, nunca 5xx', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const [a, b, c] = await seedTwoPrimaries();
+      const res = await Promise.all([del(a), del(b), del(c)]);
+      for (const r of res) expect([204, 422]).toContain(r.status);
+      expect(await primaries()).toHaveLength(1);
+    }
+  }, 120_000);
+
+  it('dois add com is_primary simultâneos: os dois entram e termina com um primário só', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      await seedTwoPrimaries();
+      await admin.kidsGuardian.deleteMany({ where: { child_id: child, guardian_person_id: { not: people[0] } } });
+      await admin.kidsGuardian.update({ where: { child_id_guardian_person_id: { child_id: child, guardian_person_id: people[0] } }, data: { is_primary: true } });
+      const res = await Promise.all([add(extra[0], { is_primary: true }), add(extra[1], { is_primary: true })]);
+      expect(res.map((r) => r.status)).toEqual([201, 201]);
+      expect(await primaries()).toHaveLength(1);
+    }
+  }, 120_000);
+
+  it('add com is_primary × remoção do primário atual: sempre sobra um primário', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      await seedTwoPrimaries();
+      await admin.kidsGuardian.deleteMany({ where: { child_id: child, guardian_person_id: { not: people[0] } } });
+      const row = await admin.kidsGuardian.findFirstOrThrow({ where: { child_id: child } });
+      const [added, removed] = await Promise.all([add(extra[0], { is_primary: true }), del(row.id)]);
+      expect(added.status).toBe(201);
+      expect([204, 422]).toContain(removed.status);
+      expect(await primaries()).toHaveLength(1);
+    }
+  }, 120_000);
+});

@@ -117,3 +117,62 @@ describe('KidsRetentionService: escopo opcional por tenant', () => {
     expect(b.findMany.mock.calls[0][0].where).not.toHaveProperty('tenant_id');
   });
 });
+
+describe('KidsRetentionService.purgeQrTokens (REV-4.4)', () => {
+  function buildQr(batches: Array<Array<{ id: string }>>) {
+    const findMany = jest.fn();
+    for (const b of batches) findMany.mockResolvedValueOnce(b);
+    findMany.mockResolvedValue([]);
+    const deleteMany = jest.fn().mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) => ({
+      count: where.id.in.length,
+    }));
+    const prisma = { system: { kidsCheckinQrToken: { findMany, deleteMany } } } as unknown as PrismaService;
+    return { svc: new KidsRetentionService(prisma), findMany, deleteMany };
+  }
+
+  it('corta em um dia: usado ou expirado antes do corte; vigente fica', async () => {
+    const { svc, findMany } = buildQr([]);
+    await svc.purgeQrTokens(NOW);
+    const cutoff = new Date('2026-10-25T12:00:00.000Z');
+    expect(findMany.mock.calls[0][0].where.OR).toEqual([
+      { used_at: { lt: cutoff } },
+      { used_at: null, expires_at: { lt: cutoff } },
+    ]);
+  });
+
+  it('apaga em lote e devolve a contagem', async () => {
+    const { svc, deleteMany } = buildQr([[{ id: 'a' }, { id: 'b' }]]);
+    await expect(svc.purgeQrTokens(NOW)).resolves.toEqual({ purged: 2 });
+    expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['a', 'b'] } } });
+  });
+
+  it('lote cheio pede o seguinte até esgotar', async () => {
+    const cheio = Array.from({ length: 200 }, (_, i) => ({ id: `t${i}` }));
+    const { svc, findMany, deleteMany } = buildQr([cheio, [{ id: 'ultimo' }]]);
+    await expect(svc.purgeQrTokens(NOW)).resolves.toEqual({ purged: 201 });
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(deleteMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('restringe ao tenant quando informado', async () => {
+    const { svc, findMany } = buildQr([]);
+    await svc.purgeQrTokens(NOW, 't2');
+    expect(findMany.mock.calls[0][0].where.tenant_id).toBe('t2');
+  });
+
+  it('o cron registra quantos QR apagou', async () => {
+    const { svc, deleteMany } = buildQr([[{ id: 'a' }]]);
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    await expect(svc.cronPurgeQrTokens()).resolves.toBeUndefined();
+    expect(deleteMany).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith('Purga de QR de check-in kids: 1 apagado(s)');
+  });
+
+  it('o cron não derruba o processo se a purga falhar', async () => {
+    const prisma = {
+      system: { kidsCheckinQrToken: { findMany: jest.fn().mockRejectedValue(new Error('db fora')) } },
+    } as unknown as PrismaService;
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await expect(new KidsRetentionService(prisma).cronPurgeQrTokens()).resolves.toBeUndefined();
+  });
+});

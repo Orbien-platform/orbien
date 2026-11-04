@@ -52,23 +52,43 @@ export class KidsGuardiansService {
       ? await this.existingGuardian(actor, dto.guardian_person_id)
       : (await this.createThirdParty(actor, dto)).id;
 
-    const duplicate = await this.prisma.client.kidsGuardian.findFirst({
-      where: { child_id: childId, guardian_person_id: guardianId },
-      select: { id: true },
-    });
-    if (duplicate) throw new ConflictException('Esta pessoa já é responsável ou autorizada desta criança');
+    return this.prisma.runInTx(async () => {
+      await this.lockChildGuardians(childId);
 
-    return this.prisma.client.kidsGuardian.create({
-      data: {
-        tenant_id: actor.tenantId,
-        congregation_id: actor.congregationId,
-        child_id: childId,
-        guardian_person_id: guardianId,
-        relationship: dto.relationship,
-        can_pickup: canPickup,
-        is_primary: isPrimary,
-      },
+      const duplicate = await this.prisma.client.kidsGuardian.findFirst({
+        where: { child_id: childId, guardian_person_id: guardianId },
+        select: { id: true },
+      });
+      if (duplicate) throw new ConflictException('Esta pessoa já é responsável ou autorizada desta criança');
+
+      // Novo primário promove: rebaixa os atuais na mesma transação, como o
+      // `update`. Sem isso, dois `add` com `is_primary` deixariam dois primários.
+      if (isPrimary) {
+        await this.prisma.client.kidsGuardian.updateMany({
+          where: { child_id: childId, is_primary: true },
+          data: { is_primary: false },
+        });
+      }
+
+      return this.prisma.client.kidsGuardian.create({
+        data: {
+          tenant_id: actor.tenantId,
+          congregation_id: actor.congregationId,
+          child_id: childId,
+          guardian_person_id: guardianId,
+          relationship: dto.relationship,
+          can_pickup: canPickup,
+          is_primary: isPrimary,
+        },
+      });
     });
+  }
+
+  // ORDER BY id: o Postgres trava as linhas na ordem em que as devolve, e a
+  // ordem física muda a cada UPDATE. Sem ordem fixa, duas operações travam as
+  // mesmas linhas em sequências opostas e dão deadlock (40P01 -> 500).
+  private async lockChildGuardians(childId: string): Promise<void> {
+    await this.prisma.client.$queryRaw`SELECT id FROM kids_guardians WHERE child_id = ${childId} ORDER BY id FOR UPDATE`;
   }
 
   /**
@@ -95,11 +115,7 @@ export class KidsGuardiansService {
     if (!this.access.isManager(actor.roles)) await this.assertIsPrimaryGuardian(actor, row.child_id);
 
     return this.prisma.runInTx(async () => {
-      // ORDER BY id: o Postgres trava as linhas na ordem em que as devolve, e a
-      // ordem física muda a cada UPDATE. Sem ordem fixa, duas edições travam as
-      // mesmas linhas em sequências opostas e dão deadlock (40P01 -> 500).
-      await this.prisma.client
-        .$queryRaw`SELECT id FROM kids_guardians WHERE child_id = ${row.child_id} ORDER BY id FOR UPDATE`;
+      await this.lockChildGuardians(row.child_id);
 
       // `row` foi lido antes do lock: outra edição pode ter promovido ou rebaixado
       // este responsável enquanto esperávamos. O estado que vale é o de depois do lock.
@@ -145,15 +161,24 @@ export class KidsGuardiansService {
     if (!row) throw new NotFoundException('Autorizado não encontrado');
     await this.access.assertCanAccess(actor, row.child_id);
 
-    if (row.is_primary) {
-      const others = await this.prisma.client.kidsGuardian.count({
-        where: { child_id: row.child_id, is_primary: true, id: { not: row.id } },
-      });
-      if (others === 0) {
-        throw new UnprocessableEntityException('A criança precisa de ao menos um responsável primário');
+    await this.prisma.runInTx(async () => {
+      await this.lockChildGuardians(row.child_id);
+
+      // `row` foi lido antes do lock: outra operação pode ter promovido, rebaixado
+      // ou apagado este responsável. O estado que vale é o de depois do lock.
+      const current = await this.prisma.client.kidsGuardian.findUnique({ where: { id: row.id } });
+      if (!current) return; // já removido: DELETE idempotente
+
+      if (current.is_primary) {
+        const others = await this.prisma.client.kidsGuardian.count({
+          where: { child_id: current.child_id, is_primary: true, id: { not: current.id } },
+        });
+        if (others === 0) {
+          throw new UnprocessableEntityException('A criança precisa de ao menos um responsável primário');
+        }
       }
-    }
-    await this.prisma.client.kidsGuardian.delete({ where: { id: row.id } });
+      await this.prisma.client.kidsGuardian.delete({ where: { id: current.id } });
+    });
   }
 
   async list(actor: KidsActor, childId: string): Promise<KidsGuardianView[]> {

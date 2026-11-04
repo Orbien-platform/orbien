@@ -77,8 +77,10 @@ A classe de bug mais cara do projeto. Contexto em `docs/MONOREPO.md` e
 **Isolamento (🚨 quando violado):**
 - Tabela nova sem `tenant_id` e `congregation_id`
 - Tabela nova sem `ENABLE ROW LEVEL SECURITY` e sem policy
-- Tabela nova sem caso em `apps/api/test/rls/isolation.spec.ts` — as policies
-  existirem não prova que isolam
+- Tabela nova sem teste que prove o isolamento — o portão (`bash
+  scripts/pre-push.sh`) roda a suíte de RLS quando o diff toca a API, com o
+  caso da tabela em `apps/api/test/rls/`; as policies existirem não prova que
+  isolam
 - Query que filtra por tenant só na aplicação, sem depender do RLS
 - Uso de `prisma.system` (BYPASSRLS) onde `prisma.client` bastaria
 

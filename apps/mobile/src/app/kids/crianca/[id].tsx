@@ -36,6 +36,9 @@ export default function CriancaScreen() {
   const [child, setChild] = useState<KidsChildFicha | null>(null);
   const [open, setOpen] = useState<KidsOpenCheckin | null>(null);
   const [hasOpenSession, setHasOpenSession] = useState(false);
+  // Falhar ao saber se há sessão aberta não derruba a ficha, mas também não pode
+  // esconder o check-in em silêncio: a tela avisa e oferece tentar de novo.
+  const [sessionsFailed, setSessionsFailed] = useState(false);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -47,7 +50,7 @@ export default function CriancaScreen() {
       getChild(id),
       getOpenCheckin(id).catch(() => null),
       // Só decide se o botão aparece; falhar aqui não derruba a ficha.
-      listOpenSessions().catch(() => []),
+      listOpenSessions().catch(() => null),
     ])
       .then(([ficha, checkin, sessions]) => {
         if (cancelled) return;
@@ -55,7 +58,8 @@ export default function CriancaScreen() {
         setError(null);
         setChild(ficha);
         setOpen(checkin);
-        setHasOpenSession(sessions.length > 0);
+        setHasOpenSession((sessions ?? []).length > 0);
+        setSessionsFailed(sessions === null);
       })
       .catch((err: unknown) => {
         if (!cancelled && !hasDataRef.current) setError(describeLoadError(err, "a ficha da criança"));
@@ -183,6 +187,15 @@ export default function CriancaScreen() {
           onPress={() => router.push({ pathname: "/kids/codigo/[id]", params: { id } })}
           style={styles.footer}
         />
+      ) : null}
+      {!open && sessionsFailed ? (
+        <View style={styles.footer}>
+          <Alert
+            messageTestID="crianca-sessoes-erro"
+            message="Não foi possível verificar se há turma aberta hoje. O check-in fica indisponível até conseguir."
+          />
+          <AppButton testID="crianca-sessoes-retry" title="Tentar de novo" variant="secondary" onPress={load} />
+        </View>
       ) : null}
       {showCheckin ? (
         <>

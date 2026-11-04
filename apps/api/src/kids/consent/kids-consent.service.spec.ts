@@ -32,9 +32,22 @@ describe('KidsConsentService', () => {
 
       await expect(serviceWith(client).hasValidConsent('p1')).resolves.toBe(true);
       expect(client.consentRecord.findFirst).toHaveBeenCalledWith({
-        where: { person_id: 'p1', origin: { in: ['kids', 'secretaria'] }, revoked_at: null },
+        where: {
+          person_id: 'p1',
+          origin: { in: ['kids', 'secretaria'] },
+          revoked_at: null,
+          version: KIDS_TERM_VERSION,
+        },
         select: { id: true },
       });
+    });
+
+    it('filtra pela versão vigente do termo: aceite de versão antiga vale como ausente (REV-4.5)', async () => {
+      const client = clientWith();
+      client.consentRecord.findFirst.mockResolvedValue(null);
+
+      await expect(serviceWith(client).hasValidConsent('p1')).resolves.toBe(false);
+      expect(client.consentRecord.findFirst.mock.calls[0][0].where).toMatchObject({ version: KIDS_TERM_VERSION });
     });
 
     it('é falso sem registro vigente (nunca consentiu ou revogou)', async () => {
@@ -105,12 +118,30 @@ describe('KidsConsentService', () => {
     it('é idempotente: já havendo consentimento vigente, não cria outro', async () => {
       const client = clientWith();
       client.person.findFirst.mockResolvedValue({ id: 'p1' });
-      client.consentRecord.findFirst.mockResolvedValue({ id: 'c0', origin: 'kids' });
+      client.consentRecord.findFirst.mockResolvedValue({ id: 'c0', origin: 'kids', version: KIDS_TERM_VERSION });
 
       const result = await serviceWith(client).grant('t1', 'g1', 'p1', 'kids', {});
 
       expect(client.consentRecord.create).not.toHaveBeenCalled();
+      expect(client.consentRecord.updateMany).not.toHaveBeenCalled();
       expect(result).toMatchObject({ id: 'c0' });
+    });
+
+    it('vigente de versão antiga: revoga como superada (histórico) e cria o aceite novo (REV-4.5)', async () => {
+      const client = clientWith();
+      client.person.findFirst.mockResolvedValue({ id: 'p1' });
+      client.consentRecord.findFirst.mockResolvedValue({ id: 'c0', origin: 'kids', version: 'kids-antigo' });
+      client.consentRecord.updateMany.mockResolvedValue({ count: 1 });
+      client.consentRecord.create.mockResolvedValue({ id: 'c1', version: KIDS_TERM_VERSION });
+
+      const result = await serviceWith(client).grant('t1', 'g1', 'p1', 'kids', {});
+
+      expect(client.consentRecord.updateMany.mock.calls[0][0]).toMatchObject({
+        where: { person_id: 'p1', revoked_at: null, version: { not: KIDS_TERM_VERSION } },
+        data: { revocation_reason: 'superseded_by_new_term' },
+      });
+      expect(client.consentRecord.create.mock.calls[0][0].data).toMatchObject({ version: KIDS_TERM_VERSION });
+      expect(result).toMatchObject({ id: 'c1' });
     });
 
     it('404 se o responsável não existe na congregação, é criança ou foi removido', async () => {
@@ -221,9 +252,17 @@ describe('KidsConsentService — pedidos do usuário (POST /kids/consent)', () =
 
     await expect(serviceWith(client).status(resp)).resolves.toMatchObject({
       valid: true,
+      outdated: false,
       term_version: KIDS_TERM_VERSION,
       term_text: expect.any(String),
     });
+  });
+
+  it('status marca outdated quando só há aceite de versão antiga (REV-4.5)', async () => {
+    const client = ready();
+    client.consentRecord.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'c-antigo' });
+
+    await expect(serviceWith(client).status(resp)).resolves.toMatchObject({ valid: false, outdated: true });
   });
 
   it('revokeFor revoga o consentimento do próprio responsável', async () => {
