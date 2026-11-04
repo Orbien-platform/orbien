@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import QrVisitantesPage from "./page";
@@ -209,5 +209,164 @@ describe("QrVisitantesPage (PEND-19)", () => {
     await open();
     await screen.findByText("Culto de domingo");
     expect(screen.getByRole("button", { name: /Mostrar QR/ })).toBeDisabled();
+  });
+
+  it("depois de criar, fecha o formulário e relê a lista", async () => {
+    await open();
+    await screen.findByText("Culto de domingo");
+    const antes = get.mock.calls.filter(([u]) => u === "/admin/visitor/qr").length;
+    fireEvent.click(screen.getByRole("button", { name: /Novo QR/ }));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Criar QR" }));
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(get.mock.calls.filter(([u]) => u === "/admin/visitor/qr").length).toBe(antes + 1);
+  });
+
+  it("formulário de grupo sem grupo escolhido não envia nem pelo submit direto", async () => {
+    await open();
+    await screen.findByText("Culto de domingo");
+    fireEvent.click(screen.getByRole("button", { name: /Novo QR/ }));
+    fireEvent.change(await screen.findByLabelText("Onde ele vai ficar"), {
+      target: { value: "small_group" },
+    });
+    fireEvent.submit(screen.getByLabelText("Grupo").closest("form")!);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("depois de renomear, fecha o modal e relê a lista", async () => {
+    await open();
+    await screen.findByText("Culto de domingo");
+    fireEvent.click(screen.getByRole("button", { name: "Renomear Célula Centro" }));
+    // QR sem nome começa com o campo vazio.
+    expect(await screen.findByLabelText("Nome")).toHaveValue("");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Salvar nome" }));
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("falha ao renomear mostra o erro e mantém o modal", async () => {
+    patch.mockRejectedValue(httpError(500));
+    await open();
+    await screen.findByText("Culto de domingo");
+    fireEvent.click(screen.getByRole("button", { name: "Renomear Culto de domingo" }));
+    await screen.findByLabelText("Nome");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Salvar nome" }));
+    });
+    const dialog = screen.getByRole("dialog");
+    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+  });
+
+  it("fecha os modais de renomear e de mostrar pelo X", async () => {
+    await open();
+    await screen.findByText("Culto de domingo");
+    fireEvent.click(screen.getByRole("button", { name: "Renomear Culto de domingo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Mostrar QR/ })[0]).toBeEnabled());
+    fireEvent.click(screen.getAllByRole("button", { name: /Mostrar QR/ })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("QR desativado avisa no modal que não recebe cadastros", async () => {
+    await open();
+    await screen.findByText("Culto de domingo");
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Mostrar QR/ })[1]).toBeEnabled());
+    fireEvent.click(screen.getAllByRole("button", { name: /Mostrar QR/ })[1]);
+    expect(await screen.findByText("Este QR está desativado e não recebe cadastros.")).toBeInTheDocument();
+  });
+
+  it("copiar falhando orienta a copiar à mão", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockRejectedValue(new Error("negado")) },
+      configurable: true,
+    });
+    await open();
+    await screen.findByText("Culto de domingo");
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Mostrar QR/ })[0]).toBeEnabled());
+    fireEvent.click(screen.getAllByRole("button", { name: /Mostrar QR/ })[0]);
+    const dialog = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /Copiar endereço/ }));
+    });
+    expect(await within(dialog).findByText(/copie à mão/)).toBeInTheDocument();
+  });
+
+  it("grupo que não veio da API cai no nome da origem; resposta fora do formato vira lista vazia", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url === "/admin/visitor/qr") return { data: [{ ...QR_GROUP, small_group_id: "g-sumiu" }] };
+      if (url === "/settings") return { data: { tenant: { slug: "teste2-church" } } };
+      if (url === "/small-groups") return { data: { data: "quebrado" } };
+      throw new Error("inesperada");
+    });
+    await open();
+    expect((await screen.findAllByText("Grupo")).length).toBeGreaterThan(0);
+
+    serve({ erro: true });
+    cleanup();
+    await open();
+    expect(await screen.findByText("Nenhum QR criado ainda")).toBeInTheDocument();
+  });
+
+  it("sem lista de grupos (falha), a tela segue e o formulário de grupo fica sem opções", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url === "/admin/visitor/qr") return { data: [QR_SERVICE] };
+      if (url === "/settings") return { data: { tenant: { slug: "teste2-church" } } };
+      throw httpError(500);
+    });
+    await open();
+    expect(await screen.findByText("Culto de domingo")).toBeInTheDocument();
+  });
+
+  it("resposta que chega depois de a tela sair é ignorada (sucesso e falha)", async () => {
+    let resolver: (v: unknown) => void = () => undefined;
+    get.mockImplementation((url: string) =>
+      url === "/admin/visitor/qr"
+        ? new Promise((resolve) => {
+            resolver = resolve;
+          })
+        : Promise.resolve({ data: url === "/settings" ? { tenant: { slug: "x" } } : { data: [] } }),
+    );
+    const { unmount } = render(<QrVisitantesPage />);
+    unmount();
+    await act(async () => resolver({ data: [QR_SERVICE] }));
+
+    let rejeitar: (e: unknown) => void = () => undefined;
+    get.mockImplementation((url: string) =>
+      url === "/admin/visitor/qr"
+        ? new Promise((_, reject) => {
+            rejeitar = reject;
+          })
+        : Promise.resolve({ data: url === "/settings" ? { tenant: { slug: "x" } } : { data: [] } }),
+    );
+    const second = render(<QrVisitantesPage />);
+    second.unmount();
+    await act(async () => rejeitar(httpError(500)));
+  });
+
+  it("toque duplo em Salvar nome envia uma vez só", async () => {
+    let liberar: (v: unknown) => void = () => undefined;
+    patch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          liberar = resolve;
+        }),
+    );
+    await open();
+    await screen.findByText("Culto de domingo");
+    fireEvent.click(screen.getByRole("button", { name: "Renomear Culto de domingo" }));
+    const form = (await screen.findByLabelText("Nome")).closest("form")!;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    expect(patch).toHaveBeenCalledTimes(1);
+    await act(async () => liberar({ data: {} }));
   });
 });

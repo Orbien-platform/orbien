@@ -350,6 +350,17 @@ describe('VisitorService', () => {
       });
     });
 
+    it('só is_active: liga/desliga sem mexer no nome', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findFirst.mockResolvedValue({ id: 'qr1' });
+      qrTokenClient.update.mockResolvedValue({ id: 'qr1' });
+      await service.updateQrToken('qr1', { is_active: true }, user);
+      expect(qrTokenClient.update).toHaveBeenCalledWith({
+        where: { id: 'qr1' },
+        data: { is_active: true },
+      });
+    });
+
     it('rótulo em branco limpa o nome; is_active vem junto quando enviado', async () => {
       const { service, qrTokenClient } = serviceWith();
       qrTokenClient.findFirst.mockResolvedValue({ id: 'qr1' });
