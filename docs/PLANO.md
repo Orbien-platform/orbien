@@ -2380,12 +2380,11 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 
-- **`user_accounts` e `role_assignments` seguem com `orbien_app_auth
-  USING (true)` na LEITURA.** A escrita fechou em 2026-09-16 (ação B) e
-  `audit_logs` saiu da policy (ação A) — ver o registro no fim do item. O que
-  resta é o `USING (true)`: quem lê por esse caminho lê as linhas de todos os
-  tenants. Fechar isso é a ação D, e exige mover as leituras do login para
-  função `SECURITY DEFINER`.
+- ~~**`user_accounts` e `role_assignments` seguem com `orbien_app_auth
+  USING (true)` na LEITURA.**~~ **Fechado em 2026-11-04 (ação D)** — ver o
+  registro no fim do item. O que continua com `orbien_app_auth USING (true)` é
+  `tenants`, `congregations`, `branding_configs` e `tenant_plans` (ação C) e
+  `refresh_tokens` (escrita viva por desenho).
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
@@ -2490,6 +2489,35 @@ Continua em aberto, como pergunta: priorizar **C** (trocar os `include` por
 **D** (`SECURITY DEFINER`, restrição por linha) como trabalho próprio, ou
 parar aqui — A e B fecharam a permissão sem chamador, e o que sobra é o
 `USING (true)` de leitura, que é o desenho original do item.
+
+**Ação D aplicada em 2026-11-04** (`033_rls_auth_lookup.sql`, `017` emendado,
+`apps/api/src/auth/auth-lookup.ts`, passo 7 do `bootstrap-db.sh`,
+`test/rls/auth-tables.spec.ts` reescrito). `orbien_app` não tem mais policy em
+`user_accounts` nem em `role_assignments`: lê 0 linhas. A leitura
+pré-autenticação é só por três funções `SECURITY DEFINER` de parâmetro exato
+(`auth_login_lookup(email)`, `auth_session_lookup(id)`,
+`auth_tenant_admin_user_id(tenant)`), `search_path` fixo, `EXECUTE` só para
+`orbien_app`. Só `auth_login_lookup` devolve `password_hash`.
+
+- **Consumidor oculto achado no mapeamento:** `PixService.resolveTenantAdmin`
+  (webhook público da Asaas, `orbien_app` sem `SET LOCAL ROLE`) lia
+  `role_assignments` só por causa do `USING (true)`. Passou a usar
+  `auth_tenant_admin_user_id`, com `ORDER BY` determinístico.
+- **`tenants`/`tenant_plans` saíram do caminho de auth:** as funções devolvem
+  `tenant_is_active` e `plan`, e os `include:` do login (pré-requisito da ação
+  C) deixaram de existir nesse fluxo. A ação C segue aberta para as rotas
+  públicas de células e doação.
+- **Resíduo declarado:** quem tem a credencial `orbien_app` ainda obtém o hash
+  de um e-mail que já conhece (o login precisa dele); deixa de conseguir listar
+  a tabela. Diferença de tempo no login (e-mail inexistente retorna antes do
+  `argon2.verify`) já existia e não mudou — follow-up separado.
+- **Deploy em duas releases** (expandir, depois contrair): funções + código
+  primeiro; só depois da primeira estável o `017` derruba a policy. Rollback da
+  segunda: reverter e redeployar (o `017` antigo recria a policy).
+- **Pendente de decisão:** `role_assignments` não tem índice só por
+  `user_account_id` (os existentes começam por `tenant_id`), e o `JwtStrategy`
+  agora agrega papéis a cada requisição. Antes também lia a relação, então não
+  é regressão; medir em produção antes de criar índice.
 
 ### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 

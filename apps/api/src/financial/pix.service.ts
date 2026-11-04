@@ -1,3 +1,4 @@
+import { findTenantAdminUserId } from '../auth/auth-lookup';
 import {
   BadRequestException,
   ConflictException,
@@ -398,12 +399,11 @@ export class PixService {
   }
 
   private async resolveTenantAdmin(tenantId: string): Promise<string> {
-    const assignment = await this.prisma.client.roleAssignment.findFirst({
-      where: { tenant_id: tenantId, role_code: 'tenant_admin' },
-      select: { user_account_id: true },
-    });
-    if (!assignment) throw new NotFoundException('Tenant não encontrado');
-    return assignment.user_account_id;
+    // Webhook público: a tx roda como `orbien_app`, sem `app_user`, e
+    // `orbien_app` não lê `role_assignments` direto (PEND-04 D).
+    const adminUserId = await findTenantAdminUserId(this.prisma.client, tenantId);
+    if (!adminUserId) throw new NotFoundException('Tenant não encontrado');
+    return adminUserId;
   }
 
   private shortRef(): string {

@@ -62,9 +62,10 @@ export class TenantContextInterceptor implements NestInterceptor {
         async (tx) => {
           // A conexão é `orbien_app`, que tem policies `orbien_app_auth ...
           // USING (true)` em tenants, congregations, branding_configs,
-          // tenant_plans, user_accounts, role_assignments e audit_logs — elas
-          // existem porque login e bootstrap público rodam antes de haver
-          // qualquer contexto. Policies PERMISSIVE se combinam com OR, então
+          // tenant_plans e refresh_tokens — elas existem porque login e
+          // bootstrap público rodam antes de haver qualquer contexto.
+          // (`user_accounts`, `role_assignments` e `audit_logs` já não têm
+          // policy para `orbien_app`: PEND-04 A/B/D.) Policies PERMISSIVE se combinam com OR, então
           // enquanto a requisição autenticada também rodava como `orbien_app`
           // o RLS dessas tabelas não valia nada em produção: o `SET LOCAL
           // app.tenant_id` era avaliado, mas o `OR true` ganhava sempre.

@@ -20,7 +20,8 @@
 --      `005_rls_audit_platform_read.sql`. Nada alcança `orbien_app_auth` aqui:
 --      a policy sai inteira.
 --
---   B. `user_accounts` e `role_assignments` só são LIDAS por esse caminho
+--   B. (2026-09-16; a leitura foi fechada depois, ver D abaixo)
+--      `user_accounts` e `role_assignments` só são LIDAS por esse caminho
 --      (`auth.service.ts:110,190,361`, `jwt.strategy.ts:22`, e
 --      `role_assignments` sempre por relação). Toda escrita nas duas roda em
 --      outro lugar: `provision-tenant.service.ts` e
@@ -45,9 +46,10 @@
 --     Prisma pedir TODAS as colunas escalares do model, então um GRANT por
 --     coluna quebraria o login com 42501. Não cabe aqui.
 --
--- Restringir por LINHA (e não só fechar a escrita) continua fora: exigiria
--- mover essas leituras para funções SECURITY DEFINER, que é mudança de
--- arquitetura. É a ação D, ainda em aberto no PLANO.
+-- D. (fechada) Restringir por LINHA exigiu mover as leituras do login para
+--    funções SECURITY DEFINER (`033_rls_auth_lookup.sql`); com elas no lugar, a
+--    policy das duas tabelas sai por inteiro, no fim deste script. As outras seis
+--    tabelas continuam como descrito acima.
 --
 -- Ordem: roda no passo 5 do bootstrap-db.sh, depois de 004/005/006/011. Não
 -- há dependência funcional entre eles — `orbien_app_auth` não é tocada por
@@ -119,19 +121,23 @@ CREATE POLICY orbien_app_auth ON refresh_tokens
 -- verificação do passo 7 confere que a função segue SECURITY DEFINER.
 DROP POLICY IF EXISTS orbien_app_auth ON audit_logs;
 
--- B. user_accounts e role_assignments: FOR ALL → FOR SELECT.
+-- B+D. user_accounts e role_assignments: a policy sai inteira.
 --
--- `USING` continua `true`: fechar por linha é a ação D. O que muda é que
--- `WITH CHECK` deixa de existir — em policy `FOR SELECT` não há cláusula de
--- escrita, então INSERT por `orbien_app` sem contexto passa a falhar com
--- 42501, e UPDATE/DELETE deixam de alcançar linha alguma (afetam 0 linhas,
--- sem erro — o modo silencioso, coberto por test/rls/auth-tables.spec.ts).
+-- Foi FOR ALL (migration datada), virou FOR SELECT USING (true) em 2026-09-16
+-- (ação B, escrita fechada) e agora sai (ação D, 033). A leitura pré-autenticação
+-- dessas duas tabelas passa a existir só pelas funções SECURITY DEFINER de
+-- `033_rls_auth_lookup.sql` (`auth_login_lookup`, `auth_session_lookup`,
+-- `auth_tenant_admin_user_id`), que respondem por e-mail ou id exato.
+--
+-- Sem policy para `orbien_app`: SELECT devolve 0 linhas (não erra), INSERT falha
+-- com 42501 e UPDATE/DELETE afetam 0 — coberto por test/rls/auth-tables.spec.ts.
+--
+-- ROLLBACK: reverter este commit e redeployar. O bootstrap roda este arquivo
+-- inteiro de novo, e a versão anterior recria `orbien_app_auth ... FOR SELECT
+-- USING (true)` nas duas tabelas. É por isso que a policy sai aqui (e não num
+-- script novo): este é o arquivo que a declarava.
+--
+-- ORDEM: roda DEPOIS de 033 no bootstrap — a policy só pode cair quando as
+-- funções já existem. Derrubar antes deixaria o login sem leitura.
 DROP POLICY IF EXISTS orbien_app_auth ON user_accounts;
-CREATE POLICY orbien_app_auth ON user_accounts
-  AS PERMISSIVE FOR SELECT TO orbien_app
-  USING (true);
-
 DROP POLICY IF EXISTS orbien_app_auth ON role_assignments;
-CREATE POLICY orbien_app_auth ON role_assignments
-  AS PERMISSIVE FOR SELECT TO orbien_app
-  USING (true);

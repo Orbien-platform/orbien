@@ -118,8 +118,19 @@ leia o do app antes de mexer nele.
 - Toda requisição autenticada roda como `app_user`: o `TenantContextInterceptor`
   faz `SET LOCAL ROLE app_user` antes do `set_config`. É isso que faz o RLS ser
   avaliado — a conexão é `orbien_app`, que tem `orbien_app_auth USING (true)`
-  nas tabelas de auth para o login funcionar sem contexto. Rodar autenticado
-  como `orbien_app` reabre todas elas com um `OR true`. Ver a pendência nº 7.
+  em `tenants`, `congregations`, `branding_configs`, `tenant_plans` e
+  `refresh_tokens` (login e rotas públicas leem/escrevem ali sem contexto).
+  Rodar autenticado como `orbien_app` reabre todas elas com um `OR true`. Ver a
+  pendência nº 7.
+- **`user_accounts` e `role_assignments` não têm policy para `orbien_app`**
+  (PEND-04 D, 033): `orbien_app` lê 0 linhas dessas tabelas. A leitura
+  pré-autenticação (login, refresh, impersonate, `JwtStrategy`, webhook Pix) é
+  só pelas funções `SECURITY DEFINER` `auth_login_lookup(email)`,
+  `auth_session_lookup(id)` e `auth_tenant_admin_user_id(tenant)`, chamadas por
+  `apps/api/src/auth/auth-lookup.ts` — o único lugar com esse SQL. Não leia
+  `prisma.userAccount`/`roleAssignment` do client base fora de transação de
+  requisição (volta vazio); função nova de auth devolve por parâmetro exato,
+  nunca lista, e entra no passo 7 do bootstrap.
 - Rota que opera **acima** dos tenants leva três marcas juntas, e nenhuma basta
   sozinha: `@Roles('platform_support')`, `@PlatformRoute()` (o interceptor não
   fixa `app.tenant_id`) e o interceptor em si. Quem responde por elas no banco

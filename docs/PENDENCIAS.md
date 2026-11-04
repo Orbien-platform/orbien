@@ -1004,11 +1004,15 @@ simétricas.
 
 ### Continua em aberto, por desenho
 
-- **`user_accounts`, `role_assignments` e `audit_logs` seguem com
-  `orbien_app_auth USING (true)`.** Não incomoda mais nas rotas autenticadas
-  (que agora são `app_user`), mas qualquer rota pública futura que toque essas
-  tabelas as lê inteiras. Fechar isso exige mapear o que o login precisa ler
-  antes de existir contexto — trabalho próprio, não da Fase 2.
+- ~~**`user_accounts`, `role_assignments` e `audit_logs` seguem com
+  `orbien_app_auth USING (true)`.**~~ **Fechado** — `audit_logs` e a escrita das
+  duas outras em 2026-09-16 (`017`, ações A e B); a **leitura** de
+  `user_accounts`/`role_assignments` em 2026-11-04 (ação D do `PEND-04`): a
+  policy saiu e o login lê por funções `SECURITY DEFINER`
+  (`033_rls_auth_lookup.sql`). Texto original: não incomoda nas rotas
+  autenticadas, mas qualquer rota pública que toque essas tabelas as lê
+  inteiras. O que resta de `orbien_app_auth` é `tenants`, `congregations`,
+  `branding_configs`, `tenant_plans` (ação C, `PEND-04`) e `refresh_tokens`.
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) segue passando por cima. É o mesmo
   desenho do `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
