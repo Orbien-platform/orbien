@@ -4,6 +4,9 @@ import { AxiosError } from "axios";
 import { GroupMaterialsPanel } from "./GroupMaterialsPanel";
 import api from "@/lib/api";
 
+vi.mock("@/components/content/MarkdownView", () => ({
+  MarkdownView: ({ markdown }: { markdown: string }) => <div data-testid="markdown">{markdown}</div>,
+}));
 vi.mock("@/lib/api", async () => {
   const axios = await import("axios");
   return {

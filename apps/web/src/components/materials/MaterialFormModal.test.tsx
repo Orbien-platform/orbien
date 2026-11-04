@@ -5,6 +5,13 @@ import api from "@/lib/api";
 import { replaceStudyMaterialFile, uploadStudyMaterial } from "@/lib/upload-study-material";
 import { MaterialFormModal, type EditableMaterial } from "./MaterialFormModal";
 
+// O Tiptap não roda no jsdom: o editor vira um textarea com o mesmo contrato
+// (`value` em Markdown, `onChange` com a string, nome acessível em `label`).
+vi.mock("@/components/content/RichTextEditor", () => ({
+  RichTextEditor: ({ label, value, onChange, disabled }: {
+    label: string; value: string; onChange: (v: string) => void; disabled?: boolean;
+  }) => <textarea aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />,
+}));
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } }));
 vi.mock("@/lib/upload-study-material", () => ({
   uploadStudyMaterial: vi.fn(),
