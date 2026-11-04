@@ -6,8 +6,18 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly s3: S3Client;
+  // Driver de e2e (`STORAGE_DRIVER=stub`): guarda o objeto em memória, para o
+  // upload ser exercitado de ponta a ponta (ticket, multer, validação, banco)
+  // sem credencial do R2 e sem escrever em bucket nenhum. Só liga por opt-in
+  // explícito e nunca com `NODE_ENV=production` — a produção não pode cair nele
+  // por falta de variável do R2.
+  private readonly stub = process.env['STORAGE_DRIVER'] === 'stub';
+  private readonly stubObjects = new Map<string, { buffer: Buffer; contentType: string }>();
 
   constructor() {
+    if (this.stub && process.env['NODE_ENV'] === 'production') {
+      throw new Error('STORAGE_DRIVER=stub não é permitido com NODE_ENV=production');
+    }
     this.s3 = new S3Client({
       region: 'auto',
       endpoint: `https://${process.env['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
@@ -19,11 +29,16 @@ export class StorageService {
   }
 
   private publicBase(): string {
+    if (this.stub) return 'http://storage-stub.invalid';
     const domain = process.env['R2_PUBLIC_DOMAIN'] ?? '';
     return /^https?:\/\//.test(domain) ? domain : `https://${domain}`;
   }
 
   async upload(buffer: Buffer, key: string, contentType: string): Promise<string> {
+    if (this.stub) {
+      this.stubObjects.set(key, { buffer, contentType });
+      return `${this.publicBase()}/${key}`;
+    }
     await this.s3.send(
       new PutObjectCommand({
         Bucket: process.env['R2_BUCKET_NAME'],
@@ -39,6 +54,10 @@ export class StorageService {
   }
 
   async delete(key: string): Promise<void> {
+    if (this.stub) {
+      this.stubObjects.delete(key);
+      return;
+    }
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: process.env['R2_BUCKET_NAME'], Key: key }),
     );
@@ -68,6 +87,7 @@ export class StorageService {
   }
 
   async downloadBuffer(key: string): Promise<Buffer> {
+    if (this.stub) return this.stubObjects.get(key)?.buffer ?? Buffer.alloc(0);
     const { Body } = await this.s3.send(
       new GetObjectCommand({ Bucket: process.env['R2_BUCKET_NAME'], Key: key }),
     );
@@ -80,6 +100,7 @@ export class StorageService {
   }
 
   async getPresignedGetUrl(key: string, expiresInSeconds = 86_400): Promise<string> {
+    if (this.stub) return `${this.publicBase()}/${key}?expires=${expiresInSeconds}`;
     const command = new GetObjectCommand({
       Bucket: process.env['R2_BUCKET_NAME'],
       Key: key,

@@ -206,4 +206,30 @@ describe('StorageService', () => {
       expect(getSignedUrlMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), { expiresIn: 3600 });
     });
   });
+
+  describe('STORAGE_DRIVER=stub (e2e)', () => {
+    beforeEach(() => {
+      process.env['STORAGE_DRIVER'] = 'stub';
+      delete process.env['NODE_ENV'];
+    });
+
+    it('não fala com o R2: guarda, devolve URL, lê, assina e apaga em memória', async () => {
+      const service = new StorageService();
+
+      const url = await service.upload(Buffer.from('%PDF-1'), 't1/materials/a.pdf', 'application/pdf');
+      expect(url).toBe('http://storage-stub.invalid/t1/materials/a.pdf');
+      expect(await service.downloadBuffer('t1/materials/a.pdf')).toEqual(Buffer.from('%PDF-1'));
+      expect(await service.getPresignedGetUrl('t1/materials/a.pdf', 60)).toContain('t1/materials/a.pdf');
+
+      await service.deleteByUrl(url);
+      expect(await service.downloadBuffer('t1/materials/a.pdf')).toEqual(Buffer.alloc(0));
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(getSignedUrlMock).not.toHaveBeenCalled();
+    });
+
+    it('recusa subir com NODE_ENV=production', () => {
+      process.env['NODE_ENV'] = 'production';
+      expect(() => new StorageService()).toThrow(/STORAGE_DRIVER=stub/);
+    });
+  });
 });

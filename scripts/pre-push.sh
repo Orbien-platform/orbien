@@ -167,6 +167,9 @@ etapa "Build, tipos e lint"
 # o build do e2e reaproveita este em vez de refazer o web inteiro; precisam
 # estar definidas no build E no start (ver o job `e2e` do ci.yml).
 export API_BACKEND_URL="http://localhost:3000/api" NEXT_PUBLIC_API_URL="/api-proxy"
+# O upload de arquivo sobe direto na API; sem isto o build herda o
+# `.env.production`, que aponta para a API de produção.
+export NEXT_PUBLIC_API_UPLOAD_URL="http://localhost:3000/api"
 constroi /tmp/prepush-build.log && passa "build dos 5 apps" || {
   bloqueia "build falhou — veja /tmp/prepush-build.log"
   tail -15 /tmp/prepush-build.log | sed 's/^/      /'
@@ -318,7 +321,7 @@ if ! $RAPIDO && quer e2e; then
       else
         # Sem NODE_ENV, como no job `e2e` do ci.yml: a API muda de comportamento
         # com ele (cookies, CORS), e o ambiente de dev traz `development`.
-        PORT=3000 ALLOWED_ORIGINS=http://localhost:3001 FRONTEND_URL=http://localhost:3001 \
+        PORT=3000 ALLOWED_ORIGINS=http://localhost:3001 FRONTEND_URL=http://localhost:3001 STORAGE_DRIVER=stub \
           env -u NODE_ENV node apps/api/dist/src/main.js >/tmp/prepush-e2e-api.log 2>&1 &
         PIDS+=("$!")
         (cd apps/web && NODE_ENV=production exec node ../../node_modules/next/dist/bin/next start --port 3001) >/tmp/prepush-e2e-web.log 2>&1 &
