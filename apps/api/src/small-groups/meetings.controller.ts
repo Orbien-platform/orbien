@@ -171,7 +171,12 @@ export class MeetingsController {
       sub: user.sub,
       tenant_id: user.tenant_id,
       congregation_id: user.congregation_id,
-      roles: [],
+      // Os papéis vão no ticket porque a rota de upload refaz
+      // `assertCanManageMaterials` e o contexto de RLS do tenant, e os dois leem
+      // `user.roles`: com `[]`, um `tenant_admin` que não lidera o PG levava 403
+      // no upload. Não amplia o ticket: o `JwtAuthGuard` só o aceita nesta rota
+      // (`upload_kind`) e o `RolesGuard` só para esta reunião (`upload_target`).
+      roles: user.roles,
       plan: user.plan,
       scope: 'upload',
       upload_kind: 'meeting_material',

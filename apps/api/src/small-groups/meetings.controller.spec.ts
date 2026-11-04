@@ -92,13 +92,13 @@ describe('MeetingsController', () => {
     ).toBeUndefined();
   });
 
-  it('materialUploadTicket confere a reunião e assina ticket sem papel, preso a ela', async () => {
+  it('materialUploadTicket confere a reunião e assina ticket com os papéis de quem pediu, preso a ela', async () => {
     const result = await controller.materialUploadTicket('meet1', USER);
 
     expect(service.assertCanManageMaterials).toHaveBeenCalledWith('meet1', USER);
     expect(jwt.sign).toHaveBeenCalledWith(
       expect.objectContaining({
-        roles: [],
+        roles: USER.roles,
         scope: 'upload',
         upload_kind: 'meeting_material',
         upload_target: 'meet1',
@@ -106,6 +106,15 @@ describe('MeetingsController', () => {
       { expiresIn: 300 },
     );
     expect(result).toEqual({ upload_token: 'ticket', expires_in: 300 });
+  });
+
+  it('materialUploadTicket leva o papel de administração, para o upload não barrar admin que não lidera o PG', async () => {
+    await controller.materialUploadTicket('meet1', { ...USER, roles: ['tenant_admin'] });
+
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ roles: ['tenant_admin'], scope: 'upload', upload_target: 'meet1' }),
+      { expiresIn: 300 },
+    );
   });
 
   it('materialUploadTicket propaga impersonated_by e support_session pro ticket, quando presentes', async () => {
