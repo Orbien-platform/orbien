@@ -115,18 +115,22 @@ test.describe("crianças e consentimento do Kids", () => {
       await page.goto("/kids/criancas", { waitUntil: "domcontentloaded" });
       const busca = page.getByPlaceholder("Buscar criança pelo nome");
       const linha = page.getByRole("row", { name: new RegExp(nome) });
-      // Em produção (mais lenta) a lista é reconstruída depois do primeiro
-      // render: o texto digitado antes da hidratação é descartado (ver
-      // `selectTab` em fixtures) e uma linha já visível pode sumir antes do
-      // clique. Por isso buscar, ver a linha e abrir a ficha são UMA retentativa:
-      // se qualquer passo perde a corrida, a volta seguinte refaz a busca do zero.
+      // Abrir a ficha troca a lista pela ficha: o campo de busca some. Em produção
+      // a ficha leva alguns segundos para carregar, então a retentativa não pode
+      // repetir "buscar e clicar" se a ficha já abriu (o campo e a linha não
+      // existem mais). Com a lista na tela, busca e clica; com a ficha aberta, só
+      // espera ela carregar. O clique antes da hidratação é engolido: aí a lista
+      // segue na tela e a volta seguinte refaz a busca e o clique.
+      const regiao = page.getByRole("region", { name: "Consentimento" });
       await expect(async () => {
+        await expect(busca.or(regiao)).toBeVisible({ timeout: 15_000 });
+        if (await regiao.isVisible()) return;
         await busca.fill("");
         await busca.fill(nome);
         await expect(linha).toBeVisible({ timeout: 5_000 });
         await linha.click({ timeout: 5_000 });
-        await expect(page.getByRole("region", { name: "Consentimento" })).toBeVisible({ timeout: 5_000 });
-      }).toPass({ timeout: 90_000 });
+        await expect(regiao).toBeVisible({ timeout: 15_000 });
+      }).toPass({ timeout: 120_000 });
 
       const consentimento = page.getByRole("region", { name: "Consentimento" });
       await expect(consentimento.getByText(/consentiu com o termo/)).toBeVisible();
