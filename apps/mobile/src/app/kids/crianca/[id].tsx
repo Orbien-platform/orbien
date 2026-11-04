@@ -14,6 +14,7 @@ import { SectionLabel } from "../../../components/SectionLabel";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { AllergyNote } from "../../../components/kids/AllergyNote";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 import {
   ageInMonths,
   describeKidsActionError,
@@ -70,6 +71,12 @@ export default function CriancaScreen() {
   }, [id]);
 
   useFocusEffect(load);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(error?.offline === true, () => {
+    load();
+  });
 
   async function change(guardian: KidsGuardian, action: () => Promise<unknown>, fallback: string) {
     setBusyId(guardian.id);

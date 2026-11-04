@@ -24,6 +24,7 @@ import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { deleteMark, getFeed, updateMark } from "../../lib/bible/bible-client";
 import { formatVerseReference, useBookNames } from "../../lib/bible/book-names";
 import type { BibleMarkLikeState, BibleVerseMark } from "../../lib/bible/types";
@@ -57,6 +58,13 @@ export default function BibliaFeedScreen() {
   const [items, setItems] = useState<BibleVerseMark[] | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão (erro que tomou a tela), relê sozinha na volta dela.
+  // O contador refaz o `useFocusEffect` abaixo; é só a leitura do feed.
+  useReloadOnReconnect(error?.offline === true, () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  });
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   // Mesmo guard síncrono de `conteudo.tsx`: `isLoadingMoreRef` é a fonte da
   // verdade (evita duplo toque disparando duas páginas), `isLoadingMore`
@@ -114,7 +122,7 @@ export default function BibliaFeedScreen() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [retryCount]),
   );
 
   async function handleLoadMore() {

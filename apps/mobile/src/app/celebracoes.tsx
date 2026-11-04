@@ -30,6 +30,7 @@ import { getMyAssignments } from "../lib/escala/escala-client";
 import type { Assignment } from "../lib/escala/types";
 import { listAgenda, listUpcomingInstances } from "../lib/celebracoes/celebracoes-client";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import { formatDateTime, localWhen } from "../lib/format/date";
 import { ChevronRight, Church, CircleAlert, ListMusic, WifiOff } from "../lib/theme/icons";
 import { useTheme } from "../lib/theme/theme-provider";
@@ -111,6 +112,13 @@ export default function CelebracoesScreen() {
 
   const [items, setItems] = useState<CelebracaoListItem[] | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, relê sozinha na volta dela. A tela não tem botão de
+  // retry; o contador só existe para o hook refazer a leitura.
+  useReloadOnReconnect(error?.offline === true, () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +145,7 @@ export default function CelebracoesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isLeader]);
+  }, [isLeader, retryCount]);
 
   if (error) {
     return (

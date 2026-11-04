@@ -600,17 +600,37 @@ recuperação automática.
 - Adotado nas telas com o padrão `retryCount`: `(tabs)/grupos`, `autocadastro`,
   `grupo/[id]`, `grupo/encontro/[id]`, `grupo/encontro/[id]/presenca`,
   `biblia/marcacao/[id]`, `biblia/[book]/[chapter]`, `EventRegistrationPanel`.
-- **Falta adotar** (uma linha por tela com o hook; ficaram de fora por serem de
-  outras sessões ou por não terem o padrão `retryCount`): `celebracao/[id]` e
-  `celebracoes` (PEND-20), `kids/*` (REV-4.x, inclusive `kids/crianca/[id]`),
-  `contribuir` (PROD-31), e as que carregam por outra função de releitura:
-  `(tabs)/conteudo`, `escala`, `post/[id]`, `biblia/feed`, `notificacoes`,
-  `privacidade`, `troca/[id]`, `indisponibilidade`, `dizimo-automatico`,
-  `BookChapterPickerModal`, `VolunteerProfilePanel`.
+- Adotado depois, na branch `feat/app-reconexao-telas-restantes` (2026-11-04),
+  sempre chamando a releitura que a tela já tinha, sem mexer no carregamento:
+  `celebracao/[id]`, `celebracoes`, `contribuir` (só a lista de categorias; gerar
+  o PIX nunca é reenviado), `privacidade`, `(tabs)/conteudo`, `escala`,
+  `post/[id]`, `biblia/feed`, `troca/[id]`, `dizimo-automatico`,
+  `BookChapterPickerModal`, `VolunteerProfilePanel` e `kids/index`,
+  `kids/consentimento`, `kids/checkin/[childId]`, `kids/codigo/[id]`,
+  `kids/crianca/[id]`, `kids/crianca/novo`, `kids/sessao/[id]`. Onde a tela não
+  tinha botão nem contador de releitura (`celebracoes`, `conteudo`, `post/[id]`,
+  `biblia/feed`, `troca/[id]`, `BookChapterPickerModal`), entrou um
+  `retryCount` que só entra nas dependências da leitura existente.
+- **Ficaram de fora, de propósito:**
+  - `kids/qr/[childId]` — o "Tentar de novo" dela é `issueCheckinQr`, que
+    **emite** um token (escrita). Reconexão só pode reler; reemitir sozinha
+    geraria QR que ninguém pediu. Fica sem o hook até a leitura e a emissão
+    serem separadas (decisão de desenho, não de adoção).
+  - `notificacoes` e `indisponibilidade` — o erro de carga é guardado só como
+    texto (sem o `offline`) e a tela continua **editável** por baixo do alerta
+    (chaves de notificação, dias marcados). Uma releitura automática
+    sobrescreveria o que a pessoa já mexeu. Adotar pede antes guardar o
+    `LoadErrorState` e decidir o que fazer com a edição em andamento.
 - Testes: hook (cai→volta→1 releitura; já online não recarrega; oscilação;
-  desmontar), integração em `grupos`.
+  desmontar), integração em `grupos` e, por tela adotada, "cai, volta e faz
+  uma única releitura" + "já online não recarrega" (e, onde há escrita na tela,
+  que a releitura não a dispara).
 - **Pendente humano — `PEND-23`:** teste em aparelho (modo avião ligado/desligado
-  com a tela no erro), só possível com a build nativa.
+  com a tela no erro), só possível com a build nativa. Nada disto foi testado em
+  aparelho; só Jest.
+- **Só chega ao usuário com a build nativa do `netinfo`:** a adoção nas telas
+  acima é JS, mas importa o módulo nativo — precisa do bump de `version` e do
+  EAS Build; um `eas update` para o binário antigo quebra o `import`.
 
 ### PROD-33 · Transições entre telas no app (v2) · fechado no código, falta aparelho (2026-11-02)
 

@@ -6,6 +6,7 @@ import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { ConsentTerm } from "../../components/kids/ConsentTerm";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { getConsentStatus } from "../../lib/kids/kids-client";
 import type { KidsConsentStatus } from "../../lib/kids/types";
 import { CircleAlert, WifiOff } from "../../lib/theme/icons";
@@ -24,6 +25,10 @@ export default function ConsentimentoScreen() {
   }, []);
 
   useEffect(load, [load]);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(error?.offline === true, load);
 
   if (error) {
     return (

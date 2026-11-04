@@ -15,6 +15,7 @@ jest.mock("../../../lib/kids/kids-client", () => ({
   createChild: (...a: unknown[]) => mockCreate(...a),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import NovaCriancaScreen from "../../../app/kids/crianca/novo";
 
@@ -131,5 +132,58 @@ describe("NovaCriancaScreen", () => {
     expect(screen.getByTestId("nova-error")).toBeTruthy();
     await press("nova-retry");
     expect(screen.getByTestId("nova-nome")).toBeTruthy();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetStatus.mockReset();
+      mockGetStatus.mockRejectedValueOnce(new NetworkError());
+      mockGetStatus.mockResolvedValue({ ...TERM, valid: true });
+      await renderScreen();
+      expect(screen.getByTestId("nova-error")).toBeTruthy();
+      expect(mockGetStatus).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetStatus).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("nova-nome")).toBeTruthy();
+      // Só leitura: a releitura nunca cadastra a criança.
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetStatus.mockReset();
+      mockGetStatus.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("nova-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetStatus).toHaveBeenCalledTimes(1);
+    });
   });
 });

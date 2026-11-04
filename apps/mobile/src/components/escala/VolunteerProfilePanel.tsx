@@ -9,6 +9,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { formatWeeklyAvailability, joinPt } from "../../lib/escala/availability";
 import { getMyVolunteerProfile } from "../../lib/escala/escala-client";
 import type { MyVolunteerProfile } from "../../lib/escala/types";
@@ -43,6 +44,12 @@ export function VolunteerProfilePanel() {
   const { colors } = useTheme();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
+  // PROD-32: sem conexão, relê sozinho na volta dela — o mesmo "Tentar de
+  // novo" (só a leitura do perfil).
+  useReloadOnReconnect(state.kind === "error" && state.error.offline, () => {
+    setState({ kind: "loading" });
+    setAttempt((n) => n + 1);
+  });
 
   useEffect(() => {
     let cancelled = false;
