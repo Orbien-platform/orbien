@@ -22,6 +22,7 @@ jest.mock("../../lib/pix-recorrente/pix-recorrente-client", () => {
 });
 jest.mock("../../lib/auth/auth-client", () => ({ authenticatedRequest: jest.fn() }));
 
+import NetInfo from "@react-native-community/netinfo";
 import DizimoAutomaticoScreen from "../../app/dizimo-automatico";
 import { HttpError, NetworkError } from "../../lib/api/errors";
 
@@ -250,5 +251,59 @@ describe("DizimoAutomaticoScreen", () => {
 
     expect(screen.getByTestId("dizimo-load-error")).toBeTruthy();
     expect(screen.getByTestId("dizimo-retry")).toBeTruthy();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockList.mockReset();
+      mockList.mockRejectedValueOnce(new NetworkError());
+      mockList.mockResolvedValue([ACTIVE]);
+      await renderScreen();
+      expect(screen.getByTestId("dizimo-load-error")).toBeTruthy();
+      expect(mockList).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockList).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("dizimo-load-error")).toBeNull();
+      // Só leitura: a releitura nunca contrata nem cancela.
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockCancel).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockList.mockReset();
+      mockList.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("dizimo-load-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockList).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -25,6 +25,7 @@ import { SectionLabel } from "../components/SectionLabel";
 import { StatusMessage } from "../components/StatusMessage";
 import { HttpError } from "../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import { formatLongDate } from "../lib/format/date";
 import {
   cancelDeletion,
@@ -75,6 +76,12 @@ export default function PrivacidadeScreen() {
   const [editing, setEditing] = useState<MyDataPatch | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   const [confirmDeletion, setConfirmDeletion] = useState(false);
+  // PROD-32: sem conexão, relê sozinha na volta dela (só a leitura).
+  const reload = () => {
+    setLoadError(null);
+    setRetry((n) => n + 1);
+  };
+  useReloadOnReconnect(loadError?.offline === true, reload);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,10 +136,7 @@ export default function PrivacidadeScreen() {
           title="Tentar novamente"
           icon={RefreshCw}
           variant="secondary"
-          onPress={() => {
-            setLoadError(null);
-            setRetry((n) => n + 1);
-          }}
+          onPress={reload}
         />
       </StatusMessage>
     );

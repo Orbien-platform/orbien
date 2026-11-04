@@ -13,6 +13,7 @@ jest.mock("../../../lib/kids/kids-client", () => ({
   getOpenCheckin: (...a: unknown[]) => mockGetOpen(...a),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { NetworkError } from "../../../lib/api/errors";
 import CodigoScreen from "../../../app/kids/codigo/[id]";
 
@@ -97,5 +98,56 @@ describe("CodigoScreen", () => {
       fireEvent.press(screen.getByTestId("codigo-retry"));
     });
     expect(screen.getByTestId("codigo-valor")).toBeTruthy();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetOpen.mockReset();
+      mockGetOpen.mockRejectedValueOnce(new NetworkError());
+      mockGetOpen.mockResolvedValue(OPEN);
+      await renderScreen();
+      expect(screen.getByTestId("codigo-error")).toBeTruthy();
+      expect(mockGetOpen).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetOpen).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("codigo-valor")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetOpen.mockReset();
+      mockGetOpen.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("codigo-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetOpen).toHaveBeenCalledTimes(1);
+    });
   });
 });

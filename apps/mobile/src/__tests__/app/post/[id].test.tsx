@@ -22,6 +22,7 @@ jest.mock("../../../components/EventRegistrationPanel", () => {
   };
 });
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import PostScreen from "../../../app/post/[id]";
 
@@ -243,5 +244,68 @@ describe("PostScreen", () => {
     await render(<PostScreen />);
     expect(await screen.findByTestId("post-event-date")).toBeTruthy();
     expect(screen.queryByTestId("post-event-location")).toBeNull();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetPost.mockReset();
+      mockGetPost.mockRejectedValueOnce(new NetworkError());
+      mockGetPost.mockResolvedValue({
+        id: "post-1",
+        type: "announcement",
+        title: "Culto especial",
+        body: "Corpo",
+        media_url: null,
+        published_at: "2026-09-01T00:00:00.000Z",
+        created_at: "2026-08-30T00:00:00.000Z",
+      });
+      await act(async () => {
+        render(<PostScreen />);
+      });
+      expect(screen.getByTestId("post-error")).toBeTruthy();
+      expect(mockGetPost).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetPost).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("post-title").props.children).toBe("Culto especial");
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetPost.mockReset();
+      mockGetPost.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<PostScreen />);
+      });
+      expect(screen.getByTestId("post-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetPost).toHaveBeenCalledTimes(1);
+    });
   });
 });

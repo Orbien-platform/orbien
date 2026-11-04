@@ -9,6 +9,7 @@ jest.mock("../../lib/bible/bible-client", () => ({
   getBooks: (...args: unknown[]) => mockGetBooks(...args),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { BookChapterPickerModal } from "../../components/BookChapterPickerModal";
 
 const BOOKS = [
@@ -131,5 +132,60 @@ describe("BookChapterPickerModal", () => {
     });
 
     expect(mockGetBooks).toHaveBeenCalledTimes(2);
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetBooks.mockReset();
+      mockGetBooks.mockRejectedValueOnce(new NetworkError());
+      mockGetBooks.mockResolvedValue(BOOKS);
+      await act(async () => {
+        render(<BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />);
+      });
+      expect(screen.getByTestId("picker-error")).toBeTruthy();
+      expect(mockGetBooks).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetBooks).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("picker-book-JHN")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetBooks.mockReset();
+      mockGetBooks.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<BookChapterPickerModal visible onClose={jest.fn()} onSelect={jest.fn()} />);
+      });
+      expect(screen.getByTestId("picker-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetBooks).toHaveBeenCalledTimes(1);
+    });
   });
 });

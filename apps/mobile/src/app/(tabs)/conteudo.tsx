@@ -19,6 +19,7 @@ import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { getPosts } from "../../lib/content/content-client";
 import type { Post } from "../../lib/content/types";
 import { ChevronRight, CircleAlert, Inbox, WifiOff } from "../../lib/theme/icons";
@@ -43,6 +44,13 @@ export default function ConteudoScreen() {
   // `isLoadingMore` (state) só existe para o `disabled` visual do botão.
   const isLoadingMoreRef = useRef(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, relê sozinha na volta dela (a primeira página). A
+  // tela não tem botão de retry; o contador só existe para o hook.
+  useReloadOnReconnect(error?.offline === true, () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +70,7 @@ export default function ConteudoScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retryCount]);
 
   async function handleLoadMore() {
     if (isLoadingMoreRef.current) return;
