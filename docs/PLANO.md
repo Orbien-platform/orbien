@@ -2818,17 +2818,52 @@ mexido porque o limite é a defesa contra spam numa rota sem autenticação.
 
 ### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
 
-- **Teste em aparelho**: câmera, brilho e tela acesa só foram exercitados com
-  mocks. Falta rodar numa build nativa (os três módulos são nativos — não
-  saem por OTA), nos tenants `teste1-church`/`teste2-church`.
-- **Gerenciar QR de autocadastro pelo app**: o app só cria o do culto (estado
-  vazio). Criar QR de grupo ou evento, renomear e desativar não têm tela em
-  lugar nenhum — nem no painel; as rotas existem (`admin/visitor/qr`).
-- **QR de check-in não lê o código vigente**: abrir a tela gera um código
-  novo (a API só tem o `upsert`). Uma leitura do token vigente evitaria
-  invalidar o código que outro líder já está mostrando.
-- **Marca da igreja na página pública**: a página mostra o nome da igreja,
-  mas não a cor nem o logo — não há rota pública de identidade por slug.
+Três dos quatro itens fecharam na branch `feat/qr-gestao-e-checkin-vigente`;
+resta só o teste em aparelho, que é humano.
+
+- **Teste em aparelho — aberto, pendência humana**: câmera, brilho e tela
+  acesa só foram exercitados com mocks. Falta rodar numa build nativa (os
+  três módulos são nativos — não saem por OTA), nos tenants
+  `teste1-church`/`teste2-church`. Inclui agora conferir, em dois aparelhos,
+  que abrir a tela do QR de check-in no segundo **não** troca o código do
+  primeiro.
+- ~~**Gerenciar QR de autocadastro**~~ — fechado no **painel web**, tela
+  `/pessoas/qr-visitantes` (menu Pessoas › QR de visitantes). Cria QR de
+  culto, grupo ou evento, renomeia, liga/desliga e mostra o QR com o
+  endereço para copiar. Decisão de lugar: o painel, porque quem cria QR de
+  grupo ou evento é a liderança no computador, e o painel era a lacuna que a
+  PEND apontava; o app já cria o do culto. API: ganhou `PATCH
+  /admin/visitor/qr/:id` (rótulo e `is_active`, até 80 caracteres) — o
+  `UpdateQrTokenDto` existia sem rota. Sem tabela nem policy nova. O QR é
+  desenhado com `qrcode-generator` (mesmo pacote do app), dependência nova
+  de `orbien-web`. Teste: componente, `QrImage` e `e2e/qr-visitantes.spec.ts`
+  (só `teste2-church`).
+  **Fica de fora:** gestão de QR no app (continuação natural — grupo/evento,
+  renomear, desativar) e impressão/PDF do QR.
+- ~~**QR de check-in não lê o código vigente**~~ — fechado. `GET
+  /small-groups/meetings/:meetingId/checkin-token` devolve o token vigente
+  sem gerar outro; 404 quando não há ou venceu. O app lê primeiro e só chama
+  o `POST` no 404; "Renovar" continua trocando o código de propósito.
+  Escopo: `tenant_admin`, `admin_congregation`, `pastor` e `secretary` leem de
+  qualquer encontro da congregação (os mesmos que já geram pelo `POST`);
+  `cell_leader` só do PG que lidera (`assertCanManageMaterials`) — outro PG é
+  403 e não revela se há código. RLS inalterada (`meeting_checkin_tokens`
+  por congregação, 018). O token só vai na resposta: não entra em log nem em
+  `audit_logs` (o interceptor não grava corpo).
+  **Achado aberto:** o `POST` (gerar/renovar) continua sem o recorte de
+  liderança — um `cell_leader` de outro PG da mesma congregação consegue
+  renovar o QR alheio. Decidir se aplica a mesma regra do `GET`.
+- ~~**Marca da igreja na página pública**~~ — fechado **sem rota nova**.
+  `GET /public/visitor/qr/:token` ganhou `brand` (`primary_color`,
+  `accent_color`, `logo_url`, `logo_url_dark`). O tenant é resolvido pelo
+  token, como já era; o slug da URL continua só decorativo, então não há
+  endpoint por slug nem enumeração de igrejas. Expõe só cor e logo, saneados
+  (hex e https; o resto vira nulo e a página usa o padrão) — nada de chave
+  PIX, nome interno ou id. Limite: os 120/h por IP que a rota já tinha.
+  Sem `Cache-Control` público: o QR pode ser desativado e a página precisa
+  ver isso na hora. A página aplica a cor como `--brand` no escopo dela e
+  mostra o logo (par claro/escuro quando houver). Teste de integração com a
+  RLS real, sem JWT.
 
 ### ~~PEND-20 · Avisar quem estava escalado quando o culto é cancelado ou removido~~ · fechado
 

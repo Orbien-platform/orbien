@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { activeNavHref, findNavEntry, NAV_SECTIONS } from "./navigation";
 
 describe("navegação", () => {
-  it("lista Indicadores em Pessoas", () => {
+  it("lista Indicadores, Pessoas e QR de visitantes em Pessoas", () => {
     const pessoas = NAV_SECTIONS.find((s) => s.title === "Pessoas");
-    expect(pessoas?.items.map((i) => i.href)).toEqual(["/pessoas/indicadores", "/pessoas"]);
+    expect(pessoas?.items.map((i) => i.href)).toEqual(["/pessoas/indicadores", "/pessoas", "/pessoas/qr-visitantes"]);
   });
 
   it("o item mais específico vence: /pessoas/indicadores não acende Pessoas", () => {

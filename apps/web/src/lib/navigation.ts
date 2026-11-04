@@ -13,6 +13,7 @@ import {
   type LucideIcon,
   Megaphone,
   Music,
+  QrCode,
   Users,
 } from "lucide-react";
 
@@ -56,6 +57,8 @@ export const NAV_SECTIONS: NavSection[] = [
       // por quem está na escala. É o "Indicadores" que o design Órbita já previa.
       { href: "/pessoas/indicadores", label: "Indicadores", icon: ChartNoAxesColumn },
       { href: "/pessoas", label: "Pessoas", icon: Users },
+      // PEND-19: QR de autocadastro de visitante (culto, grupo, evento).
+      { href: "/pessoas/qr-visitantes", label: "QR de visitantes", icon: QrCode },
     ],
   },
   {

@@ -47,6 +47,61 @@ beforeEach(() => {
 });
 
 describe("VisitanteAutocadastroPage", () => {
+  it("aplica a cor e o logo da igreja (PEND-19)", async () => {
+    mockedGet.mockResolvedValue({
+      data: {
+        ...QR,
+        brand: {
+          primary_color: "#7a1f3d",
+          accent_color: null,
+          logo_url: "https://cdn.exemplo.com/logo.png",
+          logo_url_dark: null,
+        },
+      },
+    });
+    const { container } = render(<VisitanteAutocadastroPage />);
+    await act(async () => undefined);
+
+    const logo = screen.getByAltText("Logo da Igreja de Teste 1");
+    expect(logo).toHaveAttribute("src", "https://cdn.exemplo.com/logo.png");
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--brand")).toBe("#7a1f3d");
+    // Sem logo escuro, o mesmo logo serve nos dois temas: uma única imagem.
+    expect(screen.getAllByAltText("Logo da Igreja de Teste 1")).toHaveLength(1);
+  });
+
+  it("com logo escuro, mostra o par claro/escuro", async () => {
+    mockedGet.mockResolvedValue({
+      data: {
+        ...QR,
+        brand: {
+          primary_color: null,
+          accent_color: null,
+          logo_url: "https://cdn.exemplo.com/claro.png",
+          logo_url_dark: "https://cdn.exemplo.com/escuro.png",
+        },
+      },
+    });
+    render(<VisitanteAutocadastroPage />);
+    await act(async () => undefined);
+    expect(screen.getAllByAltText("Logo da Igreja de Teste 1")).toHaveLength(2);
+  });
+
+  it("sem marca (nulos ou API antiga), fica no padrão: sem logo e sem cor própria", async () => {
+    const { container } = render(<VisitanteAutocadastroPage />);
+    await act(async () => undefined);
+    expect(screen.queryByAltText(/Logo da/)).not.toBeInTheDocument();
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--brand")).toBe("");
+  });
+
+  it("cor que não é hex é ignorada mesmo que escape da API", async () => {
+    mockedGet.mockResolvedValue({
+      data: { ...QR, brand: { primary_color: "red;x:y", accent_color: null, logo_url: null, logo_url_dark: null } },
+    });
+    const { container } = render(<VisitanteAutocadastroPage />);
+    await act(async () => undefined);
+    expect((container.firstChild as HTMLElement).style.getPropertyValue("--brand")).toBe("");
+  });
+
   it("lê o QR ao abrir e mostra de qual igreja ele é", async () => {
     await open();
 

@@ -30,6 +30,10 @@
 /** Rota do front → área do produto, como a API as nomeia. */
 export const ROUTE_AREAS: Record<string, string> = {
   "/pessoas": "persons",
+  // PEND-19: QR de autocadastro. A API (`admin/visitor/qr`) exige um recorte
+  // menor que a leitura de pessoas; quem ler `persons` e não gerir recebe 403
+  // e a tela mostra o estado de "sem acesso".
+  "/pessoas/qr-visitantes": "persons",
   "/grupos": "small_groups",
   "/financeiro": "financial",
   "/conteudo": "content",
