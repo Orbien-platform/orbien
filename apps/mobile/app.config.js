@@ -92,6 +92,12 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       bundleIdentifier: bundleId,
+      infoPlist: {
+        ...config.ios?.infoPlist,
+        // O app só usa a criptografia do sistema (HTTPS, Keychain). Sem esta
+        // chave o App Store Connect pergunta de exportação a cada upload.
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     // OTA (expo-updates): runtime version segue o appVersion (remote, ver
     // eas.json `appVersionSource`) — qualquer build com módulo nativo novo

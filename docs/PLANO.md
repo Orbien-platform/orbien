@@ -427,9 +427,14 @@ OneSignal sincronizadas na autenticação, e `notification_preferences` com RLS
 por congregação (`008_rls_notification_preferences.sql`). Era o último
 requisito funcional do `.specs/features/app-mobile/spec.md`.
 
-### AJU-05 · `DEPLOY.md` não tem parte de mobile · dívida
+### ~~AJU-05 · `DEPLOY.md` não tem parte de mobile~~ · fechado
 
-Cobre API, site, web e admin; não há procedimento escrito de build de
+**Fechado em 2026-11-04:** `DEPLOY.md` ganhou a Parte 5 (mobile nas lojas) —
+pré-requisitos, `eas build`/`eas submit`, OTA em `production` e quando um
+bump de versão nativa é obrigatório. O texto original do item, abaixo, fica
+como registro.
+
+Cobria API, site, web e admin; não havia procedimento escrito de build de
 produção, submissão às lojas nem OTA. O `apps/mobile/README.md` cobre
 credenciais e profiles, mas não é o documento de deploy do monorepo.
 
@@ -441,6 +446,51 @@ credenciais e profiles, mas não é o documento de deploy do monorepo.
 > A infra de OTA em si já existe (2026-09-12, ver `PROD-15` abaixo); o que
 > falta aqui é só o procedimento escrito — `eas update --branch <channel>`,
 > quando publicar e como isso se relaciona com bump de versão nativa.
+
+### PROD-40 · Publicar o Starter nas lojas · parcial (2026-11-04)
+
+Meta: o app genérico multi-tenant (Starter) publicado na App Store e na Play
+Store. É o que destrava o `DEC-02` (white-label por tenant) e, com ele, o
+`DEC-05`.
+
+**Fase 1 — repositório, entregue em 2026-11-04:**
+
+- `version` do `apps/mobile` em `1.0.0` (era `0.1.0`). Como a `runtimeVersion`
+  segue o `appVersion`, o binário da loja define a base dos OTAs seguintes.
+- `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` em `app.config.js`, com
+  teste: sem a chave, o App Store Connect pergunta de exportação a cada upload.
+- `AJU-05` fechado: `DEPLOY.md`, Parte 5.
+
+**Fase 0 — pendente, depende de conta e credencial (fora do repo):**
+
+1. Apple Developer Program. Para organização exige D-U-N-S, que pode levar de
+   dias a semanas: é o caminho crítico, comece por aqui.
+2. Google Play Console. Conta pessoal exige teste fechado com 12 testadores por
+   14 dias antes da produção; conta de organização não.
+3. App criado nos dois consoles com `com.orbien.app`.
+4. App Store Connect API Key e service account do Google Play cadastradas no
+   EAS (`eas credentials`).
+5. **`eas.json` → `submit.production`** (hoje `{}`): preencher `ascAppId`
+   (iOS), `serviceAccountKeyPath` e `track` (Android). Só dá para fazer depois
+   dos itens 3 e 4; um placeholder faria o `eas submit` falhar sem aviso.
+6. Conferir o vínculo do channel `production` com o branch `production`
+   (`DEPLOY.md` 5.1).
+
+**Depois da Fase 0:**
+
+7. Primeiro build `production` e teste em aparelho real (TestFlight e teste
+   interno do Play): push, leitura de QR, login, privacidade. Só em
+   `teste1-church` e `teste2-church`.
+8. Ficha das lojas, nos consoles: política de privacidade com URL pública
+   (a página `/lgpd` do site pode servir, mas é preciso confirmar que cobre o
+   app), URL de suporte, descrição, screenshots, classificação indicativa e o
+   questionário de privacidade (App Privacy / Data Safety).
+9. Conta para o revisor, com as instruções nas notas de revisão: o login pede
+   `tenant_slug`, e-mail e senha. Usar `teste1-church`; **conferir se ela
+   existe no banco de produção** e, se não existir, semear lá (decisão
+   explícita, não silêncio).
+10. `eas submit`. A Apple costuma questionar app que atende vários clientes: a
+    resposta é o app único que carrega a identidade da igreja depois do login.
 
 ### ~~PROD-15 · Infra básica de expo-updates~~ · fechado
 

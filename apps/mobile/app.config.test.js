@@ -126,6 +126,17 @@ describe("app.config.js", () => {
     );
   });
 
+  it("declara no iOS que não usa criptografia isenta, sem perder o infoPlist recebido", () => {
+    const resolved = loadConfig()({
+      config: { ios: { infoPlist: { UIBackgroundModes: ["remote-notification"] } } },
+    });
+
+    expect(resolved.ios.infoPlist).toEqual({
+      UIBackgroundModes: ["remote-notification"],
+      ITSAppUsesNonExemptEncryption: false,
+    });
+  });
+
   it("resolve o plugin do OneSignal em modo development por padrão (fora de EAS)", () => {
     delete process.env.EAS_BUILD_PROFILE;
     const withDefaults = loadConfig();

@@ -604,6 +604,77 @@ no servidor da Vercel — não há requisição cross-origin para o browser barr
 
 ---
 
+## Parte 5 — `mobile` nas lojas (EAS)
+
+O app não passa por Render nem Vercel: o binário sai do EAS e vai para a App
+Store e a Play Store. O `apps/mobile/README.md` explica profiles e credenciais;
+aqui fica o procedimento de publicar.
+
+### 5.1 Uma vez, antes da primeira publicação
+
+Nada disto fica no repositório. A lista de pendências está em `PROD-40`
+(`docs/PLANO.md`).
+
+1. Conta Apple Developer Program e conta Google Play Console.
+2. App criado nos dois consoles com o identificador `com.orbien.app`.
+3. Credenciais no EAS (`npx eas-cli credentials`): App Store Connect API Key
+   (iOS) e service account do Google Play (Android).
+4. Em `apps/mobile/eas.json`, preencher `submit.production` com o `ascAppId`
+   (iOS) e o `serviceAccountKeyPath` e a `track` (Android). Hoje o bloco está
+   vazio de propósito: um valor inventado faria o `eas submit` falhar.
+5. Depois do primeiro build `production`, conferir com
+   `npx eas-cli channel:view production` que o channel aponta para o branch
+   `production`. Se não apontar, ligar uma vez:
+   `npx eas-cli channel:edit production --branch production`. Sem esse
+   vínculo o update sobe, mas nenhum app instalado o recebe.
+
+### 5.2 Build e submissão
+
+A partir de `apps/mobile`, com `EXPO_TOKEN` ou login no EAS:
+
+```bash
+npx eas-cli build --profile production --platform all
+npx eas-cli submit --profile production --platform all
+```
+
+O profile `production` incrementa o número de build sozinho
+(`autoIncrement`, `appVersionSource: remote`). O **`version`** de
+`apps/mobile/package.json` é o que o usuário vê na loja e também a
+`runtimeVersion` do OTA, então só muda de propósito (ver 5.3).
+
+Antes do primeiro envio, valide em aparelho real com a faixa de teste
+(TestFlight / teste interno do Play) e **só com `teste1-church` e
+`teste2-church`**: push, leitura de QR, login e a tela de privacidade.
+
+### 5.3 OTA (`eas update`) e versão nativa
+
+O OTA troca só o JavaScript, para quem já tem um binário da mesma
+`runtimeVersion`:
+
+```bash
+cd apps/mobile
+ORBIEN_API_URL=https://orbien-api.onrender.com/api \
+ORBIEN_WEB_URL=https://web.useorbien.com \
+ORBIEN_ONESIGNAL_APP_ID=<app id do profile production> \
+  npx eas-cli update --branch production --message "<descrição>"
+```
+
+As três variáveis são obrigatórias: o `eas update` reavalia o
+`app.config.js` com o ambiente de quem roda, não com o `env` do profile. Sem
+elas o app cai nos defaults (`http://localhost:3000` e o placeholder do
+OneSignal) e passa a falar com o próprio aparelho.
+
+- **Só JS** (tela, texto, regra): OTA.
+- **Módulo nativo novo, plugin novo, mudança em `app.config.js`, `eas.json` ou
+  `assets/`**: sobe o `version`, faz build e submissão. Um OTA para o binário
+  antigo quebraria no `import` do módulo, e a política de runtime barra isso
+  de propósito.
+- A CI só publica no channel `preview`; `production` é manual.
+- Mudança que depende de rota ou parâmetro novo da API segue a regra de
+  "Mobile novo contra API velha", em "Deploys do dia a dia": API primeiro.
+
+---
+
 ## Depois que os quatro estiverem verdes
 
 1. Confirmar que os domínios customizados (`web.useorbien.com`,
