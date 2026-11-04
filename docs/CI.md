@@ -470,7 +470,7 @@ de incêndio, não porta trancada.
 bash scripts/pre-push.sh              # completo — o único que libera subir
 bash scripts/pre-push.sh --review     # + revisão por IA, com veredito
 bash scripts/pre-push.sh --rapido     # só build, tipos, lint e regras (parcial)
-bash scripts/pre-push.sh --so=e2e     # uma etapa, para iterar: cobertura | rls | e2e | site
+bash scripts/pre-push.sh --so=rls     # uma etapa, para iterar: cobertura | rls | site
 ```
 
 O completo roda o que o CI roda:
@@ -480,7 +480,7 @@ O completo roda o que o CI roda:
 | Build dos 5 apps, `tsc` da API (com `test/`), lint, skills | sempre | `build` |
 | `test:cov` dos 5 apps — testes **e** piso de cobertura | sempre | `unit` |
 | `test:rls` | diff toca `apps/api/{src,prisma}` | `rls` |
-| E2E do web, **só os specs afetados** | diff mapeia para algum spec | `e2e` |
+| E2E do web | **não roda aqui** — só no GitHub (`e2e` e `e2e-prod`) | `e2e`, `e2e-prod` |
 | Smoke do site | diff toca `apps/site` ou o lockfile/`package.json` da raiz | `smoke-site` |
 
 Antes dos cinco passos de teste, o script prepara o banco. **Sempre local**: se
@@ -489,11 +489,36 @@ típico é o Supabase de produção), ele ignora as duas e usa
 `localhost:5432` com as credenciais do CI — e bloqueia, pedindo um Postgres
 local, se não houver um. Roda o `bootstrap-db.sh` quando o diff mexe em
 `apps/api/prisma/` e semeia `teste1-church`/`teste2-church` (o seed é
-idempotente). O e2e e o smoke sobem API e web nas portas 3000/3001/3002 e
-derrubam no fim; porta ocupada bloqueia, em vez de testar contra o servidor
+idempotente). O smoke do site sobe o site na porta 3002 e derruba no fim; porta ocupada bloqueia, em vez de testar contra o servidor
 errado.
 
-### Escopo do e2e
+### E2E: só no GitHub
+
+O portão **não executa** o e2e do web. Rodá-lo aqui pedia build de API e web,
+portas livres e um seed que podia divergir do ambiente do CI, e o que provava
+o job `e2e` prova de novo com o código do PR. `--so=e2e` é recusado. O que
+sobra do escopo (abaixo) é informativo: o portão imprime quais specs o diff
+pode afetar, e o smoke do site ainda usa o `site:1` do mesmo script.
+
+Os dois jobs de e2e do `ci.yml` têm papéis diferentes:
+
+- **`e2e`** sobe API e web **do PR** contra um banco limpo. É a prova de que o
+  spec — inclusive o novo — passa com o código que vai entrar.
+- **`e2e-prod`** roda contra `https://web.useorbien.com`, o que já está no ar.
+  **Em PR, os specs que o PR adiciona ou altera ficam de fora**
+  (`git diff --diff-filter=ACMR base...HEAD -- 'apps/web/e2e/*.spec.ts'` →
+  `E2E_EXCLUDE_SPECS` → `testIgnore` em `playwright.config.ts`). Sem isso, spec
+  de tela nova falhava em produção por ser prematuro, não por estar errado
+  (`qr-visitantes.spec.ts`, `PEND-19`). No push para a `main` a suíte inteira
+  roda. Consequência para leitura: `e2e-prod` vermelho em PR é regressão no que
+  já estava no ar.
+
+Limite conhecido: no push para a `main`, o `e2e-prod` pode correr antes de a
+Vercel/Render terminarem o deploy do merge e falhar em spec novo. Se
+acontecer, reexecutar o job depois do deploy resolve; é custo aceito até
+haver um jeito barato de saber que o deploy terminou.
+
+### Escopo do e2e (informativo)
 
 `scripts/e2e-escopo.mjs` recebe os arquivos alterados e devolve os specs
 afetados. Não há tabela de rotas para manter: cada spec declara a área pelo

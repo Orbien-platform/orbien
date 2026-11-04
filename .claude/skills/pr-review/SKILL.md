@@ -126,6 +126,7 @@ desta base — erro genérico de React fica com o `/code-review`.
   há dado quando a chamada falhou — ⚠️
 - Botão dentro de botão (HTML inválido)
 - Tela nova sem cobertura em `apps/web/e2e/` quando o fluxo é de escrita — 💡
+  (o e2e só roda no CI; não peça para rodar local)
 
 ---
 
