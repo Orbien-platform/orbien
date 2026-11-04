@@ -115,19 +115,18 @@ test.describe("crianças e consentimento do Kids", () => {
       await page.goto("/kids/criancas", { waitUntil: "domcontentloaded" });
       const busca = page.getByPlaceholder("Buscar criança pelo nome");
       const linha = page.getByRole("row", { name: new RegExp(nome) });
-      // Hidratação: o texto digitado antes dela é descartado quando o React
-      // assume o campo, e a busca nunca roda (ver `selectTab` em fixtures). Em
-      // produção, mais lenta, isso aparece; local não. Por isso o preenchimento
-      // entra na retentativa, limpando antes para forçar o evento de mudança.
+      // Em produção (mais lenta) a lista é reconstruída depois do primeiro
+      // render: o texto digitado antes da hidratação é descartado (ver
+      // `selectTab` em fixtures) e uma linha já visível pode sumir antes do
+      // clique. Por isso buscar, ver a linha e abrir a ficha são UMA retentativa:
+      // se qualquer passo perde a corrida, a volta seguinte refaz a busca do zero.
       await expect(async () => {
         await busca.fill("");
         await busca.fill(nome);
         await expect(linha).toBeVisible({ timeout: 5_000 });
-      }).toPass({ timeout: 60_000 });
-      await expect(async () => {
-        await linha.click();
-        await expect(page.getByRole("region", { name: "Consentimento" })).toBeVisible({ timeout: 2_000 });
-      }).toPass({ timeout: 60_000 });
+        await linha.click({ timeout: 5_000 });
+        await expect(page.getByRole("region", { name: "Consentimento" })).toBeVisible({ timeout: 5_000 });
+      }).toPass({ timeout: 90_000 });
 
       const consentimento = page.getByRole("region", { name: "Consentimento" });
       await expect(consentimento.getByText(/consentiu com o termo/)).toBeVisible();
