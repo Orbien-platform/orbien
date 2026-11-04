@@ -17,6 +17,7 @@ import { SectionLabel } from "../../../components/SectionLabel";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { AllergyNote } from "../../../components/kids/AllergyNote";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 import {
   ageInMonths,
   checkInChild,
@@ -84,6 +85,10 @@ export default function CheckinScreen() {
   }, [childId]);
 
   useEffect(load, [load]);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(error?.offline === true, load);
 
   // O botão só existe habilitado com turma e quem entrega escolhidos, e fica
   // inerte enquanto carrega — por isso recebe os dois já resolvidos.

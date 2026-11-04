@@ -11,6 +11,7 @@ jest.mock("../../../lib/kids/kids-client", () => ({
   revokeConsent: (...a: unknown[]) => mockRevoke(...a),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import ConsentimentoScreen from "../../../app/kids/consentimento";
 
@@ -107,5 +108,59 @@ describe("ConsentimentoScreen", () => {
     expect(screen.getByTestId("consent-load-error")).toBeTruthy();
     await press("consent-retry");
     expect(screen.getByTestId("consent-accept")).toBeTruthy();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetStatus.mockReset();
+      mockGetStatus.mockRejectedValueOnce(new NetworkError());
+      mockGetStatus.mockResolvedValue(PENDING);
+      await renderScreen();
+      expect(screen.getByTestId("consent-load-error")).toBeTruthy();
+      expect(mockGetStatus).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetStatus).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Autorizo a igreja a tratar os dados.")).toBeTruthy();
+      // Só leitura: a releitura nunca aceita nem revoga o termo.
+      expect(mockAccept).not.toHaveBeenCalled();
+      expect(mockRevoke).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetStatus.mockReset();
+      mockGetStatus.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("consent-load-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetStatus).toHaveBeenCalledTimes(1);
+    });
   });
 });

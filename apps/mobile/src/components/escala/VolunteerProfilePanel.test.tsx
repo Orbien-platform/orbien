@@ -10,6 +10,7 @@ jest.mock("../../lib/escala/escala-client", () => ({
 }));
 
 import { HttpError, NetworkError } from "../../lib/api/errors";
+import NetInfo from "@react-native-community/netinfo";
 import { VolunteerProfilePanel } from "./VolunteerProfilePanel";
 
 const PROFILE = {
@@ -240,5 +241,60 @@ describe("VolunteerProfilePanel", () => {
     });
 
     expect(screen.queryByTestId("perfil-voluntario")).toBeNull();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetMyVolunteerProfile.mockReset();
+      mockGetMyVolunteerProfile.mockRejectedValueOnce(new NetworkError());
+      mockGetMyVolunteerProfile.mockResolvedValue(PROFILE);
+      await act(async () => {
+        render(<VolunteerProfilePanel />);
+      });
+      expect(screen.getByTestId("perfil-voluntario-erro")).toBeTruthy();
+      expect(mockGetMyVolunteerProfile).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetMyVolunteerProfile).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("perfil-ministerios")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetMyVolunteerProfile.mockReset();
+      mockGetMyVolunteerProfile.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<VolunteerProfilePanel />);
+      });
+      expect(screen.getByTestId("perfil-voluntario-erro")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetMyVolunteerProfile).toHaveBeenCalledTimes(1);
+    });
   });
 });

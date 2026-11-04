@@ -19,6 +19,7 @@ import { SectionLabel } from "../components/SectionLabel";
 import { StatusMessage } from "../components/StatusMessage";
 import { HttpError, NetworkError } from "../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import {
   MAX_AMOUNT,
   MIN_AMOUNT,
@@ -74,6 +75,9 @@ export default function ContribuirScreen() {
   const [result, setResult] = useState<DonationResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // PROD-32: sem conexão na lista de categorias, relê sozinha na volta dela.
+  // É só a leitura das categorias — gerar o PIX (POST) nunca é reenviado.
+  useReloadOnReconnect(categoriesError?.offline === true, () => setReloadCount((n) => n + 1));
 
   useEffect(() => {
     if (!tenantSlug) return;
