@@ -44,6 +44,7 @@ describe('MeetingsController', () => {
       listMaterials: jest.fn(),
       removeMaterial: jest.fn(),
       createCheckinToken: jest.fn(),
+      getCurrentCheckinToken: jest.fn(),
       checkin: jest.fn(),
       assertCanManageMaterials: jest.fn(),
       listGroupMaterials: jest.fn(),
@@ -224,6 +225,16 @@ describe('MeetingsController', () => {
 
   it('createCheckinToken exige papel de escrita de reunião, igual recordAttendance (PROD-12)', () => {
     expect(rolesFor('createCheckinToken')).toEqual(MEETING_WRITE_ROLES);
+  });
+
+  it('getCurrentCheckinToken tem os mesmos papéis de createCheckinToken e delega (PEND-19)', async () => {
+    expect(rolesFor('getCurrentCheckinToken')).toEqual(MEETING_WRITE_ROLES);
+    service.getCurrentCheckinToken.mockResolvedValue({ token: 'tok-1', expires_at: new Date() } as never);
+
+    const result = await controller.getCurrentCheckinToken('meet1', USER);
+
+    expect(service.getCurrentCheckinToken).toHaveBeenCalledWith('meet1', USER);
+    expect(result).toEqual(expect.objectContaining({ token: 'tok-1' }));
   });
 
   it('checkin aceita member além dos papéis de leitura, igual findByGroup (PROD-12)', () => {

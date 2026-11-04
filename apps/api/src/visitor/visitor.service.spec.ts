@@ -57,12 +57,14 @@ describe('VisitorService', () => {
         origin: 'service',
         label: 'Culto da manhã',
         congregation: { name: 'Igreja de Teste 1' },
+        tenant: { brandingConfig: null },
       });
 
       await expect(service.describeQr('tok')).resolves.toEqual({
         church_name: 'Igreja de Teste 1',
         origin: 'service',
         label: 'Culto da manhã',
+        brand: { primary_color: null, accent_color: null, logo_url: null, logo_url_dark: null },
       });
       expect(qrTokenClient.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { token: 'tok' } }),
@@ -86,6 +88,64 @@ describe('VisitorService', () => {
         congregation: { name: 'Igreja de Teste 1' },
       });
       await expect(service.describeQr('tok')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('describeQr — marca (PEND-19)', () => {
+    const active = (brandingConfig: unknown) => ({
+      is_active: true,
+      origin: 'service',
+      label: null,
+      congregation: { name: 'Sede' },
+      tenant: { brandingConfig },
+    });
+
+    it('devolve cor primária, destaque e logos da igreja — e só isso', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue(
+        active({
+          primary_color: '#0B1F3A',
+          secondary_color: '#00B8A2',
+          logo_url: 'https://cdn.exemplo.com/logo.png',
+          logo_url_dark: 'https://cdn.exemplo.com/logo-dark.png',
+          pix_key: 'segredo',
+        }),
+      );
+      const info = await service.describeQr('tok');
+      expect(info.brand).toEqual({
+        primary_color: '#0B1F3A',
+        accent_color: '#00B8A2',
+        logo_url: 'https://cdn.exemplo.com/logo.png',
+        logo_url_dark: 'https://cdn.exemplo.com/logo-dark.png',
+      });
+      expect(JSON.stringify(info)).not.toContain('segredo');
+    });
+
+    it('valor fora do formato vira nulo: cor que não é hex e logo que não é https', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue(
+        active({
+          primary_color: 'red; background:url(x)',
+          secondary_color: '  #abc ',
+          logo_url: 'javascript:alert(1)',
+          logo_url_dark: 'http://inseguro.com/l.png',
+        }),
+      );
+      const { brand } = await service.describeQr('tok');
+      expect(brand).toEqual({
+        primary_color: null,
+        accent_color: '#abc',
+        logo_url: null,
+        logo_url_dark: null,
+      });
+    });
+
+    it('URL malformada vira nulo', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue(active({ logo_url: 'não é url', logo_url_dark: '   ' }));
+      const { brand } = await service.describeQr('tok');
+      expect(brand.logo_url).toBeNull();
+      expect(brand.logo_url_dark).toBeNull();
     });
   });
 
@@ -261,6 +321,44 @@ describe('VisitorService', () => {
         orderBy: { created_at: 'desc' },
       });
       expect(result).toEqual([{ id: 'qr1' }]);
+    });
+  });
+
+  describe('updateQrToken (PEND-19)', () => {
+    it('lança NotFoundException quando o QR não é da congregação', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findFirst.mockResolvedValue(null);
+      await expect(service.updateQrToken('qr1', { label: 'x' }, user)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(qrTokenClient.update).not.toHaveBeenCalled();
+      expect(qrTokenClient.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'qr1', tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+        }),
+      );
+    });
+
+    it('renomeia sem tocar em is_active', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findFirst.mockResolvedValue({ id: 'qr1' });
+      qrTokenClient.update.mockResolvedValue({ id: 'qr1', label: 'Culto das 10h' });
+      await service.updateQrToken('qr1', { label: '  Culto das 10h ' }, user);
+      expect(qrTokenClient.update).toHaveBeenCalledWith({
+        where: { id: 'qr1' },
+        data: { label: 'Culto das 10h' },
+      });
+    });
+
+    it('rótulo em branco limpa o nome; is_active vem junto quando enviado', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findFirst.mockResolvedValue({ id: 'qr1' });
+      qrTokenClient.update.mockResolvedValue({ id: 'qr1' });
+      await service.updateQrToken('qr1', { label: '   ', is_active: false }, user);
+      expect(qrTokenClient.update).toHaveBeenCalledWith({
+        where: { id: 'qr1' },
+        data: { label: null, is_active: false },
+      });
     });
   });
 

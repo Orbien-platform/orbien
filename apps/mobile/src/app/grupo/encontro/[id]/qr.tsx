@@ -6,10 +6,11 @@
 // máximo e sem apagar (`usePresentationMode`), porque o celular passa de mão
 // em mão pela sala.
 //
-// Abrir a tela GERA o código: a API não tem leitura do token vigente, só o
-// `upsert` que troca o valor e reabre as 4h. Na prática é o que se quer —
-// quem abre o QR vai mostrá-lo agora —, e o código anterior deixa de valer
-// (quem já fez check-in continua com a presença gravada).
+// Abrir a tela LÊ o código vigente (`GET`, PEND-19) e só gera um novo (`POST`)
+// quando não há nenhum ou ele venceu (404). Assim abrir o QR no segundo
+// celular não invalida o que o outro líder está mostrando. Quem troca o
+// código é "Renovar", de propósito — e aí o anterior deixa de valer (quem já
+// fez check-in continua com a presença gravada).
 //
 // Regra da v2: o QR vale 4h e pode ser gerado até 24h depois do encontro. As
 // duas contas são da API (`createCheckinToken`); aqui só se mostra o
@@ -29,6 +30,7 @@ import { describeLoadError, type LoadErrorState } from "../../../../lib/api/load
 import { formatTime } from "../../../../lib/format/date";
 import {
   createCheckinToken,
+  getCurrentCheckinToken,
   getMeeting,
 } from "../../../../lib/pequenos-grupos/pequenos-grupos-client";
 import type { CheckinToken } from "../../../../lib/pequenos-grupos/types";
@@ -69,6 +71,22 @@ function describeFailure(error: unknown): LoadFailure {
   return { kind: "error", state: describeLoadError(error, "o código de check-in") };
 }
 
+/** Validade de um código novo (`CHECKIN_TOKEN_TTL_MINUTES` da API): para um
+ * código lido, e não gerado agora, é daqui que se deduz quando ele nasceu. */
+const TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
+
+/** Código vigente, se houver; 404 da API = não há, então gera um. */
+async function loadOrIssue(meetingId: string): Promise<IssuedToken> {
+  try {
+    const current = await getCurrentCheckinToken(meetingId);
+    return { ...current, issuedAt: new Date(current.expires_at).getTime() - TOKEN_TTL_MS };
+  } catch (err) {
+    if (!(err instanceof HttpError && err.status === 404)) throw err;
+  }
+  const issued = await createCheckinToken(meetingId);
+  return { ...issued, issuedAt: Date.now() };
+}
+
 interface IssuedToken extends CheckinToken {
   /** Quando o app recebeu o token — base da barra de tempo restante. */
   issuedAt: number;
@@ -95,10 +113,10 @@ export default function CheckinQrScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    createCheckinToken(meetingId)
+    loadOrIssue(meetingId)
       .then((issued) => {
         if (cancelled) return;
-        setToken({ ...issued, issuedAt: Date.now() });
+        setToken(issued);
         setNow(Date.now());
       })
       .catch((err: unknown) => {

@@ -17,6 +17,7 @@ import { TenantContextInterceptor } from '../common/interceptors/tenant-context.
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { VisitorService } from './visitor.service';
 import { CreateQrTokenDto } from './dto/create-qr-token.dto';
+import { UpdateQrTokenDto } from './dto/update-qr-token.dto';
 
 const MANAGE_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary'];
 
@@ -36,6 +37,17 @@ export class VisitorAdminController {
   @Roles(...MANAGE_ROLES)
   findAll(@CurrentUser() user: JwtPayload) {
     return this.visitorService.listQrTokens(user);
+  }
+
+  // PEND-19: renomear (e ligar/desligar) um QR.
+  @Patch(':id')
+  @Roles(...MANAGE_ROLES)
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateQrTokenDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.visitorService.updateQrToken(id, dto, user);
   }
 
   @Patch(':id/toggle')

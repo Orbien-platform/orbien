@@ -19,6 +19,12 @@ describe('UpdateQrTokenDto', () => {
     expect(errors.some((e) => e.property === 'label')).toBe(true);
   });
 
+  it('rejeita label com mais de 80 caracteres (PEND-19)', async () => {
+    const dto = plainToInstance(UpdateQrTokenDto, { label: 'x'.repeat(81) });
+    expect((await validate(dto)).some((e) => e.property === 'label')).toBe(true);
+    expect(await validate(plainToInstance(UpdateQrTokenDto, { label: 'x'.repeat(80) }))).toHaveLength(0);
+  });
+
   it('aceita is_active booleano', async () => {
     const dto = plainToInstance(UpdateQrTokenDto, { is_active: true });
     expect(await validate(dto)).toHaveLength(0);

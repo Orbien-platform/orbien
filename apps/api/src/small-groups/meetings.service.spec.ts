@@ -933,6 +933,86 @@ describe('MeetingsService', () => {
     });
   });
 
+  describe('getCurrentCheckinToken (PEND-19)', () => {
+    const MEETING = { id: 'meet1', small_group_id: 'sg1', smallGroup: { leader_person_id: 'p-lead' } };
+    const live = () => ({ token: 'tok-vigente', expires_at: new Date(Date.now() + 60 * 60 * 1000) });
+
+    it('devolve o token vigente sem gerar outro (nada de upsert)', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+      const current = live();
+      client.meetingCheckinToken.findUnique.mockResolvedValue(current);
+
+      await expect(serviceWith(client).getCurrentCheckinToken('meet1', USER)).resolves.toEqual(current);
+      expect(client.meetingCheckinToken.upsert).not.toHaveBeenCalled();
+      expect(client.meetingCheckinToken.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { group_meeting_id: 'meet1' } }),
+      );
+    });
+
+    it('404 quando não há token', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+      client.meetingCheckinToken.findUnique.mockResolvedValue(null);
+      await expect(serviceWith(client).getCurrentCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('404 quando o token venceu — não devolve código morto', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+      client.meetingCheckinToken.findUnique.mockResolvedValue({
+        token: 'velho',
+        expires_at: new Date(Date.now() - 1000),
+      });
+      await expect(serviceWith(client).getCurrentCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('cell_leader de outra célula leva 403 e o token nem é lido', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p-outro' });
+      client.groupMembership.findUnique.mockResolvedValue(null);
+
+      await expect(serviceWith(client).getCurrentCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(client.meetingCheckinToken.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('cell_leader que é só membro comum da célula também leva 403', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+      client.userAccount.findUnique.mockResolvedValue({ person_id: 'p-x' });
+      client.groupMembership.findUnique.mockResolvedValue({ role: 'member' });
+      await expect(serviceWith(client).getCurrentCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it.each(['tenant_admin', 'admin_congregation', 'pastor', 'secretary'])(
+      '%s lê o código de qualquer encontro sem checar liderança',
+      async (role) => {
+        const client = clientWith();
+        client.meetingCheckinToken.findUnique.mockResolvedValue(live());
+        const result = await serviceWith(client).getCurrentCheckinToken('meet1', { ...USER, roles: [role] });
+        expect(result.token).toBe('tok-vigente');
+        expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+      },
+    );
+
+    it('reunião inexistente para cell_leader é 404', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(null);
+      await expect(serviceWith(client).getCurrentCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('checkin', () => {
     it('lança NotFoundException quando o token não existe', async () => {
       const client = clientWith();

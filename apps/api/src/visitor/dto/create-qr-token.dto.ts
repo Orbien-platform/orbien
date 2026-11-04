@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { VisitOrigin } from '@prisma/client';
 
@@ -17,6 +18,7 @@ export class CreateQrTokenDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(80, { message: 'label deve ter no máximo 80 caracteres' })
   label?: string;
 
   @IsOptional()

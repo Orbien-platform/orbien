@@ -84,6 +84,19 @@ export async function createCheckinToken(meetingId: string): Promise<CheckinToke
   );
 }
 
+/**
+ * `GET /small-groups/meetings/:meetingId/checkin-token` (PEND-19): lê o código
+ * vigente **sem gerar outro**, para abrir a tela do QR sem invalidar o que
+ * outro líder está mostrando. 404 = não há código vigente (nunca gerado ou
+ * vencido) — quem chama decide gerar com `createCheckinToken`.
+ */
+export async function getCurrentCheckinToken(meetingId: string): Promise<CheckinToken> {
+  return authenticatedRequest<CheckinToken>(
+    "get",
+    `/small-groups/meetings/${meetingId}/checkin-token`,
+  );
+}
+
 /** `POST /small-groups/meetings/checkin` (PROD-12): o membro manda o token lido. */
 export async function checkIn(token: string): Promise<CheckinResult> {
   return authenticatedRequest<CheckinResult>("post", "/small-groups/meetings/checkin", {

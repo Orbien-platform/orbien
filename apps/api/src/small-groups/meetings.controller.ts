@@ -130,6 +130,16 @@ export class MeetingsController {
     return this.meetingsService.createCheckinToken(meetingId, user);
   }
 
+  // PEND-19: lê o código vigente sem rotacionar (404 se não há ou venceu).
+  @Get('meetings/:meetingId/checkin-token')
+  @Roles(...MEETING_WRITE_ROLES)
+  getCurrentCheckinToken(
+    @Param('meetingId', ParseUUIDPipe) meetingId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.meetingsService.getCurrentCheckinToken(meetingId, user);
+  }
+
   // PROD-12: o membro escaneia o QR. Sem :meetingId no path — o token já
   // identifica o encontro —, e sem bypass de papel: MeetingsService exige
   // GroupMembership real mesmo para quem está em MEETING_LIST_READ_ROLES por

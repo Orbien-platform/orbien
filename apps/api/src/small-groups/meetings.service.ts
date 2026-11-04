@@ -54,7 +54,10 @@ const MATERIAL_LEADER_ROLES = ['cell_leader', 'admin_congregation', 'tenant_admi
 // Os dois papéis que mexem em material de qualquer PG da congregação. Os demais
 // (`cell_leader`) só mexem no do PG que lideram — o RLS filtra por congregação,
 // não por papel.
-const MATERIAL_ADMIN_ROLES = ['tenant_admin', 'admin_congregation'];
+// PEND-19: quem lê o código vigente de qualquer encontro da congregação — os
+// mesmos que o `POST` já deixa gerar sem ser líder do PG.
+const CHECKIN_READ_ANY_ROLES = ['tenant_admin', 'admin_congregation', 'pastor', 'secretary'];
+const MATERIAL_ADMIN_ROLES =['tenant_admin', 'admin_congregation'];
 
 // Espelha `MEETING_READ_ROLES` do controller — papéis de liderança que já
 // enxergam grupos que não lideram (ex.: `pastor`/`secretary` cobrindo a rede
@@ -263,7 +266,11 @@ export class MeetingsService {
    * que lidera (líder titular do PG, ou `leader`/`trainee` na membership).
    * Devolve o PG do encontro.
    */
-  async assertCanManageMaterials(meetingId: string, user: JwtPayload): Promise<string> {
+  async assertCanManageMaterials(
+    meetingId: string,
+    user: JwtPayload,
+    deniedMessage = 'Só quem lidera este grupo pode enviar material para ele',
+  ): Promise<string> {
     const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
       select: {
@@ -296,7 +303,7 @@ export class MeetingsService {
         })
       : null;
     if (!membership || !['leader', 'trainee'].includes(membership.role)) {
-      throw new ForbiddenException('Só quem lidera este grupo pode enviar material para ele');
+      throw new ForbiddenException(deniedMessage);
     }
     return meeting.small_group_id;
   }
@@ -558,6 +565,37 @@ export class MeetingsService {
     });
 
     return { token: checkinToken.token, expires_at: checkinToken.expires_at };
+  }
+
+  /**
+   * PEND-19: lê o código de check-in vigente do encontro **sem gerar outro**.
+   * Abrir a tela do QR no app só precisa mostrar o que já existe — o `POST`
+   * rotaciona o token e invalidaria o QR que outro líder está projetando.
+   * Sem token ou vencido: 404, e quem chama decide se gera (`POST`).
+   * Escopo: `pastor`/`secretary` (que já geram pelo `POST`) e a administração
+   * passam; `cell_leader` só lê o do PG que lidera (`assertCanManageMaterials`)
+   * — o de outra célula dá 403 e não revela se há código. O token só trafega
+   * na resposta: nunca em log, nem em `audit_logs` (o interceptor não grava
+   * corpo de resposta).
+   */
+  async getCurrentCheckinToken(meetingId: string, user: JwtPayload): Promise<CheckinTokenResult> {
+    const wideAccess = user.roles.some((role) => CHECKIN_READ_ANY_ROLES.includes(role));
+    if (!wideAccess) {
+      await this.assertCanManageMaterials(
+        meetingId,
+        user,
+        'Só quem lidera este grupo pode ver o código de check-in',
+      );
+    }
+
+    const current = await this.prisma.client.meetingCheckinToken.findUnique({
+      where: { group_meeting_id: meetingId },
+      select: { token: true, expires_at: true },
+    });
+    if (!current || current.expires_at <= new Date()) {
+      throw new NotFoundException('Este encontro não tem código de check-in vigente');
+    }
+    return { token: current.token, expires_at: current.expires_at };
   }
 
   /**

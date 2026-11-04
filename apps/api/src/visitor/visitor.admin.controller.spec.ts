@@ -27,6 +27,7 @@ describe('VisitorAdminController', () => {
     visitorService = {
       createQrToken: jest.fn(),
       listQrTokens: jest.fn(),
+      updateQrToken: jest.fn(),
       toggleQrToken: jest.fn(),
     } as unknown as jest.Mocked<VisitorService>;
     controller = new VisitorAdminController(visitorService);
@@ -51,6 +52,17 @@ describe('VisitorAdminController', () => {
     expect(visitorService.listQrTokens).toHaveBeenCalledWith(user);
     expect(result).toEqual([{ id: 'qr1' }]);
     expect(rolesFor('findAll')).toEqual(MANAGE_ROLES);
+  });
+
+  it('update delega ao service com id, dto e usuário, e exige papel de gestão (PEND-19)', async () => {
+    visitorService.updateQrToken.mockResolvedValue({ id: 'qr1', label: 'Novo' } as never);
+    const dto = { label: 'Novo' } as never;
+
+    const result = await controller.update('qr1', dto, user);
+
+    expect(visitorService.updateQrToken).toHaveBeenCalledWith('qr1', dto, user);
+    expect(result).toEqual({ id: 'qr1', label: 'Novo' });
+    expect(rolesFor('update')).toEqual(MANAGE_ROLES);
   });
 
   it('toggle delega ao service com id e usuário, e exige papel de gestão', async () => {

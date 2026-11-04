@@ -6,6 +6,7 @@ import { VisitsService } from '../persons/visits.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { RegisterVisitorDto } from './dto/register-visitor.dto';
 import { CreateQrTokenDto } from './dto/create-qr-token.dto';
+import { UpdateQrTokenDto } from './dto/update-qr-token.dto';
 import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto';
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 import { writeAuditLog } from '../common/audit/write-audit-log';
@@ -57,7 +58,35 @@ export type PublicQrInfo = {
   church_name: string;
   origin: QrToken['origin'];
   label: string | null;
+  /** PEND-19: marca da igreja — só cor e logo, já saneados; nulo = padrão da Orbien. */
+  brand: PublicQrBrand;
 };
+
+export type PublicQrBrand = {
+  primary_color: string | null;
+  accent_color: string | null;
+  logo_url: string | null;
+  logo_url_dark: string | null;
+};
+
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** Valor que o tenant digitou vira CSS e `<img src>` na página pública: só
+ * passa cor hex e URL https — o resto vira nulo e a página usa o padrão. */
+function publicColor(value: string | null | undefined): string | null {
+  const v = value?.trim();
+  return v && HEX_COLOR.test(v) ? v : null;
+}
+
+function publicLogoUrl(value: string | null | undefined): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  try {
+    return new URL(v).protocol === 'https:' ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 type RegisterResult =
   | { status: 'registered'; message: string }
@@ -88,6 +117,18 @@ export class VisitorService {
         origin: true,
         label: true,
         congregation: { select: { name: true } },
+        tenant: {
+          select: {
+            brandingConfig: {
+              select: {
+                primary_color: true,
+                secondary_color: true,
+                logo_url: true,
+                logo_url_dark: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -95,10 +136,17 @@ export class VisitorService {
       throw new NotFoundException('QR code inválido ou expirado');
     }
 
+    const branding = qrToken.tenant.brandingConfig;
     return {
       church_name: qrToken.congregation.name,
       origin: qrToken.origin,
       label: qrToken.label,
+      brand: {
+        primary_color: publicColor(branding?.primary_color),
+        accent_color: publicColor(branding?.secondary_color),
+        logo_url: publicLogoUrl(branding?.logo_url),
+        logo_url_dark: publicLogoUrl(branding?.logo_url_dark),
+      },
     };
   }
 
@@ -388,6 +436,23 @@ export class VisitorService {
         congregation_id: user.congregation_id,
       },
       orderBy: { created_at: 'desc' },
+    });
+  }
+
+  /** PEND-19: renomeia (e, se vier, liga/desliga) um QR da congregação. */
+  async updateQrToken(id: string, dto: UpdateQrTokenDto, user: JwtPayload): Promise<QrToken> {
+    const qr = await this.prisma.client.qrToken.findFirst({
+      where: { id, tenant_id: user.tenant_id, congregation_id: user.congregation_id },
+      select: { id: true },
+    });
+    if (!qr) throw new NotFoundException('QR token não encontrado');
+
+    return this.prisma.client.qrToken.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label.trim() || null } : {}),
+        ...(dto.is_active !== undefined ? { is_active: dto.is_active } : {}),
+      },
     });
   }
 
