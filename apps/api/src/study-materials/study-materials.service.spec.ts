@@ -144,6 +144,20 @@ describe('StudyMaterialsService', () => {
       expect(storageService.upload).not.toHaveBeenCalled();
     });
 
+    it('recusa arquivo disfarçado (nome e mimetype de PDF, conteúdo de executável) sem tocar no storage', async () => {
+      const client = clientWith();
+      client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }]);
+      const { service, storageService } = serviceWith(client);
+      const file = { originalname: 'a.pdf', buffer: Buffer.from('MZ\x90\x00'), mimetype: 'application/pdf' } as Express.Multer.File;
+
+      await expect(
+        service.create({ source_type: 'pdf', publish_at: '2026-09-10' } as never, file, USER),
+      ).rejects.toThrow(/conteúdo do arquivo/);
+
+      expect(storageService.upload).not.toHaveBeenCalled();
+      expect(client.studyMaterial.create).not.toHaveBeenCalled();
+    });
+
     it('cria o material com todos os grupos da congregação quando target_group_ids não é informado', async () => {
       const client = clientWith();
       client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }, { id: 'g2' }]);
@@ -283,7 +297,7 @@ describe('StudyMaterialsService', () => {
       const client = ready();
       client.network.findFirst.mockResolvedValue(null);
       const { service, storageService } = serviceWith(client);
-      const file = { originalname: 'a.pdf', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
+      const file = { originalname: 'a.pdf', buffer: Buffer.from('%PDF-1.4 conteudo'), mimetype: 'application/pdf' } as Express.Multer.File;
 
       await expect(
         service.create({ title: 'T', source_type: 'pdf', publish_at: '2026-09-10', audience: 'network', network_id: 'n9' } as never, file, USER),
@@ -296,7 +310,7 @@ describe('StudyMaterialsService', () => {
       client.smallGroup.findMany.mockResolvedValue([{ id: 'g1' }]);
       client.studyMaterial.create.mockRejectedValue(new Error('db'));
       const { service, storageService } = serviceWith(client);
-      const file = { originalname: 'a.pdf', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
+      const file = { originalname: 'a.pdf', buffer: Buffer.from('%PDF-1.4 conteudo'), mimetype: 'application/pdf' } as Express.Multer.File;
 
       await expect(
         service.create({ title: 'T', source_type: 'pdf', publish_at: '2026-09-10' } as never, file, USER),
@@ -615,7 +629,7 @@ describe('StudyMaterialsService', () => {
       client.studyMaterial.updateMany.mockResolvedValue({ count: 1 });
       client.studyMaterial.findUniqueOrThrow.mockResolvedValue({ id: 'm1' });
       const { service, storageService } = serviceWith(client);
-      const file = { originalname: 'novo.PDF', buffer: Buffer.from('x'), mimetype: 'application/pdf' } as Express.Multer.File;
+      const file = { originalname: 'novo.PDF', buffer: Buffer.from('%PDF-1.7 novo'), mimetype: 'application/pdf' } as Express.Multer.File;
 
       await service.update('m1', {} as never, file, USER);
 
@@ -651,7 +665,7 @@ describe('StudyMaterialsService', () => {
       const { service } = serviceWith(client);
       const file = {
         originalname: 'novo.docx',
-        buffer: Buffer.from('x'),
+        buffer: Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('word/document.xml')]),
         mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       } as Express.Multer.File;
 

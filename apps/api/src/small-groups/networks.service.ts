@@ -83,7 +83,16 @@ export class NetworksService {
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('Rede não encontrada');
-    return this.prisma.client.network.delete({ where: { id } });
+    // O FK zera `study_materials.network_id` (SET NULL). A lista de PGs do
+    // material já foi gravada em `material_targets`, então o alcance passa a ser
+    // "grupos" — sem isso fica `audience = 'network'` apontando para nada.
+    return this.prisma.runInTx(async (tx) => {
+      await tx.studyMaterial.updateMany({
+        where: { network_id: id, audience: 'network' },
+        data: { audience: 'group' },
+      });
+      return tx.network.delete({ where: { id } });
+    });
   }
 
   // Status da meta de saúde da rede (PROD-20, CEL20-08): agrega o semáforo

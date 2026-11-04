@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { StorageService } from '../storage/storage.service';
@@ -306,13 +307,24 @@ export class MeetingsService {
     dto: CreateMeetingMaterialDto,
     user: JwtPayload,
   ): Promise<GroupMeetingMaterial> {
-    await this.assertCanManageMaterials(meetingId, user);
+    const smallGroupId = await this.assertCanManageMaterials(meetingId, user);
 
     const material = await this.prisma.client.studyMaterial.findUnique({
       where: { id: dto.material_id },
-      select: { id: true },
+      select: {
+        id: true,
+        materialTargets: { where: { small_group_id: smallGroupId }, select: { small_group_id: true }, take: 1 },
+      },
     });
     if (!material) throw new NotFoundException('Material de estudo não encontrado');
+    // Vincular material que não alcança o PG do encontro o deixaria visível no
+    // encontro e fora da lista do PG (`material_targets`), e o aviso iria a
+    // quem a administração não escolheu.
+    if (material.materialTargets.length === 0) {
+      throw new UnprocessableEntityException(
+        'Este material não está destinado ao grupo deste encontro. Ajuste o alcance dele em Materiais ou envie um arquivo novo.',
+      );
+    }
 
     const existing = await this.prisma.client.groupMeetingMaterial.findUnique({
       where: {
