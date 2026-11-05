@@ -99,6 +99,49 @@ describe("EncontroScreen", () => {
     expect(screen.queryByTestId("material-gm1-abrir")).toBeNull();
   });
 
+  it("material rich_text em Markdown renderiza negrito, título e lista", async () => {
+    mockListMaterials.mockResolvedValue([
+      {
+        id: "gm1",
+        visibility: "all",
+        material: {
+          id: "mat1",
+          title: "Reflexão",
+          source_type: "rich_text",
+          file_url: null,
+          rich_content: "## Tema\n\nUm **ponto** importante\n\n1. um\n2. dois\n\n[ok](https://igreja.example) [mau](javascript:alert(1))",
+        },
+      },
+    ]);
+
+    await act(async () => {
+      render(<EncontroScreen />);
+    });
+
+    expect(screen.getByText("Tema")).toBeTruthy();
+    expect(screen.getByText("ponto")).toBeTruthy();
+    expect(screen.getByText("um")).toBeTruthy();
+    expect(screen.queryByText(/\*\*|##/)).toBeNull();
+    // Só o link http(s) é tocável.
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("material rich_text sem rich_content não quebra", async () => {
+    mockListMaterials.mockResolvedValue([
+      {
+        id: "gm1",
+        visibility: "all",
+        material: { id: "mat1", title: "Reflexão", source_type: "rich_text", file_url: null, rich_content: null },
+      },
+    ]);
+
+    await act(async () => {
+      render(<EncontroScreen />);
+    });
+
+    expect(screen.getByText("Reflexão")).toBeTruthy();
+  });
+
   it("sem material visível mostra estado vazio explícito (AC5)", async () => {
     mockListMaterials.mockResolvedValue([]);
 
