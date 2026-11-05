@@ -6,6 +6,10 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
+  useFocusEffect: (callback: () => () => void) => {
+    const { useEffect } = jest.requireActual("react");
+    useEffect(callback, [callback]);
+  },
 }));
 
 const mockUseAuth = jest.fn();
@@ -55,7 +59,7 @@ describe("AutocadastroScreen", () => {
     mockDecodeJwtPayload.mockReturnValue({ roles: ["secretary"] });
   });
 
-  it("lista só os QRs ativos, com origem e cadastros", async () => {
+  it("lista os ativos e, à parte, os desativados, com origem e cadastros", async () => {
     mockListSignupQrs.mockResolvedValue([
       qr(),
       qr({ id: "q2", label: null, origin: "event", scan_count: 1 }),
@@ -67,18 +71,49 @@ describe("AutocadastroScreen", () => {
     expect(screen.getByTestId("autocadastro-qr-q1")).toHaveTextContent(/Culto · 12 cadastros/);
     // Sem rótulo, o título é a origem.
     expect(screen.getByTestId("autocadastro-qr-q2")).toHaveTextContent("EventoEvento · 1 cadastro");
-    expect(screen.queryByTestId("autocadastro-qr-q3")).toBeNull();
+    expect(screen.getByTestId("autocadastro-qrs-desativados")).toContainElement(
+      screen.getByTestId("autocadastro-qr-q3"),
+    );
+    expect(screen.getByTestId("autocadastro-qrs")).not.toContainElement(
+      screen.getByTestId("autocadastro-qr-q3"),
+    );
   });
 
-  it("tocar num QR abre a tela cheia com o token e o título", async () => {
+  it("tocar num QR abre o gerenciamento com o que a tela precisa", async () => {
     mockListSignupQrs.mockResolvedValue([qr()]);
     await open();
 
     fireEvent.press(screen.getByTestId("autocadastro-qr-q1"));
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: "/autocadastro-qr",
-      params: { token: "tok-1", title: "Culto da manhã" },
+      pathname: "/autocadastro-editar",
+      params: {
+        id: "q1",
+        token: "tok-1",
+        origin: "service",
+        label: "Culto da manhã",
+        active: "1",
+        scans: "12",
+      },
     });
+  });
+
+  it("QR desativado também abre o gerenciamento, marcado como inativo", async () => {
+    mockListSignupQrs.mockResolvedValue([qr({ is_active: false, label: null })]);
+    await open();
+
+    expect(screen.queryByTestId("autocadastro-vazio")).toBeNull();
+    fireEvent.press(screen.getByTestId("autocadastro-qr-q1"));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/autocadastro-editar",
+      params: expect.objectContaining({ active: "0", label: "" }),
+    });
+  });
+
+  it("Novo QR leva ao formulário", async () => {
+    mockListSignupQrs.mockResolvedValue([qr()]);
+    await open();
+    fireEvent.press(screen.getByTestId("autocadastro-novo"));
+    expect(mockPush).toHaveBeenCalledWith("/autocadastro-novo");
   });
 
   it("enquanto carrega, mostra o carregando", async () => {
@@ -88,7 +123,7 @@ describe("AutocadastroScreen", () => {
   });
 
   it("sem nenhum ativo: estado vazio cria o QR do culto e já o abre", async () => {
-    mockListSignupQrs.mockResolvedValue([qr({ is_active: false })]);
+    mockListSignupQrs.mockResolvedValue([]);
     mockCreateSignupQr.mockResolvedValue(qr({ id: "q9", token: "tok-9", label: "Culto" }));
     await open();
 

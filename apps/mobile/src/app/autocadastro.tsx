@@ -7,15 +7,16 @@
 // web, sem instalar o app.
 //
 // Sem nenhum QR ativo, a ação do estado vazio cria o do culto — é o caso de
-// quase toda igreja, e criar outro tipo (grupo, evento) ou desativar fica
-// para o painel.
+// quase toda igreja. "Novo QR" (`/autocadastro-novo`) cria o de grupo, evento
+// ou outro; tocar num QR abre `/autocadastro-editar`, onde se mostra, renomeia
+// e liga/desliga — o mesmo desenho do painel web (`/pessoas/qr-visitantes`).
 //
 // Papéis em `SIGNUP_QR_ROLES` (src/lib/auth/roles.ts), espelho de
 // `MANAGE_ROLES` da API. A Mais já esconde a linha de quem não tem;
 // aqui o cadeado cobre quem chega por link, e o 403 da API, quem tem papel
 // no token mas não no banco.
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { Alert } from "../components/Alert";
@@ -66,27 +67,45 @@ export default function AutocadastroScreen() {
   const [createError, setCreateError] = useState(false);
   const creatingRef = useRef(false);
 
-  useEffect(() => {
-    if (!allowed) return;
-    let cancelled = false;
-    listSignupQrs()
-      .then((all) => {
-        if (!cancelled) setQrs(all.filter((item) => item.is_active));
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof HttpError && err.status === 403) setForbidden(true);
-        else setError(describeLoadError(err, "os QRs de autocadastro"));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [allowed, retryCount]);
+  // Relê ao voltar de "Novo QR" / "Gerenciar": o que mudou lá aparece aqui.
+  useFocusEffect(
+    useCallback(() => {
+      if (!allowed) return;
+      let cancelled = false;
+      listSignupQrs()
+        .then((all) => {
+          if (!cancelled) setQrs(all);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          if (err instanceof HttpError && err.status === 403) setForbidden(true);
+          else setError(describeLoadError(err, "os QRs de autocadastro"));
+        });
+      return () => {
+        cancelled = true;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allowed, retryCount]),
+  );
 
   function open(item: SignupQr) {
     router.push({
       pathname: "/autocadastro-qr",
       params: { token: item.token, title: qrTitle(item) },
+    });
+  }
+
+  function manage(item: SignupQr) {
+    router.push({
+      pathname: "/autocadastro-editar",
+      params: {
+        id: item.id,
+        token: item.token,
+        origin: item.origin,
+        label: item.label ?? "",
+        active: item.is_active ? "1" : "0",
+        scans: String(item.scan_count),
+      },
     });
   }
 
@@ -97,7 +116,7 @@ export default function AutocadastroScreen() {
     setCreateError(false);
     try {
       const created = await createSignupQr("service", "Culto");
-      setQrs([created]);
+      setQrs((current) => [created, ...(current ?? [])]);
       open(created);
     } catch {
       setCreateError(true);
@@ -146,7 +165,10 @@ export default function AutocadastroScreen() {
     );
   }
 
-  if (qrs.length === 0) {
+  const active = qrs.filter((item) => item.is_active);
+  const inactive = qrs.filter((item) => !item.is_active);
+
+  if (active.length === 0 && inactive.length === 0) {
     return (
       <StatusMessage
         testID="autocadastro-vazio"
@@ -173,31 +195,50 @@ export default function AutocadastroScreen() {
     );
   }
 
+  const rows = (list: SignupQr[]) =>
+    list.map((item) => ({
+      key: item.id,
+      testID: `autocadastro-qr-${item.id}`,
+      label: qrTitle(item),
+      sub: `${ORIGIN_LABELS[item.origin]} · ${
+        item.scan_count === 1 ? "1 cadastro" : `${item.scan_count} cadastros`
+      }`,
+      icon: QrCode,
+      onPress: () => manage(item),
+    }));
+
   return (
     <Screen scroll testID="autocadastro-lista">
       <Text style={[typography.body, styles.intro, { color: colors.textSecondary }]}>
-        Escolha o QR e projete no telão. O visitante lê com o celular e se cadastra numa página
-        da igreja, sem instalar o app.
+        Escolha o QR para projetar no telão. O visitante lê com o celular e se cadastra numa
+        página da igreja, sem instalar o app.
       </Text>
-      <SectionLabel trailing={String(qrs.length)}>Ativos</SectionLabel>
-      <ListGroup
-        testID="autocadastro-qrs"
-        items={qrs.map((item) => ({
-          key: item.id,
-          testID: `autocadastro-qr-${item.id}`,
-          label: qrTitle(item),
-          sub: `${ORIGIN_LABELS[item.origin]} · ${
-            item.scan_count === 1 ? "1 cadastro" : `${item.scan_count} cadastros`
-          }`,
-          icon: QrCode,
-          onPress: () => open(item),
-        }))}
+      <AppButton
+        testID="autocadastro-novo"
+        title="Novo QR"
+        icon={Plus}
+        variant="secondary"
+        onPress={() => router.push("/autocadastro-novo")}
       />
+      <View style={styles.spacer} />
+      {active.length > 0 ? (
+        <>
+          <SectionLabel trailing={String(active.length)}>Ativos</SectionLabel>
+          <ListGroup testID="autocadastro-qrs" items={rows(active)} />
+        </>
+      ) : null}
+      {inactive.length > 0 ? (
+        <>
+          <SectionLabel trailing={String(inactive.length)}>Desativados</SectionLabel>
+          <ListGroup testID="autocadastro-qrs-desativados" items={rows(inactive)} />
+        </>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   intro: { marginBottom: spacing.xl },
+  spacer: { height: spacing.xl },
   emptyAction: { alignSelf: "stretch", gap: spacing.md },
 });

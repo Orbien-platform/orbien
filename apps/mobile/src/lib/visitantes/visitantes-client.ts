@@ -106,10 +106,43 @@ export async function listSignupQrs(): Promise<SignupQr[]> {
   return authenticatedRequest<SignupQr[]>("get", "/admin/visitor/qr");
 }
 
-export async function createSignupQr(origin: VisitOrigin, label: string): Promise<SignupQr> {
+/** Rótulo vazio não vai no corpo; grupo só viaja quando há (origem "Grupo"). */
+export async function createSignupQr(
+  origin: VisitOrigin,
+  label: string,
+  smallGroupId?: string,
+): Promise<SignupQr> {
+  const name = label.trim();
   return authenticatedRequest<SignupQr>("post", "/admin/visitor/qr", {
-    body: { origin, label },
+    body: {
+      origin,
+      ...(name ? { label: name } : {}),
+      ...(smallGroupId ? { small_group_id: smallGroupId } : {}),
+    },
   });
+}
+
+/** `PATCH /admin/visitor/qr/:id` — renomeia e/ou liga/desliga. O endereço
+ * (token) não muda: o QR já impresso continua valendo. */
+export async function updateSignupQr(
+  id: string,
+  patch: { label?: string; is_active?: boolean },
+): Promise<SignupQr> {
+  return authenticatedRequest<SignupQr>("patch", `/admin/visitor/qr/${encodeURIComponent(id)}`, {
+    body: patch,
+  });
+}
+
+export interface GroupOption {
+  id: string;
+  name: string;
+}
+
+/** Grupos da congregação para escolher no QR de origem "Grupo" (mesma
+ * consulta do painel web). */
+export async function listGroupOptions(): Promise<GroupOption[]> {
+  const res = await authenticatedRequest<{ data: GroupOption[] }>("get", "/small-groups?limit=100");
+  return Array.isArray(res?.data) ? res.data : [];
 }
 
 /**

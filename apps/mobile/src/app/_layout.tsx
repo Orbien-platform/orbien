@@ -177,6 +177,8 @@ function ThemedShell() {
           <Stack.Screen name="grupo/encontro/[id]/qr" options={{ headerShown: false }} />
           <Stack.Screen name="checkin" options={{ headerShown: false }} />
           <Stack.Screen name="autocadastro" options={{ title: "QR de autocadastro" }} />
+          <Stack.Screen name="autocadastro-novo" options={{ title: "Novo QR" }} />
+          <Stack.Screen name="autocadastro-editar" options={{ title: "QR de autocadastro" }} />
           <Stack.Screen name="autocadastro-qr" options={{ headerShown: false }} />
         </Stack.Protected>
         {/* Enquanto `status` é "loading" as rotas autenticadas ainda não
