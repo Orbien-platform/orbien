@@ -3280,16 +3280,27 @@ aparelho, abrir um material de texto formatado (título, lista, negrito, link) n
 seção "Materiais" de um PG e no material de um encontro — sem `**`/`##` cru; um
 material antigo em texto puro continua legível; o link https abre no navegador.
 
-### PEND-24 · `e2e-prod` na `main` pode correr antes do deploy · aberto
+### ~~PEND-25 · `e2e-prod` na `main` pode correr antes do deploy~~ · fechado (aguarda 1ª execução no GitHub)
 
-Surgiu em 2026-11-04, ao fechar o desenho do e2e (PR da `PEND-19`). Em PR, o
-job `E2E (produção)` já deixa de fora os specs que o PR adiciona ou altera
-(`E2E_EXCLUDE_SPECS`); no **push para a `main`** a suíte inteira roda contra
-produção, e o job pode começar antes de a Vercel/Render terminarem o deploy do
-merge — um spec de tela nova falharia por ser prematuro. Hoje o remédio é
-reexecutar o job depois do deploy. Falta um jeito barato de o job esperar o
-deploy (por exemplo, consultar a versão publicada no web antes de rodar). Ver
-`docs/CI.md`, "E2E: só no GitHub".
+Surgiu em 2026-11-04, ao fechar o desenho do e2e (PR da `PEND-19`); o número era
+`PEND-24`, duplicado com o do `password_reset_tokens` (que o mantém, por ser
+citado em outros lugares). Em PR, o job `E2E (produção)` já deixa de fora os
+specs que o PR adiciona ou altera (`E2E_EXCLUDE_SPECS`); no **push para a
+`main`** a suíte inteira roda contra produção, e o job podia começar antes de a
+Vercel/Render terminarem o deploy do merge.
+
+**Fechado em 2026-11-05:** passo "Esperar o deploy do merge" no `e2e-prod`, só
+em `push` (`scripts/esperar-deploy.mjs`). Poll de 20 s, até 15 min. Web: status
+`Vercel – orbien-web` no commit (a Vercel reporta ao GitHub, inclusive o build
+ignorado); API: `GET /api/health` passa a devolver `commit`
+(`RENDER_GIT_COMMIT`) — o Render não reporta ao GitHub — comparado com o alvo
+respeitando o `buildFilter` do `render.yaml`. Prazo estourado = exit 3 com
+`::error::` de deploy (distinto de falha de spec); deploy da Vercel falho =
+exit 4. Detalhe e como reexecutar: `docs/CI.md`, "E2E: só no GitHub".
+
+**Evidência:** `scripts/esperar-deploy.test.mjs` (9 testes, no portão),
+`app.controller.spec.ts`. **Falta:** confirmar na primeira execução real na
+`main` — o poll não fala com as plataformas fora do GitHub.
 
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 

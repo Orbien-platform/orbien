@@ -178,6 +178,8 @@ npx turbo run lint >/tmp/prepush-lint.log 2>&1 && passa "lint" \
   || { bloqueia "lint falhou — veja /tmp/prepush-lint.log"; grep -E "problems|error" /tmp/prepush-lint.log | tail -8 | sed 's/^/      /'; }
 node scripts/check-skills.mjs >/dev/null 2>&1 && passa "skills consistentes" \
   || bloqueia "skills inconsistentes — rode 'node scripts/check-skills.mjs'"
+node --test scripts/esperar-deploy.test.mjs >/tmp/prepush-esperar.log 2>&1 && passa "espera de deploy do e2e-prod (testes)" \
+  || { bloqueia "scripts/esperar-deploy.test.mjs falhou — veja /tmp/prepush-esperar.log"; grep -E "^not ok|Error" /tmp/prepush-esperar.log | head -6 | sed 's/^/      /'; }
 
 fi # -z "$SO"
 
