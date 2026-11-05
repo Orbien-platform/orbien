@@ -8,12 +8,16 @@
  * QR de visitante, domínio próprio) e o `impersonate`.
  *
  * Estado que este arquivo prende:
+ *   - Sem contexto, `orbien_app` lê 0 linhas das quatro tabelas.
  *   - Cada função de 034 responde por UM parâmetro exato e devolve só as
  *     colunas devidas (nada de `cloudflare_*`).
+ *   - Com `app.tenant_id` fixado, `orbien_app` enxerga só o PRÓPRIO tenant
+ *     (herança de `app_user`): é o que o callback OAuth e as células públicas
+ *     usam depois de resolver o tenant.
  */
 
 import type { Prisma } from '@prisma/client';
-import { prisma, prismaAdmin, runAsTenantWithRole } from '../helpers/rls';
+import { prisma, prismaAdmin, runAsTenant, runAsTenantWithRole } from '../helpers/rls';
 
 const ts = Date.now();
 
@@ -98,6 +102,71 @@ afterAll(async () => {
   await prismaAdmin.tenant.deleteMany({ where: { id: { in: [tenantAId, tenantBId] } } });
   await prismaAdmin.$disconnect();
   await prisma.$disconnect();
+});
+
+describe('leitura direta sem contexto — fechada (PEND-04 C)', () => {
+  it('as quatro tabelas existem para o dono mas orbien_app lê 0 linhas', async () => {
+    const ids = { in: [tenantAId, tenantBId] };
+    expect(await prismaAdmin.tenant.count({ where: { id: ids } })).toBe(2);
+    expect(await prismaAdmin.congregation.count({ where: { tenant_id: ids } })).toBe(3);
+    expect(await prismaAdmin.brandingConfig.count({ where: { tenant_id: ids } })).toBe(2);
+    expect(await prismaAdmin.tenantPlan.count({ where: { tenant_id: ids } })).toBe(1);
+
+    expect(await prisma.tenant.findMany({ where: { id: ids } })).toEqual([]);
+    expect(await prisma.congregation.findMany({ where: { tenant_id: ids } })).toEqual([]);
+    expect(await prisma.brandingConfig.findMany({ where: { tenant_id: ids } })).toEqual([]);
+    expect(await prisma.tenantPlan.findMany({ where: { tenant_id: ids } })).toEqual([]);
+  });
+
+  it('o slug, que era a consulta das rotas públicas, não acha mais o tenant', async () => {
+    expect(await prisma.tenant.findUnique({ where: { slug: slugA } })).toBeNull();
+  });
+
+  it('o token OAuth da Cloudflare não é alcançável sem contexto', async () => {
+    const rows = await prisma.$queryRaw<unknown[]>`
+      SELECT cloudflare_access_token_encrypted FROM branding_configs
+       WHERE cloudflare_access_token_encrypted IS NOT NULL
+         AND tenant_id IN (${tenantAId}, ${tenantBId})
+    `;
+    expect(rows).toEqual([]);
+  });
+
+  it('não escreve nas quatro tabelas sem contexto', async () => {
+    await expect(
+      prisma.tenant.create({ data: { slug: `intruso-${ts}`, name: 'Intruso' } }),
+    ).rejects.toThrow(/row-level security|42501/i);
+    expect(await prisma.brandingConfig.updateMany({ where: { tenant_id: tenantAId }, data: { app_name: 'hack' } })).toEqual({ count: 0 });
+    expect(await prisma.tenantPlan.updateMany({ where: { tenant_id: tenantAId }, data: { plan: 'starter' } })).toEqual({ count: 0 });
+    expect(await prisma.congregation.updateMany({ where: { tenant_id: tenantAId }, data: { name: 'hack' } })).toEqual({ count: 0 });
+    const admin = await prismaAdmin.brandingConfig.findUnique({ where: { tenant_id: tenantAId } });
+    expect(admin?.app_name).toBe('Igreja A');
+  });
+});
+
+describe('com app.tenant_id fixado, orbien_app vê só o próprio tenant', () => {
+  it('lê e escreve a marca do tenant do contexto, nunca a do outro', async () => {
+    await runAsTenant(tenantAId, congA1Id, async (tx) => {
+      const own = await tx.brandingConfig.findUnique({ where: { tenant_id: tenantAId } });
+      expect(own?.app_name).toBe('Igreja A');
+      expect(await tx.brandingConfig.findUnique({ where: { tenant_id: tenantBId } })).toBeNull();
+      expect(await tx.tenant.findUnique({ where: { id: tenantBId } })).toBeNull();
+      expect(await tx.tenantPlan.findUnique({ where: { tenant_id: tenantBId } })).toBeNull();
+
+      // O que o callback OAuth faz.
+      const upd = await tx.brandingConfig.update({
+        where: { tenant_id: tenantAId },
+        data: { cloudflare_zone_id: `zona-${ts}` },
+      });
+      expect(upd.cloudflare_zone_id).toBe(`zona-${ts}`);
+    });
+  });
+
+  it('o contexto de A não escreve na marca de B', async () => {
+    const r = await runAsTenant(tenantAId, congA1Id, (tx) =>
+      tx.brandingConfig.updateMany({ where: { tenant_id: tenantBId }, data: { app_name: 'hack' } }),
+    );
+    expect(r.count).toBe(0);
+  });
 });
 
 interface TenantRow { tenant_id: string; name: string; is_active: boolean; app_name: string | null }

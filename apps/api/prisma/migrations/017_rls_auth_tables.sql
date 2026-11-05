@@ -37,14 +37,12 @@
 --     `auth.service.ts` cria e revoga token no refresh, no logout e no login
 --     (`:254`, `:283`, `:293`, `:327`, `:478`), tudo pelo client base. Trocar
 --     por `FOR SELECT` derruba login e refresh em produção.
---   * Não mexe em `tenants`, `congregations`, `branding_configs` e
---     `tenant_plans`. As quatro são lidas pelo mesmo caminho e também por rota
---     pública já existente — `public-small-groups.service.ts:163,168` resolve
---     a igreja pelo slug e lê o `app_name` do branding sem JWT nenhum.
---     Apertá-las é a ação C do PEND-04, e ela depende de trocar os `include:`
---     do `auth.service.ts` por `select:` explícito antes: `include` faz o
---     Prisma pedir TODAS as colunas escalares do model, então um GRANT por
---     coluna quebraria o login com 42501. Não cabe aqui.
+--   * Não declara mais `tenants`, `congregations`, `branding_configs` e
+--     `tenant_plans` (ação C, fechada): a leitura pública e a de auth passaram
+--     às funções de `034_rls_public_lookup.sql` e a policy cai em
+--     `035_rls_public_tables_close.sql`. Antes eram lidas por rota pública
+--     (`public-small-groups`, PIX público, QR de visitante, domínio próprio) e
+--     pelo `impersonate`, todas mapeadas e migradas — ver 034.
 --
 -- D. (fechada) Restringir por LINHA exigiu mover as leituras do login para
 --    funções SECURITY DEFINER (`033_rls_auth_lookup.sql`); com elas no lugar, a
@@ -75,32 +73,16 @@
 -- o caminho de reparo — que é o que "idempotente" tem que significar aqui.
 -- -----------------------------------------------------------------------------
 
--- As cinco que continuam FOR ALL. São os consumidores vivos: leitura no login
--- e nas rotas públicas, e — em `refresh_tokens` — escrita também.
-DROP POLICY IF EXISTS orbien_app_auth ON tenants;
-CREATE POLICY orbien_app_auth ON tenants
-  AS PERMISSIVE FOR ALL TO orbien_app
-  USING (true)
-  WITH CHECK (true);
-
-DROP POLICY IF EXISTS orbien_app_auth ON congregations;
-CREATE POLICY orbien_app_auth ON congregations
-  AS PERMISSIVE FOR ALL TO orbien_app
-  USING (true)
-  WITH CHECK (true);
-
-DROP POLICY IF EXISTS orbien_app_auth ON branding_configs;
-CREATE POLICY orbien_app_auth ON branding_configs
-  AS PERMISSIVE FOR ALL TO orbien_app
-  USING (true)
-  WITH CHECK (true);
-
-DROP POLICY IF EXISTS orbien_app_auth ON tenant_plans;
-CREATE POLICY orbien_app_auth ON tenant_plans
-  AS PERMISSIVE FOR ALL TO orbien_app
-  USING (true)
-  WITH CHECK (true);
-
+-- C. tenants, congregations, branding_configs, tenant_plans: NÃO são mais
+-- declaradas aqui. A policy `orbien_app_auth` delas é derrubada por
+-- `035_rls_public_tables_close.sql` (que roda depois); a leitura sem contexto
+-- passou às funções de `034_rls_public_lookup.sql`.
+--
+-- ROLLBACK da ação C: reverter este trecho (volta o bloco de quatro CREATE
+-- POLICY abaixo no histórico do git) e o passo do 035 no bootstrap. O bootstrap
+-- recria `orbien_app_auth ... USING (true)` nas quatro tabelas.
+--
+-- Só `refresh_tokens` segue FOR ALL: escrita viva, ver abaixo.
 -- `refresh_tokens` é a única das oito onde a ESCRITA por `orbien_app` sem
 -- contexto tem chamador: `auth.service.ts` cria e revoga token no login, no
 -- refresh e no logout (`:254`, `:283`, `:293`, `:327`, `:478`), tudo pelo
