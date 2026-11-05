@@ -58,7 +58,9 @@ test.describe("qr de visitantes", () => {
 
       await test.step("desativa e a página pública recusa", async () => {
         await page.getByRole("button", { name: `Desativar ${renomeado}` }).click();
-        await expect(page.getByText("Desativado")).toBeVisible();
+        // Na linha do QR criado aqui: o tenant de teste acumula QRs desativados
+        // de rodadas anteriores (a API não exclui), então o texto solto casa vários.
+        await expect(page.getByRole("row", { name: new RegExp(renomeado) }).getByText("Desativado")).toBeVisible();
         const anon = await browser.newContext();
         const pub = await anon.newPage();
         await pub.goto(`${base}/visitante/teste2-church/${criado!.token}`, { waitUntil: "domcontentloaded" });
