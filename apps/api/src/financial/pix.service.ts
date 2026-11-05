@@ -1,4 +1,5 @@
 import { findTenantAdminUserId } from '../auth/auth-lookup';
+import { findPublicDonationTarget } from '../common/public-lookup';
 import {
   BadRequestException,
   ConflictException,
@@ -189,34 +190,21 @@ export class PixService {
   }
 
   private async resolveTenant(slug: string): Promise<TenantContext> {
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { slug },
-      select: { id: true, name: true },
-    });
-    if (!tenant) throw new NotFoundException('Tenant não encontrado');
+    // Rota pública, sem contexto: `orbien_app` não lê as tabelas de tenant
+    // direto (PEND-04 C) — `public_donation_target` (034) resolve o slug exato.
+    const target = await findPublicDonationTarget(this.prisma.client, slug);
+    if (!target) throw new NotFoundException('Tenant não encontrado');
 
-    const [branding, congregation] = await Promise.all([
-      this.prisma.client.brandingConfig.findUnique({
-        where: { tenant_id: tenant.id },
-        select: { pix_key: true, app_name: true },
-      }),
-      this.prisma.client.congregation.findFirst({
-        where: { tenant_id: tenant.id },
-        orderBy: { created_at: 'asc' },
-        select: { id: true },
-      }),
-    ]);
-
-    if (!branding?.pix_key) {
+    if (!target.pix_key) {
       throw new BadRequestException('Igreja não configurou chave PIX');
     }
-    if (!congregation) throw new NotFoundException('Tenant não encontrado');
+    if (!target.congregation_id) throw new NotFoundException('Tenant não encontrado');
 
     return {
-      tenantId: tenant.id,
-      congregationId: congregation.id,
-      pixKey: branding.pix_key,
-      churchName: branding.app_name ?? tenant.name,
+      tenantId: target.tenant_id,
+      congregationId: target.congregation_id,
+      pixKey: target.pix_key,
+      churchName: target.app_name ?? target.tenant_name,
     };
   }
 
@@ -226,45 +214,29 @@ export class PixService {
    * `resolveTenant` confirmava que o slug existe e em que estado está a
    * configuração da igreja.
    *
-   * O plano é lido aqui, no banco — `tenant_plans` é legível sem contexto
-   * (`orbien_app_auth`, 017) e a rota não tem JWT, então não existe claim. Só
+   * O plano é lido aqui, no banco — por `public_donation_target` (034), a
+   * única leitura de `tenant_plans` sem contexto — e a rota não tem JWT, então
+   * não existe claim. Só
    * `premium` em `active`/`trial` abre cobrança: um tenant suspenso ou
    * cancelado não deve gerar cobrança nova na Asaas. Starter e plano ausente
    * seguem na chave estática.
    */
   private async resolvePublicDonationTenant(slug: string): Promise<PublicDonationTenant> {
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { slug },
-      select: { id: true, name: true },
-    });
-    if (!tenant) throw new NotFoundException('Igreja não encontrada');
+    const target = await findPublicDonationTarget(this.prisma.client, slug);
+    if (!target) throw new NotFoundException('Igreja não encontrada');
 
-    const [branding, congregation, tenantPlan] = await Promise.all([
-      this.prisma.client.brandingConfig.findUnique({
-        where: { tenant_id: tenant.id },
-        select: { pix_key: true, app_name: true },
-      }),
-      this.prisma.client.congregation.findFirst({
-        where: { tenant_id: tenant.id },
-        orderBy: { created_at: 'asc' },
-        select: { id: true },
-      }),
-      this.prisma.client.tenantPlan.findUnique({
-        where: { tenant_id: tenant.id },
-        select: { plan: true, status: true },
-      }),
-    ]);
-
-    if (!branding?.pix_key || !congregation) throw new NotFoundException('Igreja não encontrada');
+    if (!target.pix_key || !target.congregation_id) {
+      throw new NotFoundException('Igreja não encontrada');
+    }
 
     return {
-      tenantId: tenant.id,
-      congregationId: congregation.id,
-      pixKey: branding.pix_key,
-      churchName: branding.app_name ?? tenant.name,
+      tenantId: target.tenant_id,
+      congregationId: target.congregation_id,
+      pixKey: target.pix_key,
+      churchName: target.app_name ?? target.tenant_name,
       dynamicEnabled:
-        tenantPlan?.plan === PlanType.premium &&
-        (tenantPlan.status === PlanStatus.active || tenantPlan.status === PlanStatus.trial),
+        target.plan === PlanType.premium &&
+        (target.plan_status === PlanStatus.active || target.plan_status === PlanStatus.trial),
     };
   }
 

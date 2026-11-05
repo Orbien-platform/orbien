@@ -11,6 +11,7 @@ import { AxiosError } from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { SecretCipher } from '../common/crypto/secret-cipher';
 import { SignedState } from '../common/crypto/signed-state';
+import { findTenantSlugByVerifiedHost } from '../common/public-lookup';
 
 type CloudflareTokenResponse = {
   access_token: string;
@@ -104,6 +105,26 @@ export class DomainProvisioningService {
     return `${base}/configuracoes`;
   }
 
+  /**
+   * O callback OAuth da Cloudflare é público (sem JWT): roda como `orbien_app`,
+   * sem `app.tenant_id`, e `orbien_app` já não lê nem escreve `branding_configs`
+   * por `USING (true)` (PEND-04 C). O tenant vem do `state` assinado — nunca do
+   * navegador — e vira contexto aqui; a policy `tenant_isolation` (herdada de
+   * `app_user`) recorta a linha da própria igreja.
+   *
+   * Dentro de requisição autenticada o contexto já existe e a condição do
+   * `WHERE` não deixa o `set_config` sobrescrevê-lo.
+   */
+  private inTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+    return this.prisma.runInTx(async (tx) => {
+      await tx.$executeRaw`
+        SELECT set_config('app.tenant_id', ${tenantId}, true)
+         WHERE coalesce(current_setting('app.tenant_id', true), '') = ''
+      `;
+      return fn();
+    });
+  }
+
   // ── Status e instruções manuais ─────────────────────────────────────────
 
   async getStatus(tenantId: string): Promise<DomainStatus> {
@@ -145,10 +166,12 @@ export class DomainProvisioningService {
     const branding = await this.requireBranding(tenantId);
     await this.registerOnVercel(branding.custom_domain!);
     const verified = await this.checkVercelVerification(branding.custom_domain!);
-    await this.prisma.client.brandingConfig.update({
-      where: { tenant_id: tenantId },
-      data: { custom_domain_status: verified ? 'verified' : 'pending' },
-    });
+    await this.inTenant(tenantId, () =>
+      this.prisma.client.brandingConfig.update({
+        where: { tenant_id: tenantId },
+        data: { custom_domain_status: verified ? 'verified' : 'pending' },
+      }),
+    );
     return this.getStatus(tenantId);
   }
 
@@ -178,15 +201,17 @@ export class DomainProvisioningService {
 
     try {
       const tokens = await this.exchangeCloudflareCode(code);
-      await this.prisma.client.brandingConfig.update({
-        where: { tenant_id: tenantId },
-        data: {
-          cloudflare_access_token_encrypted: this.cipher.encrypt(tokens.access_token),
-          cloudflare_refresh_token_encrypted: this.cipher.encrypt(tokens.refresh_token),
-          cloudflare_token_expires_at: new Date(Date.now() + tokens.expires_in * 1000),
-          cloudflare_connected_at: new Date(),
-        },
-      });
+      await this.inTenant(tenantId, () =>
+        this.prisma.client.brandingConfig.update({
+          where: { tenant_id: tenantId },
+          data: {
+            cloudflare_access_token_encrypted: this.cipher.encrypt(tokens.access_token),
+            cloudflare_refresh_token_encrypted: this.cipher.encrypt(tokens.refresh_token),
+            cloudflare_token_expires_at: new Date(Date.now() + tokens.expires_in * 1000),
+            cloudflare_connected_at: new Date(),
+          },
+        }),
+      );
 
       await this.provisionViaCloudflare(tenantId);
       return `${this.settingsPageUrl}?dominio=conectado`;
@@ -225,10 +250,12 @@ export class DomainProvisioningService {
     }
 
     await this.upsertCloudflareCname(accessToken, zone.id, customDomain);
-    await this.prisma.client.brandingConfig.update({
-      where: { tenant_id: tenantId },
-      data: { cloudflare_zone_id: zone.id },
-    });
+    await this.inTenant(tenantId, () =>
+      this.prisma.client.brandingConfig.update({
+        where: { tenant_id: tenantId },
+        data: { cloudflare_zone_id: zone.id },
+      }),
+    );
 
     await this.registerOnVercel(customDomain);
     const verified = await this.checkVercelVerification(customDomain);
@@ -239,14 +266,16 @@ export class DomainProvisioningService {
   }
 
   private async getValidCloudflareToken(tenantId: string): Promise<string> {
-    const branding = await this.prisma.client.brandingConfig.findUnique({
-      where: { tenant_id: tenantId },
-      select: {
-        cloudflare_access_token_encrypted: true,
-        cloudflare_refresh_token_encrypted: true,
-        cloudflare_token_expires_at: true,
-      },
-    });
+    const branding = await this.inTenant(tenantId, () =>
+      this.prisma.client.brandingConfig.findUnique({
+        where: { tenant_id: tenantId },
+        select: {
+          cloudflare_access_token_encrypted: true,
+          cloudflare_refresh_token_encrypted: true,
+          cloudflare_token_expires_at: true,
+        },
+      }),
+    );
     if (!branding?.cloudflare_access_token_encrypted || !branding.cloudflare_refresh_token_encrypted) {
       throw new BadRequestException('Tenant não conectou a conta Cloudflare');
     }
@@ -260,22 +289,26 @@ export class DomainProvisioningService {
     const refreshed = await this.refreshCloudflareToken(
       this.cipher.decrypt(branding.cloudflare_refresh_token_encrypted),
     );
-    await this.prisma.client.brandingConfig.update({
-      where: { tenant_id: tenantId },
-      data: {
-        cloudflare_access_token_encrypted: this.cipher.encrypt(refreshed.access_token),
-        cloudflare_refresh_token_encrypted: this.cipher.encrypt(refreshed.refresh_token),
-        cloudflare_token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000),
-      },
-    });
+    await this.inTenant(tenantId, () =>
+      this.prisma.client.brandingConfig.update({
+        where: { tenant_id: tenantId },
+        data: {
+          cloudflare_access_token_encrypted: this.cipher.encrypt(refreshed.access_token),
+          cloudflare_refresh_token_encrypted: this.cipher.encrypt(refreshed.refresh_token),
+          cloudflare_token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000),
+        },
+      }),
+    );
     return refreshed.access_token;
   }
 
   private async requireBranding(tenantId: string) {
-    const branding = await this.prisma.client.brandingConfig.findUnique({
-      where: { tenant_id: tenantId },
-      select: { custom_domain: true },
-    });
+    const branding = await this.inTenant(tenantId, () =>
+      this.prisma.client.brandingConfig.findUnique({
+        where: { tenant_id: tenantId },
+        select: { custom_domain: true },
+      }),
+    );
     if (!branding?.custom_domain) {
       throw new BadRequestException(
         'Cadastre o domínio em Configurações antes de provisionar (dto.branding.custom_domain)',
@@ -467,18 +500,12 @@ export class DomainProvisioningService {
   // ── Resolução pública por host (usada pelo middleware do apps/web) ──────
 
   async resolveTenantSlugByHost(host: string): Promise<{ tenant_slug: string }> {
-    const branding = await this.prisma.client.brandingConfig.findFirst({
-      where: { custom_domain: host, custom_domain_status: 'verified' },
-      select: { tenant_id: true },
-    });
-    if (!branding) throw new NotFoundException('Domínio não reconhecido');
+    // Rota pública, sem contexto: `orbien_app` não lê `branding_configs` direto
+    // (PEND-04 C). `public_domain_resolve` (034) só devolve o slug quando o
+    // domínio está `verified` — domínio pendente continua sem resolver.
+    const slug = await findTenantSlugByVerifiedHost(this.prisma.client, host);
+    if (!slug) throw new NotFoundException('Domínio não reconhecido');
 
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { id: branding.tenant_id },
-      select: { slug: true },
-    });
-    if (!tenant) throw new NotFoundException('Domínio não reconhecido');
-
-    return { tenant_slug: tenant.slug };
+    return { tenant_slug: slug };
   }
 }

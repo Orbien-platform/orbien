@@ -40,6 +40,7 @@ import { PixService } from './pix.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DonationReceiptService } from './donation-receipts.service';
 import { findTenantAdminUserId } from '../auth/auth-lookup';
+import { findPublicDonationTarget } from '../common/public-lookup';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 
@@ -47,6 +48,7 @@ import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
 // DEFINER), não de `role_assignments` pelo client. O SQL é coberto em
 // `test/rls/auth-tables.spec.ts`.
 jest.mock('../auth/auth-lookup');
+jest.mock('../common/public-lookup');
 
 const user: JwtPayload = {
   sub: 'user-1',
@@ -124,6 +126,30 @@ type Opts = {
 };
 
 function harness(opts: Opts = {}) {
+  // Rotas públicas resolvem o slug por `public_donation_target` (034, PEND-04 C),
+  // não pelo client base: a mesma configuração do harness monta a linha da função.
+  const lookupTenant =
+    opts.tenant === undefined ? { id: 't1', name: 'Igreja Central' } : opts.tenant;
+  const lookupBranding =
+    opts.branding === undefined
+      ? { pix_key: 'chave@igreja.test', app_name: 'App da Igreja' }
+      : opts.branding;
+  const lookupCongregation = opts.congregation === undefined ? { id: 'c1' } : opts.congregation;
+  const lookupPlan =
+    opts.tenantPlan === undefined ? { plan: 'starter', status: 'active' } : opts.tenantPlan;
+  (findPublicDonationTarget as jest.Mock).mockResolvedValue(
+    lookupTenant === null
+      ? null
+      : {
+          tenant_id: lookupTenant.id,
+          tenant_name: lookupTenant.name,
+          app_name: lookupBranding?.app_name ?? null,
+          pix_key: lookupBranding?.pix_key ?? null,
+          congregation_id: lookupCongregation?.id ?? null,
+          plan: lookupPlan?.plan ?? null,
+          plan_status: lookupPlan?.status ?? null,
+        },
+  );
   (findTenantAdminUserId as jest.Mock).mockResolvedValue(
     opts.assignment === undefined ? 'admin-1' : (opts.assignment?.user_account_id ?? null),
   );
@@ -1886,8 +1912,7 @@ describe('PixService', () => {
 
     it('erro que não é 404 ao resolver a igreja não é mascarado como 404', async () => {
       const { service } = harness();
-      (service as unknown as { prisma: { client: { tenant: { findUnique: () => Promise<never> } } } }).prisma.client.tenant.findUnique =
-        () => Promise.reject(new Error('banco fora do ar'));
+      (findPublicDonationTarget as jest.Mock).mockRejectedValue(new Error('banco fora do ar'));
 
       await expect(service.getPublicDonationStatus('igreja-central', ID)).rejects.toThrow(
         'banco fora do ar',

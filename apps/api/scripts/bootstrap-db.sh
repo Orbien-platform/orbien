@@ -303,6 +303,14 @@ fi
 if [ -f prisma/migrations/033_rls_auth_lookup.sql ]; then
   run_sql_file prisma/migrations/033_rls_auth_lookup.sql
 fi
+# PEND-04 (C, expandir): funções SECURITY DEFINER de leitura pública de
+# tenants/congregations/branding_configs/tenant_plans (public_tenant_by_slug,
+# public_donation_target, public_qr_church, public_domain_resolve,
+# auth_impersonate_target). Só adiciona funções; a policy `orbien_app_auth`
+# dessas quatro tabelas só cai no 035 (contrair), que é uma release à parte.
+if [ -f prisma/migrations/034_rls_public_lookup.sql ]; then
+  run_sql_file prisma/migrations/034_rls_public_lookup.sql
+fi
 # PEND-04 (A+B+D): aperta a policy `orbien_app_auth` que a migration datada
 # 20260608175621 criou com USING(true)/WITH CHECK(true) em oito tabelas. Tira
 # `audit_logs` (a auditoria escreve por audit_insert(), SECURITY DEFINER) e,
@@ -808,6 +816,26 @@ BEGIN
   RAISE NOTICE 'funcoes auth_* conformes: %', n;
   IF n <> 3 THEN
     RAISE EXCEPTION 'esperava 3 funcoes auth_* (auth_login_lookup, auth_session_lookup, auth_tenant_admin_user_id) SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 033_rls_auth_lookup.sql rodou?', n;
+  END IF;
+
+  -- 034 (PEND-04, ação C): as cinco funções de leitura pública. Mesmos vícios
+  -- que a checagem de 033 cobre: sem SECURITY DEFINER, sem search_path fixo,
+  -- EXECUTE aberto a app_user/PUBLIC, ou dono orbien_app.
+  SELECT count(*) INTO n
+    FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+   WHERE p.proname IN ('public_tenant_by_slug', 'public_donation_target',
+                       'public_qr_church', 'public_domain_resolve',
+                       'auth_impersonate_target')
+     AND p.prosecdef
+     AND p.proconfig IS NOT NULL
+     AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+     AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE')
+     AND pg_get_userbyid(p.proowner) <> 'orbien_app';
+  RAISE NOTICE 'funcoes publicas conformes: %', n;
+  IF n <> 5 THEN
+    RAISE EXCEPTION 'esperava 5 funcoes publicas (public_tenant_by_slug, public_donation_target, public_qr_church, public_domain_resolve, auth_impersonate_target) SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 034_rls_public_lookup.sql rodou?', n;
   END IF;
 
   -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu

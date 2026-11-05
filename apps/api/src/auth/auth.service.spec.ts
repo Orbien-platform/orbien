@@ -23,12 +23,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { findLoginByEmail, findSessionByUserId } from './auth-lookup';
+import { findImpersonateTarget } from '../common/public-lookup';
 
 // PEND-04 D: `orbien_app` não lê `user_accounts` direto; login, refresh e
 // impersonate passam pelas funções SECURITY DEFINER de `auth-lookup.ts`. O SQL
 // delas é coberto em `test/rls/auth-tables.spec.ts` — aqui o que importa é o
 // que o serviço faz com a resposta.
 jest.mock('./auth-lookup');
+jest.mock('../common/public-lookup');
 
 interface LegacyAccount {
   id?: string;
@@ -719,6 +721,10 @@ describe('AuthService.impersonate', () => {
     plan: 'starter',
   };
 
+  beforeEach(() => {
+    (findImpersonateTarget as jest.Mock).mockReset();
+  });
+
   /**
    * O papel vem de `role_assignments`, não do `roles` do JWT — e os dois
    * primeiros testes existem para prender a inversão nos dois sentidos. Antes
@@ -756,16 +762,16 @@ describe('AuthService.impersonate', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     // Nem chega a olhar o tenant alvo: a autorização vem antes.
-    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+    expect(findImpersonateTarget).not.toHaveBeenCalled();
   });
 
   it('libera quem o banco confirma, mesmo sem o papel no token', async () => {
     const { service, prisma } = serviceWith({});
     comAtor(prisma, true);
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-      id: 'target',
-      tenantPlan: null,
-      congregations: [{ id: 'target-cong' }],
+    (findImpersonateTarget as jest.Mock).mockResolvedValue({
+      tenant_id: 'target',
+      plan: null,
+      congregation_id: 'target-cong',
     });
     const semPapelNoToken: JwtPayload = { ...requester, roles: [] };
 
@@ -794,7 +800,7 @@ describe('AuthService.impersonate', () => {
     await expect(
       service.impersonate(requester, { target_tenant_id: 'target' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+    expect(findImpersonateTarget).not.toHaveBeenCalled();
   });
 
   it('barra conta ativa sem platform_support no banco, mesmo com o papel no token', async () => {
@@ -804,13 +810,13 @@ describe('AuthService.impersonate', () => {
     await expect(
       service.impersonate(requester, { target_tenant_id: 'target' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+    expect(findImpersonateTarget).not.toHaveBeenCalled();
   });
 
   it('rejeita tenant alvo inexistente', async () => {
     const { service, prisma } = serviceWith({});
     comAtor(prisma, true);
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(null);
+    (findImpersonateTarget as jest.Mock).mockResolvedValue(null);
 
     await expect(
       service.impersonate(requester, { target_tenant_id: 'target' }),
@@ -820,10 +826,10 @@ describe('AuthService.impersonate', () => {
   it('rejeita tenant sem nenhuma congregação', async () => {
     const { service, prisma } = serviceWith({});
     comAtor(prisma, true);
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-      id: 'target',
-      tenantPlan: null,
-      congregations: [],
+    (findImpersonateTarget as jest.Mock).mockResolvedValue({
+      tenant_id: 'target',
+      plan: null,
+      congregation_id: null,
     });
 
     await expect(
@@ -834,10 +840,10 @@ describe('AuthService.impersonate', () => {
   it('emite token marcado support_session, com o tenant e a congregação do alvo', async () => {
     const { service, prisma } = serviceWith({});
     comAtor(prisma, true);
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-      id: 'target',
-      tenantPlan: { plan: 'premium' },
-      congregations: [{ id: 'target-cong' }],
+    (findImpersonateTarget as jest.Mock).mockResolvedValue({
+      tenant_id: 'target',
+      plan: 'premium',
+      congregation_id: 'target-cong',
     });
 
     const result = await service.impersonate(requester, { target_tenant_id: 'target' });
@@ -858,10 +864,10 @@ describe('AuthService.impersonate', () => {
   it('usa "starter" quando o tenant alvo não tem plano', async () => {
     const { service, prisma } = serviceWith({});
     comAtor(prisma, true);
-    (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-      id: 'target',
-      tenantPlan: null,
-      congregations: [{ id: 'target-cong' }],
+    (findImpersonateTarget as jest.Mock).mockResolvedValue({
+      tenant_id: 'target',
+      plan: null,
+      congregation_id: 'target-cong',
     });
 
     await service.impersonate(requester, { target_tenant_id: 'target' });

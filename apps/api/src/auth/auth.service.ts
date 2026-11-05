@@ -12,6 +12,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { findLoginByEmail, findSessionByUserId } from './auth-lookup';
+import { findImpersonateTarget } from '../common/public-lookup';
 import { MailService } from '../mail/mail.service';
 import { PLATFORM_MAIL_BRAND, TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import {
@@ -407,19 +408,15 @@ export class AuthService {
       !!actor?.is_active && actor.roles.some((ra) => ra.role_code === PLATFORM_ROLE);
     if (!isPlatform) throw new ForbiddenException();
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: dto.target_tenant_id },
-      include: {
-        tenantPlan: { select: { plan: true } },
-        congregations: { take: 1, select: { id: true } },
-      },
-    });
-    if (!tenant) throw new NotFoundException('Tenant não encontrado');
+    // `orbien_app` não lê `tenants`/`tenant_plans`/`congregations` direto
+    // (PEND-04 C): o destino vem de `auth_impersonate_target` (034).
+    const target = await findImpersonateTarget(this.prisma, dto.target_tenant_id);
+    if (!target) throw new NotFoundException('Tenant não encontrado');
 
-    const congregation_id = tenant.congregations[0]?.id;
+    const congregation_id = target.congregation_id;
     if (!congregation_id) throw new NotFoundException('Tenant sem congregações');
 
-    const plan = (tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+    const plan = (target.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
       sub: requestingUser.sub,

@@ -22,6 +22,9 @@ import { DomainProvisioningService } from './domain-provisioning.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SecretCipher } from '../common/crypto/secret-cipher';
 import { SignedState } from '../common/crypto/signed-state';
+import { findTenantSlugByVerifiedHost } from '../common/public-lookup';
+
+jest.mock('../common/public-lookup');
 
 const ENV_BASE = {
   DOMAIN_SECRETS_ENCRYPTION_KEY: 'c'.repeat(64),
@@ -62,8 +65,25 @@ function harness(opts: {
     ...opts.branding,
   };
   const updates: Record<string, unknown>[] = [];
+  // Resolução por host (034, PEND-04 C): a função só devolve o slug de domínio
+  // `verified`; o mock reproduz isso para o teste continuar provando o contrato.
+  (findTenantSlugByVerifiedHost as jest.Mock).mockImplementation(() =>
+    Promise.resolve(
+      branding.custom_domain && branding.custom_domain_status === 'verified'
+        ? (opts.tenantSlug ?? null)
+        : null,
+    ),
+  );
+  const contextWrites: unknown[][] = [];
+  const tx = {
+    $executeRaw: jest.fn((_strings: TemplateStringsArray, ...valores: unknown[]) => {
+      contextWrites.push(valores);
+      return Promise.resolve(1);
+    }),
+  };
 
   const prisma = {
+    runInTx: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
     client: {
       brandingConfig: {
         findUnique: jest.fn(() => Promise.resolve(opts.brandingMissing ? null : branding)),
@@ -104,7 +124,7 @@ function harness(opts: {
   }
 
   const service = new DomainProvisioningService(prisma, http, new SecretCipher(), new SignedState());
-  return { service, branding, updates, http, prisma };
+  return { service, branding, updates, http, prisma, contextWrites };
 }
 
 describe('DomainProvisioningService', () => {
@@ -238,6 +258,31 @@ describe('DomainProvisioningService', () => {
         url.includes('/zones/zone-1/dns_records'),
       );
       expect(dnsCall![1]).toMatchObject({ type: 'CNAME', proxied: false, content: 'cname.vercel-dns.com' });
+    });
+
+    it('fixa o tenant do state assinado no contexto antes de tocar branding_configs (PEND-04 C)', async () => {
+      // O callback é público: `orbien_app` sem `app.tenant_id` não lê nem escreve
+      // `branding_configs`. O tenant sai do `state` assinado, nunca do navegador.
+      const { service, prisma, contextWrites } = harness({
+        branding: { custom_domain: 'doar.igreja.com' },
+        httpPost: (url) => (url.includes('oauth2/token') ? { access_token: 'a', refresh_token: 'r', expires_in: 3600 } : {}),
+        httpGet: () => ({ result: [] }),
+      });
+      const state = service.buildAuthorizeUrl('t1').url.match(/state=([^&]+)/)![1]!;
+
+      await service.handleOAuthCallback('code', decodeURIComponent(state));
+
+      expect(contextWrites.length).toBeGreaterThan(0);
+      for (const valores of contextWrites) expect(valores).toEqual(['t1']);
+      // Nenhuma leitura/escrita de branding fora de uma transação com contexto.
+      expect(prisma.runInTx).toHaveBeenCalled();
+    });
+
+    it('state adulterado não abre transação nem fixa contexto', async () => {
+      const { service, prisma, contextWrites } = harness();
+      await expect(service.handleOAuthCallback('code', 'lixo.nao-assinado')).rejects.toThrow();
+      expect(prisma.runInTx).not.toHaveBeenCalled();
+      expect(contextWrites).toEqual([]);
     });
 
     it('falha na Cloudflare redireciona com erro em vez de propagar exceção pro navegador', async () => {
