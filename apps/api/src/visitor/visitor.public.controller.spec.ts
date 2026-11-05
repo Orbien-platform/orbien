@@ -4,8 +4,11 @@
  * `@UseGuards` do controller) e a validação de entrada, coberta à parte em
  * `dto/register-visitor.dto.spec.ts`.
  */
+import { Test } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import request from 'supertest';
 import { Reflector } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { VisitorPublicController } from './visitor.public.controller';
 import { VisitorService } from './visitor.service';
 
@@ -24,14 +27,14 @@ describe('VisitorPublicController', () => {
     expect(result).toEqual({ status: 'registered', message: 'ok' });
   });
 
-  it('é protegida por ThrottlerGuard e limita a 20 chamadas por hora', () => {
+  it('é protegida por ThrottlerGuard e tem teto de 300 por hora por IP (rede de segurança — PEND-18)', () => {
     const guards = Reflect.getMetadata('__guards__', VisitorPublicController) as unknown[];
     expect(guards).toContain(ThrottlerGuard);
 
     const reflector = new Reflector();
     const limit = reflector.get<number>('THROTTLER:LIMITdefault', VisitorPublicController.prototype.register);
     const ttl = reflector.get<number>('THROTTLER:TTLdefault', VisitorPublicController.prototype.register);
-    expect(limit).toBe(20);
+    expect(limit).toBe(300);
     expect(ttl).toBe(3600000);
   });
 
@@ -48,5 +51,32 @@ describe('VisitorPublicController', () => {
     const reflector = new Reflector();
     expect(reflector.get<number>('THROTTLER:LIMITdefault', VisitorPublicController.prototype.describeQr)).toBe(120);
     expect(reflector.get<number>('THROTTLER:TTLdefault', VisitorPublicController.prototype.describeQr)).toBe(3600000);
+  });
+
+  it('dois tokens no mesmo IP se somam no teto de IP: o 301º envio recebe 429', async () => {
+    const registerViaQr = jest.fn().mockResolvedValue({ status: 'registered', message: 'ok' });
+    const moduleRef = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])],
+      controllers: [VisitorPublicController],
+      providers: [{ provide: VisitorService, useValue: { registerViaQr } }],
+    }).compile();
+    const app: INestApplication = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    await app.init();
+    try {
+      const send = (token: string) =>
+        request(app.getHttpServer())
+          .post('/public/visitor/register')
+          .send({ token, full_name: 'Ana', lgpd_consent: true, origin: 'service' });
+      for (let i = 0; i < 300; i++) {
+        const res = await send(i % 2 ? 'tok-a' : 'tok-b');
+        expect(res.status).toBe(200);
+      }
+      expect((await send('tok-a')).status).toBe(429);
+      expect((await send('tok-b')).status).toBe(429);
+      expect(registerViaQr).toHaveBeenCalledTimes(300);
+    } finally {
+      await app.close();
+    }
   });
 });
