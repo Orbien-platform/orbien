@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { VisitorService } from './visitor.service';
+import { VisitorRegisterLimiter } from './visitor-register-limiter.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificationService } from '../persons/classification.service';
 import { VisitsService } from '../persons/visits.service';
@@ -41,7 +42,7 @@ function serviceWith() {
   const visitsService = {} as VisitsService;
 
   return {
-    service: new VisitorService(prisma, classificationService, visitsService),
+    service: new VisitorService(prisma, classificationService, visitsService, new VisitorRegisterLimiter()),
     qrTokenClient,
     tx,
     classificationService,

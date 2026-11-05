@@ -24,6 +24,7 @@ import { AllergyNote } from "../../../components/kids/AllergyNote";
 import { QrScanner } from "../../../components/kids/QrScanner";
 import { HttpError } from "../../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 import { useAuth } from "../../../lib/auth/auth-provider";
 import { decodeJwtPayload } from "../../../lib/auth/jwt";
 import {
@@ -104,6 +105,12 @@ export default function SessaoScreen() {
   }, [id]);
 
   useFocusEffect(load);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(error?.offline === true, () => {
+    load();
+  });
 
   function open(item: KidsRosterItem, nextMode: Mode) {
     setScanning(false);

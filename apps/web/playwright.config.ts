@@ -9,8 +9,22 @@ import { defineConfig, devices } from "@playwright/test";
  * desmontam dados reais no mesmo tenant (instâncias, escalas, templates).
  * Rodar em paralelo faria um spec apagar o template que o outro reaproveita.
  */
+/**
+ * Specs que esta execução não deve rodar, por nome de arquivo, separados por
+ * vírgula. Só o job `E2E (produção)` do ci.yml usa, em PR: um spec que o PR
+ * adiciona ou altera pode exercitar código que ainda não está no ar, e a
+ * produção ainda não o tem. Quem prova esse spec é o job `E2E`, que sobe o
+ * código do PR. Vazio (o padrão, e todo o resto) roda tudo.
+ */
+const ignorados = (process.env.E2E_EXCLUDE_SPECS ?? "")
+  .split(",")
+  .map((nome) => nome.trim())
+  .filter(Boolean)
+  .map((nome) => `**/${nome}`);
+
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: ignorados,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

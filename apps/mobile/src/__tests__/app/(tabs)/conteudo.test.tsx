@@ -19,6 +19,7 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import ConteudoScreen from "../../../app/(tabs)/conteudo";
 
 const POST_1 = { id: "p1", type: "announcement", title: "Post 1", body: "Corpo 1", media_url: null, published_at: "2026-09-01T10:00:00Z", created_at: "2026-09-01T10:00:00Z" };
@@ -197,5 +198,60 @@ describe("ConteudoScreen", () => {
 
     const card = await screen.findByTestId("post-p1");
     expect(JSON.stringify(card)).toContain("https://cdn.example/capa.jpg");
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetPosts.mockReset();
+      mockGetPosts.mockRejectedValueOnce(new NetworkError());
+      mockGetPosts.mockResolvedValue({ data: [POST_1], total: 1 });
+      await act(async () => {
+        render(<ConteudoScreen />);
+      });
+      expect(screen.getByTestId("conteudo-error")).toBeTruthy();
+      expect(mockGetPosts).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetPosts).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("post-p1")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetPosts.mockReset();
+      mockGetPosts.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<ConteudoScreen />);
+      });
+      expect(screen.getByTestId("conteudo-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetPosts).toHaveBeenCalledTimes(1);
+    });
   });
 });

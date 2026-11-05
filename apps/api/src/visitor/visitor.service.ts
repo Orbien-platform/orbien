@@ -10,6 +10,7 @@ import { UpdateQrTokenDto } from './dto/update-qr-token.dto';
 import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto';
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 import { writeAuditLog } from '../common/audit/write-audit-log';
+import { VisitorRegisterLimiter } from './visitor-register-limiter.service';
 
 type PrismaTx = Omit<
   PrismaClient,
@@ -100,6 +101,7 @@ export class VisitorService {
     private readonly prisma: PrismaService,
     private readonly classificationService: ClassificationService,
     private readonly visitsService: VisitsService,
+    private readonly registerLimiter: VisitorRegisterLimiter,
   ) {}
 
   /**
@@ -155,14 +157,22 @@ export class VisitorService {
     ip: string | undefined,
     userAgent: string | string[] | undefined,
   ): Promise<RegisterResult> {
+    // Limites do autocadastro (PEND-18): o IP que já errou token demais nem
+    // chega ao banco; token inexistente conta contra o IP; só o token validado
+    // ganha contador próprio. O teto por IP geral é o @Throttle da rota.
+    this.registerLimiter.assertIpNotBlocked(ip);
+
     const qrToken = await this.prisma.client.qrToken.findUnique({
       where: { token: dto.token },
       include: { congregation: { select: { name: true } } },
     });
 
     if (!qrToken || !qrToken.is_active) {
+      this.registerLimiter.recordInvalid(ip);
       throw new NotFoundException('QR code inválido ou expirado');
     }
+
+    this.registerLimiter.hitToken(qrToken.id);
 
     await this.prisma.client.qrToken.update({
       where: { id: qrToken.id },

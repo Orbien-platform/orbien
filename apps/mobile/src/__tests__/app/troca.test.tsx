@@ -16,6 +16,7 @@ jest.mock("../../lib/escala/escala-client", () => ({
   requestSwap: (...args: unknown[]) => mockRequestSwap(...args),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../lib/api/errors";
 import TrocaScreen from "../../app/troca/[id]";
 
@@ -148,5 +149,62 @@ describe("TrocaScreen", () => {
     });
 
     expect(screen.queryByText("Bianca Lopes")).toBeNull();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetSwapCandidates.mockReset();
+      mockGetSwapCandidates.mockRejectedValueOnce(new NetworkError());
+      mockGetSwapCandidates.mockResolvedValue(CANDIDATES);
+      await act(async () => {
+        render(<TrocaScreen />);
+      });
+      expect(screen.getByTestId("troca-erro")).toBeTruthy();
+      expect(mockGetSwapCandidates).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetSwapCandidates).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Bianca Lopes")).toBeTruthy();
+      // Só leitura: a releitura nunca manda pedido de troca.
+      expect(mockRequestSwap).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetSwapCandidates.mockReset();
+      mockGetSwapCandidates.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<TrocaScreen />);
+      });
+      expect(screen.getByTestId("troca-erro")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetSwapCandidates).toHaveBeenCalledTimes(1);
+    });
   });
 });

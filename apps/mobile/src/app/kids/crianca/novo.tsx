@@ -12,6 +12,7 @@ import { Screen } from "../../../components/Screen";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { ConsentTerm } from "../../../components/kids/ConsentTerm";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 import { createChild, describeKidsActionError, getConsentStatus, kidsErrorCode } from "../../../lib/kids/kids-client";
 import type { KidsConsentStatus } from "../../../lib/kids/types";
 import { maskBirthDate, parseBirthDate } from "../../../lib/format/profile-input";
@@ -42,6 +43,10 @@ export default function NovaCriancaScreen() {
   }, []);
 
   useEffect(loadConsent, [loadConsent]);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(loadError?.offline === true, loadConsent);
 
   async function submit() {
     const birthIso = parseBirthDate(birth);

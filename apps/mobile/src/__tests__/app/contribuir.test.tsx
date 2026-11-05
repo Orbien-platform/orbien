@@ -27,6 +27,7 @@ jest.mock("../../lib/contribuir/contribuir-client", () => {
 const mockUseTheme = jest.fn();
 jest.mock("../../lib/theme/theme-provider", () => ({ useTheme: () => mockUseTheme() }));
 
+import NetInfo from "@react-native-community/netinfo";
 import ContribuirScreen from "../../app/contribuir";
 import { HttpError, NetworkError } from "../../lib/api/errors";
 import { palettes } from "../../lib/theme/tokens";
@@ -290,5 +291,58 @@ describe("ContribuirScreen", () => {
     });
     await renderScreen();
     expect(screen.getByTestId("contribuir-sem-igreja")).toBeTruthy();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockCategories.mockReset();
+      mockCategories.mockRejectedValueOnce(new NetworkError());
+      mockCategories.mockResolvedValue(CATEGORIES);
+      await renderScreen();
+      expect(screen.getByTestId("contribuir-categorias-erro")).toBeTruthy();
+      expect(mockCategories).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockCategories).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Oferta Missionária")).toBeTruthy();
+      // Só leitura: a releitura nunca gera cobrança.
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockCategories.mockReset();
+      mockCategories.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("contribuir-categorias-erro")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockCategories).toHaveBeenCalledTimes(1);
+    });
   });
 });

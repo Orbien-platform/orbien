@@ -13,6 +13,7 @@ import { Screen } from "../../../components/Screen";
 import { StatusMessage } from "../../../components/StatusMessage";
 import { PickupCode } from "../../../components/kids/PickupCode";
 import { describeLoadError, type LoadErrorState } from "../../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../../lib/network/use-reload-on-reconnect";
 import { getOpenCheckin } from "../../../lib/kids/kids-client";
 import type { KidsOpenCheckin } from "../../../lib/kids/types";
 import { formatTime } from "../../../lib/format/date";
@@ -37,6 +38,10 @@ export default function CodigoScreen() {
   }, [id]);
 
   useEffect(load, [load]);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(error?.offline === true, load);
 
   if (error) {
     return (

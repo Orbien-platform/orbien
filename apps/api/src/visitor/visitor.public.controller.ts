@@ -29,7 +29,11 @@ export class VisitorPublicController {
     return this.visitorService.describeQr(token);
   }
 
-  @Throttle({ default: { limit: 20, ttl: 3600000 } })
+  // PEND-18: teto por IP é só a rede de segurança (300/h). O limite real por
+  // culto é por QR (200/h) e o de token inválido por IP (20/h) — ambos em
+  // `VisitorRegisterLimiter`, aplicados depois de validar o token. Antes era 20
+  // por IP, e o wi-fi da igreja estourava no 21º visitante.
+  @Throttle({ default: { limit: 300, ttl: 3600000 } })
   @Post('register')
   @HttpCode(HttpStatus.OK)
   register(@Body() dto: RegisterVisitorDto, @Req() req: Request) {

@@ -264,7 +264,7 @@ foi retomado — cinco no total.
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan`, com tela no console |
-| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin + logs de auditoria (2 anos) + consentimento (5 anos após revogação) — ver **CONF-02**; revisão jurídica das regras em **CONF-01** |
+| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin + logs de auditoria (2 anos) + consentimento (5 anos após revogação) + tokens de auth expirados — ver **CONF-02**; revisão jurídica das regras em **CONF-01** |
 | App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
@@ -306,7 +306,8 @@ sugestão, não fila.
 de que passaram por advogado. Inclui os itens da seção 10 do mapeamento LGPD
 e o checklist de pré-go-live da seção 9.
 
-Depende de gente de fora, não de código.
+Depende de gente de fora, não de código. Inclui o texto provisório do termo de
+voluntariado (`legal/consent-terms/volunteer_term_v1.md`, `PROD-36`).
 
 ### CONF-02 · Retenção de dados — o que falta da seção 5 · dívida
 
@@ -373,13 +374,46 @@ contra o Postgres local, só em `teste2-church`.
 - **Sem linha de auditoria por execução:** `audit_insert()` exige tenant e ator
   (`actor_user_id` NOT NULL com FK) e o cron não tem nenhum dos dois. O rastro é
   o log estruturado do processo, só com contagens (sem dado pessoal).
-- **Não há trigger de imutabilidade em `audit_logs`** (o mapeamento 7.2 o
-  prevê, mas não foi implementado). Criá-lo exigiria exceção para este job.
-- Fora do escopo: `login_attempts`, `refresh_tokens` e `password_reset_tokens`
-  (contadores e tokens, sem IP; não verifiquei se algum job limpa expirados) e
-  o log de login com IP do mapeamento 7.1, que não existe em tabela alguma.
-- O aviso semanal da seção 5.1 não foi estendido a estas duas linhas: não são
-  cadastro de pessoa, e o aviso conta pessoas.
+- **Trigger de imutabilidade em `audit_logs`:** segue sem implementar — ver
+  `DEC-08`. Hoje UPDATE/DELETE de `app_user` já falham (só há policy de
+  `SELECT`); o que o trigger fecharia é a conexão `system`.
+- **Log de login com IP (mapeamento 7.1):** continua fora. Não existe em tabela
+  alguma (`login_attempts` não guarda IP; o limite por IP é do `ThrottlerGuard`,
+  em memória) e não foi criado.
+- O aviso semanal da seção 5.1 não foi estendido a estas duas linhas (log e
+  consentimento) nem às tabelas de auth: não são cadastro de pessoa, e o aviso
+  conta pessoas.
+
+**Resíduos fechados em 2026-11-04** — `AuthTokensRetentionService`
+(`apps/api/src/auth/auth-tokens-retention.service.ts`), cron **1h UTC**, como
+`prisma.system`, sem policy nem exceção de RLS nova. Nenhum job limpava essas
+três tabelas; nenhuma guarda `ip` nem `user_agent`:
+
+| Tabela | O que guarda | Prazo | Regra |
+|---|---|---|---|
+| `login_attempts` | `"<rota>:<e-mail>"` (e-mail em claro, existindo a conta ou não), contador, janela | 7 dias | `max(window_at, blocked_at) < now - 7d` |
+| `password_reset_tokens` | token, `user_id`, `expires_at` (30 min), `used_at` | 7 dias após `expires_at` | usado ou não |
+| `refresh_tokens` | hash, `user_account_id`, `expires_at` (7 dias), `revoked_at`, `replaced_by_id` | 30 dias após `expires_at` | revogado ou não |
+
+Prazos decididos pelo dono em 2026-11-04. O de `refresh_tokens` é o que exige
+cuidado: a linha **revogada** é a evidência com que `AuthService.refresh`
+detecta reuso e derruba a família. Um token roubado só serve enquanto algum
+descendente estiver vivo, e cada elo vive 7 dias e nasce dentro da vida do pai —
+depois de `expires_at + 7 dias` não há descendente vivo; os 30 dias são esse
+limite mais folga (cron perdido, `PEND-13`, e investigação de incidente). O
+`DELETE` ordena por `expires_at`, então o pai (que aponta para o filho em
+`replaced_by_id`) sai antes ou junto do filho, sem violar a FK. Lotes de 1000,
+teto de 200 por rodada, idempotente, log só com contagens.
+
+Evidência: `src/auth/auth-tokens-retention.service.spec.ts` (prazos, lote, teto,
+escopo, falha no meio, cron) e `test/integration/auth-tokens-retention.spec.ts`
+contra o Postgres local, só `teste2-church` (limite exato, cadeia pai→filho,
+mais de um lote, idempotência e **reuso de refresh token ainda detectado dentro
+da retenção**; depois dela, o token vira "Token inválido").
+
+**`PEND-13` vale para o cron novo**, como para o de 2h: só dispara com o
+processo acordado, e execução perdida atrasa a limpeza sem perder dado.
+Achado derivado: `PEND-24`.
 
 ### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
@@ -600,17 +634,37 @@ recuperação automática.
 - Adotado nas telas com o padrão `retryCount`: `(tabs)/grupos`, `autocadastro`,
   `grupo/[id]`, `grupo/encontro/[id]`, `grupo/encontro/[id]/presenca`,
   `biblia/marcacao/[id]`, `biblia/[book]/[chapter]`, `EventRegistrationPanel`.
-- **Falta adotar** (uma linha por tela com o hook; ficaram de fora por serem de
-  outras sessões ou por não terem o padrão `retryCount`): `celebracao/[id]` e
-  `celebracoes` (PEND-20), `kids/*` (REV-4.x, inclusive `kids/crianca/[id]`),
-  `contribuir` (PROD-31), e as que carregam por outra função de releitura:
-  `(tabs)/conteudo`, `escala`, `post/[id]`, `biblia/feed`, `notificacoes`,
-  `privacidade`, `troca/[id]`, `indisponibilidade`, `dizimo-automatico`,
-  `BookChapterPickerModal`, `VolunteerProfilePanel`.
+- Adotado depois, na branch `feat/app-reconexao-telas-restantes` (2026-11-04),
+  sempre chamando a releitura que a tela já tinha, sem mexer no carregamento:
+  `celebracao/[id]`, `celebracoes`, `contribuir` (só a lista de categorias; gerar
+  o PIX nunca é reenviado), `privacidade`, `(tabs)/conteudo`, `escala`,
+  `post/[id]`, `biblia/feed`, `troca/[id]`, `dizimo-automatico`,
+  `BookChapterPickerModal`, `VolunteerProfilePanel` e `kids/index`,
+  `kids/consentimento`, `kids/checkin/[childId]`, `kids/codigo/[id]`,
+  `kids/crianca/[id]`, `kids/crianca/novo`, `kids/sessao/[id]`. Onde a tela não
+  tinha botão nem contador de releitura (`celebracoes`, `conteudo`, `post/[id]`,
+  `biblia/feed`, `troca/[id]`, `BookChapterPickerModal`), entrou um
+  `retryCount` que só entra nas dependências da leitura existente.
+- **Ficaram de fora, de propósito:**
+  - `kids/qr/[childId]` — o "Tentar de novo" dela é `issueCheckinQr`, que
+    **emite** um token (escrita). Reconexão só pode reler; reemitir sozinha
+    geraria QR que ninguém pediu. Fica sem o hook até a leitura e a emissão
+    serem separadas (decisão de desenho, não de adoção).
+  - `notificacoes` e `indisponibilidade` — o erro de carga é guardado só como
+    texto (sem o `offline`) e a tela continua **editável** por baixo do alerta
+    (chaves de notificação, dias marcados). Uma releitura automática
+    sobrescreveria o que a pessoa já mexeu. Adotar pede antes guardar o
+    `LoadErrorState` e decidir o que fazer com a edição em andamento.
 - Testes: hook (cai→volta→1 releitura; já online não recarrega; oscilação;
-  desmontar), integração em `grupos`.
+  desmontar), integração em `grupos` e, por tela adotada, "cai, volta e faz
+  uma única releitura" + "já online não recarrega" (e, onde há escrita na tela,
+  que a releitura não a dispara).
 - **Pendente humano — `PEND-23`:** teste em aparelho (modo avião ligado/desligado
-  com a tela no erro), só possível com a build nativa.
+  com a tela no erro), só possível com a build nativa. Nada disto foi testado em
+  aparelho; só Jest.
+- **Só chega ao usuário com a build nativa do `netinfo`:** a adoção nas telas
+  acima é JS, mas importa o módulo nativo — precisa do bump de `version` e do
+  EAS Build; um `eas update` para o binário antigo quebra o `import`.
 
 ### PROD-33 · Transições entre telas no app (v2) · fechado no código, falta aparelho (2026-11-02)
 
@@ -959,19 +1013,56 @@ Falta: conferir o formulário no aparelho (teclado numérico, rolagem com os
 quatro campos abertos dentro do card). Spec em
 `.specs/features/contagem-presenca-culto/`.
 
-### PROD-36 · Voluntário edita o próprio perfil e aceita o termo de voluntariado · aberto
+### PROD-36 · Voluntário edita a própria disponibilidade e aceita o termo de voluntariado · parcial
 
-"Meu perfil" (`PROD-35`) só lê. O protótipo deixa a disponibilidade semanal
-tocável e mostra o "Termo de voluntariado" com a data do aceite (`promessa`).
+Entregue em 2026-11-04 (código; falta o aparelho e o jurídico). "Meu perfil"
+(`PROD-35`) deixou de ser só leitura em dois pontos.
 
-Para fazer:
-- uma rota `PATCH /volunteers/me/profile` restrita a `availability`, com
-  auditoria como a do `PATCH /me`;
-- o texto do termo, em `legal/consent-terms/` (revisão em `CONF-01`);
-- o aceite gravado como `consent_records`.
+- **Decisão do dono (2026-11-04):** a habilidade **não** é editável pelo
+  voluntário; continua sendo da liderança, assim como ministérios e restrições.
+- **API.**
+  - `PATCH /volunteers/me/profile` aceita só `availability`. Com o
+    `ValidationPipe` global (`forbidNonWhitelisted`), `skills`, `restrictions`,
+    `person_id` ou qualquer outro campo é 400, e nada é gravado. A pessoa vem de
+    `user_accounts.person_id` no banco; a rota não tem `:id`, então não há como
+    apontar para o perfil de outro. Auditoria `volunteer_profile.self_updated`,
+    com antes/depois, pelo `writeAuditLog` — o mesmo desenho do `PATCH /me`.
+  - `POST /volunteers/me/term` (`term_version` no corpo) grava `consent_records`
+    com versão `volunteer_term_v1`, origem `volunteer_app`, IP e user-agent, e
+    audita `consent.granted`. Reaceitar a mesma versão não duplica nem audita de
+    novo; aceite de versão anterior é revogado (`superseded_by_new_term`), não
+    apagado; versão que não é a vigente é 409 `volunteer_term_outdated`.
+  - `GET /volunteers/me/profile` passou a trazer `term { version, text,
+    accepted_at }` (`accepted_at` nulo se não aceitou ou se revogou).
+  - Sessão de suporte (`support_session`) recebe 403 nas duas rotas: editar e
+    aceitar são atos do titular.
+  - Revogação: `POST /me/revoke-consent` com `version: volunteer_term_v1` já
+    serve. **CONF-02:** o job só apaga `consent_records` com `revoked_at` mais
+    velho que 5 anos; o registro novo nasce sem `revoked_at`, então não
+    conflita. Sem tabela nem policy nova.
+- **Texto do termo:** `legal/consent-terms/volunteer_term_v1.md`, provisório e
+  marcado `[REVISÃO JURÍDICA OBRIGATÓRIA]`. Sem cláusula de peso legal: diz só
+  o que a Orbien guarda e que dá para pedir revogação/correção. **Depende de
+  `CONF-01`**; mudar o texto sobe a versão (`volunteer_term_v2`) e o código
+  (`volunteers/volunteer-term.ts`) muda junto.
+- **App.** `AvailabilityEditor` (sete dias × manhã/tarde/noite, "Salvar
+  disponibilidade" ligado só com mudança) e o card "Termo de voluntariado" com a
+  data do aceite, ambos no `VolunteerProfilePanel`. Termo trocado no servidor
+  (409) recarrega o perfil para ler a versão nova. O hook
+  `useReloadOnReconnect` **não** foi adotado nesta tela (é da `PROD-32`).
+- **Web:** a `PROD-35` não deu a visão no web, então não há paridade a fazer.
+- **Testes.** Unidade (`volunteer-profiles.service.spec.ts`, controller, DTO) e
+  `test/integration/volunteer-self-profile.spec.ts` em `teste1-church`: edita só
+  a própria disponibilidade, habilidade/outro campo é 400, a edição de um não
+  toca o outro, aceite grava `consent_records` e auditoria, reaceite não duplica,
+  revogado volta a "não aceito". App: painel e cliente.
 
-Decisão em aberto: se a habilidade também é editável pelo voluntário, ou se
-continua sendo da liderança.
+Falta: **(1)** conferir no aparelho o editor (alvo de toque dos turnos, largura
+em tela estreita, teclado/rolagem) e o card do termo — pendência humana;
+**(2)** revisão jurídica do texto (`CONF-01`); **(3)** corrida de dois aceites
+simultâneos do mesmo voluntário pode gravar duas linhas (não há unique parcial
+em `consent_records`; o `kids` tem o mesmo comportamento) — baixa chance, sem
+efeito além de uma linha a mais.
 
 ---
 
@@ -2315,7 +2406,7 @@ está.
   para a liderança projetar no culto, com a página pública que esse QR abre
   no `apps/web` (`PROD-34`, fechado). O Início por papel (`PROD-30`) saiu em
   2026-10-05. Contribuir nativo saiu em 2026-10-05 na variante Starter (`PROD-31`). `PROD-32` (sem conexão que se
-  recupera) e `PROD-33` (transições) saíram em 2026-11-02 (teste em aparelho em `PEND-23`). Ficam pendentes, dos QRs, `PEND-18` e `PEND-19` —
+  recupera) e `PROD-33` (transições) saíram em 2026-11-02 (teste em aparelho em `PEND-23`). Fica pendente, dos QRs, `PEND-19` (`PEND-18` fechou em 2026-11-04) —
   lista completa em `PROJETO.md` §4.2.
 
 - **Console (`apps/admin`) — entregue (2026-10-04).** Herda tudo do
@@ -2380,12 +2471,11 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 
-- **`user_accounts` e `role_assignments` seguem com `orbien_app_auth
-  USING (true)` na LEITURA.** A escrita fechou em 2026-09-16 (ação B) e
-  `audit_logs` saiu da policy (ação A) — ver o registro no fim do item. O que
-  resta é o `USING (true)`: quem lê por esse caminho lê as linhas de todos os
-  tenants. Fechar isso é a ação D, e exige mover as leituras do login para
-  função `SECURITY DEFINER`.
+- ~~**`user_accounts` e `role_assignments` seguem com `orbien_app_auth
+  USING (true)` na LEITURA.**~~ **Fechado em 2026-11-04 (ação D)** — ver o
+  registro no fim do item. O que continua com `orbien_app_auth USING (true)` é
+  `tenants`, `congregations`, `branding_configs` e `tenant_plans` (ação C) e
+  `refresh_tokens` (escrita viva por desenho).
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
@@ -2490,6 +2580,35 @@ Continua em aberto, como pergunta: priorizar **C** (trocar os `include` por
 **D** (`SECURITY DEFINER`, restrição por linha) como trabalho próprio, ou
 parar aqui — A e B fecharam a permissão sem chamador, e o que sobra é o
 `USING (true)` de leitura, que é o desenho original do item.
+
+**Ação D aplicada em 2026-11-04** (`033_rls_auth_lookup.sql`, `017` emendado,
+`apps/api/src/auth/auth-lookup.ts`, passo 7 do `bootstrap-db.sh`,
+`test/rls/auth-tables.spec.ts` reescrito). `orbien_app` não tem mais policy em
+`user_accounts` nem em `role_assignments`: lê 0 linhas. A leitura
+pré-autenticação é só por três funções `SECURITY DEFINER` de parâmetro exato
+(`auth_login_lookup(email)`, `auth_session_lookup(id)`,
+`auth_tenant_admin_user_id(tenant)`), `search_path` fixo, `EXECUTE` só para
+`orbien_app`. Só `auth_login_lookup` devolve `password_hash`.
+
+- **Consumidor oculto achado no mapeamento:** `PixService.resolveTenantAdmin`
+  (webhook público da Asaas, `orbien_app` sem `SET LOCAL ROLE`) lia
+  `role_assignments` só por causa do `USING (true)`. Passou a usar
+  `auth_tenant_admin_user_id`, com `ORDER BY` determinístico.
+- **`tenants`/`tenant_plans` saíram do caminho de auth:** as funções devolvem
+  `tenant_is_active` e `plan`, e os `include:` do login (pré-requisito da ação
+  C) deixaram de existir nesse fluxo. A ação C segue aberta para as rotas
+  públicas de células e doação.
+- **Resíduo declarado:** quem tem a credencial `orbien_app` ainda obtém o hash
+  de um e-mail que já conhece (o login precisa dele); deixa de conseguir listar
+  a tabela. Diferença de tempo no login (e-mail inexistente retorna antes do
+  `argon2.verify`) já existia e não mudou — follow-up separado.
+- **Deploy em duas releases** (expandir, depois contrair): funções + código
+  primeiro; só depois da primeira estável o `017` derruba a policy. Rollback da
+  segunda: reverter e redeployar (o `017` antigo recria a policy).
+- **Pendente de decisão:** `role_assignments` não tem índice só por
+  `user_account_id` (os existentes começam por `tenant_id`), e o `JwtStrategy`
+  agora agrega papéis a cada requisição. Antes também lia a relação, então não
+  é regressão; medir em produção antes de criar índice.
 
 ### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
@@ -2806,15 +2925,44 @@ tenant — logo a tarifa não é do tenant e o 1% não é cobrado. Trabalho: mon
 (`DEC-07`, decidido: `AD-009`). Spec e tasks em `.specs/features/asaas-taxa-e-split-padrao/`.
 Bloqueia o `PROD-27` do doador (`.specs/features/pix-recorrente-doador-mobile/`).
 
-### PEND-18 · Limite do autocadastro por IP é baixo para o wi-fi da igreja · aberto
+### ~~PEND-18 · Limite do autocadastro por IP é baixo para o wi-fi da igreja~~ · fechado
 
-`POST /public/visitor/register` aceita 20 envios por hora **por IP**
-(`visitor.public.controller.ts`). Com o QR projetado no culto (`PROD-34`), os
-visitantes na rede da igreja saem pelo mesmo IP: o 21º cadastro da hora
-recebe 429 — a página explica e mantém o que foi digitado, mas o cadastro não
-entra. Quem usa dados móveis não é afetado. Opções a decidir: limite por
-token do QR em vez de por IP, ou um teto por IP maior só nesta rota. Não foi
-mexido porque o limite é a defesa contra spam numa rota sem autenticação.
+Fechado em 2026-11-04. `POST /public/visitor/register` aceitava 20 envios por
+hora por IP; com o QR projetado no culto, o 21º visitante no wi-fi da igreja
+recebia 429. Decisão do dono: pode limitar; o desenho ficou a cargo da
+implementação.
+
+**Desenho** (três baldes, em memória, `visitor-register-limiter.service.ts`):
+
+| Balde | Teto/hora | Onde | Para quê |
+|---|---|---|---|
+| Por QR (`qr_tokens.id`) | 200 | `VisitorRegisterLimiter.hitToken`, depois de ler o token no banco | Limite real: o QR é a unidade do culto. 500 presentes × 10% de visitantes ≈ 50/h; 200 dá 4× de folga e ainda barra um despejo de milhares num QR só |
+| Por IP, só token inválido | 20 | `assertIpNotBlocked` antes da consulta; `recordInvalid` no 404 | O limite baixo de antes, agora só para quem erra token. QR válido nunca incrementa este balde, e IP bloqueado nem chega ao banco |
+| Por IP, qualquer envio | 300 | `@Throttle` da rota (`ThrottlerGuard`) | Rede de segurança. Dois QRs no mesmo IP somam aqui; fica acima do teto do QR para não o anular |
+
+- **Sem chave por token inventado.** O contador por token só nasce depois que o
+  token foi validado no banco (existe e está ativo); token inexistente conta
+  contra o IP. Os mapas têm teto de 10 000 chaves (varre o vencido, depois
+  descarta o mais antigo), então não crescem sem limite.
+- **IP** depende de `trust proxy 1` (`main.ts`) e do mesmo ponto em aberto de
+  `PEND-04`: o que a API vê atrás do `/api-proxy` da Vercel. Se `req.ip` for o
+  IP de saída do proxy, o balde de 300 é compartilhado entre igrejas — o risco
+  que o teto de IP maior assume. O balde por QR não depende de IP.
+- **Memória do processo.** Os contadores reiniciam em deploy e quando o Render
+  acorda a instância, e valem 1/N com N instâncias. Não importa: o pior caso é
+  a janela recomeçar (o limite por IP já era assim) e não há dado de pessoa em
+  jogo. Tabela compartilhada só se aparecer abuso real.
+- **Front sem mudança.** A página `/visitante/{tenant_slug}/{token}` já trata o
+  429 e guarda o digitado.
+- **Antifraude: nada novo.** Já existe a deduplicação por telefone no próprio
+  `registerViaQr` (telefone repetido vira visita, não pessoa nova); nome
+  repetido não foi tratado.
+
+**Fica de fora:** quem tem o QR (está no telão) ainda pode, de muitos IPs,
+cadastrar até 200 nomes falsos por hora naquele QR — antes eram 20 por IP, sem
+teto por QR, então não piora. Resposta, se aparecer: desativar/regerar o QR
+(`admin/visitor/qr`), ou captcha. Persistência dos contadores no banco, e
+limite por telefone/nome, só com evidência de abuso.
 
 ### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
 
@@ -2954,6 +3102,17 @@ erro offline; desligar o modo avião e ver a tela atualizar sozinha, uma vez;
 fade + 3 px entre telas no iOS e no Android; (4) com "Reduzir movimento" ligado,
 sem deslocamento; (5) gesto de voltar no iOS e botão voltar no Android.
 
+### PEND-24 · `e2e-prod` na `main` pode correr antes do deploy · aberto
+
+Surgiu em 2026-11-04, ao fechar o desenho do e2e (PR da `PEND-19`). Em PR, o
+job `E2E (produção)` já deixa de fora os specs que o PR adiciona ou altera
+(`E2E_EXCLUDE_SPECS`); no **push para a `main`** a suíte inteira roda contra
+produção, e o job pode começar antes de a Vercel/Render terminarem o deploy do
+merge — um spec de tela nova falharia por ser prematuro. Hoje o remédio é
+reexecutar o job depois do deploy. Falta um jeito barato de o job esperar o
+deploy (por exemplo, consultar a versão publicada no web antes de rodar). Ver
+`docs/CI.md`, "E2E: só no GitHub".
+
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 
 No job "E2E (produção)" do run 37530228190 (PR #167, 2026-10-06, 21:09–21:38Z)
@@ -2985,6 +3144,18 @@ timeout/queda de conexão, que não são retentados.
 loga a exceção não tratada com stack, que diz se foi `P2028`, queda de conexão
 com o pooler do Supabase ou reinício do serviço. Decisão em aberto: mapear
 `P2028` para 503 (hoje 500).
+
+### PEND-24 · `password_reset_tokens.token` é gravado em claro · segurança
+
+Achado ao investigar a retenção das tabelas de auth (`CONF-02`, 2026-11-04).
+`AuthService.forgotPassword` e `UsersService` gravam o token de redefinição
+em claro (`randomBytes(32).toString('hex')` direto em `token`), e
+`resetPassword` o busca por igualdade. O `refresh_tokens`, ao contrário, guarda
+SHA-256. Quem lê o banco enquanto o token vale (30 min, até o uso) redefine a
+senha da conta. A limpeza de 7 dias após o vencimento não muda isso. Correção
+natural: guardar o hash (SHA-256, como o refresh token) e buscar por hash;
+exige tratar os tokens em voo na migração (curtos, podem simplesmente expirar).
+Não corrigido nesta rodada, por ser outro assunto.
 
 ## 8. Ajustes — documento, rótulo e portão
 
@@ -3217,6 +3388,23 @@ Condicionado ao fechamento do ciclo de conformidade e ao `DEC-01`.
 Cuidado pastoral preditivo, classificação de doações, projeção financeira —
 listados na tabela comparativa de `produto-gestao-igrejas-mvp.md` (seção 5).
 Nenhum tem desenho técnico.
+
+### DEC-08 · Trigger de imutabilidade em `audit_logs` · em aberto
+
+Previsto no mapeamento LGPD 7.2, não implementado (`CONF-02`). Hoje a proteção é
+RLS: `tenant_read` é `FOR SELECT`, então UPDATE/DELETE de `app_user` falham; a
+escrita é só por `audit_insert()` (`SECURITY DEFINER`). O trigger fecharia só a
+conexão `system` (BYPASSRLS), que é o próprio código da API, e o job de
+retenção precisaria de exceção. Desenho, se um dia for feito: trigger
+`BEFORE UPDATE OR DELETE` que bloqueia sem a flag `orbien.audit_purge`, setada
+apenas dentro de uma função `SECURITY DEFINER audit_purge_expired(cutoff, batch)`
+com `EXECUTE` restrito (nunca `SET LOCAL` solto, que qualquer `$executeRaw`
+liberaria); script de RLS de número novo no `bootstrap-db.sh`, assertivas no passo 7 e
+teste de RLS de UPDATE/DELETE por `app_user`, `orbien_app` e `system`. Contra:
+uma `SECURITY DEFINER` que apaga prova, executável pela role da API, não barra
+código da API comprometido (só limita ao vencido), e todo expurgo manual passa a
+exigir migration. Recomendação de 2026-11-04: não fazer agora; reavaliar depois
+do parecer da `CONF-01`. Decisão do dono: a registrar.
 
 ---
 

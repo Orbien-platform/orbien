@@ -32,6 +32,7 @@ import { SwapRequestsPanel } from "../components/escala/SwapRequestsPanel";
 import { VolunteerProfilePanel } from "../components/escala/VolunteerProfilePanel";
 import { HttpError } from "../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import {
   checkIn,
   getMyAssignments,
@@ -121,6 +122,11 @@ export default function EscalaScreen() {
   }, []);
 
   useFocusEffect(load);
+  // PROD-32: sem conexão (erro que tomou a tela), relê sozinha na volta dela
+  // com o mesmo `load` do foco — só as leituras de escala e de trocas.
+  useReloadOnReconnect(error?.offline === true, () => {
+    load();
+  });
 
   function updateAssignment(id: string, patch: Partial<Assignment>) {
     setAssignments((current) =>
