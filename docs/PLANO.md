@@ -1002,9 +1002,14 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   a sessão remota não alcança `onrender.com` (403 do proxy de saída) e o GitHub
   só registra deployments da Vercel, não do Render; a `main` tem a rota desde
   `a2bc79f`. O passo ficou **fora** do `kids-modelo-sessoes.spec.ts` para não
-  quebrar o `e2e-prod`. Para liberar: conferir que `POST /kids/sessions/<uuid>/reopen`
-  sem credencial responde 401 (e não 404) em `orbien-api.onrender.com`, e então
-  acrescentar o passo (cancelar, reativar o culto, "Reabrir").
+  quebrar o `e2e-prod`. Segunda tentativa em 2026-11-05: o mesmo 403 do proxy
+  (`CONNECT tunnel failed, response 403`, política de egress), e não há MCP do
+  Render na sessão — o da Vercel só enxerga o front. Continua sem confirmação.
+  Para liberar, de uma máquina que alcance o Render:
+  `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://orbien-api.onrender.com/api/kids/sessions/6f1c2b1e-3a4d-4c55-9e0a-1b2c3d4e5f60/reopen`.
+  **401** = rota publicada: acrescentar o passo (cancelar a instância, reativar o
+  culto, "Reabrir", sessão volta aberta) em `kids-modelo-sessoes.spec.ts`.
+  **404** = não deployada: esperar o deploy e repetir.
 - ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
   requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
   travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
