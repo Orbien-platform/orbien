@@ -860,11 +860,11 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
     `audience = 'network'` sem `network_id`.
   - **`rich_content` formatado no web**: o modal de `/materiais` usa o mesmo
     `RichTextEditor` dos posts (grava Markdown) e a aba "Materiais" do PG
-    renderiza com `MarkdownView`. Limite: o **mobile** mostra `rich_content` de
-    material como texto puro (`grupo/[id].tsx`, `grupo/encontro/[id].tsx`), então
-    texto formatado chega com `**` e `##` cru até a tela de material do app usar
-    o `MarkdownText` dos posts (área do mobile, não tocada aqui). Link puro
-    continua funcionando como antes.
+    renderiza com `MarkdownView`. O **mobile** também renderiza (2026-11-05):
+    `grupo/[id].tsx` (seção "Materiais") e `grupo/encontro/[id].tsx` usam o
+    `MarkdownText` dos posts, sem fork; texto puro antigo continua legível, link
+    `javascript:` vira texto e `rich_content` nulo não quebra. Só JS (sai por
+    OTA); teste em aparelho em `PEND-23`.
   - **Troca de arquivo/conteúdo pela tela `/materiais`**: já estava na `main`
     (`ff92166`, o PLANO estava defasado): na edição, escolher um arquivo troca
     o PDF/Word (o anterior fica no histórico de versões) e o texto é
@@ -3169,6 +3169,11 @@ erro offline; desligar o modo avião e ver a tela atualizar sozinha, uma vez;
 (2) oscilar a rede e conferir que não há rajada de requisições; (3) transição
 fade + 3 px entre telas no iOS e no Android; (4) com "Reduzir movimento" ligado,
 sem deslocamento; (5) gesto de voltar no iOS e botão voltar no Android.
+
+Acrescentado em 2026-11-05 (PROD-38, material em texto formatado): (6) no
+aparelho, abrir um material de texto formatado (título, lista, negrito, link) na
+seção "Materiais" de um PG e no material de um encontro — sem `**`/`##` cru; um
+material antigo em texto puro continua legível; o link https abre no navegador.
 
 ### PEND-24 · `e2e-prod` na `main` pode correr antes do deploy · aberto
 

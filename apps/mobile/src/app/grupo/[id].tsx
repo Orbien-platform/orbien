@@ -24,6 +24,7 @@ import { AppButton } from "../../components/AppButton";
 import { AppLink } from "../../components/AppLink";
 import { Card } from "../../components/Card";
 import { DateBlock } from "../../components/DateBlock";
+import { MarkdownText } from "../../components/MarkdownText";
 import { Screen } from "../../components/Screen";
 import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
@@ -74,12 +75,11 @@ function MaterialCard({ material, now }: { material: GroupMaterial; now: number 
         </View>
       </View>
       {isRichText ? (
-        <Text
-          testID={`grupo-material-${material.id}-rich-content`}
-          style={[typography.body, styles.richContent, { color: colors.textSecondary }]}
-        >
-          {material.rich_content}
-        </Text>
+        <View style={styles.richContent}>
+          <MarkdownText testID={`grupo-material-${material.id}-rich-content`}>
+            {material.rich_content ?? ""}
+          </MarkdownText>
+        </View>
       ) : (
         <AppLink
           testID={`grupo-material-${material.id}-abrir`}

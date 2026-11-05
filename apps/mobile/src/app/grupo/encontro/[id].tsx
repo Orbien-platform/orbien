@@ -20,6 +20,7 @@ import { Linking, StyleSheet, Text, View } from "react-native";
 import { AppButton } from "../../../components/AppButton";
 import { AppLink } from "../../../components/AppLink";
 import { Card } from "../../../components/Card";
+import { MarkdownText } from "../../../components/MarkdownText";
 import { Screen } from "../../../components/Screen";
 import { SectionLabel } from "../../../components/SectionLabel";
 import { StatusMessage } from "../../../components/StatusMessage";
@@ -167,12 +168,11 @@ export default function EncontroScreen() {
                 </View>
 
                 {isRichText ? (
-                  <Text
-                    testID={`material-${m.id}-rich-content`}
-                    style={[typography.body, styles.richContent, { color: colors.textSecondary }]}
-                  >
-                    {m.material.rich_content}
-                  </Text>
+                  <View style={styles.richContent}>
+                    <MarkdownText testID={`material-${m.id}-rich-content`}>
+                      {m.material.rich_content ?? ""}
+                    </MarkdownText>
+                  </View>
                 ) : (
                   <AppLink
                     testID={`material-${m.id}-abrir`}
