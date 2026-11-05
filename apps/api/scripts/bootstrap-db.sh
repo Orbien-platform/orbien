@@ -303,6 +303,14 @@ fi
 if [ -f prisma/migrations/033_rls_auth_lookup.sql ]; then
   run_sql_file prisma/migrations/033_rls_auth_lookup.sql
 fi
+# PEND-04 (C, expandir): funções SECURITY DEFINER de leitura pública de
+# tenants/congregations/branding_configs/tenant_plans (public_tenant_by_slug,
+# public_donation_target, public_qr_church, public_domain_resolve,
+# auth_impersonate_target). Só adiciona funções; a policy `orbien_app_auth`
+# dessas quatro tabelas só cai no 035 (contrair), que é uma release à parte.
+if [ -f prisma/migrations/034_rls_public_lookup.sql ]; then
+  run_sql_file prisma/migrations/034_rls_public_lookup.sql
+fi
 # PEND-04 (A+B+D): aperta a policy `orbien_app_auth` que a migration datada
 # 20260608175621 criou com USING(true)/WITH CHECK(true) em oito tabelas. Tira
 # `audit_logs` (a auditoria escreve por audit_insert(), SECURITY DEFINER) e,
@@ -311,6 +319,12 @@ fi
 # toca `orbien_app_auth` — o passo 7 confere que continua assim.
 if [ -f prisma/migrations/017_rls_auth_tables.sql ]; then
   run_sql_file prisma/migrations/017_rls_auth_tables.sql
+fi
+# PEND-04 (C, contrair): derruba `orbien_app_auth` de tenants, congregations,
+# branding_configs e tenant_plans. Depois de 034 (as funções precisam existir) e
+# de 017. Release à parte da que traz 034 — ver o cabeçalho do 035.
+if [ -f prisma/migrations/035_rls_public_tables_close.sql ]; then
+  run_sql_file prisma/migrations/035_rls_public_tables_close.sql
 fi
 
 echo ""
@@ -810,6 +824,26 @@ BEGIN
     RAISE EXCEPTION 'esperava 3 funcoes auth_* (auth_login_lookup, auth_session_lookup, auth_tenant_admin_user_id) SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 033_rls_auth_lookup.sql rodou?', n;
   END IF;
 
+  -- 034 (PEND-04, ação C): as cinco funções de leitura pública. Mesmos quatro
+  -- vícios que a checagem de 033 cobre: sem SECURITY DEFINER, sem search_path
+  -- fixo, EXECUTE aberto a app_user/PUBLIC, ou dono orbien_app.
+  SELECT count(*) INTO n
+    FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+   WHERE p.proname IN ('public_tenant_by_slug', 'public_donation_target',
+                       'public_qr_church', 'public_domain_resolve',
+                       'auth_impersonate_target')
+     AND p.prosecdef
+     AND p.proconfig IS NOT NULL
+     AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+     AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE')
+     AND pg_get_userbyid(p.proowner) <> 'orbien_app';
+  RAISE NOTICE 'funcoes publicas conformes: %', n;
+  IF n <> 5 THEN
+    RAISE EXCEPTION 'esperava 5 funcoes publicas (public_tenant_by_slug, public_donation_target, public_qr_church, public_domain_resolve, auth_impersonate_target) SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 034_rls_public_lookup.sql rodou?', n;
+  END IF;
+
   -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu
   -- USING(true)/WITH CHECK(true) FOR ALL em oito tabelas, na migration datada
   -- 20260608175621. 017 tira `audit_logs` da policy e fecha a escrita em
@@ -863,20 +897,30 @@ BEGIN
     RAISE EXCEPTION 'refresh_tokens perdeu a policy orbien_app_auth FOR ALL simetrica — login, refresh e logout escrevem nela como orbien_app, sem contexto, e passam a falhar com 42501';
   END IF;
 
-  -- As quatro que 017 deixa abertas de propósito. Não basta conferir o que
-  -- foi apertado: se `orbien_app_auth` sumir de uma DESTAS, o login para de
-  -- resolver o tenant e a página pública de células (que lê `tenants` e
-  -- `branding_configs` sem JWT, por `public-small-groups.service.ts:163,168`)
-  -- para junto — e, sem esta checagem, o passo 7 passaria verde.
+  -- PEND-04 C: `tenants`, `congregations`, `branding_configs` e `tenant_plans`
+  -- NÃO têm mais `orbien_app_auth`. Policy de volta reabre a leitura de todos
+  -- os tenants por `orbien_app` — incluindo os tokens OAuth cifrados da
+  -- Cloudflare em `branding_configs` — em silêncio: as rotas públicas continuam
+  -- funcionando, o `OR true` só passa a existir de novo.
   SELECT count(*) INTO n
     FROM pg_policies
    WHERE policyname = 'orbien_app_auth'
-     AND tablename IN ('tenants', 'congregations', 'branding_configs', 'tenant_plans')
-     AND cmd = 'ALL'
-     AND with_check IS NOT DISTINCT FROM qual;
-  RAISE NOTICE 'orbien_app_auth intacta nas tabelas de leitura pre-autenticacao: %', n;
+     AND tablename IN ('tenants', 'congregations', 'branding_configs', 'tenant_plans');
+  RAISE NOTICE 'orbien_app_auth em tenants/congregations/branding_configs/tenant_plans: % (esperado 0)', n;
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'tenants/congregations/branding_configs/tenant_plans ainda tem % policy(ies) orbien_app_auth — 035_rls_public_tables_close.sql nao rodou, ou a migration datada a recriou depois. A leitura publica e pelas funcoes de 034', n;
+  END IF;
+
+  -- O outro sentido: as quatro continuam com RLS e com as policies de
+  -- isolamento (`tenant_isolation`, `TO app_user`), de onde `orbien_app` herda
+  -- o acesso quando há `app.tenant_id`. Sem elas o tenant não leria a própria
+  -- marca, e sem contexto ninguém leria nada.
+  SELECT count(*) INTO n
+    FROM pg_policies
+   WHERE policyname = 'tenant_isolation'
+     AND tablename IN ('tenants', 'congregations', 'branding_configs', 'tenant_plans');
   IF n <> 4 THEN
-    RAISE EXCEPTION 'esperava 4 policies orbien_app_auth FOR ALL simetricas (tenants, congregations, branding_configs, tenant_plans), encontrei % — o login e a rota publica de celulas leem essas tabelas como orbien_app, sem contexto', n;
+    RAISE EXCEPTION 'esperava a policy tenant_isolation em tenants, congregations, branding_configs e tenant_plans, encontrei % — 001/004 rodaram?', n;
   END IF;
 
   -- A auditoria so sobrevive a saida de `audit_logs` da policy porque

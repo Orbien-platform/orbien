@@ -11,6 +11,7 @@ import { RegisterVisitorByLeaderDto } from './dto/register-visitor-by-leader.dto
 import { PRODUCT_AREA_READ_ROLES } from '../auth/product-areas';
 import { writeAuditLog } from '../common/audit/write-audit-log';
 import { VisitorRegisterLimiter } from './visitor-register-limiter.service';
+import { findPublicQrChurch } from '../common/public-lookup';
 
 type PrismaTx = Omit<
   PrismaClient,
@@ -114,40 +115,28 @@ export class VisitorService {
   async describeQr(token: string): Promise<PublicQrInfo> {
     const qrToken = await this.prisma.client.qrToken.findUnique({
       where: { token },
-      select: {
-        is_active: true,
-        origin: true,
-        label: true,
-        congregation: { select: { name: true } },
-        tenant: {
-          select: {
-            brandingConfig: {
-              select: {
-                primary_color: true,
-                secondary_color: true,
-                logo_url: true,
-                logo_url_dark: true,
-              },
-            },
-          },
-        },
-      },
+      select: { is_active: true, origin: true, label: true },
     });
 
     if (!qrToken || !qrToken.is_active) {
       throw new NotFoundException('QR code inválido ou expirado');
     }
 
-    const branding = qrToken.tenant.brandingConfig;
+    // Sem contexto de tenant, `orbien_app` não lê `congregations` nem
+    // `branding_configs` direto (PEND-04 C): nome e marca vêm de
+    // `public_qr_church` (034), pelo token exato.
+    const branding = await findPublicQrChurch(this.prisma.client, token);
+    if (!branding) throw new NotFoundException('QR code inválido ou expirado');
+
     return {
-      church_name: qrToken.congregation.name,
+      church_name: branding.church_name,
       origin: qrToken.origin,
       label: qrToken.label,
       brand: {
-        primary_color: publicColor(branding?.primary_color),
-        accent_color: publicColor(branding?.secondary_color),
-        logo_url: publicLogoUrl(branding?.logo_url),
-        logo_url_dark: publicLogoUrl(branding?.logo_url_dark),
+        primary_color: publicColor(branding.primary_color),
+        accent_color: publicColor(branding.secondary_color),
+        logo_url: publicLogoUrl(branding.logo_url),
+        logo_url_dark: publicLogoUrl(branding.logo_url_dark),
       },
     };
   }
@@ -164,7 +153,6 @@ export class VisitorService {
 
     const qrToken = await this.prisma.client.qrToken.findUnique({
       where: { token: dto.token },
-      include: { congregation: { select: { name: true } } },
     });
 
     if (!qrToken || !qrToken.is_active) {
@@ -269,9 +257,12 @@ export class VisitorService {
     );
 
     if (isNewPerson) {
+      // O nome da congregação sai de `public_qr_church` (034): `orbien_app` não
+      // lê `congregations` direto (PEND-04 C).
+      const church = await findPublicQrChurch(this.prisma.client, dto.token);
       return {
         status: 'registered',
-        message: `Cadastro realizado! Bem-vindo à ${qrToken.congregation.name}.`,
+        message: `Cadastro realizado! Bem-vindo à ${church?.church_name ?? 'nossa igreja'}.`,
       };
     }
 
