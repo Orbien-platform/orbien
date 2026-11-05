@@ -3,10 +3,13 @@
  * editar o alcance depois e conferir o que chega ao PG — pela API
  * (`GET /small-groups/:id/materials`) e pela aba "Materiais" da gaveta do PG.
  *
- * O conteúdo é "Texto ou link", e não arquivo: o upload sobe direto na API
- * (`NEXT_PUBLIC_API_UPLOAD_URL`) e não depende deste spec para o que ele
- * verifica — o alcance. O modo arquivo tem teste de componente
- * (`MaterialFormModal.test.tsx`, `upload-study-material.test.ts`).
+ * O primeiro teste usa "Texto ou link" (o que ele verifica é o alcance). Os
+ * outros dois sobem arquivo de verdade — `/materiais` e o modal de reunião —,
+ * pelo caminho real: ticket pelo proxy, arquivo direto na API
+ * (`NEXT_PUBLIC_API_UPLOAD_URL`), validação de conteúdo e gravação. No e2e
+ * local a API usa `STORAGE_DRIVER=stub` (storage em memória, sem R2); no
+ * `e2e-prod` o upload vai ao bucket real, no tenant de teste, e a limpeza
+ * apaga o objeto junto com o material.
  *
  * Só roda em `teste1-church`/`teste2-church` (E2E_EMAIL deve ser de um deles);
  * tudo o que o teste cria é apagado no fim.
@@ -20,7 +23,23 @@ interface Group { id: string; name: string }
 interface GroupType { id: string; name: string }
 interface Person { id: string; full_name: string }
 interface GroupMaterial { id: string; title: string; visibility: string }
-interface Material { id: string; title: string }
+interface Material { id: string; title: string; source_type?: string; file_url?: string | null }
+
+// Conteúdo mínimo que passa na validação por magic bytes da API.
+const PDF = { name: "estudo.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%E2E\n%%EOF\n") };
+const DOCX = {
+  name: "estudo.docx",
+  mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  buffer: Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("word/document.xml")]),
+};
+
+/** Apaga, pela API, os materiais de teste que ficaram com estes títulos. */
+async function limpaMateriais(api: { call<T>(m: string, p: string): Promise<T>; tryCall(m: string, p: string): Promise<void> }, titulos: string[]) {
+  const materiais = await api.call<{ data: Material[] }>("GET", "/study-materials?limit=100");
+  for (const m of materiais.data) {
+    if (titulos.includes(m.title)) await api.tryCall("DELETE", `/study-materials/${m.id}`);
+  }
+}
 
 test.describe("materiais", () => {
   test("cria para todas as redes, restringe a um PG só para líderes e confere no PG", async ({
@@ -57,7 +76,7 @@ test.describe("materiais", () => {
         await page.goto("/materiais", { waitUntil: "domcontentloaded" });
         await lista;
         await page.getByRole("button", { name: "Novo material" }).click();
-        await page.getByLabel("Título").fill(titulo);
+        await page.getByRole("textbox", { name: "Título", exact: true }).fill(titulo);
         await page.getByLabel("Texto ou link").check();
         await page.getByLabel("Texto ou link do material").fill("Leia Rute 1 e responda em casa.");
         await page.getByLabel("Todas as redes").check();
@@ -95,7 +114,7 @@ test.describe("materiais", () => {
       await test.step("edita: só o PG B, só líderes", async () => {
         await editar.click();
         await expect(page.getByRole("heading", { name: "Editar material" })).toBeVisible();
-        await expect(page.getByLabel("Título")).toHaveValue(titulo);
+        await expect(page.getByRole("textbox", { name: "Título", exact: true })).toHaveValue(titulo);
 
         await page.getByLabel("Um PG").check();
         await page.getByLabel("PG", { exact: true }).selectOption({ label: nomeB });
@@ -144,6 +163,134 @@ test.describe("materiais", () => {
         if (m.title === titulo) await api.tryCall("DELETE", `/study-materials/${m.id}`);
       }
       for (const id of groupIds) await api.tryCall("DELETE", `/small-groups/${id}`);
+    }
+  });
+  test("arquivo: sobe um PDF pela tela, troca por Word e o material continua no mesmo registro", async ({
+    page,
+    errorLog,
+    api,
+  }) => {
+    const titulo = `Material Arquivo E2E ${Date.now()}`;
+    try {
+      await test.step("publica um PDF para todas as redes", async () => {
+        const lista = page.waitForResponse(
+          (r) => r.url().includes("/study-materials") && r.request().method() === "GET"
+        );
+        await page.goto("/materiais", { waitUntil: "domcontentloaded" });
+        await lista;
+        await page.getByRole("button", { name: "Novo material" }).click();
+        await page.getByRole("textbox", { name: "Título", exact: true }).fill(titulo);
+        await page.getByLabel("Arquivo do material").setInputFiles(PDF);
+        await page.getByLabel("Todas as redes").check();
+        await page.getByRole("button", { name: "Publicar material" }).click();
+        await expect(page.getByRole("row").filter({ hasText: titulo })).toBeVisible();
+      });
+
+      let idDoMaterial = "";
+      let urlDoPdf = "";
+      await test.step("a API guardou o arquivo como PDF", async () => {
+        const { data } = await api.call<{ data: Material[] }>("GET", "/study-materials?limit=100");
+        const criado = data.find((m) => m.title === titulo);
+        expect(criado, "o material não aparece na API depois do upload").toBeTruthy();
+        expect(criado?.source_type).toBe("pdf");
+        expect(criado?.file_url).toBeTruthy();
+        idDoMaterial = criado!.id;
+        urlDoPdf = criado!.file_url!;
+      });
+
+      await test.step("troca o arquivo por um Word pela edição", async () => {
+        await page.getByRole("row").filter({ hasText: titulo }).getByRole("button", { name: "Editar material" }).click();
+        await expect(page.getByRole("heading", { name: "Editar material" })).toBeVisible();
+        // O `e2e-prod` roda contra o que está no ar: antes do deploy da troca de
+        // arquivo a edição não tem o campo, e o resto do passo não tem o que testar.
+        test.skip(
+          (await page.getByLabel("Arquivo do material").count()) === 0,
+          "Troca de arquivo ainda não está no ambiente testado (e2e-prod antes do deploy)."
+        );
+        await page.getByLabel("Arquivo do material").setInputFiles(DOCX);
+        await page.getByRole("button", { name: "Salvar alterações" }).click();
+        await expect(page.getByRole("heading", { name: "Editar material" })).toBeHidden();
+
+        const { data } = await api.call<{ data: Material[] }>("GET", "/study-materials?limit=100");
+        const depois = data.filter((m) => m.title === titulo);
+        expect(depois, "a troca criou outro material em vez de editar o mesmo").toHaveLength(1);
+        expect(depois[0].id).toBe(idDoMaterial);
+        expect(depois[0].source_type).toBe("doc");
+        expect(depois[0].file_url).toBeTruthy();
+        expect(depois[0].file_url).not.toBe(urlDoPdf);
+      });
+
+      await test.step("sem erro de console ou HTTP inesperado", async () => {
+        expect(realConsoleErrors(errorLog), "erros de console no upload de material").toEqual([]);
+        expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+      });
+    } finally {
+      await limpaMateriais(api, [titulo]);
+    }
+  });
+
+  test("arquivo: registra a reunião de um PG, anexa um PDF e o material chega ao PG", async ({
+    page,
+    errorLog,
+    api,
+  }) => {
+    const stamp = Date.now();
+    const nomePg = `PG E2E Reunião Arquivo ${stamp}`;
+    const titulo = `Roteiro E2E ${stamp}`;
+    let grupoId = "";
+
+    try {
+      await test.step("cria um PG via API", async () => {
+        const tipos = await api.call<GroupType[]>("GET", "/groups/types");
+        const pessoas = await api.call<{ data: Person[] }>("GET", "/persons?limit=1");
+        const criado = await api.call<Group>("POST", "/small-groups", {
+          name: nomePg,
+          group_type_id: tipos[0].id,
+          leader_person_id: pessoas.data[0].id,
+        });
+        grupoId = criado.id;
+      });
+
+      await test.step("registra a reunião e anexa o PDF pelo modal", async () => {
+        await page.goto("/grupos", { waitUntil: "domcontentloaded" });
+        await page.getByPlaceholder("Buscar grupos…").fill(nomePg);
+        await page.getByRole("cell", { name: nomePg }).click();
+        await expect(page.getByRole("heading", { name: nomePg })).toBeVisible();
+
+        await page.getByRole("tab", { name: "Reuniões" }).click();
+        await page.getByRole("button", { name: "Registrar reunião" }).click();
+        await page.getByLabel(/^Data/).fill("2026-01-15");
+        await page.getByRole("button", { name: "Registrar e marcar presença" }).click();
+
+        await page.getByRole("button", { name: "Enviar PDF ou Word" }).click();
+        await page.getByPlaceholder("Título do material").fill(titulo);
+        await page.getByLabel("Arquivo do material").setInputFiles(PDF);
+        await page.getByRole("button", { name: "Adicionar material" }).click();
+
+        // O material entra na lista do modal quando a API devolve o vínculo.
+        await expect(page.getByText(titulo)).toBeVisible();
+        await shot(page, "63-reuniao-material-arquivo");
+        await page.getByRole("button", { name: "Finalizar" }).click();
+      });
+
+      await test.step("o PDF é do PG da reunião, com arquivo guardado", async () => {
+        const doPg = await api.call<(GroupMaterial & { file_url?: string | null; source_type?: string })[]>(
+          "GET",
+          `/small-groups/${grupoId}/materials`
+        );
+        const anexado = doPg.find((m) => m.title === titulo);
+        expect(anexado, "o PG não recebeu o material anexado à reunião").toBeTruthy();
+        expect(anexado?.source_type).toBe("pdf");
+        expect(anexado?.file_url).toBeTruthy();
+      });
+
+      await test.step("sem erro de console ou HTTP inesperado", async () => {
+        expect(realConsoleErrors(errorLog), "erros de console no modal de reunião").toEqual([]);
+        expect(unexpectedHttp(errorLog), "respostas HTTP com erro").toEqual([]);
+      });
+    } finally {
+      await limpaMateriais(api, [titulo]);
+      if (grupoId) await api.tryCall("DELETE", `/small-groups/${grupoId}`);
     }
   });
 });

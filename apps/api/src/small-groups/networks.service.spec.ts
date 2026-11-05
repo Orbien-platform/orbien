@@ -23,12 +23,16 @@ function clientWith(overrides: Record<string, unknown> = {}) {
     smallGroup: { findMany: jest.fn() },
     groupMeeting: { groupBy: jest.fn() },
     person: { findUnique: jest.fn() },
+    studyMaterial: { updateMany: jest.fn() },
     ...overrides,
   };
 }
 
 function serviceWith(client: ReturnType<typeof clientWith>) {
-  const prisma = { client } as unknown as PrismaService;
+  const prisma = {
+    client,
+    runInTx: jest.fn((fn: (tx: unknown) => unknown) => fn(client)),
+  } as unknown as PrismaService;
   return new NetworksService(prisma);
 }
 
@@ -201,6 +205,10 @@ describe('NetworksService', () => {
 
       const result = await service.remove('n1');
 
+      expect(client.studyMaterial.updateMany).toHaveBeenCalledWith({
+        where: { network_id: 'n1', audience: 'network' },
+        data: { audience: 'group' },
+      });
       expect(client.network.delete).toHaveBeenCalledWith({ where: { id: 'n1' } });
       expect(result).toEqual({ id: 'n1' });
     });

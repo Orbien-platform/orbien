@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { MeetingMaterialNotifier } from './meeting-material.notifier';
 import { StorageService } from '../storage/storage.service';
@@ -323,6 +323,29 @@ describe('MeetingsService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
+    it('recusa (422) material que não tem o PG do encontro como alvo', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue({
+        id: 'meet1',
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-other' },
+      });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1', materialTargets: [] });
+      const service = serviceWith(client);
+
+      await expect(
+        service.addMaterial('meet1', { material_id: 'mat1' } as never, USER),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(client.groupMeetingMaterial.create).not.toHaveBeenCalled();
+      expect(client.studyMaterial.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            materialTargets: expect.objectContaining({ where: { small_group_id: 'sg1' } }),
+          }),
+        }),
+      );
+    });
+
     it('rejeita vínculo duplicado', async () => {
       const client = clientWith();
       client.groupMeeting.findUnique.mockResolvedValue({
@@ -330,7 +353,7 @@ describe('MeetingsService', () => {
         small_group_id: 'sg1',
         smallGroup: { leader_person_id: 'p-other' },
       });
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1', materialTargets: [{ small_group_id: 'sg1' }] });
       client.groupMeetingMaterial.findUnique.mockResolvedValue({ id: 'link1' });
       const service = serviceWith(client);
 
@@ -346,7 +369,7 @@ describe('MeetingsService', () => {
         small_group_id: 'sg1',
         smallGroup: { leader_person_id: 'p-other' },
       });
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1', materialTargets: [{ small_group_id: 'sg1' }] });
       client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
       client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
       const service = serviceWith(client);
@@ -373,7 +396,7 @@ describe('MeetingsService', () => {
         small_group_id: 'sg1',
         smallGroup: { leader_person_id: 'p-other' },
       });
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1', materialTargets: [{ small_group_id: 'sg1' }] });
       client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
       client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
       const service = serviceWith(client);
@@ -396,7 +419,7 @@ describe('MeetingsService', () => {
         small_group_id: 'sg1',
         smallGroup: { leader_person_id: 'p-other' },
       });
-      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1' });
+      client.studyMaterial.findUnique.mockResolvedValue({ id: 'mat1', materialTargets: [{ small_group_id: 'sg1' }] });
       client.groupMeetingMaterial.findUnique.mockResolvedValue(null);
       client.groupMeetingMaterial.create.mockResolvedValue({ id: 'link1' });
       const service = serviceWith(client);
@@ -418,7 +441,7 @@ describe('MeetingsService', () => {
       ({
         originalname: 'estudo.pdf',
         mimetype: 'application/pdf',
-        buffer: Buffer.from('x'),
+        buffer: Buffer.from('%PDF-1.4 conteudo'),
         ...over,
       }) as unknown as Express.Multer.File;
 
@@ -446,6 +469,8 @@ describe('MeetingsService', () => {
       ['executável renomeado para pdf', { originalname: 'x.pdf', mimetype: 'application/x-msdownload' }],
       ['extensão que não bate com o tipo', { originalname: 'x.exe', mimetype: 'application/pdf' }],
       ['imagem', { originalname: 'x.png', mimetype: 'image/png' }],
+      ['executável com nome e mimetype de pdf', { buffer: Buffer.from('MZ\x90\x00') }],
+      ['zip sem word/ como docx', { originalname: 'x.docx', mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from('PK\x03\x04xl/') }],
     ])('recusa %s sem tocar no storage', async (_n, over) => {
       const service = serviceWith(ready());
       await expect(
@@ -505,6 +530,7 @@ describe('MeetingsService', () => {
         pdf({
           originalname: 'Roteiro.DOCX',
           mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          buffer: Buffer.from('PK\x03\x04word/document.xml'),
         }),
         USER,
       );
@@ -539,7 +565,7 @@ describe('MeetingsService', () => {
     const pdfFile = {
       originalname: 'a.pdf',
       mimetype: 'application/pdf',
-      buffer: Buffer.from('x'),
+      buffer: Buffer.from('%PDF-1.4 conteudo'),
     } as unknown as Express.Multer.File;
 
     function withMeeting(leaderPersonId = 'p-other') {

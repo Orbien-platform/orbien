@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BookOpen, ExternalLink, FileText, Loader2, Lock } from "lucide-react";
+import { MarkdownView } from "@/components/content/MarkdownView";
 import { NoAccessState } from "@/components/ui/NoAccessState";
 import api, { isForbidden } from "@/lib/api";
 import { formatInstant } from "@/lib/datetime";
@@ -135,7 +136,7 @@ export function GroupMaterialsPanel({ groupId }: { groupId: string }) {
             </div>
 
             {!href && m.rich_content && (
-              <p className="whitespace-pre-wrap text-sm text-stone">{m.rich_content}</p>
+              <MarkdownView markdown={m.rich_content} className="text-sm text-stone" />
             )}
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone">

@@ -125,15 +125,16 @@ export function RegisterMeetingModal({
     setError("");
     setIsSubmitting(true);
     try {
-      const { data } = await api.post<{ id: string }>(
-        `/small-groups/${groupId}/meetings`,
+      const { data } = await api.post<{ meeting: { id: string }; attendance_count: number }>(
+        "/small-groups/meetings",
         {
+          small_group_id: groupId,
           occurred_at: new Date(occurredAt + "T12:00:00").toISOString(),
           topic: topic.trim() || undefined,
           observations: observations.trim() || undefined,
         }
       );
-      setMeetingId(data.id);
+      setMeetingId(data.meeting.id);
       setStep("attendance");
     } catch (err: unknown) {
       // Endpoint may not be available in local dev (Railway-only)

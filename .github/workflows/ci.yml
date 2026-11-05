@@ -260,6 +260,9 @@ jobs:
       # encaminha para cá. Precisa estar definido no build E no start.
       API_BACKEND_URL: http://localhost:3000/api
       NEXT_PUBLIC_API_URL: /api-proxy
+      # O upload de arquivo sobe direto na API (fora do proxy). Sem isto o build
+      # herdaria o `.env.production`, que aponta para a API de produção.
+      NEXT_PUBLIC_API_UPLOAD_URL: http://localhost:3000/api
     steps:
       - uses: actions/checkout@v7
 
@@ -289,6 +292,8 @@ jobs:
           JWT_REFRESH_SECRET: ci-jwt-refresh-secret
           ALLOWED_ORIGINS: http://localhost:3001
           FRONTEND_URL: http://localhost:3001
+          # Storage em memória: o upload de arquivo roda de ponta a ponta sem R2.
+          STORAGE_DRIVER: stub
         run: |
           node apps/api/dist/src/main.js &
           for i in $(seq 1 60); do

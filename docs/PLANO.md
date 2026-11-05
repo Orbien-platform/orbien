@@ -837,22 +837,83 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
     primeiro alvo. O modo arquivo ficou só em teste de componente: o upload
     depende de `NEXT_PUBLIC_API_UPLOAD_URL` e não muda o que o spec verifica.
 
-Falta:
-- E2E do modo arquivo (encontro e `/materiais`), com upload real.
-- Tornar o bucket (ou um prefixo) privado, para a URL assinada de "só líderes"
-  proteger de fato; hoje a URL pública do R2 ainda abre o arquivo.
-- A validação de arquivo confere mimetype e extensão, não o conteúdo (magic
-  bytes).
-- Rede apagada deixa `audience = 'network'` com `network_id` nulo (`SET NULL`);
-  é cosmético, a lista de PGs já foi gravada.
-- Foto vs. consulta viva: se o produto quiser que PG novo numa rede receba o
-  material da rede, `material_targets` precisa ser resolvido na leitura. Vale
-  também para a edição de alcance, que regrava a foto no momento do `PATCH`.
-- `rich_content` (texto formatado) no web — o modal cria material por link ou
-  arquivo.
-- Troca de arquivo ou de conteúdo de material já criado pela tela `/materiais`
-  (a API aceita; a tela edita só alcance e liberação).
-- `addMaterial` não confere se o material tem o PG do encontro como alvo.
+- Fechamento (2026-11-04):
+  - **Conteúdo do arquivo por magic bytes** (`assertMaterialFile`): PDF
+    (`%PDF-` no início), doc (OLE `D0CF11E0A1B11AE1`), docx (zip `PK\x03\x04`
+    com uma parte `word/`, o que separa de xlsx/pptx/zip qualquer). Recusa com
+    400 "O conteúdo do arquivo não corresponde a um PDF ou Word válido…". A
+    checagem roda no buffer, **antes** de qualquer `upload` ao R2 (as três
+    rotas, `POST/PATCH /study-materials` e o upload do encontro, recebem o
+    arquivo pela API em memória), então não há objeto para apagar. Evidência:
+    `material-file.spec.ts` (PDF/doc/docx válidos; executável, texto, PDF dentro
+    de .doc/.docx, zip sem `word/`, OLE como docx, vazio e sem buffer
+    recusados) e um caso de arquivo disfarçado em `create` e em
+    `uploadMaterial`, ambos sem tocar o storage.
+  - **`addMaterial` confere o alvo**: vincular a um encontro um material que não
+    tem o PG do encontro em `material_targets` devolve 422. Evidência: teste
+    novo em `meetings.service.spec.ts`. Efeito a saber: material criado "para
+    todas as redes" antes de um PG existir (foto, ver abaixo) não pode ser
+    vinculado ao encontro desse PG; o caminho é editar o alcance dele em
+    `/materiais` (que regrava a foto) ou enviar o arquivo pelo encontro.
+  - **Rede apagada** passa o alcance dos materiais dela para `group`
+    (`NetworksService.remove`, na mesma transação), em vez de deixar
+    `audience = 'network'` sem `network_id`.
+  - **`rich_content` formatado no web**: o modal de `/materiais` usa o mesmo
+    `RichTextEditor` dos posts (grava Markdown) e a aba "Materiais" do PG
+    renderiza com `MarkdownView`. Limite: o **mobile** mostra `rich_content` de
+    material como texto puro (`grupo/[id].tsx`, `grupo/encontro/[id].tsx`), então
+    texto formatado chega com `**` e `##` cru até a tela de material do app usar
+    o `MarkdownText` dos posts (área do mobile, não tocada aqui). Link puro
+    continua funcionando como antes.
+  - **Troca de arquivo/conteúdo pela tela `/materiais`**: já estava na `main`
+    (`ff92166`, o PLANO estava defasado): na edição, escolher um arquivo troca
+    o PDF/Word (o anterior fica no histórico de versões) e o texto é
+    reescrito no mesmo `PATCH`. Passou a ter e2e.
+  - **E2E com upload real** (`materiais.spec.ts`, dois testes novos): `/materiais`
+    sobe um PDF, confere na API (`source_type = pdf`, `file_url`), troca por
+    Word e confere que é o mesmo registro (`doc`, `file_url` novo); e o modal de
+    reunião registra a reunião de um PG, anexa o PDF e confere que o PG o recebeu.
+    Para rodar sem R2: `STORAGE_DRIVER=stub` (storage em memória; recusado com
+    `NODE_ENV=production`) na API do job `e2e` do CI (o e2e do web só roda
+    no GitHub), e `NEXT_PUBLIC_API_UPLOAD_URL=http://localhost:3000/api` no
+    build/start do web
+    (sem isso o build herdava o `.env.production`, que aponta para a API de
+    produção). O `e2e-prod` usa o upload real contra o bucket, em tenant de
+    teste, e a limpeza apaga o objeto com o material. Antes do deploy da troca
+    de arquivo o passo "troca" se pula com motivo (padrão do spec).
+  - **Bug achado pelo e2e do encontro, corrigido:** o `RegisterMeetingModal`
+    fazia `POST /small-groups/:groupId/meetings`, rota que não existe (a API
+    tem `POST /small-groups/meetings` com `small_group_id` no corpo). A tela
+    caía no aviso "Reuniões ainda não disponíveis neste ambiente" em qualquer
+    ambiente, e o teste unitário passava porque mockava a mesma URL errada. O
+    modal agora chama a rota certa; os testes de `RegisterMeetingModal` e
+    `GroupDetailSheet` conferem `small_group_id`. Mesmo trecho, segundo
+    defeito: a API devolve `{ meeting, attendance_count }` e o modal lia
+    `data.id`, então `meetingId` ficava vazio e marcar presença e adicionar
+    material não faziam nada, sem erro na tela (os mocks dos testes repetiam o
+    formato errado). Agora lê `data.meeting.id`.
+  - **Terceiro defeito, na API:** o ticket de upload do encontro saía com
+    `roles: []`, e `uploadMaterial` refaz `assertCanManageMaterials` (e o
+    contexto de RLS) por `user.roles`. Resultado: `tenant_admin` ou
+    `admin_congregation` que não lidera o PG levava 403 ao anexar PDF/Word ao
+    encontro; só o líder passava. O ticket agora carrega os papéis de quem o
+    pediu; não amplia o alcance dele (`JwtAuthGuard` só o aceita nesta rota por
+    `upload_kind`, `RolesGuard` só para esta reunião por `upload_target`). Os
+    tickets de post e de material de estudo seguem com `roles: []`: o de
+    material de estudo passou no e2e com admin, e o de post não foi tocado.
+    Evidência: dois testes em `meetings.controller.spec.ts` e o e2e do encontro,
+    com admin que não é líder do PG.
+
+Falta (decisão de vocês ou fora do código):
+- **Tornar o bucket (ou um prefixo) privado** (Cloudflare, ação humana), para a
+  URL assinada de "só líderes" proteger de fato; hoje a URL pública do R2 ainda
+  abre o arquivo. O código já está pronto.
+- **Foto vs. consulta viva** de `material_targets` (decisão de produto): hoje é
+  foto — PG criado ou movido de rede depois não recebe material antigo, e a
+  edição de alcance regrava a foto no momento do `PATCH`. Consulta viva faria o
+  PG novo numa rede receber o material da rede, ao custo de resolver
+  `audience`/`network_id` na leitura e no aviso.
+
 
 ### PROD-39 · Módulo Kids: turmas, check-in e check-out seguros · entregue, faltam o jurídico e o refino
 
@@ -937,8 +998,13 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   reabrir em `test/integration/kids-sessions.spec.ts`, unitários e vitest do
   modal. **Fora de escopo, segue aberto:** o passo "reabrir" no e2e — o
   `e2e-prod` roda os specs contra o ambiente publicado, que só tem o botão e a
-  rota depois do deploy, então ele entra em `kids-modelo-sessoes.spec.ts` num PR
-  depois do deploy.
+  rota depois do deploy. Em 2026-11-04 não deu para confirmar o deploy da API:
+  a sessão remota não alcança `onrender.com` (403 do proxy de saída) e o GitHub
+  só registra deployments da Vercel, não do Render; a `main` tem a rota desde
+  `a2bc79f`. O passo ficou **fora** do `kids-modelo-sessoes.spec.ts` para não
+  quebrar o `e2e-prod`. Para liberar: conferir que `POST /kids/sessions/<uuid>/reopen`
+  sem credencial responde 401 (e não 404) em `orbien-api.onrender.com`, e então
+  acrescentar o passo (cancelar, reativar o culto, "Reabrir").
 - ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
   requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
   travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
@@ -975,9 +1041,11 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   (criar, editar, desativar, reativar), `kids-criancas.spec.ts` (cadastro com
   aceite do termo, edição, revogar e registrar o consentimento) e
   `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir e cancelar sessão;
-  o reabrir fica para depois do deploy, ver REV-4.2). **Fora de escopo, segue aberto:** a tela de autorizados
-  (`GuardianFormModal`: adicionar, editar e remover responsável) continua só com
-  vitest.
+  o reabrir fica para depois do deploy, ver REV-4.2). A tela de autorizados fechou em 2026-11-04 com
+  `kids-autorizados.spec.ts` (`teste2-church`): adiciona um terceiro autorizado,
+  recusa remover o único primário, edita o vínculo promovendo-o a primário
+  (o anterior é rebaixado), remove o ex-primário e recusa remover o último.
+  Cria e apaga criança, responsável e autorizado.
 - ~~**REV-4.8 · Lembrete de deploy:** `bootstrap-db.sh` junto ou antes da release
   da API.~~ **Fechado** com a nota em `DEPLOY.md` (seção 1.9) que diz o que cada
   script 029 a 032 protege e o efeito de omitir cada um. O `db:deploy` do build

@@ -40,7 +40,7 @@ describe("RegisterMeetingModal", () => {
 
   it("requires the date and creates the meeting, moving to the attendance step", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
 
     render(
       <RegisterMeetingModal
@@ -58,8 +58,8 @@ describe("RegisterMeetingModal", () => {
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
-        "/small-groups/g1/meetings",
-        expect.objectContaining({ topic: "Estudo de Romanos" })
+        "/small-groups/meetings",
+        expect.objectContaining({ small_group_id: "g1", topic: "Estudo de Romanos" })
       )
     );
 
@@ -114,7 +114,7 @@ describe("RegisterMeetingModal", () => {
   it("toggles attendance for a member and updates the counter", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/attendance") return Promise.resolve({ data: {} });
       return Promise.reject(new Error(`unexpected POST ${url}`));
     });
@@ -147,7 +147,7 @@ describe("RegisterMeetingModal", () => {
   it("reverts attendance when the API call fails", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/attendance")
         return Promise.reject(new Error("fail"));
       return Promise.reject(new Error(`unexpected POST ${url}`));
@@ -176,7 +176,7 @@ describe("RegisterMeetingModal", () => {
   it("adds an existing study material to the meeting", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/materials")
         return Promise.resolve({ data: { id: "link-1" } });
       return Promise.reject(new Error(`unexpected POST ${url}`));
@@ -222,7 +222,7 @@ describe("RegisterMeetingModal", () => {
 
   it("validates required fields when adding an external link material", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
 
     render(
       <RegisterMeetingModal
@@ -249,7 +249,7 @@ describe("RegisterMeetingModal", () => {
   it("removes a linked material", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/materials")
         return Promise.resolve({ data: { id: "link-1" } });
       return Promise.reject(new Error(`unexpected POST ${url}`));
@@ -292,7 +292,7 @@ describe("RegisterMeetingModal", () => {
 
   it("finishes the flow, calling onRegistered and closing the modal", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
     const onRegistered = vi.fn();
     const onOpenChange = vi.fn();
 
@@ -340,7 +340,7 @@ describe("RegisterMeetingModal", () => {
 
   it("lets the user change the occurred_at date before submitting", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
 
     render(
       <RegisterMeetingModal
@@ -361,7 +361,7 @@ describe("RegisterMeetingModal", () => {
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
-        "/small-groups/g1/meetings",
+        "/small-groups/meetings",
         expect.objectContaining({
           occurred_at: new Date("2026-01-15T12:00:00").toISOString(),
           observations: "Reunião especial",
@@ -413,7 +413,7 @@ describe("RegisterMeetingModal", () => {
 
   it("clears search results when the search term is emptied", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
     vi.mocked(api.get).mockResolvedValue({
       data: { data: [{ id: "sm1", title: "Guia de Romanos" }] },
     });
@@ -444,7 +444,7 @@ describe("RegisterMeetingModal", () => {
 
   it("shows no results when material search fails", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
     vi.mocked(api.get).mockRejectedValue(new Error("search failed"));
 
     render(
@@ -472,7 +472,7 @@ describe("RegisterMeetingModal", () => {
 
   it("validates that a material is selected in existing mode before adding", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
 
     render(
       <RegisterMeetingModal
@@ -496,7 +496,7 @@ describe("RegisterMeetingModal", () => {
   it("link externo com data de liberação manda release_at para o vínculo", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/study-materials") return Promise.resolve({ data: { id: "sm-new" } });
       if (url === "/small-groups/meetings/meet-1/materials")
         return Promise.resolve({ data: { id: "link-1" } });
@@ -535,7 +535,7 @@ describe("RegisterMeetingModal", () => {
   it("adds a new material via an external link", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/study-materials") return Promise.resolve({ data: { id: "sm-new" } });
       if (url === "/small-groups/meetings/meet-1/materials")
         return Promise.resolve({ data: { id: "link-1" } });
@@ -585,7 +585,7 @@ describe("RegisterMeetingModal", () => {
 
   it("switches back to existing-material mode and clears a selected material", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
     vi.mocked(api.get).mockResolvedValue({
       data: { data: [{ id: "sm1", title: "Guia de Romanos" }] },
     });
@@ -628,7 +628,7 @@ describe("RegisterMeetingModal", () => {
   it("shows a conflict message when the material is already linked (409)", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/materials") {
         return Promise.reject(Object.assign(new Error("conflict"), { response: { status: 409 } }));
       }
@@ -666,7 +666,7 @@ describe("RegisterMeetingModal", () => {
   it("shows a generic error message when adding a material fails without 409", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/materials") {
         return Promise.reject(new Error("boom"));
       }
@@ -702,7 +702,7 @@ describe("RegisterMeetingModal", () => {
   it("shows an error message when removing a material fails", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/materials")
         return Promise.resolve({ data: { id: "link-1" } });
       return Promise.reject(new Error(`unexpected POST ${url}`));
@@ -741,7 +741,7 @@ describe("RegisterMeetingModal", () => {
 
   it("falls back to an empty results list when the search response has no data field", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
     vi.mocked(api.get).mockResolvedValue({ data: {} });
 
     render(
@@ -770,7 +770,7 @@ describe("RegisterMeetingModal", () => {
   it("shows the leaders-only badge for a material added with restricted visibility", async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockImplementation((url: string) => {
-      if (url === "/small-groups/g1/meetings") return Promise.resolve({ data: { id: "meet-1" } });
+      if (url === "/small-groups/meetings") return Promise.resolve({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       if (url === "/small-groups/meetings/meet-1/materials")
         return Promise.resolve({ data: { id: "link-1" } });
       return Promise.reject(new Error(`unexpected POST ${url}`));
@@ -811,7 +811,7 @@ describe("RegisterMeetingModal", () => {
 
   it("shows a message when the group has no members", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
 
     render(
       <RegisterMeetingModal
@@ -834,7 +834,7 @@ describe("RegisterMeetingModal", () => {
   describe("material por arquivo", () => {
     async function openFileMode() {
       const user = userEvent.setup({ applyAccept: false });
-      vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-1" } });
+      vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-1" }, attendance_count: 0 } });
       render(
         <RegisterMeetingModal
           open={true}

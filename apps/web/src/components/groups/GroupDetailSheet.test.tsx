@@ -1013,7 +1013,7 @@ describe("GroupDetailSheet", () => {
         return Promise.resolve({ data: { data: [] } });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
-    vi.mocked(api.post).mockResolvedValue({ data: { id: "meet-new" } });
+    vi.mocked(api.post).mockResolvedValue({ data: { meeting: { id: "meet-new" }, attendance_count: 0 } });
     const user = userEvent.setup();
 
     render(
@@ -1035,8 +1035,8 @@ describe("GroupDetailSheet", () => {
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
-        "/small-groups/g1/meetings",
-        expect.anything()
+        "/small-groups/meetings",
+        expect.objectContaining({ small_group_id: "g1" })
       )
     );
     await user.click(screen.getByRole("button", { name: "Finalizar" }));

@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { RichTextEditor } from "@/components/content/RichTextEditor";
 import api from "@/lib/api";
 import { MATERIAL_FILE_ACCEPT, validateMaterialFile } from "@/lib/upload-meeting-material";
 import { replaceStudyMaterialFile, uploadStudyMaterial } from "@/lib/upload-study-material";
@@ -215,13 +216,12 @@ export function MaterialFormModal({ open, onOpenChange, onSaved, material }: Mat
           </p>
         )}
         {(editing ? isText : kind === "text") && (
-          <textarea
-            aria-label="Texto ou link do material"
+          <RichTextEditor
+            label="Texto ou link do material"
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={setContent}
             disabled={isSubmitting}
-            rows={5}
-            className="w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-base)] px-3 py-2 text-sm text-ink dark:text-white"
+            placeholder="Escreva o texto do material ou cole um link"
           />
         )}
 
