@@ -87,10 +87,8 @@ export class VisitorRegisterLimiter {
   private makeRoom(map: Map<string, Bucket>): void {
     const now = Date.now();
     for (const [key, bucket] of map) if (bucket.resetAt <= now) map.delete(key);
-    if (map.size >= MAX_KEYS) {
-      const oldest = map.keys().next().value;
-      if (oldest !== undefined) map.delete(oldest);
-    }
+    // Cheio, logo há ao menos uma chave: a primeira é a mais antiga.
+    if (map.size >= MAX_KEYS) map.delete(map.keys().next().value as string);
   }
 
   private tooMany(): never {
