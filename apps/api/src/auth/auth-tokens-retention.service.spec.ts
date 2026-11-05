@@ -78,9 +78,21 @@ describe('AuthTokensRetentionService', () => {
     expect(await serviceWith(exec).purgeLoginAttempts(NOW)).toEqual({ deleted: RETENTION_BATCH, failed: true });
   });
 
-  it('o cron roda os três e uma falha não impede os outros', async () => {
+  it('o cron roda os três; falha de lote é contida e não impede os outros', async () => {
     const exec = jest.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(0);
     await expect(serviceWith(exec).cronPurgeAuthTokens()).resolves.toBeUndefined();
     expect(exec).toHaveBeenCalledTimes(3);
+  });
+
+  it('o cron também contém uma exceção que escape do job e segue para os demais', async () => {
+    const svc = serviceWith(jest.fn().mockResolvedValue(0));
+    jest.spyOn(svc, 'purgeLoginAttempts').mockRejectedValue(new Error('boom'));
+    const reset = jest.spyOn(svc, 'purgePasswordResetTokens');
+    const refresh = jest.spyOn(svc, 'purgeRefreshTokens');
+
+    await expect(svc.cronPurgeAuthTokens()).resolves.toBeUndefined();
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
