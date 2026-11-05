@@ -539,12 +539,31 @@ export class MeetingsService {
   }
 
   /**
+   * Recorte de liderança do código de check-in (GET e POST): administração,
+   * `pastor` e `secretary` em qualquer encontro; `cell_leader` só no PG que
+   * lidera. Outro PG dá 403, sem revelar se há código.
+   */
+  private async assertCanAccessCheckinToken(meetingId: string, user: JwtPayload): Promise<void> {
+    if (user.roles.some((role) => CHECKIN_READ_ANY_ROLES.includes(role))) return;
+    await this.assertCanManageMaterials(
+      meetingId,
+      user,
+      'Só quem lidera este grupo pode gerar ou ver o código de check-in',
+    );
+  }
+
+  /**
    * PROD-12: o líder gera (ou regenera) o QR de check-in do encontro. Um
    * token por `GroupMeeting` — chamar de novo rotaciona o valor e estende
    * `expires_at`, o que também serve para revogar o QR anterior (quem
    * escaneou o antigo recebe "inválido ou expirado" no próximo check-in).
    */
   async createCheckinToken(meetingId: string, user: JwtPayload): Promise<CheckinTokenResult> {
+    // Mesmo recorte do GET: `cell_leader` só gera/renova o QR do PG que lidera.
+    // Sem isto, líder de outro PG da mesma congregação rotacionava o código
+    // alheio e derrubava o QR que estava sendo projetado.
+    await this.assertCanAccessCheckinToken(meetingId, user);
+
     const meeting = await this.prisma.client.groupMeeting.findUnique({
       where: { id: meetingId },
       select: { id: true, tenant_id: true, congregation_id: true, occurred_at: true },
@@ -591,14 +610,7 @@ export class MeetingsService {
    * corpo de resposta).
    */
   async getCurrentCheckinToken(meetingId: string, user: JwtPayload): Promise<CheckinTokenResult> {
-    const wideAccess = user.roles.some((role) => CHECKIN_READ_ANY_ROLES.includes(role));
-    if (!wideAccess) {
-      await this.assertCanManageMaterials(
-        meetingId,
-        user,
-        'Só quem lidera este grupo pode ver o código de check-in',
-      );
-    }
+    await this.assertCanAccessCheckinToken(meetingId, user);
 
     const current = await this.prisma.client.meetingCheckinToken.findUnique({
       where: { group_meeting_id: meetingId },
