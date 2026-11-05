@@ -382,6 +382,22 @@ describe('AuthService.refresh', () => {
     await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('token válido cuja conta a função não devolve: 401, sem rotacionar nem emitir token', async () => {
+    const { service, prisma } = serviceWith({});
+    mockStored(prisma, {
+      id: 'rtk-1',
+      user_account_id: 'u1',
+      revoked_at: null,
+      expires_at: new Date('2999-01-01'),
+    });
+
+    await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(findSessionByUserId).toHaveBeenCalledWith(prisma, 'u1');
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
   it('reuso de token revogado derruba toda a família e barra o acesso', async () => {
     const { service, prisma } = serviceWith({});
     mockStored(prisma, {
