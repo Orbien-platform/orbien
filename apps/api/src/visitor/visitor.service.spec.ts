@@ -117,6 +117,15 @@ describe('VisitorService', () => {
     });
   });
 
+  describe('describeQr — QR ativo sem congregação/marca resolvida', () => {
+    it('vira o mesmo 404 do QR inválido', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue({ is_active: true, origin: 'service', label: null });
+      mockChurch(null);
+      await expect(service.describeQr('tok')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('describeQr — marca (PEND-19)', () => {
     const active = (brandingConfig: Record<string, unknown>) => {
       mockChurch(brandingConfig);
@@ -220,6 +229,28 @@ describe('VisitorService', () => {
       expect(result).toEqual({
         status: 'registered',
         message: 'Cadastro realizado! Bem-vindo à Sede.',
+      });
+    });
+
+    it('se a função não achar a congregação, o cadastro vale e a mensagem usa um nome genérico', async () => {
+      const { service, qrTokenClient, tx } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue({
+        id: 'qr1',
+        is_active: true,
+        tenant_id: 'tenant-1',
+        congregation_id: 'cong-1',
+        origin: 'service',
+        small_group_id: null,
+        created_by: 'creator-1',
+      });
+      tx.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana Nova' });
+      mockChurch(null);
+
+      const result = await service.registerViaQr({ token: 'tok', full_name: 'Ana Nova' } as never, '1.2.3.4', 'ua');
+
+      expect(result).toEqual({
+        status: 'registered',
+        message: 'Cadastro realizado! Bem-vindo à nossa igreja.',
       });
     });
 
