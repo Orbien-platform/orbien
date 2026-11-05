@@ -3067,6 +3067,17 @@ erro offline; desligar o modo avião e ver a tela atualizar sozinha, uma vez;
 fade + 3 px entre telas no iOS e no Android; (4) com "Reduzir movimento" ligado,
 sem deslocamento; (5) gesto de voltar no iOS e botão voltar no Android.
 
+### PEND-24 · `e2e-prod` na `main` pode correr antes do deploy · aberto
+
+Surgiu em 2026-11-04, ao fechar o desenho do e2e (PR da `PEND-19`). Em PR, o
+job `E2E (produção)` já deixa de fora os specs que o PR adiciona ou altera
+(`E2E_EXCLUDE_SPECS`); no **push para a `main`** a suíte inteira roda contra
+produção, e o job pode começar antes de a Vercel/Render terminarem o deploy do
+merge — um spec de tela nova falharia por ser prematuro. Hoje o remédio é
+reexecutar o job depois do deploy. Falta um jeito barato de o job esperar o
+deploy (por exemplo, consultar a versão publicada no web antes de rodar). Ver
+`docs/CI.md`, "E2E: só no GitHub".
+
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 
 No job "E2E (produção)" do run 37530228190 (PR #167, 2026-10-06, 21:09–21:38Z)

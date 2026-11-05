@@ -71,13 +71,14 @@ Verifique no diff e mencione em **Riscos e pendências** quando aparecer:
 | Tabela nova | precisa de RLS e policy, mais teste em `test/rls/isolation.spec.ts` |
 | `render.yaml`, `vercel.json`, `Dockerfile`, `turbo.json` | configuração de deploy; ver `DEPLOY.md` |
 | Variável de ambiente nova | configurar em Render ou Vercel antes do merge |
-| `apps/web/e2e/` | como rodar a suíte |
+| `apps/web/e2e/` | o e2e só roda no CI: diga que spec foi adicionado/alterado e que o job `E2E` o prova; em produção ele só entra depois do merge |
 | Rota de API removida ou renomeada | quem consome no front precisa mudar junto |
 
 ## Antes de abrir: portão verde
 
 Antes da revisão, `bash scripts/pre-push.sh` completo tem que liberar (testes e
-cobertura dos 5 apps, e2e do escopo afetado, smoke do site se tocou o site).
+cobertura dos 5 apps, RLS se tocou a API, smoke do site se tocou o site; o e2e não
+roda local, só no GitHub).
 Falhou: corrija a causa e rode de novo — ver "Antes de subir" no `CLAUDE.md`.
 Em **Como validar**, cite o resultado dele; `--rapido` e `--so=` não valem.
 

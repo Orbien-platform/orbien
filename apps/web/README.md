@@ -115,7 +115,7 @@ Comandos úteis (todos com `-w orbien-web` a partir da raiz, ou direto nesta
 pasta):
 
 ```bash
-npm run e2e -w orbien-web                                   # a suíte inteira
+npm run e2e -w orbien-web                                   # a suíte inteira (contra um app já em pé; no dia a dia o e2e roda só no CI — ver CLAUDE.md)
 npm run e2e:report -w orbien-web                            # abre o relatório HTML
 npx playwright test e2e/templates.spec.ts                    # um spec só
 npx playwright test --headed                                 # vendo o navegador

@@ -11,12 +11,13 @@
 #   bash scripts/pre-push.sh --review     # + revisão por IA, com veredito
 #   bash scripts/pre-push.sh --rapido     # só build, tipos, lint e regras — NÃO libera PR
 #   bash scripts/pre-push.sh --so=ETAPA   # só uma etapa, para iterar — NÃO libera PR
-#                                         #   ETAPA: cobertura | rls | e2e | site
+#                                         #   ETAPA: cobertura | rls | site
 #
 # O completo roda o que o CI roda, na mesma ordem de importância:
 #   build, tipos, lint · testes e cobertura dos 5 apps (sempre) · RLS (se o
-#   diff toca a API) · e2e do web só nos specs que o diff afeta · smoke do site
-#   (se o diff toca o site).
+#   diff toca a API) · smoke do site (se o diff toca o site).
+# O e2e do web NÃO roda aqui: só no GitHub (jobs `E2E` e `E2E (produção)` do
+# ci.yml). O portão só avisa quais specs o diff pode afetar. Ver CLAUDE.md.
 # Banco, API e web sobem sozinhos, num Postgres local — nunca o do Supabase.
 #
 # Falhou? Corrija a causa e rode de novo até liberar; `--so=` encurta o ciclo,
@@ -33,10 +34,10 @@ RAPIDO=false
 SO=""
 for arg in "$@"; do
   case "$arg" in
-    --e2e) echo "(--e2e não é mais preciso: o e2e do escopo afetado roda sempre)" ;;
+    --e2e|--so=e2e) echo "o e2e do web não roda mais aqui — só no GitHub (jobs E2E e E2E (produção)). Veja 'Antes de subir' no CLAUDE.md."; exit 2 ;;
     --review) WITH_REVIEW=true ;;
     --rapido) RAPIDO=true ;;
-    --so=cobertura|--so=rls|--so=e2e|--so=site) SO="${arg#--so=}" ;;
+    --so=cobertura|--so=rls|--so=site) SO="${arg#--so=}" ;;
     *) echo "argumento desconhecido: $arg"; exit 2 ;;
   esac
 done
@@ -293,57 +294,16 @@ ESCOPO=$(echo "$CHANGED" | node scripts/e2e-escopo.mjs 2>/tmp/prepush-escopo.log
 WEB_SPECS=$(echo "$ESCOPO" | sed -n 's/^web://p')
 SITE_NO_ESCOPO=$(echo "$ESCOPO" | grep -c '^site:1' || true)
 
-if ! $RAPIDO && quer e2e; then
+# O e2e do web não roda aqui — só no GitHub. Rodar a suíte local pedia build
+# da API e do web, porta livre e um seed que divergia do ambiente do CI; e o que
+# ela provava, o job `E2E` do ci.yml prova de novo com o código do PR. O portão
+# só diz quais specs o diff pode afetar, para quem abre o PR saber o que vigiar.
+if ! $RAPIDO && [ -z "$SO" ] && [ -n "$WEB_SPECS" ]; then
   echo
-  etapa "E2E do web — só o escopo afetado"
-  if [ -z "$WEB_SPECS" ]; then
-    passa "nenhum spec do e2e é afetado por este diff"
-    [ -s /tmp/prepush-escopo.log ] && sed 's/^/  /' /tmp/prepush-escopo.log
-  else
-    if [ "$WEB_SPECS" = "*" ]; then SPEC_ARGS=(); QUAIS="suíte inteira"; else
-      SPEC_ARGS=(); for sp in $WEB_SPECS; do SPEC_ARGS+=("e2e/$sp"); done
-      QUAIS="$(echo "$WEB_SPECS" | wc -w | tr -d ' ') spec(s): $(echo $WEB_SPECS | sed 's/\.spec\.ts//g')"
-    fi
-    echo "  escopo: $QUAIS"
-    sed 's/^/  /' /tmp/prepush-escopo.log
-
-    if porta_aberta 3000 || porta_aberta 3001; then
-      bloqueia "porta 3000 ou 3001 ocupada — o e2e sobe a API e o web nelas; encerre o que estiver rodando"
-    elif prepara_banco; then
-      # API_BACKEND_URL / NEXT_PUBLIC_API_URL já exportados antes do build geral.
-      echo "  … build da API e do web"
-      if ! constroi /tmp/prepush-e2e-build.log --filter=orbien-backend --filter=orbien-web; then
-        bloqueia "build para o e2e falhou — veja /tmp/prepush-e2e-build.log"
-        tail -10 /tmp/prepush-e2e-build.log | sed 's/^/      /'
-      else
-        # Sem NODE_ENV, como no job `e2e` do ci.yml: a API muda de comportamento
-        # com ele (cookies, CORS), e o ambiente de dev traz `development`.
-        PORT=3000 ALLOWED_ORIGINS=http://localhost:3001 FRONTEND_URL=http://localhost:3001 \
-          env -u NODE_ENV node apps/api/dist/src/main.js >/tmp/prepush-e2e-api.log 2>&1 &
-        PIDS+=("$!")
-        (cd apps/web && NODE_ENV=production exec node ../../node_modules/next/dist/bin/next start --port 3001) >/tmp/prepush-e2e-web.log 2>&1 &
-        PIDS+=("$!")
-        if ! espera_url http://localhost:3000/api/health 60; then
-          bloqueia "a API não respondeu em 120s — veja /tmp/prepush-e2e-api.log"; tail -6 /tmp/prepush-e2e-api.log | sed 's/^/      /'
-        elif ! espera_url http://localhost:3001/login 60; then
-          bloqueia "o web não respondeu em 120s — veja /tmp/prepush-e2e-web.log"; tail -6 /tmp/prepush-e2e-web.log | sed 's/^/      /'
-        else
-          # Credenciais do seed, não segredo; as mesmas do job `e2e` do ci.yml.
-          # teste2-church (Premium), nunca doca-church.
-          E2E_BASE_URL=http://localhost:3001 E2E_API_URL=http://localhost:3000/api \
-          E2E_EMAIL=fvargaspf+teste2@gmail.com E2E_PASSWORD=A3dodfemf E2E_TENANT=teste2-church \
-          E2E_SUPPORT_EMAIL=fernando.vargas@fill.tech E2E_SUPPORT_PASSWORD=A3dodfemf \
-            npm run e2e -w orbien-web -- ${SPEC_ARGS[@]+"${SPEC_ARGS[@]}"} >/tmp/prepush-e2e.log 2>&1 \
-            && passa "e2e — $QUAIS" \
-            || {
-              bloqueia "e2e falhou — veja /tmp/prepush-e2e.log (traces em apps/web/test-results, relatório em apps/web/playwright-report)"
-              grep -E "✘|^\s+[0-9]+\) |passed|failed|Executable doesn't exist" /tmp/prepush-e2e.log | tail -12 | sed 's/^/      /'
-            }
-        fi
-      fi
-      encerra; PIDS=()
-    fi
+  if [ "$WEB_SPECS" = "*" ]; then QUAIS="a suíte inteira"; else
+    QUAIS="$(echo $WEB_SPECS | sed 's/\.spec\.ts//g')"
   fi
+  echo "ℹ e2e do web fica para o GitHub (não roda aqui). Afetado por este diff: $QUAIS"
 fi
 
 if ! $RAPIDO && quer site; then

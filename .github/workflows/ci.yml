@@ -374,6 +374,14 @@ jobs:
   # O `if` pula PR de fork em vez de falhar vermelho: o GitHub não entrega
   # secret para fork, e sem as credenciais o job morreria no login com uma
   # mensagem que não ajuda ninguém.
+  #
+  # **Em PR, os specs que o PR adiciona ou altera ficam de fora** (passo
+  # "Specs do PR..."). Este job testa o que está NO AR, e um spec novo ou
+  # alterado pode falar de uma tela, rota ou campo que só existe depois do
+  # merge — ele falharia aqui por ser prematuro, não por estar errado (foi o
+  # caso de `qr-visitantes.spec.ts`, PEND-19). Quem prova esses specs é o job
+  # `e2e`, que sobe o código do PR. Spec que o PR não toca roda como sempre.
+  # No push para a main a suíte inteira roda: a essa altura o merge já saiu.
   e2e-prod:
     name: E2E (produção)
     runs-on: ubuntu-latest
@@ -391,6 +399,9 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Histórico inteiro: o passo abaixo compara o PR com a base.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -398,6 +409,21 @@ jobs:
           cache: npm
 
       - run: npm ci --include=dev
+
+      - name: Specs do PR ficam de fora (ainda não estão em produção)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          ESPECS=$(git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -- 'apps/web/e2e/*.spec.ts' \
+            | xargs -r -n1 basename | paste -sd, -)
+          echo "E2E_EXCLUDE_SPECS=$ESPECS" >> "$GITHUB_ENV"
+          if [ -n "$ESPECS" ]; then
+            echo "Specs adicionados/alterados pelo PR, provados pelo job E2E e não por produção: $ESPECS"
+          else
+            echo "O PR não toca em spec: a suíte inteira roda contra produção."
+          fi
 
       - name: Chromium
         run: npx playwright install --with-deps chromium
