@@ -1528,8 +1528,10 @@ describe("ServiceOrderView", () => {
       })
     );
     // Nada mais é enviado: tom, BPM e link digitados ficam como estavam.
-    expect(screen.getByText("G")).toBeInTheDocument();
-    expect(screen.getByText("80 BPM")).toBeInTheDocument();
+    // `findBy`: a tela relê o repertório depois do PATCH; conferir na hora perde
+    // a corrida quando o CI está carregado.
+    expect(await screen.findByText("G")).toBeInTheDocument();
+    expect(await screen.findByText("80 BPM")).toBeInTheDocument();
   });
 
   it("mostra erro e preserva a lista quando o PATCH de vínculo falha", async () => {
