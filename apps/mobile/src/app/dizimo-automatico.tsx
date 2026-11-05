@@ -24,6 +24,7 @@ import { SectionLabel } from "../components/SectionLabel";
 import { StatusMessage } from "../components/StatusMessage";
 import { HttpError, NetworkError } from "../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import { formatBRL } from "../lib/format/currency";
 import { formatLongDate } from "../lib/format/date";
 import {
@@ -87,6 +88,12 @@ export default function DizimoAutomaticoScreen() {
       setLoadError(describeLoadError(err, "seu dízimo automático"));
     }
   }, [applyLoaded]);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela com o mesmo `load` do
+  // "Tentar de novo" — só a leitura; contratar/cancelar nunca são reenviados.
+  useReloadOnReconnect(loadError?.offline === true, () => {
+    void load();
+  });
 
   // Carga inicial: estado só muda na resposta, e resposta que chega depois
   // de a tela desmontar é ignorada (mesmo padrão de `notificacoes.tsx`).

@@ -14,6 +14,7 @@ jest.mock("../../../lib/celebracoes/celebracoes-client", () => ({
 }));
 
 import { HttpError, NetworkError } from "../../../lib/api/errors";
+import NetInfo from "@react-native-community/netinfo";
 import CelebracaoScreen from "../../../app/celebracao/[id]";
 
 const BASE_ORDER = {
@@ -462,5 +463,60 @@ describe("CelebracaoScreen", () => {
 
     expect(await screen.findByText("Sem tom definido")).toBeTruthy();
     expect(screen.getByTestId("celebracao-item-item1-horario").props.children).toBe("1h · 20min");
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetServiceOrder.mockReset();
+      mockGetServiceOrder.mockRejectedValueOnce(new NetworkError());
+      mockGetServiceOrder.mockResolvedValue(BASE_ORDER);
+      await act(async () => {
+        render(<CelebracaoScreen />);
+      });
+      expect(screen.getByTestId("celebracao-error")).toBeTruthy();
+      expect(mockGetServiceOrder).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetServiceOrder).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("celebracao-title")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetServiceOrder.mockReset();
+      mockGetServiceOrder.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<CelebracaoScreen />);
+      });
+      expect(screen.getByTestId("celebracao-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetServiceOrder).toHaveBeenCalledTimes(1);
+    });
   });
 });

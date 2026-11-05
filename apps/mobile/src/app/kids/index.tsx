@@ -9,6 +9,7 @@ import { AppButton } from "../../components/AppButton";
 import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { ageInMonths, formatAge, listChildren } from "../../lib/kids/kids-client";
 import type { KidsChild } from "../../lib/kids/types";
 import { Baby, ChevronRight, CircleAlert, ShieldCheck, WifiOff } from "../../lib/theme/icons";
@@ -41,6 +42,12 @@ export default function KidsScreen() {
   }, []);
 
   useFocusEffect(load);
+
+  // PROD-32: sem conexão, relê sozinha na volta dela — o mesmo `load` do
+  // "Tentar de novo", só leitura.
+  useReloadOnReconnect(error?.offline === true, () => {
+    load();
+  });
 
   if (error) {
     return (

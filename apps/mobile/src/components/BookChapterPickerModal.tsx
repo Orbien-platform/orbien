@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import { getBooks } from "../lib/bible/bible-client";
 import type { BibleBook } from "../lib/bible/types";
 import { ChevronRight, CircleAlert, WifiOff, X } from "../lib/theme/icons";
@@ -26,6 +27,13 @@ export function BookChapterPickerModal({ visible, onClose, onSelect }: BookChapt
   const [books, setBooks] = useState<BibleBook[] | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: com o seletor aberto e sem conexão, relê sozinho a lista de
+  // livros na volta dela. O seletor não tem botão de retry; o contador é do hook.
+  useReloadOnReconnect(visible && error?.offline === true, () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  });
 
   useEffect(() => {
     if (!visible) return;
@@ -44,7 +52,7 @@ export function BookChapterPickerModal({ visible, onClose, onSelect }: BookChapt
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [visible, retryCount]);
 
   function handleClose() {
     setSelectedBook(null);

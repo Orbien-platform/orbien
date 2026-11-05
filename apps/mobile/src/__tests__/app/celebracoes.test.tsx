@@ -27,6 +27,7 @@ jest.mock("../../lib/celebracoes/celebracoes-client", () => ({
   listAgenda: (...args: unknown[]) => mockListAgenda(...args),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import CelebracoesScreen from "../../app/celebracoes";
 
 function makeToken(payload: object): string {
@@ -264,5 +265,58 @@ describe("CelebracoesScreen", () => {
 
     expect(screen.getByText("dom, 27 set · 19:00")).toBeTruthy();
     expect(screen.getAllByText("Celebração de domingo")).toHaveLength(3);
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+      mockListAgenda.mockReset();
+      mockListAgenda.mockRejectedValueOnce(new NetworkError());
+      mockListAgenda.mockResolvedValue([agendaDomingo]);
+      await renderScreen();
+      expect(screen.getByTestId("celebracoes-error")).toBeTruthy();
+      expect(mockListAgenda).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockListAgenda).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Celebração de domingo")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockUseAuth.mockReturnValue(sessionWithRoles(["member"]));
+      mockListAgenda.mockReset();
+      mockListAgenda.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("celebracoes-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockListAgenda).toHaveBeenCalledTimes(1);
+    });
   });
 });

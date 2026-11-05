@@ -111,7 +111,7 @@ export async function respondToSwap(
   return authenticatedRequest<SwapRequest>("patch", `/swap-requests/${id}/${action}`);
 }
 
-/** `GET /volunteers/me/profile` — leitura só; quem edita é a secretaria. */
+/** `GET /volunteers/me/profile` — ministérios, habilidades e restrições são da liderança. */
 export async function getMyVolunteerProfile(): Promise<MyVolunteerProfile> {
   return authenticatedRequest<MyVolunteerProfile>("get", "/volunteers/me/profile");
 }
@@ -129,4 +129,23 @@ export async function saveAttendance(
     `/celebrations/instances/${instanceId}/attendance`,
     { body: counts },
   );
+}
+
+/**
+ * `PATCH /volunteers/me/profile` — o voluntário edita só a disponibilidade
+ * semanal; habilidade e restrições seguem com a liderança.
+ */
+export async function updateMyAvailability(
+  availability: Record<string, string[]>,
+): Promise<MyVolunteerProfile> {
+  return authenticatedRequest<MyVolunteerProfile>("patch", "/volunteers/me/profile", {
+    body: { availability },
+  });
+}
+
+/** `POST /volunteers/me/term` — aceita a versão do termo que a tela mostrou. */
+export async function acceptVolunteerTerm(termVersion: string): Promise<MyVolunteerProfile> {
+  return authenticatedRequest<MyVolunteerProfile>("post", "/volunteers/me/term", {
+    body: { term_version: termVersion },
+  });
 }

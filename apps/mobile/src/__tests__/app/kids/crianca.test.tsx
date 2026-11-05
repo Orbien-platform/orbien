@@ -29,6 +29,7 @@ jest.mock("../../../lib/kids/kids-client", () => ({
   removeGuardian: (...a: unknown[]) => mockRemove(...a),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import CriancaScreen from "../../../app/kids/crianca/[id]";
 
@@ -275,4 +276,55 @@ describe("CriancaScreen", () => {
     expect(screen.queryByTestId("crianca-error")).toBeNull();
   });
 
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetChild.mockReset();
+      mockGetChild.mockRejectedValueOnce(new NetworkError());
+      mockGetChild.mockResolvedValue(FICHA);
+      await renderScreen();
+      expect(screen.getByTestId("crianca-error")).toBeTruthy();
+      expect(mockGetChild).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetChild).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Ana Souza")).toBeTruthy();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetChild.mockReset();
+      mockGetChild.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("crianca-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetChild).toHaveBeenCalledTimes(1);
+    });
+  });
 });

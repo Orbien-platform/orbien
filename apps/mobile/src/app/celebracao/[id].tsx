@@ -36,6 +36,7 @@ import {
   WifiOff,
 } from "../../lib/theme/icons";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { useTheme } from "../../lib/theme/theme-provider";
 import { ICON_STROKE_WIDTH, iconSize, spacing, typography } from "../../lib/theme/tokens";
 
@@ -57,6 +58,13 @@ export default function CelebracaoScreen() {
   const [error, setError] = useState<LoadErrorState | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, relê sozinha na volta dela — a mesma releitura do
+  // "Tentar novamente". O 404 não é offline, então não assina a rede.
+  const retry = () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  };
+  useReloadOnReconnect(error?.offline === true, retry);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,10 +108,7 @@ export default function CelebracaoScreen() {
             title="Tentar novamente"
             icon={RefreshCw}
             variant="secondary"
-            onPress={() => {
-              setError(null);
-              setRetryCount((n) => n + 1);
-            }}
+            onPress={retry}
           />
         ) : null}
       </StatusMessage>

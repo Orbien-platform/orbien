@@ -48,6 +48,7 @@ jest.mock("../../../lib/kids/kids-client", () => ({
   checkOutOverride: (...a: unknown[]) => mockOverride(...a),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import SessaoScreen from "../../../app/kids/sessao/[id]";
 
@@ -535,4 +536,58 @@ describe("SessaoScreen", () => {
     }
   });
 
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetRoster.mockReset();
+      mockGetRoster.mockRejectedValueOnce(new NetworkError());
+      mockGetRoster.mockResolvedValue(roster([]));
+      await renderScreen();
+      expect(screen.getByTestId("sessao-error")).toBeTruthy();
+      expect(mockGetRoster).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetRoster).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("sessao-vazia")).toBeTruthy();
+      // Só leitura: a releitura nunca faz check-in nem check-out.
+      expect(mockCheckInByQr).not.toHaveBeenCalled();
+      expect(mockCheckOut).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetRoster.mockReset();
+      mockGetRoster.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("sessao-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetRoster).toHaveBeenCalledTimes(1);
+    });
+  });
 });

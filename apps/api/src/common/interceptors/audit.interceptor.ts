@@ -137,8 +137,8 @@ export class AuditInterceptor implements NestInterceptor {
 
   /**
    * Resolve o nome do autor para congelar em `actor_name_snapshot` (AD-004).
-   * `persons` não tem policy de bypass para `orbien_app` (só `user_accounts`
-   * tem, via `orbien_app_auth`) e este client roda sem `SET LOCAL
+   * `persons`, `user_accounts` e `role_assignments` não têm policy de bypass
+   * para `orbien_app` (PEND-04 D) e este client roda sem `SET LOCAL
    * ROLE app_user`/contexto de tenant — por isso a leitura passa por
    * `resolve_actor_name()`, SECURITY DEFINER, em vez de um `findUnique` com
    * `include: { person: true }`, que voltaria sempre vazio por RLS.

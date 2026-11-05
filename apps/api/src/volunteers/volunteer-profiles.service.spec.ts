@@ -1,6 +1,7 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { VolunteerProfilesService } from './volunteer-profiles.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 function clientWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -174,6 +175,7 @@ describe('VolunteerProfilesService.findMine', () => {
       userAccount: { findUnique: jest.fn().mockResolvedValue({ person_id: 'p1' }) },
       volunteerProfile: { findFirst: jest.fn() },
       celebrationAssignment: { count: jest.fn().mockResolvedValue(12) },
+      consentRecord: { findFirst: jest.fn().mockResolvedValue(null) },
     };
   }
   const mineService = (client: ReturnType<typeof mineClient>) =>
@@ -199,6 +201,7 @@ describe('VolunteerProfilesService.findMine', () => {
       restrictions: null,
       volunteer_since: since,
       served_count: 12,
+      term: { version: 'volunteer_term_v1', text: expect.any(String), accepted_at: null },
     });
     expect(client.volunteerProfile.findFirst.mock.calls[0][0].where).toEqual({
       person_id: 'p1',
@@ -252,5 +255,141 @@ describe('VolunteerProfilesService.findMine', () => {
     await expect(mineService(client).findMine('u1', 't1', 'g1')).rejects.toThrow(
       'Perfil de voluntário não encontrado',
     );
+  });
+});
+
+describe('VolunteerProfilesService — edição do próprio perfil e termo', () => {
+  const user: JwtPayload = { sub: 'u1', tenant_id: 't1', congregation_id: 'g1', roles: ['volunteer'], plan: 'starter' };
+  const row = {
+    id: 'vp1',
+    skills: ['OBS'],
+    availability: { sunday: ['morning'] },
+    restrictions: null,
+    created_at: new Date('2024-03-02T00:00:00Z'),
+    volunteerMinistries: [],
+  };
+
+  function setup() {
+    const client = {
+      userAccount: { findUnique: jest.fn().mockResolvedValue({ person_id: 'p1' }) },
+      volunteerProfile: {
+        findFirst: jest.fn().mockResolvedValue(row),
+        update: jest.fn().mockResolvedValue({ ...row, availability: { monday: ['evening'] } }),
+      },
+      celebrationAssignment: { count: jest.fn().mockResolvedValue(0) },
+      consentRecord: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = { client, $executeRaw: jest.fn().mockResolvedValue(1) };
+    return { client, prisma, service: new VolunteerProfilesService(prisma as unknown as PrismaService) };
+  }
+
+  describe('updateMine', () => {
+    it('grava só availability (sem repetir turno) no perfil da conta e audita antes/depois', async () => {
+      const { client, prisma, service } = setup();
+      const out = await service.updateMine(user, { availability: { monday: ['evening', 'evening'] } });
+
+      expect(client.volunteerProfile.findFirst.mock.calls[0][0].where).toEqual({
+        person_id: 'p1',
+        tenant_id: 't1',
+        congregation_id: 'g1',
+      });
+      const call = client.volunteerProfile.update.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'vp1' });
+      expect(call.data).toEqual({ availability: { monday: ['evening'] } });
+      expect(out.availability).toEqual({ monday: ['evening'] });
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      const sql = JSON.stringify(prisma.$executeRaw.mock.calls[0].slice(1));
+      expect(sql).toContain('volunteer_profile.self_updated');
+      expect(sql).toContain('{\\"availability\\":{\\"sunday\\":[\\"morning\\"]}}');
+    });
+
+    it('ignora dia sem lista (undefined) ao normalizar', async () => {
+      const { client, service } = setup();
+      await service.updateMine(user, { availability: { monday: undefined, friday: [] } });
+      expect(client.volunteerProfile.update.mock.calls[0][0].data).toEqual({ availability: { friday: [] } });
+    });
+
+    it('sessão de suporte não edita', async () => {
+      const { client, service } = setup();
+      await expect(
+        service.updateMine({ ...user, support_session: true }, { availability: {} }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.volunteerProfile.update).not.toHaveBeenCalled();
+    });
+
+    it('sem perfil: 404 e nada gravado', async () => {
+      const { client, service } = setup();
+      client.volunteerProfile.findFirst.mockResolvedValue(null);
+      await expect(service.updateMine(user, { availability: {} })).rejects.toBeInstanceOf(NotFoundException);
+      expect(client.volunteerProfile.update).not.toHaveBeenCalled();
+    });
+
+    it('falha da auditoria não desfaz a edição', async () => {
+      const { prisma, service } = setup();
+      prisma.$executeRaw.mockRejectedValue(new Error('boom'));
+      await expect(service.updateMine(user, { availability: { monday: ['evening'] } })).resolves.toBeDefined();
+    });
+  });
+
+  describe('acceptTerm', () => {
+    const meta = { ip: '1.2.3.4', userAgent: 'jest' };
+
+    it('grava consent_record com versão, origem, ip e user-agent, e audita', async () => {
+      const { client, prisma, service } = setup();
+      await service.acceptTerm(user, 'volunteer_term_v1', meta);
+      expect(client.consentRecord.updateMany).not.toHaveBeenCalled();
+      expect(client.consentRecord.create.mock.calls[0][0].data).toMatchObject({
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        person_id: 'p1',
+        version: 'volunteer_term_v1',
+        origin: 'volunteer_app',
+        ip: '1.2.3.4',
+        user_agent: 'jest',
+      });
+      expect(JSON.stringify(prisma.$executeRaw.mock.calls[0].slice(1))).toContain('consent.granted');
+    });
+
+    it('sem ip nem user-agent grava null', async () => {
+      const { client, service } = setup();
+      await service.acceptTerm(user, 'volunteer_term_v1', {});
+      expect(client.consentRecord.create.mock.calls[0][0].data).toMatchObject({ ip: null, user_agent: null });
+    });
+
+    it('reaceitar a mesma versão não duplica nem audita de novo', async () => {
+      const { client, prisma, service } = setup();
+      client.consentRecord.findFirst.mockResolvedValue({ version: 'volunteer_term_v1', consented_at: new Date() });
+      await service.acceptTerm(user, 'volunteer_term_v1', meta);
+      expect(client.consentRecord.create).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('aceite de versão antiga é revogado, não apagado, e o novo é gravado', async () => {
+      const { client, service } = setup();
+      client.consentRecord.findFirst.mockResolvedValue({ version: 'volunteer_term_v0' });
+      await service.acceptTerm(user, 'volunteer_term_v1', meta);
+      expect(client.consentRecord.updateMany.mock.calls[0][0].data).toMatchObject({
+        revocation_reason: 'superseded_by_new_term',
+      });
+      expect(client.consentRecord.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('versão que não é a vigente: 409 com o termo vigente', async () => {
+      const { client, service } = setup();
+      await expect(service.acceptTerm(user, 'volunteer_term_v0', meta)).rejects.toBeInstanceOf(ConflictException);
+      expect(client.consentRecord.create).not.toHaveBeenCalled();
+    });
+
+    it('sessão de suporte não aceita pelo voluntário', async () => {
+      const { client, service } = setup();
+      await expect(
+        service.acceptTerm({ ...user, support_session: true }, 'volunteer_term_v1', meta),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(client.consentRecord.create).not.toHaveBeenCalled();
+    });
   });
 });

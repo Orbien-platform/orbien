@@ -2,7 +2,7 @@
 // `CreateVolunteerProfileDto` (`{ sunday: ["morning", "evening"], ... }`)
 // vira "Dom manhã e noite, Qua noite", a linha de apoio de "Meu perfil".
 
-const DAYS: [string, string][] = [
+export const DAYS: [string, string][] = [
   ["sunday", "Dom"],
   ["monday", "Seg"],
   ["tuesday", "Ter"],
@@ -12,7 +12,7 @@ const DAYS: [string, string][] = [
   ["saturday", "Sáb"],
 ];
 
-const SLOTS: [string, string][] = [
+export const SLOTS: [string, string][] = [
   ["morning", "manhã"],
   ["afternoon", "tarde"],
   ["evening", "noite"],

@@ -10,8 +10,8 @@ import {
 import { Type } from 'class-transformer';
 
 const SLOTS = ['morning', 'afternoon', 'evening'] as const;
-type Slot = (typeof SLOTS)[number];
-type DayKey =
+export type Slot = (typeof SLOTS)[number];
+export type DayKey =
   | 'sunday'
   | 'monday'
   | 'tuesday'
@@ -20,7 +20,7 @@ type DayKey =
   | 'friday'
   | 'saturday';
 
-class DayAvailabilityDto {
+export class DayAvailabilityDto {
   @IsOptional() @IsArray() @IsIn(SLOTS, { each: true }) sunday?: Slot[];
   @IsOptional() @IsArray() @IsIn(SLOTS, { each: true }) monday?: Slot[];
   @IsOptional() @IsArray() @IsIn(SLOTS, { each: true }) tuesday?: Slot[];

@@ -295,12 +295,19 @@ fi
 if [ -f prisma/migrations/011_rls_platform_transfer.sql ]; then
   run_sql_file prisma/migrations/011_rls_platform_transfer.sql
 fi
-# PEND-04 (A+B): aperta a policy `orbien_app_auth` que a migration datada
+# PEND-04 (D): funções SECURITY DEFINER de leitura do login (auth_login_lookup,
+# auth_session_lookup, auth_tenant_admin_user_id). Precisa vir ANTES do 017: a
+# policy `orbien_app_auth` de leitura em user_accounts/role_assignments só pode
+# cair quando estas funções já existem. Só adiciona funções; sozinho não muda
+# comportamento.
+if [ -f prisma/migrations/033_rls_auth_lookup.sql ]; then
+  run_sql_file prisma/migrations/033_rls_auth_lookup.sql
+fi
+# PEND-04 (A+B+D): aperta a policy `orbien_app_auth` que a migration datada
 # 20260608175621 criou com USING(true)/WITH CHECK(true) em oito tabelas. Tira
-# `audit_logs` da policy (não tem consumidor: a auditoria escreve por
-# audit_insert(), SECURITY DEFINER) e troca FOR ALL por FOR SELECT em
-# `user_accounts` e `role_assignments` (a escrita por orbien_app sem contexto
-# não tem chamador). Roda por último no passo 5 porque nenhum outro script
+# `audit_logs` (a auditoria escreve por audit_insert(), SECURITY DEFINER) e,
+# agora que 033 existe, também `user_accounts` e `role_assignments` (a leitura
+# do login vai pelas funções auth_*). Roda por último no passo 5 porque nenhum outro script
 # toca `orbien_app_auth` — o passo 7 confere que continua assim.
 if [ -f prisma/migrations/017_rls_auth_tables.sql ]; then
   run_sql_file prisma/migrations/017_rls_auth_tables.sql
@@ -784,6 +791,25 @@ BEGIN
     RAISE EXCEPTION 'esperava 1 policy shared_read_write com USING(true)/WITH CHECK(true) em bible_chapter_cache, encontrei % — 021_rls_bible_chapter_cache.sql rodou?', n;
   END IF;
 
+  -- 033 (PEND-04, ação D): as três funções de leitura do login. Sem
+  -- SECURITY DEFINER, sem search_path fixo, com EXECUTE aberto a app_user/PUBLIC
+  -- ou com dono orbien_app (que não passa por cima do RLS), deixam de ser a
+  -- fronteira que o desenho promete.
+  SELECT count(*) INTO n
+    FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+   WHERE p.proname IN ('auth_login_lookup', 'auth_session_lookup', 'auth_tenant_admin_user_id')
+     AND p.prosecdef
+     AND p.proconfig IS NOT NULL
+     AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+     AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE')
+     AND pg_get_userbyid(p.proowner) <> 'orbien_app';
+  RAISE NOTICE 'funcoes auth_* conformes: %', n;
+  IF n <> 3 THEN
+    RAISE EXCEPTION 'esperava 3 funcoes auth_* (auth_login_lookup, auth_session_lookup, auth_tenant_admin_user_id) SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 033_rls_auth_lookup.sql rodou?', n;
+  END IF;
+
   -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu
   -- USING(true)/WITH CHECK(true) FOR ALL em oito tabelas, na migration datada
   -- 20260608175621. 017 tira `audit_logs` da policy e fecha a escrita em
@@ -806,15 +832,17 @@ BEGIN
     RAISE EXCEPTION 'audit_logs ainda tem a policy orbien_app_auth — 017_rls_auth_tables.sql nao rodou, ou a migration datada a recriou depois';
   END IF;
 
+  -- PEND-04 D: user_accounts e role_assignments NÃO têm mais policy
+  -- `orbien_app_auth` — a leitura pré-autenticação é só pelas funções de 033.
+  -- Policy de volta aqui reabre a leitura de todos os tenants (hash incluído)
+  -- por `orbien_app`, em silêncio: o login continua funcionando.
   SELECT count(*) INTO n
     FROM pg_policies
    WHERE policyname = 'orbien_app_auth'
-     AND tablename IN ('user_accounts', 'role_assignments')
-     AND cmd = 'SELECT'
-     AND with_check IS NULL;
-  RAISE NOTICE 'orbien_app_auth restrita a leitura em user_accounts/role_assignments: %', n;
-  IF n <> 2 THEN
-    RAISE EXCEPTION 'esperava 2 policies orbien_app_auth FOR SELECT sem WITH CHECK (user_accounts, role_assignments), encontrei % — 017_rls_auth_tables.sql rodou?', n;
+     AND tablename IN ('user_accounts', 'role_assignments');
+  RAISE NOTICE 'orbien_app_auth em user_accounts/role_assignments: % (esperado 0)', n;
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'user_accounts/role_assignments ainda tem % policy(ies) orbien_app_auth — 017_rls_auth_tables.sql nao rodou, ou a migration datada a recriou depois. A leitura do login e pelas funcoes de 033', n;
   END IF;
 
   -- O contrapeso: `refresh_tokens` TEM que continuar aberta para escrita por

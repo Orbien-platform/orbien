@@ -3,6 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { findSessionByUserId } from '../auth-lookup';
+
+// PEND-04 D: a leitura da conta vai por `auth_session_lookup` (SECURITY
+// DEFINER), não por `prisma.userAccount`. O SQL é coberto em
+// `test/rls/auth-tables.spec.ts`.
+jest.mock('../auth-lookup');
 
 function configWith(secret: string | undefined): ConfigService {
   return {
@@ -24,66 +30,53 @@ const payload: JwtPayload = {
   plan: 'starter',
 };
 
+const prisma = {} as unknown as PrismaService;
+
+function sessao(overrides: Record<string, unknown> = {}) {
+  return {
+    user_id: 'user-1',
+    tenant_id: 'tenant-1',
+    congregation_id: 'cong-1',
+    is_active: true,
+    tenant_is_active: true,
+    plan: 'starter',
+    roles: [],
+    ...overrides,
+  };
+}
+
 describe('JwtStrategy', () => {
+  beforeEach(() => (findSessionByUserId as jest.Mock).mockReset());
+
   it('lê JWT_SECRET do ConfigService na construção', () => {
-    const prisma = { userAccount: { findUnique: jest.fn() } } as unknown as PrismaService;
     expect(() => new JwtStrategy(configWith('segredo-de-teste'), prisma)).not.toThrow();
   });
 
   describe('validate', () => {
     it('devolve o payload quando o usuário e o tenant existem e estão ativos', async () => {
-      const findUnique = jest
-        .fn()
-        .mockResolvedValue({ is_active: true, tenant: { is_active: true } });
-      const prisma = { userAccount: { findUnique } } as unknown as PrismaService;
+      (findSessionByUserId as jest.Mock).mockResolvedValue(sessao());
       const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
 
       await expect(strategy.validate(payload)).resolves.toBe(payload);
-      expect(findUnique).toHaveBeenCalledWith({
-        where: { id: payload.sub },
-        select: { is_active: true, tenant: { select: { is_active: true } } },
-      });
+      expect(findSessionByUserId).toHaveBeenCalledWith(prisma, payload.sub);
     });
 
     it('rejeita quando o usuário não existe', async () => {
-      const prisma = {
-        userAccount: { findUnique: jest.fn().mockResolvedValue(null) },
-      } as unknown as PrismaService;
+      (findSessionByUserId as jest.Mock).mockResolvedValue(null);
       const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
 
       await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
     it('rejeita quando o usuário existe mas está inativo', async () => {
-      const prisma = {
-        userAccount: {
-          findUnique: jest.fn().mockResolvedValue({ is_active: false, tenant: { is_active: true } }),
-        },
-      } as unknown as PrismaService;
+      (findSessionByUserId as jest.Mock).mockResolvedValue(sessao({ is_active: false }));
       const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
 
       await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
     it('rejeita quando o usuário está ativo mas o tenant está inativo', async () => {
-      const prisma = {
-        userAccount: {
-          findUnique: jest.fn().mockResolvedValue({ is_active: true, tenant: { is_active: false } }),
-        },
-      } as unknown as PrismaService;
-      const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
-
-      await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
-    });
-
-    // Teórico dado o FK obrigatório de `user_accounts.tenant_id` — mas
-    // `tenant.is_active` não pode assumir a relação presente sem checar.
-    it('rejeita, sem estourar, quando a relação de tenant vem nula', async () => {
-      const prisma = {
-        userAccount: {
-          findUnique: jest.fn().mockResolvedValue({ is_active: true, tenant: null }),
-        },
-      } as unknown as PrismaService;
+      (findSessionByUserId as jest.Mock).mockResolvedValue(sessao({ tenant_is_active: false }));
       const strategy = new JwtStrategy(configWith('segredo-de-teste'), prisma);
 
       await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);

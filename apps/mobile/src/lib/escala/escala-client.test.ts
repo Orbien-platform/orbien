@@ -14,6 +14,8 @@ import {
   getSwapCandidates,
   getUnavailability,
   requestSwap,
+  acceptVolunteerTerm,
+  updateMyAvailability,
   respondToAssignment,
   respondToSwap,
   saveAttendance,
@@ -65,6 +67,17 @@ describe("EscalaClient", () => {
         ["get", "/volunteers/my-swap-requests"],
         ["patch", "/swap-requests/r1/accept"],
         ["get", "/volunteers/me/profile"],
+      ]);
+    });
+  });
+
+  describe("perfil editável (PROD-36)", () => {
+    it("PATCH só com availability e POST do termo com a versão", async () => {
+      await updateMyAvailability({ sunday: ["morning"] });
+      await acceptVolunteerTerm("volunteer_term_v1");
+      expect(mockAuthenticatedRequest.mock.calls).toEqual([
+        ["patch", "/volunteers/me/profile", { body: { availability: { sunday: ["morning"] } } }],
+        ["post", "/volunteers/me/term", { body: { term_version: "volunteer_term_v1" } }],
       ]);
     });
   });

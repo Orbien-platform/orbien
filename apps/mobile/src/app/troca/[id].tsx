@@ -23,6 +23,7 @@ import { SectionLabel } from "../../components/SectionLabel";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError, NetworkError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { getSwapCandidates, requestSwap } from "../../lib/escala/escala-client";
 import type { CandidateAvailability, SwapCandidate } from "../../lib/escala/types";
 import { CircleAlert, CircleCheck, MessageSquare, Users, WifiOff } from "../../lib/theme/icons";
@@ -61,6 +62,13 @@ export default function TrocaScreen() {
   const sendingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<SwapCandidate | "ministerio" | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão na lista de substitutos, relê sozinha na volta dela.
+  // Só a leitura dos candidatos — o pedido de troca (POST) nunca é reenviado.
+  useReloadOnReconnect(loadError?.offline === true, () => {
+    setLoadError(null);
+    setRetryCount((n) => n + 1);
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +82,7 @@ export default function TrocaScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, retryCount]);
 
   async function send(target: SwapCandidate | "ministerio") {
     // Ref, não o state: dois toques antes do re-render veriam `sending` nulo

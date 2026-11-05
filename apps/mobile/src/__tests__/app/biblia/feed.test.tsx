@@ -39,6 +39,7 @@ jest.mock("../../../lib/bible/bible-client", () => ({
     Promise.resolve([{ code: "JHN", name: "João", testament: "NT", chapters: 21 }]),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import BibliaFeedScreen from "../../../app/biblia/feed";
 import type { BibleVerseMark } from "../../../lib/bible/types";
@@ -607,5 +608,62 @@ describe("BibliaFeedScreen", () => {
 
     expect(screen.getByTestId("biblia-mark-like-count-mark-1")).toHaveTextContent("1");
     expect(screen.getByTestId("biblia-mark-like-count-mark-2")).toHaveTextContent("4");
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockFocusRuns.length = 0;
+      mockGetFeed.mockReset();
+      mockGetFeed.mockRejectedValueOnce(new NetworkError());
+      mockGetFeed.mockResolvedValue({ items: [mark()], nextCursor: null });
+      await act(async () => {
+        render(<BibliaFeedScreen />);
+      });
+      expect(screen.getByTestId("biblia-feed-error")).toBeTruthy();
+      expect(mockGetFeed).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetFeed).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("biblia-feed-error")).toBeNull();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockFocusRuns.length = 0;
+      mockGetFeed.mockReset();
+      mockGetFeed.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<BibliaFeedScreen />);
+      });
+      expect(screen.getByTestId("biblia-feed-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockGetFeed).toHaveBeenCalledTimes(1);
+    });
   });
 });

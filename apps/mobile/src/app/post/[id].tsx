@@ -23,6 +23,7 @@ import { Screen } from "../../components/Screen";
 import { StatusMessage } from "../../components/StatusMessage";
 import { HttpError } from "../../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../../lib/api/load-error";
+import { useReloadOnReconnect } from "../../lib/network/use-reload-on-reconnect";
 import { getPost } from "../../lib/content/content-client";
 import { isImageUrl } from "../../lib/content/media";
 import type { Post } from "../../lib/content/types";
@@ -45,6 +46,13 @@ export default function PostScreen() {
   const { colors } = useTheme();
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<LoadErrorState | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // PROD-32: sem conexão, relê sozinha na volta dela. O 404 traz offline:false
+  // e não assina a rede. A tela não tem botão de retry; o contador é do hook.
+  useReloadOnReconnect(error?.offline === true, () => {
+    setError(null);
+    setRetryCount((n) => n + 1);
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +81,7 @@ export default function PostScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, retryCount]);
 
   if (error) {
     return (

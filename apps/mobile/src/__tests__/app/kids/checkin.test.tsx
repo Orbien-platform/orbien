@@ -24,6 +24,7 @@ jest.mock("../../../lib/privacidade/privacidade-client", () => ({
   getMyPersonId: (...a: unknown[]) => mockGetMyPersonId(...a),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
 import { HttpError, NetworkError } from "../../../lib/api/errors";
 import CheckinScreen from "../../../app/kids/checkin/[childId]";
 
@@ -248,6 +249,60 @@ describe("CheckinScreen", () => {
       expect(screen.getByTestId("checkin-error")).toBeTruthy();
       await press("checkin-retry");
       expect(screen.getByTestId("checkin-fazer")).toBeTruthy();
+    });
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(NOW);
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockListOpen.mockReset();
+      mockListOpen.mockRejectedValueOnce(new NetworkError());
+      mockListOpen.mockResolvedValue([MATERNAL, JUNIOR]);
+      await renderScreen();
+      expect(screen.getByTestId("checkin-error")).toBeTruthy();
+      expect(mockListOpen).toHaveBeenCalledTimes(1);
+
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockListOpen).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("checkin-fazer")).toBeTruthy();
+      // Só leitura: a releitura nunca faz o check-in.
+      expect(mockCheckIn).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockListOpen.mockReset();
+      mockListOpen.mockRejectedValue(new NetworkError());
+      await renderScreen();
+      expect(screen.getByTestId("checkin-error")).toBeTruthy();
+
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(mockListOpen).toHaveBeenCalledTimes(1);
     });
   });
 });
