@@ -264,7 +264,7 @@ foi retomado — cinco no total.
 | Módulo 4 — Conteúdos e Notificações | Entregue — posts, notificações, segmentação básica e avançada (comportamento/engajamento/inatividade, Premium), métricas da OneSignal |
 | Módulo 5 — Celebrações e OC | Entregue — `Celebration`, `CelebrationInstance`, `ServiceOrder`/`ServiceOrderItem`, `Setlist`, repertório, OC em PDF, integração com escalas do Módulo 1 |
 | Plano de plataforma (Nível 0) | Entregue e além do escopo original — `apps/admin`, `@PlatformRoute()`, `platform_support`, sessão de suporte cross-origin, auditoria, cancelamento/reativação de `TenantPlan`, com tela no console |
-| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin + logs de auditoria (2 anos) + consentimento (5 anos após revogação) — ver **CONF-02**; revisão jurídica das regras em **CONF-01** |
+| Retenção de dados (LGPD, seção 5) | Entregue nas 4 categorias de pessoa + Art. 18 (soft delete) + aviso semanal ao admin + logs de auditoria (2 anos) + consentimento (5 anos após revogação) + tokens de auth expirados — ver **CONF-02**; revisão jurídica das regras em **CONF-01** |
 | App mobile (Fase 7, ADR-004/ADR-005) | Entregue na variante Starter — `apps/mobile` (Expo + RN). MOB-01…MOB-12 verificados, incluindo MOB-10 (preferências de notificação, PR #76). Ver `.specs/features/app-mobile/` |
 | Infra | Entregue com a atualização do ADR-008: Render (runtime Node) + Vercel (site/web/admin) + EAS Build (mobile) + Supabase + Cloudflare R2 |
 
@@ -374,13 +374,46 @@ contra o Postgres local, só em `teste2-church`.
 - **Sem linha de auditoria por execução:** `audit_insert()` exige tenant e ator
   (`actor_user_id` NOT NULL com FK) e o cron não tem nenhum dos dois. O rastro é
   o log estruturado do processo, só com contagens (sem dado pessoal).
-- **Não há trigger de imutabilidade em `audit_logs`** (o mapeamento 7.2 o
-  prevê, mas não foi implementado). Criá-lo exigiria exceção para este job.
-- Fora do escopo: `login_attempts`, `refresh_tokens` e `password_reset_tokens`
-  (contadores e tokens, sem IP; não verifiquei se algum job limpa expirados) e
-  o log de login com IP do mapeamento 7.1, que não existe em tabela alguma.
-- O aviso semanal da seção 5.1 não foi estendido a estas duas linhas: não são
-  cadastro de pessoa, e o aviso conta pessoas.
+- **Trigger de imutabilidade em `audit_logs`:** segue sem implementar — ver
+  `DEC-08`. Hoje UPDATE/DELETE de `app_user` já falham (só há policy de
+  `SELECT`); o que o trigger fecharia é a conexão `system`.
+- **Log de login com IP (mapeamento 7.1):** continua fora. Não existe em tabela
+  alguma (`login_attempts` não guarda IP; o limite por IP é do `ThrottlerGuard`,
+  em memória) e não foi criado.
+- O aviso semanal da seção 5.1 não foi estendido a estas duas linhas (log e
+  consentimento) nem às tabelas de auth: não são cadastro de pessoa, e o aviso
+  conta pessoas.
+
+**Resíduos fechados em 2026-11-04** — `AuthTokensRetentionService`
+(`apps/api/src/auth/auth-tokens-retention.service.ts`), cron **1h UTC**, como
+`prisma.system`, sem policy nem exceção de RLS nova. Nenhum job limpava essas
+três tabelas; nenhuma guarda `ip` nem `user_agent`:
+
+| Tabela | O que guarda | Prazo | Regra |
+|---|---|---|---|
+| `login_attempts` | `"<rota>:<e-mail>"` (e-mail em claro, existindo a conta ou não), contador, janela | 7 dias | `max(window_at, blocked_at) < now - 7d` |
+| `password_reset_tokens` | token, `user_id`, `expires_at` (30 min), `used_at` | 7 dias após `expires_at` | usado ou não |
+| `refresh_tokens` | hash, `user_account_id`, `expires_at` (7 dias), `revoked_at`, `replaced_by_id` | 30 dias após `expires_at` | revogado ou não |
+
+Prazos decididos pelo dono em 2026-11-04. O de `refresh_tokens` é o que exige
+cuidado: a linha **revogada** é a evidência com que `AuthService.refresh`
+detecta reuso e derruba a família. Um token roubado só serve enquanto algum
+descendente estiver vivo, e cada elo vive 7 dias e nasce dentro da vida do pai —
+depois de `expires_at + 7 dias` não há descendente vivo; os 30 dias são esse
+limite mais folga (cron perdido, `PEND-13`, e investigação de incidente). O
+`DELETE` ordena por `expires_at`, então o pai (que aponta para o filho em
+`replaced_by_id`) sai antes ou junto do filho, sem violar a FK. Lotes de 1000,
+teto de 200 por rodada, idempotente, log só com contagens.
+
+Evidência: `src/auth/auth-tokens-retention.service.spec.ts` (prazos, lote, teto,
+escopo, falha no meio, cron) e `test/integration/auth-tokens-retention.spec.ts`
+contra o Postgres local, só `teste2-church` (limite exato, cadeia pai→filho,
+mais de um lote, idempotência e **reuso de refresh token ainda detectado dentro
+da retenção**; depois dela, o token vira "Token inválido").
+
+**`PEND-13` vale para o cron novo**, como para o de 2h: só dispara com o
+processo acordado, e execução perdida atrasa a limpeza sem perder dado.
+Achado derivado: `PEND-24`.
 
 ### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
@@ -3009,6 +3042,18 @@ loga a exceção não tratada com stack, que diz se foi `P2028`, queda de conex�
 com o pooler do Supabase ou reinício do serviço. Decisão em aberto: mapear
 `P2028` para 503 (hoje 500).
 
+### PEND-24 · `password_reset_tokens.token` é gravado em claro · segurança
+
+Achado ao investigar a retenção das tabelas de auth (`CONF-02`, 2026-11-04).
+`AuthService.forgotPassword` e `UsersService` gravam o token de redefinição
+em claro (`randomBytes(32).toString('hex')` direto em `token`), e
+`resetPassword` o busca por igualdade. O `refresh_tokens`, ao contrário, guarda
+SHA-256. Quem lê o banco enquanto o token vale (30 min, até o uso) redefine a
+senha da conta. A limpeza de 7 dias após o vencimento não muda isso. Correção
+natural: guardar o hash (SHA-256, como o refresh token) e buscar por hash;
+exige tratar os tokens em voo na migração (curtos, podem simplesmente expirar).
+Não corrigido nesta rodada, por ser outro assunto.
+
 ## 8. Ajustes — documento, rótulo e portão
 
 Nenhum muda comportamento. Todos são documento ou rótulo divergindo do que a
@@ -3240,6 +3285,23 @@ Condicionado ao fechamento do ciclo de conformidade e ao `DEC-01`.
 Cuidado pastoral preditivo, classificação de doações, projeção financeira —
 listados na tabela comparativa de `produto-gestao-igrejas-mvp.md` (seção 5).
 Nenhum tem desenho técnico.
+
+### DEC-08 · Trigger de imutabilidade em `audit_logs` · em aberto
+
+Previsto no mapeamento LGPD 7.2, não implementado (`CONF-02`). Hoje a proteção é
+RLS: `tenant_read` é `FOR SELECT`, então UPDATE/DELETE de `app_user` falham; a
+escrita é só por `audit_insert()` (`SECURITY DEFINER`). O trigger fecharia só a
+conexão `system` (BYPASSRLS), que é o próprio código da API, e o job de
+retenção precisaria de exceção. Desenho, se um dia for feito: trigger
+`BEFORE UPDATE OR DELETE` que bloqueia sem a flag `orbien.audit_purge`, setada
+apenas dentro de uma função `SECURITY DEFINER audit_purge_expired(cutoff, batch)`
+com `EXECUTE` restrito (nunca `SET LOCAL` solto, que qualquer `$executeRaw`
+liberaria); script de RLS de número novo no `bootstrap-db.sh`, assertivas no passo 7 e
+teste de RLS de UPDATE/DELETE por `app_user`, `orbien_app` e `system`. Contra:
+uma `SECURITY DEFINER` que apaga prova, executável pela role da API, não barra
+código da API comprometido (só limita ao vencido), e todo expurgo manual passa a
+exigir migration. Recomendação de 2026-11-04: não fazer agora; reavaliar depois
+do parecer da `CONF-01`. Decisão do dono: a registrar.
 
 ---
 
