@@ -105,7 +105,6 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   const [payment, setPayment] = useState<ShownPayment | null>(null);
   const [paymentIssue, setPaymentIssue] = useState<PaymentIssue | null>(null);
   const [paymentOffline, setPaymentOffline] = useState(false);
-  const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentRetry, setPaymentRetry] = useState(0);
   const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
   // Incrementado por "Tentar novamente" — mesma mecânica de `presenca.tsx`.
@@ -167,10 +166,11 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   // `pending_payment` entra, e `payment` já preenchido (resposta do POST) não
   // refaz a leitura.
   const needsPayment = mine?.status === "pending_payment" && payment === null;
+  // Lendo enquanto falta QR e nenhum motivo de não haver.
+  const paymentLoading = needsPayment && paymentIssue === null;
   useEffect(() => {
     if (!needsPayment) return;
     let cancelled = false;
-    setPaymentLoading(true);
     getMyEventRegistrationPayment(postId)
       .then((result) => {
         if (cancelled) return;
@@ -185,9 +185,6 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
         if (cancelled) return;
         setPaymentOffline(describeLoadError(err, "o pagamento").offline);
         setPaymentIssue("failed");
-      })
-      .finally(() => {
-        if (!cancelled) setPaymentLoading(false);
       });
     return () => {
       cancelled = true;

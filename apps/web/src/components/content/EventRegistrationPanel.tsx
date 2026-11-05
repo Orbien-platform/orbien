@@ -136,7 +136,6 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   const [mine, setMine] = useState<MyRegistration | null>(null);
   const [payment, setPayment] = useState<RegistrationPayment | null>(null);
   const [paymentIssue, setPaymentIssue] = useState<PaymentIssue | null>(null);
-  const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentRetry, setPaymentRetry] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -177,10 +176,11 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   // Inscrição pendente sem QR em tela (post reaberto): relê o PIX. Com o
   // `payment` da resposta do POST já preenchido, não relê.
   const needsPayment = mine?.status === "pending_payment" && payment === null;
+  // Lendo enquanto falta QR e nenhum motivo de não haver.
+  const paymentLoading = needsPayment && paymentIssue === null;
   useEffect(() => {
     if (!needsPayment) return;
     const signal = { cancelled: false };
-    setPaymentLoading(true);
     api
       .get<MyPaymentResult>(`/content/posts/${postId}/registrations/me/payment`)
       .then(({ data }) => {
@@ -194,9 +194,6 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       })
       .catch(() => {
         if (!signal.cancelled) setPaymentIssue("failed");
-      })
-      .finally(() => {
-        if (!signal.cancelled) setPaymentLoading(false);
       });
     return () => {
       signal.cancelled = true;
