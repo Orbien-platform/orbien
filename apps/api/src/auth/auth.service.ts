@@ -52,6 +52,21 @@ interface RoleAssignmentRow {
 }
 
 /**
+ * Hash argon2id de uma senha aleatória que ninguém conhece, gerado com os
+ * parâmetros padrão de `argon2.hash` (os mesmos de toda conta real: m=65536,
+ * t=3, p=4). Existe só para o caminho "sem conta" do login gastar o MESMO
+ * `argon2.verify` que o caminho "conta existe, senha errada" gasta — sem isso,
+ * e-mail inexistente respondia em microssegundos e conta existente em dezenas
+ * de milissegundos, e a diferença de tempo entregava quais e-mails têm conta.
+ *
+ * O resultado desse verify é descartado: quem decide é `!user`. Se o custo do
+ * `argon2.hash` padrão mudar, `auth.service.spec.ts` falha (`needsRehash`) até
+ * este valor ser regerado.
+ */
+export const DUMMY_PASSWORD_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=4$glXfxHATcc3QlcQbiN2qLg$YLQzDZX8N7oMtiDYBQlsPYOZTtntvanY/fhw0vYBguw';
+
+/**
  * Papéis que vão para o token.
  *
  * A regra base é a de sempre: só os papéis atribuídos na congregação em que a
@@ -120,6 +135,14 @@ export class AuthService {
     // a tentativa falhou. Quem barra de fato tenant inativo em toda
     // requisição — não só aqui — é o `JwtStrategy.validate`; este é o caminho
     // que evita emitir um token que já nasceria inútil.
+    //
+    // O `argon2.verify` roda em TODOS os caminhos, antes de qualquer decisão:
+    // sem conta, contra `DUMMY_PASSWORD_HASH` (mesmo custo de uma conta real).
+    // Senão o tempo de resposta diferenciava e-mail com conta de e-mail sem
+    // conta (e conta inativa de ativa). O resultado só vale com a conta
+    // aprovada; sem conta, é descartado.
+    const valid = await argon2.verify(user?.password_hash ?? DUMMY_PASSWORD_HASH, dto.password);
+
     if (!user || !user.is_active || !user.tenant_is_active) {
       // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
       this.logger.warn(
@@ -129,7 +152,6 @@ export class AuthService {
       throw invalid;
     }
 
-    const valid = await argon2.verify(user.password_hash, dto.password);
     if (!valid) {
       // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
       this.logger.warn(`login falhou [${dto.email}]: senha não confere`);
@@ -204,12 +226,15 @@ export class AuthService {
     const hasPlatformRole =
       user?.roles.some((ra) => ra.role_code === PLATFORM_ROLE) ?? false;
 
+    // Mesmo `argon2.verify` em todos os caminhos (ver `login`): sem conta, contra
+    // o hash de mesmo custo; sem o papel ou inativa, contra o hash real.
+    const valid = await argon2.verify(user?.password_hash ?? DUMMY_PASSWORD_HASH, dto.password);
+
     if (!user || !user.is_active || !hasPlatformRole) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
 
-    const valid = await argon2.verify(user.password_hash, dto.password);
     if (!valid) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;

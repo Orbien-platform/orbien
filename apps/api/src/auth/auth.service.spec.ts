@@ -17,7 +17,7 @@ import { ForbiddenException, NotFoundException, UnauthorizedException, BadReques
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
-import { AuthService } from './auth.service';
+import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
 import { LoginRateLimitService, LOGIN_POLICY } from './login-rate-limit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -31,6 +31,13 @@ import { findImpersonateTarget } from '../common/public-lookup';
 // que o serviço faz com a resposta.
 jest.mock('./auth-lookup');
 jest.mock('../common/public-lookup');
+
+// `argon2.verify` continua real; o wrapper só registra as chamadas, para provar
+// que o verify roda em todos os caminhos do login (equalização de tempo).
+jest.mock('argon2', () => {
+  const actual = jest.requireActual('argon2');
+  return { ...actual, verify: jest.fn(actual.verify) };
+});
 
 interface LegacyAccount {
   id?: string;
@@ -75,6 +82,7 @@ function mockStored(
 }
 
 beforeEach(() => {
+  (argon2.verify as jest.Mock).mockClear();
   (findLoginByEmail as jest.Mock).mockReset();
   (findSessionByUserId as jest.Mock).mockReset();
 });
@@ -590,6 +598,129 @@ describe('AuthService.logout', () => {
       where: { token_hash: expect.any(String), revoked_at: null },
       data: { revoked_at: expect.any(Date) },
     });
+  });
+});
+
+describe('AuthService — o argon2.verify roda em todos os caminhos do login', () => {
+  /**
+   * Não mede tempo (flaky por natureza): prova que a mesma operação cara roda
+   * antes de qualquer decisão. Sem isto, e-mail inexistente respondia antes do
+   * verify e o tempo de resposta diferenciava conta existente de inexistente.
+   */
+  const senha = 'senha-errada';
+  const verifyCalls = () => (argon2.verify as jest.Mock).mock.calls;
+
+  async function linha(overrides: Record<string, unknown> = {}) {
+    return {
+      user_id: 'u1',
+      tenant_id: 't1',
+      congregation_id: 'c1',
+      password_hash: await argon2.hash('senha-certa'),
+      is_active: true,
+      tenant_is_active: true,
+      plan: null,
+      roles: [{ role_code: 'platform_support', congregation_id: 'c1' }],
+      ...overrides,
+    };
+  }
+
+  async function erroDe(fn: () => Promise<unknown>) {
+    return fn().then(
+      () => {
+        throw new Error('devia ter recusado');
+      },
+      (e: UnauthorizedException) => e,
+    );
+  }
+
+  it('o hash fixo tem o mesmo custo de uma conta real (parâmetros padrão de argon2.hash)', async () => {
+    expect(DUMMY_PASSWORD_HASH.startsWith('$argon2id$')).toBe(true);
+    // `needsRehash` é false só quando m/t/p do hash batem com os padrões atuais.
+    expect(argon2.needsRehash(DUMMY_PASSWORD_HASH)).toBe(false);
+    expect(await argon2.verify(DUMMY_PASSWORD_HASH, 'qualquer-coisa')).toBe(false);
+  });
+
+  it('login — sem conta: verify roda contra o hash fixo, com a senha enviada', async () => {
+    const { service } = serviceWith({});
+    mockLogin(null);
+
+    await erroDe(() => service.login({ email: 'nao@existe.test', password: senha }));
+
+    expect(verifyCalls()).toEqual([[DUMMY_PASSWORD_HASH, senha]]);
+  });
+
+  it('login — senha errada, conta inativa e tenant inativo: verify roda contra o hash REAL', async () => {
+    const real = await argon2.hash('senha-certa');
+    for (const overrides of [
+      {},
+      { is_active: false },
+      { tenant_is_active: false },
+    ]) {
+      (argon2.verify as jest.Mock).mockClear();
+      const { service } = serviceWith({});
+      (findLoginByEmail as jest.Mock).mockResolvedValue(await linha({ password_hash: real, ...overrides }));
+
+      await erroDe(() => service.login({ email: 'a@b.test', password: senha }));
+
+      expect(verifyCalls()).toEqual([[real, senha]]);
+    }
+  });
+
+  it('login — o hash fixo nunca autentica: mesmo acertando a senha dele, sem conta é 401', async () => {
+    const { service } = serviceWith({});
+    mockLogin(null);
+    const e = await erroDe(() => service.login({ email: 'nao@existe.test', password: DUMMY_PASSWORD_HASH }));
+    expect(e).toBeInstanceOf(UnauthorizedException);
+    expect(findLoginByEmail).toHaveBeenCalled();
+  });
+
+  it('login — as quatro recusas continuam indistinguíveis (corpo idêntico)', async () => {
+    const real = await argon2.hash('senha-certa');
+    const respostas: unknown[] = [];
+    for (const row of [
+      null, // inexistente
+      await linha({ password_hash: real }), // senha errada
+      await linha({ password_hash: real, is_active: false }), // inativa
+      await linha({ password_hash: real, tenant_is_active: false }), // tenant inativo
+    ]) {
+      const { service } = serviceWith({});
+      (findLoginByEmail as jest.Mock).mockResolvedValue(row);
+      const e = await erroDe(() => service.login({ email: 'a@b.test', password: senha }));
+      respostas.push(e.getResponse());
+    }
+    expect(new Set(respostas.map((r) => JSON.stringify(r))).size).toBe(1);
+    expect(respostas[0]).toEqual({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+  });
+
+  it('platformLogin — sem conta, sem o papel e inativa: verify roda nos três', async () => {
+    const real = await argon2.hash('senha-certa');
+    const casos: Array<[string, unknown, string]> = [
+      ['sem conta', null, DUMMY_PASSWORD_HASH],
+      ['sem o papel', await linha({ password_hash: real, roles: [{ role_code: 'tenant_admin', congregation_id: 'c1' }] }), real],
+      ['inativa', await linha({ password_hash: real, is_active: false }), real],
+    ];
+    const respostas: unknown[] = [];
+    for (const [, row, esperado] of casos) {
+      (argon2.verify as jest.Mock).mockClear();
+      const { service } = serviceWith({});
+      (findLoginByEmail as jest.Mock).mockResolvedValue(row);
+
+      const e = await erroDe(() => service.platformLogin({ email: 'p@o.test', password: senha }));
+
+      expect(verifyCalls()).toEqual([[esperado, senha]]);
+      respostas.push(e.getResponse());
+    }
+    expect(new Set(respostas.map((r) => JSON.stringify(r))).size).toBe(1);
+  });
+
+  it('login válido continua emitindo token (o verify extra não mudou o caminho feliz)', async () => {
+    const { service } = serviceWith({});
+    (findLoginByEmail as jest.Mock).mockResolvedValue(await linha({ roles: [{ role_code: 'member', congregation_id: 'c1' }] }));
+
+    await expect(service.login({ email: 'a@b.test', password: 'senha-certa' })).resolves.toMatchObject({
+      access_token: 'signed-token',
+    });
+    expect(verifyCalls()).toHaveLength(1);
   });
 });
 
