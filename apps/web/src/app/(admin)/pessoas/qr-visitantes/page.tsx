@@ -12,7 +12,7 @@
  * tenant_admin, admin_congregation, pastor ou secretary — papel sem isso cai
  * no estado de "sem acesso", sem tratar 403 como lista vazia.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Check,
   Copy,
@@ -20,6 +20,7 @@ import {
   Pencil,
   Plus,
   Power,
+  Printer,
   QrCode,
 } from "lucide-react";
 import { QrImage } from "@/components/people/QrImage";
@@ -572,9 +573,43 @@ function ShowQrModal({
   );
 }
 
+/**
+ * Impressão pelo navegador: uma janela só com o QR, o nome e o endereço,
+ * montada por DOM (nome e endereço entram como `textContent`, nunca como HTML)
+ * e entregue ao diálogo de impressão do navegador — sem PDF no servidor e sem
+ * dependência. Devolve false se o navegador bloqueou a janela.
+ */
+function printQr(svg: SVGElement, name: string, url: string): boolean {
+  const win = window.open("", "_blank", "width=720,height=900");
+  if (!win) return false;
+  const doc = win.document;
+  doc.title = name;
+  const style = doc.createElement("style");
+  style.textContent =
+    "body{font-family:system-ui,sans-serif;text-align:center;margin:0;padding:48px 24px;color:#0b1f3a}" +
+    "h1{font-size:28px;margin:0 0 8px}p{font-size:14px;word-break:break-all;margin:16px 0 0}" +
+    "svg{width:min(80vw,420px);height:auto;margin-top:24px}";
+  doc.head.appendChild(style);
+  const title = doc.createElement("h1");
+  title.textContent = name;
+  const address = doc.createElement("p");
+  address.textContent = url;
+  doc.body.append(title, doc.importNode(svg, true), address);
+  win.focus();
+  win.print();
+  return true;
+}
+
 function ShowQrBody({ url, name }: { url: string; name: string }) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [printFailed, setPrintFailed] = useState(false);
+  const qrRef = useRef<HTMLDivElement>(null);
+
+  function print() {
+    const svg = qrRef.current?.querySelector("svg");
+    setPrintFailed(!svg || !printQr(svg, name, url));
+  }
 
   async function copy() {
     setCopyFailed(false);
@@ -588,7 +623,9 @@ function ShowQrBody({ url, name }: { url: string; name: string }) {
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <QrImage value={url} label={`QR de cadastro: ${name}`} />
+      <div ref={qrRef}>
+        <QrImage value={url} label={`QR de cadastro: ${name}`} />
+      </div>
       <p className="w-full break-all rounded-[8px] bg-[var(--surface-subtle)] px-3 py-2 font-mono text-xs text-stone">
         {url}
       </p>
@@ -601,6 +638,21 @@ function ShowQrBody({ url, name }: { url: string; name: string }) {
         {copied ? <Check size={14} /> : <Copy size={14} />}
         {copied ? "Endereço copiado" : "Copiar endereço"}
       </Button>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={print}
+        className="h-10 w-full rounded-[8px]"
+      >
+        <Printer size={14} />
+        Imprimir
+      </Button>
+      {printFailed && (
+        <p className="text-sm text-crimson" role="alert">
+          O navegador bloqueou a janela de impressão. Libere pop-ups para este
+          site e tente de novo.
+        </p>
+      )}
       {copyFailed && (
         <p className="text-sm text-crimson" role="alert">
           Não foi possível copiar. Selecione o endereço acima e copie à mão.
