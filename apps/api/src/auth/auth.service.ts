@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { findLoginByEmail, findSessionByUserId } from './auth-lookup';
 import { MailService } from '../mail/mail.service';
 import { PLATFORM_MAIL_BRAND, TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
 import {
@@ -109,20 +110,16 @@ export class AuthService {
       code: 'INVALID_CREDENTIALS',
     });
 
-    const user = await this.prisma.userAccount.findUnique({
-      where: { email: dto.email },
-      include: {
-        roleAssignments: { select: { role_code: true, congregation_id: true } },
-        tenant: { include: { tenantPlan: { select: { plan: true } } } },
-      },
-    });
+    // `orbien_app` não lê `user_accounts` direto (PEND-04 D): a leitura vai pela
+    // função SECURITY DEFINER de `033_rls_auth_lookup.sql`.
+    const user = await findLoginByEmail(this.prisma, dto.email);
 
     // E-mail inexistente, conta inativa e tenant inativo levam o mesmo 401
     // genérico — quem tenta entrar não deve descobrir por qual desses motivos
     // a tentativa falhou. Quem barra de fato tenant inativo em toda
     // requisição — não só aqui — é o `JwtStrategy.validate`; este é o caminho
     // que evita emitir um token que já nasceria inútil.
-    if (!user || !user.is_active || !user.tenant.is_active) {
+    if (!user || !user.is_active || !user.tenant_is_active) {
       // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
       this.logger.warn(
         `login falhou [${dto.email}]: ${!user ? 'conta não encontrada' : !user.is_active ? 'conta inativa' : 'tenant inativo'}`,
@@ -145,12 +142,12 @@ export class AuthService {
     // Credencial certa zera a janela: quem sabe a senha nunca esbarra no limite.
     await this.rateLimit.clear(limitKey);
 
-    const roles = rolesForToken(user.roleAssignments, user.congregation_id);
+    const roles = rolesForToken(user.roles, user.congregation_id);
 
-    const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+    const plan = (user.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
-      sub: user.id,
+      sub: user.user_id,
       tenant_id: user.tenant_id,
       congregation_id: user.congregation_id,
       roles,
@@ -158,7 +155,7 @@ export class AuthService {
     };
 
     const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    const refresh_token = await this.createRefreshToken(user.id);
+    const refresh_token = await this.createRefreshToken(user.user_id);
 
     return { access_token, refresh_token, expires_in: EXPIRES_IN };
   }
@@ -183,7 +180,7 @@ export class AuthService {
    * defeito da pendência nº 6.
    *
    * Roda antes de haver contexto, como `orbien_app` — o mesmo caminho do
-   * `login`, e o que o sustenta são as policies `orbien_app_auth`.
+   * `login`, e a leitura da conta vai pela função `auth_login_lookup` (SECURITY DEFINER).
    */
   async platformLogin(
     dto: PlatformLoginDto,
@@ -198,19 +195,13 @@ export class AuthService {
     const limitKey = LoginRateLimitService.key('platform-login', dto.email);
     await this.rateLimit.assert(limitKey, LOGIN_POLICY);
 
-    const user = await this.prisma.userAccount.findUnique({
-      where: { email: dto.email },
-      include: {
-        roleAssignments: { select: { role_code: true, congregation_id: true } },
-        tenant: { include: { tenantPlan: { select: { plan: true } } } },
-      },
-    });
+    const user = await findLoginByEmail(this.prisma, dto.email);
 
     // Sem o papel é indistinguível de e-mail inexistente, e tem que ser: quem
     // tenta entrar aqui com credencial válida de `tenant_admin` não deve
     // descobrir pela mensagem que a credencial serve em outro lugar.
     const hasPlatformRole =
-      user?.roleAssignments.some((ra) => ra.role_code === PLATFORM_ROLE) ?? false;
+      user?.roles.some((ra) => ra.role_code === PLATFORM_ROLE) ?? false;
 
     if (!user || !user.is_active || !hasPlatformRole) {
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
@@ -225,18 +216,18 @@ export class AuthService {
 
     await this.rateLimit.clear(limitKey);
 
-    const plan = (user.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+    const plan = (user.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
-      sub: user.id,
+      sub: user.user_id,
       tenant_id: user.tenant_id,
       congregation_id: user.congregation_id,
-      roles: rolesForToken(user.roleAssignments, user.congregation_id),
+      roles: rolesForToken(user.roles, user.congregation_id),
       plan,
     };
 
     const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    const refresh_token = await this.createRefreshToken(user.id);
+    const refresh_token = await this.createRefreshToken(user.user_id);
 
     return { access_token, refresh_token, expires_in: EXPIRES_IN };
   }
@@ -248,14 +239,6 @@ export class AuthService {
 
     const stored = await this.prisma.refreshToken.findUnique({
       where: { token_hash: hash },
-      include: {
-        userAccount: {
-          include: {
-            roleAssignments: { select: { role_code: true, congregation_id: true } },
-            tenant: { include: { tenantPlan: { select: { plan: true } } } },
-          },
-        },
-      },
     });
 
     if (!stored) throw new UnauthorizedException('Token inválido');
@@ -290,7 +273,13 @@ export class AuthService {
     // Derruba a família toda, e não só este token, pela mesma razão da detecção
     // de reuso logo acima: o que se quer é encerrar a sessão, não invalidar um
     // elo e deixar os outros de pé.
-    if (!stored.userAccount.is_active || !stored.userAccount.tenant.is_active) {
+    // Conta, papéis e tenant vêm da função SECURITY DEFINER (PEND-04 D): o
+    // `include userAccount` de antes lia `user_accounts` por `orbien_app`. A FK
+    // com cascade garante a conta; se vier vazia, o token é tratado como inválido.
+    const userAccount = await findSessionByUserId(this.prisma, stored.user_account_id);
+    if (!userAccount) throw new UnauthorizedException('Token inválido');
+
+    if (!userAccount.is_active || !userAccount.tenant_is_active) {
       await this.prisma.refreshToken.updateMany({
         where: { user_account_id: stored.user_account_id, revoked_at: null },
         data: { revoked_at: new Date() },
@@ -360,13 +349,12 @@ export class AuthService {
       throw new UnauthorizedException('Sessão encerrada por segurança. Faça login novamente.');
     }
 
-    const { userAccount } = stored;
-    const roles = rolesForToken(userAccount.roleAssignments, userAccount.congregation_id);
+    const roles = rolesForToken(userAccount.roles, userAccount.congregation_id);
 
-    const plan = (userAccount.tenant.tenantPlan?.plan ?? 'starter') as 'starter' | 'premium';
+    const plan = (userAccount.plan ?? 'starter') as 'starter' | 'premium';
 
     const payload: JwtPayload = {
-      sub: userAccount.id,
+      sub: userAccount.user_id,
       tenant_id: userAccount.tenant_id,
       congregation_id: userAccount.congregation_id,
       roles,
@@ -411,17 +399,13 @@ export class AuthService {
     //
     // O `@Roles('platform_support')` do controller fica: é rejeição barata
     // antes da consulta. Autoridade é esta linha. Roda como `orbien_app`, sem
-    // contexto — o mesmo caminho do `login`, sustentado pelas policies
-    // `orbien_app_auth`.
-    const actor = await this.prisma.userAccount.findFirst({
-      where: {
-        id: requestingUser.sub,
-        is_active: true,
-        roleAssignments: { some: { role_code: PLATFORM_ROLE } },
-      },
-      select: { id: true },
-    });
-    if (!actor) throw new ForbiddenException();
+    // contexto — o mesmo caminho do `login`: a conta e os
+    // papéis vêm de `auth_session_lookup` (SECURITY DEFINER), lidos de
+    // `role_assignments` no banco — nunca do `roles` do token.
+    const actor = await findSessionByUserId(this.prisma, requestingUser.sub);
+    const isPlatform =
+      !!actor?.is_active && actor.roles.some((ra) => ra.role_code === PLATFORM_ROLE);
+    if (!isPlatform) throw new ForbiddenException();
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: dto.target_tenant_id },

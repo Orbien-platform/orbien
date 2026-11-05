@@ -39,8 +39,14 @@ import { Prisma } from '@prisma/client';
 import { PixService } from './pix.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DonationReceiptService } from './donation-receipts.service';
+import { findTenantAdminUserId } from '../auth/auth-lookup';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePixDto, CreateDynamicPixDto } from './dto/create-pix.dto';
+
+// PEND-04 D: o admin do tenant sai de `auth_tenant_admin_user_id()` (SECURITY
+// DEFINER), não de `role_assignments` pelo client. O SQL é coberto em
+// `test/rls/auth-tables.spec.ts`.
+jest.mock('../auth/auth-lookup');
 
 const user: JwtPayload = {
   sub: 'user-1',
@@ -118,6 +124,9 @@ type Opts = {
 };
 
 function harness(opts: Opts = {}) {
+  (findTenantAdminUserId as jest.Mock).mockResolvedValue(
+    opts.assignment === undefined ? 'admin-1' : (opts.assignment?.user_account_id ?? null),
+  );
   const cap = {
     subscriptionFindManyArgs: undefined as Record<string, unknown> | undefined,
     pixPayments: [] as Record<string, unknown>[],
@@ -294,12 +303,6 @@ function harness(opts: Opts = {}) {
           const next = categories[catCall++];
           return Promise.resolve(next ? [{ name: 'Oferta', ...next }] : []);
         },
-      },
-      roleAssignment: {
-        findFirst: () =>
-          Promise.resolve(
-            opts.assignment === undefined ? { user_account_id: 'admin-1' } : opts.assignment,
-          ),
       },
       tenantPlan: {
         findUnique: () =>
