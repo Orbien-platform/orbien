@@ -513,10 +513,37 @@ Os dois jobs de e2e do `ci.yml` têm papéis diferentes:
   roda. Consequência para leitura: `e2e-prod` vermelho em PR é regressão no que
   já estava no ar.
 
-Limite conhecido: no push para a `main`, o `e2e-prod` pode correr antes de a
-Vercel/Render terminarem o deploy do merge e falhar em spec novo. Se
-acontecer, reexecutar o job depois do deploy resolve; é custo aceito até
-haver um jeito barato de saber que o deploy terminou.
+**Esperar o deploy (`PEND-25`).** No push para a `main` o `e2e-prod` roda a
+suíte inteira, e o merge acabou de sair: Vercel e Render ainda podem estar
+publicando. O passo "Esperar o deploy do merge" (`scripts/esperar-deploy.mjs`,
+só em `push`) faz poll a cada 20 s, por até 15 min, até os dois servirem o
+commit do merge:
+
+- **web** — a Vercel reporta ao GitHub o status `Vercel – orbien-web` no
+  commit (`GET /repos/:r/commits/:sha/status`). `pending` espera; `success`
+  libera, inclusive o build ignorado pelo `turbo-ignore` ("Canceled by Ignored
+  Build Step") quando o commit não toca o web; `failure`/`error` encerra na hora.
+- **api** — o Render não reporta ao GitHub, então `GET /api/health` devolve
+  `commit` (`RENDER_GIT_COMMIT`, só o SHA). Como o `buildFilter` do
+  `render.yaml` pula o deploy de commit que não toca a API, o commit servido
+  pode ficar legitimamente para trás: vale se for o alvo, descendente dele, ou
+  se nenhum caminho do `buildFilter` mudou entre os dois (`git diff`). O script
+  tem uma cópia dessa lista, e um teste a compara com o `render.yaml`.
+
+Falhas distintas de falha de spec — a suíte nem começou:
+
+- **Prazo estourado** (exit 3): `::error title=Deploy não terminou::` diz qual
+  lado faltou. Olhe o deploy na Vercel/Render; com ele concluído, reexecute só
+  o job (Actions → run → "Re-run failed jobs"). Não aumente o prazo para
+  esconder deploy quebrado.
+- **Deploy falhou na Vercel** (exit 4): conserte o deploy e reexecute.
+- Falha de spec continua sendo o exit do Playwright, depois do passo de espera.
+
+Limites: o comportamento real só se confirma na primeira execução no GitHub (o
+poll é testado com relógio simulado, não contra as plataformas). A primeira
+`main` depois deste PR só passa quando o Render publicar a API que expõe
+`commit`; até lá o `/health` não traz o campo e o passo espera. Em PR o passo
+não roda — não há deploy de `main` a aguardar.
 
 ### Escopo do e2e (informativo)
 
