@@ -18,6 +18,7 @@
 
 import type { Prisma } from '@prisma/client';
 import { prisma, prismaAdmin, runAsTenant, runAsTenantWithRole } from '../helpers/rls';
+import { TENANT_MAIL_BRAND_SELECT } from '../../src/mail/mail-brand';
 
 const ts = Date.now();
 
@@ -158,6 +159,24 @@ describe('com app.tenant_id fixado, orbien_app vê só o próprio tenant', () =>
         data: { cloudflare_zone_id: `zona-${ts}` },
       });
       expect(upd.cloudflare_zone_id).toBe(`zona-${ts}`);
+    });
+  });
+
+  it('a leitura do recibo do webhook (tenant + marca + plano) segue funcionando sob o escopo', async () => {
+    // `DonationReceiptService.generateForTransaction` roda depois do commit do
+    // webhook, como `orbien_app`, com o escopo vindo do banco. O `.catch` do
+    // chamador engole erro: se isto voltar vazio, o recibo some em silêncio.
+    await runAsTenant(tenantAId, congA1Id, async (tx) => {
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantAId },
+        select: TENANT_MAIL_BRAND_SELECT,
+      });
+      expect(tenant).not.toBeNull();
+      const plan = await tx.tenantPlan.findUnique({
+        where: { tenant_id: tenantAId },
+        select: { plan: true },
+      });
+      expect(plan?.plan).toBe('premium');
     });
   });
 

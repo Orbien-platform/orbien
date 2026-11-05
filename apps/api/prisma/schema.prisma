@@ -335,6 +335,11 @@ model RoleAssignment {
   @@index([tenant_id, id])
   @@index([tenant_id, congregation_id])
   @@index([tenant_id, user_account_id])
+  // `auth_session_lookup` (JwtStrategy, a cada requisição) e `auth_login_lookup`
+  // agregam os papéis por `user_account_id` SEM tenant: os índices acima
+  // começam por `tenant_id` e não servem. Medido em PEND-04: seq scan, 8 ms e
+  // 1 484 buffers com 130 mil linhas, contra 0,1 ms com este índice.
+  @@index([user_account_id])
   @@map("role_assignments")
 }
 

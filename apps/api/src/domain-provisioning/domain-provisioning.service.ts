@@ -166,12 +166,10 @@ export class DomainProvisioningService {
     const branding = await this.requireBranding(tenantId);
     await this.registerOnVercel(branding.custom_domain!);
     const verified = await this.checkVercelVerification(branding.custom_domain!);
-    await this.inTenant(tenantId, () =>
-      this.prisma.client.brandingConfig.update({
-        where: { tenant_id: tenantId },
-        data: { custom_domain_status: verified ? 'verified' : 'pending' },
-      }),
-    );
+    await this.prisma.client.brandingConfig.update({
+      where: { tenant_id: tenantId },
+      data: { custom_domain_status: verified ? 'verified' : 'pending' },
+    });
     return this.getStatus(tenantId);
   }
 
@@ -259,10 +257,12 @@ export class DomainProvisioningService {
 
     await this.registerOnVercel(customDomain);
     const verified = await this.checkVercelVerification(customDomain);
-    await this.prisma.client.brandingConfig.update({
-      where: { tenant_id: tenantId },
-      data: { custom_domain_status: verified ? 'verified' : 'pending' },
-    });
+    await this.inTenant(tenantId, () =>
+      this.prisma.client.brandingConfig.update({
+        where: { tenant_id: tenantId },
+        data: { custom_domain_status: verified ? 'verified' : 'pending' },
+      }),
+    );
   }
 
   private async getValidCloudflareToken(tenantId: string): Promise<string> {
