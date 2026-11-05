@@ -10,9 +10,11 @@ jest.mock("expo-router", () => ({
 }));
 
 const mockCreateCheckinToken = jest.fn();
+const mockGetCurrentCheckinToken = jest.fn();
 const mockGetMeeting = jest.fn();
 jest.mock("../../../../../lib/pequenos-grupos/pequenos-grupos-client", () => ({
   createCheckinToken: (...args: unknown[]) => mockCreateCheckinToken(...args),
+  getCurrentCheckinToken: (...args: unknown[]) => mockGetCurrentCheckinToken(...args),
   getMeeting: (...args: unknown[]) => mockGetMeeting(...args),
 }));
 
@@ -63,6 +65,8 @@ describe("CheckinQrScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers({ now: NOW });
+    // Padrão: ainda não há código vigente (404), então a tela gera um.
+    mockGetCurrentCheckinToken.mockRejectedValue(new HttpError(404, "sem código"));
     mockCreateCheckinToken.mockResolvedValue(issued(TOKEN_A));
     mockGetMeeting.mockResolvedValue(meeting(2));
   });
@@ -81,6 +85,29 @@ describe("CheckinQrScreen", () => {
     expect(screen.getByTestId("checkin-qr-restante")).toHaveTextContent("4h restantes");
     expect(screen.getByTestId("checkin-qr-contagem")).toHaveTextContent("2 presenças registradas");
     expect(screen.getByText("Estudo 12")).toBeTruthy();
+  });
+
+  it("com código vigente, mostra o mesmo e não gera outro (PEND-19)", async () => {
+    mockGetCurrentCheckinToken.mockResolvedValue(issued(TOKEN_B, NOW - HOUR));
+    await open();
+
+    expect(mockGetCurrentCheckinToken).toHaveBeenCalledWith("m1");
+    expect(mockCreateCheckinToken).not.toHaveBeenCalled();
+    expect(screen.getByTestId("checkin-qr-code")).toHaveTextContent(`orbien:checkin:${TOKEN_B}`);
+    expect(screen.getByTestId("checkin-qr-restante")).toHaveTextContent("3h restantes");
+  });
+
+  it("sem código vigente (404), gera um novo", async () => {
+    await open();
+    expect(mockGetCurrentCheckinToken).toHaveBeenCalledWith("m1");
+    expect(mockCreateCheckinToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("403 na leitura do código vigente mostra o cadeado, sem tentar gerar", async () => {
+    mockGetCurrentCheckinToken.mockRejectedValue(new HttpError(403, "proibido"));
+    await open();
+    expect(screen.getByTestId("checkin-qr-sem-acesso")).toBeTruthy();
+    expect(mockCreateCheckinToken).not.toHaveBeenCalled();
   });
 
   it("enquanto gera, diz que está gerando", async () => {

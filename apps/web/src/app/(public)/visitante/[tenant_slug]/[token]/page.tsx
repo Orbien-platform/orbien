@@ -16,7 +16,7 @@
  * O texto do aceite é o termo `visitor_consent_v1`
  * (legal/consent-terms/visitor_consent_v1.md). Mudou o texto, muda a versão.
  */
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useParams } from "next/navigation";
 import axios from "axios";
 import { Check, Loader2, QrCode, RefreshCw } from "lucide-react";
@@ -32,7 +32,17 @@ interface QrInfo {
   church_name: string;
   origin: Origin;
   label: string | null;
+  /** PEND-19: marca da igreja. Ausente (API antiga) ou nula = padrão da Orbien. */
+  brand?: {
+    primary_color: string | null;
+    accent_color: string | null;
+    logo_url: string | null;
+    logo_url_dark: string | null;
+  };
 }
+
+// A API já saneia; a página confere de novo antes de pôr o valor em `style`.
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 interface RegisterResult {
   status: "registered" | "visit_recorded";
@@ -93,6 +103,14 @@ export default function VisitanteAutocadastroPage() {
     };
   }, [token, attempt]);
 
+  const info = load.kind === "ready" ? load.info : null;
+  const brandColor =
+    info?.brand?.primary_color && HEX_COLOR.test(info.brand.primary_color)
+      ? info.brand.primary_color
+      : null;
+  const logoLight = info?.brand?.logo_url ?? null;
+  const logoDark = info?.brand?.logo_url_dark ?? logoLight;
+
   const nameOk = fullName.trim().length >= 2;
   const canSubmit = nameOk && consent && !isSubmitting;
 
@@ -129,7 +147,12 @@ export default function VisitanteAutocadastroPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--surface-parchment)] px-4 py-10">
+    <div
+      className="flex min-h-screen items-center justify-center bg-[var(--surface-parchment)] px-4 py-10"
+      // Só esta página usa a cor da igreja: `--brand` fica no escopo do div e
+      // não vaza para o resto do documento.
+      style={brandColor ? ({ "--brand": brandColor } as CSSProperties) : undefined}
+    >
       <div className="w-full max-w-[400px]">
         <div className="rounded-[12px] border border-[var(--border-default)] bg-[var(--surface-base)] p-8 shadow-[var(--shadow-md)]">
           {load.kind === "loading" ? (
@@ -178,6 +201,24 @@ export default function VisitanteAutocadastroPage() {
           ) : (
             <>
               <div className="mb-8">
+                {logoLight && (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- logo externa do tenant */}
+                    <img
+                      src={logoLight}
+                      alt={`Logo da ${load.info.church_name}`}
+                      className={`mb-5 h-12 w-auto max-w-[200px] object-contain ${logoDark !== logoLight ? "dark:hidden" : ""}`}
+                    />
+                    {logoDark && logoDark !== logoLight && (
+                      // eslint-disable-next-line @next/next/no-img-element -- logo externa do tenant
+                      <img
+                        src={logoDark}
+                        alt={`Logo da ${load.info.church_name}`}
+                        className="mb-5 hidden h-12 w-auto max-w-[200px] object-contain dark:block"
+                      />
+                    )}
+                  </>
+                )}
                 <p className="text-sm text-stone">{load.info.label?.trim() || ORIGIN_CONTEXT[load.info.origin]}</p>
                 <h1 className="mt-1 font-serif text-[32px] leading-[1.05] text-ink dark:text-white">
                   Que bom ter você na {load.info.church_name}

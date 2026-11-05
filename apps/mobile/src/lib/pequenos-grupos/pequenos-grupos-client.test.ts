@@ -8,6 +8,7 @@ jest.mock("../auth/auth-client", () => ({
 import {
   checkIn,
   createCheckinToken,
+  getCurrentCheckinToken,
   getGroupRoster,
   getHealthSummary,
   getMeeting,
@@ -140,6 +141,19 @@ describe("PequenosGruposClient", () => {
       await expect(createCheckinToken("m1")).resolves.toEqual(token);
       expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
         "post",
+        "/small-groups/meetings/m1/checkin-token",
+      );
+    });
+  });
+
+  describe("getCurrentCheckinToken (PEND-19)", () => {
+    it("chama GET /small-groups/meetings/:id/checkin-token, sem gerar", async () => {
+      const token = { token: "t", expires_at: "2026-10-04T23:00:00.000Z" };
+      mockAuthenticatedRequest.mockResolvedValue(token);
+
+      await expect(getCurrentCheckinToken("m1")).resolves.toEqual(token);
+      expect(mockAuthenticatedRequest).toHaveBeenCalledWith(
+        "get",
         "/small-groups/meetings/m1/checkin-token",
       );
     });

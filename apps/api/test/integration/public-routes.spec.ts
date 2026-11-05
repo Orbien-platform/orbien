@@ -175,9 +175,50 @@ describe('POST /api/public/waitlist', () => {
 // sem contexto de tenant do cadastro: a leitura de qr_tokens e da congregação
 // precisa passar pela RLS sem JWT.
 describe('GET /api/public/visitor/qr/:token', () => {
-  it('QR ativo devolve só o nome da congregação, a origem e o rótulo', async () => {
+  it('QR ativo devolve só o nome da congregação, a origem, o rótulo e a marca', async () => {
     const res = await http().get(`/api/public/visitor/qr/${qrToken}`).expect(200);
-    expect(res.body).toEqual({ church_name: 'Público — Sede', origin: 'service', label: null });
+    // `brand` lê branding_configs sem JWT: se a RLS fechasse a tabela para a
+    // rota pública, esta chamada estouraria em vez de devolver os nulos.
+    expect(res.body).toEqual({
+      church_name: 'Público — Sede',
+      origin: 'service',
+      label: null,
+      brand: { primary_color: null, accent_color: null, logo_url: null, logo_url_dark: null },
+    });
+  });
+
+  it('com branding cadastrado, devolve cor e logo — e só eles (PEND-19)', async () => {
+    const before = await admin.brandingConfig.findUniqueOrThrow({ where: { tenant_id: tenantId } });
+    await admin.brandingConfig.update({
+      where: { tenant_id: tenantId },
+      data: {
+        primary_color: '#7A1F3D',
+        secondary_color: '#00B8A2',
+        logo_url: 'https://cdn.exemplo.com/logo.png',
+      },
+    });
+    try {
+      const res = await http().get(`/api/public/visitor/qr/${qrToken}`).expect(200);
+      expect(res.body.brand).toEqual({
+        primary_color: '#7A1F3D',
+        accent_color: '#00B8A2',
+        logo_url: 'https://cdn.exemplo.com/logo.png',
+        logo_url_dark: null,
+      });
+      // Nada de dado interno do branding: chave PIX e nome do app ficam fora.
+      const body = JSON.stringify(res.body);
+      if (before.pix_key) expect(body).not.toContain(before.pix_key);
+      if (before.app_name) expect(body).not.toContain(before.app_name);
+    } finally {
+      await admin.brandingConfig.update({
+        where: { tenant_id: tenantId },
+        data: {
+          primary_color: before.primary_color,
+          secondary_color: before.secondary_color,
+          logo_url: before.logo_url,
+        },
+      });
+    }
   });
 
   it('QR inexistente responde 404', async () => {
