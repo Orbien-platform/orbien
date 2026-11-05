@@ -13,6 +13,7 @@ const mockedApi = vi.mocked(api, true);
 
 const SUMMARY_URL = "/content/posts/p1/registrations/summary";
 const ME_URL = "/content/posts/p1/registrations/me";
+const PAYMENT_URL = "/content/posts/p1/registrations/me/payment";
 
 function summary(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -36,8 +37,21 @@ function httpError(status: number, message?: string) {
 }
 
 /** Responde `summary` e `me`; `me` vazio é o `null` do Nest (200 de corpo vazio). */
-function respond(opts: { summary?: Record<string, unknown>; mine?: unknown } = {}) {
+function respond(
+  opts: { summary?: Record<string, unknown>; mine?: unknown; payment?: unknown } = {}
+) {
   mockedApi.get.mockImplementation((url: string) => {
+    if (url === PAYMENT_URL) {
+      return opts.payment instanceof Error
+        ? Promise.reject(opts.payment)
+        : Promise.resolve({
+            data: opts.payment ?? {
+              state: "pending",
+              qr_code: "00020126RELIDO",
+              expires_at: "2026-09-17T12:00:00.000Z",
+            },
+          });
+    }
     if (url === SUMMARY_URL) return Promise.resolve({ data: summary(opts.summary) });
     if (url === ME_URL) return Promise.resolve({ data: opts.mine ?? "" });
     return Promise.reject(new Error(`unexpected GET ${url}`));
@@ -151,7 +165,9 @@ describe("EventRegistrationPanel", () => {
       "data:image/png;base64,QUJD"
     );
     expect(screen.getByTestId("pix-code")).toHaveTextContent("00020126PIXCODE");
-    expect(screen.getByText(/vale por 24 horas e só aparece aqui agora/)).toBeInTheDocument();
+    expect(screen.getByText(/Este código vale/)).toBeInTheDocument();
+    // Resposta do POST já traz o QR: não relê o pagamento.
+    expect(mockedApi.get.mock.calls.map(([url]) => url)).not.toContain(PAYMENT_URL);
 
     await user.click(screen.getByRole("button", { name: "Copiar código PIX" }));
     expect(writeText).toHaveBeenCalledWith("00020126PIXCODE");
@@ -177,7 +193,7 @@ describe("EventRegistrationPanel", () => {
     expect(screen.getByTestId("pix-code")).toBeInTheDocument();
   });
 
-  it("inscrição pendente vinda do GET (sem QR) mostra o estado e permite cancelar", async () => {
+  it("inscrição pendente ao reabrir relê o PIX e mostra o QR de novo (PEND-07)", async () => {
     respond({
       summary: { registration_price: 10 },
       mine: { id: "r1", status: "pending_payment" },
@@ -185,8 +201,70 @@ describe("EventRegistrationPanel", () => {
     render(<EventRegistrationPanel postId="p1" />);
 
     expect(await screen.findByText("Aguardando pagamento")).toBeInTheDocument();
-    expect(screen.queryByAltText(/QR Code do PIX/)).not.toBeInTheDocument();
+    expect(await screen.findByTestId("pix-code")).toHaveTextContent("00020126RELIDO");
+    expect(screen.getByRole("img", { name: /QR Code do PIX/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancelar inscrição" })).toBeInTheDocument();
+    // Recuperou: o aviso de cancelar e refazer sai de cena. Só leitura, sem POST.
+    expect(screen.queryByText(/cancele a inscrição e inscreva-se/)).not.toBeInTheDocument();
+    expect(mockedApi.post).not.toHaveBeenCalled();
+  });
+
+  it("inscrição confirmada não relê o pagamento", async () => {
+    respond({
+      summary: { registration_price: 10 },
+      mine: { id: "r1", status: "confirmed" },
+    });
+    render(<EventRegistrationPanel postId="p1" />);
+
+    expect(await screen.findByText("Inscrição confirmada")).toBeInTheDocument();
+    expect(mockedApi.get.mock.calls.map(([url]) => url)).not.toContain(PAYMENT_URL);
+  });
+
+  it("PIX já pago: avisa e não mostra QR", async () => {
+    respond({
+      summary: { registration_price: 10 },
+      mine: { id: "r1", status: "pending_payment" },
+      payment: { state: "paid" },
+    });
+    render(<EventRegistrationPanel postId="p1" />);
+
+    expect(await screen.findByText(/Recebemos o seu pagamento/)).toBeInTheDocument();
+    expect(screen.queryByTestId("pix-code")).not.toBeInTheDocument();
+  });
+
+  it("PIX vencido: sem QR, com o contorno de refazer a inscrição", async () => {
+    respond({
+      summary: { registration_price: 10 },
+      mine: { id: "r1", status: "pending_payment" },
+      payment: { state: "expired" },
+    });
+    render(<EventRegistrationPanel postId="p1" />);
+
+    expect(await screen.findByText(/O código do PIX venceu/)).toBeInTheDocument();
+    expect(screen.queryByTestId("pix-code")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancelar inscrição" })).toBeInTheDocument();
+  });
+
+  it("falha na releitura mantém o contorno antigo e deixa tentar de novo", async () => {
+    respond({
+      summary: { registration_price: 10 },
+      mine: { id: "r1", status: "pending_payment" },
+      payment: httpError(503),
+    });
+    const user = userEvent.setup();
+    render(<EventRegistrationPanel postId="p1" />);
+
+    expect(await screen.findByText(/cancele a inscrição e inscreva-se de novo/)).toBeInTheDocument();
+    expect(screen.queryByTestId("pix-code")).not.toBeInTheDocument();
+
+    respond({
+      summary: { registration_price: 10 },
+      mine: { id: "r1", status: "pending_payment" },
+    });
+    await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
+
+    expect(await screen.findByTestId("pix-code")).toHaveTextContent("00020126RELIDO");
+    expect(mockedApi.post).not.toHaveBeenCalled();
   });
 
   it("cancelar volta ao botão de inscrever-se, limpa o QR e recarrega as vagas", async () => {

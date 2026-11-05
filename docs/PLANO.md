@@ -79,8 +79,8 @@ que o `PROD-24` devolve passa a ter onde aparecer.
 
 Em **2026-09-30** o `PROD-25` ganhou a metade do `apps/web`: o membro se
 inscreve, vê o estado e cancela pelo `PostDetailSheet` de `/conteudo` — nota
-"Também no `apps/web`" na seção 6. Sem mudança de backend; o `PEND-07` segue
-aberto.
+"Também no `apps/web`" na seção 6. Sem mudança de backend; o `PEND-07`
+ficou aberto na época e foi fechado em 2026-11-05 (seção 8).
 
 Em **2026-09-19** fechou `PROD-23` (tela da liderança para os pedidos de
 visita, `apps/web`) — nota na seção 6 — e nasceu já decidida a `DEC-06`
@@ -1823,7 +1823,7 @@ onde o membro consome conteúdo.
   do QR manda cancelar e se inscrever de novo, que gera outro. Resolver
   isso de verdade seria trabalho de backend (expor o `qr_code` do
   `PixPayment` ligado à inscrição), fora do escopo desta entrega; nasceu
-  como `PEND-07` na seção 8.
+  como `PEND-07` na seção 8 (fechado em 2026-11-05: `GET .../me/payment`).
 - `formatBRL` (`src/lib/format/currency.ts`) é manual pelo mesmo motivo que
   `date.ts` documenta: sem `Intl` completo o Hermes cai em en-US **em
   silêncio**, e "R$ 1.234,56" viraria "R$1,234.56". O web segue com
@@ -1874,9 +1874,8 @@ grupo de rota, layout nem guard novos.
   branco fixo (QR no tema escuro não lê), copia-e-cola em `<code>` com
   botão "Copiar código PIX" via `navigator.clipboard`, validade de 24h dita em
   tela. Sem dependência nova.
-- **`PEND-07` continua valendo, igual ao mobile**: o QR só existe na resposta
-  do `POST`. Quem fecha o post antes de pagar perde o código, e a nota abaixo
-  do QR manda cancelar e se inscrever de novo. A API não foi tocada.
+- **`PEND-07` valia aqui igual ao mobile** (o QR só existia na resposta do
+  `POST`) e foi fechada em 2026-11-05: o painel relê o PIX ao reabrir o post.
 - Testes ao lado do componente (`EventRegistrationPanel.test.tsx`) e dois
   casos novos no `PostDetailSheet.test.tsx` (membro vê o painel próprio e não
   pede a lista do organizador; sem inscrição ligada não faz chamada).
@@ -2722,28 +2721,56 @@ um lado reintroduziria a divergência que o cabeçalho do notifier proíbe. É
 o que `test/integration/small-groups-absence-alerts.spec.ts` agora mede —
 ver a nota do `PROD-11` na seção 6.
 
-### PEND-07 · O QR do PIX da inscrição só existe na resposta do POST · dívida
+### ~~PEND-07 · O QR do PIX da inscrição só existe na resposta do POST~~ · fechado
 
 Nasceu declarada no `PROD-25` (2026-09-16), com a limitação escrita na
-própria tela — não é achado que sobrou de revisão. Nasceu como `PEND-06`
-e foi renumerada no merge com a `main`: o `PROD-11` fechou um `PEND-06`
-próprio no mesmo dia, em outra branch, e ID não se recicla.
+própria tela. `POST .../registrations/me` devolvia `{ registration, payment }`
+em evento pago e o `qr_code`/`qr_code_image` só existia ali: quem gerava o QR
+e saía da tela antes de pagar só tinha o contorno de cancelar e se inscrever
+de novo, ao custo de uma cobrança órfã na Asaas por tentativa abandonada.
 
-`POST .../registrations/me` devolve `{ registration, payment }` em evento
-pago, e o `payment.qr_code`/`qr_code_image` **só existe ali**: `GET
-.../registrations/me` devolve a linha de `event_registrations`, que guarda
-`pix_payment_id` mas não o payload. Quem gera o QR e sai da tela antes de
-pagar não tem como voltar a ele.
+**Fechado em 2026-11-05** (`feat/inscricao-pix-recuperavel`), por leitura do
+que já estava no banco — sem cobrança nova, sem chamada à Asaas, sem
+migration:
 
-O contorno em produção funciona e está dito em tela ("cancele a inscrição e
-inscreva-se de novo para gerar outro") — cancelar solta o `identity` que
-bloquearia a segunda tentativa, e a nova gera outro QR válido por 24h. O
-custo é uma cobrança órfã na Asaas por tentativa abandonada.
+- `GET /content/posts/:postId/registrations/me/payment`
+  (`EventRegistrationsService.findMyPayment`). A pessoa vem da conta no banco
+  (`requirePersonOf`), a inscrição é achada por ela e o `pix_payments` por
+  `registration.pix_payment_id` + `tenant_id`: não há parâmetro que aponte
+  inscrição ou pagamento de outro. Evento sem preço, inscrição que não é do
+  usuário, cancelada ou sem pagamento ligado: 404.
+- `pending` devolve `{ state, qr_code, amount, expires_at }` (validade =
+  `pix_payments.created_at` + 24h, a mesma janela de `PENDING_PAYMENT_HOLD_MS`).
+  Pago (inscrição `confirmed`/`paid` ou PIX `confirmed`) devolve `{ state:
+  'paid' }`; vencido ou `failed`, `{ state: 'expired' }` — os dois sem QR.
+- **Decisão que o código já tinha tomado:** o payload copia-e-cola é gravado em
+  `pix_payments.qr_code` por `createForEventRegistration` desde o `PROD-24`.
+  Esta entrega não persiste nada novo. A imagem do QR (`qr_code_image`) não
+  é guardada: as telas a desenham de `qr_code` com `qrcode-generator`, que já
+  era dependência dos dois apps (mobile `QrCode`, web `QrImage`).
+- A consulta `GET /payments/:id/pixQrCode` na Asaas **não** foi usada: o código
+  tem uma chave só (`ASAAS_API_KEY`, raiz) e a subconta por igreja do `AD-009`
+  é a `PEND-17`. Como a leitura é do banco, `PixService` e a trava
+  `ASAAS_PAYMENTS_ENABLED` nem entram no caminho.
+- Telas: `EventRegistrationPanel` do mobile e do web releem o PIX ao reabrir uma
+  inscrição `pending_payment` sem QR em tela e mostram o QR de novo; o aviso
+  "cancele e inscreva-se de novo" saiu de quando a recuperação funciona e fica
+  como fallback (pago, vencido ou falha da leitura, com "tentar de novo"). No
+  mobile, `useReloadOnReconnect` relê o PIX quando a rede volta (só leitura);
+  o web não tem o hook e usa o botão.
 
-A correção é de backend, não de tela: expor o `qr_code` do `PixPayment`
-ligado à inscrição em `findMine` quando `status = pending_payment` e o QR
-ainda estiver dentro da janela de 24h. Fora do escopo do `PROD-25`, que é
-tela sobre API pronta.
+**Evidência:** `event-registrations.service.spec.ts` (pendente devolve o QR sem
+chamar `createForEventRegistration`; pago, vencido e `failed` sem QR; outra
+pessoa e cancelada: 404; sem preço: 404), `event-registrations.controller.spec.ts`
+(papéis e `sub` do token) e `test/integration/event-registration-payment.spec.ts`
+(banco real: outro membro da mesma igreja recebe 404 sem o payload e a contagem
+de `pix_payments` não muda), mais os specs dos dois painéis.
+
+**Limite conhecido:** o estado vem do nosso banco, que o webhook da Asaas
+atualiza. Uma cobrança cancelada na Asaas antes das 24h só aparece como vencida
+quando o webhook chegar ou a janela passar. Reler o status direto na Asaas fica
+para depois da subconta (`PEND-17`). **Pendência humana:** conferir em aparelho
+(iOS/Android) e no navegador, em `teste1-church`/`teste2-church`.
 
 ### PEND-09 · Token de produção do abibliadigital.com.br não configurado · dívida
 

@@ -23,6 +23,12 @@ export interface PaidEventRegistrationResult {
   payment: EventRegistrationPayment;
 }
 
+/** `GET .../registrations/me/payment` — só `pending` traz o payload do PIX. */
+export type MyEventRegistrationPayment =
+  | { state: 'pending'; qr_code: string; amount: number; expires_at: string }
+  | { state: 'paid' }
+  | { state: 'expired' };
+
 interface EventPostForRegistration {
   id: string;
   title: string;
@@ -187,6 +193,71 @@ export class EventRegistrationsService {
         status: { in: MINE_VISIBLE },
       },
     });
+  }
+
+  /**
+   * Relê o PIX da inscrição paga do próprio usuário (`PEND-07`): quem gerou o
+   * QR e saiu da tela antes de pagar volta a ele sem cancelar e refazer.
+   *
+   * É LEITURA do `pix_payments` que `createForEventRegistration` já gravou —
+   * não chama a Asaas e não cria cobrança (a trava `ASAAS_PAYMENTS_ENABLED`
+   * nem entra: `PixService` não é tocado). A pessoa vem da conta no banco
+   * (`requirePersonOf`), nunca da requisição, e a inscrição é achada por ela:
+   * não existe parâmetro que aponte a inscrição ou o pagamento de outro.
+   *
+   * Só `pending` devolve o payload. Pago, expirado e falhado devolvem o
+   * estado sem `qr_code`. A validade é a mesma janela de 24h da cobrança
+   * (`PENDING_PAYMENT_HOLD_MS`); a imagem do QR não é guardada, a tela a
+   * desenha a partir do `qr_code`.
+   */
+  async findMyPayment(
+    tenantId: string,
+    congregationId: string,
+    postId: string,
+    userId: string,
+  ): Promise<MyEventRegistrationPayment> {
+    const post = await this.requireEventPost(tenantId, congregationId, postId);
+    if (!post.registration_price || !post.registration_price.greaterThan(0)) {
+      throw new NotFoundException('Este evento não tem pagamento');
+    }
+    const personId = await this.requirePersonOf(userId);
+
+    const registration = await this.prisma.client.eventRegistration.findFirst({
+      where: {
+        tenant_id: tenantId,
+        congregation_id: congregationId,
+        content_post_id: postId,
+        person_id: personId,
+        status: { in: MINE_VISIBLE },
+      },
+    });
+    if (!registration) throw new NotFoundException('Inscrição não encontrada');
+
+    if (registration.status === 'confirmed' || registration.payment_status === 'paid') {
+      return { state: 'paid' };
+    }
+    if (registration.status !== 'pending_payment' || !registration.pix_payment_id) {
+      throw new NotFoundException('Pagamento não encontrado');
+    }
+
+    const pix = await this.prisma.client.pixPayment.findFirst({
+      where: { id: registration.pix_payment_id, tenant_id: tenantId },
+    });
+    if (!pix) throw new NotFoundException('Pagamento não encontrado');
+
+    if (pix.status === 'confirmed') return { state: 'paid' };
+
+    const expiresAt = new Date(pix.created_at.getTime() + PENDING_PAYMENT_HOLD_MS);
+    if (pix.status === 'failed' || expiresAt.getTime() < Date.now() || !pix.qr_code) {
+      return { state: 'expired' };
+    }
+
+    return {
+      state: 'pending',
+      qr_code: pix.qr_code,
+      amount: pix.amount.toNumber(),
+      expires_at: expiresAt.toISOString(),
+    };
   }
 
   /**

@@ -38,6 +38,7 @@ describe('EventRegistrationsController', () => {
       list: jest.fn(),
       summary: jest.fn(),
       findMine: jest.fn(),
+      findMyPayment: jest.fn(),
       registerSelf: jest.fn(),
       register: jest.fn(),
       cancelMine: jest.fn(),
@@ -61,7 +62,7 @@ describe('EventRegistrationsController', () => {
       const leitura = [...PRODUCT_AREA_READ_ROLES.content];
 
       expect(leitura).toContain('member');
-      for (const method of ['summary', 'findMine', 'registerSelf', 'cancelMine'] as const) {
+      for (const method of ['summary', 'findMine', 'findMyPayment', 'registerSelf', 'cancelMine'] as const) {
         expect(rolesFor(method)).toEqual(leitura);
       }
     });
@@ -104,6 +105,12 @@ describe('EventRegistrationsController', () => {
     controller.findMine('p1', user({ sub: 'membro-1' }));
 
     expect(service.findMine).toHaveBeenCalledWith('t1', 'g1', 'p1', 'membro-1');
+  });
+
+  it('o pagamento é do `sub` do token — a rota não recebe id de inscrição nem de pagamento', () => {
+    controller.findMyPayment('p1', user({ sub: 'membro-1' }));
+
+    expect(service.findMyPayment).toHaveBeenCalledWith('t1', 'g1', 'p1', 'membro-1');
   });
 
   it('cancelar a própria inscrição não precisa do id dela', () => {

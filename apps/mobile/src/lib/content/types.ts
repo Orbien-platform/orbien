@@ -98,6 +98,13 @@ export interface PaidEventRegistrationResult {
   payment: EventRegistrationPayment;
 }
 
+/** `GET .../registrations/me/payment` (PEND-07): só `pending` traz o payload
+ * do PIX; a imagem do QR não é guardada, a tela a desenha de `qr_code`. */
+export type MyEventRegistrationPayment =
+  | { state: "pending"; qr_code: string; amount: number; expires_at: string }
+  | { state: "paid" }
+  | { state: "expired" };
+
 export type RegisterSelfResult = MyEventRegistration | PaidEventRegistrationResult;
 
 /** Uma inscrição do próprio usuário com o evento que ela reserva

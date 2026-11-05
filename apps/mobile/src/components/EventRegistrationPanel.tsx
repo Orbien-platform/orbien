@@ -23,6 +23,7 @@ import { Alert } from "./Alert";
 import { AppButton } from "./AppButton";
 import { Badge, type BadgeTone } from "./Badge";
 import { Card } from "./Card";
+import { QrCode } from "./QrCode";
 import { SectionLabel } from "./SectionLabel";
 import { HttpError } from "../lib/api/errors";
 import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
@@ -30,11 +31,11 @@ import {
   cancelMyEventRegistration,
   getEventRegistrationSummary,
   getMyEventRegistration,
+  getMyEventRegistrationPayment,
   isPaidRegistration,
   registerSelfForEvent,
 } from "../lib/content/content-client";
 import type {
-  EventRegistrationPayment,
   EventRegistrationStatus,
   EventRegistrationSummary,
   MyEventRegistration,
@@ -70,6 +71,26 @@ const STATUS: Record<string, { label: string; tone: BadgeTone; hint: string }> =
   },
 };
 
+/** O PIX em tela. Vem de duas fontes: a resposta do POST (traz a imagem) e a
+ * releitura `GET .../me/payment` (só o `qr_code`, e a tela desenha o QR). */
+interface ShownPayment {
+  qr_code: string;
+  qr_code_image?: string;
+  expires_at: string;
+}
+
+/** Por que não há QR para uma inscrição pendente: já pago, vencido, ou a
+ * releitura falhou (rede/5xx) — nos dois últimos, o contorno é refazer. */
+type PaymentIssue = "paid" | "expired" | "failed";
+
+const PAYMENT_ISSUE_TEXT: Record<PaymentIssue, string> = {
+  paid: "Recebemos o seu pagamento. A confirmação da vaga pode levar alguns instantes.",
+  expired:
+    "O código do PIX venceu. Cancele a inscrição e inscreva-se de novo para gerar outro.",
+  failed:
+    "Não foi possível carregar o código do PIX. Toque em tentar de novo; se persistir, cancele a inscrição e inscreva-se de novo para gerar outro.",
+};
+
 interface EventRegistrationPanelProps {
   postId: string;
 }
@@ -78,11 +99,14 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
   const { colors } = useTheme();
   const [summary, setSummary] = useState<EventRegistrationSummary | null>(null);
   const [mine, setMine] = useState<MyEventRegistration | null>(null);
-  // O QR só existe na resposta de `POST .../registrations/me` — `findMine`
-  // devolve a inscrição, não o payload do PIX. Por isso ele mora em estado
-  // de tela e some ao sair dela; a nota abaixo do QR diz ao usuário o que
-  // fazer nesse caso (cancelar e se inscrever de novo gera outro).
-  const [payment, setPayment] = useState<EventRegistrationPayment | null>(null);
+  // O PIX da inscrição pendente. Logo após o POST vem da resposta dele; ao
+  // reabrir a tela, `GET .../me/payment` o relê (PEND-07) — leitura do que
+  // já foi cobrado, nunca uma cobrança nova.
+  const [payment, setPayment] = useState<ShownPayment | null>(null);
+  const [paymentIssue, setPaymentIssue] = useState<PaymentIssue | null>(null);
+  const [paymentOffline, setPaymentOffline] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentRetry, setPaymentRetry] = useState(0);
   const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
   // Incrementado por "Tentar novamente" — mesma mecânica de `presenca.tsx`.
   const [retryCount, setRetryCount] = useState(0);
@@ -93,6 +117,11 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
     setRetryCount((n) => n + 1);
   };
   useReloadOnReconnect(loadError?.offline === true, retry);
+  const retryPayment = () => {
+    setPaymentIssue(null);
+    setPaymentRetry((n) => n + 1);
+  };
+  useReloadOnReconnect(paymentIssue === "failed" && paymentOffline, retryPayment);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -134,6 +163,37 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
     };
   }, [postId, retryCount]);
 
+  // Inscrição pendente sem QR em tela (tela reaberta): relê o PIX. Só
+  // `pending_payment` entra, e `payment` já preenchido (resposta do POST) não
+  // refaz a leitura.
+  const needsPayment = mine?.status === "pending_payment" && payment === null;
+  useEffect(() => {
+    if (!needsPayment) return;
+    let cancelled = false;
+    setPaymentLoading(true);
+    getMyEventRegistrationPayment(postId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.state === "pending") {
+          setPayment({ qr_code: result.qr_code, expires_at: result.expires_at });
+          setPaymentIssue(null);
+        } else {
+          setPaymentIssue(result.state);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPaymentOffline(describeLoadError(err, "o pagamento").offline);
+        setPaymentIssue("failed");
+      })
+      .finally(() => {
+        if (!cancelled) setPaymentLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsPayment, postId, paymentRetry]);
+
   /** Mensagem da API quando ela tem uma ("Vagas esgotadas para este
    * evento", "O prazo de inscrição para este evento já encerrou") — são
    * escritas para o usuário final e dizem mais que qualquer texto genérico
@@ -152,6 +212,7 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       if (isPaidRegistration(result)) {
         setMine(result.registration);
         setPayment(result.payment);
+        setPaymentIssue(null);
       } else {
         setMine(result);
       }
@@ -176,6 +237,7 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       await cancelMyEventRegistration(postId);
       setMine(null);
       setPayment(null);
+      setPaymentIssue(null);
       setCopied(false);
       setSummary(await getEventRegistrationSummary(postId).catch(() => summary));
     } catch (err) {
@@ -305,14 +367,25 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
 
         {payment ? (
           <View testID="event-registration-payment" style={styles.payment}>
-            <Image
-              testID="event-registration-qr"
-              source={{ uri: `data:image/png;base64,${payment.qr_code_image}` }}
-              style={styles.qr}
-              resizeMode="contain"
-              accessibilityIgnoresInvertColors
-              accessibilityLabel="QR Code do PIX para pagar a inscrição"
-            />
+            {payment.qr_code_image ? (
+              <Image
+                testID="event-registration-qr"
+                source={{ uri: `data:image/png;base64,${payment.qr_code_image}` }}
+                style={styles.qr}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+                accessibilityLabel="QR Code do PIX para pagar a inscrição"
+              />
+            ) : (
+              <View style={styles.qrDrawn}>
+                <QrCode
+                  testID="event-registration-qr"
+                  value={payment.qr_code}
+                  size={200}
+                  accessibilityLabel="QR Code do PIX para pagar a inscrição"
+                />
+              </View>
+            )}
             <Text style={[typography.bodyMedium, styles.line, { color: colors.textSecondary }]}>
               Escaneie o QR no app do seu banco ou copie o código abaixo.
             </Text>
@@ -334,10 +407,34 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
               onPress={handleCopy}
               style={styles.action}
             />
-            <Text style={[typography.caption, styles.line, { color: colors.textTertiary }]}>
-              Este código vale por 24 horas e só aparece aqui agora. Se você sair desta tela
-              antes de pagar, cancele a inscrição e inscreva-se de novo para gerar outro.
+            <Text
+              testID="event-registration-pix-validity"
+              style={[typography.caption, styles.line, { color: colors.textTertiary }]}
+            >
+              {`Este código vale até ${formatDateTime(payment.expires_at)}. Se você sair desta tela, ele volta quando você a abrir de novo.`}
             </Text>
+          </View>
+        ) : paymentLoading ? (
+          <Text
+            testID="event-registration-payment-loading"
+            style={[typography.bodyMedium, styles.line, { color: colors.textTertiary }]}
+          >
+            Carregando o código do PIX…
+          </Text>
+        ) : paymentIssue ? (
+          <View testID="event-registration-payment-issue" style={styles.payment}>
+            <Text style={[typography.bodyMedium, styles.line, { color: colors.textSecondary }]}>
+              {PAYMENT_ISSUE_TEXT[paymentIssue]}
+            </Text>
+            {paymentIssue === "failed" ? (
+              <AppButton
+                testID="event-registration-payment-retry"
+                title="Tentar de novo"
+                icon={RefreshCw}
+                variant="secondary"
+                onPress={retryPayment}
+              />
+            ) : null}
           </View>
         ) : null}
 
@@ -398,6 +495,10 @@ const styles = StyleSheet.create({
   qr: {
     width: "100%",
     height: 200,
+    marginBottom: spacing.md,
+  },
+  qrDrawn: {
+    alignItems: "center",
     marginBottom: spacing.md,
   },
   pixCode: {

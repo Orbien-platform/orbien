@@ -10,6 +10,7 @@ import type {
   PostsPage,
   RegisterSelfResult,
   UpcomingEventRegistration,
+  MyEventRegistrationPayment,
 } from "./types";
 
 /**
@@ -75,6 +76,19 @@ export async function getMyEventRegistration(
   return authenticatedRequest<MyEventRegistration | null>(
     "get",
     `/content/posts/${postId}/registrations/me`,
+  );
+}
+
+/**
+ * `GET .../registrations/me/payment` — relê o PIX da inscrição pendente
+ * (PEND-07). Só leitura: nunca gera cobrança nova.
+ */
+export async function getMyEventRegistrationPayment(
+  postId: string,
+): Promise<MyEventRegistrationPayment> {
+  return authenticatedRequest<MyEventRegistrationPayment>(
+    "get",
+    `/content/posts/${postId}/registrations/me/payment`,
   );
 }
 
