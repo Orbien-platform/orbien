@@ -241,6 +241,39 @@ describe("GrupoScreen", () => {
       expect(Linking.openURL).toHaveBeenCalledTimes(2);
     });
 
+    it("material de texto formatado renderiza Markdown, não os símbolos", async () => {
+      mockListGroupMaterials.mockResolvedValue([
+        {
+          ...MATERIALS[2],
+          rich_content: "## Rute\n\n**Leia** com calma\n\n- primeiro\n- segundo\n\n[site](javascript:alert(1))",
+        },
+      ]);
+
+      await act(async () => {
+        await render(<GrupoScreen />);
+      });
+
+      expect(screen.getByText("Rute")).toBeTruthy();
+      expect(screen.getByText("Leia")).toBeTruthy();
+      expect(screen.getByText("primeiro")).toBeTruthy();
+      expect(screen.getAllByText("•")).toHaveLength(2);
+      expect(screen.queryByText(/\*\*|##/)).toBeNull();
+      // Link com esquema inseguro vira texto: não há link para tocar.
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.getByText("site")).toBeTruthy();
+    });
+
+    it("material de texto sem rich_content não quebra", async () => {
+      mockListGroupMaterials.mockResolvedValue([{ ...MATERIALS[2], rich_content: null }]);
+
+      await act(async () => {
+        await render(<GrupoScreen />);
+      });
+
+      expect(screen.getByText("Reflexão")).toBeTruthy();
+      expect(screen.getByTestId("grupo-material-mat3-rich-content")).toBeTruthy();
+    });
+
     it("sem materiais não mostra a seção", async () => {
       await act(async () => {
         await render(<GrupoScreen />);

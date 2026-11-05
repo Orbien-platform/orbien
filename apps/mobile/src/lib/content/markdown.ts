@@ -24,9 +24,9 @@ export type MarkdownBlock =
 
 type Style = Omit<InlineSpan, "text">;
 
-/** Só abre link com esquema conhecido — `javascript:` e afins viram texto. */
+/** Só abre link http(s) — `javascript:` e afins viram texto. */
 function safeHref(url: string): string | undefined {
-  return /^(https?:\/\/|mailto:)/i.test(url.trim()) ? url.trim() : undefined;
+  return /^https?:\/\//i.test(url.trim()) ? url.trim() : undefined;
 }
 
 export function parseInline(source: string, style: Style = {}): InlineSpan[] {
