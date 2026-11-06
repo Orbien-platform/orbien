@@ -94,6 +94,20 @@ describe('LoginRateLimitService', () => {
     });
   });
 
+  it('o 429 do `assert` não escreve log com a chave (e-mail) da janela', async () => {
+    const { service } = serviceWithStore();
+    const spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map((m) =>
+      jest.spyOn(Logger.prototype, m).mockImplementation(() => undefined),
+    );
+    try {
+      for (let i = 0; i < LOGIN_POLICY.max; i++) await service.register(key, LOGIN_POLICY);
+      await expect(service.assert(key, LOGIN_POLICY)).rejects.toMatchObject({ status: HttpStatus.TOO_MANY_REQUESTS });
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it('o bloqueio vence sozinho depois da janela', async () => {
     const { service, rows } = serviceWithStore();
 

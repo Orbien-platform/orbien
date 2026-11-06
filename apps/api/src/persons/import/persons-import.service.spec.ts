@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { JobStatus, Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
 import * as XLSX from 'xlsx';
 import { ImportResult, PersonsImportService } from './persons-import.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -300,6 +301,11 @@ describe('PersonsImportService', () => {
         data: expect.objectContaining({ role_code: 'member' }),
       });
       expect(passwordResetTokenClient.create).toHaveBeenCalled();
+      // PEND-24: o banco recebe o SHA-256; o valor em claro só vai no link do convite.
+      const raw = new URL((mail.sendInvite as jest.Mock).mock.calls[0][1] as string).searchParams.get('token')!;
+      const stored = passwordResetTokenClient.create.mock.calls[0][0].data;
+      expect(stored.token_hash).toBe(createHash('sha256').update(raw).digest('hex'));
+      expect(stored).not.toHaveProperty('token');
       expect(mail.sendInvite).toHaveBeenCalledWith(
         'ana@test.com',
         expect.stringContaining('/redefinir-senha?token='),

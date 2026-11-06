@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Gender, ImportJob, JobStatus, PersonClassification, Prisma } from '@prisma/client';
 import * as path from 'path';
 import { randomUUID, randomBytes } from 'crypto';
+import { hashToken } from '../../common/crypto/token-hash';
 import * as argon2 from 'argon2';
 import { isEmail } from 'class-validator';
 import { parse as csvParse } from 'csv-parse/sync';
@@ -347,7 +348,7 @@ export class PersonsImportService {
             });
 
             await sysTx.passwordResetToken.create({
-              data: { user_id: account.id, token: rawToken, expires_at: expiresAt },
+              data: { user_id: account.id, token_hash: hashToken(rawToken), expires_at: expiresAt },
             });
 
             return { personId: person.id, rawToken };

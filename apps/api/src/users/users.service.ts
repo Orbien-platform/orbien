@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
+import { hashToken } from '../common/crypto/token-hash';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
@@ -90,7 +91,7 @@ export class UsersService {
         });
 
         await sysTx.passwordResetToken.create({
-          data: { user_id: created.id, token: rawToken, expires_at: expiresAt },
+          data: { user_id: created.id, token_hash: hashToken(rawToken), expires_at: expiresAt },
         });
 
         return created;
@@ -211,7 +212,7 @@ export class UsersService {
     await this.prisma.system.$transaction(async (sysTx) => {
       await sysTx.passwordResetToken.deleteMany({ where: { user_id: account.id, used_at: null } });
       await sysTx.passwordResetToken.create({
-        data: { user_id: account.id, token: rawToken, expires_at: expiresAt },
+        data: { user_id: account.id, token_hash: hashToken(rawToken), expires_at: expiresAt },
       });
     });
 

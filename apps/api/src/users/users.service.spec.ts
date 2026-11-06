@@ -6,6 +6,7 @@
 
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -63,14 +64,21 @@ function serviceWith(overrides: {
 
   const mail = { sendInvite: jest.fn().mockResolvedValue(undefined) } as unknown as MailService;
 
-  return { service: new UsersService(prisma, mail), mail, roleAssignmentCreate };
+  return { service: new UsersService(prisma, mail), mail, roleAssignmentCreate, passwordResetTokenCreate };
 }
 
 describe('UsersService', () => {
   it('cria a conta, o papel e o token de convite, e envia o e-mail', async () => {
-    const { service, mail, roleAssignmentCreate } = serviceWith();
+    const { service, mail, roleAssignmentCreate, passwordResetTokenCreate } = serviceWith();
 
     const result = await service.create(dto, actor);
+
+    // PEND-24: o banco recebe o SHA-256; o valor em claro só vai no link do e-mail.
+    const raw = new URL((mail.sendInvite as jest.Mock).mock.calls[0][1] as string).searchParams.get('token')!;
+    const stored = passwordResetTokenCreate.mock.calls[0][0].data;
+    expect(stored.token_hash).toBe(createHash('sha256').update(raw).digest('hex'));
+    expect(stored).not.toHaveProperty('token');
+    expect(JSON.stringify(stored)).not.toContain(raw);
 
     expect(result).toEqual({ id: 'user-novo', email: dto.email });
     expect(roleAssignmentCreate).toHaveBeenCalledWith(
@@ -327,6 +335,13 @@ describe('UsersService.resendInvite', () => {
     });
     expect(deleteMany).toHaveBeenCalledWith({ where: { user_id: 'user-alvo', used_at: null } });
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'user-alvo' }) });
+    // PEND-24: o banco recebe o SHA-256; o valor em claro só vai no link do e-mail.
+    const url = (mail.sendInvite as jest.Mock).mock.calls[0][1] as string;
+    const raw = new URL(url).searchParams.get('token')!;
+    const { data } = create.mock.calls[0][0];
+    expect(data.token_hash).toBe(createHash('sha256').update(raw).digest('hex'));
+    expect(data).not.toHaveProperty('token');
+    expect(JSON.stringify(data)).not.toContain(raw);
     expect(mail.sendInvite).toHaveBeenCalledWith(
       'alvo@igreja.test',
       expect.stringContaining('/redefinir-senha?token='),
