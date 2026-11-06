@@ -364,7 +364,8 @@ model RefreshToken {
 model PasswordResetToken {
   id         String    @id @default(uuid())
   user_id    String
-  token      String    @unique
+  /// SHA-256 (hex) do token; o valor em claro só existe no e-mail/link.
+  token_hash String    @unique
   expires_at DateTime
   used_at    DateTime?
   created_at DateTime  @default(now())

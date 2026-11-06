@@ -13,10 +13,11 @@
  *     AuditInterceptor leem.
  */
 
-import { ForbiddenException, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
+import { createHash } from 'crypto';
 import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
 import { LoginRateLimitService, LOGIN_POLICY } from './login-rate-limit.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -692,6 +693,41 @@ describe('AuthService — o argon2.verify roda em todos os caminhos do login', (
     expect(respostas[0]).toEqual({ message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
   });
 
+  it('nenhuma recusa (nem sucesso) de login escreve log: sem e-mail e sem motivo (TEMP DEBUG removido)', async () => {
+    const real = await argon2.hash('senha-certa');
+    const spies = (['log', 'warn', 'error', 'debug', 'verbose', 'fatal'] as const).map((m) =>
+      jest.spyOn(Logger.prototype, m).mockImplementation(() => undefined),
+    );
+    const consoleSpies = (['log', 'warn', 'error', 'info', 'debug'] as const).map((m) =>
+      jest.spyOn(console, m).mockImplementation(() => undefined),
+    );
+    try {
+      const email = 'pessoa.secreta@igreja.test';
+      const rows = [
+        null,
+        await linha({ password_hash: real }),
+        await linha({ password_hash: real, is_active: false }),
+        await linha({ password_hash: real, tenant_is_active: false }),
+      ];
+      for (const row of rows) {
+        const { service } = serviceWith({});
+        (findLoginByEmail as jest.Mock).mockResolvedValue(row);
+        await erroDe(() => service.login({ email, password: senha }));
+        await erroDe(() => service.platformLogin({ email, password: senha }));
+      }
+      // caminho feliz também não loga
+      const { service } = serviceWith({});
+      (findLoginByEmail as jest.Mock).mockResolvedValue(
+        await linha({ password_hash: real, roles: [{ role_code: 'member', congregation_id: 'c1' }] }),
+      );
+      await service.login({ email, password: 'senha-certa' });
+
+      for (const spy of [...spies, ...consoleSpies]) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of [...spies, ...consoleSpies]) spy.mockRestore();
+    }
+  });
+
   it('platformLogin — sem conta, sem o papel e inativa: verify roda nos três', async () => {
     const real = await argon2.hash('senha-certa');
     const casos: Array<[string, unknown, string]> = [
@@ -1049,6 +1085,45 @@ describe('AuthService.forgotPassword', () => {
     expect(mail.sendPasswordReset).toHaveBeenCalledWith('a@b.com', expect.stringContaining('/redefinir-senha?token='), 'Ana', expect.objectContaining({ kind: expect.any(String) }));
   });
 
+  it('grava só o SHA-256 do token; o valor em claro vai apenas no link do e-mail (PEND-24)', async () => {
+    const { service, prisma, mail } = serviceWith({});
+    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      is_active: true,
+      person: { full_name: 'Ana Silva' },
+    });
+
+    await service.forgotPassword({ email: 'a@b.com' });
+
+    const url = (mail.sendPasswordReset as jest.Mock).mock.calls[0][1] as string;
+    const raw = new URL(url).searchParams.get('token')!;
+    expect(raw).toMatch(/^[0-9a-f]{64}$/);
+
+    const { data } = (prisma.system.passwordResetToken.create as jest.Mock).mock.calls[0][0];
+    expect(data.token_hash).toBe(createHash('sha256').update(raw).digest('hex'));
+    expect(data).not.toHaveProperty('token');
+    expect(JSON.stringify(data)).not.toContain(raw);
+  });
+
+  it('dois pedidos geram tokens distintos e hashes distintos', async () => {
+    const { service, prisma, mail } = serviceWith({});
+    (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      is_active: true,
+      person: { full_name: 'Ana' },
+    });
+    await service.forgotPassword({ email: 'a@b.com' });
+    await service.forgotPassword({ email: 'a@b.com' });
+    const urls = (mail.sendPasswordReset as jest.Mock).mock.calls.map((c) => c[1] as string);
+    const hashes = (prisma.system.passwordResetToken.create as jest.Mock).mock.calls.map(
+      (c) => c[0].data.token_hash as string,
+    );
+    expect(urls[0]).not.toBe(urls[1]);
+    expect(hashes[0]).not.toBe(hashes[1]);
+  });
+
   it('pedido do web/app sai com a marca da igreja do tenant da conta', async () => {
     const { service, prisma, mail } = serviceWith({});
     (prisma.system.userAccount.findUnique as jest.Mock).mockResolvedValue({
@@ -1299,6 +1374,60 @@ describe('AuthService.resetPassword', () => {
     });
 
     await expect(service.resetPassword({ token: 'x', password: 'segredo123' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('busca pelo SHA-256 do token recebido e nunca pelo valor em claro (PEND-24)', async () => {
+    const { service, prisma } = serviceWith({});
+    (prisma.system.passwordResetToken.findUnique as jest.Mock).mockResolvedValue(null);
+
+    await expect(service.resetPassword({ token: 'abc123', password: 'segredo123' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    expect(prisma.system.passwordResetToken.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.system.passwordResetToken.findUnique).toHaveBeenCalledWith({
+      where: { token_hash: createHash('sha256').update('abc123').digest('hex') },
+    });
+  });
+
+  it('o hash guardado no banco não serve como token (colar o hash no link não abre a conta)', async () => {
+    const { service, prisma } = serviceWith({});
+    const stored = createHash('sha256').update('abc123').digest('hex');
+    const table: Record<string, unknown> = {
+      [stored]: { id: 'tok-1', user_id: 'u1', used_at: null, expires_at: new Date('2999-01-01') },
+    };
+    (prisma.system.passwordResetToken.findUnique as jest.Mock).mockImplementation(
+      ({ where }: { where: { token_hash: string } }) => Promise.resolve(table[where.token_hash] ?? null),
+    );
+
+    await expect(service.resetPassword({ token: stored, password: 'segredo123' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(service.resetPassword({ token: 'abc123', password: 'segredo-novo' })).resolves.toEqual({
+      message: 'Senha redefinida com sucesso.',
+    });
+  });
+
+  it('reuso: o token marcado como usado na troca é recusado na segunda vez', async () => {
+    const { service, prisma } = serviceWith({});
+    const row = { id: 'tok-1', user_id: 'u1', used_at: null as Date | null, expires_at: new Date('2999-01-01') };
+    (prisma.system.passwordResetToken.findUnique as jest.Mock).mockImplementation(() => Promise.resolve({ ...row }));
+    (prisma.system.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        userAccount: { update: jest.fn() },
+        passwordResetToken: {
+          update: jest.fn().mockImplementation(({ data }) => {
+            row.used_at = data.used_at;
+          }),
+        },
+        refreshToken: { updateMany: jest.fn() },
+      }),
+    );
+
+    await expect(service.resetPassword({ token: 'x', password: 'segredo-novo' })).resolves.toBeDefined();
+    await expect(service.resetPassword({ token: 'x', password: 'outra-senha' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });

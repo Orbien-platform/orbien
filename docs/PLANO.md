@@ -413,7 +413,7 @@ da retenção**; depois dela, o token vira "Token inválido").
 
 **`PEND-13` vale para o cron novo**, como para o de 2h: só dispara com o
 processo acordado, e execução perdida atrasa a limpeza sem perder dado.
-Achado derivado: `PEND-24`.
+Achado derivado: `PEND-24` (fechado).
 
 ### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
@@ -2787,11 +2787,13 @@ descartado quando não há conta.
 plataforma (dono passa por cima — mesmo desenho do `fix_rls_enforcement`, e é o
 que permite o `seed.ts`); rate limit de login por IP depende de
 `X-Forwarded-For` confiável atrás do Render (infra, não código);
-`refresh_tokens` com `orbien_app_auth FOR ALL` (escrita viva). Os `TEMP DEBUG`
-de `auth.service.ts` (log do e-mail e do motivo da recusa) continuam lá — não
-são parte desta ação, mas **escrevem no log o motivo exato da recusa por
-e-mail**, o que desfaz no log a indistinguibilidade que o 401 mantém: vale
-decidir quando removê-los.
+`refresh_tokens` com `orbien_app_auth FOR ALL` (escrita viva).
+
+**`TEMP DEBUG` removidos em 2026-11-06** (`auth.service.ts` e
+`login-rate-limit.service.ts`): escreviam no log o e-mail e o motivo exato da
+recusa, desfazendo no log a indistinguibilidade que o 401 mantém. Nenhum log de
+recusa ficou; teste por spy no `Logger` e no `console` prova que nenhum caminho
+de `login`/`platformLogin` (recusa ou sucesso) e nem o 429 escrevem log.
 
 ### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
@@ -3388,17 +3390,44 @@ loga a exceção não tratada com stack, que diz se foi `P2028`, queda de conex�
 com o pooler do Supabase ou reinício do serviço. Decisão em aberto: mapear
 `P2028` para 503 (hoje 500).
 
-### PEND-24 · `password_reset_tokens.token` é gravado em claro · segurança
+### ~~PEND-24 · `password_reset_tokens.token` é gravado em claro~~ · fechado · segurança
 
 Achado ao investigar a retenção das tabelas de auth (`CONF-02`, 2026-11-04).
-`AuthService.forgotPassword` e `UsersService` gravam o token de redefinição
-em claro (`randomBytes(32).toString('hex')` direto em `token`), e
-`resetPassword` o busca por igualdade. O `refresh_tokens`, ao contrário, guarda
-SHA-256. Quem lê o banco enquanto o token vale (30 min, até o uso) redefine a
-senha da conta. A limpeza de 7 dias após o vencimento não muda isso. Correção
-natural: guardar o hash (SHA-256, como o refresh token) e buscar por hash;
-exige tratar os tokens em voo na migração (curtos, podem simplesmente expirar).
-Não corrigido nesta rodada, por ser outro assunto.
+`AuthService.forgotPassword`, `UsersService` (convite e reenvio) e a importação
+de pessoas gravavam o token em claro (`randomBytes(32).toString('hex')` direto
+em `token`), e `resetPassword` o buscava por igualdade. O `refresh_tokens`, ao
+contrário, guarda SHA-256. Quem lia o banco enquanto o token valia (30 min na
+redefinição, **7 dias no convite**, até o uso) redefinia a senha da conta.
+
+**Fechado em 2026-11-06.** A coluna passou a `token_hash` (SHA-256 hex) e a busca
+é por hash; o valor em claro só existe no link do e-mail. Decisões:
+
+- **Helper único** `src/common/crypto/token-hash.ts` (`hashToken`), usado pelo
+  refresh token e pelo token de redefinição/convite. SHA-256 e não argon2: o
+  token tem 256 bits de entropia aleatória e a busca precisa ser por igualdade.
+- **Renomeei a coluna** (`token` → `token_hash`; migration
+  `20261106120000_password_reset_tokens_hash`) em vez de manter o nome. O
+  `RENAME COLUMN` é só catálogo, sem reescrita, e o índice único acompanha. O
+  nome diz o que a coluna guarda, e código antigo que ainda gravasse/buscasse
+  `token` quebraria alto, em vez de gravar claro em silêncio. Menor risco que
+  parece: manter o nome deixaria o defeito invisível.
+- **Tokens em voo não expiram**: a própria migration converte cada token ainda
+  em claro para o seu SHA-256 (`sha256(convert_to(x,'UTF8'))`, Postgres 11+).
+  Divergi da sugestão de "deixar expirar" porque o convite vale 7 dias —
+  expirar derrubaria convites já enviados — e porque a conversão não deixa
+  nenhum claro na tabela. Não há fallback de busca em claro no código. Há um
+  teste que prova que o `sha256` do Postgres e o do Node dão o mesmo valor.
+- O job de retenção (`CONF-02`) apaga por `expires_at` em SQL cru que não cita a
+  coluna: intacto. Os demais consumidores (`UsersService.create/resendInvite`,
+  `PersonsImportService`) migraram para o hash. A resposta do fluxo de reset
+  segue idêntica para e-mail inexistente.
+
+Evidência: `src/auth/auth.service.spec.ts` (só o hash vai ao banco e o claro só
+ao e-mail; busca por hash; token inexistente, usado, expirado; reuso; o hash
+guardado não serve de token), `src/users/users.service.spec.ts`,
+`src/persons/import/persons-import.service.spec.ts`, `token-hash.spec.ts` e
+`test/integration/password-reset-token-hash.spec.ts` contra o Postgres local em
+`teste1-church` e `teste2-church`.
 
 ## 8. Ajustes — documento, rótulo e portão
 
