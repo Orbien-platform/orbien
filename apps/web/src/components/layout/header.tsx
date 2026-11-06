@@ -49,12 +49,13 @@ export function Header() {
   // Não há `change-password` na API: "Trocar senha" pede o mesmo e-mail de
   // redefinição do "Esqueci a senha", para o endereço da própria conta. A API
   // responde 200 de qualquer jeito (não revela se o e-mail existe).
-  async function sendPasswordLink() {
-    if (!user?.email || passwordLink === "sending") return;
+  // O item só é desenhado com e-mail e fica desabilitado enquanto envia, então
+  // a função não precisa se proteger de nenhum dos dois.
+  async function sendPasswordLink(email: string) {
     setPasswordLink("sending");
     try {
       await axios.post("/api-proxy/auth/forgot-password", {
-        email: user.email.trim().toLowerCase(),
+        email: email.trim().toLowerCase(),
       });
       setPasswordLink("sent");
     } catch {
@@ -166,7 +167,7 @@ export function Header() {
               <DropdownMenuItem
                 closeOnClick={false}
                 disabled={passwordLink === "sending"}
-                onClick={sendPasswordLink}
+                onClick={() => sendPasswordLink(user.email)}
               >
                 Trocar senha
               </DropdownMenuItem>
