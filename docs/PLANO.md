@@ -2506,8 +2506,20 @@ está.
   dentro das telas e nas notificações (esbarra no gênero gramatical).
 
 Decisões de 2026-10-04, na seção 5 do `PROJETO.md`: o site fica só escuro.
-Segue em aberto só a copy do site (títulos da v2 contra os do React, e
-"Precision Modern" na Sobre).
+
+**Estado conferido em 2026-11-06** (`PROJETO.md` atualizado contra `main`):
+- Os títulos do produto (painel, console e app) são **Geist 500**, não
+  Instrument Serif (`b6dd34e`, 2026-10-10); só o site mantém a serifa.
+- Guia de marca: a seção 3 de `apps/site/design-reference/orbien-brand-guidelines.md`
+  foi reescrita para a Órbita.
+- Rodada 1 em andamento, uma branch por entrega (`feat/orbita-v2-<assunto>`):
+  header e estados do painel, Início por papel, termo da igreja nas telas,
+  convite Premium/skeleton no app, copy do site. Fica para a rodada 2: páginas
+  próprias de pessoa, grupo e celebração, sub-áreas de Financeiro, Comunicação
+  e Administração, Famílias, Escalas por período, e a central de notificações
+  do app (depois do `PROD-32`).
+- Em aberto: a copy do site (títulos da v2 contra os do React; "Precision
+  Modern" na Sobre sai na entrega do site) e o termo da igreja nos push da API.
 
 ---
 

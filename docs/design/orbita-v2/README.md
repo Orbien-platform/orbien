@@ -1,5 +1,10 @@
 # Handoff: Orbien v2 · direção "Órbita" (site, painel web e app)
 
+> **Nota do repositório (2026-11-06).** O que foi decidido na execução vale
+> mais que este pacote: o produto (painel, console e app) usa **Geist 500** nos
+> títulos, não Instrument Serif (`b6dd34e`); só o site mantém a serifa. O estado
+> real por superfície está em [`PROJETO.md`](PROJETO.md).
+
 ## Overview
 Proposta v2 da Orbien em três superfícies:
 1. **Site** (8 páginas de marketing), com nova identidade noturna.

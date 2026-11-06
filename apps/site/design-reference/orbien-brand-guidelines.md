@@ -1,19 +1,14 @@
 # Brand Guidelines
 ## Orbien — Plataforma de Gestão e App White-label para Igrejas
 
-**Versão:** 1.0
+**Versão:** 2.0 (seção 3)
 **Status:** decidido
-**Última atualização:** 2026-05
+**Última atualização:** 2026-11
 
-> **Substituído em parte pela direção Órbita v2 (2026-10).** Para cor,
-> tipografia e forma, vale `docs/design/orbita-v2/README.md`: fundo noturno
-> `#05070F`, teal `#00E5C7` como acento da Orbien, Instrument Serif nos
-> títulos, Geist no texto e Geist Mono em rótulos e números, botões em pill.
-> A seção 3 (Identidade Visual: cor, tipografia e forma) abaixo descreve a
-> v1 e não vale mais para o site nem para o painel. Posicionamento, nome, voz
-> e tom seguem valendo.
-> A reescrita completa deste guia está registrada em
-> `docs/design/orbita-v2/PROJETO.md`.
+> **Seção 3 reescrita para a direção Órbita v2 (2026-11).** Cor, tipografia e
+> forma seguem `docs/design/orbita-v2/README.md` e a execução por superfície
+> está em `docs/design/orbita-v2/PROJETO.md`. Posicionamento, nome, voz e tom
+> (seções 1, 2 e 4) não mudaram.
 
 ---
 
@@ -83,135 +78,87 @@ Igrejas de pequeno e médio porte no Brasil são mal atendidas por software de g
 
 ## 3. Identidade Visual
 
+Direção **Órbita** (v2, 2026-10). A fonte dos valores é o handoff em
+`docs/design/orbita-v2/README.md`; a execução, por superfície, está em
+`docs/design/orbita-v2/PROJETO.md`. Esta seção resume o que é regra de marca.
+
 ### 3.1 Direção visual
-**Precision Modern** — minimalismo técnico com calor suficiente. Rigor sem frieza. Muito espaço negativo, tipografia com contraste de peso, paleta fria ancorada em Navy com acento Teal.
+**Órbita** — noturna, nítida, com um ponto de luz no que importa. Fundo quase
+preto azulado, texto quente, um único acento (teal) e anéis concêntricos com um
+satélite teal como assinatura: hero do site e fundo do painel. Elevação por
+borda e brilho, quase sem sombra.
 
-### 3.2 Paleta de cores
+### 3.2 Paleta
 
-#### Tokens de cor (CSS variables)
+Tema escuro é o padrão. O site é só escuro; painel e app alternam com o claro.
 
-```css
-/* Cores de marca */
---color-navy:          #1E3A7B;   /* Primária · CTAs · links · interativos */
---color-navy-dark:     #162D62;   /* Hover e pressed states do Navy */
---color-navy-dim:      #D4DCEF;   /* Fundo de badge Navy (light) */
---color-navy-dim-dark: #1A2540;   /* Fundo de badge Navy (dark) */
-
---color-teal:          #00B8A2;   /* Acento · sucesso · semáforo verde · deltas positivos */
---color-teal-dark:     #00CDB5;   /* Teal em dark mode */
---color-teal-dim:      #D0F5F1;   /* Fundo de badge Teal (light) */
---color-teal-dim-dark: #0A2E2A;   /* Fundo de badge Teal (dark) */
-
-/* Cores funcionais */
---color-crimson:       #C0392B;   /* Erro · alerta funcional · validação de campo · semáforo vermelho */
---color-crimson-dark:  #E05444;   /* Crimson em dark mode */
---color-crimson-dim:   #FDECEA;   /* Fundo de alerta erro (light) */
-
---color-burgundy:      #991B1B;   /* Badge de status grave: inadimplente, suspenso, bloqueado */
---color-burgundy-dim:  #F5E6E6;   /* Fundo de badge Burgundy (light) */
-
-/* Neutros */
---color-ink:           #0F1117;   /* Texto primário (light) · fundo base (dark) */
---color-parchment:     #F5F4F1;   /* Fundo base (light) */
---color-surface:       #FFFFFF;   /* Cards e superfícies elevadas (light) */
---color-surface-dark:  #13151E;   /* Cards e superfícies elevadas (dark) */
---color-subtle:        #EEECEA;   /* Hover · fundo de KPI · surface sutil (light) */
---color-subtle-dark:   #1C1F2B;   /* Hover · fundo de KPI · surface sutil (dark) */
---color-stone:         #5C5A56;   /* Texto secundário (light) */
---color-muted:         #9B9893;   /* Texto terciário · labels (light) */
---color-border:        #E0DDD9;   /* Bordas padrão (light) */
---color-border-dark:   #232634;   /* Bordas padrão (dark) */
-```
+| Papel | Escuro | Claro |
+|---|---|---|
+| Fundo | `#05070F` | `#F4F3EF` |
+| Superfície | `#0B0F1D` (cards: gradiente `#0C1121` → `#090C18`) | `#FFFFFF` |
+| Sutil (campos, hover) | `#121729` | `#ECEBE6` |
+| Texto | `#F2F1EE` | — |
+| Texto secundário | `#A9AEBD` | — |
+| Texto de apoio | `#6C7286` | — |
+| Borda | `rgba(255,255,255,.08)`; forte `.16` | `#E2E0DA` |
+| Teal (acento da Orbien) | `#00E5C7` | `#007F70` (texto) |
+| Atenção | texto `#F2C766`, fundo `rgba(242,199,102,.12)` | — |
+| Erro | texto `#FF7A6B`, fundo `rgba(255,122,107,.12)`; sólido `#C0392B` | — |
+| Marca padrão | `#1E3A7B`, brilho `#2B4FA8` | — |
 
 #### Regras de uso
-- **Navy** é a única cor de CTA primário. Nunca usar Teal ou Crimson em botão primário.
-- **Teal** é reservado para feedback positivo, deltas de crescimento e semáforo verde. Não usar em texto corrido.
-- **Crimson** é exclusivo para estados de erro, alertas críticos e semáforo vermelho. Não usar decorativamente.
-- **Burgundy** é exclusivo para badges de status grave (inadimplente, suspenso, bloqueado). Não usar em botões.
-- Nunca combinar Navy + Burgundy no mesmo componente — conflito semântico (ação vs. alerta grave).
+- **Teal é da Orbien e não muda com a igreja.** No site é a cor do CTA. No
+  produto, o primário é `--brand`, a cor da igreja (padrão `#1E3A7B`).
+- No escuro, texto na cor da igreja usa `brand 45%` misturado com branco; o
+  fundo suave usa `brand 28%` misturado com o fundo.
+- Teal marca destaque, progresso e estado "ok". Não vai em texto corrido.
+- Crimson é exclusivo de erro, alerta crítico e sessão de suporte. Não é
+  decoração.
+- Nunca combinar a cor da igreja com Crimson no mesmo componente: ação e
+  alerta grave não se misturam.
 
 ### 3.3 Tipografia
 
-#### Famílias
-| Família | Uso | Import |
-|---|---|---|
-| **DM Sans** | Todo o produto — display, headings, body, labels, botões | Google Fonts |
-| **DM Mono** | Dados técnicos, IDs, valores monetários formatados | Google Fonts |
+| Família | Uso |
+|---|---|
+| **Geist** (300–600) | Todo o texto de interface e corpo |
+| **Geist Mono** (400/500) | Números, rótulos e cabeçalho de tabela |
+| **Instrument Serif** (400) | `h1`/`h2` do **site**. No painel, no console e no app os títulos usam Geist 500 com tracking fechado (decisão de 2026-10-10) |
 
-#### Escala tipográfica
-
-| Nome | Família | Peso | Tamanho | Tracking | Uso |
-|---|---|---|---|---|---|
-| Display | DM Sans | 300 | 48–80px | −3% | Títulos de página, hero |
-| Display Bold | DM Sans | 600 | 48–80px | −3% | Destaque no display |
-| Heading 1 | DM Sans | 500 | 28–32px | −2% | Título de seção principal |
-| Heading 2 | DM Sans | 500 | 22–24px | −1.5% | Título de card ou modal |
-| Heading 3 | DM Sans | 500 | 18px | −1% | Subtítulo de seção |
-| Body | DM Sans | 300 | 15–16px | 0 | Texto corrido |
-| Body Medium | DM Sans | 400 | 14–15px | 0 | Texto de formulário, descrições |
-| Label | DM Sans | 500 | 12px | 0 | Labels de campo, cabeçalho de tabela, categorias |
-| Section Label | DM Sans | 500 | 14px | 0 | Rótulo que abre uma seção dentro de card, folha ou modal |
-| Caption | DM Sans | 400 | 11px | +4% | Meta informações, timestamps |
-| Mono | DM Mono | 400 | 12–13px | +4% | IDs, códigos, valores técnicos |
-
-#### Regras tipográficas
-- **Sem caixa alta em rótulo.** Label, cabeçalho de tabela e rótulo de seção
-  vão em caixa de frase ("Dados pessoais", não "DADOS PESSOAIS"). Maiúscula
-  espaçada em rótulo pequeno é o tratamento padrão de interface genérica — não
-  distingue a Orbien de nada — e custa leitura: tira o contorno das palavras,
-  que é o que o olho reconhece. A hierarquia vem de tamanho, peso e cor.
-- **Mono é para dado, não para rótulo.** DM Mono entra onde o conteúdo é
-  técnico (ID, código, valor); o nome que identifica esse dado vai em DM Sans.
-- **Mínimo de 11px** em qualquer texto, inclusive caption. A exceção é a
-  miniatura de tela do produto (os mockups de painel e celular dos heros do
-  site): ali o texto é ilustração em escala reduzida, não texto para ler, e
-  pode ir a 10px. O que o visitante lê como texto da página não entra na
-  exceção.
-- Nunca usar peso 400 onde 300 ou 500 funcionam — o contraste de peso é a principal ferramenta expressiva
-- Texto de botão: sempre DM Sans 500, nunca 600
-- Valores monetários (R$ 12.400): DM Mono 500 para o número, DM Sans 400 para o símbolo
-- Texto de alerta/erro: DM Sans 400 para body, 600 para título do alerta
+- Site: `h1` em `clamp(52px, 7.2vw, 104px)`, line-height .98. Ênfase em itálico
+  teal.
+- Produto: corpo 14px; título de página 28px em Geist 500.
+- Rótulo: Geist Mono, 10,5–11px, caixa alta, tracking .14em. Mínimo de 11px em
+  texto de leitura; a miniatura de tela dos heros do site pode ir a 10px.
+- Valores monetários e números de tabela em Geist Mono.
+- As fontes ficam no repositório (`src/fonts/`, licença OFL ao lado) e
+  carregam por `next/font/local`; nunca `next/font/google`.
 
 ### 3.4 Iconografia
-- Biblioteca recomendada: **Lucide Icons** (já incluída via `lucide-react` no stack)
-- Stroke width padrão: 1.5px
-- Nunca usar ícones filled junto de ícones outlined no mesmo contexto
-- Tamanhos padrão: 16px (inline), 20px (botão), 24px (card/ação), 32px (estado vazio)
+- Lucide, traço de 1,6px. Nunca ícone cheio junto de ícone de contorno.
+- Tamanhos: 16px (inline), 20px (botão), 24px (card/ação), 32px (estado vazio).
 
 ### 3.5 Espaçamento
 Base 4px. Escala: 4 · 8 · 12 · 16 · 24 · 32 · 40 · 48 · 64 · 80 · 96px.
+Padding interno em múltiplos de 4; gap entre componentes em múltiplos de 8;
+margem de seção de 64px ou 80px.
 
-Regra prática:
-- Espaçamento interno de componente (padding): múltiplos de 4 (12, 16, 24)
-- Gap entre componentes: múltiplos de 8 (8, 16, 24, 32)
-- Margem de seção: 64px ou 80px
-
-### 3.6 Border radius
+### 3.6 Forma
 | Contexto | Valor |
 |---|---|
-| Botão | 8px |
-| Card | 12px |
-| Modal | 16px |
-| Badge / pill | 100px |
-| Avatar | 10px |
-| Input | 8px |
-| Tooltip | 6px |
+| Botão, badge, segmentado | pill (999px); alturas 30 / 36 / 46px no produto, 42 / 52px no site |
+| Card | 14px no painel; 16–20px no app |
+| Modal | 20px |
+| Campo | 10px |
 
-### 3.7 Sombras
-```css
---shadow-sm: 0 1px 3px rgba(15,17,23,.06), 0 1px 2px rgba(15,17,23,.04);
---shadow-md: 0 4px 16px rgba(15,17,23,.08), 0 2px 6px rgba(15,17,23,.05);
---shadow-lg: 0 12px 40px rgba(15,17,23,.12), 0 4px 12px rgba(15,17,23,.06);
-```
-Em dark mode: substituir `rgba(15,17,23,X)` por `rgba(0,0,0,X*2.5)`.
+### 3.7 Elevação
+Quase nenhuma sombra no escuro: a elevação vem de borda e de brilho
+(`0 0 30px` da cor). Modal e menu flutuante: `0 30px 80px rgba(0,0,0,.6)`.
 
 ### 3.8 Logo
-**Status:** em desenvolvimento. Três conceitos de brief encaminhados para designer:
-- **Conceito A:** Wordmark com contraste de peso — "or" e "en" em 300, "bi" em 600 com Navy
-- **Conceito B:** Ícone orbital (órbita + ponto Teal) + wordmark
-- **Conceito C:** Marca modular em grid para dark mode nativo
-
-Até logo final aprovado, usar wordmark tipográfico: `orbien` em DM Sans 500, Navy.
+A marca é um anel com o satélite teal (`OrbLogo` do protótipo da v2), usada no
+ícone dos três apps, no favicon, no header, no rodapé e na tela "em breve" do
+site. O wordmark segue em minúsculas: `orbien`, em Geist 500.
 
 ---
 
@@ -299,7 +246,7 @@ Até logo final aprovado, usar wordmark tipográfico: `orbien` em DM Sans 500, N
 ### 5.1 App mobile (Starter — app-pai com skin)
 - Logo da igreja em destaque
 - Cores da igreja como primária (carregadas via `tenant_id`)
-- "Powered by Orbien" no rodapé — fonte 10px, Stone (#5C5A56), discreta
+- "Powered by Orbien" no rodapé — fonte 10px, texto de apoio, discreta
 - Ícone do app: logo da plataforma com skin de cor da igreja
 
 ### 5.2 App mobile (Premium — build próprio via EAS)
@@ -309,8 +256,8 @@ Até logo final aprovado, usar wordmark tipográfico: `orbien` em DM Sans 500, N
 
 ### 5.3 Painel web (admin)
 - Header: logo da plataforma + nome da congregação
-- Sidebar: Navy como cor de fundo opcional ou Ink (dark mode padrão)
-- Favicon: ícone Orbien (até logo final, usar "O" em Navy)
+- Sidebar: superfície escura da Órbita (tema escuro padrão); item ativo na cor da igreja
+- Favicon: a marca da Órbita (anel com satélite teal)
 
 ### 5.4 Emails transacionais
 - Remetente: `noreply@orbien.app` (ou domínio da igreja no Premium)
@@ -319,8 +266,8 @@ Até logo final aprovado, usar wordmark tipográfico: `orbien` em DM Sans 500, N
 - Tom: mesmo tom de voz do produto — nunca marketing agressivo em email transacional
 
 ### 5.5 Documentos (contratos, PDFs)
-- Tipografia: DM Sans para títulos, sistema para corpo (compatibilidade)
-- Cor de destaque em documentos: Navy — nunca Crimson ou Teal
+- Tipografia: Geist para títulos, sistema para corpo (compatibilidade)
+- Cor de destaque em documentos: azul da marca (`#1E3A7B`) — nunca Crimson
 - Footer de documento: "Orbien · orbien.app"
 
 ---
