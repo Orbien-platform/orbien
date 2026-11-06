@@ -413,7 +413,7 @@ da retenção**; depois dela, o token vira "Token inválido").
 
 **`PEND-13` vale para o cron novo**, como para o de 2h: só dispara com o
 processo acordado, e execução perdida atrasa a limpeza sem perder dado.
-Achado derivado: `PEND-24`.
+Achado derivado: `PEND-24` (fechado).
 
 ### ~~CONF-03 · Direitos do titular (Art. 18)~~ · fechado
 
@@ -648,21 +648,36 @@ recuperação automática.
 - **Ficaram de fora, de propósito:**
   - `kids/qr/[childId]` — o "Tentar de novo" dela é `issueCheckinQr`, que
     **emite** um token (escrita). Reconexão só pode reler; reemitir sozinha
-    geraria QR que ninguém pediu. Fica sem o hook até a leitura e a emissão
-    serem separadas (decisão de desenho, não de adoção).
-  - `notificacoes` e `indisponibilidade` — o erro de carga é guardado só como
-    texto (sem o `offline`) e a tela continua **editável** por baixo do alerta
-    (chaves de notificação, dias marcados). Uma releitura automática
-    sobrescreveria o que a pessoa já mexeu. Adotar pede antes guardar o
-    `LoadErrorState` e decidir o que fazer com a edição em andamento.
+    geraria QR que ninguém pediu. **Continua de fora, e a causa agora é
+    conhecida (2026-11-06):** não existe leitura do QR vigente a separar da
+    emissão. `KidsQrService.issueCheckin` guarda só o `secret_hash`, e o QR é
+    mostrado uma única vez; uma rota `GET` só poderia devolvê-lo guardando o
+    segredo ou derivando-o por HMAC do id (muda a criptografia da emissão e
+    invalida tokens em voo no deploy). Mesmo assim a tela emite ao abrir (é o
+    pedido do usuário), então a leitura só serviria para trocar o reemitir por
+    um toque a mais na porta da turma. Reemitir substitui o token anterior
+    (`deleteMany` dos não usados do par), mas isso é escrita. Decisão de
+    produto/segurança em aberto: (a) manter só o "Tentar de novo" manual, (b)
+    reemitir na volta quando a 1ª emissão falhou por rede, (c) `GET` com segredo
+    derivado. Sem esta, a PROD-32 fica **parcial** (só esta tela).
+  - `notificacoes` e `indisponibilidade` — **adotadas** na branch
+    `feat/app-reconexao-tres-telas`. O erro de carga passou a guardar o
+    `LoadErrorState` (com `offline`) e a tela marca "edição pendente"
+    (chave de notificação tocada; dia ou observação alterados). Regra: sem
+    edição pendente a volta da conexão relê sozinha; **com** edição pendente
+    não sobrescreve nada e mostra o `ReconnectNotice` ("Conexão voltou. Toque
+    para atualizar"), e a releitura vira escolha da pessoa. Trocar de mês na
+    indisponibilidade zera a marca (já descartava a edição).
 - Testes: hook (cai→volta→1 releitura; já online não recarrega; oscilação;
-  desmontar), integração em `grupos` e, por tela adotada, "cai, volta e faz
+  desmontar), integração em `grupos`, em `notificacoes` e `indisponibilidade`
+  (inclui "edição pendente não é sobrescrita") e, por tela adotada, "cai, volta e faz
   uma única releitura" + "já online não recarrega" (e, onde há escrita na tela,
   que a releitura não a dispara).
 - **Pendente humano — `PEND-23`:** teste em aparelho (modo avião ligado/desligado
   com a tela no erro), só possível com a build nativa. Nada disto foi testado em
   aparelho; só Jest.
-- **Só chega ao usuário com a build nativa do `netinfo`:** a adoção nas telas
+- **Só chega ao usuário com a build nativa do `netinfo`** (vale também para
+  `notificacoes` e `indisponibilidade`; nada nativo novo nesta entrega): a adoção nas telas
   acima é JS, mas importa o módulo nativo — precisa do bump de `version` e do
   EAS Build; um `eas update` para o binário antigo quebra o `import`.
 
@@ -996,20 +1011,16 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   idempotente se já aberta; 422 com culto cancelado ou turma desativada) e o
   botão "Reabrir" no `KidsSessionsModal`. Evidência: ciclo cancelar, reativar,
   reabrir em `test/integration/kids-sessions.spec.ts`, unitários e vitest do
-  modal. **Fora de escopo, segue aberto:** o passo "reabrir" no e2e — o
-  `e2e-prod` roda os specs contra o ambiente publicado, que só tem o botão e a
-  rota depois do deploy. Em 2026-11-04 não deu para confirmar o deploy da API:
-  a sessão remota não alcança `onrender.com` (403 do proxy de saída) e o GitHub
-  só registra deployments da Vercel, não do Render; a `main` tem a rota desde
-  `a2bc79f`. O passo ficou **fora** do `kids-modelo-sessoes.spec.ts` para não
-  quebrar o `e2e-prod`. Segunda tentativa em 2026-11-05: o mesmo 403 do proxy
-  (`CONNECT tunnel failed, response 403`, política de egress), e não há MCP do
-  Render na sessão — o da Vercel só enxerga o front. Continua sem confirmação.
-  Para liberar, de uma máquina que alcance o Render:
-  `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://orbien-api.onrender.com/api/kids/sessions/6f1c2b1e-3a4d-4c55-9e0a-1b2c3d4e5f60/reopen`.
-  **401** = rota publicada: acrescentar o passo (cancelar a instância, reativar o
-  culto, "Reabrir", sessão volta aberta) em `kids-modelo-sessoes.spec.ts`.
-  **404** = não deployada: esperar o deploy e repetir.
+  modal. **Passo e2e fechado em 2026-11-06:** `kids-modelo-sessoes.spec.ts` ganhou
+  o teste "cancela o culto, reativa e reabre a sessão kids" (`teste2-church`;
+  cria turma, celebração e sessão, e apaga o que usou). Ele esperava o deploy,
+  porque o `e2e-prod` roda os specs contra o ambiente publicado. Evidência de
+  que o deploy aconteceu: `GET https://orbien-api.onrender.com/api/health`
+  devolveu `commit` = `abdce8f` (a HEAD da main) e `POST /api/kids/sessions/<uuid>/reopen`
+  sem credencial respondeu **401** (rota publicada, não 404); no mesmo commit, o
+  status `Vercel – orbien-web` está `success` ("Deployment has completed") e o
+  botão "Reabrir" está na main desde o PR #196. Validado só com tipos, lint e
+  `playwright test --list`; o e2e roda no GitHub.
 - ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
   requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
   travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
@@ -1045,8 +1056,8 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   três specs em `apps/web/e2e/`, todos em `teste2-church`: `kids-turmas.spec.ts`
   (criar, editar, desativar, reativar), `kids-criancas.spec.ts` (cadastro com
   aceite do termo, edição, revogar e registrar o consentimento) e
-  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir e cancelar sessão;
-  o reabrir fica para depois do deploy, ver REV-4.2). A tela de autorizados fechou em 2026-11-04 com
+  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir, cancelar e reabrir sessão,
+  ver REV-4.2). A tela de autorizados fechou em 2026-11-04 com
   `kids-autorizados.spec.ts` (`teste2-church`): adiciona um terceiro autorizado,
   recusa remover o único primário, edita o vínculo promovendo-o a primário
   (o anterior é rebaixado), remove o ex-primário e recusa remover o último.
@@ -2495,8 +2506,20 @@ está.
   dentro das telas e nas notificações (esbarra no gênero gramatical).
 
 Decisões de 2026-10-04, na seção 5 do `PROJETO.md`: o site fica só escuro.
-Segue em aberto só a copy do site (títulos da v2 contra os do React, e
-"Precision Modern" na Sobre).
+
+**Estado conferido em 2026-11-06** (`PROJETO.md` atualizado contra `main`):
+- Os títulos do produto (painel, console e app) são **Geist 500**, não
+  Instrument Serif (`b6dd34e`, 2026-10-10); só o site mantém a serifa.
+- Guia de marca: a seção 3 de `apps/site/design-reference/orbien-brand-guidelines.md`
+  foi reescrita para a Órbita.
+- Rodada 1 em andamento, uma branch por entrega (`feat/orbita-v2-<assunto>`):
+  header e estados do painel, Início por papel, termo da igreja nas telas,
+  convite Premium/skeleton no app, copy do site. Fica para a rodada 2: páginas
+  próprias de pessoa, grupo e celebração, sub-áreas de Financeiro, Comunicação
+  e Administração, Famílias, Escalas por período, e a central de notificações
+  do app (depois do `PROD-32`).
+- Em aberto: a copy do site (títulos da v2 contra os do React; "Precision
+  Modern" na Sobre sai na entrega do site) e o termo da igreja nos push da API.
 
 ---
 
@@ -2776,11 +2799,13 @@ descartado quando não há conta.
 plataforma (dono passa por cima — mesmo desenho do `fix_rls_enforcement`, e é o
 que permite o `seed.ts`); rate limit de login por IP depende de
 `X-Forwarded-For` confiável atrás do Render (infra, não código);
-`refresh_tokens` com `orbien_app_auth FOR ALL` (escrita viva). Os `TEMP DEBUG`
-de `auth.service.ts` (log do e-mail e do motivo da recusa) continuam lá — não
-são parte desta ação, mas **escrevem no log o motivo exato da recusa por
-e-mail**, o que desfaz no log a indistinguibilidade que o 401 mantém: vale
-decidir quando removê-los.
+`refresh_tokens` com `orbien_app_auth FOR ALL` (escrita viva).
+
+**`TEMP DEBUG` removidos em 2026-11-06** (`auth.service.ts` e
+`login-rate-limit.service.ts`): escreviam no log o e-mail e o motivo exato da
+recusa, desfazendo no log a indistinguibilidade que o 401 mantém. Nenhum log de
+recusa ficou; teste por spy no `Logger` e no `console` prova que nenhum caminho
+de `login`/`platformLogin` (recusa ou sucesso) e nem o 429 escrevem log.
 
 ### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
@@ -3377,17 +3402,44 @@ loga a exceção não tratada com stack, que diz se foi `P2028`, queda de conex�
 com o pooler do Supabase ou reinício do serviço. Decisão em aberto: mapear
 `P2028` para 503 (hoje 500).
 
-### PEND-24 · `password_reset_tokens.token` é gravado em claro · segurança
+### ~~PEND-24 · `password_reset_tokens.token` é gravado em claro~~ · fechado · segurança
 
 Achado ao investigar a retenção das tabelas de auth (`CONF-02`, 2026-11-04).
-`AuthService.forgotPassword` e `UsersService` gravam o token de redefinição
-em claro (`randomBytes(32).toString('hex')` direto em `token`), e
-`resetPassword` o busca por igualdade. O `refresh_tokens`, ao contrário, guarda
-SHA-256. Quem lê o banco enquanto o token vale (30 min, até o uso) redefine a
-senha da conta. A limpeza de 7 dias após o vencimento não muda isso. Correção
-natural: guardar o hash (SHA-256, como o refresh token) e buscar por hash;
-exige tratar os tokens em voo na migração (curtos, podem simplesmente expirar).
-Não corrigido nesta rodada, por ser outro assunto.
+`AuthService.forgotPassword`, `UsersService` (convite e reenvio) e a importação
+de pessoas gravavam o token em claro (`randomBytes(32).toString('hex')` direto
+em `token`), e `resetPassword` o buscava por igualdade. O `refresh_tokens`, ao
+contrário, guarda SHA-256. Quem lia o banco enquanto o token valia (30 min na
+redefinição, **7 dias no convite**, até o uso) redefinia a senha da conta.
+
+**Fechado em 2026-11-06.** A coluna passou a `token_hash` (SHA-256 hex) e a busca
+é por hash; o valor em claro só existe no link do e-mail. Decisões:
+
+- **Helper único** `src/common/crypto/token-hash.ts` (`hashToken`), usado pelo
+  refresh token e pelo token de redefinição/convite. SHA-256 e não argon2: o
+  token tem 256 bits de entropia aleatória e a busca precisa ser por igualdade.
+- **Renomeei a coluna** (`token` → `token_hash`; migration
+  `20261106120000_password_reset_tokens_hash`) em vez de manter o nome. O
+  `RENAME COLUMN` é só catálogo, sem reescrita, e o índice único acompanha. O
+  nome diz o que a coluna guarda, e código antigo que ainda gravasse/buscasse
+  `token` quebraria alto, em vez de gravar claro em silêncio. Menor risco que
+  parece: manter o nome deixaria o defeito invisível.
+- **Tokens em voo não expiram**: a própria migration converte cada token ainda
+  em claro para o seu SHA-256 (`sha256(convert_to(x,'UTF8'))`, Postgres 11+).
+  Divergi da sugestão de "deixar expirar" porque o convite vale 7 dias —
+  expirar derrubaria convites já enviados — e porque a conversão não deixa
+  nenhum claro na tabela. Não há fallback de busca em claro no código. Há um
+  teste que prova que o `sha256` do Postgres e o do Node dão o mesmo valor.
+- O job de retenção (`CONF-02`) apaga por `expires_at` em SQL cru que não cita a
+  coluna: intacto. Os demais consumidores (`UsersService.create/resendInvite`,
+  `PersonsImportService`) migraram para o hash. A resposta do fluxo de reset
+  segue idêntica para e-mail inexistente.
+
+Evidência: `src/auth/auth.service.spec.ts` (só o hash vai ao banco e o claro só
+ao e-mail; busca por hash; token inexistente, usado, expirado; reuso; o hash
+guardado não serve de token), `src/users/users.service.spec.ts`,
+`src/persons/import/persons-import.service.spec.ts`, `token-hash.spec.ts` e
+`test/integration/password-reset-token-hash.spec.ts` contra o Postgres local em
+`teste1-church` e `teste2-church`.
 
 ## 8. Ajustes — documento, rótulo e portão
 

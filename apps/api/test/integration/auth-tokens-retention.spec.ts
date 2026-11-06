@@ -86,7 +86,7 @@ describe('login_attempts', () => {
 describe('password_reset_tokens', () => {
   beforeAll(async () => {
     const mk = async (name: string, expires_at: Date, used_at: Date | null = null) => {
-      ids[name] = (await admin.passwordResetToken.create({ data: { user_id: userId, token: `${tag}-${name}`, expires_at, used_at } })).id;
+      ids[name] = (await admin.passwordResetToken.create({ data: { user_id: userId, token_hash: `${tag}-${name}`, expires_at, used_at } })).id;
     };
     await mk('pr-velho', ago(7, -1000));
     await mk('pr-usado-velho', ago(8), ago(8));
