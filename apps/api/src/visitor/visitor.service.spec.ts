@@ -6,6 +6,27 @@ import { ClassificationService } from '../persons/classification.service';
 import { VisitsService } from '../persons/visits.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateQrTokenDto } from './dto/create-qr-token.dto';
+import { findPublicQrChurch } from '../common/public-lookup';
+
+// Nome da congregação e marca saem de `public_qr_church` (034, PEND-04 C):
+// `orbien_app` não lê `congregations`/`branding_configs` direto.
+jest.mock('../common/public-lookup');
+
+function mockChurch(overrides: Record<string, unknown> | null = {}) {
+  (findPublicQrChurch as jest.Mock).mockReset();
+  (findPublicQrChurch as jest.Mock).mockResolvedValue(
+    overrides === null
+      ? null
+      : {
+          church_name: 'Sede',
+          primary_color: null,
+          secondary_color: null,
+          logo_url: null,
+          logo_url_dark: null,
+          ...overrides,
+        },
+  );
+}
 
 const user: JwtPayload = {
   sub: 'user-1',
@@ -16,6 +37,8 @@ const user: JwtPayload = {
 };
 
 function serviceWith() {
+  mockChurch();
+  (findPublicQrChurch as jest.Mock).mockClear();
   const qrTokenClient = {
     findUnique: jest.fn(),
     update: jest.fn().mockResolvedValue({}),
@@ -57,9 +80,8 @@ describe('VisitorService', () => {
         is_active: true,
         origin: 'service',
         label: 'Culto da manhã',
-        congregation: { name: 'Igreja de Teste 1' },
-        tenant: { brandingConfig: null },
       });
+      mockChurch({ church_name: 'Igreja de Teste 1' });
 
       await expect(service.describeQr('tok')).resolves.toEqual({
         church_name: 'Igreja de Teste 1',
@@ -70,6 +92,8 @@ describe('VisitorService', () => {
       expect(qrTokenClient.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { token: 'tok' } }),
       );
+      // Token exato — a função de 034 não aceita padrão.
+      expect(findPublicQrChurch).toHaveBeenCalledWith(expect.anything(), 'tok');
       // A leitura não conta como cadastro.
       expect(qrTokenClient.update).not.toHaveBeenCalled();
     });
@@ -86,20 +110,27 @@ describe('VisitorService', () => {
         is_active: false,
         origin: 'service',
         label: null,
-        congregation: { name: 'Igreja de Teste 1' },
       });
+      await expect(service.describeQr('tok')).rejects.toBeInstanceOf(NotFoundException);
+      // Não chega a consultar a marca de um QR desativado.
+      expect(findPublicQrChurch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('describeQr — QR ativo sem congregação/marca resolvida', () => {
+    it('vira o mesmo 404 do QR inválido', async () => {
+      const { service, qrTokenClient } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue({ is_active: true, origin: 'service', label: null });
+      mockChurch(null);
       await expect(service.describeQr('tok')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
   describe('describeQr — marca (PEND-19)', () => {
-    const active = (brandingConfig: unknown) => ({
-      is_active: true,
-      origin: 'service',
-      label: null,
-      congregation: { name: 'Sede' },
-      tenant: { brandingConfig },
-    });
+    const active = (brandingConfig: Record<string, unknown>) => {
+      mockChurch(brandingConfig);
+      return { is_active: true, origin: 'service', label: null };
+    };
 
     it('devolve cor primária, destaque e logos da igreja — e só isso', async () => {
       const { service, qrTokenClient } = serviceWith();
@@ -179,7 +210,6 @@ describe('VisitorService', () => {
         origin: 'service',
         small_group_id: null,
         created_by: 'creator-1',
-        congregation: { name: 'Sede' },
       });
       tx.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana Nova' });
 
@@ -202,6 +232,28 @@ describe('VisitorService', () => {
       });
     });
 
+    it('se a função não achar a congregação, o cadastro vale e a mensagem usa um nome genérico', async () => {
+      const { service, qrTokenClient, tx } = serviceWith();
+      qrTokenClient.findUnique.mockResolvedValue({
+        id: 'qr1',
+        is_active: true,
+        tenant_id: 'tenant-1',
+        congregation_id: 'cong-1',
+        origin: 'service',
+        small_group_id: null,
+        created_by: 'creator-1',
+      });
+      tx.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana Nova' });
+      mockChurch(null);
+
+      const result = await service.registerViaQr({ token: 'tok', full_name: 'Ana Nova' } as never, '1.2.3.4', 'ua');
+
+      expect(result).toEqual({
+        status: 'registered',
+        message: 'Cadastro realizado! Bem-vindo à nossa igreja.',
+      });
+    });
+
     it('reconhece pessoa existente pelo telefone e registra visita, sem criar pessoa nova', async () => {
       const { service, qrTokenClient, tx } = serviceWith();
       qrTokenClient.findUnique.mockResolvedValue({
@@ -212,7 +264,6 @@ describe('VisitorService', () => {
         origin: 'service',
         small_group_id: null,
         created_by: 'creator-1',
-        congregation: { name: 'Sede' },
       });
       tx.person.findFirst.mockResolvedValue({ id: 'p1', full_name: 'João Existente' });
 
@@ -236,7 +287,6 @@ describe('VisitorService', () => {
         origin: 'service',
         small_group_id: null,
         created_by: 'creator-1',
-        congregation: { name: 'Sede' },
       });
       tx.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana' });
 
@@ -261,7 +311,6 @@ describe('VisitorService', () => {
         origin: 'service',
         small_group_id: null,
         created_by: 'creator-1',
-        congregation: { name: 'Sede' },
       });
       tx.person.create.mockResolvedValue({ id: 'p1', full_name: 'Ana' });
 
@@ -406,7 +455,6 @@ describe('VisitorService.registerViaQr — criança (AD-013)', () => {
       origin: 'service',
       small_group_id: null,
       created_by: 'creator-1',
-      congregation: { name: 'Sede' },
     });
     tx.person.findFirst.mockResolvedValue(null);
     tx.person.create.mockResolvedValue({ id: 'new-1', full_name: 'João' });

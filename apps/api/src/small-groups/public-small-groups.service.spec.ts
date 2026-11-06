@@ -2,6 +2,9 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PublicSmallGroupsService } from './public-small-groups.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { findPublicTenantBySlug } from '../common/public-lookup';
+
+jest.mock('../common/public-lookup');
 
 const TENANT = { id: 't1', name: 'Igreja Central', is_active: true };
 
@@ -46,16 +49,15 @@ function insertCall(tx: TxMock) {
   return values;
 }
 
+// `orbien_app` não lê `tenants`/`branding_configs` direto (PEND-04 C): o slug
+// resolve por `public_tenant_by_slug`, que devolve o tenant e o `app_name`.
 function serviceWith(tx: TxMock, tenant: unknown = TENANT, brandingAppName: string | null = null) {
+  const t = tenant as { id: string; name: string; is_active: boolean } | null;
+  (findPublicTenantBySlug as jest.Mock).mockResolvedValue(
+    t === null ? null : { tenant_id: t.id, name: t.name, is_active: t.is_active, app_name: brandingAppName },
+  );
   const prisma = {
-    client: {
-      tenant: { findUnique: jest.fn().mockResolvedValue(tenant) },
-      brandingConfig: {
-        findUnique: jest.fn().mockResolvedValue(
-          brandingAppName === null ? null : { app_name: brandingAppName },
-        ),
-      },
-    },
+    client: {},
     runInTx: jest.fn(async (fn: (t: TxMock) => Promise<unknown>) => fn(tx)),
   };
   return {

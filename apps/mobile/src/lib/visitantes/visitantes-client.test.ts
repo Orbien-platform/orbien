@@ -5,6 +5,8 @@ jest.mock("../auth/auth-client", () => ({
 
 import {
   createSignupQr,
+  listGroupOptions,
+  updateSignupQr,
   listSignupQrs,
   normalizePhone,
   recordVisitForExisting,
@@ -92,6 +94,30 @@ describe("QR de autocadastro", () => {
     expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/admin/visitor/qr", {
       body: { origin: "service", label: "Culto" },
     });
+  });
+
+  it("cria QR de grupo com o grupo e sem rótulo vazio", async () => {
+    mockAuthenticatedRequest.mockResolvedValue({ id: "q1" });
+    await createSignupQr("small_group", "  ", "g1");
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("post", "/admin/visitor/qr", {
+      body: { origin: "small_group", small_group_id: "g1" },
+    });
+  });
+
+  it("renomeia e liga/desliga pelo PATCH", async () => {
+    mockAuthenticatedRequest.mockResolvedValue({ id: "q1" });
+    await updateSignupQr("q1", { label: "Noite", is_active: false });
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("patch", "/admin/visitor/qr/q1", {
+      body: { label: "Noite", is_active: false },
+    });
+  });
+
+  it("lista os grupos para o QR de grupo; resposta torta vira lista vazia", async () => {
+    mockAuthenticatedRequest.mockResolvedValueOnce({ data: [{ id: "g1", name: "PG" }] });
+    await expect(listGroupOptions()).resolves.toEqual([{ id: "g1", name: "PG" }]);
+    expect(mockAuthenticatedRequest).toHaveBeenCalledWith("get", "/small-groups?limit=100");
+    mockAuthenticatedRequest.mockResolvedValueOnce(null);
+    await expect(listGroupOptions()).resolves.toEqual([]);
   });
 
   it("monta a URL da página pública com slug e token", () => {

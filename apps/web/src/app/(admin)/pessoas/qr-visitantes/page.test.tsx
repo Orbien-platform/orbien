@@ -201,6 +201,33 @@ describe("QrVisitantesPage (PEND-19)", () => {
     expect(await within(dialog).findByText("Endereço copiado")).toBeInTheDocument();
   });
 
+  it("imprime numa janela só com nome, QR e endereço; avisa se o navegador bloqueia", async () => {
+    const win = {
+      document: document.implementation.createHTMLDocument(""),
+      focus: vi.fn(),
+      print: vi.fn(),
+    };
+    const winOpen = vi.spyOn(window, "open").mockReturnValueOnce(win as unknown as Window);
+    await open();
+    await screen.findByText("Culto de domingo");
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Mostrar QR/ })[0]).toBeEnabled());
+    fireEvent.click(screen.getAllByRole("button", { name: /Mostrar QR/ })[0]);
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Imprimir/ }));
+    expect(win.print).toHaveBeenCalled();
+    expect(win.document.querySelector("h1")?.textContent).toBe("Culto de domingo");
+    expect(win.document.querySelector("svg")).not.toBeNull();
+    expect(win.document.querySelector("p")?.textContent).toBe(
+      `${window.location.origin}/visitante/teste2-church/tok-culto`,
+    );
+
+    winOpen.mockReturnValueOnce(null);
+    fireEvent.click(within(dialog).getByRole("button", { name: /Imprimir/ }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/bloqueou/);
+    winOpen.mockRestore();
+  });
+
   it("sem o endereço da igreja, o botão Mostrar QR fica desabilitado", async () => {
     get.mockImplementation(async (url: string) => {
       if (url === "/admin/visitor/qr") return { data: [QR_SERVICE] };

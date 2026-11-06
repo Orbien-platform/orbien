@@ -14,6 +14,7 @@ describe("parseInline", () => {
   it("link http vira href; javascript: fica só texto", () => {
     expect(parseInline("[site](https://x.org)")).toEqual([{ text: "site", href: "https://x.org" }]);
     expect(parseInline("[mal](javascript:alert(1))")[0]).not.toHaveProperty("href");
+    expect(parseInline("[mail](mailto:a@b.co)")[0]).not.toHaveProperty("href");
   });
 
   it("escape e símbolo solto passam como texto", () => {

@@ -848,8 +848,61 @@ describe('MeetingsService', () => {
       client.groupMeeting.findUnique.mockResolvedValue(null);
       const service = serviceWith(client);
 
-      await expect(service.createCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+      // Administração não passa por `assertCanManageMaterials`: o 404 sai daqui.
+      await expect(
+        service.createCheckinToken('meet1', { ...USER, roles: ['pastor'] }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('reunião inexistente para cell_leader também é 404', async () => {
+      const client = clientWith();
+      client.groupMeeting.findUnique.mockResolvedValue(null);
+      await expect(serviceWith(client).createCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
         NotFoundException,
+      );
+    });
+
+    describe('recorte de liderança (PEND-19)', () => {
+      const MEETING = {
+        id: 'meet1',
+        tenant_id: 't1',
+        congregation_id: 'g1',
+        occurred_at: new Date(),
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-lead' },
+      };
+
+      it('cell_leader de outro PG leva 403 e o token não é renovado', async () => {
+        const client = clientWith();
+        client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+        client.userAccount.findUnique.mockResolvedValue({ person_id: 'p-outro' });
+        client.groupMembership.findUnique.mockResolvedValue(null);
+
+        await expect(serviceWith(client).createCheckinToken('meet1', USER)).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+        expect(client.meetingCheckinToken.upsert).not.toHaveBeenCalled();
+      });
+
+      it('o líder do PG segue podendo gerar', async () => {
+        const client = clientWith();
+        client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+        client.meetingCheckinToken.upsert.mockResolvedValue({ token: 't', expires_at: new Date() });
+        await expect(serviceWith(client).createCheckinToken('meet1', USER)).resolves.toEqual(
+          expect.objectContaining({ token: 't' }),
+        );
+      });
+
+      it.each(['tenant_admin', 'admin_congregation', 'pastor', 'secretary'])(
+        '%s gera em qualquer encontro sem checar liderança',
+        async (role) => {
+          const client = clientWith();
+          client.groupMeeting.findUnique.mockResolvedValue(MEETING);
+          client.meetingCheckinToken.upsert.mockResolvedValue({ token: 't', expires_at: new Date() });
+          await serviceWith(client).createCheckinToken('meet1', { ...USER, roles: [role] });
+          expect(client.userAccount.findUnique).not.toHaveBeenCalled();
+          expect(client.meetingCheckinToken.upsert).toHaveBeenCalled();
+        },
       );
     });
 
@@ -861,6 +914,8 @@ describe('MeetingsService', () => {
         tenant_id: 't1',
         congregation_id: 'g1',
         occurred_at,
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-lead' },
       });
       const service = serviceWith(client);
 
@@ -878,6 +933,8 @@ describe('MeetingsService', () => {
         tenant_id: 't1',
         congregation_id: 'g1',
         occurred_at,
+        small_group_id: 'sg1',
+        smallGroup: { leader_person_id: 'p-lead' },
       });
       client.meetingCheckinToken.upsert.mockResolvedValue({
         token: 'tok-123',
@@ -924,6 +981,8 @@ describe('MeetingsService', () => {
           tenant_id: 't1',
           congregation_id: 'g1',
           occurred_at,
+          small_group_id: 'sg1',
+          smallGroup: { leader_person_id: 'p-lead' },
         });
         client.meetingCheckinToken.upsert.mockImplementation(
           ({ create }: { create: { token: string; expires_at: Date } }) =>

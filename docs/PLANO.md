@@ -860,11 +860,11 @@ O vínculo encontro–material (`GroupMeetingMaterial`) já tinha visibilidade
     `audience = 'network'` sem `network_id`.
   - **`rich_content` formatado no web**: o modal de `/materiais` usa o mesmo
     `RichTextEditor` dos posts (grava Markdown) e a aba "Materiais" do PG
-    renderiza com `MarkdownView`. Limite: o **mobile** mostra `rich_content` de
-    material como texto puro (`grupo/[id].tsx`, `grupo/encontro/[id].tsx`), então
-    texto formatado chega com `**` e `##` cru até a tela de material do app usar
-    o `MarkdownText` dos posts (área do mobile, não tocada aqui). Link puro
-    continua funcionando como antes.
+    renderiza com `MarkdownView`. O **mobile** também renderiza (2026-11-05):
+    `grupo/[id].tsx` (seção "Materiais") e `grupo/encontro/[id].tsx` usam o
+    `MarkdownText` dos posts, sem fork; texto puro antigo continua legível, link
+    `javascript:` vira texto e `rich_content` nulo não quebra. Só JS (sai por
+    OTA); teste em aparelho em `PEND-23`.
   - **Troca de arquivo/conteúdo pela tela `/materiais`**: já estava na `main`
     (`ff92166`, o PLANO estava defasado): na edição, escolher um arquivo troca
     o PDF/Word (o anterior fica no histórico de versões) e o texto é
@@ -1002,9 +1002,14 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   a sessão remota não alcança `onrender.com` (403 do proxy de saída) e o GitHub
   só registra deployments da Vercel, não do Render; a `main` tem a rota desde
   `a2bc79f`. O passo ficou **fora** do `kids-modelo-sessoes.spec.ts` para não
-  quebrar o `e2e-prod`. Para liberar: conferir que `POST /kids/sessions/<uuid>/reopen`
-  sem credencial responde 401 (e não 404) em `orbien-api.onrender.com`, e então
-  acrescentar o passo (cancelar, reativar o culto, "Reabrir").
+  quebrar o `e2e-prod`. Segunda tentativa em 2026-11-05: o mesmo 403 do proxy
+  (`CONNECT tunnel failed, response 403`, política de egress), e não há MCP do
+  Render na sessão — o da Vercel só enxerga o front. Continua sem confirmação.
+  Para liberar, de uma máquina que alcance o Render:
+  `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://orbien-api.onrender.com/api/kids/sessions/6f1c2b1e-3a4d-4c55-9e0a-1b2c3d4e5f60/reopen`.
+  **401** = rota publicada: acrescentar o passo (cancelar a instância, reativar o
+  culto, "Reabrir", sessão volta aberta) em `kids-modelo-sessoes.spec.ts`.
+  **404** = não deployada: esperar o deploy e repetir.
 - ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
   requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
   travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
@@ -2539,10 +2544,11 @@ e esquecer do `permissions.ts`" — não precisou chegar.
 ### PEND-04 · Resíduos de RLS abertos por desenho · dívida
 
 - ~~**`user_accounts` e `role_assignments` seguem com `orbien_app_auth
-  USING (true)` na LEITURA.**~~ **Fechado em 2026-11-04 (ação D)** — ver o
-  registro no fim do item. O que continua com `orbien_app_auth USING (true)` é
-  `tenants`, `congregations`, `branding_configs` e `tenant_plans` (ação C) e
-  `refresh_tokens` (escrita viva por desenho).
+  USING (true)` na LEITURA.**~~ **Fechado em 2026-11-04 (ação D).**
+- ~~**`tenants`, `congregations`, `branding_configs` e `tenant_plans` seguem com
+  `orbien_app_auth USING (true)`.**~~ **Fechado em 2026-11-05 (ação C)** — ver o
+  registro no fim do item. Só `refresh_tokens` mantém `orbien_app_auth` (escrita
+  viva por desenho).
 - **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
   (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
   `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
@@ -2663,8 +2669,7 @@ pré-autenticação é só por três funções `SECURITY DEFINER` de parâmetro 
   `auth_tenant_admin_user_id`, com `ORDER BY` determinístico.
 - **`tenants`/`tenant_plans` saíram do caminho de auth:** as funções devolvem
   `tenant_is_active` e `plan`, e os `include:` do login (pré-requisito da ação
-  C) deixaram de existir nesse fluxo. A ação C segue aberta para as rotas
-  públicas de células e doação.
+  C) deixaram de existir nesse fluxo. A ação C (rotas públicas de células e doação) fechou em 2026-11-05.
 - **Resíduo declarado:** quem tem a credencial `orbien_app` ainda obtém o hash
   de um e-mail que já conhece (o login precisa dele); deixa de conseguir listar
   a tabela. Diferença de tempo no login (e-mail inexistente retorna antes do
@@ -2672,10 +2677,110 @@ pré-autenticação é só por três funções `SECURITY DEFINER` de parâmetro 
 - **Deploy em duas releases** (expandir, depois contrair): funções + código
   primeiro; só depois da primeira estável o `017` derruba a policy. Rollback da
   segunda: reverter e redeployar (o `017` antigo recria a policy).
-- **Pendente de decisão:** `role_assignments` não tem índice só por
+- **Índice (decidido em 2026-11-05, ver "Ação C" abaixo):** `role_assignments` não tinha índice só por
   `user_account_id` (os existentes começam por `tenant_id`), e o `JwtStrategy`
   agora agrega papéis a cada requisição. Antes também lia a relação, então não
   é regressão; medir em produção antes de criar índice.
+
+**Ação C aplicada em 2026-11-05** (`034_rls_public_lookup.sql`,
+`035_rls_public_tables_close.sql`, `017` emendado, `apps/api/src/common/
+public-lookup.ts`, passo 7 do `bootstrap-db.sh`, `test/rls/public-lookup.spec.ts`
+e `test/integration/public-domains.spec.ts`). `orbien_app` sem `app.tenant_id`
+lê **0 linhas** de `tenants`, `congregations`, `branding_configs` e
+`tenant_plans`; a leitura pública é só por cinco funções `SECURITY DEFINER` de
+parâmetro exato (`search_path` fixo, `EXECUTE` só para `orbien_app`, uma linha
+no máximo, só as colunas usadas).
+
+Mapeamento (consumidores que rodam como `orbien_app` sem contexto, um a um):
+
+| Consumidor | Colunas realmente usadas | Destino |
+|---|---|---|
+| `PublicSmallGroupsService.resolveTenant` | tenants `id,name,is_active`; branding `app_name` | `public_tenant_by_slug(slug)` |
+| `PixService.resolveTenant` (PIX manual) | tenants `id,name`; branding `pix_key,app_name`; 1ª congregação | `public_donation_target(slug)` |
+| `PixService.resolvePublicDonationTenant` (categorias, doação, status) | idem + plano `plan,status` | `public_donation_target(slug)` |
+| `VisitorService.describeQr` / `registerViaQr` (autocadastro) | congregação `name`; branding cores e logos | `public_qr_church(token)` |
+| `DomainProvisioningService.resolveTenantSlugByHost` (middleware web) | branding `custom_domain(_status)`; tenants `slug` | `public_domain_resolve(host)` — só `verified` |
+| `AuthService.impersonate` | tenants `id`; plano; 1ª congregação | `auth_impersonate_target(tenant)` |
+| Callback OAuth da Cloudflare e `provisionViaCloudflare` | branding (leitura e escrita, tokens cifrados) | sem função: fixa `app.tenant_id` do `state` assinado (`inTenant`) |
+
+Fora do mapa por motivo: requisição autenticada roda como `app_user`
+(`tenant_isolation`, nunca passou por `orbien_app_auth`); crons usam
+`prisma.system`; o recibo do webhook Pix roda sob o `scope` que o banco
+devolve (`withScope`) — coberto por teste de RLS, porque o `.catch` do chamador
+engoliria uma leitura vazia; o login e o `JwtStrategy` já não tocavam essas
+tabelas desde a ação D.
+
+- **Consumidores ocultos achados no mapeamento:** (1) o **autocadastro por QR**
+  — `include: { congregation }` e `select` aninhado em `tenant.brandingConfig`
+  puxavam duas dessas tabelas por relação; (2) o **callback OAuth da
+  Cloudflare** — rota pública que **escreve** em `branding_configs` com os
+  tokens; não dá para resolver por função de leitura, então o tenant do `state`
+  assinado vira contexto. `orbien_app` herda `app_user`
+  (`GRANT ... WITH SET TRUE`, `INHERIT` padrão), logo as policies `TO app_user`
+  (`tenant_isolation`, `public_discovery_read` de 013) valem para ele assim que
+  há contexto: com `app.tenant_id` ele vê só o próprio tenant. O teste de
+  integração do callback achou um `update` que ficou fora do contexto na
+  primeira versão (`custom_domain_status`), que os mocks do unitário não
+  pegavam.
+- **Mudança de comportamento, declarada:** a congregação "primeira do tenant" ganhou
+  desempate determinístico (`ORDER BY created_at, id`); o `findFirst`/`take: 1`
+  anteriores não tinham ordem no `impersonate`. Em tenant com uma congregação
+  nada muda.
+- **Deploy em duas releases** (expandir, depois contrair), como a ação D:
+  1. **Release 1** — `034` + o código que usa as funções (commit "expandir").
+     Só adiciona funções; a policy continua no lugar. O `bootstrap-db.sh` roda
+     `034` e confere as cinco funções no passo 7.
+  2. **Release 2**, só com a 1 estável em produção — liga o `035` no bootstrap,
+     tira o bloco de quatro `CREATE POLICY` do `017` e inverte a checagem do
+     passo 7 (zero `orbien_app_auth` nas quatro, `tenant_isolation` presente)
+     (commit "contrair"). Derrubar a policy antes da release 1 deixa doação
+     pública, células, QR, domínio próprio e sessão de suporte sem leitura.
+  - **Rollback da 2:** reverter o commit "contrair" e redeployar — o `017` antigo
+    recria `orbien_app_auth ... USING (true)` nas quatro. As funções de `034`
+    ficam (inofensivas). Rollback da 1 depois da 2 não é seguro: o código
+    antigo precisa da policy.
+- **Resíduo declarado:** quem tem a credencial `orbien_app` ainda obtém, por
+  `public_donation_target`/`public_tenant_by_slug`, os dados públicos de um slug
+  que já conhece (é o que a página pública mostra, `pix_key` incluída); deixa de
+  listar tenants e de ler `branding_configs` (tokens OAuth cifrados da Cloudflare,
+  `terms_url`, domínio) e `tenant_plans`.
+
+**Índice de `role_assignments` por `user_account_id` — criado (2026-11-05).**
+Medido no Postgres local com 130 mil linhas sintéticas (2 000 tenants × 50
+contas, 1–2 papéis cada), `EXPLAIN (ANALYZE, BUFFERS)` da subconsulta de
+`auth_session_lookup` (único acesso a `role_assignments`; o resto é PK):
+
+| | Plano | Tempo | Buffers |
+|---|---|---|---|
+| Sem índice | `Seq Scan on role_assignments` (130 004 linhas descartadas) | 8,0 ms | 1 484 |
+| Com índice | `Index Scan using ..._user_account_id_idx` | 0,1 ms | 4 |
+
+Os índices existentes começam por `tenant_id`, que a consulta não filtra — o
+seq scan cresce linear com a tabela e roda a cada requisição autenticada.
+Migration datada `20261105120000_add_role_assignments_user_account_idx`
+(`@@index([user_account_id])` no schema), reversível por `DROP INDEX`. A medição
+rodou numa transação com rollback (zero resíduo).
+
+**Timing do login — fechado (2026-11-05).** `argon2.verify` agora roda **antes**
+de qualquer decisão, em `login` e `platformLogin`: sem conta, contra
+`DUMMY_PASSWORD_HASH` (argon2id com os parâmetros padrão de `argon2.hash`, os
+mesmos de conta real; o teste confere com `needsRehash`). Cobre também conta
+inativa, tenant inativo e conta sem `platform_support`, que antes retornavam sem
+verify e também diferiam no tempo — o mesmo ganho, sem custo extra. Mensagens e
+`rolesForToken()` intactos. Teste por spy (verify chamado uma vez, com o hash
+certo, em cada caminho; corpo do 401 idêntico nas quatro recusas), não por
+medição de tempo. O hash fixo nunca autentica: o resultado do verify é
+descartado quando não há conta.
+
+**Segue aberto em PEND-04:** `FORCE ROW LEVEL SECURITY` nas tabelas de
+plataforma (dono passa por cima — mesmo desenho do `fix_rls_enforcement`, e é o
+que permite o `seed.ts`); rate limit de login por IP depende de
+`X-Forwarded-For` confiável atrás do Render (infra, não código);
+`refresh_tokens` com `orbien_app_auth FOR ALL` (escrita viva). Os `TEMP DEBUG`
+de `auth.service.ts` (log do e-mail e do motivo da recusa) continuam lá — não
+são parte desta ação, mas **escrevem no log o motivo exato da recusa por
+e-mail**, o que desfaz no log a indistinguibilidade que o 401 mantém: vale
+decidir quando removê-los.
 
 ### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 
@@ -3062,7 +3167,8 @@ limite por telefone/nome, só com evidência de abuso.
 ### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
 
 Três dos quatro itens fecharam na branch `feat/qr-gestao-e-checkin-vigente`;
-resta só o teste em aparelho, que é humano.
+o resto (recorte do `POST`, gestão no app, impressão no painel) fechou em
+`feat/qr-app-e-recorte-checkin`. Resta só o teste em aparelho, que é humano.
 
 - **Teste em aparelho — aberto, pendência humana**: câmera, brilho e tela
   acesa só foram exercitados com mocks. Falta rodar numa build nativa (os
@@ -3081,8 +3187,23 @@ resta só o teste em aparelho, que é humano.
   desenhado com `qrcode-generator` (mesmo pacote do app), dependência nova
   de `orbien-web`. Teste: componente, `QrImage` e `e2e/qr-visitantes.spec.ts`
   (só `teste2-church`).
-  **Fica de fora:** gestão de QR no app (continuação natural — grupo/evento,
-  renomear, desativar) e impressão/PDF do QR.
+  **Fechou depois (`feat/qr-app-e-recorte-checkin`):** a gestão no app e a
+  impressão no painel — itens abaixo.
+- ~~**Gestão de QR de autocadastro no app**~~ — fechado. Na aba Mais ›
+  "QR de autocadastro" a lista mostra ativos e desativados; "Novo QR"
+  (`/autocadastro-novo`) cria culto, grupo (escolhe o grupo), evento ou outro,
+  com nome opcional, e abre o QR em tela cheia; tocar num QR abre
+  `/autocadastro-editar` (mostrar, renomear, desativar/reativar). Mesmas
+  rotas do painel (`GET/POST /admin/visitor/qr`, `PATCH :id`; grupos por
+  `GET /small-groups?limit=100`) e mesmos papéis (`tenant_admin`,
+  `admin_congregation`, `pastor`, `secretary`) — nada de rota nova. Só JS e
+  telas: **sem módulo nativo novo**, sai por OTA. Mudou o toque na lista: antes
+  abria o QR direto; agora abre o gerenciamento, onde "Mostrar QR" é o botão
+  principal (um toque a mais para projetar, em troca de renomear/desativar).
+- ~~**Impressão do QR**~~ — feita **só no painel web**: botão "Imprimir" no
+  diálogo "Mostrar QR" abre uma janela do navegador com nome, QR e endereço e
+  chama o diálogo de impressão. Sem PDF no servidor, sem dependência. **No app
+  fica de fora, de propósito** (exigiria módulo nativo de impressão).
 - ~~**QR de check-in não lê o código vigente**~~ — fechado. `GET
   /small-groups/meetings/:meetingId/checkin-token` devolve o token vigente
   sem gerar outro; 404 quando não há ou venceu. O app lê primeiro e só chama
@@ -3093,9 +3214,9 @@ resta só o teste em aparelho, que é humano.
   403 e não revela se há código. RLS inalterada (`meeting_checkin_tokens`
   por congregação, 018). O token só vai na resposta: não entra em log nem em
   `audit_logs` (o interceptor não grava corpo).
-  **Achado aberto:** o `POST` (gerar/renovar) continua sem o recorte de
-  liderança — um `cell_leader` de outro PG da mesma congregação consegue
-  renovar o QR alheio. Decidir se aplica a mesma regra do `GET`.
+  **Achado do `POST` — fechado:** gerar/renovar agora aplica o mesmo recorte
+  do `GET` (`assertCanAccessCheckinToken`): `cell_leader` de outro PG recebe
+  403 sem tocar no token; o líder do PG e a administração seguem podendo.
 - ~~**Marca da igreja na página pública**~~ — fechado **sem rota nova**.
   `GET /public/visitor/qr/:token` ganhou `brand` (`primary_color`,
   `accent_color`, `logo_url`, `logo_url_dark`). O tenant é resolvido pelo
@@ -3197,16 +3318,32 @@ erro offline; desligar o modo avião e ver a tela atualizar sozinha, uma vez;
 fade + 3 px entre telas no iOS e no Android; (4) com "Reduzir movimento" ligado,
 sem deslocamento; (5) gesto de voltar no iOS e botão voltar no Android.
 
-### PEND-24 · `e2e-prod` na `main` pode correr antes do deploy · aberto
+Acrescentado em 2026-11-05 (PROD-38, material em texto formatado): (6) no
+aparelho, abrir um material de texto formatado (título, lista, negrito, link) na
+seção "Materiais" de um PG e no material de um encontro — sem `**`/`##` cru; um
+material antigo em texto puro continua legível; o link https abre no navegador.
 
-Surgiu em 2026-11-04, ao fechar o desenho do e2e (PR da `PEND-19`). Em PR, o
-job `E2E (produção)` já deixa de fora os specs que o PR adiciona ou altera
-(`E2E_EXCLUDE_SPECS`); no **push para a `main`** a suíte inteira roda contra
-produção, e o job pode começar antes de a Vercel/Render terminarem o deploy do
-merge — um spec de tela nova falharia por ser prematuro. Hoje o remédio é
-reexecutar o job depois do deploy. Falta um jeito barato de o job esperar o
-deploy (por exemplo, consultar a versão publicada no web antes de rodar). Ver
-`docs/CI.md`, "E2E: só no GitHub".
+### ~~PEND-25 · `e2e-prod` na `main` pode correr antes do deploy~~ · fechado (aguarda 1ª execução no GitHub)
+
+Surgiu em 2026-11-04, ao fechar o desenho do e2e (PR da `PEND-19`); o número era
+`PEND-24`, duplicado com o do `password_reset_tokens` (que o mantém, por ser
+citado em outros lugares). Em PR, o job `E2E (produção)` já deixa de fora os
+specs que o PR adiciona ou altera (`E2E_EXCLUDE_SPECS`); no **push para a
+`main`** a suíte inteira roda contra produção, e o job podia começar antes de a
+Vercel/Render terminarem o deploy do merge.
+
+**Fechado em 2026-11-05:** passo "Esperar o deploy do merge" no `e2e-prod`, só
+em `push` (`scripts/esperar-deploy.mjs`). Poll de 20 s, até 15 min. Web: status
+`Vercel – orbien-web` no commit (a Vercel reporta ao GitHub, inclusive o build
+ignorado); API: `GET /api/health` passa a devolver `commit`
+(`RENDER_GIT_COMMIT`) — o Render não reporta ao GitHub — comparado com o alvo
+respeitando o `buildFilter` do `render.yaml`. Prazo estourado = exit 3 com
+`::error::` de deploy (distinto de falha de spec); deploy da Vercel falho =
+exit 4. Detalhe e como reexecutar: `docs/CI.md`, "E2E: só no GitHub".
+
+**Evidência:** `scripts/esperar-deploy.test.mjs` (9 testes, no portão),
+`app.controller.spec.ts`. **Falta:** confirmar na primeira execução real na
+`main` — o poll não fala com as plataformas fora do GitHub.
 
 ### PEND-21 · 500 intermitente na montagem de dado do E2E de produção · aberto
 

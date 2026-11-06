@@ -9,6 +9,9 @@ import { VisitorService } from './visitor.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificationService } from '../persons/classification.service';
 import { VisitsService } from '../persons/visits.service';
+import { findPublicQrChurch } from '../common/public-lookup';
+
+jest.mock('../common/public-lookup');
 
 const status = (fn: () => void): number | undefined => {
   try {
@@ -75,6 +78,7 @@ describe('VisitorRegisterLimiter (PEND-18)', () => {
 
 describe('VisitorService.registerViaQr — limites do autocadastro (PEND-18)', () => {
   function setup() {
+    (findPublicQrChurch as jest.Mock).mockResolvedValue({ church_name: 'I' });
     const qrToken = { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) };
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(undefined),

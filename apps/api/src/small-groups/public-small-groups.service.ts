@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { findPublicTenantBySlug } from '../common/public-lookup';
 import { ListPublicSmallGroupsQueryDto } from './dto/list-public-small-groups-query.dto';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto';
 
@@ -156,20 +157,11 @@ export class PublicSmallGroupsService {
   }
 
   private async resolveTenant(slug: string): Promise<{ id: string; name: string }> {
-    // `tenants` tem a policy `orbien_app_auth ... USING (true)`, então esta
-    // leitura funciona antes de existir qualquer contexto — é o mesmo passo
-    // que o PIX público faz para resolver a igreja pelo slug.
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { slug },
-      select: { id: true, name: true, is_active: true },
-    });
+    // `orbien_app` não lê `tenants`/`branding_configs` direto (PEND-04 C): antes
+    // de existir contexto, o slug só resolve por `public_tenant_by_slug` (034).
+    const tenant = await findPublicTenantBySlug(this.prisma.client, slug);
     if (!tenant || !tenant.is_active) throw new NotFoundException('Igreja não encontrada');
 
-    const branding = await this.prisma.client.brandingConfig.findUnique({
-      where: { tenant_id: tenant.id },
-      select: { app_name: true },
-    });
-
-    return { id: tenant.id, name: branding?.app_name ?? tenant.name };
+    return { id: tenant.tenant_id, name: tenant.app_name ?? tenant.name };
   }
 }
