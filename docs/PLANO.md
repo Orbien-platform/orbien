@@ -996,20 +996,16 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   idempotente se já aberta; 422 com culto cancelado ou turma desativada) e o
   botão "Reabrir" no `KidsSessionsModal`. Evidência: ciclo cancelar, reativar,
   reabrir em `test/integration/kids-sessions.spec.ts`, unitários e vitest do
-  modal. **Fora de escopo, segue aberto:** o passo "reabrir" no e2e — o
-  `e2e-prod` roda os specs contra o ambiente publicado, que só tem o botão e a
-  rota depois do deploy. Em 2026-11-04 não deu para confirmar o deploy da API:
-  a sessão remota não alcança `onrender.com` (403 do proxy de saída) e o GitHub
-  só registra deployments da Vercel, não do Render; a `main` tem a rota desde
-  `a2bc79f`. O passo ficou **fora** do `kids-modelo-sessoes.spec.ts` para não
-  quebrar o `e2e-prod`. Segunda tentativa em 2026-11-05: o mesmo 403 do proxy
-  (`CONNECT tunnel failed, response 403`, política de egress), e não há MCP do
-  Render na sessão — o da Vercel só enxerga o front. Continua sem confirmação.
-  Para liberar, de uma máquina que alcance o Render:
-  `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://orbien-api.onrender.com/api/kids/sessions/6f1c2b1e-3a4d-4c55-9e0a-1b2c3d4e5f60/reopen`.
-  **401** = rota publicada: acrescentar o passo (cancelar a instância, reativar o
-  culto, "Reabrir", sessão volta aberta) em `kids-modelo-sessoes.spec.ts`.
-  **404** = não deployada: esperar o deploy e repetir.
+  modal. **Passo e2e fechado em 2026-11-06:** `kids-modelo-sessoes.spec.ts` ganhou
+  o teste "cancela o culto, reativa e reabre a sessão kids" (`teste2-church`;
+  cria turma, celebração e sessão, e apaga o que usou). Ele esperava o deploy,
+  porque o `e2e-prod` roda os specs contra o ambiente publicado. Evidência de
+  que o deploy aconteceu: `GET https://orbien-api.onrender.com/api/health`
+  devolveu `commit` = `abdce8f` (a HEAD da main) e `POST /api/kids/sessions/<uuid>/reopen`
+  sem credencial respondeu **401** (rota publicada, não 404); no mesmo commit, o
+  status `Vercel – orbien-web` está `success` ("Deployment has completed") e o
+  botão "Reabrir" está na main desde o PR #196. Validado só com tipos, lint e
+  `playwright test --list`; o e2e roda no GitHub.
 - ~~**REV-4.3 · Travamento das 5 tentativas lê o contador do início da
   requisição.**~~ **Fechado sem mudar código: já estava correto.** A decisão de
   travar (`kids-checkin.service.ts`, `locked = attempts === KIDS_CHECKOUT_MAX_ATTEMPTS`)
@@ -1045,8 +1041,8 @@ a 4.9) no PR #196; o que ficou de fora está declarado em cada item:
   três specs em `apps/web/e2e/`, todos em `teste2-church`: `kids-turmas.spec.ts`
   (criar, editar, desativar, reativar), `kids-criancas.spec.ts` (cadastro com
   aceite do termo, edição, revogar e registrar o consentimento) e
-  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir e cancelar sessão;
-  o reabrir fica para depois do deploy, ver REV-4.2). A tela de autorizados fechou em 2026-11-04 com
+  `kids-modelo-sessoes.spec.ts` (modelo da celebração, abrir, cancelar e reabrir sessão,
+  ver REV-4.2). A tela de autorizados fechou em 2026-11-04 com
   `kids-autorizados.spec.ts` (`teste2-church`): adiciona um terceiro autorizado,
   recusa remover o único primário, edita o vínculo promovendo-o a primário
   (o anterior é rebaixado), remove o ex-primário e recusa remover o último.
