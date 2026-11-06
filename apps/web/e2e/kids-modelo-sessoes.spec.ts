@@ -44,9 +44,13 @@ async function montarCenario(api: Api, stamp: number) {
     recurrence: "none",
     scheduled_date: daysAhead(45),
   });
-  // A avulsa já nasce com a instância; se não, cria.
-  const detail = await api.call<{ instances?: Identified[] }>("GET", `/celebrations/${celebration.id}`);
-  let instanceId = detail.instances?.[0]?.id;
+  // A avulsa já nasce com a instância; se não, cria. Lê do mesmo endpoint que a
+  // ficha usa: ler de outro lugar e criar "por garantia" deixava duas instâncias.
+  const existing = await api.call<Identified[]>(
+    "GET",
+    `/celebrations/instances?celebration_id=${celebration.id}`,
+  );
+  let instanceId = existing[0]?.id;
   if (!instanceId) {
     const created = await api.call<Identified>("POST", "/celebrations/instances", {
       celebration_id: celebration.id,
