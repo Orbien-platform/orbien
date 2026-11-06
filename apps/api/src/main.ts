@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { proxyClientIp } from './common/middleware/proxy-client-ip';
 
 async function bootstrap() {
   // Tipado como NestExpressApplication: é o que expõe `.set()`, que por baixo
@@ -17,6 +18,10 @@ async function bootstrap() {
   // em vez de isolar por cliente. `1` diz ao Express para confiar só nesse
   // último salto, não na cadeia inteira.
   app.set('trust proxy', 1);
+
+  // IP do cliente que o servidor do web repassa (login, refresh, /api-proxy).
+  // Inerte sem `ORBIEN_PROXY_SECRET`; ver o cabeçalho do middleware.
+  app.use(proxyClientIp(process.env['ORBIEN_PROXY_SECRET']));
 
   app.useGlobalPipes(
     new ValidationPipe({

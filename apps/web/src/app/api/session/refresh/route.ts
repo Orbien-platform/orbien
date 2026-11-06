@@ -13,6 +13,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { clientIpHeaders } from "@/lib/client-ip";
 import {
   REFRESH_COOKIE,
   REFRESH_MAX_AGE,
@@ -25,7 +26,7 @@ import {
 export async function POST(request: NextRequest) {
   const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
 
-  const pair = refresh ? await rotate(refresh) : null;
+  const pair = refresh ? await rotate(refresh, clientIpHeaders(request)) : null;
   if (!pair) {
     const response = new NextResponse(null, { status: 401 });
     clearSessionCookies(response.cookies);

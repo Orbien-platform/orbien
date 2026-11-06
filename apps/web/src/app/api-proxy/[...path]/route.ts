@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { CLIENT_IP_HEADER, PROXY_AUTH_HEADER, clientIpHeaders } from "@/lib/client-ip";
 import { ACCESS_COOKIE, BACKEND_URL } from "@/lib/session";
 
 /**
@@ -29,6 +30,9 @@ const NAO_REPASSAR = new Set([
   "content-length",
   "cookie",
   "authorization",
+  // Quem decide o IP repassado é este handler, nunca o browser.
+  PROXY_AUTH_HEADER,
+  CLIENT_IP_HEADER,
 ]);
 
 async function encaminhar(request: NextRequest, path: string[]) {
@@ -39,6 +43,7 @@ async function encaminhar(request: NextRequest, path: string[]) {
     if (!NAO_REPASSAR.has(nome.toLowerCase())) headers.set(nome, valor);
   }
   if (token) headers.set("authorization", `Bearer ${token}`);
+  for (const [nome, valor] of Object.entries(clientIpHeaders(request))) headers.set(nome, valor);
 
   const temCorpo = !["GET", "HEAD"].includes(request.method);
 

@@ -15,13 +15,16 @@
  *   - `user_accounts` e `role_assignments`: `orbien_app` NÃO lê nem escreve por
  *     tabela. A única leitura é pelas funções SECURITY DEFINER de 033, por
  *     e-mail ou id exato.
- *   - `refresh_tokens`: escrita viva por `orbien_app` (login/refresh/logout).
+ *   - `refresh_tokens`: escrita viva por `orbien_app` (login/refresh/logout) NA
+ *     RELEASE 1; o código já escreve em contexto (`withRefreshContext`) e lê por
+ *     `auth_refresh_lookup` (036). A policy cai na release 2.
  *   - `audit_logs`: fora da policy; a escrita é por `audit_insert()`.
  */
 
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
-import { prisma, prismaAdmin, ensureRole, runAsTenantWithRole } from '../helpers/rls';
+import { prisma, prismaAdmin, ensureRole, runAsTenantWithRole, runAsUser } from '../helpers/rls';
+import { withRefreshContext } from '../../src/auth/auth-lookup';
 
 const ts = Date.now();
 
@@ -374,5 +377,107 @@ describe('audit_logs — fora da policy orbien_app_auth', () => {
         },
       }),
     ).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// refresh_tokens — leitura por hash e escrita em contexto (PEND-04, release 1)
+// ---------------------------------------------------------------------------
+describe('refresh_tokens — auth_refresh_lookup e withRefreshContext (036)', () => {
+  let userPlatId: string;
+  const hashA = `rt-hash-a-${ts}`;
+  const hashB = `rt-hash-b-${ts}`;
+  const exp = new Date(Date.now() + 3600_000);
+
+  beforeAll(async () => {
+    await ensureRole(prismaAdmin, 'platform_support', 'Platform Support');
+    const plat = await prismaAdmin.userAccount.create({
+      data: {
+        tenant_id: tenantAId,
+        congregation_id: congregationAId,
+        email: `plat-${ts}@authtbl.test`,
+        password_hash: 'hash-p',
+      },
+    });
+    userPlatId = plat.id;
+    await prismaAdmin.roleAssignment.create({
+      data: {
+        tenant_id: tenantAId,
+        congregation_id: congregationAId,
+        user_account_id: userPlatId,
+        role_code: 'platform_support',
+      },
+    });
+    await prismaAdmin.refreshToken.createMany({
+      data: [
+        { user_account_id: userAId, token_hash: hashA, expires_at: exp },
+        { user_account_id: userBId, token_hash: hashB, expires_at: exp },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await prismaAdmin.refreshToken.deleteMany({
+      where: { user_account_id: { in: [userAId, userBId, userPlatId] } },
+    });
+    await prismaAdmin.roleAssignment.deleteMany({ where: { user_account_id: userPlatId } });
+    await prismaAdmin.userAccount.deleteMany({ where: { id: userPlatId } });
+  });
+
+  it('a função devolve uma linha por hash exato, e sem o hash', async () => {
+    const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT * FROM auth_refresh_lookup(${hashA})`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]['user_account_id']).toBe(userAId);
+    expect(Object.keys(rows[0]).sort()).toEqual(['expires_at', 'id', 'revoked_at', 'user_account_id']);
+  });
+
+  it('hash desconhecido e padrão não casam: zero linhas', async () => {
+    expect(await prisma.$queryRaw`SELECT * FROM auth_refresh_lookup(${'rt-hash-%'})`).toEqual([]);
+    expect(await prisma.$queryRaw`SELECT * FROM auth_refresh_lookup(${'nao-existe'})`).toEqual([]);
+  });
+
+  it('app_user (requisição autenticada) não executa a função', async () => {
+    await expect(
+      runAsUser(
+        tenantAId,
+        congregationAId,
+        userAId,
+        (tx) => tx.$queryRaw`SELECT * FROM auth_refresh_lookup(${hashA})`,
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  const comContexto = <T>(userId: string, tenantId: string, fn: (tx: Prisma.TransactionClient) => Promise<T>) =>
+    withRefreshContext(prisma, { userId, tenantId }, fn);
+
+  it('no contexto de A: vê só os tokens de A; B é invisível, não atualizável e não gravável', async () => {
+    const vistos = await comContexto(userAId, tenantAId, (tx) =>
+      tx.refreshToken.findMany({ where: { token_hash: { in: [hashA, hashB] } } }),
+    );
+    expect(vistos.map((r) => r.token_hash)).toEqual([hashA]);
+
+    const upd = await comContexto(userAId, tenantAId, (tx) =>
+      tx.refreshToken.updateMany({ where: { token_hash: hashB }, data: { revoked_at: new Date() } }),
+    );
+    expect(upd.count).toBe(0);
+
+    await expect(
+      comContexto(userAId, tenantAId, (tx) =>
+        tx.refreshToken.create({
+          data: { user_account_id: userBId, token_hash: `rt-forja-${ts}`, expires_at: exp },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await prismaAdmin.refreshToken.findFirst({ where: { token_hash: hashB } })).toMatchObject({
+      revoked_at: null,
+    });
+  });
+
+  it('conta de plataforma COM o tenant fixado não abre os tokens dos outros tenants', async () => {
+    const vistos = await comContexto(userPlatId, tenantAId, (tx) =>
+      tx.refreshToken.findMany({ where: { token_hash: { in: [hashA, hashB] } } }),
+    );
+    expect(vistos).toEqual([]);
   });
 });

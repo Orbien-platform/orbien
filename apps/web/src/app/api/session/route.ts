@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { decodeJwtPayload } from "@/lib/auth";
+import { clientIpHeaders } from "@/lib/client-ip";
 import {
   ACCESS_COOKIE,
   BACKEND_URL,
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
   const upstream = await fetch(`${BACKEND_URL}/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...clientIpHeaders(request) },
     body: JSON.stringify(body),
   });
 
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
   // member" pra liberar.
   const hasNonMemberRole = payload.roles.some((role) => role !== "member");
   if (!hasNonMemberRole) {
-    await revokeRefreshToken(pair.refresh_token);
+    await revokeRefreshToken(pair.refresh_token, clientIpHeaders(request));
     return NextResponse.json(
       {
         code: "WEB_ACCESS_DENIED",
@@ -122,7 +123,7 @@ export async function DELETE(request: NextRequest) {
   const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
 
   if (refresh) {
-    await revokeRefreshToken(refresh);
+    await revokeRefreshToken(refresh, clientIpHeaders(request));
   }
 
   const response = new NextResponse(null, { status: 204 });

@@ -84,9 +84,12 @@
 --
 -- Só `refresh_tokens` segue FOR ALL: escrita viva, ver abaixo.
 -- `refresh_tokens` é a única das oito onde a ESCRITA por `orbien_app` sem
--- contexto tem chamador: `auth.service.ts` cria e revoga token no login, no
--- refresh e no logout (`:254`, `:283`, `:293`, `:327`, `:478`), tudo pelo
--- client base. Apertar aqui derruba a autenticação inteira.
+-- contexto TEVE chamador: `auth.service.ts` criava e revogava token no login, no
+-- refresh e no logout pelo client base. Desde a release 1 de PEND-04
+-- (`036_rls_refresh_lookup.sql`) o código lê por `auth_refresh_lookup` e escreve
+-- em contexto `app_user`; a policy fica aqui até a release 2 (`037`, commit à
+-- parte) derrubá-la. Apertar antes da release 1 estar estável derruba a
+-- autenticação das instâncias antigas.
 DROP POLICY IF EXISTS orbien_app_auth ON refresh_tokens;
 CREATE POLICY orbien_app_auth ON refresh_tokens
   AS PERMISSIVE FOR ALL TO orbien_app

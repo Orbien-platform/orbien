@@ -22,7 +22,12 @@ import { LoginRateLimitService, LOGIN_POLICY } from './login-rate-limit.service'
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { findLoginByEmail, findSessionByUserId } from './auth-lookup';
+import {
+  findLoginByEmail,
+  findRefreshTokenByHash,
+  findSessionByUserId,
+  withRefreshContext,
+} from './auth-lookup';
 import { findImpersonateTarget } from '../common/public-lookup';
 
 // PEND-04 D: `orbien_app` não lê `user_accounts` direto; login, refresh e
@@ -73,11 +78,11 @@ function mockStored(
   stored: (Record<string, unknown> & { userAccount?: LegacyAccount }) | null,
 ): void {
   if (!stored) {
-    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(null);
+    (findRefreshTokenByHash as jest.Mock).mockResolvedValue(null);
     return;
   }
   const { userAccount, ...token } = stored;
-  (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(token);
+  (findRefreshTokenByHash as jest.Mock).mockResolvedValue(token);
   (findSessionByUserId as jest.Mock).mockResolvedValue(userAccount ? adapt(userAccount) : null);
 }
 
@@ -85,6 +90,14 @@ beforeEach(() => {
   (argon2.verify as jest.Mock).mockClear();
   (findLoginByEmail as jest.Mock).mockReset();
   (findSessionByUserId as jest.Mock).mockReset();
+  (findRefreshTokenByHash as jest.Mock).mockReset();
+  // `withRefreshContext` (SET LOCAL ROLE app_user + app.user_id/tenant_id) é
+  // coberto no banco real; aqui só importa quem chama e com qual contexto, e o
+  // `tx` é o próprio mock do Prisma.
+  (withRefreshContext as jest.Mock).mockReset();
+  (withRefreshContext as jest.Mock).mockImplementation(
+    (client: unknown, _ctx: unknown, fn: (tx: unknown) => unknown) => fn(client),
+  );
 });
 
 const jwtService = { sign: jest.fn().mockReturnValue('signed-token') } as unknown as JwtService;
@@ -415,9 +428,19 @@ describe('AuthService.refresh', () => {
       user_account_id: 'u1',
       revoked_at: new Date('2020-01-01'),
       expires_at: new Date('2999-01-01'),
+      userAccount: {
+        id: 'u1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        is_active: true,
+        roleAssignments: [],
+        tenant: { tenantPlan: null, is_active: true },
+      },
     });
 
     await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
+    // A escrita roda no contexto do DONO do token (`own_tokens`), com o tenant.
+    expect(withRefreshContext).toHaveBeenCalledWith(prisma, { userId: 'u1', tenantId: 't1' }, expect.any(Function));
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
       where: { user_account_id: 'u1', revoked_at: null },
       data: { revoked_at: expect.any(Date) },
@@ -431,9 +454,20 @@ describe('AuthService.refresh', () => {
       user_account_id: 'u1',
       revoked_at: null,
       expires_at: new Date('2020-01-01'),
+      userAccount: {
+        id: 'u1',
+        tenant_id: 't1',
+        congregation_id: 'c1',
+        is_active: true,
+        roleAssignments: [],
+        tenant: { tenantPlan: null, is_active: true },
+      },
     });
 
-    await expect(service.refresh({ refresh_token: 'rt' })).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refresh({ refresh_token: 'rt' })).rejects.toMatchObject({
+      message: 'Sessão expirada',
+    });
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
   });
 
   it('conta desativada não rotaciona, e a família inteira é revogada', async () => {
@@ -592,12 +626,29 @@ describe('AuthService.refresh', () => {
 describe('AuthService.logout', () => {
   it('revoga o refresh token pelo hash', async () => {
     const { service, prisma } = serviceWith({});
+    mockStored(prisma, {
+      id: 'rtk-1',
+      user_account_id: 'u1',
+      revoked_at: null,
+      expires_at: new Date('2999-01-01'),
+      userAccount: { id: 'u1', tenant_id: 't1', congregation_id: 'c1', is_active: true },
+    });
 
     await expect(service.logout('rt')).resolves.toEqual({ message: 'Sessão encerrada.' });
+    expect(withRefreshContext).toHaveBeenCalledWith(prisma, { userId: 'u1', tenantId: 't1' }, expect.any(Function));
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
       where: { token_hash: expect.any(String), revoked_at: null },
       data: { revoked_at: expect.any(Date) },
     });
+  });
+
+  it('hash desconhecido: idempotente, não escreve nada', async () => {
+    const { service, prisma } = serviceWith({});
+    mockStored(prisma, null);
+
+    await expect(service.logout('rt')).resolves.toEqual({ message: 'Sessão encerrada.' });
+    expect(withRefreshContext).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
   });
 });
 

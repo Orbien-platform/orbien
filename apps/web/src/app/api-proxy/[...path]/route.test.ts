@@ -57,6 +57,44 @@ describe("api-proxy [...path]", () => {
     expect(init.redirect).toBe("manual");
   });
 
+  it("descarta x-orbien-* vindos do browser e manda o IP que a borda viu, com o segredo", async () => {
+    vi.stubEnv("ORBIEN_PROXY_SECRET", "s3cret");
+    const fetchMock = vi.fn().mockResolvedValue(upstreamResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api-proxy/persons", {
+      method: "GET",
+      headers: {
+        "x-real-ip": "203.0.113.9",
+        "x-orbien-client-ip": "1.2.3.4",
+        "x-orbien-proxy-auth": "forjado",
+      },
+    });
+    await GET(request, ctx(["persons"]));
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get("x-orbien-client-ip")).toBe("203.0.113.9");
+    expect(headers.get("x-orbien-proxy-auth")).toBe("s3cret");
+    vi.unstubAllEnvs();
+  });
+
+  it("sem ORBIEN_PROXY_SECRET, os x-orbien-* do browser não passam", async () => {
+    vi.stubEnv("ORBIEN_PROXY_SECRET", "");
+    const fetchMock = vi.fn().mockResolvedValue(upstreamResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api-proxy/persons", {
+      method: "GET",
+      headers: { "x-orbien-client-ip": "1.2.3.4", "x-orbien-proxy-auth": "forjado" },
+    });
+    await GET(request, ctx(["persons"]));
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.has("x-orbien-client-ip")).toBe(false);
+    expect(headers.has("x-orbien-proxy-auth")).toBe(false);
+    vi.unstubAllEnvs();
+  });
+
   it("não anexa Authorization quando não há cookie de acesso", async () => {
     const fetchMock = vi.fn().mockResolvedValue(upstreamResponse());
     vi.stubGlobal("fetch", fetchMock);

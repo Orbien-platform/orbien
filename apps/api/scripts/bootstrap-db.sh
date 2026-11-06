@@ -311,6 +311,13 @@ fi
 if [ -f prisma/migrations/034_rls_public_lookup.sql ]; then
   run_sql_file prisma/migrations/034_rls_public_lookup.sql
 fi
+# PEND-04 (refresh_tokens, release 1 — expandir): auth_refresh_lookup(hash),
+# leitura do refresh token por hash exato. Só adiciona a função; a policy
+# `orbien_app_auth` de `refresh_tokens` continua no 017. Quem a derruba é o 037,
+# release à parte (commit/PR posterior), que NÃO existe nesta release.
+if [ -f prisma/migrations/036_rls_refresh_lookup.sql ]; then
+  run_sql_file prisma/migrations/036_rls_refresh_lookup.sql
+fi
 # PEND-04 (A+B+D): aperta a policy `orbien_app_auth` que a migration datada
 # 20260608175621 criou com USING(true)/WITH CHECK(true) em oito tabelas. Tira
 # `audit_logs` (a auditoria escreve por audit_insert(), SECURITY DEFINER) e,
@@ -842,6 +849,25 @@ BEGIN
   RAISE NOTICE 'funcoes publicas conformes: %', n;
   IF n <> 5 THEN
     RAISE EXCEPTION 'esperava 5 funcoes publicas (public_tenant_by_slug, public_donation_target, public_qr_church, public_domain_resolve, auth_impersonate_target) SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 034_rls_public_lookup.sql rodou?', n;
+  END IF;
+
+  -- 036 (PEND-04, refresh_tokens, release 1): a função de leitura por hash.
+  -- Mesmos quatro vícios das checagens de 033/034. Esta checagem fica também
+  -- depois da release 2: a função é o único caminho sem contexto.
+  SELECT count(*) INTO n
+    FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public'
+   WHERE p.proname = 'auth_refresh_lookup'
+     AND p.prosecdef
+     AND p.proconfig IS NOT NULL
+     AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+     AND has_function_privilege('orbien_app', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('app_user', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('public', p.oid, 'EXECUTE')
+     AND pg_get_userbyid(p.proowner) <> 'orbien_app';
+  RAISE NOTICE 'auth_refresh_lookup conforme: %', n;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperava auth_refresh_lookup SECURITY DEFINER com search_path fixo, EXECUTE so para orbien_app e dono diferente de orbien_app, encontrei % — 036_rls_refresh_lookup.sql rodou?', n;
   END IF;
 
   -- 017 (PEND-04, ações A e B): a policy `orbien_app_auth` nasceu
