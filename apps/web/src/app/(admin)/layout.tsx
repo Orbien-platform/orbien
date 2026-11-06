@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { SupportSessionBanner } from "@/components/layout/SupportSessionBanner";
 import { ProfileGapsGate } from "@/components/layout/ProfileGapsGate";
+import { PageTransition } from "@/components/layout/PageTransition";
 import { ChurchIdentityProvider } from "@/contexts/ChurchIdentityContext";
 
 export default function AdminLayout({
@@ -29,7 +30,9 @@ export default function AdminLayout({
               <i />
               <i />
             </div>
-            <div className="relative p-6">{children}</div>
+            <div className="relative p-6">
+              <PageTransition>{children}</PageTransition>
+            </div>
           </main>
         </div>
       </div>

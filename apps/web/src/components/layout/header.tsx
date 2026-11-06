@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronRight, Menu, Moon, Sun } from "lucide-react";
+import axios from "axios";
+import { ChevronRight, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,10 @@ import { roleLabel } from "@/lib/roles";
 import { findNavEntry, navLabel } from "@/lib/navigation";
 import { useChurchIdentity } from "@/contexts/ChurchIdentityContext";
 import { Sidebar } from "./sidebar";
+import { CommandPalette } from "./CommandPalette";
+
+/** Andamento do "Trocar senha" no menu da conta. */
+type PasswordLinkState = "idle" | "sending" | "sent" | "error";
 
 /** Telas fora do menu lateral — hoje só o perfil, que mora no menu da conta. */
 const OFF_MENU_LABELS: Record<string, string> = {
@@ -38,6 +44,24 @@ export function Header() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
+  const [passwordLink, setPasswordLink] = useState<PasswordLinkState>("idle");
+
+  // Não há `change-password` na API: "Trocar senha" pede o mesmo e-mail de
+  // redefinição do "Esqueci a senha", para o endereço da própria conta. A API
+  // responde 200 de qualquer jeito (não revela se o e-mail existe).
+  // O item só é desenhado com e-mail e fica desabilitado enquanto envia, então
+  // a função não precisa se proteger de nenhum dos dois.
+  async function sendPasswordLink(email: string) {
+    setPasswordLink("sending");
+    try {
+      await axios.post("/api-proxy/auth/forgot-password", {
+        email: email.trim().toLowerCase(),
+      });
+      setPasswordLink("sent");
+    } catch {
+      setPasswordLink("error");
+    }
+  }
 
   const { groupTerm } = useChurchIdentity();
   const entry = findNavEntry(pathname);
@@ -89,6 +113,7 @@ export function Header() {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
+        <CommandPalette />
         <Button
           variant="ghost"
           size="icon"
@@ -99,11 +124,11 @@ export function Header() {
           <Moon size={20} strokeWidth={1.5} className="hidden dark:block" />
         </Button>
 
-        <Button variant="ghost" size="icon" aria-label="Notificações">
-          <Bell size={20} strokeWidth={1.5} />
-        </Button>
-
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (!open) setPasswordLink("idle");
+          }}
+        >
           <DropdownMenuTrigger
             render={
               <Button
@@ -119,13 +144,16 @@ export function Header() {
               </AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuContent align="end" className="w-64">
             {user && (
               <div className="px-2 py-1.5">
                 <p className="truncate text-sm font-medium text-ink dark:text-white">
                   {user.name}
                 </p>
-                <p className="truncate text-xs text-stone">{user.roles[0] ? roleLabel(user.roles[0]) : ""}</p>
+                <p className="truncate text-xs text-stone">{user.email}</p>
+                <p className="truncate text-xs text-muted-text">
+                  {user.roles[0] ? roleLabel(user.roles[0]) : ""}
+                </p>
               </div>
             )}
             <DropdownMenuSeparator />
@@ -135,6 +163,33 @@ export function Header() {
             <DropdownMenuItem onClick={() => router.push("/configuracoes")}>
               Configurações
             </DropdownMenuItem>
+            {user?.email && (
+              <DropdownMenuItem
+                closeOnClick={false}
+                disabled={passwordLink === "sending"}
+                onClick={() => sendPasswordLink(user.email)}
+              >
+                Trocar senha
+              </DropdownMenuItem>
+            )}
+            {passwordLink !== "idle" && (
+              <p
+                role="status"
+                className={
+                  passwordLink === "error"
+                    ? "px-2 pb-1.5 text-xs text-crimson"
+                    : "px-2 pb-1.5 text-xs text-stone"
+                }
+              >
+                {passwordLink === "sending" && "Enviando o link…"}
+                {passwordLink === "sent" && `Enviamos o link para ${user?.email}.`}
+                {passwordLink === "error" && "Não foi possível enviar o link. Tente de novo."}
+              </p>
+            )}
+            <DropdownMenuSeparator />
+            <p className="px-2 py-1.5 text-xs text-muted-text">
+              Escalas e perfil pessoal ficam no app.
+            </p>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               data-variant="destructive"

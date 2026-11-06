@@ -51,7 +51,7 @@ export const ROUTE_AREAS: Record<string, string> = {
   "/auditoria": "audit",
 };
 
-interface AccessSubject {
+export interface AccessSubject {
   /**
    * As áreas que a API disse que esta sessão lê, ou `null` quando não deu para
    * perguntar (API fora, token vencido antes da primeira renovação).

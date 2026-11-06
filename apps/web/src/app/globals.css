@@ -182,6 +182,10 @@
   --elev-lg: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
 
   --input: var(--border-strong);
+
+  /* Card da Órbita: gradiente quase imperceptível, de cima para baixo. */
+  --card-from: #0c1121;
+  --card-to: #090c18;
 }
 
 @layer base {
@@ -204,6 +208,32 @@
   line-height: 1.15;
   letter-spacing: -0.025em;
   color: var(--fg);
+}
+
+/* Card da Órbita: raio 14px e borda; no escuro, gradiente #0C1121 → #090C18.
+   No claro vale a superfície lisa. */
+@utility card-orbita {
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface-base);
+}
+.dark .card-orbita {
+  background: linear-gradient(180deg, var(--card-from), var(--card-to));
+}
+
+/* Entrada de tela: fade + translateY(3px), 180 ms (`PageTransition`). */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-enter {
+  animation: page-enter 180ms ease-out both;
 }
 
 /* Rótulo de seção e cabeçalho de tabela: Geist Mono, caixa alta espaçada. */
