@@ -26,14 +26,13 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PlanStatus, PlanType, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { createHash } from 'crypto';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { hashToken } from '../../src/common/crypto/token-hash';
 import { AuthTokensRetentionService } from '../../src/auth/auth-tokens-retention.service';
 import { ensureRole } from '../helpers/rls';
 
 const SENHA = 'senha-de-teste-refresh';
-const sha = (t: string) => createHash('sha256').update(t).digest('hex');
 
 const admin = new PrismaClient({
   datasources: { db: { url: process.env['DIRECT_URL']! } },
@@ -134,7 +133,7 @@ describe.each([
 
     const rows = await linhas(id);
     expect(rows).toHaveLength(2);
-    expect(rows[0].token_hash).toBe(sha(p1.refresh_token));
+    expect(rows[0].token_hash).toBe(hashToken(p1.refresh_token));
     expect(rows[0].revoked_at).not.toBeNull();
     expect(rows[0].replaced_by_id).toBe(rows[1].id);
     expect(rows[1].revoked_at).toBeNull();

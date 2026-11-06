@@ -1,12 +1,12 @@
 /**
  * E2E do modelo de turmas e das sessões kids de um culto (REV-4.7): definir o
- * modelo na celebração, abrir a turma no culto e cancelar a sessão.
+ * modelo na celebração, abrir a turma no culto e cancelar a sessão. O segundo
+ * teste cobre o ciclo da REV-4.2: cancelar a instância fecha as sessões,
+ * reativar o culto não as reabre, e o "Reabrir" da sessão a traz de volta.
  *
- * O "Reabrir" (REV-4.2) não está aqui de propósito: o job `e2e-prod` roda esta
- * suíte contra o ambiente publicado, que só ganha o botão e a rota depois do
- * deploy do PR. O reabrir está coberto por integração
- * (`kids-sessions.spec.ts`) e vitest (`KidsSessionsModal.test.tsx`); o passo
- * e2e volta num PR depois do deploy.
+ * O "Reabrir" ficou de fora enquanto a rota e o botão não estavam no ambiente
+ * publicado (o job `e2e-prod` roda esta suíte contra ele); já estão, desde o
+ * deploy de `abdce8f`.
  *
  * Roda em `teste2-church` (Premium — Kids é Premium): `E2E_EMAIL` aponta a
  * conta `fvargaspf+teste2@gmail.com`, nunca `doca-church`. Celebração e turma
@@ -44,15 +44,23 @@ async function montarCenario(api: Api, stamp: number) {
     recurrence: "none",
     scheduled_date: daysAhead(45),
   });
-  // A avulsa já nasce com a instância; se não, cria.
-  const detail = await api.call<{ instances?: Identified[] }>("GET", `/celebrations/${celebration.id}`);
-  if (!detail.instances || detail.instances.length === 0) {
-    await api.call("POST", "/celebrations/instances", {
+  // A avulsa já nasce com a instância; se não, cria. Lê do mesmo endpoint que a
+  // ficha usa: ler de outro lugar e criar "por garantia" deixava duas instâncias.
+  const existing = await api.call<Identified[]>(
+    "GET",
+    `/celebrations/instances?celebration_id=${celebration.id}`,
+  );
+  let instanceId = existing[0]?.id;
+  if (!instanceId) {
+    const created = await api.call<Identified>("POST", "/celebrations/instances", {
       celebration_id: celebration.id,
       scheduled_date: daysAhead(45),
     });
+    instanceId = created.id;
   }
   return {
+    roomId: room.id,
+    instanceId,
     roomName,
     celebrationName,
     cleanup: async () => {
@@ -113,6 +121,50 @@ test.describe("modelo e sessões do Kids no culto", () => {
         await expect(sessoes.getByText("Cancelada")).toBeVisible();
         await expect(sessoes.getByRole("button", { name: `Cancelar a sessão ${cenario.roomName}` })).toHaveCount(0);
         await shot(page, "kids-modelo-02-sessao-cancelada");
+      });
+    } finally {
+      await cenario.cleanup();
+    }
+  });
+
+  test("cancela o culto, reativa e reabre a sessão kids", async ({ page, api }) => {
+    const stamp = Date.now();
+    const cenario = await montarCenario(api, stamp);
+    try {
+      await api.call("POST", `/celebrations/instances/${cenario.instanceId}/kids-sessions`, {
+        room_ids: [cenario.roomId],
+      });
+      await abrirCelebracao(page, cenario.celebrationName);
+
+      const botaoCulto = (acao: "Cancelar" | "Reabrir") =>
+        page.getByRole("button", { name: new RegExp(`^${acao} o culto de`) });
+      const botaoKids = page.getByRole("button", { name: /^Turmas kids do culto de/ });
+      const sessoes = page.getByRole("dialog", { name: "Turmas kids do culto" });
+
+      await test.step("cancela o culto: o botão das turmas kids some", async () => {
+        await botaoCulto("Cancelar").first().click();
+        await page.getByRole("button", { name: "Cancelar culto", exact: true }).click();
+        await expect(botaoCulto("Reabrir").first()).toBeVisible();
+        await expect(botaoKids).toHaveCount(0);
+      });
+
+      await test.step("reativa o culto: a sessão segue cancelada", async () => {
+        await botaoCulto("Reabrir").first().click();
+        await expect(botaoCulto("Cancelar").first()).toBeVisible();
+        // O clique logo após a troca de estado pode ser engolido: retenta até o modal abrir.
+        await expect(async () => {
+          await botaoKids.first().click();
+          await expect(sessoes).toBeVisible({ timeout: 3_000 });
+        }).toPass({ timeout: 60_000 });
+        await expect(sessoes.getByText("Cancelada")).toBeVisible();
+        await shot(page, "kids-modelo-03-sessao-cancelada-pelo-culto");
+      });
+
+      await test.step("reabre a sessão", async () => {
+        await sessoes.getByRole("button", { name: `Reabrir a sessão ${cenario.roomName}` }).click();
+        await expect(sessoes.getByRole("button", { name: `Cancelar a sessão ${cenario.roomName}` })).toBeVisible();
+        await expect(sessoes.getByText("Cancelada")).toHaveCount(0);
+        await shot(page, "kids-modelo-04-sessao-reaberta");
       });
     } finally {
       await cenario.cleanup();

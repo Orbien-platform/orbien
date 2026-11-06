@@ -4,12 +4,12 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
-  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
+import { hashToken } from '../common/crypto/token-hash';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   findLoginByEmail,
@@ -107,8 +107,6 @@ function rolesForToken(
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -149,23 +147,14 @@ export class AuthService {
     const valid = await argon2.verify(user?.password_hash ?? DUMMY_PASSWORD_HASH, dto.password);
 
     if (!user || !user.is_active || !user.tenant_is_active) {
-      // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
-      this.logger.warn(
-        `login falhou [${dto.email}]: ${!user ? 'conta não encontrada' : !user.is_active ? 'conta inativa' : 'tenant inativo'}`,
-      );
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
 
     if (!valid) {
-      // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
-      this.logger.warn(`login falhou [${dto.email}]: senha não confere`);
       await this.rateLimit.register(limitKey, LOGIN_POLICY);
       throw invalid;
     }
-
-    // TEMP DEBUG (remover): diagnóstico de login falhando só no mobile.
-    this.logger.warn(`login ok [${dto.email}]`);
 
     // Credencial certa zera a janela: quem sabe a senha nunca esbarra no limite.
     await this.rateLimit.clear(limitKey);
@@ -532,7 +521,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
 
     await this.prisma.system.passwordResetToken.create({
-      data: { user_id: user.id, token: rawToken, expires_at: expiresAt },
+      data: { user_id: user.id, token_hash: hashToken(rawToken), expires_at: expiresAt },
     });
 
     const baseUrl = scope === 'platform' ? adminUrl() : frontendUrl();
@@ -547,7 +536,7 @@ export class AuthService {
 
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
     const resetToken = await this.prisma.system.passwordResetToken.findUnique({
-      where: { token: dto.token },
+      where: { token_hash: hashToken(dto.token) },
     });
 
     if (!resetToken || resetToken.used_at !== null || resetToken.expires_at < new Date()) {
@@ -604,10 +593,9 @@ export class AuthService {
     );
   }
 
-  // SHA-256 for deterministic O(1) DB lookup.
-  // Argon2 is not viable here: its random salt makes lookup impossible without a full-scan + verify.
+  // SHA-256 (helper compartilhado com o token de redefinição): ver common/crypto/token-hash.ts.
   private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
+    return hashToken(token);
   }
 
   private refreshExpiry(): Date {

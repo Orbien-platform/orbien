@@ -17,6 +17,8 @@ jest.mock("../../lib/notifications/onesignal-client", () => ({
   syncNotificationPreferenceTags: (...args: unknown[]) => mockSyncNotificationPreferenceTags(...args),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
+import { NetworkError } from "../../lib/api/errors";
 import NotificacoesScreen from "../../app/notificacoes";
 
 const ALL_ON = { avisos: true, oracao: true, eventos: true, devocional: true, biblia: true, kids: true };
@@ -280,5 +282,96 @@ describe("NotificacoesScreen", () => {
     await waitFor(() => expect(mockSyncNotificationPreferenceTags).toHaveBeenCalledWith(ALL_ON));
     expect(screen.getByTestId("switch-oracao").props.value).toBe(true);
     expect(screen.queryByText(/Não foi possível salvar/)).toBeNull();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    async function reconnect() {
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+    }
+
+    it("cai, volta e faz uma única releitura", async () => {
+      mockGetNotificationPreferences.mockRejectedValueOnce(new NetworkError());
+      mockGetNotificationPreferences.mockResolvedValue({ ...ALL_ON, kids: false });
+      await act(async () => {
+        render(<NotificacoesScreen />);
+      });
+      expect(screen.getByTestId("load-error")).toBeTruthy();
+
+      await reconnect();
+
+      expect(mockGetNotificationPreferences).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("load-error")).toBeNull();
+      expect(screen.getByTestId("switch-kids").props.value).toBe(false);
+      expect(mockUpdateNotificationPreferences).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetNotificationPreferences.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<NotificacoesScreen />);
+      });
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+      expect(mockGetNotificationPreferences).toHaveBeenCalledTimes(1);
+    });
+
+    it("erro de servidor não assina a rede nem recarrega", async () => {
+      mockGetNotificationPreferences.mockRejectedValue(new Error("500"));
+      await act(async () => {
+        render(<NotificacoesScreen />);
+      });
+      await reconnect();
+      expect(mockGetNotificationPreferences).toHaveBeenCalledTimes(1);
+    });
+
+    it("com chave já mexida, a volta NÃO sobrescreve: mostra o aviso e só relê ao toque", async () => {
+      mockGetNotificationPreferences.mockRejectedValueOnce(new NetworkError());
+      mockGetNotificationPreferences.mockResolvedValue(ALL_ON);
+      mockUpdateNotificationPreferences.mockResolvedValue({ ...ALL_ON, avisos: false });
+      await act(async () => {
+        render(<NotificacoesScreen />);
+      });
+      await act(async () => {
+        fireEvent(screen.getByTestId("switch-avisos"), "valueChange", false);
+      });
+      expect(screen.getByTestId("switch-avisos").props.value).toBe(false);
+
+      await reconnect();
+
+      expect(mockGetNotificationPreferences).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("switch-avisos").props.value).toBe(false);
+      expect(screen.getByTestId("reconnect-notice")).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("reconnect-notice"));
+      });
+      expect(mockGetNotificationPreferences).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("reconnect-notice")).toBeNull();
+      expect(screen.queryByTestId("load-error")).toBeNull();
+    });
   });
 });

@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import type { Dispatch, SetStateAction } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/hooks/useAuth";
+import axios from "axios";
 import { Header } from "./header";
 
 const push = vi.fn();
@@ -169,5 +170,46 @@ describe("Header", () => {
     render(<Header />);
     await userEvent.click(screen.getByRole("button", { name: "Abrir menu" }));
     expect(await screen.findByText("orbien")).toBeInTheDocument();
+  });
+
+  it("não desenha o sino de notificações, que ainda não tem de onde ler", () => {
+    setup();
+    render(<Header />);
+    expect(screen.queryByRole("button", { name: "Notificações" })).not.toBeInTheDocument();
+  });
+
+  it("tem a busca de telas no topo", () => {
+    setup();
+    render(<Header />);
+    expect(screen.getByRole("button", { name: "Buscar tela" })).toBeInTheDocument();
+  });
+
+  it("mostra o e-mail e a frase sobre escalas e perfil no menu da conta", async () => {
+    setup();
+    render(<Header />);
+    await userEvent.click(screen.getByRole("button", { name: "Menu do usuário" }));
+    expect(await screen.findByText("ana@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Escalas e perfil pessoal ficam no app.")).toBeInTheDocument();
+  });
+
+  it("Trocar senha pede o e-mail de redefinição e mantém o menu aberto", async () => {
+    setup();
+    vi.spyOn(axios, "post").mockResolvedValue({});
+    render(<Header />);
+    await userEvent.click(screen.getByRole("button", { name: "Menu do usuário" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Trocar senha" }));
+    expect(axios.post).toHaveBeenCalledWith("/api-proxy/auth/forgot-password", {
+      email: "ana@example.com",
+    });
+    expect(await screen.findByText("Enviamos o link para ana@example.com.")).toBeInTheDocument();
+  });
+
+  it("Trocar senha avisa quando o envio falha", async () => {
+    setup();
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("rede"));
+    render(<Header />);
+    await userEvent.click(screen.getByRole("button", { name: "Menu do usuário" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Trocar senha" }));
+    expect(await screen.findByText(/Não foi possível enviar o link/)).toBeInTheDocument();
   });
 });

@@ -25,6 +25,8 @@ jest.mock("../../lib/auth/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+import NetInfo from "@react-native-community/netinfo";
+import { NetworkError } from "../../lib/api/errors";
 import IndisponibilidadeScreen from "../../app/indisponibilidade";
 
 describe("IndisponibilidadeScreen", () => {
@@ -268,5 +270,93 @@ describe("IndisponibilidadeScreen", () => {
     });
 
     expect(screen.queryByText(/Não foi possível carregar/)).toBeNull();
+  });
+
+  describe("sem conexão: relê sozinha quando a conexão volta (PROD-32)", () => {
+    type NetState = { isConnected: boolean; isInternetReachable: boolean };
+    let emit: (state: NetState) => void;
+    const OFFLINE = { isConnected: false, isInternetReachable: false };
+    const ONLINE = { isConnected: true, isInternetReachable: true };
+
+    beforeEach(() => {
+      emit = () => undefined;
+      (NetInfo.addEventListener as jest.Mock).mockImplementation((cb: (state: NetState) => void) => {
+        emit = cb;
+        return jest.fn();
+      });
+    });
+
+    async function reconnect() {
+      emit(OFFLINE);
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+    }
+
+    it("cai, volta e faz uma única releitura do mês", async () => {
+      mockGetUnavailability.mockRejectedValueOnce(new NetworkError());
+      mockGetUnavailability.mockResolvedValue({ dates: [{ date: "2026-09-10" }] });
+      await act(async () => {
+        render(<IndisponibilidadeScreen />);
+      });
+      expect(screen.getByTestId("load-error")).toBeTruthy();
+
+      await reconnect();
+
+      expect(mockGetUnavailability).toHaveBeenCalledTimes(2);
+      expect(mockGetUnavailability).toHaveBeenLastCalledWith(9, 2026);
+      expect(screen.getByTestId("day-2026-09-10").props.accessibilityState.selected).toBe(true);
+      expect(mockSaveUnavailability).not.toHaveBeenCalled();
+    });
+
+    it("já online, sem ter visto a conexão cair, não recarrega", async () => {
+      mockGetUnavailability.mockRejectedValue(new NetworkError());
+      await act(async () => {
+        render(<IndisponibilidadeScreen />);
+      });
+      emit(ONLINE);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+      expect(mockGetUnavailability).toHaveBeenCalledTimes(1);
+    });
+
+    it("com dia marcado, a volta NÃO sobrescreve: mostra o aviso e só relê ao toque", async () => {
+      mockGetUnavailability.mockRejectedValueOnce(new NetworkError());
+      mockGetUnavailability.mockResolvedValue({ dates: [{ date: "2026-09-10" }] });
+      await act(async () => {
+        render(<IndisponibilidadeScreen />);
+      });
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("day-2026-09-15"));
+      });
+
+      await reconnect();
+
+      expect(mockGetUnavailability).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("day-2026-09-15").props.accessibilityState.selected).toBe(true);
+      expect(screen.getByTestId("reconnect-notice")).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("reconnect-notice"));
+      });
+      expect(mockGetUnavailability).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("reconnect-notice")).toBeNull();
+    });
+
+    it("observação digitada também conta como edição pendente", async () => {
+      mockGetUnavailability.mockRejectedValueOnce(new NetworkError());
+      mockGetUnavailability.mockResolvedValue({ dates: [] });
+      await act(async () => {
+        render(<IndisponibilidadeScreen />);
+      });
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId("notes-input"), "viagem");
+      });
+      await reconnect();
+      expect(mockGetUnavailability).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("reconnect-notice")).toBeTruthy();
+    });
   });
 });

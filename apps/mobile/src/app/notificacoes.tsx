@@ -19,13 +19,15 @@ import { StyleSheet, Switch, Text, View } from "react-native";
 
 import { Alert } from "../components/Alert";
 import { Card } from "../components/Card";
+import { ReconnectNotice } from "../components/ReconnectNotice";
 import { Screen } from "../components/Screen";
-import { describeLoadError } from "../lib/api/load-error";
+import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
   type NotificationPreferenceValues,
 } from "../lib/notifications/notification-preferences-client";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import { syncNotificationPreferenceTags } from "../lib/notifications/onesignal-client";
 import { useTheme } from "../lib/theme/theme-provider";
 import { spacing, touchTarget, typography } from "../lib/theme/tokens";
@@ -57,7 +59,12 @@ const SAVE_ERROR_MESSAGE = "Não foi possível salvar. Tente novamente.";
 export default function NotificacoesScreen() {
   const { primaryColor, colors } = useTheme();
   const [prefs, setPrefs] = useState<NotificationPreferenceValues>(DEFAULT_PREFS);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // Edição pendente: a pessoa mexeu em alguma chave desde a última leitura.
+  // Com ela, a reconexão NÃO relê sozinha (sobrescreveria o que ela fez).
+  const dirtyRef = useRef(false);
+  const [reconnected, setReconnected] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   // Uma cadeia de promises por categoria — chave da serialização "por
   // categoria, não global" do Edge Case da spec. A cadeia armazenada nunca
@@ -78,19 +85,33 @@ export default function NotificacoesScreen() {
       .then((result) => {
         if (signal.cancelled) return;
         setPrefs(result);
+        dirtyRef.current = false;
         setLoadError(null);
       })
       .catch((err: unknown) => {
         if (signal.cancelled) return;
-        setLoadError(describeLoadError(err, "suas preferências de notificação").message);
+        setLoadError(describeLoadError(err, "suas preferências de notificação"));
       });
     return () => {
       signal.cancelled = true;
     };
-  }, []);
+  }, [retryCount]);
+
+  const reload = () => {
+    setReconnected(false);
+    setRetryCount((n) => n + 1);
+  };
+
+  // Volta da conexão: relê sozinha só se a tela está intocada. Com edição
+  // pendente, avisa e deixa a releitura para a pessoa.
+  useReloadOnReconnect(loadError?.offline === true, () => {
+    if (dirtyRef.current) setReconnected(true);
+    else reload();
+  });
 
   function handleToggle(category: Category, value: boolean) {
     const previousValue = prefs[category];
+    dirtyRef.current = true;
     setSaveError(null);
     setPrefs((prev) => ({ ...prev, [category]: value }));
 
@@ -141,7 +162,8 @@ export default function NotificacoesScreen() {
         ))}
       </Card>
 
-      {loadError ? <Alert messageTestID="load-error" message={loadError} /> : null}
+      {loadError ? <Alert messageTestID="load-error" message={loadError.message} /> : null}
+      {loadError && reconnected ? <ReconnectNotice testID="reconnect-notice" onPress={reload} /> : null}
       {saveError ? <Alert messageTestID="save-error" message={saveError} /> : null}
     </Screen>
   );
