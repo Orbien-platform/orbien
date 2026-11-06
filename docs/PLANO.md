@@ -3140,7 +3140,8 @@ limite por telefone/nome, só com evidência de abuso.
 ### PEND-19 · QRs do app: o que ficou fora da primeira entrega · aberto
 
 Três dos quatro itens fecharam na branch `feat/qr-gestao-e-checkin-vigente`;
-resta só o teste em aparelho, que é humano.
+o resto (recorte do `POST`, gestão no app, impressão no painel) fechou em
+`feat/qr-app-e-recorte-checkin`. Resta só o teste em aparelho, que é humano.
 
 - **Teste em aparelho — aberto, pendência humana**: câmera, brilho e tela
   acesa só foram exercitados com mocks. Falta rodar numa build nativa (os
@@ -3159,8 +3160,23 @@ resta só o teste em aparelho, que é humano.
   desenhado com `qrcode-generator` (mesmo pacote do app), dependência nova
   de `orbien-web`. Teste: componente, `QrImage` e `e2e/qr-visitantes.spec.ts`
   (só `teste2-church`).
-  **Fica de fora:** gestão de QR no app (continuação natural — grupo/evento,
-  renomear, desativar) e impressão/PDF do QR.
+  **Fechou depois (`feat/qr-app-e-recorte-checkin`):** a gestão no app e a
+  impressão no painel — itens abaixo.
+- ~~**Gestão de QR de autocadastro no app**~~ — fechado. Na aba Mais ›
+  "QR de autocadastro" a lista mostra ativos e desativados; "Novo QR"
+  (`/autocadastro-novo`) cria culto, grupo (escolhe o grupo), evento ou outro,
+  com nome opcional, e abre o QR em tela cheia; tocar num QR abre
+  `/autocadastro-editar` (mostrar, renomear, desativar/reativar). Mesmas
+  rotas do painel (`GET/POST /admin/visitor/qr`, `PATCH :id`; grupos por
+  `GET /small-groups?limit=100`) e mesmos papéis (`tenant_admin`,
+  `admin_congregation`, `pastor`, `secretary`) — nada de rota nova. Só JS e
+  telas: **sem módulo nativo novo**, sai por OTA. Mudou o toque na lista: antes
+  abria o QR direto; agora abre o gerenciamento, onde "Mostrar QR" é o botão
+  principal (um toque a mais para projetar, em troca de renomear/desativar).
+- ~~**Impressão do QR**~~ — feita **só no painel web**: botão "Imprimir" no
+  diálogo "Mostrar QR" abre uma janela do navegador com nome, QR e endereço e
+  chama o diálogo de impressão. Sem PDF no servidor, sem dependência. **No app
+  fica de fora, de propósito** (exigiria módulo nativo de impressão).
 - ~~**QR de check-in não lê o código vigente**~~ — fechado. `GET
   /small-groups/meetings/:meetingId/checkin-token` devolve o token vigente
   sem gerar outro; 404 quando não há ou venceu. O app lê primeiro e só chama
@@ -3171,9 +3187,9 @@ resta só o teste em aparelho, que é humano.
   403 e não revela se há código. RLS inalterada (`meeting_checkin_tokens`
   por congregação, 018). O token só vai na resposta: não entra em log nem em
   `audit_logs` (o interceptor não grava corpo).
-  **Achado aberto:** o `POST` (gerar/renovar) continua sem o recorte de
-  liderança — um `cell_leader` de outro PG da mesma congregação consegue
-  renovar o QR alheio. Decidir se aplica a mesma regra do `GET`.
+  **Achado do `POST` — fechado:** gerar/renovar agora aplica o mesmo recorte
+  do `GET` (`assertCanAccessCheckinToken`): `cell_leader` de outro PG recebe
+  403 sem tocar no token; o líder do PG e a administração seguem podendo.
 - ~~**Marca da igreja na página pública**~~ — fechado **sem rota nova**.
   `GET /public/visitor/qr/:token` ganhou `brand` (`primary_color`,
   `accent_color`, `logo_url`, `logo_url_dark`). O tenant é resolvido pelo
